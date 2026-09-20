@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Questions</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="questions">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 id="pageTitle" class="h3 mb-1">Questions</h1>
+        <div id="pageSubtitle" class="small-muted">Loading…</div>
+      </div>
+      <div class="d-flex gap-2 no-print">
+        <a class="btn btn-outline-primary" href="/account.html#my-questions">My Questions</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <div id="adminCard" class="card" style="display:none;">
+      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div class="fw-semibold">Questions queue</div>
+        <div class="d-flex gap-2 align-items-center">
+          <select id="queueStatus" class="form-select form-select-sm" style="min-width:180px;">
+            <option value="">Open only</option>
+            <option value="reviewing">Reviewing</option>
+            <option value="answered">Answered</option>
+            <option value="all">All statuses</option>
+          </select>
+          <button class="btn btn-sm btn-outline-primary" id="btnRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Updated</th>
+                <th>Event</th>
+                <th>Asked by</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="queueBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="userCard" class="card" style="display:none;">
+      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div class="fw-semibold">My threads</div>
+        <button class="btn btn-sm btn-outline-primary" id="btnRefreshUser" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+      </div>
+      <div class="card-body">
+        <div id="questionsEmpty" class="small-muted" style="display:none;">No questions yet.</div>
+        <div class="table-responsive" id="questionsTableWrap" style="display:none;">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Status</th>
+                <th>Updated</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="questionsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/questions.js"></script>
+</body>
+</html>

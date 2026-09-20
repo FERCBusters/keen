@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Audit</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/vendor/wysi/wysi.min.css">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="audits">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="small-muted mb-1"><a class="link-subtle" href="/audits.html">← Audits</a></div>
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1" id="title">Audit</h1>
+        <div class="small-muted" id="meta">—</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <button id="btnAuditZip" class="btn btn-outline-success" type="button">Export audit ZIP</button>
+        <a id="sampleEventLink" class="btn btn-outline-primary" href="/events.html">Find evidence</a>
+        <button id="deleteAudit" class="btn btn-outline-danger d-none" type="button">Delete audit</button>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+    <div id="auditLockNotice" class="alert alert-warning" style="display:none;"></div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-xl-5">
+        <div class="card h-100">
+          <div class="card-header d-flex justify-content-between align-items-start gap-2">
+            <div>
+              <div class="fw-bold">Audit details</div>
+              <div class="small-muted">Title, dates, status and summary.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#auditDetailsBody" aria-expanded="true" aria-controls="auditDetailsBody">
+              <span class="when-expanded">Collapse</span><span class="when-collapsed">Expand</span>
+            </button>
+          </div>
+          <div id="auditDetailsBody" class="collapse show">
+            <div class="card-body">
+              <form id="detailsForm" class="row g-2">
+                <div class="col-12">
+                  <label class="form-label small-muted mb-1">Title</label>
+                  <input id="auditTitle" class="form-control" />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label small-muted mb-1">Framework</label>
+                  <input id="auditFramework" class="form-control" />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label small-muted mb-1">Status</label>
+                  <select id="auditStatus" class="form-select">
+                    <option value="open">Open</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="template">Template</option>
+                    <option value="completed">Completed</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label small-muted mb-1">Audit type</label>
+                  <select id="auditType" class="form-select">
+                    <option value="internal">Internal</option>
+                    <option value="external">External</option>
+                  </select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small-muted mb-1">Begin date</label>
+                  <input id="auditStart" class="form-control visually-hidden" type="date" />
+                  <div class="input-group">
+                    <input id="auditStartText" class="form-control" type="text" placeholder="YYYY-MM-DD" autocomplete="off" inputmode="numeric" />
+                    <button id="auditStartPick" class="btn btn-outline-secondary" type="button" title="Pick date"><i class="bi bi-calendar"></i></button>
+                  </div>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small-muted mb-1">End date</label>
+                  <input id="auditEnd" class="form-control visually-hidden" type="date" />
+                  <div class="input-group">
+                    <input id="auditEndText" class="form-control" type="text" placeholder="YYYY-MM-DD" autocomplete="off" inputmode="numeric" />
+                    <button id="auditEndPick" class="btn btn-outline-secondary" type="button" title="Pick date"><i class="bi bi-calendar"></i></button>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <label class="form-label small-muted mb-1">Executive Summary</label>
+                  <div class="rich-text-editor"><textarea id="auditExecutiveSummary" class="form-control" rows="4" data-rich-text="1" placeholder="High-level summary of audit objectives, coverage, headline outcomes, and overall conclusion."></textarea></div>
+                </div>
+                <div class="col-12">
+                  <button class="btn btn-primary" type="submit">Save details</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-7">
+        <div class="card h-100">
+          <div class="card-header d-flex justify-content-between align-items-start gap-2">
+            <div>
+              <div class="fw-bold">Final report</div>
+              <div class="small-muted">Upload the final report and maintain report drafting notes.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#finalReportBody" aria-expanded="true" aria-controls="finalReportBody">
+              <span class="when-expanded">Collapse</span><span class="when-collapsed">Expand</span>
+            </button>
+          </div>
+          <div id="finalReportBody" class="collapse show">
+            <div class="card-body">
+              <div id="reportInfo" class="mb-3 small-muted">No final report uploaded.</div>
+              <form id="reportForm" class="d-flex flex-wrap gap-2 align-items-center">
+                <input id="reportFile" class="form-control" style="max-width:420px" type="file" />
+                <button class="btn btn-outline-primary" type="submit">Upload report</button>
+              </form>
+              <hr />
+              <div class="row g-3 text-center">
+                <div class="col-3"><div class="kpi"><div class="label">Evidence</div><div class="value" id="kpiEvidence">–</div></div></div>
+                <div class="col-3"><div class="kpi"><div class="label">Scope</div><div class="value" id="kpiScope">–</div></div></div>
+                <div class="col-3"><div class="kpi"><div class="label">People</div><div class="value" id="kpiPeople">–</div></div></div>
+                <div class="col-3"><div class="kpi"><div class="label">Findings</div><div class="value" id="kpiFindings">–</div></div></div>
+              </div>
+              <hr />
+              <form id="reportNotesForm">
+                <label class="form-label small-muted mb-1">Report Notes</label>
+                <div class="rich-text-editor"><textarea id="auditNotes" class="form-control" rows="4" data-rich-text="1" placeholder="Detailed report notes, context, caveats, follow-ups, or drafting notes."></textarea></div>
+                <div class="mt-2"><button class="btn btn-outline-primary" type="submit">Save report notes</button></div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="templateScheduleCard" class="card mb-3 d-none">
+      <div class="card-header d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <div class="fw-bold">Template schedule</div>
+          <div class="small-muted">Change when this audit template should materialise into a real audit.</div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#templateScheduleBody" aria-expanded="true" aria-controls="templateScheduleBody">
+          <span class="when-expanded">Collapse</span><span class="when-collapsed">Expand</span>
+        </button>
+      </div>
+      <div id="templateScheduleBody" class="collapse show">
+        <div class="card-body">
+          <form id="templateScheduleForm" class="row g-2">
+            <div class="col-12 col-lg-4">
+              <label class="form-label small-muted mb-1" for="tmplDateRule">Date selector</label>
+              <select id="tmplDateRule" class="form-select">
+                <option value="exact">Exact next run date</option>
+                <option value="first_weekday_of_month">First weekday of month</option>
+                <option value="first_monday_of_month">First Monday of month</option>
+                <option value="first_tuesday_of_month">First Tuesday of month</option>
+                <option value="first_wednesday_of_month">First Wednesday of month</option>
+                <option value="first_thursday_of_month">First Thursday of month</option>
+                <option value="first_friday_of_month">First Friday of month</option>
+              </select>
+              <div class="form-text">Use the fuzzy option for recurring schedules such as “first Monday of January”.</div>
+            </div>
+
+            <div class="col-12 col-lg-4" id="tmplExactDateFields">
+              <label class="form-label small-muted mb-1">Next run date</label>
+              <input id="tmplScheduleStart" class="form-control visually-hidden" type="date" />
+              <div class="input-group">
+                <input id="tmplScheduleStartText" class="form-control" type="text" placeholder="YYYY-MM-DD" autocomplete="off" inputmode="numeric" />
+                <button id="tmplScheduleStartPick" class="btn btn-outline-secondary" type="button" title="Pick date"><i class="bi bi-calendar"></i></button>
+              </div>
+              <div class="form-text">This also updates the template begin date.</div>
+            </div>
+
+            <div class="col-12 col-lg-4" id="tmplFuzzyDateFields" style="display:none;">
+              <div class="row g-2">
+                <div class="col-7">
+                  <label class="form-label small-muted mb-1" for="tmplFuzzyMonth" id="tmplFuzzyMonthLabel">First weekday of</label>
+                  <select id="tmplFuzzyMonth" class="form-select">
+                    <option value="1">January</option>
+                    <option value="2">February</option>
+                    <option value="3">March</option>
+                    <option value="4">April</option>
+                    <option value="5">May</option>
+                    <option value="6">June</option>
+                    <option value="7">July</option>
+                    <option value="8">August</option>
+                    <option value="9">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                  </select>
+                </div>
+                <div class="col-5">
+                  <label class="form-label small-muted mb-1" for="tmplFuzzyYear">Start year</label>
+                  <input id="tmplFuzzyYear" class="form-control" type="number" min="1900" max="3000" />
+                </div>
+                <div class="col-12">
+                  <div class="small-muted" id="tmplSchedulePreview"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-4 col-lg-3">
+              <label class="form-label small-muted mb-1" for="tmplRecurrence">Recurrence</label>
+              <select id="tmplRecurrence" class="form-select">
+                <option value="once">Once</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </div>
+            <div class="col-6 col-md-2 col-lg-2">
+              <label class="form-label small-muted mb-1" for="tmplInterval">Every</label>
+              <input id="tmplInterval" class="form-control" type="number" min="1" max="120" value="1" />
+            </div>
+            <div class="col-6 col-md-4 col-lg-3">
+              <label class="form-label small-muted mb-1">Until</label>
+              <input id="tmplUntil" class="form-control visually-hidden" type="date" />
+              <div class="input-group">
+                <input id="tmplUntilText" class="form-control" type="text" placeholder="YYYY-MM-DD" autocomplete="off" inputmode="numeric" />
+                <button id="tmplUntilPick" class="btn btn-outline-secondary" type="button" title="Pick date"><i class="bi bi-calendar"></i></button>
+              </div>
+            </div>
+            <div class="col-12 col-lg-4 d-flex align-items-end">
+              <div id="tmplScheduleInfo" class="small-muted"></div>
+            </div>
+            <div class="col-12">
+              <button class="btn btn-outline-primary" type="submit">Save template schedule</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <div class="fw-bold">Audit scope</div>
+          <div class="small-muted">Select ISMS policies/processes, ISO clauses and Annex A controls. Saving documents/clauses automatically includes their linked clauses/controls.</div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <button id="deselectDocuments" class="btn btn-sm btn-outline-secondary" type="button">Deselect all documents</button>
+          <button id="deselectClauses" class="btn btn-sm btn-outline-secondary" type="button">Deselect all clauses</button>
+          <button id="deselectControls" class="btn btn-sm btn-outline-secondary" type="button">Deselect all controls</button>
+          <button id="saveScope" class="btn btn-sm btn-primary">Save scope</button>
+          <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#scopeBody" aria-expanded="true" aria-controls="scopeBody">
+            <span class="when-expanded">Collapse</span><span class="when-collapsed">Expand</span>
+          </button>
+        </div>
+      </div>
+      <div id="scopeBody" class="collapse show">
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-12 col-xl-4">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="fw-semibold">ISMS documents</div>
+                <div class="small-muted" id="documentScopeCount">0 selected</div>
+              </div>
+              <input id="documentFilter" class="form-control mb-2" placeholder="Filter policies/processes…" />
+              <div id="documentsList" class="row g-2" style="max-height:340px; overflow:auto;"></div>
+            </div>
+            <div class="col-12 col-xl-4">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="fw-semibold">Clauses</div>
+                <div class="small-muted" id="clauseScopeCount">0 selected</div>
+              </div>
+              <input id="clauseFilter" class="form-control mb-2" placeholder="Filter clauses by ref or title…" />
+              <div id="clausesList" class="row g-2" style="max-height:340px; overflow:auto;"></div>
+            </div>
+            <div class="col-12 col-xl-4">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="fw-semibold">Controls</div>
+                <div class="small-muted" id="controlScopeCount">0 selected</div>
+              </div>
+              <input id="controlFilter" class="form-control mb-2" placeholder="Filter controls by ref or title…" />
+              <div id="controlsList" class="row g-2" style="max-height:340px; overflow:auto;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <div class="fw-bold">Scope graph</div>
+          <div class="small-muted">Bipartite view of selected audit clauses and controls, including clickable database-linked relationships.</div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#scopeVisualBody" aria-expanded="true" aria-controls="scopeVisualBody">
+          <span class="when-expanded">Collapse</span><span class="when-collapsed">Expand</span>
+        </button>
+      </div>
+      <div id="scopeVisualBody" class="collapse show">
+        <div class="card-body">
+          <div id="scopeHeatmapSummary" class="small-muted mb-2">Loading scope visualisation…</div>
+          <div id="scopeHeatmap" class="audit-scope-graph border rounded bg-white p-2" style="min-height:260px; overflow:auto;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-lg-5">
+        <div class="card h-100">
+          <div class="card-header d-flex justify-content-between align-items-start gap-2">
+            <div>
+              <div class="fw-bold">People present</div>
+              <div class="small-muted">Auditors, auditees and other attendees.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#peopleBody" aria-expanded="true" aria-controls="peopleBody">
+              <span class="when-expanded">Collapse</span><span class="when-collapsed">Expand</span>
+            </button>
+          </div>
+          <div id="peopleBody" class="collapse show">
+            <div class="card-body">
+              <form id="attendeeForm" class="row g-2 mb-3">
+                <div class="col-12">
+                  <label class="form-label small-muted mb-1" for="attendeeUserId">Keen user</label>
+                  <select id="attendeeUserId" class="form-select">
+                    <option value="">Custom / external attendee</option>
+                  </select>
+                  <div class="form-text">Select a Keen user, or leave this as custom and enter a free-text attendee below.</div>
+                </div>
+                <div class="col-12"><input id="attendeeName" class="form-control" placeholder="Name (or override selected user's display name)" /></div>
+                <div class="col-12 col-md-6"><input id="attendeeEmail" class="form-control" placeholder="Email (optional)" /></div>
+                <div class="col-12 col-md-6"><input id="attendeeRole" class="form-control" placeholder="Role / organisation" /></div>
+                <div class="col-12"><button class="btn btn-outline-primary" type="submit">Add person</button></div>
+              </form>
+              <div id="attendees">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-7">
+        <div class="card h-100">
+          <div class="card-header d-flex justify-content-between align-items-start gap-2">
+            <div>
+              <div class="fw-bold">Findings</div>
+              <div class="small-muted">Create, edit, close or remove audit findings.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#findingsBody" aria-expanded="true" aria-controls="findingsBody">
+              <span class="when-expanded">Collapse</span><span class="when-collapsed">Expand</span>
+            </button>
+          </div>
+          <div id="findingsBody" class="collapse show">
+            <div class="card-body">
+              <form id="findingForm" class="row g-2 mb-3">
+                <div class="col-12 col-md-4">
+                  <select id="findingKind" class="form-select">
+                    <option value="major_nc">Major Non-Conformity</option>
+                    <option value="minor_nc">Minor Non-Conformity</option>
+                    <option value="ofi">Opportunity for Improvement</option>
+                    <option value="best_practice">Best Practice</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-4"><input id="findingTitle" class="form-control" placeholder="Finding title" required /></div>
+                <div class="col-12 col-md-4">
+                  <select id="findingStatus" class="form-select">
+                    <option value="open">Open</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-4"><input id="findingControl" class="form-control" placeholder="Control ref/id (optional)" /></div>
+                <div class="col-12"><div class="rich-text-editor"><textarea id="findingDesc" class="form-control" rows="3" data-rich-text="1" placeholder="Description / evidence / recommendation"></textarea></div></div>
+                <div class="col-12"><button class="btn btn-outline-primary" type="submit">Add finding</button></div>
+              </form>
+              <div id="findings">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <div class="fw-bold">Sampled evidence</div>
+          <div class="small-muted">Events and event URLs sampled into this audit. Notes are audit-specific.</div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#evidenceBody" aria-expanded="true" aria-controls="evidenceBody">
+          <span class="when-expanded">Collapse</span><span class="when-collapsed">Expand</span>
+        </button>
+      </div>
+      <div id="evidenceBody" class="collapse show">
+        <div class="card-body">
+          <form id="urlEvidenceForm" class="d-flex flex-wrap gap-2 mb-3">
+            <input id="urlEvidence" class="form-control form-control-sm flex-grow-1" style="min-width:280px" placeholder="Paste an event URL or external evidence URL…" />
+            <button class="btn btn-sm btn-outline-primary" type="submit">Add URL</button>
+          </form>
+          <div id="evidence">—</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/wysi/wysi.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
+  <script src="/vendor/html2canvas/html2canvas.min.js"></script>
+  <script type="module" src="/pages/audit.js"></script>
+</body>
+</html>

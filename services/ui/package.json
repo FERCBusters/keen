@@ -1,0 +1,20 @@
+{
+  "name": "keen-ui",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "bootstrap": "5.3.8",
+    "bootstrap-icons": "1.13.1",
+    "d3": "7.9.0",
+    "html2canvas": "1.4.1",
+    "wysi": "github:mdbassit/Wysi#v0.5.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0"
+  },
+  "scripts": {
+    "vendor": "node scripts/vendor-assets.mjs",
+    "minify:public": "node scripts/minify-public.mjs",
+    "build": "npm run vendor && npm run minify:public"
+  }
+}

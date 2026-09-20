@@ -1,0 +1,97 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: keen
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMe123!}
+      POSTGRES_DB: keen
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keen -d keen"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5442:5432"
+    networks: [keen]
+    restart: unless-stopped
+
+  valkey:
+    image: valkey/valkey:7
+    command: ["valkey-server", "--requirepass", "${REDIS_PASSWORD:-ChangeMe123!}"]
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-ChangeMe123!}
+    ports:
+      - "127.0.0.1:6399:6379"
+    networks: [keen]
+    restart: unless-stopped
+
+  keen-api:
+    build:
+      context: ./services/api
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+    volumes:
+      - ./config:/app/config:ro
+      - ./frameworks:/app/frameworks:ro
+    ports:
+      - "127.0.0.1:8181:8080"
+    networks: [keen]
+    restart: unless-stopped
+
+  keen-worker:
+    build:
+      context: ./services/api
+    command: ["bash", "-c", "celery -A app.worker.celery_app worker -l INFO"]
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+    volumes:
+      - ./config:/app/config:ro
+      - ./frameworks:/app/frameworks:ro
+    networks: [keen]
+    restart: unless-stopped
+
+  keen-beat:
+    build:
+      context: ./services/api
+    command: ["bash", "-c", "celery -A app.worker.celery_app beat -l INFO --schedule=/var/lib/keen/celerybeat-schedule"]
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+    volumes:
+      - ./config:/app/config:ro
+      - ./frameworks:/app/frameworks:ro
+      - beatdata:/var/lib/keen
+    networks: [keen]
+    restart: unless-stopped
+
+  keen-ui:
+    build:
+      context: ..
+      dockerfile: keen/services/ui/Dockerfile
+    depends_on:
+      - keen-api
+    ports:
+      - "127.0.0.1:8081:80"
+    networks: [keen]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  beatdata:
+
+networks:
+  keen:
+    driver: bridge

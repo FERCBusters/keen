@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – ISMS Statement of Applicability</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="soa">
+  <div id="navbar"></div>
+
+  <main class="container-fluid py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/">← Home</a></div>
+        <h1 class="h3 mb-1">ISMS – Statement of Applicability</h1>
+        <div class="small-muted" id="soaMeta">Read-only summary of controls, clauses, CIA Triad risks, PESTLE(E), Interested Parties, Effectiveness Measures and ISMS entities.</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <a class="btn btn-outline-primary" data-nav-fw="1" href="/isms.html">ISMS</a>
+        <a class="btn btn-outline-primary" data-nav-fw="1" href="/controls.html">Controls</a>
+        <a class="btn btn-outline-primary" data-nav-fw="1" href="/clauses.html">Clauses</a>
+        <a class="btn btn-outline-primary" data-nav-fw="1" href="/risks.html">CIA Triad Risks</a>
+        <a class="btn btn-outline-primary" data-nav-fw="1" href="/pestle.html">PESTLE(E)</a>
+        <a class="btn btn-outline-primary" data-nav-fw="1" href="/interested_parties.html">Interested Parties</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3 no-print" id="soaTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="soaControlsTab" data-bs-toggle="tab" data-bs-target="#soaControlsPane" type="button" role="tab" aria-controls="soaControlsPane" aria-selected="true">Controls</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="soaClausesTab" data-bs-toggle="tab" data-bs-target="#soaClausesPane" type="button" role="tab" aria-controls="soaClausesPane" aria-selected="false">Clauses</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="soaRisksTab" data-bs-toggle="tab" data-bs-target="#soaRisksPane" type="button" role="tab" aria-controls="soaRisksPane" aria-selected="false">CIA Triad Risks</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="soaPestleTab" data-bs-toggle="tab" data-bs-target="#soaPestlePane" type="button" role="tab" aria-controls="soaPestlePane" aria-selected="false">PESTLE(E)</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="soaInterestedPartiesTab" data-bs-toggle="tab" data-bs-target="#soaInterestedPartiesPane" type="button" role="tab" aria-controls="soaInterestedPartiesPane" aria-selected="false">Interested Parties</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="soaIsmsObjectivesTab" data-bs-toggle="tab" data-bs-target="#soaIsmsObjectivesPane" type="button" role="tab" aria-controls="soaIsmsObjectivesPane" aria-selected="false">ISMS Objectives</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="soaIsmsDocumentsTab" data-bs-toggle="tab" data-bs-target="#soaIsmsDocumentsPane" type="button" role="tab" aria-controls="soaIsmsDocumentsPane" aria-selected="false">ISMS Documents</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="soaIsmsEffectivenessTab" data-bs-toggle="tab" data-bs-target="#soaIsmsEffectivenessPane" type="button" role="tab" aria-controls="soaIsmsEffectivenessPane" aria-selected="false">Effectiveness Measures</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="soaIsmsOrgAssetsTab" data-bs-toggle="tab" data-bs-target="#soaIsmsOrgAssetsPane" type="button" role="tab" aria-controls="soaIsmsOrgAssetsPane" aria-selected="false">Org & Assets</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="soaIsmsAppConfigTab" data-bs-toggle="tab" data-bs-target="#soaIsmsAppConfigPane" type="button" role="tab" aria-controls="soaIsmsAppConfigPane" aria-selected="false">App Config</button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="soaTabContent">
+      <section class="tab-pane fade show active" id="soaControlsPane" role="tabpanel" aria-labelledby="soaControlsTab" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">All controls</div>
+              <div class="small-muted">Each clause column shows applicable, partially applicable or not applicable.</div>
+            </div>
+            <input id="controlsFilter" class="form-control form-control-sm no-print" type="search" placeholder="Filter controls…" style="max-width:320px;">
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive soa-table-wrap">
+              <table class="table table-sm table-hover align-middle mb-0 soa-matrix-table">
+                <thead id="controlsHead"></thead>
+                <tbody id="controlsRows"><tr><td class="p-4 small-muted">Loading controls…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="soaClausesPane" role="tabpanel" aria-labelledby="soaClausesTab" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">All clauses</div>
+              <div class="small-muted">Control columns show clause applicability.</div>
+            </div>
+            <input id="clausesFilter" class="form-control form-control-sm no-print" type="search" placeholder="Filter clauses…" style="max-width:320px;">
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive soa-table-wrap">
+              <table class="table table-sm table-hover align-middle mb-0 soa-matrix-table">
+                <thead id="clausesHead"></thead>
+                <tbody id="clausesRows"><tr><td class="p-4 small-muted">Loading clauses…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="soaRisksPane" role="tabpanel" aria-labelledby="soaRisksTab" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">CIA Triad risks and mapped controls</div>
+              <div class="small-muted">Confidentiality, Integrity and Availability risk scores and residual scores are shown alongside linked controls.</div>
+            </div>
+            <input id="risksFilter" class="form-control form-control-sm no-print" type="search" placeholder="Filter risks…" style="max-width:320px;">
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th style="width:180px;">Asset</th>
+                    <th style="width:150px;">Category</th>
+                    <th style="width:160px;">Subcategory</th>
+                    <th style="width:170px;">Risk types</th>
+                    <th>Threat summary</th>
+                    <th class="text-end" style="width:100px;">Risk score</th>
+                    <th class="text-end" style="width:110px;">Residual</th>
+                    <th style="width:130px;">Owner</th>
+                    <th style="width:260px;">Linked controls</th>
+                  </tr>
+                </thead>
+                <tbody id="risksRows"><tr><td colspan="9" class="p-4 small-muted">Loading risks…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="soaPestlePane" role="tabpanel" aria-labelledby="soaPestleTab" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">PESTLE(E) impact assessment</div>
+              <div class="small-muted">Political, Economical, Social, Technological, Legal, Environmental and Ethical context mapped to business processes and framework clauses.</div>
+            </div>
+            <input id="pestleFilter" class="form-control form-control-sm no-print" type="search" placeholder="Filter PESTLE(E)…" style="max-width:320px;">
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th style="width:130px;">Type</th>
+                    <th style="width:110px;">Lens</th>
+                    <th>Item</th>
+                    <th style="width:130px;">Overall relevance</th>
+                    <th>Rationale</th>
+                    <th style="width:260px;">Business processes</th>
+                    <th style="width:260px;">Relevant clauses</th>
+                  </tr>
+                </thead>
+                <tbody id="pestleRows"><tr><td colspan="7" class="p-4 small-muted">Loading PESTLE(E)…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="soaInterestedPartiesPane" role="tabpanel" aria-labelledby="soaInterestedPartiesTab" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Interested Parties and mapped controls</div>
+              <div class="small-muted">Names, Nature of Interest, communications and linked Annex A controls.</div>
+            </div>
+            <input id="interestedPartiesFilter" class="form-control form-control-sm no-print" type="search" placeholder="Filter Interested Parties or notes…" style="max-width:320px;">
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th style="width:220px;">Name</th>
+                    <th style="width:220px;">Nature of Interest</th>
+                    <th style="width:260px;">Note</th>
+                    <th style="width:260px;">Linked controls</th>
+                    <th>Communications</th>
+                    <th style="width:260px;">Methods</th>
+                  </tr>
+                </thead>
+                <tbody id="interestedPartiesRows"><tr><td colspan="6" class="p-4 small-muted">Loading Interested Parties…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="soaIsmsObjectivesPane" role="tabpanel" aria-labelledby="soaIsmsObjectivesTab" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between"><div><div class="fw-bold">ISMS Objectives</div><div class="small-muted">Read-only ISMS objectives with owners, resources and linked Controls/Clauses.</div></div><input id="ismsObjectivesFilter" class="form-control form-control-sm no-print" type="search" placeholder="Filter objectives…" style="max-width:320px;"></div>
+          <div class="card-body p-0"><div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 sortable" data-sortable="1"><thead><tr><th>Goal</th><th>Metric</th><th>Owner</th><th>Target</th><th>Resources</th><th>Controls</th><th>Clauses</th></tr></thead><tbody id="ismsObjectivesRows"><tr><td colspan="7" class="p-4 small-muted">Loading ISMS objectives…</td></tr></tbody></table></div></div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="soaIsmsDocumentsPane" role="tabpanel" aria-labelledby="soaIsmsDocumentsTab" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between"><div><div class="fw-bold">ISMS Policies and Processes</div><div class="small-muted">Read-only ISMS documents, document links/uploads and linked Controls/Clauses.</div></div><input id="ismsDocumentsFilter" class="form-control form-control-sm no-print" type="search" placeholder="Filter documents…" style="max-width:320px;"></div>
+          <div class="card-body p-0"><div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 sortable" data-sortable="1"><thead><tr><th>Title</th><th>Type</th><th>URL/File</th><th>Description</th><th>Controls</th><th>Clauses</th></tr></thead><tbody id="ismsDocumentsRows"><tr><td colspan="6" class="p-4 small-muted">Loading ISMS documents…</td></tr></tbody></table></div></div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="soaIsmsEffectivenessPane" role="tabpanel" aria-labelledby="soaIsmsEffectivenessTab" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">ISMS Effectiveness Measures</div>
+              <div class="small-muted">Read-only effectiveness measures, latest metric values, targets and linked Controls.</div>
+            </div>
+            <input id="ismsEffectivenessFilter" class="form-control form-control-sm no-print" type="search" placeholder="Filter effectiveness measures…" style="max-width:320px;">
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle mb-0 sortable" data-sortable="1">
+                <thead>
+                  <tr>
+                    <th style="min-width:220px;">Summary / description</th>
+                    <th style="min-width:220px;">Effectiveness measure</th>
+                    <th style="min-width:140px;">Metric</th>
+                    <th style="min-width:140px;">Latest value</th>
+                    <th style="width:110px;">Target</th>
+                    <th style="width:130px;">Frequency</th>
+                    <th style="width:130px;">Owner</th>
+                    <th style="min-width:180px;">Controls</th>
+                  </tr>
+                </thead>
+                <tbody id="ismsEffectivenessRows"><tr><td colspan="8" class="p-4 small-muted">Loading effectiveness measures…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="soaIsmsOrgAssetsPane" role="tabpanel" aria-labelledby="soaIsmsOrgAssetsTab" tabindex="0">
+        <div class="row g-3">
+          <div class="col-12"><div class="card"><div class="card-header"><div class="fw-bold">Organisation Chart</div><div class="small-muted">Read-only organisation categories, positions and linked users.</div></div><div class="card-body p-0"><div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 sortable" data-sortable="1"><thead><tr><th>Name</th><th>Parent</th><th>People</th><th>Controls</th><th>Clauses</th></tr></thead><tbody id="ismsOrgRows"><tr><td colspan="5" class="p-4 small-muted">Loading organisation chart…</td></tr></tbody></table></div></div></div></div>
+          <div class="col-12"><div class="card"><div class="card-header"><div class="fw-bold">Asset Matrix</div><div class="small-muted">Read-only assets and their organisation chart ownership/register responsibilities.</div></div><div class="card-body p-0"><div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 sortable" data-sortable="1"><thead><tr><th>Asset</th><th>Category</th><th>Subcategory</th><th>License</th><th>Owner</th><th>Register held by</th><th>Controls</th><th>Clauses</th></tr></thead><tbody id="ismsAssetsRows"><tr><td colspan="8" class="p-4 small-muted">Loading ISMS assets…</td></tr></tbody></table></div></div></div></div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="soaIsmsAppConfigPane" role="tabpanel" aria-labelledby="soaIsmsAppConfigTab" tabindex="0">
+        <div class="card"><div class="card-header"><div class="fw-bold">Application Configuration Matrix</div><div class="small-muted">Read-only policy/process, people, assets and org chart positions cross-referenced to business processes.</div></div><div class="card-body p-0"><div class="table-responsive isms-app-matrix-wrap"><table class="table table-sm table-bordered align-middle mb-0 sortable isms-app-matrix-table" data-sortable="1"><thead id="ismsAppConfigHead"><tr><th>Group</th><th>Key linkages</th></tr></thead><tbody id="ismsAppConfigRows"><tr><td colspan="2" class="p-4 small-muted">Loading application configuration matrix…</td></tr></tbody></table></div></div></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/statement-of-applicability.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# Taiga polling config.
+# Keen uses the project timeline endpoint: /api/v1/timeline/project/{projectId}
+#
+# This is great for "what changed today" (stories closed, comments, status changes, etc.).
+# You can also configure Taiga webhooks to POST into /v1/webhooks/taiga/... if you prefer push.
+
+projects: []

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Controls</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="controls">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1">Controls register</h1>
+        <div class="small-muted">Browse framework controls/clauses and jump straight to mapped evidence.</div>
+      </div>
+      <div class="d-flex gap-2 no-print">
+        <a class="btn btn-outline-primary" href="/events.html?unmapped=true">Unmapped events</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3" id="controlsTabs" role="tablist">
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="controlsRegisterTab" data-bs-toggle="tab" data-bs-target="#controlsRegisterPane" type="button" role="tab" aria-controls="controlsRegisterPane" aria-selected="true">Controls</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="controlsVisualisationsTab" data-bs-toggle="tab" data-bs-target="#embeddedVisualisationsPane" type="button" role="tab" aria-controls="embeddedVisualisationsPane" aria-selected="false">Visualisations</button></li>
+    </ul>
+    <div class="tab-content">
+      <section class="tab-pane fade show active" id="controlsRegisterPane" role="tabpanel" aria-labelledby="controlsRegisterTab" tabindex="0">
+
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-lg-7">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+              <div>
+                <div class="fw-bold">Global event search</div>
+                <div class="small-muted">Find evidence without knowing the clause first.</div>
+              </div>
+              <form id="frontSearch" class="d-flex gap-2" style="min-width:320px; max-width:520px; width:100%;">
+                <input id="frontQ" class="form-control" type="search" placeholder="Search events (summary / actor / system / source)…">
+                <button class="btn btn-primary" type="submit">Search</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-5">
+        <div class="row g-3">
+          <div class="col-6">
+            <div class="kpi">
+              <div class="label">Events mapped</div>
+              <div class="value" id="kpiEventsMapped">–</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="kpi">
+              <div class="label">Events unmapped</div>
+              <div class="value" id="kpiEventsUnmapped">–</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="kpi">
+              <div class="label">Controls with evidence (in-scope)</div>
+              <div class="value" id="kpiControlsWith">–</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="kpi">
+              <div class="label">Controls w/o evidence (in-scope)</div>
+              <div class="value" id="kpiControlsWithout">–</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" data-mosp-filter-section="controls-index-filters" data-mosp-filter-title="Controls filters">
+      <div class="card-header">
+        <div class="d-flex flex-wrap gap-2 align-items-end justify-content-between">
+          <div>
+            <div class="fw-bold">Controls</div>
+            <div class="small-muted">Click a control to view mapped evidence and sampling tools.</div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body border-bottom no-print" data-mosp-filter-body>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <input id="filterText" class="form-control form-control-sm" style="min-width:280px;" type="text" placeholder="Filter controls (ref/title)…">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="onlyGaps">
+            <label class="form-check-label small-muted" for="onlyGaps">Gaps only</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="onlyInScope" checked>
+            <label class="form-check-label small-muted" for="onlyInScope">In-scope only</label>
+          </div>
+          <button id="reload" class="btn btn-sm btn-outline-primary">Reload</button>
+          <button id="resetFilters" class="btn btn-sm btn-outline-primary">Reset</button>
+          <button id="saveSearch" class="btn btn-sm btn-outline-primary">Save</button>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" data-sortable>
+            <thead>
+              <tr>
+                <th style="width:140px;">Ref</th>
+                <th>Title</th>
+                <th style="width:190px;">Justification</th>
+                <th style="width:140px;">Evidence</th>
+                <th style="width:200px;">Last evidence</th>
+                <th style="width:110px;">Scope</th>
+              </tr>
+            </thead>
+            <tbody id="rows"><tr class="table-loading-row"><td colspan="6" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading controls…</span></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+      </section>
+      <section class="tab-pane fade" id="embeddedVisualisationsPane" role="tabpanel" aria-labelledby="controlsVisualisationsTab" tabindex="0">
+        <div data-keen-visualisation-mount
+             data-viz-title="Control visualisations"
+             data-viz-intro="Review source-to-control coverage, the control sunburst, and clause-to-control relationships."
+             data-viz-modes="graph,heatmap,sunburst_control,graph_clause_control"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
+  <script type="module" src="/pages/controls.js"></script>
+  <script type="module" src="/pages/visualisation.js"></script>
+</body>
+</html>

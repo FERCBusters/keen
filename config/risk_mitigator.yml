@@ -1,0 +1,719 @@
+# Keen Mitigator deterministic recommendation rules.
+# The backend combines these terms with the user's structured questionnaire answers
+# and the control catalog text.  Keep this explainable and auditable: every term here
+# can be shown back to a user as a signal for a suggested mitigation.
+
+risk_types:
+  Confidentiality:
+    label: Confidentiality
+    reason: The issue may expose, leak, disclose, or allow unauthorised access to information.
+    scenario_terms:
+      - confidentiality
+      - confidential
+      - leak
+      - leaked
+      - leakage
+      - disclose
+      - disclosure
+      - exposed
+      - exposure
+      - stolen
+      - theft
+      - unauthorised access
+      - unauthorized access
+      - exfiltration
+      - secret
+      - credential
+      - privacy
+      - personal data
+      - customer records
+      - mitm
+      - man in the middle
+      - crack
+      - cracked
+      - cracking
+      - decrypt
+      - decrypted
+      - decryption
+      - password
+      - dark web
+    mitigation_words:
+      - access
+      - identity
+      - authentication
+      - authorisation
+      - authorization
+      - rights
+      - privileged
+      - classification
+      - labelling
+      - labeling
+      - encryption
+      - cryptography
+      - transfer
+      - leakage
+      - masking
+      - deletion
+      - disposal
+      - confidentiality
+      - privacy
+      - threat intelligence
+  Integrity:
+    label: Integrity
+    reason: The issue may corrupt, tamper with, or reduce trust in information or systems.
+    scenario_terms:
+      - integrity
+      - corrupt
+      - corruption
+      - deface
+      - defacement
+      - vandal
+      - vandalise
+      - tamper
+      - tampering
+      - altered
+      - incorrect
+      - invalid
+      - wrong data
+      - unusable
+      - unauthorised change
+      - unauthorized change
+      - unauthorised modification
+      - unauthorized modification
+      - configuration drift
+      - unauthorised code
+      - unauthorized code
+      - ransom
+      - ransomware
+    mitigation_words:
+      - change
+      - configuration
+      - secure development
+      - test
+      - testing
+      - acceptance
+      - logging
+      - monitoring
+      - review
+      - segregation
+      - separation
+      - backup
+      - restore
+      - integrity
+      - maintenance
+      - vulnerability
+  Availability:
+    label: Availability
+    reason: The issue may interrupt a service, destroy data, or create a single point of failure.
+    scenario_terms:
+      - availability
+      - outage
+      - unavailable
+      - downtime
+      - down
+      - failure
+      - single point of failure
+      - spof
+      - denial of service
+      - dos
+      - ddos
+      - disaster
+      - ransom
+      - ransomware
+      - lost data
+      - loss of data
+      - data loss
+      - capacity
+      - resilience
+      - continuity
+      - shutdown
+      - crash
+      - offline
+      - available
+    mitigation_words:
+      - backup
+      - redundancy
+      - resilient
+      - resilience
+      - capacity
+      - availability
+      - continuity
+      - incident
+      - response
+      - monitoring
+      - logging
+      - malware
+      - network
+      - configuration
+      - restore
+      - disaster
+
+asset_categories:
+  Data:
+    mitigation_words:
+      - information
+      - asset
+      - classification
+      - labelling
+      - transfer
+      - access
+      - backup
+      - deletion
+      - disposal
+      - masking
+      - privacy
+      - encryption
+      - cryptography
+      - threat intelligence
+    reason: The affected asset is data or information, so information lifecycle and protection controls are relevant.
+  I.T:
+    mitigation_words:
+      - endpoint
+      - network
+      - configuration
+      - access
+      - privileged
+      - malware
+      - vulnerability
+      - logging
+      - monitoring
+      - backup
+      - capacity
+      - change
+    reason: The affected asset is technology infrastructure, so technical operations and resilience controls are relevant.
+  Cost / financial:
+    mitigation_words:
+      - supplier
+      - project
+      - capacity
+      - continuity
+      - incident
+      - responsibilities
+      - monitoring
+      - review
+    reason: Financial impact often requires governance, monitoring, contractual, and continuity mitigations.
+  Brand / reputation:
+    mitigation_words:
+      - incident
+      - response
+      - authorities
+      - communication
+      - monitoring
+      - event
+      - intelligence
+      - supplier
+      - responsibilities
+    reason: Brand impact is usually mitigated through detection, response, communication, and governance controls.
+  Legal / regulatory:
+    mitigation_words:
+      - legal
+      - statutory
+      - regulatory
+      - contractual
+      - authorities
+      - privacy
+      - protection
+      - records
+      - evidence
+      - compliance
+    reason: Legal or regulatory risk should consider compliance, evidence, records, and authority/contact controls.
+  Supplier / third party:
+    mitigation_words:
+      - supplier
+      - cloud
+      - agreement
+      - service
+      - monitoring
+      - review
+      - change
+      - access
+      - relationship
+      - third party
+    reason: A supplier or third-party asset category should prioritise supplier relationship and service monitoring controls.
+  People / process:
+    mitigation_words:
+      - awareness
+      - training
+      - responsibilities
+      - segregation
+      - duties
+      - disciplinary
+      - process
+      - management
+      - review
+    reason: People and process risks are commonly mitigated through responsibilities, training, segregation, and governance.
+  Facilities:
+    mitigation_words:
+      - physical
+      - premises
+      - facilities
+      - equipment
+      - secure areas
+      - monitoring
+      - protection
+    reason: Facilities risks should consider physical and environmental protection controls.
+  Other:
+    mitigation_words:
+      - policy
+      - responsibilities
+      - risk
+      - incident
+      - monitoring
+      - review
+    reason: General risks should still be assessed against policy, ownership, monitoring, and response controls.
+
+impact_flags:
+  sensitive_data:
+    label: Sensitive or customer data could be exposed
+    risk_types: [Confidentiality]
+    mitigation_words: [classification, labelling, access, encryption, cryptography, transfer, leakage, privacy, threat intelligence]
+    reason: Sensitive data exposure points to confidentiality and data protection controls.
+  data_corruption:
+    label: Data could be corrupted or made unreliable
+    risk_types: [Integrity]
+    mitigation_words: [change, configuration, logging, monitoring, backup, testing, review]
+    reason: Corruption or unreliable data points to integrity controls and recoverability.
+  service_outage:
+    label: A service could be interrupted or unavailable
+    risk_types: [Availability]
+    mitigation_words: [backup, capacity, continuity, incident, monitoring, network, resilience]
+    reason: Outages point to availability, continuity, and detection controls.
+  financial:
+    label: Direct financial or cost impact is likely
+    risk_types: []
+    mitigation_words: [supplier, project, capacity, continuity, monitoring, review, responsibilities]
+    reason: Financial impact benefits from governance, supplier, and continuity mitigations.
+  brand:
+    label: Brand or reputation could be damaged
+    risk_types: []
+    mitigation_words: [incident, response, authorities, communication, monitoring, event, intelligence]
+    reason: Reputational impact depends on good detection, response, and communications.
+  supplier:
+    label: A supplier or third party is involved
+    risk_types: []
+    mitigation_words: [supplier, cloud, agreement, service, monitoring, review, access, relationship]
+    reason: Supplier involvement points to third-party relationship, agreement, and monitoring controls.
+  compliance:
+    label: Compliance or audit readiness could be affected
+    risk_types: []
+    mitigation_words: [legal, statutory, regulatory, evidence, records, compliance, audit, review]
+    reason: Compliance impact points to legal, records, evidence, and auditability controls.
+
+scenario_terms:
+  supplier:
+    terms: [supplier, vendor, third party, third-party, processor, outsource, outsourced, cloud provider, saas]
+    mitigation_words: [supplier, cloud, agreement, service, monitoring, review, access, relationship]
+    reason: The issue mentions a supplier or third party.
+  identity_access:
+    terms: [password, mfa, multifactor, login, account, credential, authentication, authorisation, authorization, privileged, admin]
+    mitigation_words: [identity, authentication, access, rights, privileged, secrets]
+    reason: The issue mentions identity, account, or privileged access concerns.
+  malware_ransomware:
+    terms: [malware, ransom, ransomware, virus, phishing, malicious, compromise, compromised, crack, cracking, decrypt, decryption, decrypted, dark web]
+    mitigation_words: [malware, backup, monitoring, incident, awareness, vulnerability, threat intelligence]
+    reason: The issue mentions malware or compromise indicators.
+  logging_monitoring:
+    terms: [log, logs, logging, audit trail, monitoring, alert, detection, forensic]
+    mitigation_words: [logging, monitoring, event, clock, audit, response]
+    reason: The issue mentions detection, logging, or auditability.
+  change_config:
+    terms: [change, deployment, release, configuration, misconfiguration, patch, update, drift]
+    mitigation_words: [change, configuration, secure development, testing, review, vulnerability]
+    reason: The issue mentions change, configuration, or release risk.
+  backup_recovery:
+    terms: [backup, restore, recovery, retention, lost data, data loss, archive]
+    mitigation_words: [backup, restore, availability, continuity, deletion, retention]
+    reason: The issue mentions backup, recovery, or data loss.
+
+# PESTLE(E) detection is deliberately rules-based so users can see why the
+# Mitigator suggested an existing PESTLE(E) item or offered to draft a new one.
+pestle_types:
+  Political:
+    lens: External
+    reason: The scenario may be influenced by government, public policy, international relations, sanctions or civil unrest.
+    impact_flags: []
+    scenario_terms:
+      - government
+      - government policy
+      - change of government
+      - election
+      - elections
+      - policy
+      - public policy
+      - sanctions
+      - trade embargo
+      - tariffs
+      - trade wars
+      - brexit
+      - european union
+      - nato
+      - war
+      - conflict
+      - civil unrest
+      - russia
+      - ukraine
+      - us politics
+      - us/china
+      - nationalisation
+      - privatisation
+      - ncsc
+      - threat intelligence
+    search_terms:
+      - policy
+      - government
+      - sanctions
+      - elections
+      - conflict
+      - NCSC
+  Economical:
+    lens: External
+    reason: The scenario may affect cost, budgets, funding, market conditions, suppliers or revenue.
+    impact_flags: [financial, supplier]
+    scenario_terms:
+      - cost
+      - costs
+      - financial
+      - budget
+      - budgets
+      - funding
+      - cash-flow
+      - cash flow
+      - inflation
+      - interest rates
+      - recession
+      - currency
+      - exchange rates
+      - market
+      - pricing
+      - supplier costs
+      - subscriptions
+      - customers
+      - subscribers
+      - business development
+      - sales
+      - marketing
+      - procurement
+      - bankruptcy
+      - taxation
+      - tax
+      - wages
+    search_terms:
+      - cost
+      - budget
+      - market
+      - supplier
+      - customer
+      - subscriptions
+      - inflation
+  Social:
+    lens: External
+    reason: The scenario may affect people, culture, customers, workforce, reputation or public sentiment.
+    impact_flags: [brand]
+    scenario_terms:
+      - users
+      - user
+      - members
+      - personnel
+      - staff
+      - employee
+      - employees
+      - workforce
+      - customer complaints
+      - customer requirements
+      - reputation
+      - social media
+      - culture
+      - bullying
+      - harassment
+      - discrimination
+      - mental health
+      - working from home
+      - remote workers
+      - training
+      - staff shortage
+      - staff turnover
+      - online communities
+      - media
+      - subscribers
+    search_terms:
+      - users
+      - personnel
+      - reputation
+      - social media
+      - culture
+      - training
+      - subscribers
+  Technological:
+    lens: Internal
+    reason: The scenario may involve software, platforms, cloud, security operations, data, development or technical change.
+    impact_flags: [sensitive_data, data_corruption, service_outage, supplier]
+    scenario_terms:
+      - technology
+      - technical
+      - software
+      - development
+      - platform
+      - cloud
+      - aws
+      - amazon web services
+      - azure
+      - office 365
+      - sharepoint
+      - api
+      - cyber
+      - cyber attack
+      - cyber threat
+      - ransomware
+      - ddos
+      - vulnerability
+      - vulnerability management
+      - patch
+      - patches
+      - upgrades
+      - outage
+      - backup
+      - artificial intelligence
+      - ai
+      - machine learning
+      - ml
+      - blockchain
+      - cryptocurrency
+      - data transfer
+      - hosting
+      - web hosting
+      - security hardening
+    search_terms:
+      - cyber
+      - software
+      - cloud
+      - vulnerability
+      - outage
+      - data
+      - hosting
+      - artificial intelligence
+  Legal:
+    lens: External
+    reason: The scenario may involve laws, contractual duties, regulatory notifications, compliance or audit exposure.
+    impact_flags: [compliance, sensitive_data]
+    scenario_terms:
+      - legal
+      - regulation
+      - regulatory
+      - compliance
+      - audit
+      - gdpr
+      - dpa 2018
+      - data protection
+      - data privacy framework
+      - e-privacy
+      - epr
+      - pecr
+      - cookie law
+      - computer misuse act
+      - investigatory powers act
+      - ripa
+      - nis
+      - dora
+      - contract law
+      - contractual
+      - non-compliance
+      - lawsuits
+      - fines
+      - ico
+      - ncsc
+      - employment law
+      - intellectual property
+      - copyright
+      - patents
+      - trademark
+    search_terms:
+      - legal
+      - compliance
+      - GDPR
+      - regulatory
+      - fines
+      - contract
+      - ICO
+      - NIS
+  Environmental:
+    lens: External
+    reason: The scenario may involve sustainability, climate, energy, facilities or physical environmental exposure.
+    impact_flags: []
+    scenario_terms:
+      - environmental
+      - environment
+      - climate change
+      - global warming
+      - carbon footprint
+      - emissions
+      - sustainability
+      - recycling
+      - renewable
+      - renewables
+      - energy
+      - fuel
+      - weather
+      - extreme weather
+      - flood
+      - flooding
+      - natural disaster
+      - waste
+      - pollution
+      - water courses
+      - facilities
+      - physical infrastructure
+    search_terms:
+      - climate
+      - sustainability
+      - energy
+      - weather
+      - waste
+      - pollution
+  Ethical:
+    lens: Internal
+    reason: The scenario may raise ethical obligations, fairness, responsible conduct, transparency or social responsibility concerns.
+    impact_flags: [brand, compliance]
+    scenario_terms:
+      - ethical
+      - ethics
+      - do the right thing
+      - accountability
+      - transparency
+      - fairness
+      - anti-bribery
+      - bribery
+      - corruption
+      - anti-slavery
+      - slavery
+      - modern slavery
+      - child labour
+      - conflict minerals
+      - blood diamonds
+      - equality
+      - diversity
+      - inclusivity
+      - discrimination
+      - harassment
+      - whistle blowers
+      - whistleblower
+      - csr
+      - social responsibility
+      - ai ethics
+      - artificial intelligence ethics
+    search_terms:
+      - ethical
+      - accountability
+      - bribery
+      - modern slavery
+      - equality
+      - whistleblower
+      - AI
+
+pestle_business_processes:
+  Board Strategy:
+    reason: The issue affects governance, strategic direction, policy or board-level risk appetite.
+    pestle_types: [Political, Legal, Ethical, Environmental]
+    terms: [board, strategy, governance, leadership, government, policy, legislation, regulator, regulatory, reputation, ethical, csr, sustainability, sanctions]
+  Business Development:
+    reason: The issue affects customers, subscribers, markets, pricing, sales or revenue opportunities.
+    pestle_types: [Economical, Social]
+    terms: [customer, customers, subscriber, subscribers, market, sales, marketing, pricing, business development, competition, subscriptions, revenue, complaints]
+  Development Operations:
+    reason: The issue affects delivery pipelines, deployment, change management or operational development work.
+    pestle_types: [Technological]
+    terms: [devops, deployment, release, change, configuration, patch, upgrades, automation, implementation, support]
+  Implementation and Support:
+    reason: The issue affects customer-facing implementation, support, incident handling or service delivery.
+    pestle_types: [Social, Technological]
+    terms: [support, implementation, customer, customers, subscriber, incident, alert, notifiable event, service desk, training, complaints]
+  Platform Security and Operations:
+    reason: The issue affects platform resilience, security operations, threat intelligence or infrastructure.
+    pestle_types: [Technological, Legal]
+    terms: [platform, security, operations, cyber, ransomware, ddos, vulnerability, threat intelligence, ncsc, cloud, outage, backup, monitoring, infrastructure]
+  Software Development:
+    reason: The issue affects application code, development practice, software supply chain or technical design.
+    pestle_types: [Technological, Ethical]
+    terms: [software, code, application, api, secure development, ai, artificial intelligence, machine learning, vulnerability, patch, repository, development]
+  Architecture and requirements:
+    reason: The issue affects architecture, requirements, assurance criteria or design decisions.
+    pestle_types: [Technological, Legal, Ethical]
+    terms: [architecture, requirements, design, assurance, compatibility, interoperability, data transfer, privacy by design, technical evolution]
+
+interested_parties:
+  organisation_members:
+    name: Organisation Members
+    nature: Impacted by scenario
+    reason: The issue mentions users or members, which maps to Organisation Members.
+    terms: [user, users, member, members, organisation member, data subject, individual, individuals, citizen, citizens]
+    note: Users/members appear to be directly affected by the scenario.
+    communication:
+      event: Alert
+      when: As Required
+      with_whom: Individual member
+      methods: [Email, As Appropriate]
+  organisation_personnel:
+    name: Organisation Personnel
+    nature: Impacted by scenario
+    reason: The issue mentions personnel, staff, employees or workforce impacts, which maps to Organisation Personnel.
+    terms: [personnel, staff, employee, employees, worker, workers, workforce, internal user, operator, operators, team, teams]
+    note: Personnel appear to be directly affected by the scenario.
+    communication:
+      event: Alert
+      when: As Required
+      with_whom: Individual staff member
+      methods: [Email, Google Chat]
+  suppliers:
+    name: Suppliers
+    nature: Impacted by scenario
+    reason: The issue mentions suppliers, vendors or third parties.
+    terms: [supplier, suppliers, vendor, vendors, third party, third-party, contractor, outsource, outsourced, processor, cloud provider, aws, azure, saas]
+    note: Supplier or third-party involvement was detected.
+    communication:
+      event: Alert
+      when: As Required
+      with_whom: Supplier Point of Contact
+      methods: [Email, As Appropriate]
+  legal_regulatory_bodies:
+    name: Legal/regulatory bodies
+    nature: Notification or compliance interest
+    reason: The issue may require legal or regulatory awareness.
+    terms: [legal, regulator, regulatory, compliance, ico, gdpr, dpa 2018, data protection, breach notification, fines, audit, statutory]
+    note: Legal/regulatory interest was detected.
+    communication:
+      event: Notifiable Event
+      when: As Required
+      with_whom: ICO
+      methods: [ICO Portal, Email]
+  independent_alerting_entities:
+    name: Independent alerting entities
+    nature: Alerting or public-interest source
+    reason: The issue mentions independent alerting sources such as researchers, media or whistleblowers.
+    terms: [security researcher, researchers, media, journalist, journalists, whistleblower, whistle blowers, independent alert, public disclosure, campaigners, lobbyists]
+    note: An independent alerting or public-interest entity may be involved.
+    communication:
+      event: Alert
+      when: Upon Identification
+      with_whom: Sender
+      methods: [Email, As Appropriate]
+  ncsc:
+    name: NCSC
+    nature: Threat intelligence or cyber guidance interest
+    reason: The issue mentions NCSC, threat intelligence or nationally relevant cyber security concerns.
+    terms: [ncsc, threat intelligence, cyber threat, cyber attack, cni, state actor, state actors, ransomware, national cyber security centre]
+    note: NCSC/threat-intelligence relevance was detected.
+    communication:
+      event: Alert
+      when: Upon Identification
+      with_whom: NCSC
+      methods: [Email, As Appropriate]
+  subscribers:
+    name: Subscribers
+    nature: Impacted by scenario
+    reason: The issue mentions customers or subscribers, which maps to Subscribers.
+    terms: [customer, customers, subscriber, subscribers, client, clients, tenant, tenants, paying user, paying users]
+    note: Customer/subscriber impact was detected.
+    communication:
+      event: Alert
+      when: As Required
+      with_whom: Individual member
+      methods: [Email, As Appropriate]

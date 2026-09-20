@@ -1,0 +1,39 @@
+# GitHub ingestion configuration
+#
+# Secrets:
+#   - Set your PAT via env var GITHUB_TOKEN (or KEEN_GITHUB_TOKEN)
+#   - Optionally set GITHUB_USERNAME (or KEEN_GITHUB_USERNAME) if you want the
+#     org-dashboard endpoint (/users/{username}/events/orgs/{org}) in "user" mode.
+#
+# Notes:
+#   - /orgs/{org}/events is a *public* org activity feed.
+#   - For private org/repo activity, prefer org_events_mode: auto (or user) with
+#     an authenticated token.
+#   - repo_events enumerates org repos then calls /repos/{owner}/{repo}/events.
+#
+# organizations:
+#   - org: my-org
+#     label: My Org
+#     include: "events+repo_events"   # events | repo_events | audit | all
+#     org_events_mode: auto            # auto | user | org
+#     repo_limit: 0                    # optional; 0/null = no limit
+#     exclude_archived: true
+#     exclude_forks: true
+#
+# repos:
+#   - owner: my-org
+#     repo: my-repo
+#     label: My Repo
+#
+# feeds:
+#   - url: "https://github.com/<...>.atom"
+#     label: Dashboard
+
+organizations:
+  - org: example-org
+    label: Example Organisation
+    include: "events+repo_events"   # events | repo_events | audit | all
+    org_events_mode: auto            # auto | user | org
+    repo_limit: 0                    # optional; 0/null = no limit
+    exclude_archived: true
+    exclude_forks: true

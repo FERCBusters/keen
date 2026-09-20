@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – ISMS Effectiveness Measure</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="isms-effectiveness-measure">
+  <div id="navbar"></div>
+
+  <main class="container-fluid py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/isms.html?tab=effectiveness">← ISMS Effectiveness Measures</a></div>
+        <h1 class="h3 mb-1" id="measureTitle">Effectiveness measure</h1>
+        <div class="small-muted" id="measureMeta">Loading effectiveness measure…</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <button id="sampleMeasureAudit" class="btn btn-outline-success" type="button" style="display:none;"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Sample into audit</button>
+        <a id="recordMetricLink" class="btn btn-outline-primary" data-nav-fw="1" href="/isms.html?tab=effectiveness">Record metric</a>
+        <a id="editMeasureLink" class="btn btn-primary" data-nav-fw="1" href="/isms.html?tab=effectiveness">Edit measure</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3 no-print" id="measureTabs" role="tablist">
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="measureDetailsTab" data-bs-toggle="tab" data-bs-target="#measureDetailsPane" type="button" role="tab">Details</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="measureMetricsTab" data-bs-toggle="tab" data-bs-target="#measureMetricsPane" type="button" role="tab">Metrics</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="measureVisualisationsTab" data-bs-toggle="tab" data-bs-target="#measureVisualisationsPane" type="button" role="tab">Visualisations</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="measureChangelogTab" data-bs-toggle="tab" data-bs-target="#measureChangelogPane" type="button" role="tab">Changelog</button></li>
+    </ul>
+
+    <div class="tab-content" id="measureTabContent">
+      <section class="tab-pane fade show active" id="measureDetailsPane" role="tabpanel" tabindex="0">
+        <div class="row g-3">
+          <div class="col-12 col-xl-8">
+            <div class="vstack gap-3">
+              <div class="card">
+                <div class="card-header fw-bold">Summary and description</div>
+                <div class="card-body">
+                  <h2 class="h5" id="measureSummary">—</h2>
+                  <div id="measureDescription" class="whitespace-pre-wrap small-muted mt-2">—</div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header fw-bold">Effectiveness measure</div>
+                <div id="measureBody" class="card-body whitespace-pre-wrap">—</div>
+              </div>
+              <div class="card">
+                <div class="card-header fw-bold">Metric definition</div>
+                <div id="metricDefinition" class="card-body whitespace-pre-wrap">—</div>
+              </div>
+              <div class="card">
+                <div class="card-header fw-bold">Notes</div>
+                <div id="measureNotes" class="card-body whitespace-pre-wrap small-muted">—</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-4">
+            <div class="vstack gap-3">
+              <div class="card">
+                <div class="card-header fw-bold">Dashboard</div>
+                <div class="card-body">
+                  <dl class="row mb-0">
+                    <dt class="col-sm-5">Latest value</dt><dd class="col-sm-7" id="latestValue">—</dd>
+                    <dt class="col-sm-5">Target</dt><dd class="col-sm-7" id="targetDisplay">—</dd>
+                    <dt class="col-sm-5">Metric entries</dt><dd class="col-sm-7" id="metricCount">—</dd>
+                    <dt class="col-sm-5">Frequency</dt><dd class="col-sm-7" id="measureFrequency">—</dd>
+                    <dt class="col-sm-5">Owner</dt><dd class="col-sm-7" id="measureOwner">—</dd>
+                    <dt class="col-sm-5">Metric key</dt><dd class="col-sm-7" id="metricKey">—</dd>
+                    <dt class="col-sm-5">Updated</dt><dd class="col-sm-7" id="measureUpdated">—</dd>
+                  </dl>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header fw-bold">Linked controls</div>
+                <div class="card-body" id="linkedControls">Loading controls…</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="measureMetricsPane" role="tabpanel" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div><div class="fw-bold">Metric history</div><div class="small-muted">Each metric entry has its own permalink and can be sampled into audit independently.</div></div>
+            <div class="d-flex gap-2 align-items-center no-print">
+              <input id="metricsFilter" class="form-control form-control-sm" type="search" placeholder="Filter metric entries…" style="min-width:260px;">
+              <span id="metricsMeta" class="badge text-bg-light">0</span>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle mb-0 sortable" data-sortable="1">
+                <thead><tr><th style="width:150px;">Recorded</th><th style="width:190px;">Period</th><th style="width:160px;">Value</th><th>Source</th><th>Notes</th><th class="no-print" style="width:130px;">Actions</th></tr></thead>
+                <tbody id="metricsRows"><tr><td colspan="6" class="p-4 small-muted">Loading metric entries…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="measureVisualisationsPane" role="tabpanel" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Metric value trend</div>
+              <div class="small-muted">Visualise recorded numeric metric values for a selected source and period.</div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-end no-print">
+              <div>
+                <label class="form-label small-muted mb-1" for="trendSource">Source</label>
+                <select id="trendSource" class="form-select form-select-sm" style="min-width:180px;"><option value="">All sources</option></select>
+              </div>
+              <div>
+                <label class="form-label small-muted mb-1" for="trendFrom">From</label>
+                <input id="trendFrom" class="form-control form-control-sm" type="date">
+              </div>
+              <div>
+                <label class="form-label small-muted mb-1" for="trendTo">To</label>
+                <input id="trendTo" class="form-control form-control-sm" type="date">
+              </div>
+              <button id="trendApply" class="btn btn-sm btn-outline-primary" type="button">Apply</button>
+              <button id="trendReset" class="btn btn-sm btn-outline-primary" type="button">Reset</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="trendMeta" class="small-muted mb-2">Load metric entries to render the trend.</div>
+            <div class="metric-trend-wrap">
+              <svg id="metricTrendSvg" class="metric-trend-svg" role="img" aria-label="Effectiveness metric value trend"></svg>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="measureChangelogPane" role="tabpanel" tabindex="0">
+        <div id="measureChangelog" class="card card-body small-muted">Loading changelog…</div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
+  <script type="module" src="/pages/isms-effectiveness-measure.js"></script>
+</body>
+</html>

@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Event</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="events">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a class="link-subtle" href="/events.html">← Events</a></div>
+        <h1 class="h4 mb-1" id="summary">Event</h1>
+        <div class="small-muted" id="meta">—</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <button id="btnEditDiary" class="btn btn-outline-primary" style="display:none;">Edit diary entry</button>
+        <button id="btnCreateIncident" class="btn btn-warning" style="display:none;"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Create Incident</button>
+        <button id="btnSampleAudit" class="btn btn-success" style="display:none;"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Sample into audit</button>
+        <button id="btnPdf" class="btn btn-primary">Sample as PDF evidence</button>
+        <button id="btnZip" class="btn btn-outline-primary" style="display:none;">Download all artifacts as evidence</button>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <div id="incidentsCard" class="card mb-3 no-print" style="display:none;">
+      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div>
+          <div class="fw-bold">Incident references</div>
+          <div class="small-muted">External incidents that were created from this event.</div>
+        </div>
+      </div>
+      <div class="card-body" id="incidents">—</div>
+    </div>
+
+    <div id="auditSamplesCard" class="card mb-3 no-print" style="display:none;">
+      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div>
+          <div class="fw-bold">Audit sampling</div>
+          <div class="small-muted">Audits that already include this event as sampled evidence.</div>
+        </div>
+      </div>
+      <div class="card-body" id="auditSamples">—</div>
+    </div>
+
+    <div class="card mb-3" id="evidenceCard">
+      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div>
+          <div class="fw-bold">Evidence snapshot</div>
+          <div class="small-muted">This view is designed to be printed or captured as a screenshot for auditors.</div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center no-print">
+          <a id="openSource" class="btn btn-sm btn-outline-primary" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open in source ↗</a>
+          <a id="bySource" class="btn btn-sm btn-outline-primary" href="#">More from this source</a>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-12 col-lg-7">
+            <div class="mb-2"><span class="small-muted">Source:</span> <span id="srcBadge"></span></div>
+            <div class="mb-2"><span class="small-muted">Timestamp:</span> <span id="ts"></span></div>
+            <div class="mb-2"><span class="small-muted">System:</span> <span id="system"></span></div>
+            <div class="mb-2"><span class="small-muted">Actor:</span> <span id="actor"></span></div>
+            <div class="mb-2"><span class="small-muted">Action:</span> <span id="action"></span></div>
+            <div class="mb-2"><span class="small-muted">Outcome:</span> <span id="outcome"></span></div>
+            <div class="mb-2"><span class="small-muted">Severity:</span> <span id="severity"></span></div>
+          </div>
+          <div class="col-12 col-lg-5">
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <div class="fw-bold mb-2">Mapped controls</div>
+                <div id="controls" class="mb-2"></div>
+              </div>
+              <div class="col-12 col-md-6">
+                <div class="fw-bold mb-2">Rationale</div>
+                <div id="rationale" class="mb-2 small-muted">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <hr class="my-3">
+
+        <div id="diaryBlock" style="display:none;"></div>
+
+        <div id="imagePreviews" class="mb-3" style="display:none;"></div>
+
+        <div class="fw-bold mb-2">Artifacts</div>
+        <div id="artifacts" class="small-muted">—</div>
+
+        <hr class="my-3">
+
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+          <div>
+            <div class="fw-bold">Questions</div>
+            <div class="small-muted">Auditor questions and responses associated with this evidence.</div>
+          </div>
+          <div class="no-print">
+            <button id="btnAskQuestion" class="btn btn-sm btn-outline-primary" type="button" style="display:none;"><i class="bi bi-chat-left-text me-1" aria-hidden="true"></i>Ask a question about this event</button>
+          </div>
+        </div>
+        <div id="questions" class="small-muted">—</div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div class="fw-bold">Normalized event payload</div>
+        <div class="small-muted">What Keen stored after ingestion + redaction.</div>
+      </div>
+      <div class="card-body">
+        <pre id="normalized" class="pretty mono mb-0"></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="fw-bold">Raw pointer</div>
+        <div class="small-muted">Linkage back to the original provider record (IDs, URLs, etc).</div>
+      </div>
+      <div class="card-body">
+        <pre id="raw" class="pretty mono mb-0"></pre>
+      </div>
+    </div>
+
+    <!-- Printed PDF header (populated from KEEN_SAMPLE_PDF_HEADER via /api/v1/me) -->
+    <div id="pdfHeader" class="pdf-header" style="display:none;"></div>
+
+    <!-- Printed PDF footer (populated from KEEN_SAMPLE_PDF_FOOTER via /api/v1/me) -->
+    <div id="pdfFooter" class="pdf-footer" style="display:none;"></div>
+  </main>
+
+
+
+  <!-- Edit diary entry (admin-only) -->
+  <div class="modal fade" id="editDiaryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit diary entry</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="editDiaryStatus" class="alert alert-info" style="display:none;"></div>
+          <form id="editDiaryForm">
+            <div class="row g-2">
+              <div class="col-12">
+                <label class="form-label small-muted mb-1">Summary</label>
+                <input id="editDiarySummary" class="form-control" required />
+              </div>
+              <div class="col-12 col-lg-6">
+                <label class="form-label small-muted mb-1">Timestamp (optional)</label>
+                <input id="editDiaryTs" class="form-control" type="datetime-local" />
+                <div class="form-text">Leave blank to keep the current event timestamp.</div>
+              </div>
+              <div class="col-12">
+                <label class="form-label small-muted mb-1">Details (optional)</label>
+                <textarea id="editDiaryDetails" class="form-control mono" rows="4" placeholder="Plain text or JSON"></textarea>
+              </div>
+              <div class="col-12">
+                <label class="form-label small-muted mb-1">Links (optional)</label>
+                <div id="editDiaryLinks" class="d-flex flex-column gap-2"></div>
+                <button id="editDiaryAddLink" type="button" class="btn btn-sm btn-outline-primary mt-2">Add link</button>
+                <div class="form-text">Only http(s) and mailto links are accepted.</div>
+              </div>
+              <div class="col-12">
+                <label class="form-label small-muted mb-1">Map to controls</label>
+                <input id="editControlSearch" class="form-control" placeholder="Search by ref or title (e.g. A.8.13, backup)" />
+                <div id="editControlResults" class="list-group mt-2" style="max-height: 220px; overflow:auto;"></div>
+                <div class="small-muted mt-2">Selected:</div>
+                <div id="editControlSelected" class="d-flex flex-wrap gap-2"></div>
+              </div>
+
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button id="editDiarySave" type="button" class="btn btn-primary">Save changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Evidence PDF options (orientation) -->
+  <!-- Evidence PDF options (orientation) -->
+  <div class="modal fade" id="pdfOptionsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Export evidence PDF</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="small-muted mb-2">Choose a layout for the PDF export. The preview shows the first page only.</div>
+
+          <div id="pdfPreviewStatus" class="pdf-preview-status small-muted mb-2" style="display:none;">
+            <span class="spinner-border spinner-border-sm align-text-bottom me-2" role="status" aria-hidden="true"></span>
+            Generating previews…
+          </div>
+
+          <div class="row g-3 pdf-preview-grid">
+            <div class="col-12 col-md-6">
+              <div class="pdf-preview-option" data-orientation="portrait" tabindex="0" role="button" aria-label="Select portrait">
+                <div class="form-check mb-2">
+                  <input id="pdfOptPortrait" class="form-check-input" type="radio" name="pdfOrientation" value="portrait" checked>
+                  <label class="form-check-label" for="pdfOptPortrait">Portrait</label>
+                </div>
+                <div class="pdf-preview-frame">
+                  <div class="pdf-preview-placeholder">Preview will appear here</div>
+                  <img id="pdfPreviewPortraitImg" class="pdf-preview-img" alt="Portrait preview" />
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="pdf-preview-option" data-orientation="landscape" tabindex="0" role="button" aria-label="Select landscape">
+                <div class="form-check mb-2">
+                  <input id="pdfOptLandscape" class="form-check-input" type="radio" name="pdfOrientation" value="landscape">
+                  <label class="form-check-label" for="pdfOptLandscape">Landscape</label>
+                </div>
+                <div class="pdf-preview-frame">
+                  <div class="pdf-preview-placeholder">Preview will appear here</div>
+                  <img id="pdfPreviewLandscapeImg" class="pdf-preview-img" alt="Landscape preview" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" data-pdf-cancel="1">Cancel</button>
+          <button id="pdfOptionsGenerate" type="button" class="btn btn-primary">Generate PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+
+
+  <!-- Sample into an audit engagement -->
+  <div class="modal fade" id="auditSampleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Sample evidence into audit</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="auditSampleStatus" class="alert alert-info" style="display:none;"></div>
+          <div class="mb-3">
+            <label class="form-label small-muted mb-1">Audit</label>
+            <select id="auditSampleSelect" class="form-select"></select>
+            <div class="form-text">Only Open and In progress audits can receive sampled evidence. Start an Audit if none are available.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small-muted mb-1">Audit notes for this evidence</label>
+            <textarea id="auditSampleNotes" class="form-control" rows="4" placeholder="Why this event was sampled, what was verified, screenshots taken, etc."></textarea>
+          </div>
+          <div class="form-check">
+            <input id="auditSampleUseCurrentUrl" class="form-check-input" type="checkbox" checked>
+            <label class="form-check-label" for="auditSampleUseCurrentUrl">Store the current event URL as the evidence reference</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <a id="auditSampleCreate" class="btn btn-outline-primary me-auto" href="/audits.html?new=1">Start an Audit</a>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button id="auditSampleSubmit" type="button" class="btn btn-primary">Sample into audit</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create incident via configured outbound webhook -->
+  <div class="modal fade" id="incidentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Create incident</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="incidentStatus" class="alert alert-info" style="display:none;"></div>
+          <form id="incidentForm">
+            <div class="mb-3">
+              <label class="form-label small-muted mb-1" for="incidentTitle">Title</label>
+              <input id="incidentTitle" class="form-control" maxlength="256" required />
+            </div>
+            <div class="mb-2">
+              <label class="form-label small-muted mb-1" for="incidentText">Basic text</label>
+              <textarea id="incidentText" class="form-control" rows="8" maxlength="5000" placeholder="Describe why this event should become an incident."></textarea>
+              <div class="form-text"><span id="incidentTextCount">0</span>/5000 characters. The Keen event URL will be included automatically.</div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button id="incidentSubmit" type="button" class="btn btn-warning">Create Incident</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Question event (auditor question) -->
+  <div class="modal fade" id="questionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Ask a question about this event</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="questionStatus" class="alert alert-info" style="display:none;"></div>
+          <form id="questionForm">
+            <div class="mb-3">
+              <label class="form-label small-muted mb-1">Question</label>
+              <textarea id="questionBody" class="form-control" rows="4" placeholder="E.g. What was this about?" required></textarea>
+            </div>
+            <div class="mb-2">
+              <label class="form-label small-muted mb-1">Attachments (optional)</label>
+              <input id="questionAttachments" class="form-control" type="file" multiple />
+              <div class="form-text">Up to 10 attachments.</div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button id="questionSubmit" type="button" class="btn btn-primary">Submit question</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/html2canvas/html2canvas.min.js"></script>
+  <script type="module" src="/pages/event.js"></script>
+</body>
+</html>

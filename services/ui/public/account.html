@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Account</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="account">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1">Account</h1>
+        <div class="small-muted">Manage your profile, preferences, saved searches, questions, audits, meetings and risks.</div>
+      </div>
+      <div class="d-flex gap-2">
+        <button id="logoutBtn" class="btn btn-outline-primary" type="button">Logout</button>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3" id="accountTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile-pane" type="button" role="tab" aria-controls="profile-pane" aria-selected="true" data-tab-hash="#profile">Profile</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="preferences-tab" data-bs-toggle="tab" data-bs-target="#preferences-pane" type="button" role="tab" aria-controls="preferences-pane" aria-selected="false" data-tab-hash="#preferences">Preferences</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="saved-searches-tab" data-bs-toggle="tab" data-bs-target="#saved-searches-pane" type="button" role="tab" aria-controls="saved-searches-pane" aria-selected="false" data-tab-hash="#saved-searches">Saved searches</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-questions-tab" data-bs-toggle="tab" data-bs-target="#my-questions-pane" type="button" role="tab" aria-controls="my-questions-pane" aria-selected="false" data-tab-hash="#my-questions">My Questions</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-audits-tab" data-bs-toggle="tab" data-bs-target="#my-audits-pane" type="button" role="tab" aria-controls="my-audits-pane" aria-selected="false" data-tab-hash="#my-audits">My Audits</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-meetings-tab" data-bs-toggle="tab" data-bs-target="#my-meetings-pane" type="button" role="tab" aria-controls="my-meetings-pane" aria-selected="false" data-tab-hash="#my-meetings">My meetings</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-risks-tab" data-bs-toggle="tab" data-bs-target="#my-risks-pane" type="button" role="tab" aria-controls="my-risks-pane" aria-selected="false" data-tab-hash="#my-risks">Risks I own</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-isms-objectives-tab" data-bs-toggle="tab" data-bs-target="#my-isms-objectives-pane" type="button" role="tab" aria-controls="my-isms-objectives-pane" aria-selected="false" data-tab-hash="#my-isms-objectives">My ISMS Objectives</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-isms-role-tab" data-bs-toggle="tab" data-bs-target="#my-isms-role-pane" type="button" role="tab" aria-controls="my-isms-role-pane" aria-selected="false" data-tab-hash="#my-isms-role">My Role</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-isms-assets-tab" data-bs-toggle="tab" data-bs-target="#my-isms-assets-pane" type="button" role="tab" aria-controls="my-isms-assets-pane" aria-selected="false" data-tab-hash="#my-isms-assets">Assets I manage</button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="accountTabContent">
+      <section class="tab-pane fade show active" id="profile-pane" role="tabpanel" aria-labelledby="profile-tab" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header">
+            <div class="fw-bold">Profile</div>
+            <div class="small-muted">Your current session identity.</div>
+          </div>
+          <div class="card-body">
+            <div class="row g-2">
+              <div class="col-12 col-lg-4">
+                <div class="small-muted">Username</div>
+                <div class="fw-semibold" id="meUser">–</div>
+              </div>
+              <div class="col-12 col-lg-4">
+                <div class="small-muted">Role</div>
+                <div class="fw-semibold" id="meRole">–</div>
+              </div>
+              <div class="col-12 col-lg-4">
+                <div class="small-muted">Admin</div>
+                <div class="fw-semibold" id="meAdmin">–</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="preferences-pane" role="tabpanel" aria-labelledby="preferences-tab" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header">
+            <div class="fw-bold">Preferences</div>
+            <div class="small-muted">Personalize how times are shown and pick a theme.</div>
+          </div>
+          <div class="card-body">
+            <form id="prefsForm" class="row g-3">
+              <div class="col-12 col-lg-6">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="prefUseLocalTz">
+                  <label class="form-check-label" for="prefUseLocalTz">Display dates/times in my local timezone</label>
+                </div>
+                <div class="form-text" id="prefDefaultTzHelp"></div>
+
+                <label class="form-label small-muted mb-1 mt-3" for="prefTimezone">Your timezone (IANA name)</label>
+                <div class="input-group">
+                  <input id="prefTimezone" class="form-control" type="text" placeholder="e.g. Australia/Melbourne" />
+                  <button class="btn btn-outline-primary" id="prefUseBrowserTz" type="button">Use browser</button>
+                </div>
+                <div class="form-text">Tip: most browsers expose this as <span class="mono" id="prefBrowserTz">–</span>.</div>
+              </div>
+
+              <div class="col-12 col-lg-6">
+                <label class="form-label small-muted mb-1" for="prefTheme">Theme</label>
+                <select id="prefTheme" class="form-select"></select>
+                <div class="form-text">Theme applies instantly when you choose it.</div>
+
+                <label class="form-label small-muted mb-1 mt-3" for="prefDateFormat">Date input format</label>
+                <select id="prefDateFormat" class="form-select">
+                  <option value="default">App default</option>
+                  <option value="ymd">YYYY-MM-DD</option>
+                  <option value="dmy">DD/MM/YYYY</option>
+                </select>
+                <div class="form-text" id="prefDefaultDateFormatHelp">API values remain YYYY-MM-DD.</div>
+              </div>
+
+              <div class="col-12 col-lg-6">
+                <label class="form-label small-muted mb-1" for="prefLandingPage">Default landing page</label>
+                <select id="prefLandingPage" class="form-select"></select>
+                <div class="form-text">Where you land after logging in (when no specific page was requested).</div>
+              </div>
+
+              <div class="col-12 col-lg-6">
+                <label class="form-label small-muted mb-1" for="prefDefaultFramework">Default framework</label>
+                <select id="prefDefaultFramework" class="form-select" disabled>
+                  <option value="">Loading frameworks…</option>
+                </select>
+                <div class="form-text">Used when you sign in and no framework is explicitly selected in the URL.</div>
+              </div>
+
+              <div class="col-12">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="prefAutoApplyFilters">
+                  <label class="form-check-label" for="prefAutoApplyFilters">Auto-apply filters (skip Apply buttons)</label>
+                </div>
+                <div class="form-text">When enabled, pages with filter options update automatically as you enter values.</div>
+              </div>
+
+              <div class="col-12">
+                <details class="border rounded-3 p-3">
+                  <summary class="fw-semibold">Source badge colours</summary>
+                  <div class="form-text mb-2">Override the hex colours used for source badges and graphs. Leave blank (or reset) to use the global defaults.</div>
+                  <div id="sourceColorsLoading" class="small-muted">Loading sources…</div>
+                  <div id="sourceColorsWrap" style="display:none;" class="mt-2">
+                    <div class="table-responsive">
+                      <table class="table table-sm align-middle mb-2">
+                        <thead>
+                          <tr>
+                            <th>Source</th>
+                            <th>Label</th>
+                            <th>Default</th>
+                            <th>Your colour</th>
+                            <th class="text-end">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody id="sourceColorsBody"></tbody>
+                      </table>
+                    </div>
+                    <div class="d-flex gap-2">
+                      <button id="sourceColorsResetAll" type="button" class="btn btn-sm btn-outline-secondary">Reset all overrides</button>
+                    </div>
+                  </div>
+                </details>
+              </div>
+
+              <div class="col-12 d-flex gap-2 align-items-center">
+                <button id="prefsSaveBtn" class="btn btn-primary" type="submit">Save preferences</button>
+                <span id="prefsSaveToast" class="badge text-bg-success" style="display:none; white-space:nowrap;" aria-live="polite">Saved</span>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="saved-searches-pane" role="tabpanel" aria-labelledby="saved-searches-tab" tabindex="0">
+        <div class="card mb-3" id="savedSearchesCard">
+          <div class="card-header">
+            <div class="fw-bold">Saved searches</div>
+            <div class="small-muted">Quick links to your commonly used filters.</div>
+          </div>
+          <div class="card-body">
+            <div id="savedSearchesEmpty" class="small-muted">No saved searches yet.</div>
+            <div class="list-group" id="savedSearchesList"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="my-questions-pane" role="tabpanel" aria-labelledby="my-questions-tab" tabindex="0">
+        <div id="myQuestionsStatus" class="alert alert-info" style="display:none;"></div>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-semibold">My Questions</div>
+              <div class="small-muted">Threads you have opened on events, including any admin responses.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="myQuestionsRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          </div>
+          <div class="card-body">
+            <div id="myQuestionsEmpty" class="small-muted" style="display:none;">No questions yet.</div>
+            <div class="table-responsive" id="myQuestionsTableWrap" style="display:none;">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="myQuestionsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="my-audits-pane" role="tabpanel" aria-labelledby="my-audits-tab" tabindex="0">
+        <div id="myAuditsStatus" class="alert alert-info" style="display:none;"></div>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-semibold">My Audits</div>
+              <div class="small-muted">Audits where you were marked as an attendee.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="myAuditsRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          </div>
+          <div class="card-body">
+            <div id="myAuditsEmpty" class="small-muted" style="display:none;">You are not currently marked as an attendee of any audits.</div>
+            <div class="table-responsive" id="myAuditsTableWrap" style="display:none;">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Audit</th>
+                    <th>Framework</th>
+                    <th>Dates</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="myAuditsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="my-meetings-pane" role="tabpanel" aria-labelledby="my-meetings-tab" tabindex="0">
+        <div id="myMeetingsStatus" class="alert alert-info" style="display:none;"></div>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-semibold">My meetings</div>
+              <div class="small-muted">Minutes of Meetings where you were marked as an attendee or apology.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="myMeetingsRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          </div>
+          <div class="card-body">
+            <div id="myMeetingsEmpty" class="small-muted" style="display:none;">You are not currently marked as an attendee or apology for any Minutes of Meetings.</div>
+            <div class="table-responsive" id="myMeetingsTableWrap" style="display:none;">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Meeting</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>My attendance</th>
+                    <th>Attendees</th>
+                    <th>Apologies</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="myMeetingsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="my-risks-pane" role="tabpanel" aria-labelledby="my-risks-tab" tabindex="0">
+        <div id="myRisksStatus" class="alert alert-info" style="display:none;"></div>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-semibold">Risks I own</div>
+              <div class="small-muted">Risk entities where you are assigned as the owner.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="myRisksRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          </div>
+          <div class="card-body">
+            <div id="myRisksEmpty" class="small-muted" style="display:none;">You are not currently marked as the owner of any risks.</div>
+            <div class="table-responsive" id="myRisksTableWrap" style="display:none;">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Risk</th>
+                    <th>Category</th>
+                    <th>Type</th>
+                    <th class="text-end">Risk</th>
+                    <th class="text-end">Residual</th>
+                    <th>Controls</th>
+                    <th>Updated</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="myRisksTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="my-isms-objectives-pane" role="tabpanel" aria-labelledby="my-isms-objectives-tab" tabindex="0">
+        <div id="myIsmsObjectivesStatus" class="alert alert-info" style="display:none;"></div>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-semibold">My ISMS Objectives</div>
+              <div class="small-muted">Objectives where you are the owner or one of the named resource requirements.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="myIsmsObjectivesRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          </div>
+          <div class="card-body">
+            <div id="myIsmsObjectivesEmpty" class="small-muted" style="display:none;">You are not currently associated with any ISMS objectives.</div>
+            <div class="table-responsive" id="myIsmsObjectivesTableWrap" style="display:none;">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Requirement</th>
+                    <th>Goal</th>
+                    <th>Owner</th>
+                    <th>Resources</th>
+                    <th>Target</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="myIsmsObjectivesTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="my-isms-role-pane" role="tabpanel" aria-labelledby="my-isms-role-tab" tabindex="0">
+        <div id="myIsmsRoleStatus" class="alert alert-info" style="display:none;"></div>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-semibold">My Role</div>
+              <div class="small-muted">Organisation Chart categories and roles linked to your KEEN user account.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="myIsmsRoleRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          </div>
+          <div class="card-body">
+            <div id="myIsmsRoleEmpty" class="small-muted" style="display:none;">You are not currently linked to any ISMS Organisation Chart role.</div>
+            <div class="table-responsive" id="myIsmsRoleTableWrap" style="display:none;">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Role/category</th>
+                    <th>Type</th>
+                    <th>Relationship</th>
+                    <th>Path</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="myIsmsRoleTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="my-isms-assets-pane" role="tabpanel" aria-labelledby="my-isms-assets-tab" tabindex="0">
+        <div id="myIsmsAssetsStatus" class="alert alert-info" style="display:none;"></div>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-semibold">Assets I manage</div>
+              <div class="small-muted">Assets where your ISMS Organisation Chart role is the owner or register holder.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="myIsmsAssetsRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          </div>
+          <div class="card-body">
+            <div id="myIsmsAssetsEmpty" class="small-muted" style="display:none;">You are not currently associated with any ISMS assets.</div>
+            <div class="table-responsive" id="myIsmsAssetsTableWrap" style="display:none;">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Asset</th>
+                    <th>License</th>
+                    <th>Role</th>
+                    <th>Owner</th>
+                    <th>Register held by</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="myIsmsAssetsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/account.js"></script>
+</body>
+</html>

@@ -1,0 +1,1504 @@
+framework: UK-DVSTF:1.0
+notes: Expanded DVSTF 1.0 seed built from GOV.UK Part 2 and Part 3 clauses.
+  Refs are clause identifiers intended for control mapping in Keen.
+items:
+- type: trust_framework_control
+  ref: 5.a
+  title: Identity service provider baseline requirements — 5.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.b
+  title: Identity service provider baseline requirements — 5.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.c
+  title: Identity service provider baseline requirements — 5.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.1.a
+  title: Identity service role and responsibilities — 5.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.1.b
+  title: Identity service role and responsibilities — 5.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.1.c
+  title: Identity service role and responsibilities — 5.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.a
+  title: Proving and verifying identities — 5.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.b
+  title: Proving and verifying identities — 5.2.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.c
+  title: Proving and verifying identities — 5.2.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.d
+  title: Proving and verifying identities — 5.2.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.e
+  title: Proving and verifying identities — 5.2.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.f
+  title: Proving and verifying identities — 5.2.f
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.g
+  title: Proving and verifying identities — 5.2.g
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.h
+  title: Proving and verifying identities — 5.2.h
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.i
+  title: Proving and verifying identities — 5.2.i
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.j
+  title: Proving and verifying identities — 5.2.j
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.k
+  title: Proving and verifying identities — 5.2.k
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.l
+  title: Proving and verifying identities — 5.2.l
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.m
+  title: Proving and verifying identities — 5.2.m
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.n
+  title: Proving and verifying identities — 5.2.n
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.o
+  title: Proving and verifying identities — 5.2.o
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.1.a
+  title: Identity checks and verification methods — 5.2.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.1.b
+  title: Identity checks and verification methods — 5.2.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.1.c
+  title: Identity checks and verification methods — 5.2.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.1.d
+  title: Identity checks and verification methods — 5.2.1.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.2.a
+  title: Resolving identity evidence conflicts — 5.2.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.2.b
+  title: Resolving identity evidence conflicts — 5.2.2.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.2.c
+  title: Resolving identity evidence conflicts — 5.2.2.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.2.d
+  title: Resolving identity evidence conflicts — 5.2.2.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.2.e
+  title: Resolving identity evidence conflicts — 5.2.2.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.2.2.f
+  title: Resolving identity evidence conflicts — 5.2.2.f
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.3.a
+  title: Managing reusable digital identities — 5.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.3.b
+  title: Managing reusable digital identities — 5.3.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.3.c
+  title: Managing reusable digital identities — 5.3.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.3.d
+  title: Managing reusable digital identities — 5.3.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 5.3.e
+  title: Managing reusable digital identities — 5.3.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 6.a
+  title: Attribute service provider baseline requirements — 6.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 6.b
+  title: Attribute service provider baseline requirements — 6.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 6.c
+  title: Attribute service provider baseline requirements — 6.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 6.d
+  title: Attribute service provider baseline requirements — 6.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 6.e
+  title: Attribute service provider baseline requirements — 6.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 6.1.1.a
+  title: Creating and maintaining verified attributes — 6.1.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 6.1.1.b
+  title: Creating and maintaining verified attributes — 6.1.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 6.1.1.c
+  title: Creating and maintaining verified attributes — 6.1.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 6.1.1.d
+  title: Creating and maintaining verified attributes — 6.1.1.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 6.1.1.e
+  title: Creating and maintaining verified attributes — 6.1.1.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 6.1.1.f
+  title: Creating and maintaining verified attributes — 6.1.1.f
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.a
+  title: Holder service provider baseline requirements — 7.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.b
+  title: Holder service provider baseline requirements — 7.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.c
+  title: Holder service provider baseline requirements — 7.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.d
+  title: Holder service provider baseline requirements — 7.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.1.a
+  title: Securely holding identities and attributes — 7.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.1.b
+  title: Securely holding identities and attributes — 7.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.2.a
+  title: Reusing verified identities and attributes — 7.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.2.b
+  title: Reusing verified identities and attributes — 7.2.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.3.a
+  title: Managing holder service accounts — 7.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.3.b
+  title: Managing holder service accounts — 7.3.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.3.c
+  title: Managing holder service accounts — 7.3.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.3.d
+  title: Managing holder service accounts — 7.3.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.3.1.a
+  title: Notifying users of holder account changes — 7.3.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.3.1.b
+  title: Notifying users of holder account changes — 7.3.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 7.3.1.c
+  title: Notifying users of holder account changes — 7.3.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 8.a
+  title: Orchestration service provider rules — 8.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 9.a
+  title: Component service provider baseline requirements — 9.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 9.b
+  title: Component service provider baseline requirements — 9.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 9.1.a
+  title: Components supporting GPG 45 / GPG 44 — 9.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 9.1.1.a
+  title: GPG 45 component obligations — 9.1.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 9.1.1.b
+  title: GPG 45 component obligations — 9.1.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 9.1.2.a
+  title: GPG 44 component obligations — 9.1.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 9.1.2.b
+  title: GPG 44 component obligations — 9.1.2.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 9.1.2.c
+  title: GPG 44 component obligations — 9.1.2.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.a
+  title: Inclusion obligations — 10.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.b
+  title: Inclusion obligations — 10.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.1.a
+  title: Inclusive design and evidence options — 10.1.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.1.b
+  title: Inclusive design and evidence options — 10.1.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.1.c
+  title: Inclusive design and evidence options — 10.1.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.2.a
+  title: Annual inclusion monitoring — 10.1.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.2.b
+  title: Annual inclusion monitoring — 10.1.2.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.2.c
+  title: Annual inclusion monitoring — 10.1.2.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.3.a
+  title: Retake and fallback checks — 10.1.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.3.b
+  title: Retake and fallback checks — 10.1.3.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.3.c
+  title: Retake and fallback checks — 10.1.3.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.1.3.d
+  title: Retake and fallback checks — 10.1.3.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.2.a
+  title: Accessibility obligations — 10.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.2.b
+  title: Accessibility obligations — 10.2.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.2.c
+  title: Accessibility obligations — 10.2.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.2.d
+  title: Accessibility obligations — 10.2.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 10.2.e
+  title: Accessibility obligations — 10.2.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.1.a
+  title: Business probity — 11.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.1.b
+  title: Business probity — 11.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.1.c
+  title: Business probity — 11.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.1.d
+  title: Business probity — 11.1.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.1.e
+  title: Business probity — 11.1.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.1.f
+  title: Business probity — 11.1.f
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.2.a
+  title: Complaints and disputes — 11.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.2.b
+  title: Complaints and disputes — 11.2.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.2.c
+  title: Complaints and disputes — 11.2.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.3.a
+  title: Staffing, competence and SRO responsibilities — 11.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.3.b
+  title: Staffing, competence and SRO responsibilities — 11.3.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.3.c
+  title: Staffing, competence and SRO responsibilities — 11.3.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.3.d
+  title: Staffing, competence and SRO responsibilities — 11.3.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.4.a
+  title: Service and quality management — 11.4.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.4.b
+  title: Service and quality management — 11.4.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.4.c
+  title: Service and quality management — 11.4.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.4.d
+  title: Service and quality management — 11.4.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.4.e
+  title: Service and quality management — 11.4.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.5.a
+  title: Information management system — 11.5.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.5.b
+  title: Information management system — 11.5.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.5.1.a
+  title: Archiving policy — 11.5.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.5.1.b
+  title: Archiving policy — 11.5.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.5.2.a
+  title: Disposal schedule — 11.5.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.5.3.a
+  title: Data management policy — 11.5.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.5.3.b
+  title: Data management policy — 11.5.3.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.a
+  title: Information security management — 11.6.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.b
+  title: Information security management — 11.6.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.c
+  title: Information security management — 11.6.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.d
+  title: Information security management — 11.6.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.e
+  title: Information security management — 11.6.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.1.a
+  title: Confidentiality controls — 11.6.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.1.b
+  title: Confidentiality controls — 11.6.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.1.c
+  title: Confidentiality controls — 11.6.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.1.d
+  title: Confidentiality controls — 11.6.1.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.2.a
+  title: Integrity controls — 11.6.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.3.a
+  title: Availability controls — 11.6.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.3.b
+  title: Availability controls — 11.6.3.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.3.c
+  title: Availability controls — 11.6.3.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.4.a
+  title: Technical security controls — 11.6.4.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.4.b
+  title: Technical security controls — 11.6.4.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.5.a
+  title: Organisational security controls — 11.6.5.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.6.a
+  title: Physical security controls — 11.6.6.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.6.b
+  title: Physical security controls — 11.6.6.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.7.a
+  title: Security governance — 11.6.7.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.7.b
+  title: Security governance — 11.6.7.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.8.a
+  title: Security measures for collected data — 11.6.8.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.8.b
+  title: Security measures for collected data — 11.6.8.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.6.8.c
+  title: Security measures for collected data — 11.6.8.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.7.a
+  title: Risk management framework — 11.7.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.7.b
+  title: Risk management framework — 11.7.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.7.c
+  title: Risk management framework — 11.7.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.7.d
+  title: Risk management framework — 11.7.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.a
+  title: Record keeping requirements — 11.8.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.b
+  title: Record keeping requirements — 11.8.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.c
+  title: Record keeping requirements — 11.8.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.d
+  title: Record keeping requirements — 11.8.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.e
+  title: Record keeping requirements — 11.8.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.f
+  title: Record keeping requirements — 11.8.f
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.1.a
+  title: Records management policy — 11.8.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.1.b
+  title: Records management policy — 11.8.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.1.c
+  title: Records management policy — 11.8.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.2.a
+  title: Operational records responsibilities — 11.8.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.3.a
+  title: Records disposal — 11.8.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.3.b
+  title: Records disposal — 11.8.3.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.4.a
+  title: Disposal statement — 11.8.4.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.5.a
+  title: Record handling responsibilities — 11.8.5.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.8.6.a
+  title: Records accountability owner — 11.8.6.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.9.a
+  title: Withdrawing or retiring services — 11.9.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 11.9.b
+  title: Withdrawing or retiring services — 11.9.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.1.1.a
+  title: Data schema interoperability — 12.1.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.1.1.b
+  title: Data schema interoperability — 12.1.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.1.1.c
+  title: Data schema interoperability — 12.1.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.1.2.a
+  title: Validating inbound participant messages — 12.1.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.1.3.a
+  title: Sharing digital identities and attributes — 12.1.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.1.3.b
+  title: Sharing digital identities and attributes — 12.1.3.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.1.3.c
+  title: Sharing digital identities and attributes — 12.1.3.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: '12.2'
+  title: Performance / service assurance requirements — 12.2
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.1.a
+  title: Secure communications and transmission — 12.3.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.1.b
+  title: Secure communications and transmission — 12.3.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.1.c
+  title: Secure communications and transmission — 12.3.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.2.a
+  title: Cryptography requirements — 12.3.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.2.b
+  title: Cryptography requirements — 12.3.2.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.2.c
+  title: Cryptography requirements — 12.3.2.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.2.d
+  title: Cryptography requirements — 12.3.2.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.2.e
+  title: Cryptography requirements — 12.3.2.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.3.a
+  title: Entity authentication — 12.3.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.4.a
+  title: Digital signatures and non-repudiation — 12.3.4.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.4.b
+  title: Digital signatures and non-repudiation — 12.3.4.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.4.c
+  title: Digital signatures and non-repudiation — 12.3.4.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.4.d
+  title: Digital signatures and non-repudiation — 12.3.4.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.3.4.e
+  title: Digital signatures and non-repudiation — 12.3.4.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.a
+  title: Fraud management baseline — 12.4.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.1.a
+  title: Fraud monitoring — 12.4.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.1.b
+  title: Fraud monitoring — 12.4.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.1.c
+  title: Fraud monitoring — 12.4.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.1.d
+  title: Fraud monitoring — 12.4.1.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.1.e
+  title: Fraud monitoring — 12.4.1.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.2.a
+  title: Fraud policies and procedures — 12.4.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.2.b
+  title: Fraud policies and procedures — 12.4.2.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.2.c
+  title: Fraud policies and procedures — 12.4.2.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.2.d
+  title: Fraud policies and procedures — 12.4.2.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.2.e
+  title: Fraud policies and procedures — 12.4.2.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.3.a
+  title: Fraud reporting — 12.4.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.3.b
+  title: Fraud reporting — 12.4.3.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.4.a
+  title: Threat intelligence and fraud analysis — 12.4.4.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.4.b
+  title: Threat intelligence and fraud analysis — 12.4.4.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.4.c
+  title: Threat intelligence and fraud analysis — 12.4.4.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.5.a
+  title: Sharing threat indicators — 12.4.5.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.5.b
+  title: Sharing threat indicators — 12.4.5.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.5.c
+  title: Sharing threat indicators — 12.4.5.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.4.5.d
+  title: Sharing threat indicators — 12.4.5.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.a
+  title: Incident response baseline — 12.5.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.b
+  title: Incident response baseline — 12.5.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.c
+  title: Incident response baseline — 12.5.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.d
+  title: Incident response baseline — 12.5.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.e
+  title: Incident response baseline — 12.5.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.1.a
+  title: Responding to fraud incidents — 12.5.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.1.b
+  title: Responding to fraud incidents — 12.5.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.1.c
+  title: Responding to fraud incidents — 12.5.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.1.d
+  title: Responding to fraud incidents — 12.5.1.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.2.a
+  title: Responding to service delivery incidents — 12.5.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.3.a
+  title: Responding to data breaches — 12.5.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.3.b
+  title: Responding to data breaches — 12.5.3.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.3.c
+  title: Responding to data breaches — 12.5.3.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.4.a
+  title: Compromised holder account response — 12.5.4.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.4.b
+  title: Compromised holder account response — 12.5.4.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.4.c
+  title: Compromised holder account response — 12.5.4.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.4.d
+  title: Compromised holder account response — 12.5.4.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.4.e
+  title: Compromised holder account response — 12.5.4.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.4.f
+  title: Compromised holder account response — 12.5.4.f
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.4.g
+  title: Compromised holder account response — 12.5.4.g
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.5.a
+  title: Identity repair support — 12.5.5.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.5.5.b
+  title: Identity repair support — 12.5.5.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.6.a
+  title: User communications and service transparency — 12.6.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.a
+  title: Privacy and data protection baseline — 12.7.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.b
+  title: Privacy and data protection baseline — 12.7.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.c
+  title: Privacy and data protection baseline — 12.7.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.d
+  title: Privacy and data protection baseline — 12.7.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.e
+  title: Privacy and data protection baseline — 12.7.e
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.1.a
+  title: Transparency and privacy notices — 12.7.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.1.b
+  title: Transparency and privacy notices — 12.7.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.2.a
+  title: Data protection by design and default — 12.7.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.2.b
+  title: Data protection by design and default — 12.7.2.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.3.a
+  title: Confirming user understanding of data sharing — 12.7.3.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.3.b
+  title: Confirming user understanding of data sharing — 12.7.3.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.3.c
+  title: Confirming user understanding of data sharing — 12.7.3.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.4.a
+  title: Reconfirming understanding for holder services — 12.7.4.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.4.b
+  title: Reconfirming understanding for holder services — 12.7.4.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.4.c
+  title: Reconfirming understanding for holder services — 12.7.4.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.4.d
+  title: Reconfirming understanding for holder services — 12.7.4.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.5.a
+  title: Prohibited processing of personal data — 12.7.5.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.7.5.b
+  title: Prohibited processing of personal data — 12.7.5.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.8.a
+  title: Biometrics obligations — 12.8.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.8.b
+  title: Biometrics obligations — 12.8.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 12.8.1.a
+  title: Biometric performance and security evidence — 12.8.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 13.1.a
+  title: Supplementary code participation rules — 13.1.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 13.1.b
+  title: Supplementary code participation rules — 13.1.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 13.1.c
+  title: Supplementary code participation rules — 13.1.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 13.2.a
+  title: Service and process specific supplementary codes — 13.2.a
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 13.2.b
+  title: Service and process specific supplementary codes — 13.2.b
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 13.2.c
+  title: Service and process specific supplementary codes — 13.2.c
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause
+- type: trust_framework_control
+  ref: 13.2.d
+  title: Service and process specific supplementary codes — 13.2.d
+  metadata:
+    source: UK DVSTF 1.0 (GOV.UK)
+    origin: part_2_3_clause

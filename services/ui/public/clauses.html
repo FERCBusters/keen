@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Clauses</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="clauses">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1">Clauses</h1>
+        <div class="small-muted">Browse ISO27001 clauses and their linked controls.</div>
+      </div>
+      <div class="d-flex gap-2 no-print">
+        <a class="btn btn-outline-primary" data-nav-fw="1" href="/controls.html">Controls</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3" id="clausesTabs" role="tablist">
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="clausesRegisterTab" data-bs-toggle="tab" data-bs-target="#clausesRegisterPane" type="button" role="tab" aria-controls="clausesRegisterPane" aria-selected="true">Clauses</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="clausesVisualisationsTab" data-bs-toggle="tab" data-bs-target="#embeddedVisualisationsPane" type="button" role="tab" aria-controls="embeddedVisualisationsPane" aria-selected="false">Visualisations</button></li>
+    </ul>
+    <div class="tab-content">
+      <section class="tab-pane fade show active" id="clausesRegisterPane" role="tabpanel" aria-labelledby="clausesRegisterTab" tabindex="0">
+
+    <div class="card mb-3 no-print" data-mosp-filter-section="clauses-filters" data-mosp-filter-title="Filters">
+      <div class="card-body">
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-lg-8">
+            <label class="form-label small-muted mb-1" for="q">Search clauses</label>
+            <input id="q" class="form-control" type="text" placeholder="Clause ref or title…">
+          </div>
+          <div class="col-12 col-lg-4">
+            <button id="clearFilters" class="btn btn-outline-primary w-100" type="button">Reset</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div>
+          <div class="fw-bold">Clause register</div>
+          <div class="small-muted" id="meta">—</div>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" data-sortable>
+            <thead>
+              <tr>
+                <th style="width:140px;">Clause</th>
+                <th>Title</th>
+                <th style="width:170px;">Applicable controls</th>
+                <th style="width:150px;">Evidence</th>
+                <th style="width:150px;">Guidance</th>
+              </tr>
+            </thead>
+            <tbody id="rows"><tr><td colspan="5" class="p-4 small-muted">Loading clauses…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+      </section>
+      <section class="tab-pane fade" id="embeddedVisualisationsPane" role="tabpanel" aria-labelledby="clausesVisualisationsTab" tabindex="0">
+        <div data-keen-visualisation-mount
+             data-viz-title="Clause visualisations"
+             data-viz-intro="Review source-to-clause evidence coverage and clause-to-control applicability."
+             data-viz-modes="graph_clause_control,graph_clause_events,heatmap_clause_events"
+             data-viz-default-mode="graph_clause_control"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
+  <script type="module" src="/pages/clauses.js"></script>
+  <script type="module" src="/pages/visualisation.js"></script>
+</body>
+</html>

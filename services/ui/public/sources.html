@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Sources</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="sources">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1">Sources</h1>
+        <div class="small-muted" id="sourcesSubtitle">Pivot around the dataset by source type (Loki, Taiga, GitHub, Jenkins…).</div>
+        <div id="sourcesFilter" class="mt-1"></div>
+      </div>
+      <div class="d-flex gap-2 no-print">
+        <a class="btn btn-outline-primary" href="/events.html">Browse events</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3" id="sourcesTabs" role="tablist">
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="sourcesRegisterTab" data-bs-toggle="tab" data-bs-target="#sourcesRegisterPane" type="button" role="tab" aria-controls="sourcesRegisterPane" aria-selected="true">Sources</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="sourcesVisualisationsTab" data-bs-toggle="tab" data-bs-target="#embeddedVisualisationsPane" type="button" role="tab" aria-controls="embeddedVisualisationsPane" aria-selected="false">Visualisations</button></li>
+    </ul>
+    <div class="tab-content">
+      <section class="tab-pane fade show active" id="sourcesRegisterPane" role="tabpanel" aria-labelledby="sourcesRegisterTab" tabindex="0">
+
+    <div class="card mb-3 no-print">
+      <div class="card-body d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div>
+          <div class="fw-bold">Source register</div>
+          <div class="small-muted">Click a source to open its events, effectiveness measures and visualisations, or jump straight to unmapped.</div>
+        </div>
+        <button id="reload" class="btn btn-outline-primary">Reload</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" data-sortable>
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th style="width:160px;">Events</th>
+                <th style="width:160px;">Mapped</th>
+                <th style="width:160px;">Unmapped</th>
+                <th style="width:220px;">Last seen</th>
+                <th class="no-print" style="width:220px;" data-nosort>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rows"><tr class="table-loading-row"><td colspan="6" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading sources…</span></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+      </section>
+      <section class="tab-pane fade" id="embeddedVisualisationsPane" role="tabpanel" aria-labelledby="sourcesVisualisationsTab" tabindex="0">
+        <div data-keen-visualisation-mount
+             data-viz-title="Source visualisations"
+             data-viz-intro="Review source-to-control and source-to-clause evidence coverage, plus the source sunburst."
+             data-viz-modes="graph,heatmap,sunburst_source,graph_clause_events,heatmap_clause_events"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
+  <script type="module" src="/pages/sources.js"></script>
+  <script type="module" src="/pages/visualisation.js"></script>
+</body>
+</html>

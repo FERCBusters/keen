@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Interested Parties</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="interested-parties">
+  <div id="navbar"></div>
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/risks.html">← Risk assessments</a></div>
+        <h1 class="h3 mb-1">Interested Parties</h1>
+        <div class="small-muted">Map interested parties to their nature of interest, communications and ISO27001:2022 Annex A controls.</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <a class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" data-nav-fw="1" href="/mitigator.html"><img src="/keen-mitigator.svg" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator</a>
+        <a class="btn btn-outline-primary" data-nav-fw="1" href="/statement-of-applicability.html?tab=interestedparties"><i class="bi bi-table" aria-hidden="true"></i> SoA Interested Parties</a>
+        <a id="newInterestedParty" class="btn btn-primary" data-nav-fw="1" href="/interested_party.html"><i class="bi bi-plus-lg" aria-hidden="true"></i> New interested party</a>
+      </div>
+    </div>
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3 no-print" role="tablist">
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="interestedPartiesTab" data-bs-toggle="tab" data-bs-target="#interestedPartiesPane" type="button" role="tab">Interested Parties</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="interestedPartyNamesTab" data-bs-toggle="tab" data-bs-target="#interestedPartyNamesPane" type="button" role="tab">Names</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="interestedPartyNaturesTab" data-bs-toggle="tab" data-bs-target="#interestedPartyNaturesPane" type="button" role="tab">Nature of Interest</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="interestedPartyVisualisationsTab" data-bs-toggle="tab" data-bs-target="#interestedPartyVisualisationsPane" type="button" role="tab">Visualisations</button></li>
+    </ul>
+
+    <div class="tab-content">
+      <section class="tab-pane fade show active" id="interestedPartiesPane" role="tabpanel" tabindex="0">
+        <div class="card mb-3 no-print" data-mosp-filter-section="interested-party-filters" data-mosp-filter-title="Interested party filters">
+          <div class="card-body" data-mosp-filter-body><div class="d-flex flex-wrap gap-2 align-items-center">
+            <input id="partyQ" class="form-control form-control-sm" style="min-width:260px;" type="search" placeholder="Search names, nature or notes…">
+            <select id="partyNameFilter" class="form-select form-select-sm" style="min-width:190px;"><option value="">All names</option></select>
+            <select id="partyNatureFilter" class="form-select form-select-sm" style="min-width:210px;"><option value="">All natures</option></select>
+            <button id="reloadParties" class="btn btn-sm btn-outline-primary" type="button">Reload</button>
+          </div></div>
+        </div>
+        <div class="card"><div class="card-header d-flex justify-content-between"><div><div class="fw-bold">Interested Parties</div><div id="partyItemsMeta" class="small-muted">—</div></div></div>
+          <div class="card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0" data-sortable>
+            <thead><tr><th>Name</th><th>Nature of Interest</th><th>Note</th><th>Linked controls</th><th>Communications</th><th class="no-print" style="width:120px;">Actions</th></tr></thead>
+            <tbody id="partyRows"><tr><td colspan="6" class="p-4 small-muted">Loading interested parties…</td></tr></tbody>
+          </table></div></div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="interestedPartyNamesPane" role="tabpanel" tabindex="0">
+        <div class="card"><div class="card-header"><div class="fw-bold">Names</div><div class="small-muted">Reusable interested party names. A name can be combined with multiple Nature of Interest entries.</div></div>
+          <div class="card-body"><div class="row g-2 align-items-end mb-3 no-print"><div class="col-12 col-lg-8"><label class="form-label" for="newPartyName">Name</label><input id="newPartyName" class="form-control" maxlength="256"></div><div class="col-12 col-lg-4"><button id="addPartyName" class="btn btn-primary w-100" type="button">Add name</button></div></div><div id="partyNameList">Loading names…</div></div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="interestedPartyNaturesPane" role="tabpanel" tabindex="0">
+        <div class="card"><div class="card-header"><div class="fw-bold">Nature of Interest</div><div class="small-muted">Reusable nature categories used by interested parties.</div></div>
+          <div class="card-body"><div class="row g-2 align-items-end mb-3 no-print"><div class="col-12 col-lg-8"><label class="form-label" for="newPartyNature">Nature of Interest</label><input id="newPartyNature" class="form-control" maxlength="256"></div><div class="col-12 col-lg-4"><button id="addPartyNature" class="btn btn-primary w-100" type="button">Add nature</button></div></div><div id="partyNatureList">Loading natures…</div></div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="interestedPartyVisualisationsPane" role="tabpanel" tabindex="0">
+        <div class="row g-3">
+          <div class="col-12"><div class="card"><div class="card-header"><div class="fw-bold">Interested Parties × Controls matrix</div><div class="small-muted">Rows are interested parties; columns are linked ISO27001:2022 Annex A controls.</div></div><div id="partyControlsMatrix" class="card-body small-muted">Loading visualisation…</div></div></div>
+          <div class="col-12"><div class="card"><div class="card-header"><div class="fw-bold">Interested Parties → Communications</div><div class="small-muted">Communication rules grouped by event, audience, timing and methods.</div></div><div id="partyCommunicationsBipartite" class="card-body pestle-viz-box pestle-viz-box-lg small-muted">Loading visualisation…</div></div></div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
+  <script type="module" src="/pages/interested_parties.js"></script>
+</body>
+</html>

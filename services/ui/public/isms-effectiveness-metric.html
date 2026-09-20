@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – ISMS Effectiveness Metric</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="isms-effectiveness-metric">
+  <div id="navbar"></div>
+
+  <main class="container-fluid py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a id="metricBreadcrumb" class="link-subtle" data-nav-fw="1" href="/isms.html?tab=effectiveness">← Effectiveness measure</a></div>
+        <h1 class="h3 mb-1" id="metricTitle">Metric entry</h1>
+        <div class="small-muted" id="metricMeta">Loading metric entry…</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <button id="sampleMetricAudit" class="btn btn-outline-success" type="button" style="display:none;"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Sample into audit</button>
+        <a id="openMeasureLink" class="btn btn-primary" data-nav-fw="1" href="/isms.html?tab=effectiveness">Open measure</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <div class="row g-3">
+      <div class="col-12 col-xl-8">
+        <div class="vstack gap-3">
+          <div class="card">
+            <div class="card-header fw-bold">Metric value</div>
+            <div class="card-body">
+              <div class="display-6 mb-2" id="metricValue">—</div>
+              <div class="small-muted" id="metricPeriod">—</div>
+              <div id="metricQualitative" class="whitespace-pre-wrap mt-3">—</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header fw-bold">Source evidence</div>
+            <div class="card-body">
+              <dl class="row mb-0">
+                <dt class="col-sm-3">Source type</dt><dd class="col-sm-9" id="sourceType">—</dd>
+                <dt class="col-sm-3">Source title</dt><dd class="col-sm-9" id="sourceTitle">—</dd>
+                <dt class="col-sm-3">Source reference</dt><dd class="col-sm-9" id="sourceReference">—</dd>
+                <dt class="col-sm-3">Source URL</dt><dd class="col-sm-9" id="sourceUrl">—</dd>
+                <dt class="col-sm-3">KEEN event</dt><dd class="col-sm-9" id="sourceEvent">—</dd>
+              </dl>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header fw-bold">Notes</div>
+            <div id="metricNotes" class="card-body whitespace-pre-wrap small-muted">—</div>
+          </div>
+          <div class="card">
+            <div class="card-header fw-bold">Raw payload</div>
+            <div class="card-body"><pre id="rawPayload" class="mb-0 small bg-light border rounded-3 p-3">{}</pre></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-xl-4">
+        <div class="vstack gap-3">
+          <div class="card">
+            <div class="card-header fw-bold">Parent effectiveness measure</div>
+            <div class="card-body">
+              <h2 class="h6"><a id="parentMeasureTitle" href="/isms.html?tab=effectiveness">Effectiveness measure</a></h2>
+              <div class="small-muted mb-2" id="parentMetricKey">—</div>
+              <div class="whitespace-pre-wrap" id="parentMetricDefinition">—</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header fw-bold">Metric details</div>
+            <div class="card-body">
+              <dl class="row mb-0">
+                <dt class="col-sm-5">Recorded</dt><dd class="col-sm-7" id="metricRecorded">—</dd>
+                <dt class="col-sm-5">Created</dt><dd class="col-sm-7" id="metricCreated">—</dd>
+                <dt class="col-sm-5">Updated</dt><dd class="col-sm-7" id="metricUpdated">—</dd>
+              </dl>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header fw-bold">Linked controls</div>
+            <div class="card-body" id="metricControls">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/isms-effectiveness-metric.js"></script>
+</body>
+</html>

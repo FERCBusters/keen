@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Login</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="login">
+  <main class="container container-tight py-5">
+    <div class="row justify-content-center">
+      <div class="col-12 col-sm-10 col-md-6 col-lg-5">
+        <div class="card">
+          <div class="card-header">
+            <div class="fw-bold">Sign in</div>
+            <div class="small-muted">Keen requires authentication.</div>
+          </div>
+          <div class="card-body">
+            <div id="status" class="alert alert-info" style="display:none;"></div>
+
+            <div id="ssoSection" class="d-none mb-3">
+              <div id="ssoButtons" class="d-grid gap-2"></div>
+              <div class="small-muted mt-2 text-center">Only enabled KEEN users with a matching username or verified email address can sign in.</div>
+            </div>
+
+            <form id="loginForm" autocomplete="on">
+              <input type="hidden" id="next" name="next" value=""/>
+              <div class="mb-3">
+                <label class="form-label small-muted mb-1" for="username">Username</label>
+                <input id="username" name="username" class="form-control" autocomplete="username" required />
+              </div>
+              <div class="mb-3">
+                <label class="form-label small-muted mb-1" for="password">Password</label>
+                <input id="password" name="password" class="form-control" type="password" autocomplete="current-password" required />
+              </div>
+              <div class="d-grid gap-2">
+                <button id="loginBtn" class="btn btn-primary" type="submit">Sign in</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div id="localLoginHint" class="small-muted mt-3 text-center">
+          Fresh install? Set <span class="mono">KEEN_BOOTSTRAP_ADMIN_USERNAME</span> and
+          <span class="mono">KEEN_BOOTSTRAP_ADMIN_PASSWORD</span> in <span class="mono">.env</span>, then restart.
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/login.js"></script>
+</body>
+</html>

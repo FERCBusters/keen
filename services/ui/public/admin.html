@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Admin</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="admin">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1">Admin</h1>
+	<div class="small-muted">Force an ingestion of source data here (it normally runs on an automatic, scheduled basis)</div>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary btn-sm" href="/">Back to controls</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+    <!-- Tabs -->
+    <div class="admin-tab-layout d-flex flex-column flex-lg-row gap-3">
+      <ul class="nav nav-pills flex-column admin-tab-nav" id="adminTabs" role="tablist" aria-orientation="vertical">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="tab-users" data-bs-toggle="tab" data-bs-target="#pane-users" type="button" role="tab" aria-controls="pane-users" aria-selected="true">Users</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-groups" data-bs-toggle="tab" data-bs-target="#pane-groups" type="button" role="tab" aria-controls="pane-groups" aria-selected="false">Groups &amp; permissions</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-ingest" data-bs-toggle="tab" data-bs-target="#pane-ingest" type="button" role="tab" aria-controls="pane-ingest" aria-selected="false">Import & ingest</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-diary" data-bs-toggle="tab" data-bs-target="#pane-diary" type="button" role="tab" aria-controls="pane-diary" aria-selected="false">Add Diary evidence</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-remap" data-bs-toggle="tab" data-bs-target="#pane-remap" type="button" role="tab" aria-controls="pane-remap" aria-selected="false">Remap</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-audit" data-bs-toggle="tab" data-bs-target="#pane-audit" type="button" role="tab" aria-controls="pane-audit" aria-selected="false">Audit trail</button>
+        </li>
+      </ul>
+
+      <div class="tab-content flex-grow-1" id="adminTabContent">
+
+      <!-- Users -->
+      <div class="tab-pane fade show active" id="pane-users" role="tabpanel" aria-labelledby="tab-users" tabindex="0">
+        <div class="card mb-3" id="usersCard">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">User management</div>
+              <div class="small-muted">Create users, set roles, deactivate accounts, delete accounts, and reset passwords.</div>
+            </div>
+            <div class="d-flex gap-2">
+              <button id="usersRefresh" class="btn btn-outline-primary btn-sm" type="button">Apply</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="usersStatus" class="alert alert-info" style="display:none;"></div>
+
+            <form id="userCreateForm" class="row g-2 align-items-end mb-3">
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1">Username</label>
+                <input id="newUsername" class="form-control" placeholder="e.g. alice" required />
+              </div>
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1">Email</label>
+                <input id="newEmail" class="form-control" type="email" placeholder="alice@example.com" />
+              </div>
+              <div class="col-12 col-lg-2">
+                <label class="form-label small-muted mb-1">Password</label>
+                <input id="newPassword" class="form-control" type="password" placeholder="Initial password" required />
+              </div>
+              <div class="col-12 col-lg-2">
+                <label class="form-label small-muted mb-1">Role</label>
+                <select id="newRole" class="form-select">
+                  <option value="inherit" selected>Inherit (from groups)</option>
+                  <option value="normal">Normal</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div class="col-12 col-lg-2 d-flex gap-2">
+                <button class="btn btn-primary" type="submit">Create</button>
+              </div>
+            </form>
+
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th style="min-width: 180px;">Username</th>
+                    <th style="min-width: 220px;">Email</th>
+                    <th style="min-width: 140px;">Role</th>
+                    <th style="min-width: 90px;">Active</th>
+                    <th style="min-width: 180px;">Created</th>
+                    <th style="min-width: 180px;">Updated</th>
+                    <th style="min-width: 300px;" data-nosort>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="usersRows"></tbody>
+              </table>
+            </div>
+
+            <div class="small-muted mt-2">Tip: users can change their own password from Account.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Groups & permissions -->
+      <div class="tab-pane fade" id="pane-groups" role="tabpanel" aria-labelledby="tab-groups" tabindex="0">
+        <div class="card mb-3" id="groupsCard">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Groups &amp; permissions</div>
+              <div class="small-muted">Create groups, assign permissions to groups, and manage group membership.</div>
+            </div>
+            <div class="d-flex gap-2">
+              <button id="groupsRefresh" class="btn btn-outline-primary btn-sm" type="button">Apply</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="groupsStatus" class="alert alert-info" style="display:none;"></div>
+
+            <div class="row g-3 admin-groups-layout">
+              <div class="col-12 col-lg-5 admin-groups-list-col">
+                <form id="groupCreateForm" class="row g-2 align-items-end mb-3">
+                  <div class="col-12">
+                    <label class="form-label small-muted mb-1">Group name</label>
+                    <input id="newGroupName" class="form-control" placeholder="e.g. staff" required />
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small-muted mb-1">Description (optional)</label>
+                    <textarea id="newGroupDesc" class="form-control" rows="2" placeholder="Who is in this group? What is it for?"></textarea>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small-muted mb-1">Role (optional). Admin users can make changes, Normal users can only view data.</label>
+                    <select id="newGroupRole" class="form-select">
+                      <option value="">No role</option>
+                      <option value="normal">Normal</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                  <div class="col-12 d-flex gap-2">
+                    <button class="btn btn-primary" type="submit">Create group</button>
+                  </div>
+                </form>
+
+                <div class="table-responsive admin-groups-table-wrap">
+                  <table class="table table-sm table-hover align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th style="min-width: 160px;">Name</th>
+                        <th style="min-width: 110px;">Role</th>
+                        <th style="min-width: 90px;">Members</th>
+                        <th style="min-width: 110px;">Permissions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="groupsRows"></tbody>
+                  </table>
+                </div>
+                <div class="small-muted mt-2">Tip: click a group row to edit it on the right.</div>
+              </div>
+
+              <div class="col-12 col-lg-7 admin-groups-detail-col">
+                <div id="groupDetailEmpty" class="alert alert-light">Click on a group name to edit it.</div>
+
+                <div id="groupDetail" style="display:none;">
+                  <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                    <div>
+                      <div class="fw-bold">Edit group</div>
+                      <div class="small-muted" id="groupDetailMeta"></div>
+                    </div>
+                    <div class="d-flex gap-2">
+                      <button id="groupDelete" class="btn btn-outline-danger btn-sm" type="button">Delete</button>
+                    </div>
+                  </div>
+
+                  <div class="row g-2 mb-2">
+                    <div class="col-12">
+                      <label class="form-label small-muted mb-1">Name</label>
+                      <input id="groupName" class="form-control" />
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label small-muted mb-1">Description</label>
+                      <textarea id="groupDesc" class="form-control" rows="2"></textarea>
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label small-muted mb-1">Role (optional). Admin users can make changes, Normal users can only view data.</label>
+                      <select id="groupRole" class="form-select">
+                        <option value="">No role</option>
+                        <option value="normal">Normal</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                    <div class="col-12 d-flex gap-2">
+                      <button id="groupSave" class="btn btn-outline-primary btn-sm" type="button">Save details</button>
+                    </div>
+                  </div>
+
+                  <hr />
+
+                  <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label small-muted mb-1">Members</label>
+                      <select id="groupMembers" class="form-select" multiple size="10"></select>
+                      <div class="form-text">Leave empty to make the group have no members. Otherwise, select the desired members and click 'Apply Members' below.</div>
+                      <div class="d-flex gap-2 mt-2">
+                        <button id="groupApplyMembers" class="btn btn-primary btn-sm" type="button">Apply members</button>
+                      </div>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                      <label class="form-label small-muted mb-1">Special Permissions</label>
+                      <select id="groupPermissions" class="form-select keen-wrap-multiselect" multiple size="10"></select>
+                      <div class="form-text">Permissions are inherited by all members of this group. They are distinct from the group's 'role'.</div>
+                      <div class="d-flex gap-2 mt-2">
+                        <button id="groupApplyPermissions" class="btn btn-primary btn-sm" type="button">Apply permissions</button>
+                      </div>
+
+		      <!--
+                      <div class="border rounded p-2 mt-3">
+                        <div class="small-muted mb-1">Create a new permission code</div>
+                        <form id="permissionCreateForm" class="row g-2 align-items-end">
+                          <div class="col-12">
+                            <label class="form-label small-muted mb-1">Code</label>
+                            <input id="newPermCode" class="form-control" placeholder="e.g. audit.read" required />
+                          </div>
+                          <div class="col-12">
+                            <label class="form-label small-muted mb-1">Description (optional)</label>
+                            <input id="newPermDesc" class="form-control" placeholder="What does this allow?" />
+                          </div>
+                          <div class="col-12 d-flex gap-2">
+                            <button class="btn btn-outline-primary btn-sm" type="submit">Create permission</button>
+                          </div>
+                        </form>
+                      </div>
+		      -->
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Import & ingest -->
+      <div class="tab-pane fade" id="pane-ingest" role="tabpanel" aria-labelledby="tab-ingest" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header">
+            <div class="fw-bold">Import controls</div>
+            <div class="small-muted">Calls <span class="mono">POST /api/v1/admin/controls/import</span>.</div>
+          </div>
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-12 col-lg-4">
+                <label class="form-label small-muted mb-1">Framework</label>
+                <input id="framework" class="form-control" type="text" value=""/>
+              </div>
+              <div class="col-12 col-lg-4">
+                <label class="form-label small-muted mb-1">Load JSON</label>
+                <input id="file" class="form-control" type="file" accept="application/json"/>
+              </div>
+              <div class="col-12 col-lg-4 d-flex gap-2">
+                <button id="loadSample" class="btn btn-outline-primary">Load sample</button>
+                <button id="importBtn" class="btn btn-primary">Import</button>
+              </div>
+            </div>
+            <textarea id="payload" class="form-control mono mt-3" rows="10" placeholder='{"framework":"<framework-slug>","items":[...]}'></textarea>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-header">
+            <div class="fw-bold">Ingest runners</div>
+            <div class="small-muted">One-click ingestion for configured providers.</div>
+          </div>
+          <div class="card-body">
+            <div class="d-flex flex-wrap gap-2">
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/loki/run">Run Loki</button>
+              <button id="resetLokiCursors" class="btn btn-outline-warning">Reset Loki cursors to now</button>
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/cloudwatch_logs/run">Run CloudWatch Logs</button>
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/github/run">Run GitHub</button>
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/google_workspace/run">Run Google Workspace</button>
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/forgejo/run">Run Forgejo</button>
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/jenkins/run">Run Jenkins</button>
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/taiga/run">Run Taiga</button>
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/bookstack/run">Run BookStack</button>
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/rss/run">Run RSS</button>
+            </div>
+            <div class="small-muted mt-2">After ingest, use "Remap" to apply rules to anything that came in without a mapping.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Diary evidence -->
+      <div class="tab-pane fade" id="pane-diary" role="tabpanel" aria-labelledby="tab-diary" tabindex="0">
+        <div class="card mb-3" id="diaryCard">
+          <div class="card-header">
+            <div class="fw-bold">Add diary evidence</div>
+            <div class="small-muted">Create manual evidence ("diary" source) and map it to one or more controls.</div>
+          </div>
+          <div class="card-body">
+            <form id="diaryForm">
+              <div class="row g-2">
+                <div class="col-12">
+                  <label class="form-label small-muted mb-1">Summary</label>
+                  <input id="diarySummary" class="form-control" placeholder="e.g. DR restore test completed" required />
+                </div>
+                <div class="col-12 col-lg-6">
+                  <label class="form-label small-muted mb-1">Timestamp (optional)</label>
+                  <input id="diaryTs" class="form-control" type="datetime-local" />
+                  <div class="form-text">If blank, Keen uses the current time (UTC).</div>
+                </div>
+                <div class="col-12 col-lg-6">
+                  <label class="form-label small-muted mb-1">Attach evidence (optional)</label>
+                  <input id="diaryImages" class="form-control" type="file" multiple />
+                  <div class="form-text">Up to 10 files. These files will appear under Artifacts.</div>
+                </div>
+                <div class="col-12">
+                  <label class="form-label small-muted mb-1">Details (optional)</label>
+                  <textarea id="diaryDetails" class="form-control mono" rows="4" placeholder="Plain text or JSON (stored in normalized_payload.details)"></textarea>
+                </div>
+                <div class="col-12">
+                  <label class="form-label small-muted mb-1">Links (optional)</label>
+                  <div id="diaryLinks" class="d-flex flex-column gap-2"></div>
+                  <button id="diaryAddLink" type="button" class="btn btn-sm btn-outline-primary mt-2">Add link</button>
+                  <div class="form-text">Add one or more hyperlinks to external evidence (e.g. runbook, ticket, report). Only http(s) and mailto links are accepted.</div>
+                </div>
+
+
+                <div class="col-12">
+                  <label class="form-label small-muted mb-1">Map to controls</label>
+                  <input id="controlSearch" class="form-control" placeholder="Search by ref or title (e.g. A.8.13, backup)" />
+                  <div id="controlResults" class="list-group mt-2" style="max-height: 220px; overflow:auto;"></div>
+                  <div class="small-muted mt-2">Selected:</div>
+                  <div id="controlSelected" class="d-flex flex-wrap gap-2"></div>
+                  <div class="form-text">Tip: you can still rely on rules.yml for automatic mapping, but this creates explicit <span class="mono">manual</span> mappings.</div>
+                </div>
+                <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+                  <button class="btn btn-primary" type="submit">Create diary evidence</button>
+                  <a class="btn btn-outline-primary" href="/events.html?source=diary">View diary entries</a>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane fade" id="pane-remap" role="tabpanel" aria-labelledby="tab-remap" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header">
+            <div class="fw-bold">Remap events</div>
+            <div class="small-muted">Calls <span class="mono">POST /api/v1/admin/remap/run</span>. By default it applies rules to events with no mappings; you can optionally include already-mapped events.</div>
+          </div>
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1">From date (optional)</label>
+                <input id="remapFrom" class="form-control" type="date" />
+              </div>
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1">To date (optional)</label>
+                <input id="remapTo" class="form-control" type="date" />
+              </div>
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1">Limit (optional)</label>
+                <input id="remapLimit" class="form-control" type="number" min="0" value="500" />
+              </div>
+              <div class="col-12 col-lg-3 d-grid">
+                <button id="remapBtn" class="btn btn-primary">Remap</button>
+              </div>
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1">Source filter (optional)</label>
+                <input id="remapSource" class="form-control" placeholder="e.g. jenkins, loki, diary" />
+              </div>
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1">System filter (optional)</label>
+                <input id="remapSystem" class="form-control" placeholder="e.g. prod, network" />
+              </div>
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1">Action filter (optional)</label>
+                <input id="remapAction" class="form-control" placeholder="e.g. build, testbed_vpn" />
+              </div>
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1">Outcome filter (optional)</label>
+                <input id="remapOutcome" class="form-control" placeholder="e.g. success, failed, info" />
+              </div>
+              <div class="col-12">
+                <div class="form-check mt-2">
+                  <input class="form-check-input" type="checkbox" id="remapIncludeMapped">
+                  <label class="form-check-label" for="remapIncludeMapped">
+                    Include already-mapped events (adds any new rule-based mappings)
+                  </label>
+                </div>
+              </div>
+              <div class="col-12 small-muted">
+                Browse: <a href="/events.html?unmapped=true">unmapped events</a>. To remap only Jenkins, set Source filter to <span class="mono">jenkins</span>.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Audit -->
+      <div class="tab-pane fade" id="pane-audit" role="tabpanel" aria-labelledby="tab-audit" tabindex="0">
+        <div class="card mb-3" id="entityChangelogCard">
+          <div class="card-header">
+            <div class="fw-bold">Entity changelog</div>
+            <div class="small-muted">Semantic before/after diffs for Control, Clause and Risk changes.</div>
+          </div>
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-12 col-lg-2">
+                <label class="form-label small-muted mb-1">Entity</label>
+                <select id="entityChangeType" class="form-select">
+                  <option value="">Any</option>
+                  <option value="control">Control</option>
+                  <option value="clause">Clause</option>
+                  <option value="risk">Risk</option>
+                </select>
+              </div>
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1">Username</label>
+                <input id="entityChangeUser" class="form-control" placeholder="e.g. mig5" />
+              </div>
+              <div class="col-12 col-lg-5">
+                <label class="form-label small-muted mb-1">Search ref/title/summary</label>
+                <input id="entityChangeQuery" class="form-control" placeholder="e.g. A.5.1, supplier risk" />
+              </div>
+              <div class="col-12 col-lg-2">
+                <button id="entityChangeRefresh" class="btn btn-outline-primary w-100">Apply</button>
+              </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mt-3">
+              <div id="entityChangeMeta" class="small-muted">Loading…</div>
+              <div class="d-flex gap-2">
+                <button id="entityChangePrev" class="btn btn-outline-primary btn-sm">Prev</button>
+                <button id="entityChangeNext" class="btn btn-outline-primary btn-sm">Next</button>
+              </div>
+            </div>
+            <div id="entityChangeRows" class="border rounded mt-2 small-muted">Loading changelog…</div>
+          </div>
+        </div>
+
+        <div class="card mb-3" id="auditCard">
+          <div class="card-header">
+            <div class="fw-bold">Request audit trail</div>
+            <div class="small-muted">Records UI → backend requests to support framework-specific control refs.</div>
+          </div>
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1">Username</label>
+                <input id="auditUser" class="form-control" placeholder="e.g. mig5" />
+              </div>
+              <div class="col-12 col-lg-5">
+                <label class="form-label small-muted mb-1">Path contains</label>
+                <input id="auditPath" class="form-control" placeholder="e.g. /v1/admin" />
+              </div>
+              <div class="col-12 col-lg-2">
+                <label class="form-label small-muted mb-1">Method</label>
+                <select id="auditMethod" class="form-select">
+                  <option value="">Any</option>
+                  <option>GET</option>
+                  <option>POST</option>
+                  <option>PUT</option>
+                  <option>PATCH</option>
+                  <option>DELETE</option>
+                </select>
+              </div>
+              <div class="col-12 col-lg-2 d-flex gap-2">
+                <button id="auditRefresh" class="btn btn-outline-primary w-100">Apply</button>
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mt-3">
+              <div id="auditMeta" class="small-muted">Loading…</div>
+              <div class="d-flex gap-2">
+                <button id="auditPrev" class="btn btn-outline-primary btn-sm">Prev</button>
+                <button id="auditNext" class="btn btn-outline-primary btn-sm">Next</button>
+              </div>
+            </div>
+
+            <div class="table-responsive mt-2">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th style="min-width: 160px;">Time</th>
+                    <th style="min-width: 140px;">User</th>
+                    <th style="min-width: 80px;">Method</th>
+                    <th>Path</th>
+                    <th style="min-width: 80px;">Status</th>
+                    <th style="min-width: 90px;">Duration</th>
+                    <th style="min-width: 120px;">IP</th>
+                    <th style="min-width: 220px;">User-Agent</th>
+                  </tr>
+                </thead>
+                <tbody id="auditRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- Output (auto-expands when an action writes output) -->
+    <div class="card mt-2">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <div>
+          <div class="fw-bold">Output</div>
+          <div class="small-muted">Responses from API calls appear here.</div>
+        </div>
+        <button class="btn btn-outline-primary btn-sm collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#outCollapse" aria-expanded="false" aria-controls="outCollapse"><span class="when-expanded">Collapse</span><span class="when-collapsed">Expand</span></button>
+      </div>
+      <div id="outCollapse" class="collapse">
+        <div class="card-body">
+          <pre id="out" class="pretty mono" style="min-height:160px;">Ready.</pre>
+        </div>
+      </div>
+    
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/admin.js"></script>
+
+  <!-- User access modal (groups + explicit permissions) -->
+  <div class="modal fade" id="userAccessModal" tabindex="-1" aria-labelledby="userAccessModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="userAccessModalLabel">User access</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="small-muted mb-2" id="userAccessUsername">...</div>
+          <input type="hidden" id="userAccessUserId" />
+
+          <div class="row g-3">
+            <div class="col-12 col-lg-6">
+              <label class="form-label small-muted mb-1">Groups</label>
+              <select id="userAccessGroups" class="form-select" multiple size="10"></select>
+              <div class="form-text">Users inherit permissions from their groups.</div>
+            </div>
+            <div class="col-12 col-lg-6">
+              <label class="form-label small-muted mb-1">Explicit permissions</label>
+              <select id="userAccessPerms" class="form-select" multiple size="10"></select>
+              <div class="form-text">These apply only to this user (in addition to any group permissions).</div>
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <div class="small-muted mb-1">Effective permissions</div>
+            <div id="userAccessEffective" class="mono small"></div>
+          </div>
+
+          <div id="userAccessStatus" class="alert alert-info mt-3" style="display:none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary" id="userAccessSave">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

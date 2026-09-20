@@ -1,0 +1,30 @@
+# Simple plugin registry for poll-style ingestors.
+# Each plugin is a callable that accepts (db: Session) and returns JSON-serializable output.
+plugins:
+  - name: "loki"
+    callable: "app.ingest.loki:ingest_loki_all"
+    enabled_setting: "loki_enabled"
+
+  - name: "github"
+    callable: "app.ingest.github:ingest_github_all"
+    enabled_setting: "github_enabled"
+
+  - name: "jenkins"
+    callable: "app.ingest.jenkins:ingest_jenkins_all"
+    enabled_setting: "jenkins_enabled"
+
+  - name: "taiga"
+    callable: "app.ingest.taiga:ingest_taiga_all"
+    enabled_setting: "taiga_enabled"
+
+  - name: "bookstack"
+    callable: "app.ingest.bookstack:ingest_bookstack_all"
+    enabled_setting: "bookstack_enabled"
+
+  - name: "rss"
+    callable: "app.ingest.rss:ingest_rss_all"
+    enabled_setting: "rss_enabled"
+
+  - name: "google_workspace"
+    callable: "app.ingest.google_workspace:ingest_google_workspace_all"
+    enabled_setting: "google_workspace_enabled"

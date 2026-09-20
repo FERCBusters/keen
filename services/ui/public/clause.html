@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Clause</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="clauses">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a id="clausesBreadcrumb" class="link-subtle" data-nav-fw="1" href="/clauses.html">← Clauses</a></div>
+        <h1 class="h4 mb-1" id="clauseTitle">Clause</h1>
+        <div class="small-muted" id="clauseMeta">—</div>
+        <div class="small-muted" id="clauseLinks"></div>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <div id="clauseEvidenceCard" class="card mb-3">
+      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div>
+          <div class="fw-bold">Evidence</div>
+          <div class="small-muted" id="clauseEvidenceMeta">External resources or KEEN pages mapped directly to this clause.</div>
+        </div>
+        <button id="editClauseEvidence" class="btn btn-sm btn-outline-primary no-print" type="button" style="display:none;">Edit</button>
+      </div>
+      <div class="card-body">
+        <div id="clauseEvidenceLinks" class="small-muted">Loading evidence mapping…</div>
+        <div id="adminClauseEvidenceEditor" class="mt-3 no-print" style="display:none;">
+          <label class="form-label small-muted mb-1">Evidences</label>
+          <div id="clauseEvidenceUrlInputs" class="d-grid gap-2"></div>
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <button id="addClauseEvidenceUrl" class="btn btn-sm btn-outline-secondary" type="button"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add evidence link</button>
+            <button id="saveClauseEvidenceUrls" class="btn btn-sm btn-primary" type="button">Save evidence mapping</button>
+          </div>
+          <div class="form-text">Add a clear title plus a URL. URLs can use http://, https://, or a KEEN path such as /event.html?id=…</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="adminClauseUrlCard" class="card mb-3 no-print" style="display:none;">
+      <div class="card-header">
+        <div class="fw-bold">Admin: clause upstream URL</div>
+        <div class="small-muted">Set the upstream guidance link for this clause.</div>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-12 col-lg-8">
+            <label class="form-label small-muted mb-1" for="clauseUpstreamUrl">Clause upstream URL</label>
+            <input id="clauseUpstreamUrl" class="form-control" type="url" placeholder="https://…">
+          </div>
+          <div class="col-12 col-lg-4 d-flex align-items-end">
+            <button id="saveClauseUpstreamUrl" class="btn btn-outline-primary w-100" type="button">Save clause URL</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <div id="adminControlsCard" class="card mb-3 no-print" style="display:none;">
+      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div>
+          <div class="fw-bold">Admin: linked controls</div>
+          <div class="small-muted">Select which controls apply to this clause. Blank means not applicable.</div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#adminControlsCollapse" aria-expanded="true" aria-controls="adminControlsCollapse"><span class="when-expanded">Collapse</span><span class="when-collapsed">Expand</span></button>
+      </div>
+      <div id="adminControlsCollapse" class="collapse show">
+        <div class="card-body">
+          <div class="row g-2 mb-3">
+            <div class="col-12 col-lg-8">
+              <label class="form-label small-muted mb-1" for="controlSearch">Search controls</label>
+              <input id="controlSearch" class="form-control" type="text" placeholder="Control ref or title…">
+            </div>
+            <div class="col-12 col-lg-4 d-flex align-items-end">
+              <button id="saveClauseControls" class="btn btn-primary w-100" type="button">Save controls</button>
+            </div>
+          </div>
+          <div id="adminControlsList" class="border rounded p-2 small-muted">Loading controls…</div>
+        </div>
+      </div>
+    </div>
+
+    <ul class="nav nav-tabs mb-3 no-print" id="clausePageTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="clauseControlsTab" data-bs-toggle="tab" data-bs-target="#clauseControlsPane" type="button" role="tab" aria-controls="clauseControlsPane" aria-selected="true">Linked controls</button>
+      </li>
+      <li class="nav-item" role="presentation" id="clausePestleTabItem">
+        <button class="nav-link" id="clausePestleTab" data-bs-toggle="tab" data-bs-target="#clausePestlePane" type="button" role="tab" aria-controls="clausePestlePane" aria-selected="false">PESTLE(E)</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="clauseIsmsTab" data-bs-toggle="tab" data-bs-target="#clauseIsmsPane" type="button" role="tab" aria-controls="clauseIsmsPane" aria-selected="false">ISMS</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="clauseChangelogTab" data-bs-toggle="tab" data-bs-target="#clauseChangelogPane" type="button" role="tab" aria-controls="clauseChangelogPane" aria-selected="false">Changelog</button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="clausePageTabContent">
+      <section class="tab-pane fade show active" id="clauseControlsPane" role="tabpanel" aria-labelledby="clauseControlsTab" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Linked controls</div>
+              <div class="small-muted" id="controlsMeta">—</div>
+            </div>
+            <button id="editLinkedControls" class="btn btn-sm btn-outline-primary no-print" type="button" style="display:none;">Edit</button>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover mb-0" data-sortable>
+                <thead>
+                  <tr>
+                    <th style="width:140px;">Control</th>
+                    <th>Title</th>
+                    <th style="width:190px;">Applicability</th>
+                    <th style="width:110px;">Scope</th>
+                  </tr>
+                </thead>
+                <tbody id="rows"><tr><td colspan="4" class="p-4 small-muted">Loading controls…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="clausePestlePane" role="tabpanel" aria-labelledby="clausePestleTab" tabindex="0">
+        <div id="clausePestleCard" class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">PESTLE(E) relevance</div>
+              <div class="small-muted">PESTLE(E) items linked to this clause for the selected framework.</div>
+            </div>
+            <a id="openPestleFromClause" class="btn btn-sm btn-outline-primary" data-nav-fw="1" href="/pestle.html">Open PESTLE(E)</a>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th style="width:150px;">Type</th>
+                    <th style="width:110px;">Lens</th>
+                    <th>Item</th>
+                    <th style="width:130px;">Clause relevance</th>
+                    <th>Overall relevance</th>
+                    <th>Rationale</th>
+                  </tr>
+                </thead>
+                <tbody id="clausePestleRows"><tr><td colspan="6" class="p-4 small-muted">Loading PESTLE(E) relevance…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="clauseIsmsPane" role="tabpanel" aria-labelledby="clauseIsmsTab" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div><div class="fw-bold">ISMS references</div><div class="small-muted">ISMS objectives, documents, org roles, assets, application configuration and meetings linked to this clause.</div></div>
+            <a class="btn btn-sm btn-outline-primary" data-nav-fw="1" href="/isms.html">Open ISMS</a>
+          </div>
+          <div id="clauseIsmsView" class="card-body small-muted">Loading ISMS references…</div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="clauseChangelogPane" role="tabpanel" aria-labelledby="clauseChangelogTab" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header">
+            <div class="fw-bold">Changelog</div>
+            <div class="small-muted">Immutable audit history for this clause.</div>
+          </div>
+          <div id="clauseChangelog" class="card-body p-0 small-muted">Loading changelog…</div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/clause.js"></script>
+</body>
+</html>

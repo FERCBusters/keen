@@ -1,0 +1,1706 @@
+@import url('/vendor/mosp-design-system/styles.css');
+
+.loading-state {
+  min-height: 2rem;
+}
+
+.table-loading-row td {
+  background: rgba(248, 250, 252, 0.65);
+}
+
+
+.btn.collapsed > .when-expanded {
+  display: none;
+}
+
+.btn:not(.collapsed) > .when-collapsed {
+  display: none;
+}
+
+
+/* Admin Groups & permissions: the group list table has several min-width
+   columns. Keep it contained inside the left pane instead of letting the
+   global desktop table overflow rule spill into the edit pane. */
+#pane-groups .admin-groups-layout > [class*="col-"] {
+  min-width: 0;
+}
+
+#pane-groups .admin-groups-table-wrap {
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+#pane-groups .admin-groups-table-wrap > .table {
+  width: max-content;
+  min-width: 100%;
+}
+
+#pane-groups .admin-groups-table-wrap .table thead th {
+  position: static;
+}
+
+
+/* Control detail: keep the admin clause applicability matrix contained. */
+#adminClausesCard .admin-control-clauses-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#adminClausesCard .admin-control-clauses-wrap > .table {
+  min-width: 900px;
+}
+
+.whitespace-pre-wrap {
+  white-space: pre-wrap;
+}
+
+.incident-ref:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* Risk register score display */
+.score-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  font-weight: 700;
+  background: #198754;
+  color: #fff;
+}
+.score-pill.score-low { background: #198754; color: #fff; }
+.score-pill.score-medium { background: #ffc107; color: #111827; }
+.score-pill.score-high { background: #dc3545; color: #fff; }
+
+.user-pill-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.user-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  font-weight: 600;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+/* Connected home explorer */
+.keen-home .home-hero {
+  overflow: hidden;
+  border: 0;
+  background: linear-gradient(135deg, rgba(13, 110, 253, 0.12), rgba(32, 201, 151, 0.10));
+}
+
+.keen-home .home-entry-card,
+.keen-home .home-node-card {
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.keen-home .home-entry-card:hover,
+.keen-home .home-node-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0.65rem 1.5rem rgba(15, 23, 42, 0.10);
+  border-color: rgba(13, 110, 253, 0.35);
+}
+
+.keen-home .home-entry-icon,
+.keen-home .home-node-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.28);
+}
+
+.keen-home .home-entry-icon {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.35rem;
+}
+
+.keen-home .home-node-icon {
+  width: 2.35rem;
+  height: 2.35rem;
+  font-size: 1rem;
+}
+
+.keen-home .home-canvas {
+  min-height: 220px;
+}
+
+.keen-home .home-crumbs span,
+.keen-home .home-crumbs {
+  overflow-wrap: anywhere;
+}
+
+.keen-home .home-section + .home-section {
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  padding-top: 1rem;
+}
+
+.keen-home .home-node-header .wrap,
+.keen-home .home-node-card .text-truncate {
+  min-width: 0;
+}
+
+/* Connected home explorer refinements */
+.keen-home .home-entry-card,
+.keen-home .home-node-card,
+.keen-home .home-node-header {
+  overflow: hidden;
+}
+
+.keen-home .home-node-card .card-body,
+.keen-home .home-layer-grid > [class*="col-"] {
+  min-width: 0;
+}
+
+.keen-home .home-node-title {
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.keen-home .home-node-meta {
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.keen-home .home-node-description {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.keen-home .home-node-heading {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.keen-home .home-node-card .btn,
+.keen-home .home-entry-card .btn {
+  white-space: nowrap;
+}
+
+/* Connected home explorer: lightweight layer transitions */
+.keen-home .home-layer-outgoing {
+  opacity: 0;
+  transform: translateY(8px) scale(0.992);
+  pointer-events: none;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.keen-home .home-layer-outgoing.home-layer-swap-back {
+  transform: translateY(-8px) scale(0.992);
+}
+
+.keen-home .home-layer-incoming {
+  opacity: 0;
+  transform: translateY(10px) scale(0.995);
+}
+
+.keen-home .home-layer-incoming.home-layer-swap-back {
+  transform: translateY(-10px) scale(0.995);
+}
+
+.keen-home .home-layer-incoming.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 180ms ease,
+    transform 200ms ease;
+}
+
+.keen-home .home-entry-card,
+.keen-home .home-node-card {
+  transform-origin: center center;
+}
+
+.keen-home .home-entry-card[data-entering="true"],
+.keen-home .home-node-card[data-entering="true"] {
+  animation: keenHomeCardEnter 220ms ease both;
+  animation-delay: calc(var(--card-index, 0) * 18ms);
+}
+
+@keyframes keenHomeCardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keen-home .home-entry-card,
+  .keen-home .home-node-card,
+  .keen-home .home-layer-outgoing,
+  .keen-home .home-layer-incoming {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+.keen-home .home-pagination {
+  min-width: min(100%, 22rem);
+}
+
+.keen-home .home-pagination .btn {
+  white-space: nowrap;
+}
+
+/* Home page: ambient latest-evidence ticker */
+.keen-home .keen-latest-evidence-ticker {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  max-width: 100%;
+  margin-top: 0.85rem;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  opacity: 0.58;
+  color: var(--bs-body-color);
+}
+
+.keen-home .keen-latest-evidence-ticker a {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: min(100%, 44rem);
+  overflow: hidden;
+  white-space: nowrap;
+  color: inherit;
+  text-decoration: none;
+  scroll-behavior: auto;
+}
+
+.keen-home .keen-latest-evidence-ticker a:hover,
+.keen-home .keen-latest-evidence-ticker a:focus {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.keen-home .keen-latest-evidence-prefix {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 999px;
+  text-transform: uppercase;
+  font-size: 0.64rem;
+  font-weight: 700;
+  opacity: 0.74;
+}
+
+.keen-home #latestEvidenceTickerText {
+  display: inline-block;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.keen-home .keen-latest-evidence-ticker-pulse,
+.keen-home .keen-latest-evidence-ticker-slide-in {
+  animation: keenLatestEvidenceSlideIn 420ms ease-out;
+}
+
+.keen-home .keen-latest-evidence-ticker-slide-out {
+  animation: keenLatestEvidenceSlideOut 240ms ease-in forwards;
+}
+
+@keyframes keenLatestEvidenceSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-0.55rem);
+  }
+
+  100% {
+    opacity: 0.58;
+    transform: translateY(0);
+  }
+}
+
+@keyframes keenLatestEvidenceSlideOut {
+  0% {
+    opacity: 0.58;
+    transform: translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(0.65rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keen-home .keen-latest-evidence-ticker-pulse,
+  .keen-home .keen-latest-evidence-ticker-slide-in,
+  .keen-home .keen-latest-evidence-ticker-slide-out {
+    animation: none !important;
+  }
+
+  .keen-home #latestEvidenceTickerText {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.keen-home .home-section-header {
+  min-width: 0;
+}
+
+.keen-home .home-section-actions {
+  max-width: 100%;
+}
+
+.keen-home .home-section-actions .home-pagination {
+  margin-top: 0 !important;
+}
+
+.keen-home .home-section-collapse-toggle {
+  white-space: nowrap;
+}
+
+.keen-home .home-section-body.collapsing {
+  overflow: hidden;
+}
+
+/* Statement of Applicability matrices */
+.soa-table-wrap {
+  max-height: 70vh;
+}
+.soa-matrix-table th {
+  white-space: nowrap;
+}
+.soa-matrix-table .soa-sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bs-body-bg);
+}
+.soa-matrix-table thead .soa-sticky-col {
+  z-index: 4;
+}
+
+/* Scheduled audit calendar */
+.schedule-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: .35rem;
+}
+.schedule-calendar-head {
+  margin-bottom: .35rem;
+  color: var(--bs-secondary-color);
+  font-size: .82rem;
+  font-weight: 600;
+  text-align: center;
+}
+.schedule-calendar-day {
+  min-height: 6.25rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: .75rem;
+  padding: .45rem;
+  background: var(--bs-body-bg);
+  overflow: hidden;
+}
+.schedule-calendar-day.muted {
+  opacity: .48;
+  background: var(--bs-tertiary-bg);
+}
+.schedule-calendar-date {
+  font-size: .82rem;
+  font-weight: 700;
+  margin-bottom: .35rem;
+}
+.schedule-calendar-event {
+  border-radius: .45rem;
+  padding: .15rem .35rem;
+  margin-bottom: .25rem;
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+  font-size: .75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.keen-mitigator-icon {
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 auto;
+}
+
+.keen-mitigator-icon-sm {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
+}
+
+.mitigator-suggestion-card {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  padding: 0.875rem;
+  background: var(--bs-body-bg);
+}
+
+.mitigator-term-badge {
+  font-weight: 500;
+}
+
+.pestle-viz-box {
+  min-height: 320px;
+  overflow: hidden;
+}
+
+.pestle-viz-box-lg {
+  min-height: 520px;
+}
+
+.interested-party-bipartite-viz {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.interested-party-bipartite-viz svg {
+  display: block;
+  max-width: 100%;
+  cursor: grab;
+}
+
+.interested-party-bipartite-viz svg:active {
+  cursor: grabbing;
+}
+
+.interested-party-bipartite-node text {
+  paint-order: stroke;
+  stroke: var(--bs-body-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.viz-zoom-controls {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+}
+
+.viz-zoom-btn {
+  appearance: none;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: var(--bs-body-bg);
+  color: inherit;
+  min-width: 1.9rem;
+  height: 1.9rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.viz-zoom-btn:hover {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.viz-zoom-btn[data-zoom="reset"] {
+  min-width: auto;
+  font-size: 0.78rem;
+}
+
+/* Interested Parties control matrix */
+.interested-party-control-matrix {
+  min-width: 0;
+}
+
+.interested-party-control-matrix-wrap {
+  max-height: 72vh;
+  overflow: auto;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  background: var(--bs-body-bg);
+}
+
+.interested-party-control-matrix-table {
+  min-width: max-content;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.interested-party-control-matrix-table th,
+.interested-party-control-matrix-table td {
+  border-color: var(--bs-border-color);
+}
+
+.interested-party-control-matrix-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bs-tertiary-bg);
+}
+
+.interested-party-control-matrix-table .matrix-sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 17rem;
+  max-width: 24rem;
+  background: var(--bs-body-bg);
+}
+
+.interested-party-control-matrix-table thead .matrix-sticky-col {
+  z-index: 4;
+  background: var(--bs-tertiary-bg);
+}
+
+.interested-party-control-matrix-table .matrix-control-header {
+  width: 2.75rem;
+  min-width: 2.75rem;
+  max-width: 2.75rem;
+  height: 10rem;
+  padding: 0.35rem 0.2rem;
+  vertical-align: bottom;
+  text-align: center;
+}
+
+.interested-party-control-matrix-table .matrix-control-link {
+  display: inline-block;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  max-height: 9rem;
+  color: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.interested-party-control-matrix-table .matrix-control-link:hover {
+  text-decoration: underline;
+}
+
+.interested-party-control-matrix-table .matrix-party-label {
+  white-space: normal;
+}
+
+.interested-party-control-matrix-table .matrix-party-note {
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+}
+
+.interested-party-control-matrix-table .matrix-cell {
+  width: 2.75rem;
+  min-width: 2.75rem;
+  height: 2.35rem;
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.interested-party-control-matrix-table .matrix-cell-empty {
+  background: var(--bs-body-bg);
+}
+
+.interested-party-control-matrix-table .matrix-cell-linked {
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+  font-weight: 700;
+}
+
+.interested-party-control-matrix-table .matrix-cell-linked a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.interested-party-control-matrix-table tbody tr:hover .matrix-cell-empty {
+  background: var(--bs-tertiary-bg);
+}
+
+/* CIA Triad risk/control visualisations */
+.risk-control-heatmap-wrap {
+  max-height: 78vh;
+}
+
+.risk-control-heatmap-cell {
+  color: var(--bs-primary-text-emphasis);
+  font-weight: 700;
+}
+
+.risk-control-heatmap-cell a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.risk-control-heatmap-cell a:hover {
+  text-decoration: underline;
+}
+
+/* ISMS overview navigation flow */
+.isms-flow-card .card-body {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(13, 110, 253, 0.08), transparent 28%),
+    radial-gradient(circle at 84% 26%, rgba(32, 201, 151, 0.08), transparent 24%),
+    var(--bs-body-bg);
+}
+
+.isms-flow-wrap {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.85rem;
+  background: linear-gradient(180deg, var(--bs-body-bg), var(--bs-tertiary-bg));
+}
+
+.isms-flow-svg {
+  display: block;
+  width: 100%;
+  min-width: 960px;
+  height: auto;
+}
+
+.isms-flow-section-bg {
+  fill: var(--bs-body-bg);
+  stroke: #6f55c7;
+  stroke-width: 1.6;
+  filter: drop-shadow(0 0.45rem 0.85rem rgba(31, 41, 55, 0.12));
+}
+
+.isms-flow-section-title {
+  fill: #6f55c7;
+  font-size: 16px;
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
+.isms-flow-section-title-sm {
+  font-size: 13px;
+  font-style: normal;
+}
+
+.isms-flow-button,
+.isms-flow-button:hover,
+.isms-flow-button:focus {
+  text-decoration: none;
+}
+
+.isms-flow-button-bg {
+  fill: #6f55c7;
+  stroke: rgba(255, 255, 255, 0.78);
+  stroke-width: 1;
+  transition: fill 0.15s ease, filter 0.15s ease, transform 0.15s ease;
+}
+
+.isms-flow-button-primary .isms-flow-button-bg {
+  fill: #6f55c7;
+}
+
+.isms-flow-button-label {
+  fill: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+  dominant-baseline: auto;
+  text-decoration: none;
+}
+
+.isms-flow-button:hover .isms-flow-button-bg,
+.isms-flow-button:focus .isms-flow-button-bg {
+  fill: #5f46a6;
+  filter: drop-shadow(0 0 0.45rem rgba(111, 85, 199, 0.45));
+}
+
+.isms-flow-button:focus-visible .isms-flow-button-bg {
+  outline: none;
+  stroke: #ffc107;
+  stroke-width: 3;
+}
+
+.isms-flow-connector,
+.isms-flow-inner-connector,
+.isms-flow-side-hint {
+  fill: none;
+  stroke: #6f55c7;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.86;
+}
+
+.isms-flow-inner-connector {
+  stroke-width: 2;
+  opacity: 0.62;
+}
+
+.isms-flow-side-hint {
+  stroke: #b8abe6;
+  stroke-dasharray: 8 10;
+  opacity: 1;
+}
+
+.isms-flow-arrow-head {
+  fill: #6f55c7;
+}
+
+.isms-flow-hint-arrow-head {
+  fill: #b8abe6;
+}
+
+.isms-flow-pulse {
+  fill: none;
+  stroke: #b8abe6;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 40 1100;
+  filter: drop-shadow(0 0 0.35rem rgba(184, 171, 230, 0.9));
+  opacity: 0.95;
+  animation: isms-flow-pulse 5.25s linear infinite;
+}
+
+.isms-flow-caption {
+  fill: #6f55c7;
+  font-size: 16px;
+  font-weight: 800;
+  font-style: italic;
+}
+
+@keyframes isms-flow-pulse {
+  to { stroke-dashoffset: -1140; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .isms-flow-pulse {
+    animation: none;
+    stroke-dasharray: 18 18;
+  }
+
+  .isms-flow-button-bg {
+    transition: none;
+  }
+}
+
+/* ISMS Application Configuration matrix */
+.isms-app-matrix-wrap {
+  max-height: 76vh;
+  overflow: auto;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+}
+
+.isms-app-matrix-table {
+  width: 100%;
+  min-width: 52rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  font-size: 0.82rem;
+}
+
+.isms-app-matrix-table > thead > tr > th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  --bs-table-bg: #5f46a6;
+  --bs-table-color: #fff;
+  background-color: #5f46a6 !important;
+  color: #fff !important;
+  text-align: center;
+  vertical-align: middle;
+  line-height: 1.12;
+  white-space: normal;
+}
+
+.isms-app-matrix-table .isms-app-head-group,
+.isms-app-matrix-table .isms-app-group {
+  width: 7.5rem;
+  min-width: 7.5rem;
+  max-width: 7.5rem;
+}
+
+.isms-app-matrix-table .isms-app-head-linkage,
+.isms-app-matrix-table .isms-app-key-linkage {
+  width: 14rem;
+  min-width: 14rem;
+  max-width: 14rem;
+}
+
+.isms-app-matrix-table .isms-app-process-heading,
+.isms-app-matrix-table .isms-app-cell {
+  width: 5.25rem;
+  min-width: 5.25rem;
+  max-width: 5.25rem;
+}
+
+.isms-app-matrix-table .isms-app-head-group,
+.isms-app-matrix-table .isms-app-head-linkage {
+  text-align: left;
+}
+
+.isms-app-matrix-table td,
+.isms-app-matrix-table th {
+  border-color: var(--bs-border-color);
+}
+
+.isms-app-matrix-table .isms-app-group {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  --bs-table-bg: #5f46a6;
+  --bs-table-color: #fff;
+  background-color: #5f46a6 !important;
+  color: #fff !important;
+  font-weight: 700;
+  text-align: center;
+  vertical-align: middle;
+  line-height: 1.15;
+}
+
+.isms-app-matrix-table .isms-app-group span {
+  display: inline-block;
+  max-width: 6.5rem;
+  white-space: normal;
+}
+
+.isms-app-matrix-table .isms-app-key-linkage {
+  position: sticky;
+  left: 7.5rem;
+  z-index: 2;
+  --bs-table-bg: var(--bs-body-bg);
+  background-color: var(--bs-body-bg) !important;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  line-height: 1.2;
+}
+
+.isms-app-matrix-table thead .isms-app-head-linkage {
+  z-index: 4;
+  --bs-table-bg: #5f46a6;
+  --bs-table-color: #fff;
+  background-color: #5f46a6 !important;
+  color: #fff !important;
+}
+
+.isms-app-cell {
+  height: 2rem;
+  padding: 0.22rem 0.25rem !important;
+  text-align: center;
+  vertical-align: middle;
+  position: relative;
+  line-height: 1.1;
+}
+
+.isms-app-matrix-table .isms-app-cell-empty {
+  --bs-table-bg: var(--bs-body-bg);
+  background-color: var(--bs-body-bg) !important;
+}
+
+.isms-app-matrix-table .isms-app-cell-low {
+  --bs-table-bg: #198754;
+  --bs-table-color: #fff;
+  background-color: #198754 !important;
+  color: #fff !important;
+}
+
+.isms-app-matrix-table .isms-app-cell-medium {
+  --bs-table-bg: #ffc107;
+  --bs-table-color: #111827;
+  background-color: #ffc107 !important;
+  color: #111827 !important;
+}
+
+.isms-app-matrix-table .isms-app-cell-high {
+  --bs-table-bg: #dc3545;
+  --bs-table-color: #fff;
+  background-color: #dc3545 !important;
+  color: #fff !important;
+}
+
+.isms-app-cell-actions {
+  display: inline-flex;
+  gap: 0.12rem;
+  margin-left: 0.2rem;
+  vertical-align: middle;
+}
+
+.isms-app-cell-actions .btn {
+  line-height: 1;
+  font-size: 0.72rem;
+}
+
+/* ISMS Organisation Chart visualisation */
+.isms-org-chart-wrap {
+  width: 100%;
+  min-height: 420px;
+  max-height: 72vh;
+  overflow: auto;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  background: var(--bs-body-bg);
+}
+
+.isms-org-chart-wrap svg {
+  display: block;
+  min-width: 900px;
+}
+
+.isms-org-node {
+  fill: var(--bs-body-bg);
+  stroke: #5f46a6;
+  stroke-width: 1.4px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.08));
+}
+
+.isms-org-node-root {
+  fill: #5f46a6;
+  stroke: #5f46a6;
+}
+
+.isms-org-node-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  fill: var(--bs-body-color);
+  pointer-events: none;
+}
+
+.isms-org-node-root ~ .isms-org-node-title,
+.isms-org-node-root + text {
+  fill: #fff;
+}
+
+.isms-org-node-subtitle {
+  font-size: 0.68rem;
+  fill: var(--bs-secondary-color);
+  pointer-events: none;
+}
+
+.isms-org-node-root ~ .isms-org-node-subtitle {
+  fill: rgba(255, 255, 255, 0.86);
+}
+
+.preserve-lines {
+  white-space: pre-wrap;
+}
+
+.rich-text-content,
+.rich-text-editor [contenteditable] {
+  color: #000;
+  font-family: "Open Sans", Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.rich-text-editor [contenteditable] {
+  background: #fff;
+  min-height: 260px;
+}
+
+.rich-text-editor [data-wysi-fallback] {
+  min-height: 260px;
+}
+
+.rich-text-editor[data-rich-text-ready="1"] > textarea {
+  display: none;
+}
+
+.rich-text-editor .wysi-toolbar,
+.rich-text-editor [class*="toolbar"] {
+  font-size: 0.875rem;
+}
+
+.rich-text-editor[data-rich-text-readonly="1"] .wysi-toolbar,
+.rich-text-editor[data-rich-text-readonly="1"] [class*="toolbar"] {
+  display: none;
+}
+
+.rich-text-content h1,
+.rich-text-content h2,
+.rich-text-content h3,
+.rich-text-content h4,
+.rich-text-content h5,
+.rich-text-content h6,
+.rich-text-content p,
+.rich-text-content ul,
+.rich-text-content ol,
+.rich-text-editor [contenteditable] h1,
+.rich-text-editor [contenteditable] h2,
+.rich-text-editor [contenteditable] h3,
+.rich-text-editor [contenteditable] h4,
+.rich-text-editor [contenteditable] h5,
+.rich-text-editor [contenteditable] h6,
+.rich-text-editor [contenteditable] p,
+.rich-text-editor [contenteditable] ul,
+.rich-text-editor [contenteditable] ol {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+}
+
+.rich-text-content h1,
+.rich-text-editor [contenteditable] h1 {
+  color: #20124d;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.rich-text-content h2,
+.rich-text-editor [contenteditable] h2 {
+  color: #ff9900;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rich-text-content h3,
+.rich-text-editor [contenteditable] h3 {
+  color: #cc0000;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rich-text-content h4,
+.rich-text-content h5,
+.rich-text-content h6,
+.rich-text-editor [contenteditable] h4,
+.rich-text-editor [contenteditable] h5,
+.rich-text-editor [contenteditable] h6 {
+  color: #38761d;
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 700;
+}
+
+.rich-text-content p,
+.rich-text-content li,
+.rich-text-editor [contenteditable] p,
+.rich-text-editor [contenteditable] li {
+  color: #000;
+  font-size: 11px;
+}
+
+.rich-text-content ul,
+.rich-text-content ol,
+.rich-text-editor [contenteditable] ul,
+.rich-text-editor [contenteditable] ol {
+  padding-left: 1.35rem;
+}
+
+.scope-coverage-chart svg,
+.scope-gap-matrix svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.scope-coverage-chart .coverage-axis-label,
+.scope-gap-matrix .coverage-axis-label {
+  font-size: 0.8rem;
+  fill: #475569;
+}
+
+.scope-coverage-chart .coverage-value,
+.scope-gap-matrix .coverage-value {
+  font-size: 0.78rem;
+  font-weight: 600;
+  fill: #111827;
+}
+
+.scope-gap-matrix .gap-cell-link {
+  cursor: pointer;
+  outline: none;
+}
+
+.scope-gap-matrix .gap-cell {
+  stroke: #fff;
+  stroke-width: 1.5px;
+}
+
+.scope-gap-matrix .gap-cell-link:hover .gap-cell,
+.scope-gap-matrix .gap-cell-link:focus .gap-cell {
+  stroke: #111827;
+  stroke-width: 2px;
+}
+
+/* ISMS Access Control Matrix status cells */
+.isms-app-matrix-table .isms-access-cell-approved {
+  --bs-table-bg: #198754;
+  --bs-table-color: #fff;
+  background-color: #198754 !important;
+  color: #fff !important;
+}
+
+.isms-app-matrix-table .isms-access-cell-pending {
+  --bs-table-bg: #ffc107;
+  --bs-table-color: #111827;
+  background-color: #ffc107 !important;
+  color: #111827 !important;
+}
+
+.isms-app-matrix-table .isms-access-cell-linked {
+  --bs-table-bg: #e7f1ff;
+  --bs-table-color: #0d6efd;
+  background-color: #e7f1ff !important;
+  color: #0d6efd !important;
+  font-weight: 700;
+}
+
+.isms-app-matrix-table .isms-access-status-head,
+.isms-app-matrix-table .isms-access-status,
+.isms-app-matrix-table .isms-access-role-heading,
+.isms-app-matrix-table .isms-access-role-cell,
+.isms-app-matrix-table .isms-access-actions-head,
+.isms-app-matrix-table .isms-access-actions {
+  width: 4.25rem;
+  min-width: 4.25rem;
+  max-width: 4.25rem;
+}
+
+.isms-app-matrix-table .isms-access-actions-head,
+.isms-app-matrix-table .isms-access-actions {
+  width: 3.4rem;
+  min-width: 3.4rem;
+  max-width: 3.4rem;
+  padding-left: 0.2rem !important;
+  padding-right: 0.2rem !important;
+}
+
+.isms-app-matrix-table .isms-access-actions .btn {
+  padding: 0.1rem 0.25rem;
+}
+
+.isms-app-matrix-table .isms-access-approver-head,
+.isms-app-matrix-table .isms-access-approver {
+  width: 8.5rem;
+  min-width: 8.5rem;
+  max-width: 8.5rem;
+}
+
+.isms-app-matrix-table .isms-access-accounts-head,
+.isms-app-matrix-table .isms-access-accounts {
+  width: 13rem;
+  min-width: 13rem;
+  max-width: 13rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.isms-aws-account-pill-list {
+  justify-content: flex-start;
+}
+
+.isms-aws-account-pill {
+  text-align: left;
+}
+
+.isms-app-matrix-table .isms-access-notes-head,
+.isms-app-matrix-table .isms-access-notes {
+  width: 14rem;
+  min-width: 14rem;
+  max-width: 14rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* ISMS Effectiveness Measures: colour current metric values by threshold result. */
+.eff-metric-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-weight: 700;
+  line-height: 1.35;
+  text-decoration: none;
+}
+.eff-metric-value-ok {
+  color: var(--bs-success);
+  background: rgba(var(--bs-success-rgb), 0.12);
+  border-color: rgba(var(--bs-success-rgb), 0.35);
+}
+.eff-metric-value-bad {
+  color: var(--bs-danger);
+  background: rgba(var(--bs-danger-rgb), 0.12);
+  border-color: rgba(var(--bs-danger-rgb), 0.35);
+}
+a.eff-metric-value:hover,
+a.eff-metric-value:focus {
+  text-decoration: none;
+  filter: brightness(0.95);
+}
+.eff-metric-threshold-label {
+  display: inline-flex;
+  margin-left: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.eff-metric-threshold-label-ok { color: var(--bs-success); }
+.eff-metric-threshold-label-bad { color: var(--bs-danger); }
+
+/* ISMS effectiveness metric trend visualisation. */
+.metric-trend-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+.metric-trend-svg {
+  min-width: 720px;
+  width: 100%;
+  color: var(--bs-body-color);
+}
+.metric-trend-bar {
+  fill: rgba(var(--keen-accent-rgb, 124, 58, 237), 0.45);
+}
+.metric-trend-point {
+  fill: rgba(var(--keen-accent-rgb, 124, 58, 237), 0.9);
+}
+.metric-trend-target {
+  stroke: var(--bs-danger);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+.metric-trend-target-label,
+.metric-trend-axis-label {
+  fill: currentColor;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* Compact ISMS Access Control Matrix and Effectiveness Measures tables for laptop-width screens. */
+.isms-app-matrix-table.isms-access-matrix-table {
+  min-width: 68rem;
+  font-size: 0.78rem;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-app-head-group,
+.isms-app-matrix-table.isms-access-matrix-table .isms-app-group {
+  width: 6.5rem;
+  min-width: 6.5rem;
+  max-width: 6.5rem;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-app-group span {
+  max-width: 5.75rem;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-app-head-linkage,
+.isms-app-matrix-table.isms-access-matrix-table .isms-app-key-linkage {
+  width: 11.5rem;
+  min-width: 11.5rem;
+  max-width: 11.5rem;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-app-key-linkage {
+  left: 6.5rem;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-role-heading,
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-role-cell {
+  width: 3.15rem;
+  min-width: 3.15rem;
+  max-width: 3.15rem;
+  padding-left: 0.15rem !important;
+  padding-right: 0.15rem !important;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-status-head,
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-status {
+  width: 4rem;
+  min-width: 4rem;
+  max-width: 4rem;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-approver-head,
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-approver {
+  width: 6rem;
+  min-width: 6rem;
+  max-width: 6rem;
+}
+
+.isms-access-approver-pill {
+  display: inline-block;
+  max-width: 5.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-accounts-head,
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-accounts {
+  width: 8rem;
+  min-width: 8rem;
+  max-width: 8rem;
+}
+
+.isms-aws-account-pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.12rem;
+}
+
+.isms-aws-account-pill {
+  max-width: 7.2rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-notes-head,
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-notes {
+  width: 2.8rem;
+  min-width: 2.8rem;
+  max-width: 2.8rem;
+  padding-left: 0.15rem !important;
+  padding-right: 0.15rem !important;
+}
+
+.isms-note-tooltip-trigger {
+  width: 1.55rem;
+  height: 1.55rem;
+  padding: 0 !important;
+  line-height: 1;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-actions-head,
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-actions {
+  width: 3.8rem;
+  min-width: 3.8rem;
+  max-width: 3.8rem;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-actions .btn-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.08rem;
+}
+
+.isms-app-matrix-table.isms-access-matrix-table .isms-access-actions .btn {
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 !important;
+  border-radius: 0.22rem !important;
+  line-height: 1;
+}
+
+.isms-fit-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.isms-fit-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.isms-fit-table th,
+.isms-fit-table td {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Compact ISMS Objectives table so action icons and user pills fit within laptop-width screens. */
+.isms-objectives-table {
+  font-size: 0.86rem;
+}
+
+.isms-objectives-goal-col { width: 24%; }
+.isms-objectives-metric-col { width: 18%; }
+.isms-objectives-owner-col { width: 8%; }
+.isms-objectives-target-col { width: 9%; }
+.isms-objectives-resources-col { width: 15%; }
+.isms-objectives-controls-col { width: 8%; }
+.isms-objectives-clauses-col { width: 8%; }
+.isms-objectives-actions-col,
+.isms-objectives-actions {
+  width: 6.25rem;
+  min-width: 6.25rem;
+  max-width: 6.25rem;
+}
+
+.isms-objectives-owner-cell,
+.isms-objectives-resources-cell {
+  overflow: hidden;
+}
+
+.isms-objective-user-pill {
+  max-width: 100%;
+  font-size: 0.72rem;
+  line-height: 1.15;
+  padding: 0.12rem 0.35rem;
+}
+
+.isms-objectives-actions {
+  text-align: center;
+  padding-left: 0.15rem !important;
+  padding-right: 0.15rem !important;
+}
+
+.isms-objectives-actions .btn-group {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+}
+
+.isms-objectives-actions .btn {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0 !important;
+  line-height: 1;
+}
+
+.isms-objectives-actions .btn .bi {
+  line-height: 1;
+}
+
+.isms-effectiveness-table {
+  font-size: 0.88rem;
+}
+
+.isms-effectiveness-summary-col { width: 24%; }
+.isms-effectiveness-measure-col { width: 17%; }
+.isms-effectiveness-metric-col { width: 12%; }
+.isms-effectiveness-latest-col { width: 15%; }
+.isms-effectiveness-target-col { width: 7%; }
+.isms-effectiveness-owner-col { width: 7%; }
+.isms-effectiveness-controls-col { width: 8%; }
+.isms-effectiveness-actions-col,
+.isms-effectiveness-actions {
+  width: 7.5rem;
+  min-width: 7.5rem;
+  max-width: 7.5rem;
+}
+
+.isms-effectiveness-actions .btn {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0 !important;
+  line-height: 1;
+}
+
+.isms-effectiveness-actions .btn .bi {
+  line-height: 1;
+}
+
+.isms-effectiveness-actions .bi-box-arrow-up-right {
+  transform: translateY(0.055rem);
+}
+
+@media (max-width: 1280px) {
+  .isms-app-matrix-table.isms-access-matrix-table {
+    min-width: 64rem;
+    font-size: 0.75rem;
+  }
+
+  .isms-app-matrix-table.isms-access-matrix-table .isms-app-head-linkage,
+  .isms-app-matrix-table.isms-access-matrix-table .isms-app-key-linkage {
+    width: 10.5rem;
+    min-width: 10.5rem;
+    max-width: 10.5rem;
+  }
+
+  .isms-app-matrix-table.isms-access-matrix-table .isms-access-role-heading,
+  .isms-app-matrix-table.isms-access-matrix-table .isms-access-role-cell {
+    width: 2.85rem;
+    min-width: 2.85rem;
+    max-width: 2.85rem;
+  }
+
+  .isms-effectiveness-table {
+    font-size: 0.82rem;
+  }
+
+  .isms-effectiveness-actions-col,
+  .isms-effectiveness-actions {
+    width: 6.9rem;
+    min-width: 6.9rem;
+    max-width: 6.9rem;
+  }
+
+  .isms-effectiveness-actions .btn {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+}
+
+.keen-filter-pill-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 13rem;
+  max-width: 28rem;
+}
+
+.keen-filter-pill-picker-toolbar,
+.keen-filter-pill-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.keen-filter-pill-picker-toolbar .keen-filter-pill-summary {
+  flex: 1 1 auto;
+  min-width: 8rem;
+}
+
+.keen-filter-pill-toolbar .input-group {
+  flex: 1 1 20rem;
+}
+
+.keen-filter-pill-inline,
+.keen-filter-pill-selected,
+.keen-filter-pill-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+}
+
+.keen-filter-pill-selected {
+  min-height: 2rem;
+  align-items: flex-start;
+}
+
+.keen-filter-pill-grid {
+  align-content: flex-start;
+  max-height: 26rem;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.keen-filter-pill-chip {
+  appearance: none;
+  border: 1px solid rgba(100, 116, 139, 0.42);
+  background: rgba(100, 116, 139, 0.1);
+  color: #334155;
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.84rem;
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  max-width: 100%;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+}
+
+button.keen-filter-pill-chip:hover,
+button.keen-filter-pill-chip:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 0.2rem 0.55rem rgba(15, 23, 42, 0.12);
+}
+
+.keen-filter-pill-chip.selected {
+  border-color: rgba(37, 99, 235, 0.62);
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.keen-filter-pill-chip.removable {
+  padding-right: 0.28rem;
+}
+
+.keen-filter-pill-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keen-filter-pill-remove {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.keen-filter-pill-remove:hover,
+.keen-filter-pill-remove:focus-visible {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+@media (max-width: 767.98px) {
+  .keen-filter-pill-picker,
+  .keen-filter-pill-picker-toolbar,
+  .keen-filter-pill-toolbar {
+    align-items: stretch;
+    width: 100%;
+    max-width: none;
+  }
+
+  .keen-filter-pill-picker-toolbar,
+  .keen-filter-pill-toolbar {
+    flex-direction: column;
+  }
+
+  .keen-filter-pill-grid {
+    max-height: 22rem;
+  }
+}

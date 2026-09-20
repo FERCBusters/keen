@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Audits</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/vendor/wysi/wysi.min.css">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="audits">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1">Audits</h1>
+        <div class="small-muted">Start an audit, collect sampled evidence, track scope, attendees, findings and the final report.</div>
+      </div>
+      <div class="d-flex gap-2">
+        <button id="showCreate" class="btn btn-primary"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Start audit</button>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <div id="createCard" class="card mb-3" style="display:none;">
+      <div class="card-header">
+        <div class="fw-bold">Start a new audit</div>
+        <div class="small-muted">The current framework selector is used by default.</div>
+      </div>
+      <div class="card-body">
+        <form id="createForm" class="row g-3 align-items-end">
+          <div class="col-12 col-lg-5">
+            <label class="form-label small-muted mb-1">Title</label>
+            <input id="newTitle" class="form-control" placeholder="e.g. ISO27001 surveillance audit May 2026" required />
+          </div>
+          <div class="col-12 col-md-6 col-lg-3">
+            <label class="form-label small-muted mb-1">Framework</label>
+            <input id="newFramework" class="form-control" />
+          </div>
+          <div class="col-12 col-md-6 col-lg-2">
+            <label class="form-label small-muted mb-1">Audit type</label>
+            <select id="newType" class="form-select">
+              <option value="internal">Internal</option>
+              <option value="external">External</option>
+            </select>
+          </div>
+          <div class="col-6 col-lg-1">
+            <label class="form-label small-muted mb-1">Begin date</label>
+            <input id="newStart" class="form-control" type="date" />
+          </div>
+          <div class="col-6 col-lg-1">
+            <label class="form-label small-muted mb-1">End date</label>
+            <input id="newEnd" class="form-control" type="date" />
+          </div>
+          <div class="col-12 col-lg-6">
+            <label class="form-label small-muted mb-1">Executive Summary</label>
+            <div class="rich-text-editor"><textarea id="newExecutiveSummary" class="form-control" rows="2" data-rich-text="1" data-rich-text-height="180" placeholder="Optional high-level summary; can be filled in later."></textarea></div>
+          </div>
+          <div class="col-12 col-lg-6">
+            <label class="form-label small-muted mb-1">Report Notes</label>
+            <div class="rich-text-editor"><textarea id="newNotes" class="form-control" rows="2" data-rich-text="1" data-rich-text-height="180" placeholder="Scope, audit plan reference, external auditor, etc."></textarea></div>
+          </div>
+          <div class="col-12">
+            <div class="border rounded p-3">
+              <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                <div>
+                  <div class="fw-semibold">Optional audit scope</div>
+                  <div class="small-muted">Select ISMS policies/processes, clauses or controls now, or leave scope empty and set it later. Document and clause selections automatically include their linked clauses/controls.</div>
+                </div>
+                <div class="small-muted"><span id="newDocumentCount">0 documents</span> · <span id="newClauseCount">0 clauses</span> · <span id="newControlCount">0 controls</span></div>
+              </div>
+              <div class="row g-3">
+                <div class="col-12 col-xl-4">
+                  <label class="form-label small-muted mb-1">ISMS documents</label>
+                  <input id="newDocumentFilter" class="form-control form-control-sm mb-2" placeholder="Filter policies/processes…" />
+                  <div id="newDocumentsList" class="row g-2" style="max-height:240px; overflow:auto;"></div>
+                </div>
+                <div class="col-12 col-xl-4">
+                  <label class="form-label small-muted mb-1">Clauses</label>
+                  <input id="newClauseFilter" class="form-control form-control-sm mb-2" placeholder="Filter clauses…" />
+                  <div id="newClausesList" class="row g-2" style="max-height:240px; overflow:auto;"></div>
+                </div>
+                <div class="col-12 col-xl-4">
+                  <label class="form-label small-muted mb-1">Controls</label>
+                  <input id="newControlFilter" class="form-control form-control-sm mb-2" placeholder="Filter controls…" />
+                  <div id="newControlsList" class="row g-2" style="max-height:240px; overflow:auto;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 d-flex gap-2">
+            <button class="btn btn-primary" type="submit">Create audit</button>
+            <button id="cancelCreate" class="btn btn-outline-secondary" type="button">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <ul class="nav nav-tabs mb-3" id="auditTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="register-tab" data-bs-toggle="tab" data-bs-target="#registerPane" type="button" role="tab" aria-controls="registerPane" aria-selected="true">Audit register</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="scheduled-tab" data-bs-toggle="tab" data-bs-target="#scheduledPane" type="button" role="tab" aria-controls="scheduledPane" aria-selected="false">Scheduled Audits</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="coverage-tab" data-bs-toggle="tab" data-bs-target="#coveragePane" type="button" role="tab" aria-controls="coveragePane" aria-selected="false">Scope Coverage</button>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <div class="tab-pane fade show active" id="registerPane" role="tabpanel" aria-labelledby="register-tab">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-end justify-content-between">
+            <div>
+              <div class="fw-bold">Audit register</div>
+              <div class="small-muted">Audits are shared between all auditors; the original author is retained.</div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+              <input id="q" class="form-control form-control-sm" style="min-width:240px" placeholder="Filter by title…" />
+              <select id="statusFilter" class="form-select form-select-sm" style="width:150px">
+                <option value="">All statuses</option>
+                <option value="open">Open</option>
+                <option value="in_progress">In progress</option>
+                <option value="completed">Completed</option>
+                <option value="archived">Archived</option>
+              </select>
+              <button id="reload" class="btn btn-sm btn-outline-primary">Reload</button>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Audit</th>
+                    <th>Framework</th>
+                    <th>Type</th>
+                    <th>Dates</th>
+                    <th>Author</th>
+                    <th>Evidence</th>
+                    <th>Scope</th>
+                    <th>Findings</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="rows"><tr><td colspan="10" class="p-4 small-muted">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane fade" id="scheduledPane" role="tabpanel" aria-labelledby="scheduled-tab">
+        <div class="row g-3">
+          <div class="col-12 col-xl-5">
+            <div class="card h-100">
+              <div class="card-header">
+                <div class="fw-bold">Schedule an audit template</div>
+                <div class="small-muted">Templates create a real Open audit on the scheduled date. Scope and attendees can be maintained from the template page.</div>
+              </div>
+              <div class="card-body">
+                <form id="scheduleForm" class="row g-3">
+                  <div class="col-12">
+                    <label class="form-label small-muted mb-1">Title</label>
+                    <input id="schedTitle" class="form-control" placeholder="e.g. Quarterly internal audit" required />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label small-muted mb-1">Framework</label>
+                    <input id="schedFramework" class="form-control" />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label small-muted mb-1">Audit type</label>
+                    <select id="schedType" class="form-select">
+                      <option value="internal">Internal</option>
+                      <option value="external">External</option>
+                    </select>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small-muted mb-1" for="schedDateRule">Date selector</label>
+                    <select id="schedDateRule" class="form-select">
+                      <option value="exact">Exact first run date</option>
+                      <option value="first_weekday_of_month">First weekday of month</option>
+                      <option value="first_monday_of_month">First Monday of month</option>
+                      <option value="first_tuesday_of_month">First Tuesday of month</option>
+                      <option value="first_wednesday_of_month">First Wednesday of month</option>
+                      <option value="first_thursday_of_month">First Thursday of month</option>
+                      <option value="first_friday_of_month">First Friday of month</option>
+                    </select>
+                    <div class="form-text">Use a fuzzy selector for schedules such as “first Monday of January” that should survive year-to-year calendar shifts.</div>
+                  </div>
+                  <div class="col-12" id="schedExactDateFields">
+                    <label class="form-label small-muted mb-1">First run date</label>
+                    <input id="schedStart" class="form-control visually-hidden" type="date" />
+                    <div class="input-group">
+                      <input id="schedStartText" class="form-control" type="text" placeholder="YYYY-MM-DD" autocomplete="off" inputmode="numeric" />
+                      <button id="schedStartPick" class="btn btn-outline-secondary" type="button" title="Pick date"><i class="bi bi-calendar"></i></button>
+                    </div>
+                  </div>
+                  <div class="col-12" id="schedFuzzyDateFields" style="display:none;">
+                    <div class="row g-2">
+                      <div class="col-12 col-md-7">
+                        <label class="form-label small-muted mb-1" for="schedFuzzyMonth" id="schedFuzzyMonthLabel">First weekday of</label>
+                        <select id="schedFuzzyMonth" class="form-select">
+                          <option value="1">January</option>
+                          <option value="2">February</option>
+                          <option value="3">March</option>
+                          <option value="4">April</option>
+                          <option value="5">May</option>
+                          <option value="6">June</option>
+                          <option value="7">July</option>
+                          <option value="8">August</option>
+                          <option value="9">September</option>
+                          <option value="10">October</option>
+                          <option value="11">November</option>
+                          <option value="12">December</option>
+                        </select>
+                      </div>
+                      <div class="col-12 col-md-5">
+                        <label class="form-label small-muted mb-1" for="schedFuzzyYear">Start year</label>
+                        <input id="schedFuzzyYear" class="form-control" type="number" min="1900" max="3000" />
+                      </div>
+                      <div class="col-12">
+                        <div class="small-muted" id="schedDatePreview"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small-muted mb-1">End date</label>
+                    <input id="schedEnd" class="form-control visually-hidden" type="date" />
+                    <div class="input-group">
+                      <input id="schedEndText" class="form-control" type="text" placeholder="YYYY-MM-DD" autocomplete="off" inputmode="numeric" />
+                      <button id="schedEndPick" class="btn btn-outline-secondary" type="button" title="Pick date"><i class="bi bi-calendar"></i></button>
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label small-muted mb-1">Recurrence</label>
+                    <select id="schedRecurrence" class="form-select">
+                      <option value="once">Once</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="quarterly">Quarterly</option>
+                      <option value="yearly">Yearly</option>
+                    </select>
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <label class="form-label small-muted mb-1">Every</label>
+                    <input id="schedInterval" class="form-control" type="number" min="1" max="120" value="1" />
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <label class="form-label small-muted mb-1">Until</label>
+                    <input id="schedUntil" class="form-control visually-hidden" type="date" />
+                    <div class="input-group input-group-sm">
+                      <input id="schedUntilText" class="form-control" type="text" placeholder="YYYY-MM-DD" autocomplete="off" inputmode="numeric" />
+                      <button id="schedUntilPick" class="btn btn-outline-secondary" type="button" title="Pick date"><i class="bi bi-calendar"></i></button>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small-muted mb-1">Report notes / plan</label>
+                    <div class="rich-text-editor"><textarea id="schedNotes" class="form-control" rows="3" data-rich-text="1" placeholder="Purpose, planned scope, external auditor, prep notes…"></textarea></div>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small-muted mb-1" for="schedDocuments">ISMS policies/processes in scope</label>
+                    <select id="schedDocuments" class="form-select" multiple size="5"></select>
+                    <div class="form-text">Selected documents automatically add their linked clauses and controls when the scheduled audit is created.</div>
+                  </div>
+                  <div class="col-12">
+                    <div class="border rounded p-3">
+                      <div class="fw-semibold mb-1">Attendees to email when created</div>
+                      <div class="small-muted mb-2">Email is sent only when SMTP is configured and the attendee has an email address.</div>
+                      <div class="row g-2 align-items-end">
+                        <div class="col-12">
+                          <label class="form-label small-muted mb-1" for="schedAttendeeUserId">Keen user</label>
+                          <select id="schedAttendeeUserId" class="form-select form-select-sm">
+                            <option value="">Custom / external attendee</option>
+                          </select>
+                          <div class="form-text">Select a Keen user, or leave this as custom and enter a free-text attendee below.</div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                          <label class="form-label small-muted mb-1" for="schedAttendeeName">Name</label>
+                          <input id="schedAttendeeName" class="form-control form-control-sm" placeholder="Name (or override selected user's display name)" />
+                        </div>
+                        <div class="col-12 col-md-4">
+                          <label class="form-label small-muted mb-1" for="schedAttendeeEmail">Email</label>
+                          <input id="schedAttendeeEmail" class="form-control form-control-sm" type="email" />
+                        </div>
+                        <div class="col-12 col-md-3">
+                          <label class="form-label small-muted mb-1" for="schedAttendeeRole">Role</label>
+                          <input id="schedAttendeeRole" class="form-control form-control-sm" placeholder="Auditor, auditee…" />
+                        </div>
+                        <div class="col-12 col-md-1 d-grid">
+                          <button id="schedAddAttendee" class="btn btn-sm btn-outline-primary" type="button">Add</button>
+                        </div>
+                      </div>
+                      <div id="schedAttendees" class="mt-3 small-muted">No attendees added.</div>
+                    </div>
+                  </div>
+                  <div class="col-12 d-flex gap-2">
+                    <button class="btn btn-primary" type="submit">Create scheduled audit</button>
+                    <button id="scheduleReset" class="btn btn-outline-secondary" type="button">Reset</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12 col-xl-7">
+            <div class="card mb-3">
+              <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                <div>
+                  <div class="fw-bold">Calendar</div>
+                  <div class="small-muted">Upcoming template runs in the selected month.</div>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                  <button id="schedPrevMonth" class="btn btn-sm btn-outline-secondary" type="button">‹</button>
+                  <input id="schedMonth" class="form-control form-control-sm" type="month" style="width:150px" />
+                  <button id="schedNextMonth" class="btn btn-sm btn-outline-secondary" type="button">›</button>
+                </div>
+              </div>
+              <div class="card-body">
+                <div id="scheduleCalendar" class="schedule-calendar"></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                <div>
+                  <div class="fw-bold">Scheduled audit templates</div>
+                  <div class="small-muted">Open a template to add scope, controls/clauses, or maintain attendees.</div>
+                </div>
+                <button id="reloadSchedules" class="btn btn-sm btn-outline-primary" type="button">Reload</button>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th>Template</th>
+                        <th>Next run</th>
+                        <th>Recurrence</th>
+                        <th>Attendees</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="scheduledRows"><tr><td colspan="5" class="p-4 small-muted">Loading…</td></tr></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane fade" id="coveragePane" role="tabpanel" aria-labelledby="coverage-tab">
+        <div class="card mb-3 no-print" data-mosp-filter-section="audit-scope-coverage-filters" data-mosp-filter-title="Scope coverage filters">
+          <div class="card-body" data-mosp-filter-body>
+            <div class="row g-2 align-items-end">
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1" for="coverageMode">Audit source</label>
+                <select id="coverageMode" class="form-select">
+                  <option value="both">Completed + scheduled</option>
+                  <option value="completed">Completed audits only</option>
+                  <option value="scheduled">Scheduled audit templates only</option>
+                </select>
+              </div>
+              <div class="col-6 col-lg-2">
+                <label class="form-label small-muted mb-1" for="coverageStart">From</label>
+                <input id="coverageStart" class="form-control" type="date">
+              </div>
+              <div class="col-6 col-lg-2">
+                <label class="form-label small-muted mb-1" for="coverageEnd">To</label>
+                <input id="coverageEnd" class="form-control" type="date">
+              </div>
+              <div class="col-12 col-lg-3">
+                <label class="form-label small-muted mb-1" for="coverageQ">Filter results</label>
+                <input id="coverageQ" class="form-control" type="search" placeholder="Control, clause, document, audit…">
+              </div>
+              <div class="col-12 col-lg-2">
+                <button id="coverageReload" class="btn btn-outline-primary w-100" type="button">Refresh</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3" id="coverageSummary"></div>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Scope coverage visualisations</div>
+              <div class="small-muted">What has been included and where audit-scope gaps remain.</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="coverageChart" class="scope-coverage-chart"></div>
+            <div id="coverageGapMatrix" class="scope-gap-matrix mt-3"></div>
+          </div>
+        </div>
+        <div class="row g-3">
+          <div class="col-12 col-xl-6">
+            <div class="card h-100">
+              <div class="card-header"><div class="fw-bold">Included in audit scope</div><div class="small-muted">Controls, clauses and documents seen in completed audits and/or scheduled occurrences during the selected period.</div></div>
+              <div class="card-body p-0"><div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Type</th><th>Item</th><th>Audit scope entries</th></tr></thead><tbody id="coverageIncludedRows"><tr><td colspan="3" class="p-4 small-muted">Choose filters and refresh.</td></tr></tbody></table></div></div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-6">
+            <div class="card h-100">
+              <div class="card-header"><div class="fw-bold">Not yet included / gaps</div><div class="small-muted">Framework controls/clauses and ISMS documents not covered by the selected audit scope window.</div></div>
+              <div class="card-body p-0"><div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Type</th><th>Item</th><th>Coverage</th></tr></thead><tbody id="coverageGapRows"><tr><td colspan="3" class="p-4 small-muted">Choose filters and refresh.</td></tr></tbody></table></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/wysi/wysi.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
+  <script type="module" src="/pages/audits.js"></script>
+</body>
+</html>

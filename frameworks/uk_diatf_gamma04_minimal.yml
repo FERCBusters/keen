@@ -1,0 +1,24 @@
+framework: "UK-DVSTF:1.0"
+notes: "Minimal seed refs for UK Digital Identity and Attributes Trust Framework 1.0. Import your full control library for authoritative titles and metadata."
+items:
+  # Governance & risk (sample)
+  - type: trust_framework_control
+    ref: "4.1"
+  - type: trust_framework_control
+    ref: "4.2"
+  - type: trust_framework_control
+    ref: "5.1"
+
+  # Security / assurance examples (sample)
+  - type: trust_framework_control
+    ref: "11.8.1.a"
+  - type: trust_framework_control
+    ref: "11.8.1.b"
+  - type: trust_framework_control
+    ref: "11.11.4.c"
+
+  # Fraud / operational controls (sample)
+  - type: trust_framework_control
+    ref: "14.2.1"
+  - type: trust_framework_control
+    ref: "15.3"

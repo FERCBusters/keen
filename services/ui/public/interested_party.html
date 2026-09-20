@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Interested Party</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="interested-party">
+  <div id="navbar"></div>
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a id="interestedPartiesBreadcrumb" class="link-subtle" data-nav-fw="1" href="/interested_parties.html">← Interested Parties</a></div>
+        <h1 id="partyTitle" class="h3 mb-1">Interested Party</h1>
+        <div id="partyMeta" class="small-muted">Create or edit an interested party.</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <button id="samplePartyAudit" class="btn btn-outline-success" type="button" style="display:none;"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Sample into audit</button>
+        <a class="btn btn-outline-primary" data-nav-fw="1" href="/interested_parties.html"><i class="bi bi-list-ul" aria-hidden="true"></i> All interested parties</a>
+      </div>
+    </div>
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3 no-print" role="tablist">
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="partyDetailsTab" data-bs-toggle="tab" data-bs-target="#partyDetailsPane" type="button" role="tab">Details</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="partyCommunicationsTab" data-bs-toggle="tab" data-bs-target="#partyCommunicationsPane" type="button" role="tab">Communications</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="partyChangelogTab" data-bs-toggle="tab" data-bs-target="#partyChangelogPane" type="button" role="tab">Changelog</button></li>
+    </ul>
+
+    <div class="tab-content">
+      <section class="tab-pane fade show active" id="partyDetailsPane" role="tabpanel" tabindex="0">
+        <form id="partyForm" class="card">
+          <div class="card-header"><div class="fw-bold" id="partyEditorTitle">Interested party details</div><div class="small-muted">Name and Nature of Interest are managed as reusable dropdown values.</div></div>
+          <div class="card-body">
+            <input id="partyId" type="hidden">
+            <div class="row g-3">
+              <div class="col-12 col-lg-6"><label for="partyName" class="form-label">Name</label><select id="partyName" class="form-select"></select><div class="form-text">Add more names on the Interested Parties page.</div></div>
+              <div class="col-12 col-lg-6"><label for="partyNature" class="form-label">Nature of Interest</label><select id="partyNature" class="form-select"></select><div class="form-text">Add more natures on the Interested Parties page.</div></div>
+              <div class="col-12"><label for="partyNote" class="form-label">Note</label><textarea id="partyNote" class="form-control" rows="4" maxlength="4000" placeholder="Why is this nature of interest, communication pattern, or control mapping relevant for this interested party?"></textarea><div class="form-text">Use this to explain the rationale for this name + nature of interest combination and its linked controls/communications.</div></div>
+              <div class="col-12"><div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-2"><label class="form-label mb-0" for="controlSearch">Linked Controls</label><input id="controlSearch" class="form-control form-control-sm" type="search" placeholder="Filter controls…" style="max-width:320px;"></div><div id="controlsChecklist" class="border rounded p-2 small" style="max-height:360px; overflow:auto;">Loading controls…</div></div>
+            </div>
+          </div>
+          <div class="card-footer d-flex flex-wrap gap-2 justify-content-between no-print"><button id="deleteParty" type="button" class="btn btn-outline-danger">Delete</button><button id="saveParty" type="submit" class="btn btn-primary">Save interested party</button></div>
+        </form>
+      </section>
+
+      <section class="tab-pane fade" id="partyCommunicationsPane" role="tabpanel" tabindex="0">
+        <div class="card"><div class="card-header d-flex flex-wrap gap-2 justify-content-between"><div><div class="fw-bold">Communications</div><div class="small-muted">Add multiple communication rules. Method is multi-select.</div></div><button id="addCommunication" class="btn btn-sm btn-primary no-print" type="button"><i class="bi bi-plus-lg"></i> Add communication</button></div><div class="card-body"><div id="communicationsList" class="vstack gap-3">No communications yet.</div></div><div class="card-footer text-end no-print"><button id="saveCommunications" class="btn btn-primary" type="button">Save communications</button></div></div>
+      </section>
+
+      <section class="tab-pane fade" id="partyChangelogPane" role="tabpanel" tabindex="0">
+        <div id="partyChangelog" class="card card-body small-muted">Save the interested party to start its changelog.</div>
+      </section>
+    </div>
+  </main>
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/interested_party.js"></script>
+</body>
+</html>

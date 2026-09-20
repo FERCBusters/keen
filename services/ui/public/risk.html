@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – CIA Triad Risk</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="risks">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a id="risksBreadcrumb" class="link-subtle" data-nav-fw="1" href="/risks.html">← CIA Triad Risks</a></div>
+        <h1 class="h4 mb-1" id="riskTitle">CIA Triad Risk</h1>
+        <div class="small-muted" id="riskMeta">—</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <button id="sampleRiskAudit" class="btn btn-outline-success" type="button" style="display:none;"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Sample into audit</button>
+        <a id="riskVisualisation" class="btn btn-outline-primary" data-nav-fw="1" href="/risks.html?tab=visualisations">CIA risk visualisation</a>
+        <a id="editRisk" class="btn btn-primary" href="/risks.html" style="display:none;">Edit risk</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3 no-print" id="riskPageTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="riskDetailsTab" data-bs-toggle="tab" data-bs-target="#riskDetailsPane" type="button" role="tab" aria-controls="riskDetailsPane" aria-selected="true">Details</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="riskQuestionsTab" data-bs-toggle="tab" data-bs-target="#riskQuestionsPane" type="button" role="tab" aria-controls="riskQuestionsPane" aria-selected="false">Questions</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="riskChangelogTab" data-bs-toggle="tab" data-bs-target="#riskChangelogPane" type="button" role="tab" aria-controls="riskChangelogPane" aria-selected="false">Changelog</button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="riskPageTabContent">
+      <section class="tab-pane fade show active" id="riskDetailsPane" role="tabpanel" aria-labelledby="riskDetailsTab" tabindex="0">
+        <div id="riskDetail" class="vstack gap-3">
+          <div class="card">
+            <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+              <div>
+                <div class="fw-bold">CIA Triad risk scenario</div>
+                <div class="small-muted">Read-only risk view. Use Edit to change this scenario.</div>
+              </div>
+              <div id="riskTypes" class="d-flex flex-wrap gap-1"></div>
+            </div>
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-12 col-lg-4">
+                  <div class="small-muted">Asset</div>
+                  <div class="fw-semibold" id="riskAsset">—</div>
+                </div>
+                <div class="col-12 col-lg-4">
+                  <div class="small-muted">Category</div>
+                  <div id="riskCategory">—</div>
+                </div>
+                <div class="col-12 col-lg-4">
+                  <div class="small-muted">Subcategory</div>
+                  <div id="riskSubcategory">—</div>
+                </div>
+                <div class="col-12 col-lg-4">
+                  <div class="small-muted">Owner</div>
+                  <div id="riskOwner">—</div>
+                </div>
+                <div class="col-12 col-lg-4">
+                  <div class="small-muted">Inherent risk</div>
+                  <div id="riskScore">—</div>
+                </div>
+                <div class="col-12 col-lg-4">
+                  <div class="small-muted">Residual risk</div>
+                  <div id="residualScore">—</div>
+                </div>
+                <div class="col-12">
+                  <div class="small-muted">Threat summary</div>
+                  <div id="threatSummary" class="whitespace-pre-wrap border rounded-3 p-3 bg-light">—</div>
+                </div>
+                <div class="col-12">
+                  <div class="small-muted">Note</div>
+                  <div id="riskNote" class="whitespace-pre-wrap border rounded-3 p-3 bg-light">—</div>
+                </div>
+                <div class="col-12" id="riskMitigatorContextWrap" style="display:none;">
+                  <div class="small-muted d-flex align-items-center gap-2"><img src="/keen-mitigator.svg" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator context</div>
+                  <div id="riskMitigatorContext" class="border rounded-3 p-3 bg-light small">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+              <div>
+                <div class="fw-bold">Linked controls</div>
+                <div class="small-muted">Controls mapped to this risk for the selected framework.</div>
+              </div>
+              <span id="controlsCount" class="badge text-bg-light">0</span>
+            </div>
+            <div class="card-body p-0">
+              <div id="linkedControls" class="p-3 small-muted">Loading controls…</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="riskQuestionsPane" role="tabpanel" aria-labelledby="riskQuestionsTab" tabindex="0">
+        <div id="questions" class="card mb-3">
+          <div class="card-header">
+            <div class="fw-bold">Questions</div>
+            <div class="small-muted">Ask auditors or owners questions about this CIA Triad risk scenario.</div>
+          </div>
+          <div class="card-body">
+            <div class="no-print mb-3">
+              <label class="form-label" for="riskQuestionBody">Ask a question</label>
+              <textarea id="riskQuestionBody" class="form-control" rows="3" placeholder="Write a question about this CIA Triad risk scenario…"></textarea>
+              <div class="d-flex justify-content-end mt-2">
+                <button id="riskAskQuestion" class="btn btn-sm btn-primary" type="button">Ask question</button>
+              </div>
+            </div>
+            <div id="riskQuestions" class="small-muted">Loading questions…</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="riskChangelogPane" role="tabpanel" aria-labelledby="riskChangelogTab" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header">
+            <div class="fw-bold">Changelog</div>
+            <div class="small-muted">Immutable audit history for this risk.</div>
+          </div>
+          <div id="riskChangelog" class="card-body p-0 small-muted">Loading changelog…</div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/risk.js"></script>
+</body>
+</html>

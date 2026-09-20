@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – My Questions</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1">My Questions</h1>
+        <div class="small-muted">Threads you&#39;ve opened on events, including any admin responses.</div>
+      </div>
+      <div class="no-print">
+        <a class="btn btn-outline-primary" href="/events.html">Events</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <div class="card">
+      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div class="fw-semibold">Threads</div>
+        <button class="btn btn-sm btn-outline-primary" id="btnRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+      </div>
+      <div class="card-body">
+        <div id="questionsEmpty" class="small-muted" style="display:none;">No questions yet.</div>
+        <div class="table-responsive" id="questionsTableWrap" style="display:none;">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Status</th>
+                <th>Updated</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="questionsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/my-questions.js"></script>
+</body>
+</html>

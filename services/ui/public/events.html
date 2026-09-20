@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Events</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="events">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 id="pageTitle" class="h3 mb-1">Events</h1>
+        <div class="small-muted">Search and slice evidence by source, clause, actor/system — then jump to sampling.</div>
+      </div>
+      <div id="eventsActions" class="d-flex gap-2 no-print">
+        <a class="btn btn-outline-primary" href="/sources.html">Sources</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3" id="eventsTabs" role="tablist">
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="eventsRegisterTab" data-bs-toggle="tab" data-bs-target="#eventsRegisterPane" type="button" role="tab" aria-controls="eventsRegisterPane" aria-selected="true">Events</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="eventsVisualisationsTab" data-bs-toggle="tab" data-bs-target="#embeddedVisualisationsPane" type="button" role="tab" aria-controls="embeddedVisualisationsPane" aria-selected="false">Visualisations</button></li>
+    </ul>
+    <div class="tab-content">
+      <section class="tab-pane fade show active" id="eventsRegisterPane" role="tabpanel" aria-labelledby="eventsRegisterTab" tabindex="0">
+
+    <div class="card mb-3 no-print" data-mosp-filter-section="events-filters" data-mosp-filter-title="Filters">
+      <div class="card-body">
+        <form id="filters" class="row g-2 align-items-end">
+          <div class="col-12 col-lg-5">
+            <label class="form-label small-muted mb-1">Search</label>
+            <input id="q" class="form-control" type="search" placeholder="summary / actor / system / source…">
+          </div>
+          <div class="col-12 col-lg-3">
+            <label class="form-label small-muted mb-1">Source</label>
+            <select id="source" class="form-select">
+              <option value="">All sources</option>
+            </select>
+          </div>
+          <div class="col-12 col-lg-2">
+            <label class="form-label small-muted mb-1">Control</label>
+            <select id="control" class="form-select">
+              <option value="">All controls</option>
+            </select>
+          </div>
+          <div class="col-12 col-lg-2">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="unmapped">
+              <label class="form-check-label small-muted" for="unmapped">Unmapped only</label>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-primary w-100" type="submit">Apply</button>
+              <button class="btn btn-outline-primary" id="reset" type="button">Reset</button>
+              <button class="btn btn-outline-primary" id="saveSearch" type="button">Save</button>
+            </div>
+          </div>
+          <div class="row g-2 mt-2">
+            <div class="col-6 col-lg-3">
+              <label class="form-label small-muted mb-1">From</label>
+              <!--
+                We store the actual filter as YYYY-MM-DD in a hidden native date input,
+                but display dd/mm/yyyy to users (for consistent EU-style input).
+              -->
+              <input id="startDate" class="form-control d-none" type="date" autocomplete="off">
+              <div class="input-group">
+                <input id="startDateDmy" class="form-control" type="text" inputmode="numeric" placeholder="dd/mm/yyyy" autocomplete="off">
+                <button id="startDatePick" class="btn btn-outline-secondary" type="button" title="Pick date"><i class="bi bi-calendar"></i></button>
+              </div>
+            </div>
+            <div class="col-6 col-lg-3">
+              <label class="form-label small-muted mb-1">To</label>
+              <input id="endDate" class="form-control d-none" type="date" autocomplete="off">
+              <div class="input-group">
+                <input id="endDateDmy" class="form-control" type="text" inputmode="numeric" placeholder="dd/mm/yyyy" autocomplete="off">
+                <button id="endDatePick" class="btn btn-outline-secondary" type="button" title="Pick date"><i class="bi bi-calendar"></i></button>
+              </div>
+            </div>
+            <div class="col-12 col-lg-6 d-flex align-items-end">
+              <div class="small-muted">Leave blank to search all time. Date filters apply to counts, pagination, and exports.</div>
+            </div>
+          </div>
+        </form>
+        <div class="small-muted mt-2">
+          Tip: click a <span class="badge badge-soft">control</span> or <span class="badge badge-soft">source</span> badge to pivot sideways.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div>
+          <div class="fw-bold">Results</div>
+          <div class="small-muted" id="resultMeta">—</div>
+        </div>
+        <div class="d-flex gap-2 align-items-center no-print">
+          <div class="dropdown">
+            <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Export
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><button class="dropdown-item" type="button" id="exportCsv">Export CSV</button></li>
+              <li><button class="dropdown-item" type="button" id="exportJson">Export JSON</button></li>
+              <li><button class="dropdown-item" type="button" id="exportNdjson">Export NDJSON</button></li>
+            </ul>
+          </div>
+          <select id="limit" class="form-select form-select-sm" style="width:110px;">
+            <option>25</option>
+            <option selected>50</option>
+            <option>100</option>
+            <option>200</option>
+          </select>
+          <button id="prev" data-pager="prev" class="btn btn-sm btn-outline-primary">Prev</button>
+          <button id="next" data-pager="next" class="btn btn-sm btn-outline-primary">Next</button>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" data-sortable>
+            <thead>
+              <tr>
+                <th style="width:190px;">Time</th>
+                <th style="width:140px;">Source</th>
+                <th style="width:200px;">Identifier</th>
+                <th>Summary</th>
+                <th style="width:260px;">Mapped controls</th>
+                <th style="width:90px;">Links</th>
+                <th style="width:120px;">Artifacts</th>
+              </tr>
+            </thead>
+            <tbody id="rows"><tr class="table-loading-row"><td colspan="7" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading events…</span></div></td></tr></tbody>
+          </table>
+          <div class="card-footer d-flex justify-content-end gap-2 align-items-center no-print">
+            <button id="prevBottom" data-pager="prev" class="btn btn-sm btn-outline-primary">Prev</button>
+            <button id="nextBottom" data-pager="next" class="btn btn-sm btn-outline-primary">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+      </section>
+      <section class="tab-pane fade" id="embeddedVisualisationsPane" role="tabpanel" aria-labelledby="eventsVisualisationsTab" tabindex="0">
+        <div data-keen-visualisation-mount
+             data-viz-title="Event visualisations"
+             data-viz-intro="Review event volume over time and pivot from histogram bars into the Events table."
+             data-viz-modes="histogram"
+             data-show-distribution="0"
+             data-show-coverage-gaps="0"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
+  <script type="module" src="/pages/events.js"></script>
+  <script type="module" src="/pages/visualisation.js"></script>
+</body>
+</html>

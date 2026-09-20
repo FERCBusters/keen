@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – ISMS Objective</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="isms-objective">
+  <div id="navbar"></div>
+
+  <main class="container-fluid py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/isms.html?tab=objectives">← Objectives</a></div>
+        <h1 class="h3 mb-1" id="objectiveTitle">Objective</h1>
+        <div class="small-muted" id="objectiveMeta">Loading objective…</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <button id="sampleObjectiveAudit" class="btn btn-outline-success" type="button" style="display:none;"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Sample into audit</button>
+        <a id="editObjectiveLink" class="btn btn-primary" data-nav-fw="1" href="/isms.html?tab=objectives">Edit objective</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3 no-print" id="objectiveTabs" role="tablist">
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="objectiveDetailsTab" data-bs-toggle="tab" data-bs-target="#objectiveDetailsPane" type="button" role="tab">Details</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="objectiveChangelogTab" data-bs-toggle="tab" data-bs-target="#objectiveChangelogPane" type="button" role="tab">Changelog</button></li>
+    </ul>
+
+    <div class="tab-content" id="objectiveTabContent">
+      <section class="tab-pane fade show active" id="objectiveDetailsPane" role="tabpanel" tabindex="0">
+        <div class="row g-3">
+          <div class="col-12 col-xl-8">
+            <div class="vstack gap-3">
+              <div class="card">
+                <div class="card-header fw-bold">Requirement</div>
+                <div id="objectiveRequirement" class="card-body whitespace-pre-wrap">Loading…</div>
+              </div>
+              <div class="card">
+                <div class="card-header fw-bold">Goal</div>
+                <div id="objectiveGoal" class="card-body whitespace-pre-wrap">Loading…</div>
+              </div>
+              <div class="card">
+                <div class="card-header fw-bold">Metric and completion</div>
+                <div class="card-body">
+                  <h2 class="h6">Metric</h2>
+                  <div id="objectiveMetric" class="mb-3 whitespace-pre-wrap">Loading…</div>
+                  <h2 class="h6">Completion method</h2>
+                  <div id="objectiveCompletion" class="mb-3 whitespace-pre-wrap small-muted">Loading…</div>
+                  <h2 class="h6">Evaluation method</h2>
+                  <div id="objectiveEvaluation" class="whitespace-pre-wrap small-muted">Loading…</div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header fw-bold">Linked controls and clauses</div>
+                <div class="card-body">
+                  <h2 class="h6">Controls</h2>
+                  <div class="mb-3" id="objectiveControls">Loading controls…</div>
+                  <h2 class="h6">Clauses</h2>
+                  <div id="objectiveClauses">Loading clauses…</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-4">
+            <div class="card">
+              <div class="card-header fw-bold">Objective details</div>
+              <div class="card-body">
+                <dl class="row mb-0">
+                  <dt class="col-sm-5">Owner</dt><dd class="col-sm-7" id="objectiveOwner">—</dd>
+                  <dt class="col-sm-5">Resources</dt><dd class="col-sm-7" id="objectiveResources">—</dd>
+                  <dt class="col-sm-5">Resource text</dt><dd class="col-sm-7 whitespace-pre-wrap small-muted" id="objectiveResourceText">—</dd>
+                  <dt class="col-sm-5">Target</dt><dd class="col-sm-7" id="objectiveTarget">—</dd>
+                  <dt class="col-sm-5">Status</dt><dd class="col-sm-7" id="objectiveStatusValue">—</dd>
+                  <dt class="col-sm-5">Updated</dt><dd class="col-sm-7" id="objectiveUpdated">—</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="objectiveChangelogPane" role="tabpanel" tabindex="0">
+        <div id="objectiveChangelog" class="card card-body small-muted">Loading changelog…</div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/isms-objective.js"></script>
+</body>
+</html>

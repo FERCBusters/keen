@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – ISMS Meeting Minutes</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="isms-meeting">
+  <div id="navbar"></div>
+
+  <main class="container-fluid py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/isms.html?tab=meetings">← ISMS Meetings</a></div>
+        <h1 class="h3 mb-1" id="meetingTitle">Meeting minutes</h1>
+        <div class="small-muted" id="meetingMeta">Loading meeting minutes…</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <a class="btn btn-outline-secondary" data-nav-fw="1" href="/isms.html?tab=meetings">Back to meetings</a>
+        <a class="btn btn-outline-primary" data-nav-fw="1" id="editMeetingLink" href="/isms.html?tab=meetings">Edit in ISMS</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3 no-print" id="meetingTabs" role="tablist">
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="meetingDetailsTab" data-bs-toggle="tab" data-bs-target="#meetingDetailsPane" type="button" role="tab">Details</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="meetingChangelogTab" data-bs-toggle="tab" data-bs-target="#meetingChangelogPane" type="button" role="tab">Changelog</button></li>
+    </ul>
+
+    <div class="tab-content" id="meetingTabContent">
+      <section class="tab-pane fade show active" id="meetingDetailsPane" role="tabpanel" tabindex="0">
+        <div class="row g-3">
+          <div class="col-12 col-xl-8">
+            <div class="card h-100">
+              <div class="card-header fw-bold">Agenda / Minutes / Notes</div>
+              <div class="card-body">
+                <div id="meetingNotes" class="rich-text-content">Loading…</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-4">
+            <div class="vstack gap-3">
+              <div class="card">
+                <div class="card-header fw-bold">Meeting details</div>
+                <div class="card-body">
+                  <dl class="row mb-0">
+                    <dt class="col-sm-4">Date</dt><dd class="col-sm-8" id="meetingDate">—</dd>
+                    <dt class="col-sm-4">Time</dt><dd class="col-sm-8" id="meetingTime">—</dd>
+                    <dt class="col-sm-4">Attendees</dt><dd class="col-sm-8" id="meetingAttendees">—</dd>
+                    <dt class="col-sm-4">Apologies</dt><dd class="col-sm-8" id="meetingApologies">—</dd>
+                    <dt class="col-sm-4">Updated</dt><dd class="col-sm-8" id="meetingUpdated">—</dd>
+                  </dl>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header fw-bold">Supporting links</div>
+                <div class="card-body" id="meetingLinks">Loading…</div>
+              </div>
+              <div class="card">
+                <div class="card-header fw-bold">Control and Clause links</div>
+                <div class="card-body">
+                  <h2 class="h6">Controls</h2>
+                  <div class="mb-3" id="meetingControls">—</div>
+                  <h2 class="h6">Clauses</h2>
+                  <div id="meetingClauses">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="meetingChangelogPane" role="tabpanel" tabindex="0">
+        <div id="meetingChangelog" class="card card-body small-muted">Loading changelog…</div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/isms-meeting.js"></script>
+</body>
+</html>

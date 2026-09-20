@@ -1,0 +1,152 @@
+queries:
+  - name: "ossec_ssh_failed"
+    logql: >
+      {environment="ossec"} |= "sshd" |= "Failed password"
+      | json agent="agent_name", sid="rule.sidid", rule_comment="rule.comment"
+    event:
+      source: "loki"
+      system: "ossec"
+      action: "ssh_login"
+      outcome: "failed"
+      severity: 4
+
+  - name: "ossec_ssh_success"
+    logql: >
+      {environment="ossec"} |= "sshd" |= "Accepted" != "for jenkins" != "for root"
+      | json agent="agent_name", sid="rule.sidid", rule_comment="rule.comment"
+    event:
+      source: "loki"
+      system: "ossec"
+      action: "ssh_login"
+      outcome: "success"
+      severity: 2
+
+  - name: "ossec_sudo_usage_by_sid"
+    logql: >
+      {environment="ossec"}
+      | json agent="agent_name", sid="rule.sidid", rule_comment="rule.comment"
+      | sid =~ "5401|5402|5403|5404|5405" != "jenkins :"
+    event:
+      source: "loki"
+      system: "ossec"
+      action: "sudo"
+      outcome: "executed"
+      severity: 3
+
+  - name: "ossec_command_exec"
+    logql: >
+      {environment="ossec"} |= "Person executed a command on the server"
+      | json agent="agent_name", sid="rule.sidid", rule_comment="rule.comment"
+    event:
+      source: "loki"
+      system: "ossec"
+      action: "command_exec"
+      outcome: "info"
+      severity: 3
+
+  - name: "ossec_patching"
+    logql: >
+      {environment="ossec"}
+      | json agent="agent_name", sid="rule.sidid", rule_comment="rule.comment", message="full_log"
+      | sid =~ "^(2900|2902|2903)$"
+      | line_format "{{.message}}"
+      !~ `man-db|libc-bin|mailcap`
+    event:
+      source: "loki"
+      system: "ossec"
+      action: "patching"
+      outcome: "info"
+      severity: 4
+
+  - name: "ossec_web_sec_logs"
+    logql: >
+      {environment="ossec"}
+      | json agent="agent_name", sid="rule.sidid", rule_comment="rule.comment"
+      | sid =~ "31103|31104|31105|31110|31109|31115|31120|31121|31122|31123|31151|31152|31153|31154|31161|31162|31163|31164|31165"
+    event:
+      source: "loki"
+      system: "ossec"
+      action: "web_sec_event"
+      outcome: "info"
+      severity: 7
+
+  - name: "ossec_rootkit_scan_alert"
+    logql: >
+      {environment="ossec"}
+      | json agent="agent_name", sid="rule.sidid", rule_comment="rule.comment"
+      | sid = "510"
+    event:
+      source: "loki"
+      system: "ossec"
+      action: "rootkit_sec_event"
+      outcome: "alert"
+      severity: 7
+
+  #- name: "ossec_alerts_all"
+  #  logql: >
+  #    {environment="ossec"}
+  #    | json agent="agent_name", sid="rule.sidid", rule_comment="rule.comment", level="rule.level_extracted"
+  #    | sid !~ "31101|31301|31302"
+  #  event:
+  #    source: "loki"
+  #    system: "ossec"
+  #    action: "alert"
+  #    outcome: "alert"
+  #    severity: 5
+
+  - name: "config_management"
+    logql: >
+      {environment="operations"} |~ `(?P<foo>(?i)ansible-ansible)`
+    event:
+      source: "loki"
+      system: "ossec"
+      action: "config_management"
+      outcome: "info"
+      severity: 5
+
+  - name: "vpn_use_network_secure_controls"
+    logql: >
+      {environment="operations"} |= "ovpn-server" |= "VERIFY OK"
+      | regexp `ovpn-server\[\d+\]: (?P<vpnclient>\S+)/(?P<ip>[\d\.]+):(?P<port>\d+)\s+(?P<message>.*)` 
+    event:
+      source: "loki"
+      system: "network"
+      action: "vpn"
+      outcome: "info"
+      severity: 5
+
+  - name: "clock_synchronisation"
+    logql: >
+      {platform="core"} |= `ntpd` or `timesyncd` != `Executing`
+    event:
+      source: "loki"
+      system: "network"
+      action: "clock_sync"
+      outcome: "info"
+      severity: 5
+
+  - name: "firewall_block_event"
+    logql: >
+      {platform="core", environment!="ossec"} |= `DPT=`
+    event:
+      source: "loki"
+      system: "network"
+      action: "web_filtering_event"
+      outcome: "info"
+      severity: 7
+
+# Default query_range settings (can override per query later)
+defaults:
+  limit: 5000
+  direction: "forward"   # forward or backward
+  step_seconds: 0        # leave 0 to omit step
+  # Keep each Loki query_range call below the Loki server's query length limit.
+  # 720h = 30d, which is safely below common limits such as 30d1h.
+  # Set to 0 to disable chunking.
+  max_query_range_hours: 720
+  # chunk = backfill in bounded windows; reset = set stale cursors to now.
+  overlong_range_strategy: "chunk"
+  # Increase temporarily if you want one manual run to catch up faster.
+  catchup_chunks_per_run: 1
+  # Used only when a cursor does not exist yet.
+  initial_lookback_minutes: 15

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Source</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="source">
+  <div id="navbar"></div>
+
+  <main class="container-fluid py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/sources.html">← Sources</a></div>
+        <h1 class="h3 mb-1" id="sourceTitle">Source</h1>
+        <div class="small-muted" id="sourceMeta">Loading source…</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <a id="openEventsLink" class="btn btn-outline-primary" href="/events.html">Open in events</a>
+        <a id="openUnmappedLink" class="btn btn-outline-primary" href="/events.html?unmapped=true">Open unmapped</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3 no-print" id="sourceTabs" role="tablist">
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="sourceEventsTab" data-bs-toggle="tab" data-bs-target="#sourceEventsPane" type="button" role="tab" aria-controls="sourceEventsPane" aria-selected="true">Events</button></li>
+      <li class="nav-item" role="presentation" id="sourceEffectivenessTabItem"><button class="nav-link" id="sourceEffectivenessTab" data-bs-toggle="tab" data-bs-target="#sourceEffectivenessPane" type="button" role="tab" aria-controls="sourceEffectivenessPane" aria-selected="false">Effectiveness Measures</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="sourceVisualisationsTab" data-bs-toggle="tab" data-bs-target="#sourceVisualisationsPane" type="button" role="tab" aria-controls="sourceVisualisationsPane" aria-selected="false">Visualisations</button></li>
+    </ul>
+
+    <div class="tab-content" id="sourceTabContent">
+      <section class="tab-pane fade show active" id="sourceEventsPane" role="tabpanel" aria-labelledby="sourceEventsTab" tabindex="0">
+        <div class="card mb-3 no-print" data-mosp-filter-section="source-events-filters" data-mosp-filter-title="Event filters">
+          <div class="card-body">
+            <form id="sourceEventFilters" class="row g-2 align-items-end">
+              <div class="col-12 col-lg-4">
+                <label class="form-label small-muted mb-1" for="eventQ">Search source events</label>
+                <input id="eventQ" class="form-control" type="search" placeholder="Filter by summary, actor, system…">
+              </div>
+              <div class="col-12 col-lg-2">
+                <label class="form-label small-muted mb-1" for="eventStartDate">From</label>
+                <input id="eventStartDate" class="form-control" type="date">
+              </div>
+              <div class="col-12 col-lg-2">
+                <label class="form-label small-muted mb-1" for="eventEndDate">To</label>
+                <input id="eventEndDate" class="form-control" type="date">
+              </div>
+              <div class="col-6 col-lg-1">
+                <label class="form-label small-muted mb-1" for="eventLimit">Limit</label>
+                <select id="eventLimit" class="form-select">
+                  <option>25</option>
+                  <option selected>50</option>
+                  <option>100</option>
+                  <option>200</option>
+                </select>
+              </div>
+              <div class="col-6 col-lg-1 form-check ms-lg-2 mb-2">
+                <input id="eventUnmapped" class="form-check-input" type="checkbox">
+                <label class="form-check-label small-muted" for="eventUnmapped">Unmapped</label>
+              </div>
+              <div class="col-12 col-lg-2">
+                <div class="d-flex gap-2">
+                  <button id="eventApply" class="btn btn-outline-primary flex-fill" type="submit">Apply</button>
+                  <button id="eventReset" class="btn btn-outline-primary flex-fill" type="button">Reset</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Events</div>
+              <div class="small-muted" id="eventResultMeta">—</div>
+            </div>
+            <div class="d-flex gap-2 align-items-center no-print">
+              <button id="eventPrev" data-pager="prev" class="btn btn-sm btn-outline-primary">Prev</button>
+              <button id="eventNext" data-pager="next" class="btn btn-sm btn-outline-primary">Next</button>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle mb-0 sortable" data-sortable="1">
+                <thead><tr><th style="width:170px;">Time</th><th style="width:310px;">Event UUID</th><th style="width:180px;">Context</th><th>Summary</th><th style="width:210px;">Controls</th><th style="width:80px;">Links</th><th style="width:90px;">Artifacts</th></tr></thead>
+                <tbody id="eventRows"><tr><td colspan="7" class="p-4 small-muted">Loading source events…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card-footer d-flex justify-content-end gap-2 align-items-center no-print">
+            <button id="eventPrevBottom" data-pager="prev" class="btn btn-sm btn-outline-primary">Prev</button>
+            <button id="eventNextBottom" data-pager="next" class="btn btn-sm btn-outline-primary">Next</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="sourceEffectivenessPane" role="tabpanel" aria-labelledby="sourceEffectivenessTab" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Effectiveness Measures</div>
+              <div class="small-muted" id="sourceEffectivenessMeta">Measures with metric entries recorded against this source.</div>
+            </div>
+            <a class="btn btn-sm btn-outline-primary" data-nav-fw="1" href="/isms.html?tab=effectiveness">Open Effectiveness Measures</a>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Measure</th><th>Metric</th><th>Latest matching value</th><th>Controls</th></tr></thead>
+                <tbody id="sourceEffectivenessRows"><tr><td colspan="4" class="p-4 small-muted">Open this tab to load source-related Effectiveness Measures.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="sourceVisualisationsPane" role="tabpanel" aria-labelledby="sourceVisualisationsTab" tabindex="0">
+        <div data-keen-visualisation-mount
+             data-viz-title="Source × controls"
+             data-viz-intro="Review control coverage for this source over the selected period."
+             data-viz-modes="graph,heatmap"
+             data-viz-default-mode="graph"
+             data-viz-source-param="source"
+             data-show-coverage-gaps="0"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
+  <script type="module" src="/pages/source.js"></script>
+  <script type="module" src="/pages/visualisation.js"></script>
+</body>
+</html>

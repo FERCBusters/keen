@@ -1,0 +1,745 @@
+# Suggested rules for Keen for sysadmin / CI/CD / SDLC evidence
+# IMPORTANT: Review with your ISMS owner/auditor and tune for your environment.
+# These rules assume you imported ISO27001:2022 Annex A refs like "A.8.32" etc.
+
+# Multi-framework mapping patterns supported:
+#
+# 1) Legacy (applies to rule/framework context):
+#    map_to: ["A.8.15", "A.8.16"]
+#
+# 2) Framework map:
+#    map_to:
+#      ISO27001:2022: ["A.8.15", "A.8.16"]
+#      UK-DVSTF:1.0: ["11.8.1.a", "11.8.1.b"]
+#
+# 3) Target objects with optional role gating:
+#    map_to:
+#      - framework: "ISO27001:2022"
+#        ref: "A.8.15"
+#      - framework: "UK-DVSTF:1.0"
+#        refs: ["11.8.1.a", "11.8.1.b"]
+#        roles_any: ["ops", "security"]
+#
+rules:
+  - id: "ossec_ssh_failed"
+    description: "OSSEC: Failed SSH login attempts"
+    when:
+      source: "loki"
+      system: "ossec"
+      action: "ssh_login"
+      outcome: "failed"
+    map_to: ["A.5.15","A.5.17","A.8.3","A.8.5","A.8.15","A.8.16","A.8.27"]
+    confidence: 0.75
+
+  - id: "ossec_ssh_success"
+    description: "OSSEC: Successful SSH logins"
+    when:
+      source: "loki"
+      system: "ossec"
+      action: "ssh_login"
+      outcome: "success"
+    map_to: ["A.8.2","A.8.15","A.8.27"]
+    confidence: 0.55
+
+  - id: "ossec_sudo_usage"
+    description: "OSSEC: sudo usage (privileged command execution)"
+    when:
+      source: "loki"
+      system: "ossec"
+      action: "sudo"
+      outcome: "executed"
+    map_to: ["A.8.2", "A.8.15", "A.8.16", "A.8.18"]
+    confidence: 0.70
+
+  - id: "ossec_command_exec"
+    description: "OSSEC: user executed a command. Tamper-proof log of evidence"
+    when:
+      source: "loki"
+      system: "ossec"
+      action: "command_exec"
+    map_to: ["A.8.2","A.8.15","A.8.16","A.8.27"]
+    confidence: 0.70
+
+  - id: "ossec_patching"
+    description: "OSSEC: patching activity"
+    when:
+      source: "loki"
+      system: "ossec"
+      action: "patching"
+    map_to: ["A.8.8","A.8.9","A.8.15","A.8.18","A.8.19"]
+    confidence: 0.75
+
+  - id: "ossec_web_sec_logs"
+    description: "OSSEC: web security logs"
+    when:
+      source: "loki"
+      system: "ossec"
+      action: "web_sec_event"
+    map_to: ["A.8.15","A.8.16","A.8.20","A.8.21"]
+    confidence: 0.70
+
+  - id: "ossec_rootkit_scan_alert"
+    description: "OSSEC: rootcheck rootkit scan alert"
+    when:
+      source: "loki"
+      system: "ossec"
+      action: "rootkit_sec_event"
+    map_to: ["A.8.7"]
+    confidence: 0.25
+
+  #- id: "ossec_alerts_all"
+  #  description: "OSSEC: general alerts (broad evidence of monitoring/logging)"
+  #  when:
+  #    source: "loki"
+  #    system: "ossec"
+  #    action: "alert"
+  #    outcome: "alert"
+  #  map_to: ["A.8.15","A.8.16"]
+  #  confidence: 0.35
+
+  - id: "ossec_config_management"
+    description: "OSSEC: evidence of config management playbooks"
+    when:
+      source: "loki"
+      system: "ossec"
+      action: "config_management"
+      outcome: "info"
+    map_to: ["A.8.9","A.8.32"]
+    confidence: 0.75
+
+  - id: "vpn_use_network_secure_controls"
+    description: "Use of secure VPN to access segregated networks remotely"
+    when:
+      source: "loki"
+      system: "network"
+      action: "vpn"
+      outcome: "info"
+    map_to: ["A.8.16","A.8.20","A.8.21","A.8.22","A.8.24"]
+    confidence: 0.75
+
+  - id: "clock_synchronisation"
+    description: "Use of NTP protocol for Clock Synchronisation"
+    when:
+      source: "loki"
+      system: "network"
+      action: "clock_sync"
+      outcome: "info"
+    map_to: ["A.8.17"]
+    confidence: 0.75
+
+  - id: "quad_9_web_filtering"
+    description: "DNS-level protection against malware sites via Quad 9 web filtering"
+    when:
+      source: "loki"
+      system: "network"
+      action: "web_filtering_dns"
+      outcome: "info"
+    map_to: ["A.8.7","A.8.23"]
+    confidence: 0.75
+
+  - id: "firewall_block_event"
+    description: "Software firewall blocking packets"
+    when:
+      source: "loki"
+      system: "network"
+      action: "web_filtering_event"
+      outcome: "info"
+    map_to: ["A.8.15","A.8.16","A.8.20","A.8.21","A.8.23"]
+    confidence: 0.60
+
+  # --- Jenkins (CI/CD) ---
+  # Deploy: success = strong SDLC + change mgmt + environment separation evidence
+  - id: "jenkins_deploy_success"
+    description: "Jenkins deploy job succeeded: controlled change + SDLC."
+    when:
+      source: "jenkins"
+      action: "deploy"
+      outcome: "success"
+    map_to: ["A.8.31", "A.8.25"]
+    confidence: 0.75
+
+  - id: "jenkins_deploy_failed"
+    description: "Jenkins deploy job failed: change attempt + monitoring/response trigger."
+    when:
+      source: "jenkins"
+      action: "deploy"
+      outcome: "failed"
+    map_to: ["A.8.25","A.8.31"]
+    confidence: 0.55
+
+  # Optional: explicit env separation evidence by label
+  - id: "jenkins_env_separation_labels"
+    description: "Jenkins deployments by environment."
+    when:
+      source: "jenkins"
+      action: "deploy"
+      system_regex: "(?i)^(dev|staging|production)$"
+    map_to: ["A.8.31"]
+    confidence: 0.60
+
+  # Backup jobs
+  - id: "jenkins_backup_success"
+    description: "Jenkins backup job succeeded: information backup + ICT readiness for business continuity."
+    when:
+      source: "jenkins"
+      action: "backup"
+      outcome: "success"
+    map_to: ["A.8.13", "A.5.30"]
+    confidence: 0.80
+      
+  - id: "jenkins_backup_running"
+    description: "Jenkins backup job running: information backup + ICT readiness for business continuity."
+    when:
+      source: "jenkins"
+      action: "backup"
+      outcome: "info"
+    map_to: ["A.8.13", "A.5.30"]
+    confidence: 0.80
+
+  - id: "jenkins_backup_failed"
+    description: "Jenkins backup job failed: backup control evidence + monitoring/response signal."
+    when:
+      source: "jenkins"
+      action: "backup"
+      outcome: "failed"
+    map_to: ["A.8.13", "A.5.30"]
+    confidence: 0.65
+
+  # Backup testing / DR readiness
+  - id: "jenkins_backup_testing"
+    description: "Test_Backups / restore-style jobs: stronger ICT readiness evidence (backup verification)."
+    when:
+      source: "jenkins"
+      action: "test"
+      summary_regex: "(?i)\\btest_backups\\b|restore\\s*test|backup\\s*test"
+    map_to: ["A.5.30", "A.8.13"]
+    confidence: 0.85
+
+  - id: "jenkins_infrastructure_as_code_testing"
+    description: "Infrastructure as code testing: provisioning/config of cloud services, secret scanning, network exposure testing, best practices"
+    when:
+      source: "jenkins"
+      action: "test"
+      summary_regex: "(?i)tfsec"
+    map_to: ["A.5.23","A.8.21", "A.8.25"]
+    confidence: 0.50
+
+  # General tests = test information + SDLC
+  - id: "jenkins_tests_general"
+    description: "Test jobs executed: evidence for test information and SDLC quality gates."
+    when:
+      source: "jenkins"
+      action: "test"
+    map_to: ["A.8.33", "A.8.25"]
+    confidence: 0.50
+
+  # Security testing in dev/acceptance (A.8.29) - detect by job name in summary
+  - id: "jenkins_security_testing"
+    description: "Security test/scanning jobs (SAST/DAST/scanners) executed."
+    when:
+      source: "jenkins"
+      action: "test"
+      summary_regex: "(?i)zap|ssl_tests|trivy|sonar|static_analysis|security"
+    map_to: ["A.8.29", "A.8.25", "A.8.28"]
+    confidence: 0.70
+
+  # Routine scanning/testing of TLS/cipher strength (combatting Heartbleed-esque risks)
+  - id: "jenkins_cryptography_testing"
+    description: "Testing of Cipher and TLS protocol cryptography strength on webapps"
+    when:
+      source: "jenkins"
+      action: "test"
+      summary_regex: "(?i)ssl_tests"
+    map_to: ["A.8.8","A.8.20","A.8.24","A.8.27"]
+    confidence: 0.75
+
+  # Application security requirements (A.8.26) - ZAP/SSL strongly supports this
+  - id: "jenkins_app_security_requirements"
+    description: "ZAP/SSL tests: evidence supporting application security requirements validation."
+    when:
+      source: "jenkins"
+      action: "test"
+      summary_regex: "(?i)\\bzap\\b|\\bssl\\b"
+    map_to: ["A.8.26", "A.8.29", "A.8.33"]
+    confidence: 0.75
+
+  # Static analysis on PR = secure coding + SDLC + security testing
+  - id: "jenkins_static_analysis_on_pr"
+    description: "Static analysis on PR: secure coding + SDLC + security testing evidence."
+    when:
+      source: "jenkins"
+      action: "test"
+      summary_regex: "(?i)static_analysis_on_pr|static analysis on pr"
+    map_to: ["A.8.28", "A.8.25", "A.8.29"]
+    confidence: 0.80
+
+  # Supply chain-ish: dependency scanning (lock files) + backups to other VCS
+  - id: "jenkins_supply_chain_dependency_scan"
+    description: "Dependency / artifact scanning: supports ICT supply chain + security testing evidence."
+    when:
+      source: "jenkins"
+      action: "test"
+      summary_regex: "(?i)trivy|grype|poetry_lock|lock\\s*file|dependency"
+    map_to: ["A.5.21", "A.8.29", "A.8.25"]
+    confidence: 0.65
+
+  # Permissions checks (access governance)
+  - id: "jenkins_permissions_checks"
+    description: "Permission checks (GitHub / Jenkins): supports access control/rights, access to source code, privileged access governance."
+    when:
+      source: "jenkins"
+      action: "test"
+      summary_regex: "(?i)github_org_check_permissions|jenkins_check_permissions|check_permissions"
+    map_to: ["A.5.15", "A.5.18", "A.8.2", "A.8.3", "A.8.4"]
+    confidence: 0.65
+
+  # ECS Tasks Rebalance (capacity management)
+  - id: "jenkins_capacity_management"
+    description: "ECS Tasks Rebalancer to ensure capacity is managed evenly across redundant physical zones. Fault tolerance"
+    when:
+      source: "jenkins"
+      action: "high_availability"
+    map_to: ["A.8.6","A.8.14","A.8.27"]
+    confidence: 0.75
+
+  # --- GitHub (SDLC evidence) ---
+  - id: "github_push_event"
+    description: "Code pushes: SDLC + change management evidence"
+    when:
+      source: "github"
+      action_regex: "(?i)PushEvent|CreateEvent"
+    map_to: ["A.8.25","A.8.32","A.8.4"]
+    confidence: 0.55
+
+  - id: "github_pr_event"
+    description: "Pull requests: change control + review workflow evidence."
+    when:
+      source: "github"
+      action: "PullRequestEvent"
+    map_to: ["A.8.32","A.8.25","A.8.29","A.8.4"]
+    confidence: 0.60
+
+  - id: "github_pr_review_event"
+    description: "PR review submitted/edited/dismissed: review controls evidence"
+    when:
+      source: "github"
+      action: "PullRequestReviewEvent"
+    map_to: ["A.8.28","A.8.29","A.8.25","A.8.32"]
+    confidence: 0.65
+
+  - id: "github_pr_review_comment_event"
+    description: "PR review comment: review controls evidence"
+    when:
+      source: "github"
+      action: "PullRequestReviewCommentEvent"
+    map_to: ["A.8.28","A.8.29","A.8.25","A.8.32"]
+    confidence: 0.65
+
+  - id: "github_branch_protection_or_rules"
+    description: "Repo policy changes: branch protection / rulesets"
+    when:
+      source: "github"
+      action_regex: "(?i)BranchProtectionRuleEvent|RepositoryEvent"
+      summary_regex: "(?i)branch protection|ruleset|required status|required review|protected branch"
+    map_to: ["A.8.32","A.8.25","A.8.28","A.8.29"]
+    confidence: 0.70
+
+  - id: "github_workflow_activity"
+    description: "CI/CD evidence from GitHub activity (limited via Events API)"
+    when:
+      source: "github"
+      action_regex: "(?i)CheckRunEvent|CheckSuiteEvent"
+    map_to: ["A.8.25","A.8.29","A.8.32"]
+    confidence: 0.55
+
+  - id: "github_release_event"
+    description: "Release published"
+    when:
+      source: "github"
+      action: "ReleaseEvent"
+    map_to: ["A.8.32","A.8.25","A.5.21"]
+    confidence: 0.55
+
+  - id: "github_watch_event"
+    description: "User is watching a git repository"
+    when:
+      source: "github"
+      action: "WatchEvent"
+    map_to: ["A.8.4"]
+    confidence: 0.55
+
+  - id: "github_comment_event"
+    description: "Comment added - likely evidence of peer review or static analysis/CI results"
+    when:
+      source: "github"
+      action: "IssueCommentEvent"
+    map_to: ["A.8.28","A.8.29","A.8.25"]
+    confidence: 0.65
+
+  - id: "github_delete_event"
+    description: "Deletion of an object in git: software development/workflow/hygiene evidence."
+    when:
+      source: "github"
+      action: "DeleteEvent"
+    map_to: ["A.8.32","A.8.25","A.8.4","A.8.10"]
+    confidence: 0.60
+
+#  # --- GitHub org audit log (recommended for many repos) ---
+#  - id: "github_audit_access_to_source_code"
+#    description: "GitHub org audit log: membership/team/repo access changes."
+#    when:
+#      source: "github"
+#      action_regex: "(?i)org\\.(add_member|remove_member|invite_member)|team\\.(add_member|remove_member)|repo\\.(add_member|remove_member)|member\\.(add|remove)|org\\.update_member"
+#    map_to: ["A.8.4"]
+#    confidence: 0.75
+#
+#  - id: "github_audit_branch_protection_or_ruleset"
+#    description: "GitHub org audit log: branch protection / repository rulesets changes (change management + SDLC controls)."
+#    when:
+#      source: "github"
+#      action_regex: "(?i)protected_branch\\.|repository_ruleset\\.|required_status_check\\.|branch_protection\\."
+#    map_to: ["A.8.32","A.8.25","A.8.28","A.8.29"]
+#    confidence: 0.70
+#
+#  - id: "github_audit_pull_request_activity"
+#    description: "GitHub org audit log: PR lifecycle activity (reviews, merges, comments) as SDLC/change-control evidence."
+#    when:
+#      source: "github"
+#      action_regex: "(?i)^pull_request\\.|^pull_request_review\\.|^pull_request_review_comment\\.|^issue_comment\\."
+#    map_to: ["A.8.25","A.8.28","A.8.29","A.8.32"]
+#    confidence: 0.65
+#
+#  - id: "github_audit_workflow_or_actions"
+#    description: "GitHub org audit log: CI/CD workflow changes and executions (security testing + SDLC)."
+#    when:
+#      source: "github"
+#      action_regex: "(?i)^workflows\\.|^actions\\.|^check_run\\.|^check_suite\\."
+#    map_to: ["A.8.25","A.8.29","A.8.32"]
+#    confidence: 0.60
+#
+#  - id: "github_audit_integrations_supply_chain"
+#    description: "GitHub org audit log: changes to integrations/apps/webhooks (ICT supply chain)."
+#    when:
+#      source: "github"
+#      action_regex: "(?i)^oauth_application\\.|^integration_installation\\.|^hook\\.|^marketplace_purchase\\.|^dependabot\\.|^secret_scanning\\.|^code_scanning\\."
+#    map_to: ["A.5.21","A.8.25","A.8.29"]
+#    confidence: 0.65
+#
+#  # --- GitHub Atom / dashboard feeds ---
+#  - id: "github_feed_pr_created"
+#    description: "GitHub feed: PR opened (change control / SDLC evidence)."
+#    when:
+#      source: "github"
+#      action: "pr_created"
+#    map_to: ["A.8.32","A.8.25","A.8.28","A.8.4"]
+#    confidence: 0.60
+#
+#  - id: "github_feed_pr_merged"
+#    description: "GitHub feed: PR merged (stronger change-control evidence; often implies review + checks)."
+#    when:
+#      source: "github"
+#      action: "pr_merged"
+#    map_to: ["A.8.32","A.8.25","A.8.28","A.8.29","A.8.4"]
+#    confidence: 0.65
+#
+#  - id: "github_feed_push"
+#    description: "GitHub feed: pushes/commits (SDLC + change evidence)."
+#    when:
+#      source: "github"
+#      action: "push"
+#    map_to: ["A.8.25","A.8.32","A.8.28","A.8.4"]
+#    confidence: 0.55
+#
+#  - id: "github_feed_release_or_tag"
+#    description: "GitHub feed: releases/tags (release/change evidence; can support supply chain traceability)."
+#    when:
+#      source: "github"
+#      action_regex: "(?i)^release$|^tag_created$"
+#    map_to: ["A.8.32","A.8.25","A.5.21"]
+#    confidence: 0.55
+#
+#  - id: "github_feed_dependency_update"
+#    description: "GitHub feed: dependency/supply-chain updates (Dependabot / bumps / upgrades)."
+#    when:
+#      source: "github"
+#      action_regex: "(?i)^pr_created$|^pr_merged$"
+#      summary_regex: "(?i)\\bdependabot\\b|\\bbump\\b|\\bupgrade\\b|\\bupdate\\b.*\\b(dependenc|library|package)"
+#    map_to: ["A.5.21","A.8.25","A.8.29","A.8.32"]
+#    confidence: 0.65
+#
+#  - id: "github_feed_architecture_repos"
+#    description: "GitHub feed: changes in infra/architecture repos (secure architecture evidence)."
+#    when:
+#      source: "github"
+#      action_regex: "(?i)^(pr_created|pr_merged|push)$"
+#      system_regex: "(?i)infra|terraform|k8s|kubernetes|ansible|helm|platform|architecture|arch\\b"
+#    map_to: ["A.8.27","A.8.32","A.8.25"]
+#    confidence: 0.45
+#
+#  - id: "github_feed_general"
+#    description: "GitHub feed: general SDLC activity (catch-all)."
+#    when:
+#      source: "github"
+#    map_to: ["A.8.25","A.8.32"]
+#    confidence: 0.35
+
+  # --- Forgejo: means Ansible, Tofu
+  - id: "forgejo_feed_general"
+    description: "Forgejo feed: configuration management, infra as code"
+    when:
+      source: "forgejo"
+    map_to: ["A.8.9","A.8.32"]
+    confidence: 0.35
+
+  # --- Taiga (tickets, incidents, change requests) ---
+  - id: "taiga_incident_or_security"
+    description: "Taiga incident/security work items: incident management lifecycle evidence."
+    when:
+      source: "taiga"
+      summary_regex: "(?i)incident|sev|postmortem|security|breach|vulnerab|cve|malware|phish|compromis|unauthori|exploit"
+    map_to: ["A.5.24","A.5.25","A.5.26","A.5.27","A.5.28","A.6.8","A.8.8"]
+    confidence: 0.75
+
+  - id: "taiga_supplier_services_monitoring"
+    description: "Taiga work items tagged with AWS supplier service identifiers: monitoring/review/change management of supplier services."
+    when:
+      source: "taiga"
+      # Matches specific supplier identifiers embedded in the story subject.
+      summary_regex: "\\b(474516947344|348692936236|208021331467|496953747852)\\b"
+    map_to: ["A.5.22"]
+    confidence: 0.90
+
+  - id: "taiga_icinga_events"
+    description: "Icinga alerts arriving in Tracker"
+    when:
+      source: "taiga"
+      summary_regex: "(?i)warning|critical|down"
+      system_regex: "(?i)infrastructure"
+    map_to: ["A.8.16"]
+    confidence: 0.75      
+
+  - id: "taiga_new_packages"
+    description: "Taiga work item mentioned new software upgrades available"
+    when:
+      source: "taiga"
+      summary_regex: '\bAMI\b|OpenTofu|codeberg|docker\.io|lscr'
+    map_to: ["A.8.19","A.8.32"]
+    confidence: 0.75
+
+  - id: "taiga_general_activity_tracking"
+    description: "General Taiga activity: evidence that projects are tracked/communicated via a controlled system."
+    when:
+      source: "taiga"
+    map_to: ["A.5.8"]
+    confidence: 0.35
+
+  - id: "taiga_change_events"
+    description: "Taiga change/release work items indicating change management."
+    when:
+      source: "taiga"
+      summary_regex: "(?i)change|update|upgrade|patch|deploy|release|rollout|hotfix|rollback|maintenance|config|migration|refactor|feature|bugfix|fix\\b"
+    map_to: ["A.8.32"]
+    confidence: 0.55
+
+  - id: "taiga_threat_intelligence"
+    description: "Threat Intelligence, Early Warning System and inventory with NCSC"
+    when:
+      source: "taiga"
+      summary_regex: "(?i)ncsc"
+    map_to: ["A.5.5","A.5.6","A.5.7","A.5.9"]
+    confidence: 0.55
+
+  # --- Diary entries ---
+  - id: "diary_dr_test"
+    description: "Diary: DR test performed."
+    when:
+      source: "diary"
+      summary_regex: "(?i)\bDR\b|disaster recovery|restore test|failover test|quarterly"
+    map_to: ["A.5.29","A.5.30","A.8.13","A.8.14"]
+    confidence: 0.80
+
+  # --- RSS events
+  - id: "rss_security_and_status"
+    description: "Match RSS items from either Security or Status feeds"
+    when:
+      source: "rss"
+      system_regex: "(?i)^(AWS|Github|Google)$"
+    map_to: ["A.5.19","A.5.22","A.5.23"]
+    confidence: 0.60
+
+  - id: "linux_security_patch_notifications"
+    description: "Linux Security Patch Notifications"
+    when:
+      source: "rss"
+      system_regex: "(?i)^(Ubuntu|ALAS)$"
+    map_to: ["A.5.19","A.5.22","A.5.23","A.8.8"]
+    confidence: 0.75
+
+  # --- Google Workspace events
+  # ------------------------------------------------------------
+  # Admin audit stream (system: gws_admin)
+  # ------------------------------------------------------------
+
+  - id: "gws_admin_user_created"
+    description: "Google Workspace (Admin): user account created (identity provisioning evidence)"
+    when:
+      source: "google_workspace"
+      system: "gws_admin"
+      action_regex: "(?i)(^|\\+)CREATE_USER(\\+|$)"
+    map_to: ["A.5.16", "A.5.18"]
+    confidence: 0.75
+
+  - id: "gws_admin_user_deleted"
+    description: "Google Workspace (Admin): user account deleted (deprovisioning / access removal)"
+    when:
+      source: "google_workspace"
+      system: "gws_admin"
+      action_regex: "(?i)(^|\\+)DELETE_USER(\\+|$)"
+    map_to: ["A.5.16", "A.5.18"]
+    confidence: 0.80
+
+  - id: "gws_admin_user_suspended_or_restored"
+    description: "Google Workspace (Admin): user suspended/unsuspended (access enable/disable)"
+    when:
+      source: "google_workspace"
+      system: "gws_admin"
+      action_regex: "(?i)(^|\\+)(SUSPEND_USER|UNSUSPEND_USER)(\\+|$)"
+    map_to: ["A.5.18"]
+    confidence: 0.70
+
+  - id: "gws_admin_user_renamed_or_moved_ou"
+    description: "Google Workspace (Admin): rename / OU move (account administration evidence)"
+    when:
+      source: "google_workspace"
+      system: "gws_admin"
+      action_regex: "(?i)(^|\\+)(RENAME_USER|MOVE_USER_TO_ORG_UNIT)(\\+|$)"
+    map_to: ["A.5.16"]
+    confidence: 0.60
+
+  - id: "gws_admin_password_changed_or_reset"
+    description: "Google Workspace (Admin): password changed/reset (authentication information management)"
+    when:
+      source: "google_workspace"
+      system: "gws_admin"
+      action_regex: "(?i)(^|\\+)(CHANGE_USER_PASSWORD|RESET_PASSWORD|SET_PASSWORD)(\\+|$)"
+    map_to: ["A.5.17", "A.5.18"]
+    confidence: 0.70
+
+  - id: "gws_admin_2sv_or_security_setting_changed"
+    description: "Google Workspace (Admin): 2SV/MFA or security setting changed (auth hardening evidence)"
+    when:
+      source: "google_workspace"
+      system: "gws_admin"
+      action_regex: "(?i)(2SV|2FA|MFA|TWO.?STEP|SECURITY|SIGN_IN|SSO)"
+    map_to: ["A.5.15", "A.5.17"]
+    confidence: 0.55
+
+  - id: "gws_admin_group_membership_changed"
+    description: "Google Workspace (Admin): group membership changed (access rights management evidence)"
+    when:
+      source: "google_workspace"
+      system: "gws_admin"
+      action_regex: "(?i)(GROUP|MEMBER|ADD_TO_GROUP|REMOVE_FROM_GROUP)"
+    map_to: ["A.5.18"]
+    confidence: 0.65
+
+  - id: "gws_admin_role_or_privilege_change"
+    description: "Google Workspace (Admin): admin role / privilege change (privileged access rights evidence)"
+    when:
+      source: "google_workspace"
+      system: "gws_admin"
+      action_regex: "(?i)(ADMIN|PRIVILEGE|ROLE)"
+    map_to: ["A.8.2", "A.5.18"]
+    confidence: 0.60
+
+  # Optional: evidence of monitoring/logging as a general class for admin actions
+  - id: "gws_admin_activity_logged"
+    description: "Google Workspace (Admin): administrative activity is being logged (logging/monitoring evidence)"
+    when:
+      source: "google_workspace"
+      system: "gws_admin"
+      # Match anything in the stream; keep confidence low so it doesn't overwhelm.
+      action_regex: ".+"
+    map_to: ["A.8.15"]
+    confidence: 0.20
+
+
+  # ------------------------------------------------------------
+  # Login audit stream (system: gws_login)
+  # ------------------------------------------------------------
+
+  - id: "gws_login_failure"
+    description: "Google Workspace (Login): login failure (monitoring + auth event detection evidence)"
+    when:
+      source: "google_workspace"
+      system: "gws_login"
+      action_regex: "(?i)(^|\\+)login_failure(\\+|$)"
+      outcome: "failure"
+    map_to: ["A.5.17", "A.8.15", "A.8.16", "A.6.8"]
+    confidence: 0.75
+
+  - id: "gws_login_success"
+    description: "Google Workspace (Login): login success (access control activity log evidence)"
+    when:
+      source: "google_workspace"
+      system: "gws_login"
+      action_regex: "(?i)(^|\\+)login_success(\\+|$)"
+      outcome: "success"
+    map_to: ["A.5.15", "A.8.15"]
+    confidence: 0.45
+
+  - id: "gws_login_suspicious_or_risky"
+    description: "Google Workspace (Login): suspicious/risky/unusual login signal (security event detection evidence)"
+    when:
+      source: "google_workspace"
+      system: "gws_login"
+      action_regex: "(?i)(SUSPICIOUS|RISKY|UNUSUAL|ANOMAL|CHALLENGE)"
+    map_to: ["A.8.16", "A.6.8"]
+    confidence: 0.70
+
+  # Optional: general evidence you are collecting login logs at all
+  - id: "gws_login_activity_logged"
+    description: "Google Workspace (Login): sign-in activity is being logged (logging/monitoring evidence)"
+    when:
+      source: "google_workspace"
+      system: "gws_login"
+      action_regex: ".+"
+    map_to: ["A.8.15"]
+    confidence: 0.20
+
+  # --- Hydra Logs from Cloudwatch
+  - id: "cloudwatch_logs_all_logging"
+    description: "All CloudWatch Logs ingested events are logging evidence"
+    when:
+      source: "cloudwatch_logs"
+    map_to: ["A.8.15"]
+    confidence: 0.60
+
+  - id: "cloudwatch_logs_redacted_data_masking"
+    description: "Hydra logs entries containing redacted markers indicate data masking and are evidence of OIDC, secure auth/identity mgmt"
+    when:
+      source: "cloudwatch_logs"
+      summary_regex: "(?i)\\bredacted\\b"
+    map_to: ["A.8.5", "A.8.11"]
+    confidence: 0.85
+
+  # --- Cloudwatch GuardDog
+  - id: "cloudtrail_unexpected_source_ip"
+    description: "CloudTrail: unexpected source IPs performed AWS API actions against cloud hosting infrastructure provider services."
+    when:
+      source: "webhook:cloudtrail_source_ip"
+      action: "unexpected_source_ip"
+      outcome: "info"
+    map_to:
+      ISO27001:2022:
+        - "A.5.15"  # Access control
+        - "A.5.16"  # Identity management
+        - "A.5.17"  # Authentication information
+        - "A.5.23"  # Information security for use of cloud services
+        - "A.8.2"   # Privileged access rights
+        - "A.8.3"   # Information access restriction
+        - "A.8.15"  # Logging
+        - "A.8.16"  # Monitoring activities
+        - "A.8.20"  # Networks security
+        - "A.8.22"  # Segregation of networks
+    confidence: 0.85

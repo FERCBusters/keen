@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – PESTLE(E)</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="pestle">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/risks.html">← CIA Triad Risk Assessment</a></div>
+        <h1 class="h3 mb-1">PESTLE(E) Impact Assessment</h1>
+        <div class="small-muted">Assess Political, Economical, Social, Technological, Legal, Environmental and Ethical items against business processes and framework clauses.</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <a class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" data-nav-fw="1" href="/mitigator.html"><img src="/keen-mitigator.svg" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator</a>
+        <a class="btn btn-outline-primary" data-nav-fw="1" href="/statement-of-applicability.html?tab=pestle"><i class="bi bi-table" aria-hidden="true"></i> SoA PESTLE(E)</a>
+        <a id="newPestleItem" class="btn btn-primary" data-nav-fw="1" href="/pestle_item.html"><i class="bi bi-plus-lg" aria-hidden="true"></i> New PESTLE(E) item</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ul class="nav nav-tabs mb-3 no-print" id="pestlePageTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="pestleItemsTab" data-bs-toggle="tab" data-bs-target="#pestleItemsPane" type="button" role="tab" aria-controls="pestleItemsPane" aria-selected="true">PESTLE(E) items</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="businessProcessesTab" data-bs-toggle="tab" data-bs-target="#businessProcessesPane" type="button" role="tab" aria-controls="businessProcessesPane" aria-selected="false">Business processes</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="pestleVisualisationsTab" data-bs-toggle="tab" data-bs-target="#pestleVisualisationsPane" type="button" role="tab" aria-controls="pestleVisualisationsPane" aria-selected="false">Visualisations</button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="pestlePageTabContent">
+      <section class="tab-pane fade show active" id="pestleItemsPane" role="tabpanel" aria-labelledby="pestleItemsTab" tabindex="0">
+        <div class="card mb-3 no-print" data-mosp-filter-section="pestle-filters" data-mosp-filter-title="PESTLE(E) filters">
+          <div class="card-body" data-mosp-filter-body>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+              <input id="pestleQ" class="form-control form-control-sm" style="min-width:260px;" type="search" placeholder="Search items or rationale…">
+              <select id="pestleTypeFilter" class="form-select form-select-sm" style="min-width:170px;"><option value="">All types</option></select>
+              <select id="pestleLensFilter" class="form-select form-select-sm" style="min-width:150px;"><option value="">All lenses</option></select>
+              <select id="pestleRelevanceFilter" class="form-select form-select-sm" style="min-width:150px;"><option value="">All relevance</option></select>
+              <button id="reloadPestle" class="btn btn-sm btn-outline-primary" type="button">Reload</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">PESTLE(E) items</div>
+              <div class="small-muted" id="pestleItemsMeta">—</div>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0" data-sortable>
+                <thead>
+                  <tr>
+                    <th style="width:150px;">Type</th>
+                    <th style="width:110px;">Lens</th>
+                    <th>Item</th>
+                    <th style="width:130px;">Relevance</th>
+                    <th>Rationale</th>
+                    <th style="width:150px;">Processes</th>
+                    <th style="width:120px;">Clauses</th>
+                    <th style="width:120px;" class="no-print">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="pestleRows"><tr><td colspan="8" class="p-4 small-muted">Loading PESTLE(E) items…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="businessProcessesPane" role="tabpanel" aria-labelledby="businessProcessesTab" tabindex="0">
+        <div class="card mb-3 no-print" id="businessProcessEditorCard">
+          <div class="card-header">
+            <div class="fw-bold">Business processes</div>
+            <div class="small-muted">Create the organisation-specific business processes that PESTLE(E) items are scored against.</div>
+          </div>
+          <div class="card-body">
+            <div class="row g-2 align-items-end mb-3">
+              <div class="col-12 col-lg-8">
+                <label class="form-label" for="businessProcessName">Business process name</label>
+                <input id="businessProcessName" class="form-control" maxlength="256" placeholder="E.g. Customer onboarding">
+              </div>
+              <div class="col-12 col-lg-4">
+                <button id="addBusinessProcess" class="btn btn-primary w-100" type="button">Add business process</button>
+              </div>
+            </div>
+            <div id="businessProcessList" class="small-muted">Loading business processes…</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="pestleVisualisationsPane" role="tabpanel" aria-labelledby="pestleVisualisationsTab" tabindex="0">
+        <div class="row g-3">
+          <div class="col-12 col-xl-6">
+            <div class="card h-100">
+              <div class="card-header">
+                <div class="fw-bold">Internal / External lens by type</div>
+                <div class="small-muted">Shows where PESTLE(E) items cluster across lens and PESTLE(E) type.</div>
+              </div>
+              <div id="pestleLensTypeViz" class="card-body pestle-viz-box small-muted">Loading visualisation…</div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-6">
+            <div class="card h-100">
+              <div class="card-header">
+                <div class="fw-bold">Overall relevance overlap</div>
+                <div class="small-muted">A compact relevance bubble view for High, Medium, Low and N/A items.</div>
+              </div>
+              <div id="pestleRelevanceVenn" class="card-body pestle-viz-box small-muted">Loading visualisation…</div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="card">
+              <div class="card-header">
+                <div class="fw-bold">Clauses × PESTLE(E) relationship map</div>
+                <div class="small-muted">Bipartite mapping of framework clauses to PESTLE(E) items with non-N/A relevance scores.</div>
+              </div>
+              <div id="pestleClauseNetwork" class="card-body pestle-viz-box pestle-viz-box-lg small-muted">Loading visualisation…</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
+  <script type="module" src="/pages/pestle.js"></script>
+</body>
+</html>

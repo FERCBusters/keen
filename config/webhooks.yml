@@ -1,0 +1,47 @@
+# Webhook ingestion policies.
+# Keen accepts ANY JSON payload, but these configs allow:
+# - secret header verification
+# - nicer summaries for common sources
+
+providers:
+  # No longer used, but kept for posterity of existing records
+  enroll:
+    badge_color: "#FB8313"
+    secret_header: "X-Enroll-Secret"
+    secret_env: "ENROLL_WEBHOOK_SECRET"
+    # optional: a few keys to try for summary if present
+    summary_hints:
+      # Enroll diff JSON uses nested keys under old/new.
+      # Keen supports dotted-path traversal (e.g. "new.host").
+      - "new.host"
+      - "old.host"
+      - "generated_at"
+      # Uncomment if you want extra context in the summary:
+      # - "new.state_mtime"
+      # - "old.state_mtime"
+
+
+  # Dedicated inbound metrics endpoint for ISMS Effectiveness Measures.
+  # POST /api/v1/webhooks/isms/effectiveness-metrics/{metric_key}
+  isms_metrics:
+    badge_color: "#6f42c1"
+    secret_header: "X-Keen-Metrics-Secret"
+    secret_env: "KEEN_ISMS_METRICS_WEBHOOK_SECRET"
+    summary_hints:
+      - "source_title"
+      - "period_start"
+      - "period_end"
+      - "value"
+
+  cloudtrail_source_ip:
+    ui_name: "CloudTrail Source IP Watch"
+    badge_color: "#dc3545"
+    secret_header: "X-Keen-CloudTrail-Secret"
+    secret_env: "KEEN_CLOUDTRAIL_WEBHOOK_SECRET"
+    summary_hints:
+      - "source_title"
+      - "account_label"
+      - "total_events"
+      - "actor_count"
+      - "first_seen"
+      - "last_seen"

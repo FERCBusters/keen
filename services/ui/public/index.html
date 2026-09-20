@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Home</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="home">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4 keen-home">
+    <section class="home-hero card mb-3">
+      <div class="card-body p-4 p-lg-5">
+        <div class="row g-4 align-items-center">
+          <div class="col-12 col-lg-8">
+            <div class="small text-uppercase fw-semibold text-primary mb-2">Key Evidence Engine</div>
+            <h1 class="display-6 fw-bold mb-2">What are you KEEN to see today?</h1>
+            <p class="lead mb-0 text-secondary">
+              Start navigating relationships by control, clause, risk, audit, piece of evidence, or source.
+            </p>
+            <div class="d-flex flex-wrap gap-2 mt-4">
+              <a class="btn btn-primary" data-nav-fw="1" href="/isms.html"><i class="bi bi-table" aria-hidden="true"></i> ISMS Overview</a>
+            </div>
+            <div id="latestEvidenceTicker" class="keen-latest-evidence-ticker d-none" aria-live="polite">
+              <span class="keen-latest-evidence-prefix">latest evidence</span>
+              <a id="latestEvidenceTickerLink" href="/events.html" target="_blank" rel="noopener noreferrer">
+                <span id="latestEvidenceTickerText"></span>
+              </a>
+            </div>
+          </div>
+          <div class="col-12 col-lg-4">
+            <form id="homeSearch" class="card bg-light border-0 shadow-sm">
+              <div class="card-body">
+                <label class="form-label fw-semibold" for="homeQ">Find evidence</label>
+                <div class="input-group">
+                  <input id="homeQ" class="form-control" type="search" placeholder="Search events…">
+                  <button class="btn btn-primary" type="submit"><i class="bi bi-search" aria-hidden="true"></i></button>
+                </div>
+                <div class="form-text">Jump straight into the raw data as it comes in!</div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <section class="row g-3 mb-3" id="entryCards" aria-label="Keen entry points">
+      <div class="col-12"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted p-4"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading workspace…</span></div></div>
+    </section>
+
+    <section class="card home-explorer" aria-label="Connected explorer">
+      <div class="card-header bg-white">
+        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+          <div>
+            <div class="fw-bold" id="explorerTitle">Explore connections</div>
+            <div class="small-muted" id="explorerSubtitle">Choose a starting point above, then use “Zoom in” to replace these widgets with the next connected layer.</div>
+          </div>
+          <div class="d-flex flex-wrap gap-2 no-print">
+            <button id="explorerBack" class="btn btn-sm btn-outline-secondary" type="button" disabled><i class="bi bi-zoom-out" aria-hidden="true"></i> Zoom out</button>
+            <button id="explorerRoot" class="btn btn-sm btn-outline-primary" type="button"><i class="bi bi-house" aria-hidden="true"></i> Home</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="crumbs" class="home-crumbs mb-3 small-muted"></div>
+        <div id="explorerCanvas" class="home-canvas">
+          <div class="empty-state p-4 text-center small-muted">
+            Pick one of the widgets above to start exploring KEEN as a connected graph.
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/home.js"></script>
+</body>
+</html>

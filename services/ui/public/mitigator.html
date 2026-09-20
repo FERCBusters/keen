@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Mitigator</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="mitigator">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1 d-flex align-items-center gap-2">Keen Mitigator</h1>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <a class="btn btn-outline-secondary" data-nav-fw="1" href="/risks.html"><i class="bi bi-shield-exclamation" aria-hidden="true"></i> CIA Triad risks</a>
+        <a class="btn btn-outline-secondary" data-nav-fw="1" href="/pestle.html"><i class="bi bi-globe2" aria-hidden="true"></i> PESTLE(E)</a>
+        <a class="btn btn-outline-secondary" data-nav-fw="1" href="/interested_parties.html"><i class="bi bi-people" aria-hidden="true"></i> Interested Parties</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <section id="mitigatorPane">
+  <div class="card mb-3 no-print">
+    <div class="card-header d-flex flex-wrap gap-3 align-items-center justify-content-between">
+      <div class="d-flex gap-3 align-items-center">
+        <img src="/keen-mitigator.svg" alt="" class="keen-mitigator-icon">
+        <div>
+          <div class="fw-bold">Keen Mitigator</div>
+          <div class="small-muted">I'm the Mitigator, your friendly risk assessor that helps you define risks that map to CIA, PESTLE(E) and Interested Party signals, and their associated controls.</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <form id="mitigatorForm" class="row g-3">
+        <div class="col-12">
+          <label class="form-label" for="mitigatorIssue">What potential issue do you want to analyse?</label>
+          <textarea id="mitigatorIssue" class="form-control" rows="4" maxlength="12000" required placeholder="E.g. A supplier API may expose customer records if credentials are misconfigured…"></textarea>
+          <div class="small-muted mt-1">Describe the scenario in natural language. The questionnaire answers below provide the strongest signals.</div>
+        </div>
+
+        <div class="col-12 col-lg-4">
+          <label class="form-label" for="mitigatorAsset">Affected asset, party or process</label>
+          <input id="mitigatorAsset" class="form-control" maxlength="256" placeholder="E.g. Customer records API, subscribers, supplier platform">
+        </div>
+        <div class="col-12 col-lg-4">
+          <label class="form-label" for="mitigatorCategory">Asset category</label>
+          <select id="mitigatorCategory" class="form-select" required></select>
+        </div>
+        <div class="col-12 col-lg-4">
+          <label class="form-label" for="mitigatorSubcategory">Asset subcategory</label>
+          <select id="mitigatorSubcategory" class="form-select" required></select>
+        </div>
+
+        <div class="col-12">
+          <div class="form-label mb-2">Risk type and weighting</div>
+          <div class="row g-3">
+            <div class="col-12 col-lg-4">
+              <div class="border rounded-3 p-3 h-100">
+                <div class="form-check mb-2"><input class="form-check-input mitigator-risk-type" id="mitigatorRtC" value="Confidentiality" type="checkbox" checked><label class="form-check-label fw-semibold" for="mitigatorRtC">Confidentiality</label></div>
+                <div class="small-muted mb-2">Data being stolen, leaked, exposed or read by the wrong party.</div>
+                <input id="mitigatorWeightC" class="form-range mitigator-weight" type="range" min="0" max="100" value="60" data-risk-type="Confidentiality">
+                <div class="small-muted">Weight: <span id="mitigatorWeightCValue">60</span></div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-4">
+              <div class="border rounded-3 p-3 h-100">
+                <div class="form-check mb-2"><input class="form-check-input mitigator-risk-type" id="mitigatorRtI" value="Integrity" type="checkbox"><label class="form-check-label fw-semibold" for="mitigatorRtI">Integrity</label></div>
+                <div class="small-muted mb-2">Data or configuration being corrupted, tampered with or made unreliable.</div>
+                <input id="mitigatorWeightI" class="form-range mitigator-weight" type="range" min="0" max="100" value="40" data-risk-type="Integrity">
+                <div class="small-muted">Weight: <span id="mitigatorWeightIValue">40</span></div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-4">
+              <div class="border rounded-3 p-3 h-100">
+                <div class="form-check mb-2"><input class="form-check-input mitigator-risk-type" id="mitigatorRtA" value="Availability" type="checkbox"><label class="form-check-label fw-semibold" for="mitigatorRtA">Availability</label></div>
+                <div class="small-muted mb-2">Loss of service, data loss, outage, single point of failure or recoverability issue.</div>
+                <input id="mitigatorWeightA" class="form-range mitigator-weight" type="range" min="0" max="100" value="40" data-risk-type="Availability">
+                <div class="small-muted">Weight: <span id="mitigatorWeightAValue">40</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="form-label mb-2">Impact prompts</div>
+          <div class="row g-2">
+            <div class="col-12 col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input mitigator-impact" id="mitigatorImpactSensitive" value="sensitive_data" type="checkbox"><label class="form-check-label" for="mitigatorImpactSensitive">Sensitive/customer data could be exposed</label></div></div>
+            <div class="col-12 col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input mitigator-impact" id="mitigatorImpactCorruption" value="data_corruption" type="checkbox"><label class="form-check-label" for="mitigatorImpactCorruption">Data could be corrupt or unusable</label></div></div>
+            <div class="col-12 col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input mitigator-impact" id="mitigatorImpactOutage" value="service_outage" type="checkbox"><label class="form-check-label" for="mitigatorImpactOutage">Service interruption or single point of failure</label></div></div>
+            <div class="col-12 col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input mitigator-impact" id="mitigatorImpactFinancial" value="financial" type="checkbox"><label class="form-check-label" for="mitigatorImpactFinancial">Cost or financial impact</label></div></div>
+            <div class="col-12 col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input mitigator-impact" id="mitigatorImpactBrand" value="brand" type="checkbox"><label class="form-check-label" for="mitigatorImpactBrand">Brand or reputation impact</label></div></div>
+            <div class="col-12 col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input mitigator-impact" id="mitigatorImpactSupplier" value="supplier" type="checkbox"><label class="form-check-label" for="mitigatorImpactSupplier">Supplier or third-party involvement</label></div></div>
+            <div class="col-12 col-md-6 col-xl-4"><div class="form-check"><input class="form-check-input mitigator-impact" id="mitigatorImpactCompliance" value="compliance" type="checkbox"><label class="form-check-label" for="mitigatorImpactCompliance">Compliance or audit-readiness impact</label></div></div>
+          </div>
+        </div>
+
+        <div class="col-12 d-flex flex-wrap gap-2 align-items-center justify-content-between">
+          <div class="small-muted">Recommendations are explainable suggestions; duplicate matches and final applicability still need human review.</div>
+          <div class="d-flex gap-2">
+            <button id="mitigatorClear" class="btn btn-outline-secondary" type="button">Clear</button>
+            <button id="mitigatorAnalyse" class="btn btn-primary" type="submit">Analyse scenario</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="mitigatorResultsCard" class="card mb-3" style="display:none;">
+    <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+      <div>
+        <div class="fw-bold">Keen Mitigator recommendations</div>
+        <div class="small-muted" id="mitigatorResultsMeta">—</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <button id="mitigatorCreateRisk" class="btn btn-primary" type="button">Create CIA risk</button>
+        <button id="mitigatorCreatePestle" class="btn btn-outline-primary" type="button">Create PESTLE(E) item</button>
+        <button id="mitigatorCreateInterested" class="btn btn-outline-primary" type="button">Create Interested Party</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="mitigatorSignals" class="mb-3"></div>
+      <div id="mitigatorSuggestions" class="vstack gap-2"></div>
+    </div>
+  </div>
+</section>
+
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/risks.js"></script>
+</body>
+</html>
