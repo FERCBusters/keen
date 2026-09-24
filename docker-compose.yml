@@ -19,9 +19,9 @@ services:
 
   valkey:
     image: valkey/valkey:7
-    command: ["valkey-server", "--requirepass", "${REDIS_PASSWORD:-ChangeMe123!}"]
+    command: ["valkey-server", "--requirepass", "${KEEN_REDIS_PASSWORD:-ChangeMe123!}"]
     environment:
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-ChangeMe123!}
+      - KEEN_REDIS_PASSWORD=${KEEN_REDIS_PASSWORD:-ChangeMe123!}
     ports:
       - "127.0.0.1:6399:6379"
     networks: [keen]
