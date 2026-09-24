@@ -5,10 +5,10 @@ from typing import Any
 import json
 
 import httpx
-import yaml
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 
+from app.core.managed_configuration import load_document
 from app.core.config import settings
 from app.db.models import IngestionCursor
 from app.db.models import utcnow
@@ -49,8 +49,7 @@ def _get_or_create_cursor(db: Session, name: str) -> IngestionCursor:
 
 
 def load_jenkins_config(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    return load_document("jenkins", path)
 
 
 def _client() -> httpx.Client:

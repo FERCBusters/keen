@@ -19,10 +19,10 @@ from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
 import httpx
-import yaml
 from dateutil import parser as dtparser
 from sqlalchemy.orm import Session
 
+from app.core.managed_configuration import load_document
 from app.core.config import settings
 from app.db.models import IngestionCursor
 from app.ingest.common import store_event_with_artifact, is_safe_url
@@ -30,8 +30,7 @@ from app.security.redaction import redact_url
 
 
 def load_rss_config(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    return load_document("rss", path)
 
 
 def _to_utc_naive(dt: datetime) -> datetime:

@@ -168,7 +168,7 @@ def ensure_controls(
 
 
 def apply_rules(db: Session, ev: Event) -> int:
-    rules = load_rules(settings.rules_path)
+    rules = load_rules(settings.rules_path, db=db)
     event_dict = {
         "source": ev.source,
         "system": ev.system,
@@ -180,7 +180,7 @@ def apply_rules(db: Session, ev: Event) -> int:
         "raw_pointer": ev.raw_pointer,
         "normalized_payload": ev.normalized_payload,
     }
-    matched = evaluate_by_framework(event_dict, rules)
+    matched = evaluate_by_framework(event_dict, rules, details=True)
     if not matched:
         return 0
 
@@ -195,11 +195,11 @@ def apply_rules(db: Session, ev: Event) -> int:
     }
 
     created = 0
-    for framework_slug, refs in matched.items():
-        controls = ensure_controls(db, framework_slug=framework_slug, refs=refs)
+    for framework_slug, entries in matched.items():
+        controls = ensure_controls(db, framework_slug=framework_slug, refs=[item["ref"] for item in entries])
 
-        for ref in refs:
-            ci = controls.get(ref)
+        for item in entries:
+            ci = controls.get(item["ref"])
             if not ci:
                 continue
             if ci.id in existing_control_ids:
@@ -207,9 +207,9 @@ def apply_rules(db: Session, ev: Event) -> int:
             mp = Mapping(
                 event_id=ev.id,
                 control_item_id=ci.id,
-                confidence=0.8,
+                confidence=item["confidence"],
                 method="rule",
-                rationale=f"auto by rules ({framework_slug})",
+                rationale=item["rationale"],
                 mapped_by="system",
             )
             db.add(mp)

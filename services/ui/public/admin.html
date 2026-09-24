@@ -34,6 +34,7 @@
           <button class="nav-link" id="tab-groups" data-bs-toggle="tab" data-bs-target="#pane-groups" type="button" role="tab" aria-controls="pane-groups" aria-selected="false">Groups &amp; permissions</button>
         </li>
         <li class="nav-item" role="presentation"><button class="nav-link" id="tab-framework-editor" data-bs-toggle="tab" data-bs-target="#pane-framework-editor" type="button" role="tab" aria-controls="pane-framework-editor" aria-selected="false">Frameworks</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="tab-evidence-config" data-bs-toggle="tab" data-bs-target="#pane-evidence-config" type="button" role="tab" aria-controls="pane-evidence-config" aria-selected="false">Evidence sources &amp; rules</button></li>
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="tab-ingest" data-bs-toggle="tab" data-bs-target="#pane-ingest" type="button" role="tab" aria-controls="pane-ingest" aria-selected="false">Import & ingest</button>
         </li>
@@ -278,6 +279,61 @@
           <div class="d-flex gap-2 mt-3"><button id="fe-save-node" class="btn btn-primary">Save node</button><button id="fe-delete-node" class="btn btn-outline-danger">Delete node</button></div>
           <div id="fe-message" class="small mt-2" role="status"></div>
         </div></div></div></div>
+      </div>
+
+      <div class="tab-pane fade" id="pane-evidence-config" role="tabpanel" aria-labelledby="tab-evidence-config" tabindex="0">
+        <h2 class="h5">Evidence definitions</h2>
+        <p class="small-muted">Each definition brings together a source input, the events to match, and its framework targets. A source input can support several evidence definitions.</p>
+        <div id="ec-status" role="status" hidden></div>
+        <div class="card mb-3"><div class="card-header fw-bold">Collection and framework mappings</div><div class="card-body">
+          <div id="ec-library"><div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h3 class="h6 mb-1">Evidence definition library</h3><p class="small-muted mb-0">One collected event can contribute to multiple frameworks.</p></div><button id="ec-new-rule" class="btn btn-primary">Create evidence definition</button></div>
+            <label for="ec-rule-filter" class="form-label">Search by name, collection item or framework</label><input id="ec-rule-filter" class="form-control mb-2" placeholder="Search evidence definitions"><div id="ec-rule-count" class="small-muted mb-2" role="status"></div><div id="ec-rules" class="list-group"></div><button id="ec-more-rules" class="btn btn-outline-secondary mt-2" hidden>Show more definitions</button></div>
+          <div id="ec-editor" hidden>
+            <div class="d-flex justify-content-between align-items-center mb-3"><h3 id="ec-editor-heading" class="h6 mb-0">Create evidence definition</h3><button id="ec-close-editor" type="button" class="btn btn-outline-secondary btn-sm">Back to definitions</button></div>
+            <div class="small-muted mb-2">Step <span id="ec-step-number">1</span> of 4 · <span id="ec-step-title">Describe</span></div><div class="progress mb-3" role="progressbar" aria-label="Rule setup progress" aria-valuemin="0" aria-valuemax="4"><div id="ec-step-progress" class="progress-bar"></div></div>
+            <section data-ec-step="1"><h4 class="h6">1. Describe the evidence</h4><p class="small-muted">Explain what the collected evidence demonstrates to an auditor.</p>
+            <label class="form-label">What does this evidence demonstrate?</label><input id="ec-description" class="form-control" placeholder="Successful production deployments follow the change process">
+            </section><section data-ec-step="2"><h4 class="h6">2. Collect and recognise</h4>
+            <p class="small-muted">Choose the source input once. A Loki query or Jenkins job collects events; the conditions below decide which of those events support the selected framework targets.</p>
+            <div id="ec-selected-input" class="rounded bg-body-tertiary p-2 mb-2" hidden></div>
+            <div id="ec-input-picker" class="row g-2"><div class="col-md-4"><label for="ec-definition-adapter" class="form-label">Source adapter</label><select id="ec-definition-adapter" class="form-select"></select></div><div class="col-md-4"><label for="ec-definition-section" class="form-label">Input type</label><select id="ec-definition-section" class="form-select"></select></div><div class="col-md-4"><label for="ec-definition-entry" class="form-label">Query, job, feed or page</label><select id="ec-definition-entry" class="form-select"></select></div></div>
+            <div id="ec-bookstack-picker" class="border rounded p-3 mt-3" hidden><p class="small-muted">Browse BookStack using the API credentials configured on the KEEN server. Only names and IDs are shown here.</p><div class="row g-2"><div class="col-md-5"><label for="ec-bookstack-book" class="form-label">Book</label><select id="ec-bookstack-book" class="form-select"></select></div><div class="col-md-7"><label for="ec-bookstack-page" class="form-label">Page (grouped by chapter)</label><select id="ec-bookstack-page" class="form-select"></select></div></div><div class="d-flex gap-2 mt-2"><button id="ec-bookstack-more-books" type="button" class="btn btn-sm btn-outline-secondary" hidden>More books</button><button id="ec-bookstack-more-pages" type="button" class="btn btn-sm btn-outline-secondary" hidden>More pages</button></div><div id="ec-bookstack-status" class="small mt-2" role="status"></div></div>
+            <div id="ec-definition-fields" class="row g-2 mt-2"></div>
+            <details class="mt-2"><summary>Additional collection settings (advanced)</summary><p class="small-muted">Connector-specific JSON options. Credentials remain in the Docker environment.</p><textarea id="ec-definition-extra" class="form-control font-monospace" rows="5">{}</textarea></details>
+            <input id="ec-when-source" type="hidden"><datalist id="ec-source-options"></datalist>
+            <div class="row g-2 mt-1 mb-2"><div class="col-md-9"><label class="form-label">Recent event</label><select id="ec-sample" class="form-select"></select></div><div class="col-md-3 d-flex align-items-end"><button id="ec-use-sample" class="btn btn-outline-primary w-100">Use this event</button></div></div>
+            <div id="ec-sample-details" class="small bg-body-tertiary rounded p-2 mb-2" role="status">Choose a recent event to inspect its fields. You can also define a rule before evidence arrives.</div>
+            <details class="mt-2"><summary>Narrow by event fields (optional)</summary><p class="small-muted">The selected collection item identifies the origin. Add fields only when it produces several kinds of evidence, such as both successful and failed logins. Every filled field must match.</p><div id="ec-conditions" class="row g-2"></div></details>
+            <details id="ec-bookstack-conditions-panel" class="mt-2" hidden><summary>BookStack page selectors</summary><p class="small-muted">Imported page definitions can select by book and page slug, name or pattern. New definitions can use the BookStack picker above.</p><div id="ec-bookstack-conditions" class="row g-2"></div></details>
+            <details class="mt-2"><summary>Advanced match patterns (regex)</summary><p class="small-muted">Use only when exact fields cannot express the match. Preview against real evidence before saving.</p><div id="ec-regex-conditions" class="row g-2"></div></details>
+            </section><section data-ec-step="3"><h4 class="h6">3. Select framework controls or clauses</h4><p class="small-muted">The selected control is included when you click Next. To map to several controls or frameworks, click Add for each extra target. Every matching event maps to all selected targets.</p>
+            <div class="row g-2"><div class="col-md-4"><label class="form-label">Framework</label><select id="ec-framework" class="form-select"></select></div>
+              <div class="col-md-6"><label class="form-label">Control or clause</label><select id="ec-control" class="form-select"></select></div>
+              <div class="col-md-2 d-flex align-items-end"><button id="ec-add-target" class="btn btn-outline-primary w-100">Add</button></div></div>
+            <div id="ec-targets" class="list-group mt-2"></div>
+            </section><section data-ec-step="4"><h4 class="h6">4. Preview and save</h4><p class="small-muted">Check recent matches and nonmatches before publishing. Saving applies this rule to new events; historical evaluation is selected below.</p>
+            <details class="mt-3"><summary>Advanced rule settings</summary><div class="row g-2 mt-1"><div class="col-md-6"><label class="form-label">Rule ID</label><input id="ec-rule-id" class="form-control" placeholder="jenkins_deploy_success"></div><div class="col-md-6"><label class="form-label">Confidence (0–1)</label><input id="ec-confidence" type="number" min="0" max="1" step=".05" value=".8" class="form-control"></div></div><label class="form-check mt-2"><input id="ec-enabled" type="checkbox" class="form-check-input" checked> Rule enabled</label>
+              <label class="form-check mt-2"><input id="ec-apply-existing" type="checkbox" class="form-check-input" checked> Apply this rule to previously collected evidence in the background</label>
+              <label class="form-check mt-2"><input id="ec-predefine" type="checkbox" class="form-check-input"> Predefine this rule before evidence is available (skip sample preview)</label></details>
+            <div class="d-flex flex-wrap gap-2 mt-3"><button id="ec-preview" class="btn btn-outline-primary">Preview matches</button><button id="ec-save-rule" class="btn btn-primary">Save rule</button><button id="ec-backfill-start" class="btn btn-outline-primary">Apply saved rule to past evidence</button><button id="ec-delete-rule" class="btn btn-outline-danger">Delete rule</button></div>
+            <div id="ec-preview-results" class="mt-2 small" role="status"></div>
+            <div id="ec-backfill" class="mt-2 small" role="status"></div>
+            <details class="mt-3"><summary>Review old rule mappings after changing a rule</summary>
+              <p class="small-muted">Only automatic rule mappings are considered. Choose a source and inspect one batch of at most 500. Manual and imported mappings are never removed.</p>
+              <div class="d-flex gap-2"><input id="ec-prune-source" class="form-control" placeholder="Source, e.g. jenkins"><input id="ec-prune-offset" class="form-control" type="number" min="0" value="0" aria-label="Offset"><button id="ec-prune-preview" class="btn btn-outline-primary">Review</button></div>
+              <div id="ec-prune-results" class="small mt-2" role="status"></div>
+              <button id="ec-prune-apply" class="btn btn-outline-danger mt-2" disabled>Remove reviewed stale mappings</button>
+            </details>
+            <div class="d-flex gap-2 align-items-center mt-3"><label for="ec-rule-revision">Restore a prior rule set</label><select id="ec-rule-revision" class="form-select w-auto"></select><button id="ec-rule-restore" class="btn btn-sm btn-outline-warning">Restore</button></div>
+            </section><div class="d-flex justify-content-between mt-4"><button id="ec-prev-step" class="btn btn-outline-secondary" type="button">Previous</button><button id="ec-next-step" class="btn btn-outline-primary" type="button">Next</button></div>
+          </div>
+        </div></div>
+        <details class="mb-3"><summary class="h5">Shared adapter settings</summary>
+          <p class="small-muted">Set polling, capture and other options shared by this adapter. Collection items and mappings stay in the evidence definitions above. Credentials remain in the server environment.</p>
+          <label for="ec-settings-adapter" class="form-label">Adapter</label><select id="ec-settings-adapter" class="form-select mb-2"></select>
+          <label for="ec-settings-json" class="form-label">Shared settings (JSON)</label><textarea id="ec-settings-json" class="form-control font-monospace" rows="7"></textarea>
+          <button id="ec-save-settings" class="btn btn-outline-primary mt-2">Save adapter settings</button>
+        </details>
       </div>
 
       <!-- Import & ingest -->
@@ -561,6 +617,7 @@
 
   <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
   <script type="module" src="/pages/admin.js"></script>
+  <script type="module" src="/pages/evidence-config.js"></script>
   <script type="module" src="/pages/framework-editor.js"></script>
 
   <!-- User access modal (groups + explicit permissions) -->

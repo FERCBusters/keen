@@ -43,6 +43,55 @@ class Framework(Base):
     )
 
 
+class ManagedConfiguration(Base):
+    """Versioned administrator override of a shipped YAML configuration."""
+
+    __tablename__ = "managed_configurations"
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class ManagedConfigurationRevision(Base):
+    __tablename__ = "managed_configuration_revisions"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    document: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+
+class RuleBackfillJob(Base):
+    __tablename__ = "rule_backfill_jobs"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rule_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    rule_document: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    rules_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_estimate: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
+    cutoff: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    cursor_timestamp: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cursor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    examined: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    matched: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_mappings: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
 class ControlItem(Base):
     __tablename__ = "control_items"
     id: Mapped[uuid.UUID] = mapped_column(

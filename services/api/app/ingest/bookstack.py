@@ -11,6 +11,7 @@ import httpx
 import yaml
 from sqlalchemy.orm import Session
 
+from app.core.managed_configuration import load_document
 from app.core.config import settings
 from app.db.models import ControlItem, Event, IngestionCursor, Mapping
 from app.ingest.common import is_safe_url, store_event_with_artifact
@@ -66,8 +67,7 @@ def _client() -> httpx.Client:
 
 def load_bookstack_config(path: str) -> dict[str, Any]:
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+        data = load_document("bookstack", path)
         return data if isinstance(data, dict) else {}
     except FileNotFoundError:
         return {}
@@ -823,6 +823,11 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
     ) or capture_mode in ("full", "all")
 
     page_mappings = _parse_page_mappings(cfg)
+    capture_pages = _parse_page_mappings({"page_mappings": [
+        {"match": selector, "map_to": ["__capture_only__"]}
+        for selector in (cfg.get("capture_pages") or [])
+        if isinstance(selector, dict)
+    ]})
     seed_mapped_pages = bool(
         cfg.get("seed_mapped_pages") if "seed_mapped_pages" in cfg else True
     )
@@ -900,9 +905,19 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
             if isinstance(pid, int):
                 pages_by_id[pid] = p
 
+        # Pages selected through the evidence definition editor must be
+        # captured even when they have not changed inside the poll window.
+        for selected in cfg.get("selected_pages", []) or []:
+            pid = selected.get("id") if isinstance(selected, dict) else None
+            if isinstance(pid, int) and pid > 0:
+                pages_by_id.setdefault(pid, {
+                    "id": pid, "book_id": selected.get("book_id"),
+                    "book_slug": selected.get("book_slug"),
+                })
+
         # 2) Ensure configured pages are captured at least once (as snapshots).
-        if seed_mapped_pages and page_mappings:
-            for pm in page_mappings:
+        if seed_mapped_pages and (page_mappings or capture_pages):
+            for pm in [*page_mappings, *capture_pages]:
                 try:
                     if pm.match_id is not None:
                         pages_by_id.setdefault(
@@ -1166,6 +1181,7 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
                         "bookstack": {
                             "instance": (instance_base_url or "").rstrip("/"),
                             "page_id": pid,
+                            "book_id": page_full.get("book_id") or page_list.get("book_id") or book_id,
                             "page_slug": page_slug,
                             "book_slug": book_slug_eff,
                             "url": primary_url,

@@ -8,10 +8,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import boto3
-import yaml
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.core.managed_configuration import load_document
 from app.core.config import settings
 from app.db.models import Artifact, ControlItem, Event, IngestionCursor, Mapping
 from app.mapping.rules import evaluate_by_framework, load_rules
@@ -44,8 +44,7 @@ def _cloudwatch_client(region: str | None = None):
 
 
 def load_cloudwatch_logs_config(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    return load_document("cloudwatch_logs", path)
 
 
 def _fingerprint(*parts: str) -> str:
@@ -196,7 +195,7 @@ def _ensure_control_items(
 
 
 def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
-    rules = load_rules(settings.rules_path)
+    rules = load_rules(settings.rules_path, db=db)
     event_dict = {
         "source": ev.source,
         "system": ev.system,
@@ -208,7 +207,7 @@ def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
         "raw_pointer": ev.raw_pointer,
         "normalized_payload": ev.normalized_payload,
     }
-    matched = evaluate_by_framework(event_dict, rules)
+    matched = evaluate_by_framework(event_dict, rules, details=True)
     if not matched:
         return 0
 

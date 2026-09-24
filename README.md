@@ -181,6 +181,37 @@ Key options:
     `match.book_slug` (or `match.book: {slug: ...}`) to disambiguate slugs across books
 
 
+## Evidence definitions in the admin interface
+
+Admin → **Evidence definitions** manages collection, matching and mappings in one
+place. Pick a source adapter and a collection item such as a Loki query, Jenkins
+job or BookStack page. Describe what its evidence demonstrates, optionally narrow
+it by event fields, and select controls or clauses in any number of frameworks.
+A definition may also apply to all events from a source; this is useful for
+rules that match by action or outcome across multiple collection items. One event
+can support several frameworks and controls.
+
+On `alembic upgrade head`, the database migration imports the existing YAML
+presets or current Postgres overrides and converts all rules into this format.
+Existing framework targets, enabled state, IDs and confidence values are retained.
+Rules are linked to a collection item when its existing conditions identify a
+single item; broader matches appear as “All events from this source.” BookStack
+page mappings become editable evidence definitions; their page selectors continue
+to seed page collection. A fresh install receives the same conversion during its
+first migration. From then on Postgres is authoritative; the YAML files are
+bootstrap inputs for this migration. Keep a database backup before upgrading.
+Previously collected evidence and its mappings are preserved. Rule edits can
+apply to historical evidence through a resumable background job.
+
+Jenkins **kind** sets the action on evidence emitted by a job, such as `build`
+or `deployment`. Its **label** sets the event system. The wizard explains the
+match fields and lets administrators preview against recent events. Select
+**Predefine** to create definitions before the first event arrives. BookStack's
+page picker reads names and structure through the server-side API client; its
+credentials stay in the container environment and are never sent to the browser.
+Shared adapter settings are in a separate advanced panel. Docker environment
+variables still provide connection credentials and enable adapters.
+
 ## Multi-framework mapping and filtering
 
 Keen supports mapping the same event to refs in multiple frameworks.

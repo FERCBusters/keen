@@ -6,9 +6,9 @@ import json
 import re
 
 import httpx
-import yaml
 from sqlalchemy.orm import Session
 
+from app.core.managed_configuration import load_document
 from app.core.config import settings
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact, is_safe_url
@@ -18,8 +18,7 @@ _AUTH_TOKEN: Optional[str] = None
 
 
 def load_taiga_config(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    return load_document("taiga", path)
 
 
 def _base_client(headers: Optional[dict[str, str]] = None) -> httpx.Client:

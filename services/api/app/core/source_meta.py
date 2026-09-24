@@ -3,11 +3,12 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from dataclasses import dataclass
+import time
 from functools import lru_cache
+from dataclasses import dataclass
 from typing import Any
 
-import yaml
+from app.core.managed_configuration import load_document
 
 from app.core.config import settings
 
@@ -25,14 +26,6 @@ _HEX_RE = re.compile(r"^#?[0-9a-fA-F]{6}$")
 _HEX3_RE = re.compile(r"^#?[0-9a-fA-F]{3}$")
 _ENV_PREFIX_NAME = "KEEN_SOURCE_NAME_"
 _ENV_PREFIX_COLOR = "KEEN_SOURCE_COLOR_"
-
-
-def _load_yaml(path: str) -> dict[str, Any]:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
-    except Exception:
-        return {}
 
 
 def _normalize_hex_color(raw: str | None) -> str | None:
@@ -126,8 +119,8 @@ def _merge(
         meta[source] = cur
 
 
-@lru_cache(maxsize=1)
-def _configured_source_meta() -> dict[str, dict[str, str]]:
+@lru_cache(maxsize=2)
+def _configured_source_meta(refresh_bucket: int) -> dict[str, dict[str, str]]:
     """Load configured source meta from YAML configs + env overrides."""
 
     meta: dict[str, dict[str, str]] = {}
@@ -146,13 +139,13 @@ def _configured_source_meta() -> dict[str, dict[str, str]]:
     }
 
     for src, path in plugin_cfgs.items():
-        cfg = _load_yaml(path)
+        cfg = load_document(src, path)
         label = (cfg.get("ui_name") or cfg.get("display_name") or "").strip() or None
         color = _normalize_hex_color(cfg.get("ui_color") or cfg.get("badge_color"))
         _merge(meta, src, label=label, color=color)
 
     # Webhooks: providers -> webhook:<provider>
-    wcfg = _load_yaml(settings.webhooks_path)
+    wcfg = load_document("webhooks", settings.webhooks_path)
     providers = wcfg.get("providers") or {}
     if isinstance(providers, dict):
         for prov, pcfg in providers.items():
@@ -212,7 +205,7 @@ def get_source_meta(source: str) -> SourceMeta:
     """
 
     src = (source or "").strip() or "unknown"
-    cfg = _configured_source_meta().get(src) or {}
+    cfg = _configured_source_meta(int(time.monotonic() // 30)).get(src) or {}
 
     # Env overrides for this specific source (works for any source key)
     ek = _env_key(src)

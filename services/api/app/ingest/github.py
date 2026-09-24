@@ -7,9 +7,9 @@ from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
 import httpx
-import yaml
 from sqlalchemy.orm import Session
 
+from app.core.managed_configuration import load_document
 from app.core.config import settings
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact
@@ -17,8 +17,7 @@ from app.security.redaction import redact_url
 
 
 def load_github_config(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    return load_document("github", path)
 
 
 def _client() -> httpx.Client:
@@ -202,7 +201,8 @@ def _summarize_event(e: dict[str, Any], *, fallback_repo: str | None = None) -> 
 
 
 def ingest_github_repo(
-    db: Session, owner: str, repo: str, label: str | None = None
+    db: Session, owner: str, repo: str, label: str | None = None,
+    collecting_org: str | None = None,
 ) -> dict[str, Any]:
     cursor_name = f"github:{owner}/{repo}"
     cur = (
@@ -267,6 +267,7 @@ def ingest_github_repo(
                     "endpoint": "repo_events",
                     "owner": owner,
                     "repo": repo,
+                    **({"org": collecting_org} if collecting_org else {}),
                     "id": e.get("id"),
                     "type": etype,
                     "created_at": e.get("created_at"),
@@ -502,7 +503,7 @@ def ingest_github_org_repo_events(
             continue
         owner, repo = full.split("/", 1)
         try:
-            res = ingest_github_repo(db, owner, repo, label=label)
+            res = ingest_github_repo(db, owner, repo, label=label, collecting_org=org)
             created_total += int(res.get("created_events") or 0)
             per_repo.append(res)
         except Exception as e:

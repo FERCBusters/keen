@@ -10,6 +10,7 @@ from .clauses import router as clauses_router
 from .controls import router as controls_router
 from .events import router as events_router
 from .frameworks import router as frameworks_router
+from .managed_configurations import router as managed_configurations_router
 from .graph import router as graph_router
 from .interested_parties import router as interested_parties_router
 from .isms import router as isms_router
@@ -84,6 +85,7 @@ router.include_router(webhooks_router, tags=["Webhooks"])
 router.include_router(controls_router, tags=["Controls"])
 router.include_router(clauses_router, tags=["Clauses"])
 router.include_router(frameworks_router, tags=["Frameworks"])
+router.include_router(managed_configurations_router, tags=["Admin"])
 router.include_router(events_router, tags=["Events"])
 router.include_router(questions_router, tags=["Questions"])
 router.include_router(pestle_router, tags=["PESTLE(E)"])

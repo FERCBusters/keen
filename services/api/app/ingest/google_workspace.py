@@ -26,13 +26,13 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
-import yaml
 from sqlalchemy.orm import Session
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from app.core.managed_configuration import load_document
 from app.core.config import settings
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact
@@ -41,8 +41,7 @@ SCOPES = ["https://www.googleapis.com/auth/admin.reports.audit.readonly"]
 
 
 def load_google_workspace_config(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    return load_document("google_workspace", path)
 
 
 def _to_utc_naive(dt: datetime) -> datetime:

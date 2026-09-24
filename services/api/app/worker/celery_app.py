@@ -59,6 +59,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.worker.tasks.ingest_google_workspace_all_task",
         "schedule": crontab(minute="*/30"),
     },
+    "recover-rule-backfills": {
+        "task": "app.worker.tasks.recover_rule_backfills_task",
+        "schedule": 60.0,
+    },
     "refresh-event-counter-cache": {
         "task": "app.worker.tasks.refresh_event_counter_cache_task",
         "schedule": _event_counter_refresh_seconds(),

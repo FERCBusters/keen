@@ -8,10 +8,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
-import yaml
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.core.managed_configuration import load_document
 from app.core.config import settings
 from app.db.models import Event, Artifact, IngestionCursor, ControlItem, Mapping
 from app.ingest.common import is_safe_url
@@ -65,8 +65,7 @@ def _loki_client() -> httpx.Client:
 
 
 def load_loki_queries(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    return load_document("loki", path)
 
 
 def _fingerprint(ts_ns: str, labels: dict[str, str], line: str) -> str:
@@ -213,7 +212,7 @@ def _ensure_control_items(
 
 
 def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
-    rules = load_rules(settings.rules_path)
+    rules = load_rules(settings.rules_path, db=db)
     event_dict = {
         "source": ev.source,
         "system": ev.system,
@@ -225,7 +224,7 @@ def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
         "raw_pointer": ev.raw_pointer,
         "normalized_payload": ev.normalized_payload,
     }
-    matched = evaluate_by_framework(event_dict, rules)
+    matched = evaluate_by_framework(event_dict, rules, details=True)
     if not matched:
         return 0
 

@@ -9,12 +9,14 @@ from typing import Any
 import yaml
 
 from app.core.config import settings
+from app.mapping.collector import event_collector
 
 log = logging.getLogger(__name__)
 
 
 @dataclass
 class Condition:
+    collector: str | None = None
     source: str | None = None
     source_regex: str | None = None
     system: str | None = None
@@ -29,6 +31,13 @@ class Condition:
     label: str | None = None
     label_regex: str | None = None
     summary_regex: str | None = None
+    bookstack_book_id: int | None = None
+    bookstack_book_slug: str | None = None
+    bookstack_page_id: int | None = None
+    bookstack_page_slug: str | None = None
+    bookstack_page_slug_regex: str | None = None
+    bookstack_page_title: str | None = None
+    bookstack_page_title_regex: str | None = None
 
 
 @dataclass
@@ -159,6 +168,10 @@ def _clean_optional_int(v: Any) -> int | None:
 
 
 _KNOWN_WHEN_KEYS = {
+    "bookstack_book_id", "bookstack_book_slug", "bookstack_page_id",
+    "bookstack_page_slug", "bookstack_page_slug_regex",
+    "bookstack_page_title", "bookstack_page_title_regex",
+    "collector",
     "source",
     "source_regex",
     "system",
@@ -400,23 +413,30 @@ def _normalize_rule_targets(raw_map: Any, frameworks: list[str]) -> list[RuleTar
     return [RuleTarget(framework_slug=fw, ref=one) for fw in frameworks]
 
 
-def load_rules(path: str) -> list[Rule]:
-    """Load rules from YAML.
+def load_rules(path: str, *, db: Any = None) -> list[Rule]:
+    """Load rules from the managed document, or the shipped YAML.
 
     Backward compatible with the original single-framework schema while allowing
     multi-framework rules and object-style per-target mappings.
     """
 
+    from app.core.managed_configuration import load_document
+
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            raw = yaml.safe_load(f) or {}
+        raw = load_document("rules", path, db=db)
     except FileNotFoundError:
         return []
+    return parse_rules(raw)
 
+
+def parse_rules(raw: Any) -> list[Rule]:
+    """Use the same parser for runtime matching and admin validation/preview."""
     rules: list[Rule] = []
     entries = _as_rule_entries(raw)
 
     for idx, (inherited_fw, it) in enumerate(entries):
+        if it.get("enabled") is False:
+            continue
         rid = str(it.get("id") or f"r{idx}")
         w = it.get("when") or {}
         if not isinstance(w, dict):
@@ -433,6 +453,7 @@ def load_rules(path: str) -> list[Rule]:
             )
 
         cond = Condition(
+            collector=_clean_optional_str(w.get("collector")),
             source=_clean_optional_str(w.get("source")),
             source_regex=_clean_optional_str(w.get("source_regex")),
             system=_clean_optional_str(w.get("system")),
@@ -447,6 +468,13 @@ def load_rules(path: str) -> list[Rule]:
             label=_clean_optional_str(w.get("label")),
             label_regex=_clean_optional_str(w.get("label_regex")),
             summary_regex=_clean_optional_str(w.get("summary_regex")),
+            bookstack_book_id=_clean_optional_int(w.get("bookstack_book_id")),
+            bookstack_book_slug=_clean_optional_str(w.get("bookstack_book_slug")),
+            bookstack_page_id=_clean_optional_int(w.get("bookstack_page_id")),
+            bookstack_page_slug=_clean_optional_str(w.get("bookstack_page_slug")),
+            bookstack_page_slug_regex=_clean_optional_str(w.get("bookstack_page_slug_regex")),
+            bookstack_page_title=_clean_optional_str(w.get("bookstack_page_title")),
+            bookstack_page_title_regex=_clean_optional_str(w.get("bookstack_page_title_regex")),
         )
 
         conf_raw = it.get("confidence", 0.8)
@@ -485,8 +513,9 @@ def evaluate_by_framework(
     rules: list[Rule],
     *,
     active_roles: set[str] | None = None,
-) -> dict[str, list[str]]:
-    """Return matched control refs grouped by framework slug."""
+    details: bool = False,
+) -> dict[str, list[str]] | dict[str, list[dict[str, Any]]]:
+    """Return matched refs, or provenance and confidence for persisted mappings."""
 
     source = event.get("source") or ""
     system = event.get("system") or ""
@@ -512,10 +541,40 @@ def evaluate_by_framework(
 
     roles = {str(r).strip().lower() for r in (active_roles or set()) if str(r).strip()}
 
-    hits: dict[str, list[str]] = {}
+    hits: dict[str, list[Any]] = {}
 
     for r in rules:
         c = r.when
+        if c.collector and c.collector != event_collector(event):
+            continue
+        if any((c.bookstack_book_id is not None, c.bookstack_book_slug,
+                c.bookstack_page_id is not None, c.bookstack_page_slug,
+                c.bookstack_page_slug_regex, c.bookstack_page_title,
+                c.bookstack_page_title_regex)):
+            page = (event.get("raw_pointer") or {}).get("bookstack") or {}
+            normal = (event.get("normalized_payload") or {}).get("bookstack") or {}
+            if not isinstance(page, dict) or not isinstance(normal, dict):
+                continue
+            def val(name):
+                return page.get(name) if page.get(name) is not None else normal.get(name)
+            slug = str(val("page_slug") or "")
+            book_slug = str(val("book_slug") or "")
+            candidates = (slug, f"{book_slug}-{slug}") if book_slug and slug else (slug,)
+            title = str(normal.get("page_title") or "")
+            if c.bookstack_book_id is not None and str(val("book_id")) != str(c.bookstack_book_id):
+                continue
+            if c.bookstack_book_slug and c.bookstack_book_slug.casefold() != book_slug.casefold():
+                continue
+            if c.bookstack_page_id is not None and str(val("page_id")) != str(c.bookstack_page_id):
+                continue
+            if c.bookstack_page_slug and not any(c.bookstack_page_slug.casefold() == s.casefold() for s in candidates):
+                continue
+            if c.bookstack_page_slug_regex and not any(_match_regex(c.bookstack_page_slug_regex, s) for s in candidates):
+                continue
+            if c.bookstack_page_title and c.bookstack_page_title.casefold() != title.casefold():
+                continue
+            if c.bookstack_page_title_regex and not _match_regex(c.bookstack_page_title_regex, title):
+                continue
         if c.source and str(c.source) != str(source):
             continue
         if not _match_regex(c.source_regex, source):
@@ -553,20 +612,19 @@ def evaluate_by_framework(
             if t.roles_any is not None and not roles:
                 continue
             bucket = hits.setdefault(t.framework_slug, [])
-            bucket.append(t.ref)
+            bucket.append({"ref": t.ref, "confidence": r.confidence,
+                           "rationale": f"auto by rule {r.id} ({t.framework_slug})"} if details else t.ref)
 
-    # De-duplicate refs while preserving order.
-    out: dict[str, list[str]] = {}
-    for fw, refs in hits.items():
-        seen: set[str] = set()
-        uniq: list[str] = []
-        for ref in refs:
-            if ref in seen:
-                continue
-            seen.add(ref)
-            uniq.append(ref)
-        out[fw] = uniq
-
+    # De-duplicate refs while preserving order; with details, keep the most
+    # confident matching rule for each framework/ref pair.
+    out: dict[str, list[Any]] = {}
+    for fw, entries in hits.items():
+        by_ref: dict[str, Any] = {}
+        for entry in entries:
+            ref = entry["ref"] if details else entry
+            if ref not in by_ref or (details and entry["confidence"] > by_ref[ref]["confidence"]):
+                by_ref[ref] = entry
+        out[fw] = list(by_ref.values())
     return out
 
 

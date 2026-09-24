@@ -7,9 +7,9 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-import yaml
 from sqlalchemy.orm import Session
 
+from app.core.managed_configuration import load_document
 from app.core.config import settings
 from app.core.valkey import get_valkey
 from app.ingest.common import store_event_with_artifact
@@ -20,8 +20,7 @@ _WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 900
 
 
 def load_webhook_policies(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    return load_document("webhooks", path)
 
 
 def verify_secret(provider: str, headers: dict[str, str]) -> bool:
