@@ -42,7 +42,7 @@ RUN chmod +x /app/scripts/start.sh
 # create non-root user
 RUN addgroup --system --gid 10001 keen \
  && adduser  --system --uid 10001 --ingroup keen --home /home/keen keen \
- && mkdir -p /var/lib/keen \
+ && mkdir -p /var/lib/keen /app/data/artifacts \
  && chown -R keen:keen /app /var/lib/keen
 
 USER keen

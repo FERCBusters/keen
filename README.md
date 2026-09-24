@@ -4,7 +4,7 @@ Keen is an evidence-collation engine for audit readiness, designed to turn day-t
 
 This repo intentionally starts with the **core loop**:
 1) store normalized events in PostgreSQL
-2) store immutable evidence artifacts in S3-compatible object storage (MinIO) with SHA-256 hashing
+2) store immutable evidence artifacts on a persistent local disk volume by default, or in S3-compatible storage, with SHA-256 hashing
 3) ingest “today’s” logs from Grafana Loki via `query_range`
 4) map events to controls using a simple YAML rules engine
 5) accept inbound webhooks as first-class evidence
@@ -47,14 +47,15 @@ curl -b cookies.txt -X POST http://localhost:8181/v1/admin/ingest/loki/run
 - `keen-beat` : Celery beat (scheduled ingestion)
 - `postgres` : database
 - `valkey` : Redis-compatible broker/backend (Valkey)
-- `minio` : evidence object storage
+- `artifacts` volume: evidence files shared by the API and worker
 
 ## Key config
 - Connectors: GitHub, Jenkins, Taiga, BookStack, RSS are *off by default*; enable with `KEEN_*_ENABLED=true`.
 - Enable Loki ingestion: set `KEEN_LOKI_ENABLED=true` and point `KEEN_LOKI_BASE_URL` at your Loki.
 - Enable CloudWatch Logs ingestion: set `KEEN_CLOUDWATCH_LOGS_ENABLED=true` and configure `./config/cloudwatch_logs.yml`.
 - Loki base URL + auth: `KEEN_LOKI_*`
-- S3/MinIO: `KEEN_S3_*`
+- Evidence storage: `KEEN_ARTIFACT_STORAGE_BACKEND=auto|local|s3` and `KEEN_ARTIFACT_LOCAL_DIR` (default `/app/data/artifacts`). Auto selects disk with no S3 settings and S3 with complete `KEEN_S3_*` settings. A partial S3 configuration fails evidence writes rather than silently changing storage.
+- The Docker `artifacts` named volume is persistent across rebuilds. Back it up with the database; `docker compose down -v` deletes it. To use a host directory instead, bind mount it at `/app/data/artifacts` in both the API and worker and make it writable by UID 10001. Existing `s3://` evidence remains readable if S3 credentials stay configured, even when writes use disk.
 - Authentication:
   - Bootstrap admin (first-run only): `KEEN_BOOTSTRAP_ADMIN_USERNAME`, `KEEN_BOOTSTRAP_ADMIN_PASSWORD`
   - Session cookies: `KEEN_SESSION_*`, `KEEN_COOKIE_*`
@@ -250,10 +251,6 @@ curl -b cookies.txt -X POST http://localhost:8181/v1/admin/diary \
   -d '{"summary":"DR test performed","details":{"result":"pass"}}'
 ```
 
-## Local S3 dev with MinIO (optional)
+## Optional S3 storage
 
-If you want a local S3-compatible store:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.minio.yml up --build
-```
+To use an S3-compatible provider, configure `KEEN_S3_ENDPOINT_URL`, `KEEN_S3_ACCESS_KEY`, `KEEN_S3_SECRET_KEY`, and `KEEN_S3_BUCKET` in `.env`. Set `KEEN_ARTIFACT_STORAGE_BACKEND=s3` explicitly or leave it at `auto`. To resume writing evidence to disk, set the backend to `local`; retain the S3 settings if old S3 evidence still needs to be downloaded.

@@ -204,43 +204,24 @@ class Settings(BaseSettings):
     # many seconds behind newly ingested events.
     aggregate_cache_ttl_seconds: int = Field(default=60)
 
-    # S3 (MinIO / AWS S3 / etc.)
-    # REQUIRED: These must be set via environment variables in production.
+    # Evidence storage. Existing s3:// objects remain readable after switching
+    # the write backend, provided their S3 credentials remain configured.
+    artifact_storage_backend: str = Field(default="auto")
+    artifact_local_dir: str = Field(default="/app/data/artifacts")
+
+    @field_validator("artifact_storage_backend")
+    @classmethod
+    def validate_artifact_storage_backend(cls, v: str) -> str:
+        value = (v or "").strip().lower()
+        if value not in {"auto", "local", "s3"}:
+            raise ValueError("KEEN_ARTIFACT_STORAGE_BACKEND must be auto, local or s3")
+        return value
+
+    # S3 (MinIO / AWS S3 / etc.), required only for S3 writes/reads.
     s3_endpoint_url: str = Field(default="")
-
-    @field_validator("s3_endpoint_url")
-    @classmethod
-    def validate_s3_endpoint_url(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError("KEEN_S3_ENDPOINT_URL must be set for S3 storage")
-        return v.strip()
-
     s3_access_key: str = Field(default="")
-
-    @field_validator("s3_access_key")
-    @classmethod
-    def validate_s3_access_key(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError("KEEN_S3_ACCESS_KEY must be set for S3 storage")
-        return v.strip()
-
     s3_secret_key: str = Field(default="")
-
-    @field_validator("s3_secret_key")
-    @classmethod
-    def validate_s3_secret_key(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError("KEEN_S3_SECRET_KEY must be set for S3 storage")
-        return v.strip()
-
     s3_bucket: str = Field(default="")
-
-    @field_validator("s3_bucket")
-    @classmethod
-    def validate_s3_bucket(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError("KEEN_S3_BUCKET must be set for S3 storage")
-        return v.strip()
 
     s3_region: str = Field(default="us-east-1")
     s3_use_ssl: bool = Field(default=True)
