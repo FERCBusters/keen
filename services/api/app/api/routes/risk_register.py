@@ -195,7 +195,8 @@ async def import_register(file: UploadFile = File(...), framework: str = "ISO270
 
 def _library_out(row):
     return {"id": str(row.id), "name": row.name, "threat_summary": row.threat_summary,
-            "risk_types": row.risk_types, "treatment_guidance": row.treatment_guidance}
+            "risk_types": row.risk_types, "treatment_guidance": row.treatment_guidance,
+            "suggested_assessment": row.suggested_assessment or {}}
 
 
 @router.get("/v1/risks/library")

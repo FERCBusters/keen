@@ -35,6 +35,67 @@ const metaEl = document.getElementById('ismsMeta');
 
 let meta = {users: [], org_nodes: [], documents: [], assets: [], asset_categories: [], licenses: [], aws_accounts: [], business_processes: [], controls: [], clauses: [], effectiveness_metric_sources: [], effectiveness_metric_source_types: [], effectiveness_threshold_operators: []};
 let data = {counts: {}, objectives: [], documents: [], org_nodes: [], assets: [], application_configurations: [], access_control_matrix: [], effectiveness_measures: [], meetings: []};
+let meetingPeople = [];
+let documentFolders = [];
+let documentTags = [];
+let documentTagFilter = '';
+const documentTagColors = ['primary', 'success', 'warning', 'info', 'danger', 'secondary'];
+function documentTagColor(tag) {
+  return documentTagColors[Array.from(tag).reduce((value, character) => value + character.codePointAt(0), 0) % documentTagColors.length];
+}
+function tagChip(tag, removable = false) {
+  return `<button type="button" class="btn btn-sm btn-outline-${documentTagColor(tag)} rounded-pill me-1 mb-1" ${removable ? `data-remove-doc-tag="${esc(tag)}"` : `data-filter-doc-tag="${esc(tag)}"`}>${esc(tag)}${removable ? ' ×' : ''}</button>`;
+}
+function renderDocumentTags() {
+  $('docSelectedTags').innerHTML = documentTags.map(tag => tagChip(tag, true)).join('');
+  const known = [...new Set((data.documents || []).flatMap(doc => doc.tags || []))].filter(tag => !documentTags.includes(tag));
+  $('docTagChoices').innerHTML = known.map(tag => `<button type="button" class="btn btn-sm btn-link p-1" data-add-doc-tag="${esc(tag)}">+ ${esc(tag)}</button>`).join('');
+}
+function addDocumentTag(value) {
+  const tag = value.trim();
+  if (tag && tag.length <= 64 && !documentTags.some(item => item.toLowerCase() === tag.toLowerCase()) && documentTags.length < 30) documentTags.push(tag);
+  renderDocumentTags();
+}
+function documentMedium() { return document.querySelector('input[name="docMedium"]:checked')?.value || 'write'; }
+function showDocumentMedium() {
+  const medium = documentMedium();
+  for (const [key, id] of Object.entries({write: 'docWritePane', upload: 'docUploadPane', link: 'docLinkPane'})) $(id).hidden = key !== medium;
+}
+async function loadDocumentFolders() {
+  documentFolders = await apiGet('/api/v1/isms/document-folders');
+  const selected = $('docFolder').value;
+  const names = new Map(documentFolders.map(folder => [folder.id, folder]));
+  function label(folder) {
+    const path = [folder.name]; let parent = folder.parent_id; const seen = new Set([folder.id]);
+    while (names.has(parent) && !seen.has(parent)) { seen.add(parent); const next = names.get(parent); path.unshift(next.name); parent = next.parent_id; }
+    return path.join(' / ');
+  }
+  $('docFolder').innerHTML = '<option value="">Unfiled</option>' + documentFolders.map(folder => `<option value="${esc(folder.id)}">${esc(label(folder))}</option>`).join('');
+  $('docFolder').value = selected;
+}
+
+async function loadMeetingPeople() {
+  try { meetingPeople = (await apiGet('/api/v1/isms/people')).items || []; }
+  catch (err) { meetingPeople = []; toast(status, `Could not load People: ${String(err)}`, 'warning'); }
+}
+
+function populateMeetingPeople() {
+  const options = optionList(meetingPeople, {label: (p) => `${p.name}${p.email ? ` · ${p.email}` : ''}`});
+  for (const id of ['meetingPersonAttendees', 'meetingPersonApologies']) {
+    const previous = selectedValues($(id)); $(id).innerHTML = options; setSelectValues($(id), previous);
+  }
+}
+
+function updateMeetingPersonBubble() {
+  const name=$('meetingNewPersonName')?.value.trim() || '';
+  const email=$('meetingNewPersonEmail')?.value.trim().toLowerCase() || '';
+  const matching=meetingPeople.find(p => email ? p.email?.trim().toLowerCase()===email : p.name?.trim().toLowerCase()===name.toLowerCase());
+  if (matching) {
+    const option=Array.from($('meetingPersonAttendees').options).find(o=>o.value===matching.id);
+    if (option) option.selected=true;
+  }
+  $('meetingCreatePerson').hidden=!(canManage && name && !matching);
+}
 
 const loadedMetaSections = new Set();
 const loadedSummarySections = new Set();
@@ -561,7 +622,7 @@ function resetForm(kind) {
   if (!form) return;
   form.reset();
   setFormMode(kind, null);
-  if (kind === 'document') clearFileInput($('docFile'));
+  if (kind === 'document') { clearFileInput($('docFile')); documentTags = []; renderDocumentTags(); setRichTextEditorValue('docContent', ''); $('docMediumWrite').checked = true; showDocumentMedium(); }
   if (kind === 'app') populateAppSourceOptions();
   if (kind === 'access') renderAccessFormOptions();
   if (kind === 'effectiveness') renderEffectivenessFormOptions();
@@ -655,6 +716,17 @@ function populateEditForm(kind, item) {
     $('docType').value = item.document_type || 'policy';
     $('docUrl').value = item.external_url || '';
     $('docDescription').value = item.description || '';
+    $('docFolder').value = item.folder_id || '';
+    if (item.folder_id && $('docFolder').value !== item.folder_id) {
+      loadDocumentFolders().then(() => { if ($('documentForm').dataset.editingId === item.id) $('docFolder').value = item.folder_id; })
+        .catch(err => toast(status, `Could not load document folder: ${String(err)}`, 'warning'));
+    }
+    documentTags = [...(item.tags || [])]; renderDocumentTags();
+    initRichTextEditors($('documentForm'));
+    setRichTextEditorValue('docContent', item.content_html || '');
+    $('docExistingFile').textContent = item.has_file ? `Current file: ${item.filename || 'uploaded file'}` : '';
+    $(item.content_html ? 'docMediumWrite' : item.has_file ? 'docMediumUpload' : item.external_url ? 'docMediumLink' : 'docMediumWrite').checked = true;
+    showDocumentMedium();
     clearFileInput($('docFile'));
     setSelectValues($('docControls'), itemControls(item));
     setSelectValues($('docClauses'), itemClauses(item));
@@ -711,6 +783,8 @@ function populateEditForm(kind, item) {
     $('meetingEnd').value = timeForInput(item.end_time);
     setSelectValues($('meetingAttendees'), item.attendee_user_ids || []);
     setSelectValues($('meetingApologies'), item.apology_user_ids || []);
+    setSelectValues($('meetingPersonAttendees'), item.attendee_person_ids || []);
+    setSelectValues($('meetingPersonApologies'), item.apology_person_ids || []);
     setSelectValues($('meetingDocuments'), (item.links || []).filter((l) => l.link_type === 'isms_document' && l.document_id).map((l) => l.document_id));
     resetMeetingExternalLinks(item.links || []);
     setMeetingNotesValue(item.agenda_minutes_notes || '');
@@ -844,8 +918,10 @@ function renderObjectives() {
 function renderDocuments() {
   const items = data.documents || [];
   setCount('documentsCount', items.length);
-  rows.documents.innerHTML = items.map((d) => `<tr data-isms-row="document">
-    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title || 'Document')}</a></td><td>${esc(d.document_type || '—')}</td><td>${docLink(d)}</td>
+  const tags = [...new Set(items.flatMap(item => item.tags || []))].sort();
+  $('docTagCloud').innerHTML = tags.length ? `<button type="button" class="btn btn-sm ${documentTagFilter ? 'btn-outline-secondary' : 'btn-secondary'} rounded-pill me-1 mb-1" data-filter-doc-tag="">All</button>${tags.map(tag => tagChip(tag)).join('')}` : '';
+  rows.documents.innerHTML = items.filter(item => !documentTagFilter || (item.tags || []).includes(documentTagFilter)).map((d) => `<tr data-isms-row="document">
+    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title || 'Document')}</a><div class="small">${(d.tags || []).map(tag => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '—')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in KEEN</span> ' : ''}${docLink(d)}</td>
     <td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '—')}</td><td>${controlBadges(d.controls)}</td><td>${clauseBadges(d.clauses)}</td><td class="small-muted">${esc(fmtTs(d.updated_at))}</td>${actionsHtml('document', d.id)}
   </tr>`).join('') || emptyRow(8, 'No ISMS documents yet.');
 }
@@ -1385,12 +1461,15 @@ function renderMeetings() {
 }
 
 function populateForms() {
+  initRichTextEditors($('documentForm'));
+  loadDocumentFolders().catch(err => toast(status, `Could not load document folders: ${String(err)}`, 'warning'));
   for (const id of ['objectiveFormCard', 'documentFormCard', 'orgFormCard', 'assetFormCard', 'assetCategoryCard', 'licenseCard', 'awsAccountCard', 'accessControlFormCard', 'appConfigFormCard', 'meetingFormCard']) {
     const el = $(id); if (el) el.style.display = 'none';
   }
   for (const kind of Object.keys(formIds)) ensureCancelButton(kind);
   const userOpts = optionList(meta.users || [], {label: 'username'});
   for (const id of ['objResources', 'orgUsers', 'meetingAttendees', 'meetingApologies']) { const el = $(id); if (el) el.innerHTML = userOpts; }
+  populateMeetingPeople();
   const owner = $('objOwner'); if (owner) owner.innerHTML = optionList(meta.users || [], {label: 'username', includeBlank: true});
   const docType = $('docType'); if (docType) docType.innerHTML = optionList((meta.document_types || []).map((x) => ({id: x, name: x})), {label: 'name'});
   const orgOpts = optionList(meta.org_nodes || [], {label: (n) => `${n.name || 'Node'} (${n.node_type || 'role'})`, includeBlank: true, blankLabel: 'Root'});
@@ -1594,6 +1673,7 @@ async function ensureSection(section, {force = false} = {}) {
     setSectionLoading(target);
     const metaChanged = await loadMetaSection(target, {force});
     await loadSummarySection(target, {force});
+    if (target === 'meetings' && (metaChanged || force)) await loadMeetingPeople();
     renderMetaSummary();
     if (metaChanged) populateForms();
     renderSection(target);
@@ -1652,15 +1732,46 @@ $('objectiveForm')?.addEventListener('submit', async (ev) => {
 $('documentForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const editingId = ev.target.dataset.editingId || null;
-  const saved = await saveIsms('document', {title: $('docTitle').value, document_type: $('docType').value, external_url: $('docUrl').value || null, description: $('docDescription').value, ...selectedLinkPayload('doc')}, editingId);
-  const file = $('docFile')?.files?.[0];
+  const medium = documentMedium();
+  const file = medium === 'upload' ? $('docFile')?.files?.[0] : null;
+  const existing = editingId ? findItem('document', editingId) : null;
+  if (medium === 'upload' && !file && !existing?.has_file) { toast(status, 'Select a document to upload.', 'warning'); return; }
+  if (medium === 'link' && !$('docUrl').value.trim()) { toast(status, 'Enter the document URL.', 'warning'); return; }
+  const payload = {title: $('docTitle').value, document_type: $('docType').value, external_url: medium === 'link' ? $('docUrl').value.trim() : null,
+    description: $('docDescription').value, folder_id: $('docFolder').value || null, tags: documentTags, ...selectedLinkPayload('doc')};
+  if (medium === 'write') {
+    payload.content_html = syncRichTextEditor($('docContent'));
+    if (editingId) payload.expected_content_version = existing?.content_version;
+  } else if (existing?.content_html) {
+    // Clear authored content when switching to a link or uploaded file.
+    payload.content_html = '';
+    payload.expected_content_version = existing.content_version;
+  }
+  const saved = await saveIsms('document', payload, editingId);
   if (file && saved?.id) {
     const fd = new FormData();
     fd.append('file', file, file.name);
     await apiPostForm(`/api/v1/isms/documents/${encodeURIComponent(saved.id)}/file`, fd);
   }
-  resetForm('document'); await reloadAfter(file ? 'ISMS document record saved and file uploaded' : (editingId ? 'ISMS document record updated' : 'ISMS document record created'));
+  resetForm('document'); await reloadAfter(file ? 'Document saved and file uploaded' : (editingId ? 'Document updated' : 'Document created'));
 });
+$('docAddFolder')?.addEventListener('click', async () => {
+  const name = $('docNewFolder').value.trim(); if (!name) return;
+  try {
+    const folder = await apiPost('/api/v1/isms/document-folders', {name, parent_id: $('docFolder').value || null});
+    await loadDocumentFolders(); $('docFolder').value = folder.id; $('docNewFolder').value = '';
+    toast(status, 'Folder created and selected.', 'success');
+  } catch (err) { toast(status, String(err), 'danger'); }
+});
+$('docNewFolder')?.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); $('docAddFolder').click(); } });
+$('docTags')?.addEventListener('keydown', event => {
+  if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); addDocumentTag(event.target.value.replace(/,$/, '')); event.target.value = ''; }
+});
+$('docTags')?.addEventListener('blur', event => { if (event.target.value.trim()) { addDocumentTag(event.target.value); event.target.value = ''; } });
+$('docTagChoices')?.addEventListener('click', event => { const button = event.target.closest('[data-add-doc-tag]'); if (button) addDocumentTag(button.dataset.addDocTag); });
+$('docSelectedTags')?.addEventListener('click', event => { const button = event.target.closest('[data-remove-doc-tag]'); if (button) { documentTags = documentTags.filter(tag => tag !== button.dataset.removeDocTag); renderDocumentTags(); } });
+$('docTagCloud')?.addEventListener('click', event => { const button = event.target.closest('[data-filter-doc-tag]'); if (button) { documentTagFilter = button.dataset.filterDocTag; renderDocuments(); } });
+document.querySelectorAll('input[name="docMedium"]').forEach(input => input.addEventListener('change', showDocumentMedium));
 
 $('orgForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -1729,10 +1840,23 @@ $('accessControlForm')?.addEventListener('submit', async (ev) => {
   await reloadAfter(editingId ? 'Access control matrix row updated' : 'Access control matrix row created');
 });
 
+for (const id of ['meetingNewPersonName', 'meetingNewPersonEmail']) $(id)?.addEventListener('input', updateMeetingPersonBubble);
+$('meetingCreatePerson')?.addEventListener('click', async () => {
+  try {
+    const name=$('meetingNewPersonName').value.trim();
+    const email=$('meetingNewPersonEmail').value.trim();
+    const person=await apiPost('/api/v1/isms/people', {name,email});
+    meetingPeople.push(person); populateMeetingPeople();
+    const option=Array.from($('meetingPersonAttendees').options).find(o=>o.value===person.id);
+    if (option) option.selected=true;
+    $('meetingNewPersonName').value=''; $('meetingNewPersonEmail').value='';
+    updateMeetingPersonBubble(); toast(status,'Person added to the directory and selected as an attendee.','success');
+  } catch(err) { toast(status,`Could not add Person: ${String(err)}`,'danger'); }
+});
 $('meetingForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const editingId = ev.target.dataset.editingId || null;
-  await saveIsms('meeting', {title: $('meetingTitle').value || 'ISMS Meeting', date: $('meetingDate').value, start_time: $('meetingStart').value || null, end_time: $('meetingEnd').value || null, attendee_user_ids: selectedValues($('meetingAttendees')), apology_user_ids: selectedValues($('meetingApologies')), links: selectedMeetingLinks(), agenda_minutes_notes: getMeetingNotesValue(), ...selectedLinkPayload('meeting')}, editingId);
+  await saveIsms('meeting', {title: $('meetingTitle').value || 'ISMS Meeting', date: $('meetingDate').value, start_time: $('meetingStart').value || null, end_time: $('meetingEnd').value || null, attendee_user_ids: selectedValues($('meetingAttendees')), apology_user_ids: selectedValues($('meetingApologies')), attendee_person_ids: selectedValues($('meetingPersonAttendees')), apology_person_ids: selectedValues($('meetingPersonApologies')), links: selectedMeetingLinks(), agenda_minutes_notes: getMeetingNotesValue(), ...selectedLinkPayload('meeting')}, editingId);
   resetForm('meeting'); await reloadAfter(editingId ? 'Meeting minutes updated' : 'Meeting minutes created');
 });
 
@@ -1896,4 +2020,3 @@ for (const btn of Array.from(document.querySelectorAll('#ismsTabs [data-bs-toggl
 }
 
 load().then(() => activateInitialTab()).catch((e) => toast(status, `Failed to load ISMS: ${String(e)}`, 'danger'));
-

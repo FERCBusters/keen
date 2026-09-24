@@ -106,6 +106,7 @@ let selectedClauseIds = new Set();
 let clauseControlMap = new Map();
 let clauseChildrenByParentId = new Map();
 let attendeeUsers = [];
+let attendeePeople = [];
 
 function _todayYear() {
   return new Date().getFullYear();
@@ -413,6 +414,7 @@ function captureUnsavedPageState() {
       controlFilter: fieldValue('controlFilter'),
       urlEvidence: fieldValue('urlEvidence'),
       attendeeUserId: fieldValue('attendeeUserId'),
+      attendeePersonId: fieldValue('attendeePersonId'),
       attendeeName: fieldValue('attendeeName'),
       attendeeEmail: fieldValue('attendeeEmail'),
       attendeeRole: fieldValue('attendeeRole'),
@@ -1811,6 +1813,31 @@ function renderAttendeeUserOptions() {
   sel.value = rows.some((u) => String(u.id) === cur) ? cur : '';
 }
 
+function renderAttendeePersonOptions() {
+  const sel=document.getElementById('attendeePersonId'); if (!sel) return;
+  const current=sel.value;
+  sel.innerHTML='<option value="">Choose a Person or enter a new name below</option>'+
+    attendeePeople.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}${p.email ? ` · ${esc(p.email)}` : ''}</option>`).join('');
+  sel.value=attendeePeople.some(p=>p.id===current) ? current : '';
+}
+
+async function loadAttendeePeople() {
+  try { attendeePeople=(await apiGet('/api/v1/isms/people')).items || []; renderAttendeePersonOptions(); }
+  catch (err) { attendeePeople=[]; renderAttendeePersonOptions(); }
+}
+
+function suggestPersonCreation() {
+  const button=document.getElementById('attendeeCreatePerson'); if (!button) return;
+  const name=document.getElementById('attendeeName')?.value.trim() || '';
+  const email=document.getElementById('attendeeEmail')?.value.trim().toLowerCase() || '';
+  const matching=attendeePeople.find(p=>email ? p.email?.trim().toLowerCase()===email : p.name?.trim().toLowerCase()===name.toLowerCase());
+  if (matching && !document.getElementById('attendeePersonId').value) {
+    document.getElementById('attendeePersonId').value=matching.id;
+    document.getElementById('attendeeUserId').value='';
+  }
+  button.hidden=!(name && !matching && !document.getElementById('attendeePersonId')?.value && (me?.is_admin || me?.can_manage_isms));
+}
+
 async function loadAttendeeUsers() {
   if (!canManageAudits()) return;
   try {
@@ -1841,6 +1868,25 @@ function syncAttendeeUserSelection() {
     emailEl.value = user.email || '';
   }
 }
+document.getElementById('attendeePersonId')?.addEventListener('change', () => {
+  const p=attendeePeople.find(person=>person.id===document.getElementById('attendeePersonId').value);
+  if (p) {
+    document.getElementById('attendeeUserId').value='';
+    document.getElementById('attendeeName').value=p.name;
+    document.getElementById('attendeeEmail').value=p.email || '';
+  }
+  suggestPersonCreation();
+});
+for (const id of ['attendeeName','attendeeEmail']) document.getElementById(id)?.addEventListener('input', suggestPersonCreation);
+document.getElementById('attendeeCreatePerson')?.addEventListener('click', async () => {
+  try {
+    const name=document.getElementById('attendeeName').value.trim();
+    const email=document.getElementById('attendeeEmail').value.trim();
+    const p=await apiPost('/api/v1/isms/people', {name,email});
+    await loadAttendeePeople(); document.getElementById('attendeePersonId').value=p.id;
+    suggestPersonCreation(); toast(status,'Person saved to the directory. Add them to the audit below.','success');
+  } catch (err) { toast(status,`Could not add Person: ${String(err)}`,'danger'); }
+});
 
 function renderAttendees(items) {
   const el = document.getElementById('attendees');
@@ -2154,17 +2200,21 @@ document.getElementById('attendeeForm')?.addEventListener('submit', async (ev) =
   try {
     if (!ensureAuditEditable()) return;
     const userId = document.getElementById('attendeeUserId')?.value || '';
+    const personId = document.getElementById('attendeePersonId')?.value || '';
     const user = selectedAttendeeUser();
     const name = (document.getElementById('attendeeName')?.value || '').trim();
     const email = (document.getElementById('attendeeEmail')?.value || '').trim();
-    if (!userId && !name && !email) throw new Error('Choose a Keen user, or enter a custom attendee name or email');
+    if (!userId && !personId && !name && !email) throw new Error('Choose a Person or enter a name');
+    if (userId && personId) throw new Error('Select a Person or KEEN user');
     await apiPost(`/api/v1/audits/${encodeURIComponent(auditId)}/attendees`, {
       user_id: userId || null,
+      person_id: personId || null,
       name: name || null,
       email: email || user?.email || null,
       role: document.getElementById('attendeeRole').value || null,
     });
     document.getElementById('attendeeUserId').value = '';
+    document.getElementById('attendeePersonId').value = '';
     document.getElementById('attendeeName').value = '';
     document.getElementById('attendeeEmail').value = '';
     document.getElementById('attendeeRole').value = '';
@@ -2240,4 +2290,5 @@ document.getElementById('deleteAudit')?.addEventListener('click', async () => {
 });
 
 await loadAttendeeUsers();
+await loadAttendeePeople();
 await loadAudit();

@@ -10,6 +10,7 @@ import {
   canSampleIntoAudit,
   openAuditSampleModal,
   loadEntityChangelog,
+  renderRichTextContent,
 } from '/app.js';
 import {activateTabFromHashOrQuery, clauseBadges, controlBadges} from '/pages/isms-detail-common.js';
 
@@ -38,6 +39,9 @@ function renderDocument(row) {
   $('documentTitle').textContent = title;
   $('documentMeta').textContent = [documentRow.document_type || 'document', documentRow.has_file ? 'uploaded file' : '', documentRow.external_url ? 'external URL' : '', `updated ${fmtTs(documentRow.updated_at) || '—'}`].filter(Boolean).join(' • ');
   $('documentDescription').textContent = documentRow.description || 'No description recorded.';
+  $('documentContentCard').hidden = !documentRow.content_html;
+  $('documentContent').innerHTML = renderRichTextContent(documentRow.content_html);
+  $('documentTags').textContent = (documentRow.tags || []).join(', ') || '—';
   $('documentType').textContent = documentRow.document_type || '—';
   $('documentUpdated').textContent = fmtTs(documentRow.updated_at) || '—';
   $('documentUploadedAt').textContent = fmtTs(documentRow.uploaded_at) || '—';

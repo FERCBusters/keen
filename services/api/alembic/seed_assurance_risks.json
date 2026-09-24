@@ -1,0 +1,2641 @@
+[
+  {
+    "reference": "KEEN-AF-RISK-001",
+    "name": "001 · All Company Policies and Procedures — Lack of policies",
+    "threat_summary": "Lack of policies",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All Company Policies and Procedures",
+      "inherent_impact": 5,
+      "inherent_likelihood": 5,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "",
+      "auditor_control_refs": "CPL-46, GOV-93, GOV-105, GOV-106"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-002",
+    "name": "002 · All Company Policies and Procedures — No allocation of responsibilities",
+    "threat_summary": "No allocation of responsibilities",
+    "risk_types": [
+      "Confidentiality"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All Company Policies and Procedures",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.2",
+      "auditor_control_refs": "GOV-92, GOV-106"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-003",
+    "name": "003 · All Company Policies and Procedures — Lack of Risk assessments, or Risk treatment plans",
+    "threat_summary": "Lack of Risk assessments, or Risk treatment plans",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All Company Policies and Procedures",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.5, 5.8",
+      "auditor_control_refs": "RSK-36, RSK-37, RSK-38"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-004",
+    "name": "004 · All Company Policies and Procedures — Managers not required to enforce and ensure policies",
+    "threat_summary": "Managers not required to enforce and ensure policies",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All Company Policies and Procedures",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.4, 5.36",
+      "auditor_control_refs": "GOV-92, GOV-93, GOV-106"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-005",
+    "name": "005 · All Company Policies and Procedures — Lack of training in information security for key staff",
+    "threat_summary": "Lack of training in information security for key staff",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All Company Policies and Procedures",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "6.3",
+      "auditor_control_refs": "HRS-52, SAT-44"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-006",
+    "name": "006 · All Company Policies and Procedures — Lack of effective security incident logging, management resolution and analysis",
+    "threat_summary": "Lack of effective security incident logging, management resolution and analysis",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All Company Policies and Procedures",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.24, 5.25, 5.26, 5.27, 5.28, 6.8",
+      "auditor_control_refs": "IRO-91, IRO-92, IRO-93, IRO-94, "
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-007",
+    "name": "007 · All Company Policies and Procedures — Lack of co-ordination  and management of Security, contact with authorities and external agencies",
+    "threat_summary": "Lack of co-ordination  and management of Security, contact with authorities and external agencies",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All Company Policies and Procedures",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.5, 5.6",
+      "auditor_control_refs": "GOV-89, GOV-96, GOV-106"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-008",
+    "name": "008 · All Company Policies and Procedures — Lack of Auditing",
+    "threat_summary": "Lack of Auditing",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All Company Policies and Procedures",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "",
+      "auditor_control_refs": "CPL-41, CPL-42, CPL-47, GOV-102"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-009",
+    "name": "009 · All Company Policies and Procedures — Lack of Corrective Action process",
+    "threat_summary": "Lack of Corrective Action process",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All Company Policies and Procedures",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "",
+      "auditor_control_refs": "CPL-43, GOV-102, IRO-94"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-010",
+    "name": "010 · All Company Policies and Procedures — Lack of independent review of Information Security",
+    "threat_summary": "Lack of independent review of Information Security",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All Company Policies and Procedures",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.35, 8.34",
+      "auditor_control_refs": "CPL-45"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-011",
+    "name": "011 · Internal Systems — Lack of proper logging and recording of user and administration activity",
+    "threat_summary": "Lack of proper logging and recording of user and administration activity",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.15",
+      "auditor_control_refs": "MON-120, GOV-102"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-012",
+    "name": "012 · Internal Systems — Lack of proper monitoring of system use for unauthorised activity",
+    "threat_summary": "Lack of proper monitoring of system use for unauthorised activity",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.15",
+      "auditor_control_refs": "GOV-100, GOV-102, MON-120, MON-121, TPM-55"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-013",
+    "name": "013 · Internal Systems — No systematic capacity management or protection of usage of systems",
+    "threat_summary": "No systematic capacity management or protection of usage of systems",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.6",
+      "auditor_control_refs": "CAP-7, MON-121"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-014",
+    "name": "014 · Internal Systems — Lack of effective fault logging and tracking",
+    "threat_summary": "Lack of effective fault logging and tracking",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.15",
+      "auditor_control_refs": "GOV-100, MON-120, MON-121"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-015",
+    "name": "015 · Internal Systems — Systems not synchronised to single clock source",
+    "threat_summary": "Systems not synchronised to single clock source",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.17",
+      "auditor_control_refs": "SEA-54"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-016",
+    "name": "016 · Suppliers — Breach by external 3rd party with either physical or logical access to information, or provision if a critical service (No risk assessment of external parties and assessment of SLA requirements)",
+    "threat_summary": "Breach by external 3rd party with either physical or logical access to information, or provision if a critical service (No risk assessment of external parties and assessment of SLA requirements)",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Suppliers",
+      "inherent_impact": 5,
+      "inherent_likelihood": 3,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.2",
+      "auditor_control_refs": "RSK-35, RSK-36, RSK-37, TPM-53, TPM-54"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-017",
+    "name": "017 · Suppliers — Inadequate contracts and/or service delivery agreements with external parties",
+    "threat_summary": "Inadequate contracts and/or service delivery agreements with external parties",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Suppliers",
+      "inherent_impact": 5,
+      "inherent_likelihood": 3,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.19, 5.21, 5.22",
+      "auditor_control_refs": "CPL-44, TPM-53, TPM-55"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-018",
+    "name": "018 · Suppliers — Ineffective handling of contract renewals, termination clauses",
+    "threat_summary": "Ineffective handling of contract renewals, termination clauses",
+    "risk_types": [
+      "Confidentiality"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Suppliers",
+      "inherent_impact": 5,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.2",
+      "auditor_control_refs": "CPL-44"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-019",
+    "name": "019 · Suppliers — Supplier withdraws service due to bankruptcy",
+    "threat_summary": "Supplier withdraws service due to bankruptcy",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Suppliers",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.19",
+      "auditor_control_refs": "CPL-44, TPM-53, TPM-55"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-020",
+    "name": "020 · Suppliers — Interruption to service - failure of supplier and inadequate diversity of supply",
+    "threat_summary": "Interruption to service - failure of supplier and inadequate diversity of supply",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Suppliers",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.19",
+      "auditor_control_refs": "TPM-53, TPM-55"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-021",
+    "name": "021 · Suppliers — No effective management and monitoring of external services; poor service provided by external party",
+    "threat_summary": "No effective management and monitoring of external services; poor service provided by external party",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Suppliers",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.20, 5.22",
+      "auditor_control_refs": "CPL-44, GOV-102, TPM-53, TPM-55"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-022",
+    "name": "022 · Suppliers — Withdrawal of service (non-payment)",
+    "threat_summary": "Withdrawal of service (non-payment)",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Suppliers",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.19",
+      "auditor_control_refs": "CPL-44, TPM-53, TPM-55"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-023",
+    "name": "023 · Electonic Information — Data lost or incorrect when exchanged; lack of formal agreements on process when data is exchanged with external parties",
+    "threat_summary": "Data lost or incorrect when exchanged; lack of formal agreements on process when data is exchanged with external parties",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Electonic Information",
+      "inherent_impact": 5,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.14, 6.6, 7.10",
+      "auditor_control_refs": "CPL-44, TPM-53, TPM-54, TPM-55"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-024",
+    "name": "024 · All — Lack of BCP framework",
+    "threat_summary": "Lack of BCP framework",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 5,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "A.5.29",
+      "auditor_control_refs": "IRO-96"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-025",
+    "name": "025 · All — Lack of BCP plans and procedures, including Information Security",
+    "threat_summary": "Lack of BCP plans and procedures, including Information Security",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 5,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "A.5.29",
+      "auditor_control_refs": "IRO-96"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-026",
+    "name": "026 · All — Poorly defined RTOs and RPOs",
+    "threat_summary": "Poorly defined RTOs and RPOs",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "A.5.29",
+      "auditor_control_refs": "IRO-96"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-027",
+    "name": "027 · All — Inadequate or non-working BCP recovery plans",
+    "threat_summary": "Inadequate or non-working BCP recovery plans",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "A.5.29",
+      "auditor_control_refs": "IRO-96"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-028",
+    "name": "028 · All — Lack of testing of BCP",
+    "threat_summary": "Lack of testing of BCP",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "A.5.29",
+      "auditor_control_refs": "IRO-96"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-029",
+    "name": "029 · Internal Systems, Laptops, Desktops — Lack of documented procedures",
+    "threat_summary": "Lack of documented procedures",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "A.5.37",
+      "auditor_control_refs": "GOV-109"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-030",
+    "name": "030 · Internal Systems, Laptops, Desktops — Poorly managed changes",
+    "threat_summary": "Poorly managed changes",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.32",
+      "auditor_control_refs": "CHG-37, CHG-39"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-031",
+    "name": "031 · Internal Systems, Laptops, Desktops — Lack of software installation controls",
+    "threat_summary": "Lack of software installation controls",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.19",
+      "auditor_control_refs": "CHG-38"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-032",
+    "name": "032 · Internal Systems, Laptops, Desktops — Lack of license management",
+    "threat_summary": "Lack of license management",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.32",
+      "auditor_control_refs": "AST-68"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-033",
+    "name": "033 · Internal Systems, Laptops, Desktops — Lack of protection of system utilites and software from unauthorised users",
+    "threat_summary": "Lack of protection of system utilites and software from unauthorised users",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.18",
+      "auditor_control_refs": "IAC-204"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-034",
+    "name": "034 · Internal Systems, Laptops, Desktops — No protection against viruses, ransomware, zero-day",
+    "threat_summary": "No protection against viruses, ransomware, zero-day",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 5,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.7",
+      "auditor_control_refs": "END-41"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-035",
+    "name": "035 · Internal Systems, Laptops, Desktops — Inadequate patch management",
+    "threat_summary": "Inadequate patch management",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.8",
+      "auditor_control_refs": "VPM-75"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-036",
+    "name": "036 · Internal Systems, Laptops, Desktops — Lack of penetration testing and other technical vulnerability assessment",
+    "threat_summary": "Lack of penetration testing and other technical vulnerability assessment",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.8, 5.36",
+      "auditor_control_refs": "VPM-75, CPL-46"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-037",
+    "name": "037 · Internal Systems, Laptops, Desktops — Lack of regular technical checks and audits",
+    "threat_summary": "Lack of regular technical checks and audits",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.8, 5.36",
+      "auditor_control_refs": "VPM-75, CPL-46"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-038",
+    "name": "038 · Internal Systems, Laptops, Desktops — Lack of proper backup",
+    "threat_summary": "Lack of proper backup",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 5,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.13",
+      "auditor_control_refs": "BCD-69"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-039",
+    "name": "039 · Internal Systems, Laptops, Desktops — Lack of maintenance and support agreements",
+    "threat_summary": "Lack of maintenance and support agreements",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.13",
+      "auditor_control_refs": "MNT-21"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-040",
+    "name": "040 · Internal Systems, Laptops, Desktops — Lack of media handling and use policies and guidelines",
+    "threat_summary": "Lack of media handling and use policies and guidelines",
+    "risk_types": [
+      "Confidentiality"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.10.",
+      "auditor_control_refs": "AST-70"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-041",
+    "name": "041 · Internal Systems, Laptops, Desktops — Lack of password policy and password management for OS and networks",
+    "threat_summary": "Lack of password policy and password management for OS and networks",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.17",
+      "auditor_control_refs": "IAC-199"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-042",
+    "name": "042 · Internal Systems, Laptops, Desktops — Lack of password policy and password management for Applications",
+    "threat_summary": "Lack of password policy and password management for Applications",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.17",
+      "auditor_control_refs": "IAC-199"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-043",
+    "name": "043 · Internal Systems, Laptops, Desktops — Poor user control or use of passwords",
+    "threat_summary": "Poor user control or use of passwords",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.17",
+      "auditor_control_refs": "IAC-199"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-044",
+    "name": "044 · Internal Systems, Laptops, Desktops — No access control policy",
+    "threat_summary": "No access control policy",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.15",
+      "auditor_control_refs": "IAC-197"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-045",
+    "name": "045 · Internal Systems, Laptops, Desktops — File permissions not restricted to principle of least access",
+    "threat_summary": "File permissions not restricted to principle of least access",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.15",
+      "auditor_control_refs": "IAC-197"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-046",
+    "name": "046 · Internal Systems, Laptops, Desktops — Lack of proper user registration / deregistration allocation and removal of access rights",
+    "threat_summary": "Lack of proper user registration / deregistration allocation and removal of access rights",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.16, 5.18",
+      "auditor_control_refs": "IAC-198, IAC-200"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-047",
+    "name": "047 · Internal Systems, Laptops, Desktops — Lack of secure login procedures",
+    "threat_summary": "Lack of secure login procedures",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.16, 8.5",
+      "auditor_control_refs": "IAC-198, IAC-203"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-048",
+    "name": "048 · Internal Systems, Laptops, Desktops — Lack of unique user accounts, sharing of user accounts",
+    "threat_summary": "Lack of unique user accounts, sharing of user accounts",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.16",
+      "auditor_control_refs": "IAC-198"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-049",
+    "name": "049 · Internal Systems, Laptops, Desktops — No regular review of user access",
+    "threat_summary": "No regular review of user access",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.18",
+      "auditor_control_refs": "IAC-200"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-050",
+    "name": "050 · Internal Systems, Laptops, Desktops — Poor control of access permissions to electronic information",
+    "threat_summary": "Poor control of access permissions to electronic information",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.3",
+      "auditor_control_refs": "IAC-202"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-051",
+    "name": "051 · Internal Systems, Laptops, Desktops — Lack of protection of administrator accounts and privileged access",
+    "threat_summary": "Lack of protection of administrator accounts and privileged access",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.2",
+      "auditor_control_refs": "IAC-201"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-052",
+    "name": "052 · Internal Systems, Laptops, Desktops — Lack of automatic session protection, screen-locking, clear screen",
+    "threat_summary": "Lack of automatic session protection, screen-locking, clear screen",
+    "risk_types": [
+      "Confidentiality"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "7.7",
+      "auditor_control_refs": "PES-78"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-053",
+    "name": "053 · Internal Systems, Laptops, Desktops — Lack of separation of networks",
+    "threat_summary": "Lack of separation of networks",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.22",
+      "auditor_control_refs": "NET-93"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-054",
+    "name": "054 · Internal Systems, Laptops, Desktops — Lack of protection of external user and 3rd party connections",
+    "threat_summary": "Lack of protection of external user and 3rd party connections",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.5",
+      "auditor_control_refs": "IAC-203"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-055",
+    "name": "055 · Internal Systems, Laptops, Desktops — Unprotected external / remote user connections",
+    "threat_summary": "Unprotected external / remote user connections",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.5",
+      "auditor_control_refs": "IAC-203"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-056",
+    "name": "056 · Internal Systems, Laptops, Desktops — Poor management of internal and external networks",
+    "threat_summary": "Poor management of internal and external networks",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.15, 8.20, 8.21",
+      "auditor_control_refs": "IAC-197, NET-91, NET-92"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-057",
+    "name": "057 · Internal Systems, Laptops, Desktops — Poor user behaviour due to inadequate acceptable use guidelines",
+    "threat_summary": "Poor user behaviour due to inadequate acceptable use guidelines",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.10.",
+      "auditor_control_refs": "DCH-106"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-058",
+    "name": "058 · Internal Systems, Laptops, Desktops — Lack of intrusion detection / intrusion prevention mechanisms and systems",
+    "threat_summary": "Lack of intrusion detection / intrusion prevention mechanisms and systems",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 5,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.20.",
+      "auditor_control_refs": "NET-91"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-059",
+    "name": "059 · Internal Systems, Laptops, Desktops — Inadequate encryption of hard drives",
+    "threat_summary": "Inadequate encryption of hard drives",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.15, 8.20.",
+      "auditor_control_refs": "AST-70"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-060",
+    "name": "060 · Internal Systems, Laptops, Desktops — Unprotected network equipment or unsecured admin and diagnostic ports",
+    "threat_summary": "Unprotected network equipment or unsecured admin and diagnostic ports",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Desktops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "7.8",
+      "auditor_control_refs": "PES-79"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-061",
+    "name": "061 · 3rd Party Software — Use of counterfeit or copied software due to inadequate policies relating to software licensing",
+    "threat_summary": "Use of counterfeit or copied software due to inadequate policies relating to software licensing",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "3rd Party Software",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.32",
+      "auditor_control_refs": "AST-68"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-062",
+    "name": "062 · 3rd Party Software — Error in use due to inadequate specific job or specialist training",
+    "threat_summary": "Error in use due to inadequate specific job or specialist training",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "3rd Party Software",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "6.3",
+      "auditor_control_refs": "SAT-44"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-063",
+    "name": "063 · 3rd Party Software — Unavailability due to inadequate policies relating to software licensing",
+    "threat_summary": "Unavailability due to inadequate policies relating to software licensing",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "3rd Party Software",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.32",
+      "auditor_control_refs": "AST-68"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-064",
+    "name": "064 · 3rd Party Software — Tampering with software due to well-known flaws in the software",
+    "threat_summary": "Tampering with software due to well-known flaws in the software",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "3rd Party Software",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.8",
+      "auditor_control_refs": "VPM-75"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-065",
+    "name": "065 · 3rd Party Software — Tampering with software due to inadequate logical access controls",
+    "threat_summary": "Tampering with software due to inadequate logical access controls",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "3rd Party Software",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.15",
+      "auditor_control_refs": "IAC-197"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-066",
+    "name": "066 · 3rd Party Software — Illegal use of software due to number of software users exceeding valid licenses",
+    "threat_summary": "Illegal use of software due to number of software users exceeding valid licenses",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "3rd Party Software",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.32",
+      "auditor_control_refs": "AST-68"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-067",
+    "name": "067 · 3rd Party Software — Unavailability due to failure of supplier",
+    "threat_summary": "Unavailability due to failure of supplier",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "3rd Party Software",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.22",
+      "auditor_control_refs": "TPM-55"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-068",
+    "name": "068 · Laptops. Portable Media, All — Lack of protection, processes or guidelines for working from home or from remote sites",
+    "threat_summary": "Lack of protection, processes or guidelines for working from home or from remote sites",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Laptops. Portable Media, All",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "6.7, 7.9, 7.10, 8.1",
+      "auditor_control_refs": "NET-90, AST-69"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-069",
+    "name": "069 · All — Inadequate inventory of assets",
+    "threat_summary": "Inadequate inventory of assets",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.9",
+      "auditor_control_refs": "AST-66"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-070",
+    "name": "070 · All — Inadequate technical controls for mobile phones",
+    "threat_summary": "Inadequate technical controls for mobile phones",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.1",
+      "auditor_control_refs": "END-40"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-071",
+    "name": "071 · Laptops — Loss of theft of laptops",
+    "threat_summary": "Loss of theft of laptops",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Laptops",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 1,
+      "residual_likelihood": 3,
+      "iso27001_2022": "7.9, 7.10.",
+      "auditor_control_refs": "AST-69, AST-70"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-072",
+    "name": "072 · Laptops. Portable Media, All — Loss or theft of USB Devices and other removable media",
+    "threat_summary": "Loss or theft of USB Devices and other removable media",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Laptops. Portable Media, All",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 1,
+      "residual_likelihood": 3,
+      "iso27001_2022": "7.9, 7.14, 7.10.",
+      "auditor_control_refs": "AST-69, AST-70"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-073",
+    "name": "073 · Laptops. Portable Media, All — Failure to securely erase disks and media when disposed of",
+    "threat_summary": "Failure to securely erase disks and media when disposed of",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Laptops. Portable Media, All",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.10, 7.14",
+      "auditor_control_refs": "AST-70, AST-71"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-074",
+    "name": "074 · All — No information classification or handling policies guidelines",
+    "threat_summary": "No information classification or handling policies guidelines",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.10, 5.12, 5.13",
+      "auditor_control_refs": "DCH-106, DCH-107, DCH-108"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-075",
+    "name": "075 · All — Lack of protection of paper and physical information",
+    "threat_summary": "Lack of protection of paper and physical information",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.10, 5.12, 5.13",
+      "auditor_control_refs": "DCH-106, DCH-107, DCH-108"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-076",
+    "name": "076 · All — Lack of proper identification and management of legal and regulatory requirements",
+    "threat_summary": "Lack of proper identification and management of legal and regulatory requirements",
+    "risk_types": [
+      "Confidentiality"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.31, 5.34",
+      "auditor_control_refs": "CPL-44, PRI-224"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-077",
+    "name": "077 · All — Inadequate technical and organisation measures for GDPR",
+    "threat_summary": "Inadequate technical and organisation measures for GDPR",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.31, 5.33, 5.34",
+      "auditor_control_refs": "CPL-44,DCH-109, PRI-224"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-078",
+    "name": "078 · All — Inadequate privacy notices",
+    "threat_summary": "Inadequate privacy notices",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.31, 5.33, 5.34",
+      "auditor_control_refs": "CPL-44,DCH-109, PRI-224"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-079",
+    "name": "079 · All — Inadequate contracts with processors (GDPR)",
+    "threat_summary": "Inadequate contracts with processors (GDPR)",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "All",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.31, 5.33, 5.34",
+      "auditor_control_refs": "CPL-44,DCH-109, PRI-224"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-080",
+    "name": "080 · Staff — Lack of appropriate screening of new employees",
+    "threat_summary": "Lack of appropriate screening of new employees",
+    "risk_types": [
+      "Confidentiality"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Staff",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "6.1",
+      "auditor_control_refs": "HRS-56"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-081",
+    "name": "081 · Staff — No appropriate Ts and Cs requiring employees to follow Security Policies",
+    "threat_summary": "No appropriate Ts and Cs requiring employees to follow Security Policies",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Staff",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "6.2",
+      "auditor_control_refs": "HRS-57"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-082",
+    "name": "082 · Staff — Lack of disciplinary process",
+    "threat_summary": "Lack of disciplinary process",
+    "risk_types": [
+      "Confidentiality"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Staff",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "6.4",
+      "auditor_control_refs": "HRS-58"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-083",
+    "name": "083 · Staff — Lack of Confidentiality agreements and other security requirements with staff and contractors",
+    "threat_summary": "Lack of Confidentiality agreements and other security requirements with staff and contractors",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Staff",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "6.2",
+      "auditor_control_refs": "HRS-57, HRS-60"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-084",
+    "name": "084 · Staff — Lack of definition of roles and responsibilities",
+    "threat_summary": "Lack of definition of roles and responsibilities",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Staff",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.2, 5.4",
+      "auditor_control_refs": "GOV-106, HRS-54"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-085",
+    "name": "085 · Staff — Roles assigned to inappropriate staff due to inadequate review or low staffing levels",
+    "threat_summary": "Roles assigned to inappropriate staff due to inadequate review or low staffing levels",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Staff",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "",
+      "auditor_control_refs": "GOV-94, GOV-106"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-086",
+    "name": "086 · Staff — Loss of key staff",
+    "threat_summary": "Loss of key staff",
+    "risk_types": [
+      "Confidentiality"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Staff",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.29",
+      "auditor_control_refs": "GOV-94, GOV-106"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-087",
+    "name": "087 · Staff — Loss or unavailability of senior leadership team",
+    "threat_summary": "Loss or unavailability of senior leadership team",
+    "risk_types": [
+      "Confidentiality"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Staff",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.29",
+      "auditor_control_refs": "GOV-94, GOV-106"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-088",
+    "name": "088 · Staff — Lack of proper training and awareness",
+    "threat_summary": "Lack of proper training and awareness",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Staff",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "6.3",
+      "auditor_control_refs": "SAT-44"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-089",
+    "name": "089 · Premises — Lack of effective perimeter security, access points",
+    "threat_summary": "Lack of effective perimeter security, access points",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 1,
+      "residual_likelihood": 3,
+      "iso27001_2022": "7.1,7.2",
+      "auditor_control_refs": "PES-72, PES-73"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-090",
+    "name": "090 · Premises — Inadequate handling of keys, alarm codes, etc.",
+    "threat_summary": "Inadequate handling of keys, alarm codes, etc.",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.2,7.6",
+      "auditor_control_refs": "PES-73, PES-77"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-091",
+    "name": "091 · Premises — Lack of effective control of visitors",
+    "threat_summary": "Lack of effective control of visitors",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.1,7.2",
+      "auditor_control_refs": "PES-72, PES-73"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-092",
+    "name": "092 · Premises — Lack of entry controls to interiors and protection of secure areas",
+    "threat_summary": "Lack of entry controls to interiors and protection of secure areas",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.2, 7.3, 7.6, 7.8",
+      "auditor_control_refs": "PES-73, PES-74, PES-77, PES-79"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-093",
+    "name": "093 · Premises — Lack of protection to systems from power outages",
+    "threat_summary": "Lack of protection to systems from power outages",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.11",
+      "auditor_control_refs": "PES-80"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-094",
+    "name": "094 · Premises — Lack of effective physical security to sensitive office equipment",
+    "threat_summary": "Lack of effective physical security to sensitive office equipment",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.1,7.2",
+      "auditor_control_refs": "PES-72, PES-73"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-095",
+    "name": "095 · Premises — Inadequate cabling security",
+    "threat_summary": "Inadequate cabling security",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.12",
+      "auditor_control_refs": "PES-80, PES-81"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-096",
+    "name": "096 · Premises — Confidentiality breach due to work areas being overlooked or overheard",
+    "threat_summary": "Confidentiality breach due to work areas being overlooked or overheard",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "7.8",
+      "auditor_control_refs": "PES-79"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-097",
+    "name": "097 · Premises — Inadequate handling of deliveries",
+    "threat_summary": "Inadequate handling of deliveries",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.2",
+      "auditor_control_refs": "PES-73"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-098",
+    "name": "098 · Premises — Damage by internal flooding (broken pipework, drains backing up)",
+    "threat_summary": "Damage by internal flooding (broken pipework, drains backing up)",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.5",
+      "auditor_control_refs": "PES-76"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-099",
+    "name": "099 · Premises — Damage by accident and malicious attack",
+    "threat_summary": "Damage by accident and malicious attack",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "7.5",
+      "auditor_control_refs": "PES-76"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-100",
+    "name": "100 · Premises — Lack of protection to premises and offices from external and environmental threats including fire, flood or natural disasters",
+    "threat_summary": "Lack of protection to premises and offices from external and environmental threats including fire, flood or natural disasters",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.5",
+      "auditor_control_refs": "PES-76"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-101",
+    "name": "101 · Premises — Lack of protection to equipment from environmental threats",
+    "threat_summary": "Lack of protection to equipment from environmental threats",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.5",
+      "auditor_control_refs": "PES-76"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-102",
+    "name": "102 · Premises — Lack of regular maintenance",
+    "threat_summary": "Lack of regular maintenance",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Premises",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.13",
+      "auditor_control_refs": "MNT-21"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-103",
+    "name": "103 · Electronic Information — Lack of policy on encryption",
+    "threat_summary": "Lack of policy on encryption",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.24",
+      "auditor_control_refs": "CRY-92"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-104",
+    "name": "104 · Electronic Information — Lack of effective encryption",
+    "threat_summary": "Lack of effective encryption",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Electronic Information",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.3, 6.7, 8.1",
+      "auditor_control_refs": "NET-90, END-40, IAC-202"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-105",
+    "name": "105 · Electronic Information — Inadequate compliance with encryption regulations",
+    "threat_summary": "Inadequate compliance with encryption regulations",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.31",
+      "auditor_control_refs": "CPL-44"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-106",
+    "name": "106 · Electronic Information — Poor protection of encryption keys",
+    "threat_summary": "Poor protection of encryption keys",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Electronic Information",
+      "inherent_impact": 5,
+      "inherent_likelihood": 3,
+      "residual_impact": 3,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.24",
+      "auditor_control_refs": "CRY-92"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-107",
+    "name": "107 · Electronic Information — Lack of proper control of information sent in messaging or electronic data transmission",
+    "threat_summary": "Lack of proper control of information sent in messaging or electronic data transmission",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Electronic Information",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.14",
+      "auditor_control_refs": "CRY-91"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-108",
+    "name": "108 · Paper Information — Unauthorised disclosure",
+    "threat_summary": "Unauthorised disclosure",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Paper Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.12",
+      "auditor_control_refs": "DCH-107"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-109",
+    "name": "109 · Paper Information — Loss through fire",
+    "threat_summary": "Loss through fire",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Paper Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.5",
+      "auditor_control_refs": "PES-76"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-110",
+    "name": "110 · Paper Information — Loss through theft",
+    "threat_summary": "Loss through theft",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Paper Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.5",
+      "auditor_control_refs": "PES-76"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-111",
+    "name": "111 · Paper Information — Inadequate clear desk policy",
+    "threat_summary": "Inadequate clear desk policy",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Paper Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.7",
+      "auditor_control_refs": "PES-78"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-112",
+    "name": "112 · Paper Information — Misdirected postal communcations",
+    "threat_summary": "Misdirected postal communcations",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Paper Information",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.14",
+      "auditor_control_refs": "CRY-91"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-113",
+    "name": "113 · Paper Information — Inadequate disposal mechanisms",
+    "threat_summary": "Inadequate disposal mechanisms",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Paper Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "7.1",
+      "auditor_control_refs": "PES-72, AST-71"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-114",
+    "name": "114 · Paper Information — Lost postal communications",
+    "threat_summary": "Lost postal communications",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Paper Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 1,
+      "residual_likelihood": 1,
+      "iso27001_2022": "5.14",
+      "auditor_control_refs": "CRY-91"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-115",
+    "name": "115 · Paper Information — Lack of controls whilst home working",
+    "threat_summary": "Lack of controls whilst home working",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Paper Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "6.7",
+      "auditor_control_refs": "NET-90"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-116",
+    "name": "116 · Home offices — Confidentiality breach due to work areas being overlooked or overheard",
+    "threat_summary": "Confidentiality breach due to work areas being overlooked or overheard",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Home offices",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "7.8",
+      "auditor_control_refs": "PES-79"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-117",
+    "name": "117 · Home offices — Inadequate remote working policy and/or awareness of policies",
+    "threat_summary": "Inadequate remote working policy and/or awareness of policies",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "NONTECH",
+      "asset": "Home offices",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "6.7, 7.9",
+      "auditor_control_refs": "NET-90, AST-69"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-118",
+    "name": "118 · Internal Systems, Laptops, Electronic Information — Unsecure BYOD nodes - not patched",
+    "threat_summary": "Unsecure BYOD nodes - not patched",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.1, 8.8",
+      "auditor_control_refs": "END-40, VPM-75"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-119",
+    "name": "119 · Internal Systems, Laptops, Electronic Information — Unsecure BYOD nodes - no AV",
+    "threat_summary": "Unsecure BYOD nodes - no AV",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.1, 8.7",
+      "auditor_control_refs": "END-40, END-41"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-120",
+    "name": "120 · Internal Systems, Laptops, Electronic Information — Unsecure BYOD nodes - no firewall",
+    "threat_summary": "Unsecure BYOD nodes - no firewall",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 1,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.1, 8.20",
+      "auditor_control_refs": "END-40, NET-91"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-121",
+    "name": "121 · Internal Systems, Laptops, Electronic Information — Unsecure BYOD nodes - no encryption",
+    "threat_summary": "Unsecure BYOD nodes - no encryption",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "7.14, 8.1",
+      "auditor_control_refs": "END-40, AST-71"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-122",
+    "name": "122 · Internal Systems, Laptops, Electronic Information — Unsecure BYOD nodes - end user activities carried out with admin rights",
+    "threat_summary": "Unsecure BYOD nodes - end user activities carried out with admin rights",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.1",
+      "auditor_control_refs": "END-40"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-123",
+    "name": "123 · Internal Systems, Laptops, Electronic Information — Unsecure BYOD nodes - unsecure software for personal use",
+    "threat_summary": "Unsecure BYOD nodes - unsecure software for personal use",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.1",
+      "auditor_control_refs": "END-40"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-124",
+    "name": "124 · Internal Systems, Laptops, Electronic Information — Lack of visibility of BYOD end node security state",
+    "threat_summary": "Lack of visibility of BYOD end node security state",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.1",
+      "auditor_control_refs": "END-40"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-125",
+    "name": "125 · Internal Systems, Laptops, Electronic Information — Lack of alerting from BYOD end node",
+    "threat_summary": "Lack of alerting from BYOD end node",
+    "risk_types": [
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 1,
+      "iso27001_2022": "8.1, 8.7",
+      "auditor_control_refs": "END-40, END-41"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-126",
+    "name": "126 · Internal Systems, Laptops, Electronic Information — Unsecure BYOD nodes - peripherals",
+    "threat_summary": "Unsecure BYOD nodes - peripherals",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "7.10, 8.1",
+      "auditor_control_refs": "END-40, AST-70"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-127",
+    "name": "127 · Internal Systems, Laptops, Electronic Information — Company equipment used by family members or staff member for personal use",
+    "threat_summary": "Company equipment used by family members or staff member for personal use",
+    "risk_types": [
+      "Confidentiality",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 3,
+      "iso27001_2022": "8.1",
+      "auditor_control_refs": "END-40"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-128",
+    "name": "128 · Internal Systems, Laptops, Electronic Information — Unsecure remote access tools used to give access to company resources",
+    "threat_summary": "Unsecure remote access tools used to give access to company resources",
+    "risk_types": [
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "5.15, 8.21",
+      "auditor_control_refs": "IAC-197, NET-92"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-129",
+    "name": "129 · Internal Systems, Laptops, Electronic Information — Cached company data on BYOD devices outside of company control and not erased when appropriate (retention policy/staff leaver etc.)",
+    "threat_summary": "Cached company data on BYOD devices outside of company control and not erased when appropriate (retention policy/staff leaver etc.)",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 3,
+      "iso27001_2022": "7.14, 8.1",
+      "auditor_control_refs": "END-40, AST-71"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-130",
+    "name": "130 · Internal Systems, Laptops, Electronic Information — Company data stored locally on BYOD device and not backed up",
+    "threat_summary": "Company data stored locally on BYOD device and not backed up",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 3,
+      "iso27001_2022": "8.1, 8.13",
+      "auditor_control_refs": "END-40, BCD-69"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-131",
+    "name": "131 · Internal Systems, Laptops, Electronic Information — Company data stored locally on BYOD device inadvertently backed up to personal cloud service",
+    "threat_summary": "Company data stored locally on BYOD device inadvertently backed up to personal cloud service",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 3,
+      "iso27001_2022": "8.1",
+      "auditor_control_refs": "END-40"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-132",
+    "name": "132 · Internal Systems, Laptops, Electronic Information — Uncontrolled use of external media (hard drives, flash drives, etc.)",
+    "threat_summary": "Uncontrolled use of external media (hard drives, flash drives, etc.)",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "TECH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "8.1, 8.13",
+      "auditor_control_refs": "END-40, BCD-69"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-133",
+    "name": "133 · Effect of Climate Change on the business or interested parties — Protecting against physical and environmental threats",
+    "threat_summary": "Protecting against physical and environmental threats",
+    "risk_types": [
+      "Integrity"
+    ],
+    "suggested_assessment": {
+      "category": "BOTH",
+      "asset": "Effect of Climate Change on the business or interested parties",
+      "inherent_impact": 4,
+      "inherent_likelihood": 4,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "",
+      "auditor_control_refs": "PES-76"
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-134",
+    "name": "134 · Internal Systems, Laptops, Electronic Information — Data poisoning of AI training data to skew model outputs",
+    "threat_summary": "Data poisoning of AI training data to skew model outputs",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "BOTH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 3,
+      "residual_likelihood": 2,
+      "iso27001_2022": "",
+      "auditor_control_refs": ""
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-135",
+    "name": "135 · Internal Systems, Laptops, Electronic Information — Model inversion and extraction attacks allowing adversaries reconstructing AI training data or stealing the model itself",
+    "threat_summary": "Model inversion and extraction attacks allowing adversaries reconstructing AI training data or stealing the model itself",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "BOTH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 4,
+      "inherent_likelihood": 2,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "",
+      "auditor_control_refs": ""
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-136",
+    "name": "136 · Internal Systems, Laptops, Electronic Information — Prevent prompt injection attacks from manipulating LLM behaviour",
+    "threat_summary": "Prevent prompt injection attacks from manipulating LLM behaviour",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "BOTH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "",
+      "auditor_control_refs": ""
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-137",
+    "name": "137 · Internal Systems, Laptops, Electronic Information — Protect against company staff from using unapproved AI tools",
+    "threat_summary": "Protect against company staff from using unapproved AI tools",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "BOTH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "",
+      "auditor_control_refs": ""
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-138",
+    "name": "138 · Internal Systems, Laptops, Electronic Information — Prevent third party vendor AI models from processing company data with unclear retention and training policies",
+    "threat_summary": "Prevent third party vendor AI models from processing company data with unclear retention and training policies",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "BOTH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 3,
+      "residual_likelihood": 2,
+      "iso27001_2022": "",
+      "auditor_control_refs": ""
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-139",
+    "name": "139 · Internal Systems, Laptops, Electronic Information — Prevent hallucinating AI outputs influencing business decisions without adequate human review",
+    "threat_summary": "Prevent hallucinating AI outputs influencing business decisions without adequate human review",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "BOTH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "",
+      "auditor_control_refs": ""
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-140",
+    "name": "140 · Internal Systems, Laptops, Electronic Information — Prevent explainability gaps when auditing or justifying AI-driven decisions",
+    "threat_summary": "Prevent explainability gaps when auditing or justifying AI-driven decisions",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "BOTH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 3,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "",
+      "auditor_control_refs": ""
+    }
+  },
+  {
+    "reference": "KEEN-AF-RISK-141",
+    "name": "141 · Internal Systems, Laptops, Electronic Information — Prevent overprivileged AI agents and agentic AI tools with excessive system access",
+    "threat_summary": "Prevent overprivileged AI agents and agentic AI tools with excessive system access",
+    "risk_types": [
+      "Confidentiality",
+      "Integrity",
+      "Availability"
+    ],
+    "suggested_assessment": {
+      "category": "BOTH",
+      "asset": "Internal Systems, Laptops, Electronic Information",
+      "inherent_impact": 4,
+      "inherent_likelihood": 3,
+      "residual_impact": 2,
+      "residual_likelihood": 2,
+      "iso27001_2022": "",
+      "auditor_control_refs": ""
+    }
+  }
+]

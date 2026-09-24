@@ -38,6 +38,8 @@ from app.db.models import (
     IsmsLicense,
     IsmsMeeting,
     IsmsMeetingAttendee,
+    IsmsMeetingPerson,
+    IsmsPerson,
     IsmsMeetingLink,
     IsmsObjective,
     IsmsObjectiveResourceUser,
@@ -325,6 +327,8 @@ class MeetingPayload(IsmsLinksPayload):
     end_time: time_type | None = None
     attendee_user_ids: list[uuid.UUID] | None = None
     apology_user_ids: list[uuid.UUID] | None = None
+    attendee_person_ids: list[uuid.UUID] | None = None
+    apology_person_ids: list[uuid.UUID] | None = None
     links: list[MeetingLinkPayload] | None = None
     agenda_minutes_notes: str | None = Field(default=None, max_length=50000)
 
@@ -1197,6 +1201,16 @@ def _meeting_out(
     for link in list(row.attendees or []):
         target = attendees if link.attendance_type == "attendee" else apologies
         target.append(_user_summary(link.user))
+    attendee_person_ids = []
+    apology_person_ids = []
+    for link in db.query(IsmsMeetingPerson).filter(IsmsMeetingPerson.meeting_id == row.id).all():
+        item = {"id": str(link.person_id) if link.person_id else None,
+                "person_id": str(link.person_id) if link.person_id else None,
+                "name": link.person.name if link.person else link.name,
+                "email": link.person.email if link.person else link.email}
+        (attendees if link.attendance_type == "attendee" else apologies).append(item)
+        if link.person_id:
+            (attendee_person_ids if link.attendance_type == "attendee" else apology_person_ids).append(str(link.person_id))
     support_links = []
     for link in list(row.links or []):
         support_links.append(
@@ -1221,8 +1235,10 @@ def _meeting_out(
         "end_time": row.end_time.isoformat() if row.end_time else None,
         "attendees": attendees,
         "apologies": apologies,
-        "attendee_user_ids": [x["id"] for x in attendees if x],
-        "apology_user_ids": [x["id"] for x in apologies if x],
+        "attendee_user_ids": [str(x.user_id) for x in row.attendees if x.attendance_type == "attendee"],
+        "apology_user_ids": [str(x.user_id) for x in row.attendees if x.attendance_type == "apology"],
+        "attendee_person_ids": attendee_person_ids,
+        "apology_person_ids": apology_person_ids,
         "links": support_links,
         "agenda_minutes_notes": row.agenda_minutes_notes or "",
         "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -1788,6 +1804,25 @@ def _replace_meeting_people(
         db.expire(meeting, ["attendees"])
     except Exception:
         pass
+
+
+def _replace_meeting_person_links(db: Session, meeting: IsmsMeeting,
+                                  attendees: list[uuid.UUID] | None,
+                                  apologies: list[uuid.UUID] | None) -> None:
+    if attendees is None and apologies is None:
+        return
+    ids = set(attendees or []) | set(apologies or [])
+    people = {p.id: p for p in db.query(IsmsPerson).filter(IsmsPerson.id.in_(ids)).all()} if ids else {}
+    if len(people) != len(ids):
+        raise HTTPException(400, "Unknown Person selected for meeting")
+    db.query(IsmsMeetingPerson).filter(IsmsMeetingPerson.meeting_id == meeting.id).delete(synchronize_session=False)
+    for kind, selected in (("attendee", attendees or []), ("apology", apologies or [])):
+        for pid in dict.fromkeys(selected):
+            person = people[pid]
+            db.add(IsmsMeetingPerson(meeting_id=meeting.id, person_id=pid,
+                                     attendance_type=kind, name=person.name,
+                                     email=person.email or "", created_at=_utcnow()))
+    db.flush()
 
 
 def _replace_meeting_links(
@@ -3966,6 +4001,7 @@ def create_meeting(
     _replace_meeting_people(
         db, row, payload.attendee_user_ids or [], payload.apology_user_ids or []
     )
+    _replace_meeting_person_links(db, row, payload.attendee_person_ids or [], payload.apology_person_ids or [])
     _replace_meeting_links(db, row, payload.links or [])
     _apply_links(db, "meeting", row.id, fw, payload, user)
     after = _meeting_out(db, row, fw)
@@ -4034,6 +4070,8 @@ def update_meeting(
         _replace_meeting_people(
             db, row, payload.attendee_user_ids or [], payload.apology_user_ids or []
         )
+    if "attendee_person_ids" in fields or "apology_person_ids" in fields:
+        _replace_meeting_person_links(db, row, payload.attendee_person_ids or [], payload.apology_person_ids or [])
     if "links" in fields:
         _replace_meeting_links(db, row, payload.links or [])
     _apply_links(db, "meeting", row.id, fw, payload, user)

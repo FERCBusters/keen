@@ -316,15 +316,17 @@
           <div id="peopleBody" class="collapse show">
             <div class="card-body">
               <form id="attendeeForm" class="row g-2 mb-3">
+                <div class="col-12"><label class="form-label small-muted mb-1" for="attendeePersonId">Person directory</label><select id="attendeePersonId" class="form-select"><option value="">Choose a Person or enter a new name below</option></select></div>
                 <div class="col-12">
-                  <label class="form-label small-muted mb-1" for="attendeeUserId">Keen user</label>
+                  <label class="form-label small-muted mb-1" for="attendeeUserId">KEEN user (existing accounts)</label>
                   <select id="attendeeUserId" class="form-select">
                     <option value="">Custom / external attendee</option>
                   </select>
-                  <div class="form-text">Select a Keen user, or leave this as custom and enter a free-text attendee below.</div>
+                  <div class="form-text">People can be linked to accounts. Existing account attendees remain supported.</div>
                 </div>
                 <div class="col-12"><input id="attendeeName" class="form-control" placeholder="Name (or override selected user's display name)" /></div>
                 <div class="col-12 col-md-6"><input id="attendeeEmail" class="form-control" placeholder="Email (optional)" /></div>
+                <div class="col-12"><button id="attendeeCreatePerson" class="btn btn-sm btn-outline-secondary rounded-pill" type="button" hidden>Add this as a Person in KEEN for the future?</button></div>
                 <div class="col-12 col-md-6"><input id="attendeeRole" class="form-control" placeholder="Role / organisation" /></div>
                 <div class="col-12"><button class="btn btn-outline-primary" type="submit">Add person</button></div>
               </form>

@@ -39,6 +39,7 @@ from app.db.models import (
     IsmsEntityClauseLink,
     IsmsEntityControlLink,
     IsmsMeeting,
+    IsmsPerson,
     IsmsObjective,
     IsmsOrgNode,
     Mapping,
@@ -1292,6 +1293,7 @@ def _attendee_dict(x: AuditAttendee) -> dict[str, Any]:
         "id": str(x.id),
         "audit_id": str(x.audit_id),
         "user_id": str(x.user_id) if x.user_id else None,
+        "person_id": str(x.person_id) if x.person_id else None,
         "username": u.username if u else None,
         "name": x.name,
         "email": x.email or _user_email_snapshot(u),
@@ -1379,6 +1381,7 @@ class AuditScopePayload(BaseModel):
 
 class AuditAttendeePayload(BaseModel):
     user_id: uuid.UUID | None = None
+    person_id: uuid.UUID | None = None
     name: str | None = Field(default=None, max_length=256)
     email: str | None = Field(default=None, max_length=256)
     role: str | None = Field(default=None, max_length=128)
@@ -2777,6 +2780,13 @@ def add_attendee(
     a = _audit_or_404(db, audit_id)
     _require_mutable_audit(a)
     linked_user = None
+    linked_person = None
+    if payload.person_id is not None:
+        linked_person = db.get(IsmsPerson, payload.person_id)
+        if linked_person is None:
+            raise HTTPException(status_code=400, detail="Unknown Person")
+    if payload.person_id is not None and payload.user_id is not None:
+        raise HTTPException(status_code=400, detail="Select a Person or KEEN user, not both")
     if payload.user_id is not None:
         linked_user = (
             db.query(User)
@@ -2791,18 +2801,21 @@ def add_attendee(
     display_name = _clean_text(
         payload.name,
         max_len=256,
-        required=linked_user is None,
+        required=linked_user is None and linked_person is None,
         label="name",
     )
     if linked_user is not None and not display_name:
         display_name = linked_user.username
+    if linked_person is not None and not display_name:
+        display_name = linked_person.name
 
     explicit_email = _clean_email(payload.email, label="email")
     row = AuditAttendee(
         audit_id=a.id,
         user_id=linked_user.id if linked_user is not None else None,
+        person_id=linked_person.id if linked_person is not None else None,
         name=display_name,
-        email=explicit_email or _user_email_snapshot(linked_user),
+        email=explicit_email or (linked_person.email if linked_person else None) or _user_email_snapshot(linked_user),
         role=_clean_text(payload.role, max_len=128, label="role") or None,
         created_at=_utcnow(),
     )

@@ -59,7 +59,7 @@ function render() {
 }
 function renderLibrary() {
   $('libraryList').innerHTML = library.length ? library.map(item => `
-    <div class="list-group-item d-flex justify-content-between gap-2"><div><strong>${esc(item.name)}</strong><div class="small-muted">${esc(item.threat_summary)}</div></div>
+    <div class="list-group-item d-flex justify-content-between gap-2"><div><strong>${esc(item.name)}</strong><div class="small-muted">${esc(item.threat_summary)}</div>${item.suggested_assessment?.inherent_impact ? `<div class="small-muted">Example inherent: ${esc(item.suggested_assessment.inherent_likelihood)} × ${esc(item.suggested_assessment.inherent_impact)} · residual: ${esc(item.suggested_assessment.residual_likelihood)} × ${esc(item.suggested_assessment.residual_impact)}. Review for your organisation.</div>` : ''}</div>
       <div class="d-flex gap-1 align-self-start"><a class="btn btn-sm btn-outline-primary" href="${withFramework(`/risks.html?template=${encodeURIComponent(item.id)}`, framework)}">Use template</a>
       ${manage ? `<button type="button" class="btn btn-sm btn-outline-danger" data-delete-library="${esc(item.id)}">Delete</button>` : ''}</div></div>`).join('') : '<span class="small-muted">No reusable scenarios yet. Select a risk and save its scenario here.</span>';
 }

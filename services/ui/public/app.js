@@ -99,7 +99,7 @@ function _patchIsmsNavDropdown() {
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=objectives'))}">Objectives</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=effectiveness'))}">Effectiveness Measures</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=documents'))}">Policies &amp; Processes</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/documents.html'))}">Edit policy documents</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=documents'))}">Edit policy documents</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/bookstack-sections.html'))}">BookStack policy sections</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=org'))}">Organisation Chart</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=assets'))}">Asset Matrix</a></li>

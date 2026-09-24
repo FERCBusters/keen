@@ -1027,6 +1027,7 @@ class RiskLibraryEntry(Base):
     threat_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     risk_types: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     treatment_guidance: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    suggested_assessment: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
 
@@ -2118,6 +2119,18 @@ class IsmsMeetingAttendee(Base):
     )
 
 
+class IsmsMeetingPerson(Base):
+    __tablename__ = "isms_meeting_people"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    meeting_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("isms_meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    person_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("isms_people.id", ondelete="SET NULL"), nullable=True, index=True)
+    attendance_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    email: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    person = relationship("IsmsPerson")
+
+
 class IsmsMeetingLink(Base):
     __tablename__ = "isms_meeting_links"
 
@@ -2455,6 +2468,9 @@ class AuditAttendee(Base):
         nullable=True,
         index=True,
     )
+    person_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_people.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     # For custom attendees this is the free-text name. For Keen users it is a
     # display snapshot, so exports keep a readable name even if the account is
     # later renamed/deactivated/deleted.
@@ -2467,6 +2483,7 @@ class AuditAttendee(Base):
 
     audit = relationship("Audit", back_populates="attendees")
     user = relationship("User")
+    person = relationship("IsmsPerson")
 
 
 class AuditFinding(Base):
