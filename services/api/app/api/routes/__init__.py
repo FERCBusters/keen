@@ -8,16 +8,20 @@ from .auth import router as auth_router
 from .audits import router as audits_router
 from .clauses import router as clauses_router
 from .controls import router as controls_router
+from .control_links import router as control_links_router
 from .events import router as events_router
 from .frameworks import router as frameworks_router
 from .managed_configurations import router as managed_configurations_router
 from .graph import router as graph_router
 from .interested_parties import router as interested_parties_router
 from .isms import router as isms_router
+from .assurance import router as assurance_router
+from .bookstack_sections import router as bookstack_sections_router
 from .me import router as me_router
 from .questions import router as questions_router
 from .pestle import router as pestle_router
 from .risks import router as risks_router
+from .risk_register import router as risk_register_router
 from .sources import router as sources_router
 from .soa import router as soa_router
 from .stats import router as stats_router
@@ -65,6 +69,7 @@ OPENAPI_TAGS = [
         "name": "ISMS",
         "description": "ISMS objectives, documents, organisation chart, assets, application configuration matrix, meetings and Statement of Applicability.",
     },
+    {"name": "Assurance", "description": "People, vendor and personnel assurance records."},
     {
         "name": "Statement of Applicability",
         "description": "Read-only SoA summary across controls, clauses, CIA risks, PESTLE(E), Interested Parties and ISMS.",
@@ -83,6 +88,7 @@ router.include_router(users_router, tags=["Users"])
 router.include_router(admin_router, tags=["Admin"])
 router.include_router(webhooks_router, tags=["Webhooks"])
 router.include_router(controls_router, tags=["Controls"])
+router.include_router(control_links_router, tags=["Controls"])
 router.include_router(clauses_router, tags=["Clauses"])
 router.include_router(frameworks_router, tags=["Frameworks"])
 router.include_router(managed_configurations_router, tags=["Admin"])
@@ -91,6 +97,9 @@ router.include_router(questions_router, tags=["Questions"])
 router.include_router(pestle_router, tags=["PESTLE(E)"])
 router.include_router(interested_parties_router, tags=["Interested Parties"])
 router.include_router(isms_router, tags=["ISMS"])
+router.include_router(assurance_router, tags=["Assurance"])
+router.include_router(bookstack_sections_router, tags=["ISMS"])
+router.include_router(risk_register_router, tags=["Risks"])
 router.include_router(risks_router, tags=["Risks"])
 router.include_router(artifacts_router, tags=["Artifacts"])
 router.include_router(sources_router, tags=["Sources"])

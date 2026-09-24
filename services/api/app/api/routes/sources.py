@@ -24,6 +24,7 @@ from app.api.routes.isms import (
     require_isms_read,
 )
 from app.core.config import settings
+from app.services.control_inheritance import effective_framework_ids
 
 router = APIRouter()
 
@@ -86,8 +87,7 @@ def list_sources(
         # this framework.
         mapped_event_ids = (
             db.query(Mapping.event_id.label("event_id"))
-            .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-            .filter(ControlItem.framework_slug == framework)
+            .filter(Mapping.control_item_id.in_(effective_framework_ids(framework)))
             .distinct()
             .subquery()
         )

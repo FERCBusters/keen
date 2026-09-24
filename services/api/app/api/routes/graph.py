@@ -25,6 +25,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import get_db
+from app.services.control_inheritance import evidence_pairs
 from app.security.diary_visibility import diary_filter_condition
 from app.security.permissions import has_permission
 from app.core.source_meta import get_source_meta, apply_user_source_overrides
@@ -117,6 +118,7 @@ def graph_control_source(
         event_filters = _event_filters(start_date, end_date)
         if source:
             event_filters.append(Event.source == source)
+        pairs = evidence_pairs(framework)
 
         edge_rows = (
             db.query(
@@ -126,9 +128,8 @@ def graph_control_source(
                 ControlItem.title,
                 func.count(func.distinct(Event.id)).label("n"),
             )
-            .join(Mapping, Mapping.event_id == Event.id)
-            .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-            .filter(ControlItem.framework_slug == framework)
+            .join(pairs, pairs.c.event_id == Event.id)
+            .join(ControlItem, ControlItem.id == pairs.c.control_id)
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
             .group_by(Event.source, ControlItem.id, ControlItem.ref, ControlItem.title)
@@ -137,9 +138,7 @@ def graph_control_source(
 
         src_totals_rows = (
             db.query(Event.source, func.count(func.distinct(Event.id)).label("n"))
-            .join(Mapping, Mapping.event_id == Event.id)
-            .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-            .filter(ControlItem.framework_slug == framework)
+            .join(pairs, pairs.c.event_id == Event.id)
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
             .group_by(Event.source)
@@ -234,6 +233,7 @@ def graph_clause_source(
 
     def _load():
         event_filters = _event_filters(start_date, end_date)
+        pairs = evidence_pairs(framework)
 
         edge_rows = (
             db.query(
@@ -243,13 +243,12 @@ def graph_clause_source(
                 FrameworkClause.title,
                 func.count(func.distinct(Event.id)).label("n"),
             )
-            .join(Mapping, Mapping.event_id == Event.id)
-            .join(ControlItem, ControlItem.id == Mapping.control_item_id)
+            .join(pairs, pairs.c.event_id == Event.id)
+            .join(ControlItem, ControlItem.id == pairs.c.control_id)
             .join(
                 ControlClauseLink, ControlClauseLink.control_item_id == ControlItem.id
             )
             .join(FrameworkClause, FrameworkClause.id == ControlClauseLink.clause_id)
-            .filter(ControlItem.framework_slug == framework)
             .filter(FrameworkClause.framework_slug == framework)
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
@@ -264,13 +263,12 @@ def graph_clause_source(
 
         src_totals_rows = (
             db.query(Event.source, func.count(func.distinct(Event.id)).label("n"))
-            .join(Mapping, Mapping.event_id == Event.id)
-            .join(ControlItem, ControlItem.id == Mapping.control_item_id)
+            .join(pairs, pairs.c.event_id == Event.id)
+            .join(ControlItem, ControlItem.id == pairs.c.control_id)
             .join(
                 ControlClauseLink, ControlClauseLink.control_item_id == ControlItem.id
             )
             .join(FrameworkClause, FrameworkClause.id == ControlClauseLink.clause_id)
-            .filter(ControlItem.framework_slug == framework)
             .filter(FrameworkClause.framework_slug == framework)
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)

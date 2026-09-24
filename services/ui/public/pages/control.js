@@ -3,6 +3,7 @@ import {
   apiGet,
   apiPost,
   apiPatch,
+  apiDelete,
   esc,
   fmtTs,
   tsSortKey,
@@ -41,6 +42,10 @@ const meta = document.getElementById('resultMeta');
 const localQ = document.getElementById('localQ');
 const sourceFilter = document.getElementById('sourceFilter');
 const linksEl = document.getElementById('ctrlLinks');
+const crossForm = document.getElementById('crossFrameworkForm');
+const crossList = document.getElementById('crossFrameworkLinks');
+const crossFrameworkSource = document.getElementById('crossFrameworkSource');
+const crossFrameworkControl = document.getElementById('crossFrameworkControl');
 const selLimit = document.getElementById('limit');
 const clausesCard = document.getElementById('clausesCard');
 const clausesView = document.getElementById('clausesView');
@@ -83,6 +88,64 @@ const pagerButtons = collectOffsetPagerButtons();
 
 let sourceMeta = {};
 let ctrl = null;
+let crossFrameworks = [];
+
+async function loadCrossFrameworkLinks() {
+  if (!id) return;
+  try {
+    const data = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}/cross-framework`);
+    crossList.innerHTML = (data.items || []).length ? data.items.map(link => `
+      <div class="d-flex flex-wrap gap-2 align-items-center border-bottom py-2">
+        <a href="${withFramework(`/control.html?id=${encodeURIComponent(link.source_control_id)}`, link.source_framework)}">${esc(link.source_framework)} · ${esc(link.source_ref)} ${esc(link.source_title || '')}</a>
+        <span class="small-muted">${esc(link.rationale)}</span>
+        ${me?.is_admin ? `<button class="btn btn-sm btn-outline-danger ms-auto" type="button" data-remove-cross-link="${esc(link.id)}">Remove</button>` : ''}
+      </div>`).join('') : '<span class="small-muted">No cross-framework inheritance has been approved for this control.</span>';
+    if (!me?.is_admin || !ctrl) return;
+    crossForm.style.display = '';
+    if (!crossFrameworks.length) {
+      const frameworks = await apiGet('/api/v1/frameworks');
+      crossFrameworks = (frameworks.items || []).filter(f => f.slug !== ctrl.framework);
+    }
+    const previous = crossFrameworkSource.value;
+    crossFrameworkSource.innerHTML = '<option value="">Choose framework…</option>' + crossFrameworks.map(f => `<option value="${esc(f.slug)}">${esc(f.name || f.slug)}</option>`).join('');
+    if (crossFrameworks.some(f => f.slug === previous)) crossFrameworkSource.value = previous;
+    if (crossFrameworkSource.value) await loadCrossSourceControls();
+  } catch (e) { crossList.textContent = `Could not load control links: ${String(e)}`; }
+}
+
+async function loadCrossSourceControls() {
+  const source = crossFrameworkSource.value;
+  crossFrameworkControl.innerHTML = '<option value="">Choose control…</option>';
+  if (!source) return;
+  try {
+    const data = await apiGet(`/api/v1/controls?framework=${encodeURIComponent(source)}&limit=5000`);
+    crossFrameworkControl.innerHTML += (data.items || []).map(c => `<option value="${esc(c.id)}">${esc(c.ref)} · ${esc(c.title || c.type)}</option>`).join('');
+  } catch (e) { toast(status, `Could not load source controls: ${String(e)}`, 'danger'); }
+}
+
+crossFrameworkSource?.addEventListener('change', loadCrossSourceControls);
+crossForm?.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!me?.is_admin || !crossFrameworkControl.value) return;
+  try {
+    await apiPost(`/api/v1/controls/${encodeURIComponent(id)}/cross-framework`, {
+      source_control_id: crossFrameworkControl.value,
+      rationale: document.getElementById('crossFrameworkRationale').value,
+    });
+    document.getElementById('crossFrameworkRationale').value = '';
+    toast(status, 'Control link saved. Existing evidence is now visible here.', 'success');
+    await loadCrossFrameworkLinks(); reload();
+  } catch (e) { toast(status, `Could not link controls: ${String(e)}`, 'danger'); }
+});
+crossList?.addEventListener('click', async event => {
+  const button = event.target.closest('[data-remove-cross-link]');
+  if (!button || !me?.is_admin || !confirm('Remove inherited evidence relationship?')) return;
+  try {
+    await apiDelete(`/api/v1/controls/${encodeURIComponent(id)}/cross-framework/${encodeURIComponent(button.dataset.removeCrossLink)}`);
+    toast(status, 'Control link removed.', 'success');
+    await loadCrossFrameworkLinks(); reload();
+  } catch (e) { toast(status, `Could not remove control link: ${String(e)}`, 'danger'); }
+});
 let clauseCatalog = [];
 let clauseApplicabilityEditMode = false;
 let interestedPartiesLoaded = false;
@@ -687,6 +750,7 @@ async function load() {
   try {
     ctrl = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`);
     renderControlChrome();
+    await loadCrossFrameworkLinks();
     renderControlJustificationCard();
     document.getElementById('viewAllEvents').href = withFramework(`/events.html?control=${encodeURIComponent(ctrl.ref)}`, ctrl.framework || framework);
     if (controlsBreadcrumb) controlsBreadcrumb.href = withFramework('/controls.html', ctrl.framework || framework);

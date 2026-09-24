@@ -121,6 +121,30 @@ class ControlItem(Base):
     )
 
 
+class CrossFrameworkControlLink(Base):
+    """One-way, one-hop evidence inheritance between framework controls."""
+
+    __tablename__ = "cross_framework_control_links"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source_control_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("control_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    target_control_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("control_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    source = relationship("ControlItem", foreign_keys=[source_control_id])
+    target = relationship("ControlItem", foreign_keys=[target_control_id])
+    __table_args__ = (
+        UniqueConstraint("source_control_id", "target_control_id", name="uq_cross_framework_link"),
+        CheckConstraint("source_control_id <> target_control_id", name="ck_cross_framework_distinct"),
+    )
+
+
 class FrameworkClause(Base):
     __tablename__ = "framework_clauses"
 
@@ -862,6 +886,9 @@ class RiskAsset(Base):
         nullable=True,
         index=True,
     )
+    vendor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_vendors.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     owner_org_node_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("isms_org_nodes.id", ondelete="SET NULL"),
@@ -888,6 +915,7 @@ class RiskAsset(Base):
     category = relationship("RiskCategory", back_populates="assets")
     subcategory = relationship("RiskAssetSubcategory", back_populates="assets")
     license_entity = relationship("IsmsLicense", back_populates="assets")
+    vendor = relationship("IsmsVendor", back_populates="assets")
     owner_org_node = relationship("IsmsOrgNode", foreign_keys=[owner_org_node_id])
     register_held_by_org_node = relationship(
         "IsmsOrgNode", foreign_keys=[register_held_by_org_node_id]
@@ -933,6 +961,16 @@ class Risk(Base):
         Integer, nullable=False, default=1
     )
     residual_risk_score: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Conventional 5x5 register scores are independent of KEEN's existing
+    # three-factor scenario scores; older risks remain unrated until reviewed.
+    register_likelihood: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    register_impact: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    register_residual_likelihood: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    register_residual_impact: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    treatment_strategy: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    treatment_status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    treatment_plan: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    treatment_due_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     mitigator_context: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -967,7 +1005,29 @@ class Risk(Base):
             "residual_impact_score between 0 and 5",
             name="ck_risks_residual_impact_score",
         ),
+        CheckConstraint("register_likelihood between 1 and 5", name="ck_risks_register_likelihood"),
+        CheckConstraint("register_impact between 1 and 5", name="ck_risks_register_impact"),
+        CheckConstraint("register_residual_likelihood between 1 and 5", name="ck_risks_register_residual_likelihood"),
+        CheckConstraint("register_residual_impact between 1 and 5", name="ck_risks_register_residual_impact"),
     )
+
+
+class RiskRegisterSettings(Base):
+    __tablename__ = "risk_register_settings"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    low_max: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+    moderate_max: Mapped[int] = mapped_column(Integer, nullable=False, default=9)
+    high_max: Mapped[int] = mapped_column(Integer, nullable=False, default=16)
+
+
+class RiskLibraryEntry(Base):
+    __tablename__ = "risk_library_entries"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(256), nullable=False, unique=True)
+    threat_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    risk_types: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    treatment_guidance: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
 
 class RiskControlLink(Base):
@@ -1431,6 +1491,12 @@ class IsmsDocument(Base):
     )
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     external_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    folder_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_document_folders.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    content_html: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    content_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     storage_uri: Mapped[str | None] = mapped_column(String(512), nullable=True)
     filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     content_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -1452,6 +1518,85 @@ class IsmsDocument(Base):
 
     uploaded_by = relationship("User", foreign_keys=[uploaded_by_user_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
+    folder = relationship("IsmsDocumentFolder")
+    content_revisions = relationship("IsmsDocumentRevision", cascade="all, delete-orphan")
+    comments = relationship("IsmsDocumentComment", cascade="all, delete-orphan")
+
+
+class IsmsDocumentFolder(Base):
+    __tablename__ = "isms_document_folders"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_document_folders.id", ondelete="SET NULL"), nullable=True
+    )
+    parent = relationship("IsmsDocumentFolder", remote_side=[id])
+
+
+class IsmsDocumentRevision(Base):
+    __tablename__ = "isms_document_revisions"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_html: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    __table_args__ = (UniqueConstraint("document_id", "version", name="uq_isms_document_revision"),)
+
+
+class IsmsDocumentComment(Base):
+    __tablename__ = "isms_document_comments"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    author_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    author = relationship("User")
+
+
+class BookStackSectionEvidence(Base):
+    """Immutable snapshot of a page version linked to a policy requirement."""
+
+    __tablename__ = "bookstack_section_evidence"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_documents.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    target_control_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("control_items.id", ondelete="SET NULL"), nullable=True
+    )
+    target_clause_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("framework_clauses.id", ondelete="SET NULL"), nullable=True
+    )
+    page_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    anchor: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    permalink: Mapped[str] = mapped_column(String(2048), nullable=False)
+    page_title: Mapped[str] = mapped_column(String(256), nullable=False)
+    revision_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_updated_at: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    storage_uri: Mapped[str] = mapped_column(String(512), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    captured_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    document = relationship("IsmsDocument")
+    target_control = relationship("ControlItem")
+    target_clause = relationship("FrameworkClause")
+
+    __table_args__ = (
+        CheckConstraint("target_control_id IS NOT NULL OR target_clause_id IS NOT NULL", name="ck_bookstack_section_target"),
+    )
 
 
 class IsmsOrgNode(Base):
@@ -1514,6 +1659,73 @@ class IsmsOrgNodeUser(Base):
 
     org_node = relationship("IsmsOrgNode", back_populates="users")
     user = relationship("User")
+
+
+class IsmsPerson(Base):
+    """A person in the assurance register, regardless of KEEN login access."""
+
+    __tablename__ = "isms_people"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    position: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), unique=True, nullable=True
+    )
+    org_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_org_nodes.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    user = relationship("User")
+    org_node = relationship("IsmsOrgNode")
+    assurances = relationship("IsmsPersonAssurance", back_populates="person", cascade="all, delete-orphan")
+    assets = relationship("IsmsPersonAsset", back_populates="person", cascade="all, delete-orphan")
+
+
+class IsmsVendor(Base):
+    __tablename__ = "isms_vendors"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(256), nullable=False, unique=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    website: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    contact: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    assets = relationship("RiskAsset", back_populates="vendor")
+
+
+class IsmsPersonAsset(Base):
+    __tablename__ = "isms_person_assets"
+    person_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_people.id", ondelete="CASCADE"), primary_key=True
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("risk_assets.id", ondelete="CASCADE"), primary_key=True
+    )
+    relationship_type: Mapped[str] = mapped_column(String(32), nullable=False, default="uses")
+    person = relationship("IsmsPerson", back_populates="assets")
+    asset = relationship("RiskAsset")
+
+
+class IsmsPersonAssurance(Base):
+    __tablename__ = "isms_person_assurances"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    person_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_people.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    source_system: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    evidence_url: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    completed_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expires_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    person = relationship("IsmsPerson", back_populates="assurances")
 
 
 class IsmsBusinessProcess(Base):

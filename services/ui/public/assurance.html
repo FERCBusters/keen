@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Keen – People &amp; vendors</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body data-page="isms"><div id="navbar"></div>
+<main class="container-fluid py-4">
+  <h1 class="h3">People &amp; vendors</h1>
+  <p class="small-muted">Record personnel assurance and supplier relationships. A person does not need a KEEN account. Assurance records document what was checked, when, and the authoritative source.</p>
+  <div id="status" class="alert alert-info" role="status" style="display:none"></div>
+  <ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#peoplePane" type="button">People</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#vendorsPane" type="button">Vendors</button></li>
+  </ul>
+  <div class="tab-content">
+    <section class="tab-pane fade show active" id="peoplePane">
+      <div class="row g-3">
+        <div class="col-12 col-xl-4"><div class="card"><div class="card-header fw-semibold" id="personFormTitle">Add a person</div><div class="card-body">
+          <form id="personForm" class="row g-3">
+            <div class="col-12"><label class="form-label" for="personName">Name</label><input class="form-control" id="personName" maxlength="256" required></div>
+            <div class="col-12 col-md-6"><label class="form-label" for="personEmail">Email</label><input class="form-control" id="personEmail" type="email" maxlength="256"></div>
+            <div class="col-12 col-md-6"><label class="form-label" for="personPosition">Position</label><input class="form-control" id="personPosition" maxlength="256"></div>
+            <div class="col-12"><label class="form-label" for="personUser">KEEN account (optional)</label><select class="form-select" id="personUser"></select><div class="form-text">Leave blank for people who do not sign in.</div></div>
+            <div class="col-12"><label class="form-label" for="personOrg">Organisation role (optional)</label><select class="form-select" id="personOrg"></select></div>
+            <div class="col-12"><label class="form-label" for="personAssets">Assets or devices used</label><select class="form-select" id="personAssets" multiple size="5"></select><div class="form-text">Ctrl or Command-click to select multiple assets.</div></div>
+            <div class="col-12"><label class="form-label" for="personNotes">Notes</label><textarea class="form-control" id="personNotes" rows="2"></textarea></div>
+            <div class="col-12"><button class="btn btn-primary" type="submit">Save person</button> <button class="btn btn-outline-secondary" id="newPerson" type="button">Clear</button></div>
+          </form></div></div></div>
+        <div class="col-12 col-xl-8"><div class="card"><div class="card-header fw-semibold">People</div><div class="card-body"><input class="form-control mb-3" id="personSearch" type="search" placeholder="Search names, positions or accounts"><div id="peopleList" class="list-group"></div></div></div></div>
+      </div>
+      <div class="card mt-3" id="assuranceCard" style="display:none"><div class="card-header"><div class="fw-semibold" id="assuranceTitle">Personnel assurance</div><div class="small-muted">Choose any category and name, such as Training · Cyber Essentials induction. Record the upstream system and link to its evidence.</div></div>
+        <div class="card-body"><form id="assuranceForm" class="row g-3">
+          <div class="col-md-2"><label class="form-label" for="assuranceCategory">Category</label><input id="assuranceCategory" class="form-control" list="assuranceCategories" required maxlength="64"><datalist id="assuranceCategories"><option value="Training"><option value="Policy acknowledgement"><option value="Screening"><option value="MFA"><option value="Access"><option value="Device"></datalist></div>
+          <div class="col-md-3"><label class="form-label" for="assuranceName">Requirement or training</label><input id="assuranceName" class="form-control" required maxlength="256" placeholder="e.g. Secure coding induction"></div>
+          <div class="col-md-2"><label class="form-label" for="assuranceStatus">Status</label><select id="assuranceStatus" class="form-select"><option value="pending">Pending</option><option value="met">Met</option><option value="failed">Failed</option><option value="expired">Expired</option><option value="not_applicable">Not applicable</option></select></div>
+          <div class="col-md-2"><label class="form-label" for="assuranceCompleted">Completed</label><input id="assuranceCompleted" class="form-control" type="date"></div>
+          <div class="col-md-2"><label class="form-label" for="assuranceExpires">Expires</label><input id="assuranceExpires" class="form-control" type="date"></div>
+          <div class="col-md-3"><label class="form-label" for="assuranceSource">Authoritative source</label><input id="assuranceSource" class="form-control" maxlength="128" placeholder="e.g. Google Workspace"></div>
+          <div class="col-md-6"><label class="form-label" for="assuranceEvidence">Evidence link</label><input id="assuranceEvidence" class="form-control" maxlength="2048" placeholder="https://… or /api/v1/artifacts/…"></div>
+          <div class="col-md-6"><label class="form-label" for="assuranceNotes">Notes</label><input id="assuranceNotes" class="form-control"></div>
+          <div class="col-12"><button class="btn btn-primary" type="submit">Save assurance</button> <button id="newAssurance" class="btn btn-outline-secondary" type="button">Clear</button></div>
+        </form><div class="table-responsive mt-3"><table class="table table-sm"><thead><tr><th>Category</th><th>Requirement</th><th>Status</th><th>Source</th><th>Completed</th><th>Expires</th><th>Evidence</th><th>Actions</th></tr></thead><tbody id="assuranceRows"></tbody></table></div></div>
+      </div>
+    </section>
+    <section class="tab-pane fade" id="vendorsPane"><div class="row g-3"><div class="col-12 col-xl-4"><div class="card"><div class="card-header fw-semibold" id="vendorFormTitle">Add a vendor</div><div class="card-body"><form id="vendorForm" class="row g-3">
+      <div class="col-12"><label class="form-label" for="vendorName">Vendor name</label><input class="form-control" id="vendorName" maxlength="256" required></div>
+      <div class="col-12"><label class="form-label" for="vendorDescription">Description</label><textarea class="form-control" id="vendorDescription" rows="2"></textarea></div>
+      <div class="col-12"><label class="form-label" for="vendorWebsite">Website</label><input class="form-control" id="vendorWebsite" type="url" maxlength="2048"></div>
+      <div class="col-12"><label class="form-label" for="vendorContact">Contact</label><input class="form-control" id="vendorContact" maxlength="256"></div>
+      <div class="col-12"><label class="form-label" for="vendorAssets">Assets supplied</label><select class="form-select" id="vendorAssets" multiple size="6"></select><div class="form-text">An asset has one supplying vendor; choosing one already linked elsewhere will move the link.</div></div>
+      <div class="col-12"><button class="btn btn-primary" type="submit">Save vendor</button> <button id="newVendor" class="btn btn-outline-secondary" type="button">Clear</button></div>
+    </form></div></div></div><div class="col-12 col-xl-8"><div class="card"><div class="card-header fw-semibold">Vendors and assets</div><div class="card-body"><div class="list-group" id="vendorsList"></div></div></div></div></div></section>
+  </div>
+</main><script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script><script type="module" src="/pages/assurance.js"></script>
+</body></html>

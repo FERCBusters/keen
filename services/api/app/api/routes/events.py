@@ -26,6 +26,7 @@ from app.db.models import (
     AuditLog,
     ControlClauseLink,
     ControlItem,
+    CrossFrameworkControlLink,
     Event,
     EventIncident,
     FrameworkClause,
@@ -33,6 +34,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import get_db
+from app.services.control_inheritance import evidence_pairs, effective_framework_ids, event_has_control, source_ids_for_control
 from app.outbound.incidents import (
     IncidentWebhookConfig,
     build_event_url,
@@ -263,9 +265,7 @@ def _unmapped_event_condition(framework: str):
     inside the correlated EXISTS check.
     """
 
-    framework_control_ids = select(ControlItem.id).where(
-        ControlItem.framework_slug == framework
-    )
+    framework_control_ids = effective_framework_ids(framework)
     return (
         ~exists()
         .where(Mapping.event_id == Event.id)
@@ -284,7 +284,8 @@ def _clause_event_condition(framework: str, clause: str):
     cond = (
         exists()
         .where(Mapping.event_id == Event.id)
-        .where(Mapping.control_item_id == ControlItem.id)
+        .where(or_(Mapping.control_item_id == ControlItem.id,
+                   Mapping.control_item_id.in_(source_ids_for_control(ControlItem.id).correlate(ControlItem))))
         .where(ControlClauseLink.control_item_id == ControlItem.id)
         .where(ControlClauseLink.clause_id == FrameworkClause.id)
         .where(ControlItem.framework_slug == framework)
@@ -337,9 +338,8 @@ def _build_event_id_query(
     if control:
         cid = _try_uuid(control)
         if cid:
-            qry = qry.join(Mapping, Mapping.event_id == Event.id).filter(
-                Mapping.control_item_id == cid
-            )
+            valid = db.query(ControlItem.id).filter(ControlItem.id == cid, ControlItem.framework_slug == framework).first()
+            qry = qry.filter(event_has_control(cid, Event.id) if valid else false())
         else:
             c = (
                 db.query(ControlItem)
@@ -351,9 +351,7 @@ def _build_event_id_query(
             if not c:
                 qry = qry.filter(false())
             else:
-                qry = qry.join(Mapping, Mapping.event_id == Event.id).filter(
-                    Mapping.control_item_id == c.id
-                )
+                qry = qry.filter(event_has_control(c.id, Event.id))
 
     if clause:
         qry = qry.filter(_clause_event_condition(framework, clause))
@@ -408,9 +406,8 @@ def list_events(
     if control:
         cid = _try_uuid(control)
         if cid:
-            qry = qry.join(Mapping, Mapping.event_id == Event.id).filter(
-                Mapping.control_item_id == cid
-            )
+            valid = db.query(ControlItem.id).filter(ControlItem.id == cid, ControlItem.framework_slug == framework).first()
+            qry = qry.filter(event_has_control(cid, Event.id) if valid else false())
         else:
             c = (
                 db.query(ControlItem)
@@ -421,9 +418,7 @@ def list_events(
             )
             if not c:
                 return {"total": 0, "limit": limit, "offset": offset, "items": []}
-            qry = qry.join(Mapping, Mapping.event_id == Event.id).filter(
-                Mapping.control_item_id == c.id
-            )
+            qry = qry.filter(event_has_control(c.id, Event.id))
 
     if clause:
         qry = qry.filter(_clause_event_condition(framework, clause))
@@ -447,7 +442,7 @@ def list_events(
         "limit": limit,
         "offset": offset,
         "user": user_cache_scope(user),
-        "query_version": "unmapped-v2",
+        "query_version": "inherited-controls-v1",
     }
 
     def _load_page() -> dict[str, Any]:
@@ -508,6 +503,19 @@ def list_events(
                 controls_by_event.setdefault(ev_id, []).append(
                     {"id": str(c_id), "ref": ref, "title": title, "type": ctype}
                 )
+            inherited = (
+                db.query(Mapping.event_id, ControlItem, CrossFrameworkControlLink.source_control_id)
+                .join(CrossFrameworkControlLink, CrossFrameworkControlLink.source_control_id == Mapping.control_item_id)
+                .join(ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id)
+                .filter(Mapping.event_id.in_(event_ids), ControlItem.framework_slug == framework)
+                .all()
+            )
+            for ev_id, target, source_id in inherited:
+                existing = controls_by_event.setdefault(ev_id, [])
+                if any(item["id"] == str(target.id) for item in existing):
+                    continue
+                existing.append({"id": str(target.id), "ref": target.ref, "title": target.title,
+                                 "type": target.type, "inherited_from_control_id": str(source_id)})
 
         # Preload artifact counts
         artifact_counts: dict[uuid.UUID, int] = {}
@@ -660,15 +668,16 @@ def event_facets(
                 user=user,
             ).subquery()
 
+            pairs = evidence_pairs(framework)
             ctl_rows = (
                 db.query(
                     ControlItem.ref.label("ref"),
                     ControlItem.title.label("title"),
                     ControlItem.type.label("type"),
-                    func.count(Mapping.event_id).label("count"),
+                    func.count(pairs.c.event_id).label("count"),
                 )
-                .join(Mapping, Mapping.control_item_id == ControlItem.id)
-                .join(ctl_ids, ctl_ids.c.id == Mapping.event_id)
+                .join(pairs, pairs.c.control_id == ControlItem.id)
+                .join(ctl_ids, ctl_ids.c.id == pairs.c.event_id)
                 .filter(ControlItem.framework_slug == framework)
                 .group_by(ControlItem.id)
                 .order_by(desc("count"), ControlItem.ref.asc())
@@ -739,9 +748,8 @@ def export_events(
     if control:
         cid = _try_uuid(control)
         if cid:
-            qry = qry.join(Mapping, Mapping.event_id == Event.id).filter(
-                Mapping.control_item_id == cid
-            )
+            valid = db.query(ControlItem.id).filter(ControlItem.id == cid, ControlItem.framework_slug == framework).first()
+            qry = qry.filter(event_has_control(cid, Event.id) if valid else false())
         else:
             c = (
                 db.query(ControlItem)
@@ -756,9 +764,7 @@ def export_events(
                     content = "id,timestamp,source,system,actor,action,outcome,severity,identifier,summary,source_url,controls,artifact_count\n"
                     return StreamingResponse(iter([content]), media_type="text/csv")
                 return {"total": 0, "returned": 0, "items": []}
-            qry = qry.join(Mapping, Mapping.event_id == Event.id).filter(
-                Mapping.control_item_id == c.id
-            )
+            qry = qry.filter(event_has_control(c.id, Event.id))
 
     if clause:
         qry = qry.filter(_clause_event_condition(framework, clause))
@@ -839,12 +845,12 @@ def export_events(
             event_ids = [e.id for e in batch]
             controls_by_event: dict[uuid.UUID, list[str]] = {}
             if event_ids:
+                pairs = evidence_pairs(framework)
                 rows = (
-                    db.query(Mapping.event_id, ControlItem.ref)
-                    .join(ControlItem, ControlItem.id == Mapping.control_item_id)
+                    db.query(pairs.c.event_id, ControlItem.ref)
+                    .join(ControlItem, ControlItem.id == pairs.c.control_id)
                     .filter(
-                        Mapping.event_id.in_(event_ids),
-                        ControlItem.framework_slug == framework,
+                        pairs.c.event_id.in_(event_ids),
                     )
                     .order_by(ControlItem.ref.asc())
                     .all()
@@ -1259,6 +1265,29 @@ def get_event(
         }
         for mp, ci in mapped
     ]
+    inherited = (
+        db.query(Mapping, ControlItem, CrossFrameworkControlLink)
+        .join(CrossFrameworkControlLink, CrossFrameworkControlLink.source_control_id == Mapping.control_item_id)
+        .join(ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id)
+        .filter(Mapping.event_id == eid, ControlItem.framework_slug == framework)
+        .order_by(ControlItem.ref.asc())
+        .all()
+    )
+    direct_ids = {item["id"] for item in controls}
+    for mapping, target, link in inherited:
+        if str(target.id) in direct_ids:
+            continue
+        source = link.source
+        controls.append({
+            "id": str(target.id), "ref": target.ref, "title": target.title,
+            "type": target.type, "in_scope": target.in_scope,
+            "upstream_url": _control_upstream_url(target),
+            "confidence": mapping.confidence, "method": "cross_framework",
+            "rationale": link.rationale, "mapped_at": mapping.mapped_at.isoformat() if mapping.mapped_at else None,
+            "inherited_from": {"framework": source.framework_slug, "ref": source.ref,
+                               "control_id": str(source.id)},
+        })
+        direct_ids.add(str(target.id))
 
     arts = (
         db.query(Artifact)

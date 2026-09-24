@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
@@ -71,6 +72,50 @@ class EvidenceDefinitionInput(BaseModel):
 class AdapterSettingsInput(BaseModel):
     version: int
     settings: dict[str, Any]
+
+
+class ControlSuggestionInput(BaseModel):
+    framework: str
+    description: str
+    sample_summary: str = ""
+
+
+_EVIDENCE_SYNONYMS = {
+    "supplier": {"vendor", "third party", "outsourcing", "supply chain"},
+    "change": {"deployment", "release", "pull request", "peer review"},
+    "configuration": {"patch", "baseline", "hardening", "config"},
+    "access": {"login", "mfa", "privilege", "authentication"},
+    "incident": {"alert", "detection", "security event"},
+    "backup": {"restore", "recovery", "continuity"},
+}
+
+
+@router.post("/v1/admin/control-suggestions")
+def suggest_controls(payload: ControlSuggestionInput, db: Session = Depends(get_db)):
+    """Transparent catalogue-word suggestions; an admin must confirm mappings."""
+    text = " ".join((payload.description, payload.sample_summary)).lower()[:4000]
+    words = set(re.findall(r"[a-z][a-z0-9]{3,}", text))
+    if not words:
+        return {"items": []}
+    terms = {word for word in words if word not in {"that", "this", "with", "from", "which", "event", "evidence", "control"}}
+    for concept, synonyms in _EVIDENCE_SYNONYMS.items():
+        if concept in words or any(term in text for term in synonyms):
+            terms.add(concept)
+            terms.update(word for phrase in synonyms for word in phrase.split() if len(word) >= 4)
+    candidates = db.query(ControlItem).filter(ControlItem.framework_slug == payload.framework).limit(5000).all()
+    ranked = []
+    for control in candidates:
+        catalog = " ".join((control.title or "", str(control.tags or ""), str(control.meta or ""))).lower()
+        title = (control.title or "").lower()
+        hits = sorted(term for term in terms if re.search(r"\b" + re.escape(term) + r"\b", catalog))
+        if not hits:
+            continue
+        title_hits = sum(1 for term in hits if re.search(r"\b" + re.escape(term) + r"\b", title))
+        ranked.append({"id": str(control.id), "framework": control.framework_slug,
+                       "ref": control.ref, "title": control.title, "score": 3*title_hits + len(hits),
+                       "matched_terms": hits[:8], "reason": "Words in the description or sample match the control catalogue."})
+    ranked.sort(key=lambda x: (-x["score"], x["ref"]))
+    return {"items": ranked[:10], "note": "Suggestions are based on catalogue words and must be reviewed before mapping evidence."}
 
 
 @router.get("/v1/admin/adapter-settings/{adapter}")
@@ -356,6 +401,34 @@ def get_evidence_definitions(db: Session = Depends(get_db)):
     rules = _normalized_rules(db)
     return {"collectors": items, "rules": rules, "rules_version": _version(db, "rules"),
             "warnings": warnings}
+
+
+@router.get("/v1/admin/source-catalogue")
+def source_catalogue(db: Session = Depends(get_db)):
+    """Show supported adapters, collection setup and observed evidence."""
+    definition_data = get_evidence_definitions(db)
+    collectors = definition_data["collectors"]
+    rules = definition_data["rules"]
+    observed = {
+        key: (int(count), last.isoformat() if last else None)
+        for key, count, last in db.query(Event.source, func.count(Event.id), func.max(Event.timestamp))
+        .group_by(Event.source).all()
+    }
+    items = []
+    for name in CONNECTORS:
+        enabled = True if name == "webhooks" else bool(getattr(settings, f"{name}_enabled", False))
+        count = sum(1 for item in collectors if item["adapter"] == name)
+        matching_rules = sum(1 for rule in rules if (
+            str((rule.get("when") or {}).get("source") or "").split(":")[0] == name
+        ))
+        sources = [(src, n, at) for src, (n, at) in observed.items() if src == name or name == "webhooks" and src.startswith("webhook:")]
+        events = sum(n for _, n, _ in sources)
+        last_seen = max((at for _, _, at in sources if at), default=None)
+        items.append({"adapter": name, "enabled": enabled, "collection_items": count,
+                      "definitions": matching_rules, "observed_events": events,
+                      "last_seen": last_seen, "managed_version": _version(db, name),
+                      "description": "Use the evidence definition wizard to choose inputs and map matched events. Adapter credentials and enablement are configured in Docker."})
+    return {"items": items, "warnings": definition_data["warnings"]}
 
 
 @router.get("/v1/admin/bookstack/catalog")

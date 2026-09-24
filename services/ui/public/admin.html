@@ -282,6 +282,10 @@
       </div>
 
       <div class="tab-pane fade" id="pane-evidence-config" role="tabpanel" aria-labelledby="tab-evidence-config" tabindex="0">
+        <div class="card mb-3"><div class="card-header fw-bold">Source catalogue</div><div class="card-body">
+          <p class="small-muted">These adapters are implemented by KEEN. Administrators define collection items and evidence mappings below; enabling an adapter and supplying its credentials remain Docker settings.</p>
+          <div id="source-catalogue" class="row g-2"><div class="col-12 small-muted">Loading source catalogue…</div></div>
+        </div></div>
         <h2 class="h5">Evidence definitions</h2>
         <p class="small-muted">Each definition brings together a source input, the events to match, and its framework targets. A source input can support several evidence definitions.</p>
         <div id="ec-status" role="status" hidden></div>
@@ -311,6 +315,8 @@
               <div class="col-md-6"><label class="form-label">Control or clause</label><select id="ec-control" class="form-select"></select></div>
               <div class="col-md-2 d-flex align-items-end"><button id="ec-add-target" class="btn btn-outline-primary w-100">Add</button></div></div>
             <div id="ec-targets" class="list-group mt-2"></div>
+            <div class="mt-3"><button id="ec-suggest-controls" class="btn btn-sm btn-outline-primary" type="button">Suggest controls from description</button>
+              <div id="ec-control-suggestions" class="list-group mt-2 small" role="status"></div></div>
             </section><section data-ec-step="4"><h4 class="h6">4. Preview and save</h4><p class="small-muted">Check recent matches and nonmatches before publishing. Saving applies this rule to new events; historical evaluation is selected below.</p>
             <details class="mt-3"><summary>Advanced rule settings</summary><div class="row g-2 mt-1"><div class="col-md-6"><label class="form-label">Rule ID</label><input id="ec-rule-id" class="form-control" placeholder="jenkins_deploy_success"></div><div class="col-md-6"><label class="form-label">Confidence (0–1)</label><input id="ec-confidence" type="number" min="0" max="1" step=".05" value=".8" class="form-control"></div></div><label class="form-check mt-2"><input id="ec-enabled" type="checkbox" class="form-check-input" checked> Rule enabled</label>
               <label class="form-check mt-2"><input id="ec-apply-existing" type="checkbox" class="form-check-input" checked> Apply this rule to previously collected evidence in the background</label>

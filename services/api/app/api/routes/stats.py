@@ -14,13 +14,14 @@ from app.api.utils import (
 )
 from app.core.config import settings
 from app.core.cache import cached_json
-from app.db.models import ControlItem, Event, Mapping, User
+from app.db.models import ControlItem, CrossFrameworkControlLink, Event, Mapping, User
 from app.db.session import get_db
 from app.security.diary_visibility import diary_filter_condition
 from app.services.control_evidence_stats import (
     get_control_evidence_stats_by_id,
     get_framework_event_counts,
 )
+from app.services.control_inheritance import evidence_pairs, effective_framework_ids
 from app.core.source_meta import get_source_meta, apply_user_source_overrides
 
 router = APIRouter()
@@ -46,7 +47,7 @@ def stats_summary(
         # Bump the cache signature so older Valkey summaries do not continue
         # to show stale mapped/unmapped counters from the legacy trigger-backed
         # global event stats path.
-        "counter_version": "celery-event-counts-v1",
+        "counter_version": "cross-framework-v1",
     }
 
     def _load() -> dict:
@@ -98,7 +99,10 @@ def stats_summary(
         # visible to active users, so these dashboard counters use the global
         # framework event-count cache instead of legacy trigger-maintained
         # Postgres counter tables.
-        if isinstance(user, User) and getattr(user, "is_active", False):
+        has_inheritance = db.query(CrossFrameworkControlLink.id).join(
+            ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id
+        ).filter(ControlItem.framework_slug == framework).first() is not None
+        if not has_inheritance and isinstance(user, User) and getattr(user, "is_active", False):
             controls = (
                 db.query(ControlItem.id, ControlItem.in_scope)
                 .filter(ControlItem.framework_slug == framework)
@@ -134,11 +138,10 @@ def stats_summary(
 
         total_events = db.query(func.count(Event.id)).filter(visibility).scalar() or 0
 
+        pairs = evidence_pairs(framework)
         mapped_events = (
-            db.query(func.count(func.distinct(Mapping.event_id)))
-            .join(Event, Event.id == Mapping.event_id)
-            .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-            .filter(ControlItem.framework_slug == framework)
+            db.query(func.count(func.distinct(pairs.c.event_id)))
+            .join(Event, Event.id == pairs.c.event_id)
             .filter(visibility)
             .scalar()
             or 0
@@ -161,9 +164,9 @@ def stats_summary(
 
         # Evidence coverage should be reported for IN-SCOPE controls by default.
         controls_with_evidence_in_scope = (
-            db.query(func.count(func.distinct(Mapping.control_item_id)))
-            .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-            .join(Event, Event.id == Mapping.event_id)
+            db.query(func.count(func.distinct(pairs.c.control_id)))
+            .join(ControlItem, ControlItem.id == pairs.c.control_id)
+            .join(Event, Event.id == pairs.c.event_id)
             .filter(
                 ControlItem.framework_slug == framework, ControlItem.in_scope == True
             )  # noqa: E712
@@ -174,9 +177,9 @@ def stats_summary(
 
         # Also expose "all controls" coverage for completeness.
         controls_with_evidence_all = (
-            db.query(func.count(func.distinct(Mapping.control_item_id)))
-            .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-            .join(Event, Event.id == Mapping.event_id)
+            db.query(func.count(func.distinct(pairs.c.control_id)))
+            .join(ControlItem, ControlItem.id == pairs.c.control_id)
+            .join(Event, Event.id == pairs.c.event_id)
             .filter(ControlItem.framework_slug == framework)
             .filter(visibility)
             .scalar()
@@ -216,6 +219,9 @@ def stats_controls(
     }
 
     def _load() -> dict:
+        has_inheritance = db.query(CrossFrameworkControlLink.id).join(
+            ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id
+        ).filter(ControlItem.framework_slug == framework).first() is not None
         def _item(c: ControlItem, evidence_count: int, last_evidence) -> dict:
             if isinstance(last_evidence, datetime):
                 last_evidence_value = last_evidence.isoformat()
@@ -240,6 +246,7 @@ def stats_controls(
         if (
             start_date is None
             and end_date is None
+            and not has_inheritance
             and isinstance(user, User)
             and getattr(user, "is_active", False)
         ):
@@ -278,20 +285,31 @@ def stats_controls(
         # Aggregate evidence by control first, then left-join to the comparatively
         # small controls table. This remains the exact path for date-filtered
         # requests.
-        evidence_sq = (
-            db.query(
-                Mapping.control_item_id.label("control_item_id"),
-                func.count(Mapping.event_id).label("evidence_count"),
-                func.max(Event.timestamp).label("last_evidence"),
+        if has_inheritance:
+            pairs = evidence_pairs(framework)
+            evidence_sq = (
+                db.query(pairs.c.control_id.label("control_item_id"),
+                         func.count(pairs.c.event_id).label("evidence_count"),
+                         func.max(Event.timestamp).label("last_evidence"))
+                .join(Event, Event.id == pairs.c.event_id)
+                .filter(diary_filter_condition(db, user), *event_filters)
+                .group_by(pairs.c.control_id).subquery()
             )
-            .join(Event, Event.id == Mapping.event_id)
-            .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-            .filter(ControlItem.framework_slug == framework)
-            .filter(diary_filter_condition(db, user))
-            .filter(*event_filters)
-            .group_by(Mapping.control_item_id)
-            .subquery()
-        )
+        else:
+            evidence_sq = (
+                db.query(
+                    Mapping.control_item_id.label("control_item_id"),
+                    func.count(Mapping.event_id).label("evidence_count"),
+                    func.max(Event.timestamp).label("last_evidence"),
+                )
+                .join(Event, Event.id == Mapping.event_id)
+                .join(ControlItem, ControlItem.id == Mapping.control_item_id)
+                .filter(ControlItem.framework_slug == framework)
+                .filter(diary_filter_condition(db, user))
+                .filter(*event_filters)
+                .group_by(Mapping.control_item_id)
+                .subquery()
+            )
 
         rows = (
             db.query(
@@ -486,9 +504,8 @@ def stats_events_timeseries(
             func.count(func.distinct(Event.id)).label("n"),
         )
         .join(Mapping, Mapping.event_id == Event.id)
-        .join(ControlItem, ControlItem.id == Mapping.control_item_id)
         .filter(Event.timestamp >= start)
-        .filter(ControlItem.framework_slug == framework)
+        .filter(Mapping.control_item_id.in_(effective_framework_ids(framework)))
         .filter(diary_filter_condition(db, user))
     )
     mapped_q = mapped_q.filter(Event.timestamp < end_excl)

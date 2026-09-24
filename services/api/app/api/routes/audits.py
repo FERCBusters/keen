@@ -25,6 +25,7 @@ from app.db.models import (
     AuditScopedControl,
     AuditScopedIsmsDocument,
     ControlClauseLink,
+    BookStackSectionEvidence,
     ControlItem,
     Event,
     FrameworkClause,
@@ -455,6 +456,7 @@ _AUDIT_SAMPLE_ENTITY_ALIASES = {
     "isms_objective": "isms_objective",
     "document": "isms_document",
     "isms_document": "isms_document",
+    "bookstack_section": "bookstack_section",
     "org": "isms_org_node",
     "org_node": "isms_org_node",
     "isms_org_node": "isms_org_node",
@@ -482,6 +484,7 @@ _AUDIT_SAMPLE_ENTITY_LABELS = {
     "interested_party": "Interested party",
     "isms_objective": "ISMS objective",
     "isms_document": "ISMS document",
+    "bookstack_section": "BookStack policy snapshot",
     "isms_org_node": "Organisation chart node",
     "isms_asset": "ISMS asset",
     "isms_access_control_matrix": "Access control matrix row",
@@ -536,6 +539,8 @@ def _entity_href(entity_type: str, entity_id: uuid.UUID, framework: str) -> str:
         return (
             f"/isms.html{fwfirst}&tab=documents" if fw else "/isms.html?tab=documents"
         )
+    if entity_type == "bookstack_section":
+        return f"/api/v1/isms/bookstack-sections/{eid}/snapshot"
     if entity_type == "isms_org_node":
         return f"/isms.html{fwfirst}&tab=org" if fw else "/isms.html?tab=org"
     if entity_type == "isms_asset":
@@ -716,6 +721,21 @@ def _audit_sample_entity_reference(
             title = f"ISMS document: {row.title or 'Document'}"
             subtitle = row.document_type or ""
             controls = _isms_sample_controls(db, entity_type, row.id, framework)
+    elif entity_type == "bookstack_section":
+        row = db.query(BookStackSectionEvidence).filter(BookStackSectionEvidence.id == entity_id).one_or_none()
+        if row and row.target_control and row.target_control.framework_slug == framework:
+            controls = [_control_out(row.target_control)]
+        elif row and row.target_clause and row.target_clause.framework_slug == framework:
+            linked = db.query(ControlItem).join(ControlClauseLink, ControlClauseLink.control_item_id == ControlItem.id).filter(
+                ControlClauseLink.clause_id == row.target_clause_id,
+                ControlItem.framework_slug == framework,
+            ).all()
+            controls = [_control_out(c) for c in linked]
+        else:
+            row = None  # A snapshot may only be sampled under its target framework.
+        if row:
+            title = f"BookStack policy: {row.page_title}"
+            subtitle = f"Revision {row.revision_count or 'unknown'} · SHA-256 {row.sha256}"
     elif entity_type == "isms_org_node":
         row = db.query(IsmsOrgNode).filter(IsmsOrgNode.id == entity_id).one_or_none()
         if row:

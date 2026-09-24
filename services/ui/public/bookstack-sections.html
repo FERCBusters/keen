@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Keen – BookStack policy sections</title>
+<link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet"><link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet"><link rel="stylesheet" href="/styles.css"><link rel="icon" href="/favicon.svg" type="image/svg+xml"></head>
+<body data-page="isms"><div id="navbar"></div><main class="container-fluid py-4"><h1 class="h3">BookStack policy sections</h1>
+<p class="small-muted">Link a stable BookStack page or section to a framework requirement. Capture a copy of the page at the time it is used as evidence. KEEN keeps earlier snapshots when the page changes; API credentials stay on the server.</p>
+<div id="status" class="alert alert-info" style="display:none" role="status"></div>
+<div class="card mb-3"><div class="card-header fw-semibold">Capture a policy version</div><div class="card-body"><form id="sectionForm" class="row g-3">
+<div class="col-md-4"><label class="form-label" for="policyDocument">ISMS policy or process</label><select id="policyDocument" class="form-select" required></select><div class="form-text"><a data-nav-fw="1" href="/isms.html?tab=documents">Add a document record</a> first if needed.</div></div>
+<div class="col-md-4"><label class="form-label" for="bookSelect">BookStack book</label><select id="bookSelect" class="form-select" required></select></div>
+<div class="col-md-4"><label class="form-label" for="pageSelect">Page</label><select id="pageSelect" class="form-select" required></select><button id="morePages" class="btn btn-sm btn-link" type="button" style="display:none">More pages</button></div>
+<div class="col-md-4"><label class="form-label" for="pageAnchor">Section anchor (optional)</label><input id="pageAnchor" class="form-control" maxlength="256" placeholder="bkmrk-access-review"><div class="form-text">Copy the section permalink from BookStack; paste its part after # here.</div></div>
+<div class="col-md-4"><label class="form-label" for="targetFramework">Framework</label><select id="targetFramework" class="form-select" required></select></div>
+<div class="col-md-4"><label class="form-label" for="targetRequirement">Control or clause</label><select id="targetRequirement" class="form-select" required></select></div>
+<div class="col-12"><button class="btn btn-primary" type="submit">Capture policy version and link requirement</button></div>
+</form></div></div>
+<div class="card"><div class="card-header fw-semibold">Captured policy evidence</div><div class="card-body"><div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Document</th><th>BookStack page / section</th><th>Requirement</th><th>Captured</th><th>Page revision</th><th>Snapshot</th><th></th></tr></thead><tbody id="sectionRows"></tbody></table></div></div></div>
+</main><script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script><script type="module" src="/pages/bookstack-sections.js"></script></body></html>

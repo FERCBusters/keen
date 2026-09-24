@@ -39,6 +39,7 @@ const params = new URLSearchParams(location.search);
 const requestedRiskId = params.get('id') || '';
 const requestedEditRiskId = params.get('edit') || '';
 const requestedTab = params.get('tab') || '';
+const requestedTemplateId = params.get('template') || '';
 if (!isMitigatorPage && requestedTab === 'mitigator') {
   const redirect = new URL('/mitigator.html', location.origin);
   if (framework) redirect.searchParams.set('framework', framework);
@@ -1823,6 +1824,18 @@ if (!canViewRisks) {
     // Older links used /risks.html?id=... for both viewing and editing.
     // The register is now list/edit-only; specific risk viewing has its own page.
     location.replace(riskHref(requestedRiskId));
+  } else if (!isMitigatorPage && requestedTemplateId) {
+    const library = await apiGet('/api/v1/risks/library');
+    const template = (library.items || []).find(item => item.id === requestedTemplateId);
+    if (template) {
+      showEditor();
+      setRiskTypes(template.risk_types || []);
+      threatSummary.value = template.threat_summary || '';
+      note.value = template.treatment_guidance || '';
+      toast(status, 'Template loaded. Select an asset and review its scores and controls.', 'info');
+    }
+  } else if (!isMitigatorPage && requestedTab === 'new') {
+    showEditor();
   } else if (!isMitigatorPage && requestedTab === 'visualisations') {
     showTab(riskVisualisationsTab);
     await loadRiskVisualisations();

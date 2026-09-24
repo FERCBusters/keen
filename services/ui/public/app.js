@@ -56,6 +56,7 @@ function _patchRiskNavDropdown() {
     </a>
     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="riskAssessmentsDropdown">
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risks.html'))}">CIA Triad Risk Assessment</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risk-register.html'))}">Risk Register &amp; Heatmap</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/pestle.html'))}">PESTLE(E) Impact Assessment</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/interested_parties.html'))}">Interested Parties</a></li>
       <li><a class="dropdown-item d-inline-flex align-items-center gap-2" href="${esc(_withCurrentFramework('/mitigator.html'))}"><img src="/keen-mitigator.svg" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator</a></li>
@@ -98,8 +99,11 @@ function _patchIsmsNavDropdown() {
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=objectives'))}">Objectives</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=effectiveness'))}">Effectiveness Measures</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=documents'))}">Policies &amp; Processes</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/documents.html'))}">Edit policy documents</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/bookstack-sections.html'))}">BookStack policy sections</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=org'))}">Organisation Chart</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=assets'))}">Asset Matrix</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/assurance.html'))}">People &amp; vendors</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=access'))}">Access Control Matrix</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=appconfig'))}">Application Configuration</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=meetings'))}">Minutes of Meetings</a></li>

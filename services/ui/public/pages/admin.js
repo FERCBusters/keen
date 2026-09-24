@@ -9,6 +9,21 @@ const frameworkInput = document.getElementById('framework');
 if (frameworkInput && !frameworkInput.value) frameworkInput.value = currentFramework;
 
 const isAdmin = !!me?.is_admin;
+
+async function loadSourceCatalogue() {
+  const node = document.getElementById('source-catalogue');
+  if (!node || !isAdmin) return;
+  try {
+    const data = await apiGet('/api/v1/admin/source-catalogue');
+    node.innerHTML = (data.items || []).map(item => `
+      <div class="col-md-6 col-xl-4"><div class="border rounded p-3 h-100">
+        <strong>${esc(item.adapter)}</strong> <span class="badge ${item.enabled ? 'text-bg-success' : 'text-bg-secondary'}">${item.enabled ? 'Enabled' : 'Disabled'}</span>
+        <div class="small-muted">${item.collection_items} collection items · ${item.definitions} definitions</div>
+        <div class="small-muted">${item.observed_events} events · last seen ${esc(item.last_seen || 'never')}</div>
+      </div></div>`).join('');
+  } catch (e) { node.textContent = `Could not load source catalogue: ${String(e)}`; }
+}
+document.getElementById('tab-evidence-config')?.addEventListener('shown.bs.tab', loadSourceCatalogue);
 const canAudit = !!me?.can_audit_trail;
 
 

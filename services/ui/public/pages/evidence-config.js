@@ -509,6 +509,33 @@ function addSelectedTarget() {
   renderTargets();
 }
 $('add-target').addEventListener('click', addSelectedTarget);
+$('suggest-controls').addEventListener('click', async () => {
+  const framework = $('framework').value;
+  const description = $('description').value.trim();
+  const sample = samples[Number($('sample').value)];
+  const list = $('control-suggestions');
+  list.replaceChildren();
+  if (!framework || !description) { status('Choose a framework and describe the evidence first.', 'warning'); return; }
+  try {
+    const result = await apiPost(`${apiRoot}/control-suggestions`, {framework, description, sample_summary:sample?.summary || ''});
+    if (!result.items.length) { list.textContent = 'No clear matches in this framework. Search the control list or try a more specific description.'; return; }
+    for (const suggestion of result.items) {
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = 'list-group-item list-group-item-action text-start';
+      const title = document.createElement('strong'); title.textContent = `${suggestion.ref} · ${suggestion.title || 'Control'}`;
+      const reason = document.createElement('div'); reason.className = 'small-muted';
+      reason.textContent = `Matched: ${suggestion.matched_terms.join(', ')}. Click to add; review suitability before publishing.`;
+      button.append(title, reason);
+      button.addEventListener('click', () => {
+        if (!targets.some(t => t.framework === framework && t.ref === suggestion.ref)) {
+          targets.push({framework, ref:suggestion.ref}); renderTargets();
+        }
+        button.disabled = true; button.classList.add('opacity-50');
+      });
+      list.append(button);
+    }
+  } catch (error) { status(error.message); }
+});
 $('preview').addEventListener('click', async () => {
   try {
     const rule = readRule();

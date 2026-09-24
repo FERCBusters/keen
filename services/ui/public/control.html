@@ -27,6 +27,19 @@
 
     <div id="status" class="alert alert-info" style="display:none;"></div>
 
+    <div class="card mb-3" id="crossFrameworkCard">
+      <div class="card-header"><div class="fw-bold">Related controls in other frameworks</div>
+        <div class="small-muted">Evidence mapped to a source control appears here too. Links are directional and apply to existing and future evidence. Review overlap before linking.</div></div>
+      <div class="card-body"><div id="crossFrameworkLinks" class="mb-3 small-muted">Loading linked controls…</div>
+        <form id="crossFrameworkForm" class="row g-2 align-items-end" style="display:none">
+          <div class="col-md-3"><label class="form-label" for="crossFrameworkSource">Source framework</label><select class="form-select" id="crossFrameworkSource" required></select></div>
+          <div class="col-md-4"><label class="form-label" for="crossFrameworkControl">Source control</label><select class="form-select" id="crossFrameworkControl" required></select></div>
+          <div class="col-md-4"><label class="form-label" for="crossFrameworkRationale">Why does evidence apply to both?</label><input class="form-control" id="crossFrameworkRationale" required maxlength="4000"></div>
+          <div class="col-md-1"><button class="btn btn-outline-primary w-100" type="submit">Link</button></div>
+        </form>
+      </div>
+    </div>
+
     <div id="controlJustificationCard" class="card mb-3 no-print" style="display:none;">
       <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
         <div>
