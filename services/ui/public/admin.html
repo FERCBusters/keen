@@ -33,6 +33,7 @@
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="tab-groups" data-bs-toggle="tab" data-bs-target="#pane-groups" type="button" role="tab" aria-controls="pane-groups" aria-selected="false">Groups &amp; permissions</button>
         </li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="tab-framework-editor" data-bs-toggle="tab" data-bs-target="#pane-framework-editor" type="button" role="tab" aria-controls="pane-framework-editor" aria-selected="false">Frameworks</button></li>
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="tab-ingest" data-bs-toggle="tab" data-bs-target="#pane-ingest" type="button" role="tab" aria-controls="pane-ingest" aria-selected="false">Import & ingest</button>
         </li>
@@ -248,6 +249,35 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Framework editor -->
+      <div class="tab-pane fade" id="pane-framework-editor" role="tabpanel" aria-labelledby="tab-framework-editor" tabindex="0">
+        <div class="card mb-3"><div class="card-header fw-bold">Framework details</div><div class="card-body">
+          <div class="row g-2"><div class="col-md-4"><label class="form-label">Slug</label><input id="fe-slug" class="form-control" maxlength="64"></div>
+          <div class="col-md-5"><label class="form-label">Name</label><input id="fe-name" class="form-control"></div>
+          <div class="col-md-3"><label class="form-label">Version</label><input id="fe-version" class="form-control"></div></div>
+          <label class="form-label mt-2">Description</label><textarea id="fe-description" class="form-control"></textarea>
+          <label class="form-label mt-2">Upstream URL</label><input id="fe-url" type="url" class="form-control">
+          <button id="fe-save-framework" class="btn btn-primary mt-2">Save framework</button> <button id="fe-new-framework" class="btn btn-outline-primary mt-2">New framework</button>
+        </div></div>
+        <div class="row g-3"><div class="col-lg-5"><div class="card"><div class="card-header d-flex justify-content-between">Nodes <button id="fe-new" class="btn btn-sm btn-outline-primary">New node</button></div><div class="card-body">
+          <label class="form-label">Select framework</label><select id="fe-frameworks" class="form-select mb-2"></select>
+          <input id="fe-search" class="form-control mb-2" placeholder="Search references and titles">
+          <div id="fe-tree" class="list-group"></div></div></div></div>
+        <div class="col-lg-7"><div class="card"><div class="card-header fw-bold">Node details</div><div class="card-body">
+          <div class="row g-2"><div class="col-sm-5"><label class="form-label">Category</label><select id="fe-kind" class="form-select"><option value="clause">Clause</option><option value="annex_control">Control</option><option value="custom">Custom</option></select></div>
+          <div class="col-sm-7"><label class="form-label">Reference</label><input id="fe-ref" class="form-control" maxlength="64"></div></div>
+          <label class="form-label mt-2">Title</label><input id="fe-title" class="form-control">
+          <label class="form-label mt-2">Description</label><textarea id="fe-node-description" class="form-control" rows="3"></textarea>
+          <label class="form-label mt-2">Parent (same category; optional)</label><select id="fe-parent" class="form-select"></select>
+          <label class="form-label mt-2">Related clauses (optional; control nodes only)</label><select id="fe-clauses" class="form-select" multiple size="4"></select>
+          <label class="form-label mt-2">Upstream URL</label><input id="fe-node-url" type="url" class="form-control">
+          <label class="form-label mt-2">Sort order</label><input id="fe-sort" type="number" class="form-control" value="0">
+          <label class="form-check mt-2"><input id="fe-scope" type="checkbox" class="form-check-input" checked> In scope</label>
+          <div class="d-flex gap-2 mt-3"><button id="fe-save-node" class="btn btn-primary">Save node</button><button id="fe-delete-node" class="btn btn-outline-danger">Delete node</button></div>
+          <div id="fe-message" class="small mt-2" role="status"></div>
+        </div></div></div></div>
       </div>
 
       <!-- Import & ingest -->
@@ -531,6 +561,7 @@
 
   <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
   <script type="module" src="/pages/admin.js"></script>
+  <script type="module" src="/pages/framework-editor.js"></script>
 
   <!-- User access modal (groups + explicit permissions) -->
   <div class="modal fade" id="userAccessModal" tabindex="-1" aria-labelledby="userAccessModalLabel" aria-hidden="true">

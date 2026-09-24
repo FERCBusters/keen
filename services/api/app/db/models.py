@@ -34,6 +34,10 @@ class Framework(Base):
     slug: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False
     )  # e.g. ISO27001:2022
+    name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    version: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    upstream_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False
     )
