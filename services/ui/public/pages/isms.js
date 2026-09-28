@@ -101,6 +101,7 @@ const loadedMetaSections = new Set();
 const loadedSummarySections = new Set();
 const sectionLoadPromises = new Map();
 const sectionByKind = {objective: 'objectives', document: 'documents', org: 'org', asset: 'assets', access: 'access', effectiveness: 'effectiveness', meeting: 'meetings'};
+const tabIdBySection = {overview: 'overviewTab', objectives: 'objectivesTab', documents: 'documentsTab', org: 'orgTab', assets: 'assetsTab', access: 'accessControlTab', effectiveness: 'effectivenessTab', meetings: 'meetingsTab', soa: 'soaTab'};
 const sectionAliases = {
   overview: 'overview', summary: 'overview',
   objective: 'objectives', objectives: 'objectives',
