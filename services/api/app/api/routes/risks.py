@@ -23,6 +23,7 @@ from app.db.models import (
     RiskAssetSubcategory,
     RiskCategory,
     RiskControlLink,
+    RiskLibraryEntry,
     User,
 )
 from app.db.session import get_db
@@ -127,6 +128,7 @@ class RiskUpsertPayload(BaseModel):
     mitigator_context: dict[str, Any] | None = None
     framework: str | None = Field(default=None, max_length=64)
     controls: list[str] | None = None
+    library_template_id: uuid.UUID | None = None
 
 
 def _utcnow() -> datetime:
@@ -1471,6 +1473,19 @@ def create_risk(
     user=Depends(require_risk_manage),
     db: Session = Depends(get_db),
 ):
+    template_refs: list[str] = []
+    if payload.library_template_id:
+        template = db.get(RiskLibraryEntry, payload.library_template_id)
+        if template is None:
+            raise HTTPException(status_code=400, detail="Unknown risk library template")
+        refs = (template.suggested_assessment or {}).get("keen_af_control_refs", [])
+        if isinstance(refs, list):
+            template_refs = _dedupe_controls([ref for ref in refs if isinstance(ref, str)])
+            # Administrators can remove framework controls later. An old
+            # template should still create a risk using its remaining links.
+            available = {ref for (ref,) in db.query(ControlItem.ref).filter(
+                ControlItem.framework_slug == "KEEN-AF:1.0", ControlItem.ref.in_(template_refs)).all()}
+            template_refs = [ref for ref in template_refs if ref in available]
     now = _utcnow()
     risk = Risk(created_at=now, updated_at=now, created_by_user_id=user.id)
     _apply_payload(db, risk, payload, is_create=True)
@@ -1478,7 +1493,12 @@ def create_risk(
     db.flush()
     fw = _clean_framework(payload.framework)
     if payload.controls is not None:
-        _replace_control_links(db, risk, framework=fw, control_values=payload.controls)
+        controls = payload.controls + template_refs if fw == "KEEN-AF:1.0" else payload.controls
+        _replace_control_links(db, risk, framework=fw, control_values=controls)
+    elif fw == "KEEN-AF:1.0" and template_refs:
+        _replace_control_links(db, risk, framework=fw, control_values=template_refs)
+    if template_refs and fw != "KEEN-AF:1.0":
+        _replace_control_links(db, risk, framework="KEEN-AF:1.0", control_values=template_refs)
     db.flush()
     record_entity_changelog(
         db,

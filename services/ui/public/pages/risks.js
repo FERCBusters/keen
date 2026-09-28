@@ -129,6 +129,11 @@ const residualLikelihood = document.getElementById('residualLikelihood');
 const residualImpact = document.getElementById('residualImpact');
 const residualScorePreview = document.getElementById('residualScorePreview');
 const controls = document.getElementById('controls');
+const templateControlsCard = document.getElementById('templateControlsCard');
+const templateControlsList = document.getElementById('templateControlsList');
+const templateIncludeControls = document.getElementById('templateIncludeControls');
+let selectedLibraryTemplateId = null;
+let templateControlRefs = [];
 const note = document.getElementById('note');
 const deleteRisk = document.getElementById('deleteRisk');
 const saveRisk = document.getElementById('saveRisk');
@@ -822,6 +827,10 @@ function renderFilterSubcategories() {
 }
 
 function resetForm() {
+  selectedLibraryTemplateId = null;
+  templateControlRefs = [];
+  if (templateControlsCard) templateControlsCard.hidden = true;
+  if (templateIncludeControls) templateIncludeControls.checked = true;
   if (riskId) riskId.value = '';
   if (assetId) assetId.value = '';
   if (asset) asset.value = '';
@@ -1229,6 +1238,9 @@ async function saveCurrentRisk(ev) {
   try {
     const id = riskId?.value || '';
     const payload = formPayload();
+    if (!id && selectedLibraryTemplateId && templateIncludeControls?.checked && templateControlRefs.length) {
+      payload.library_template_id = selectedLibraryTemplateId;
+    }
     const saved = id
       ? await apiPatch(`/api/v1/risks/${encodeURIComponent(id)}`, payload)
       : await apiPost('/api/v1/risks', payload);
@@ -1828,6 +1840,11 @@ if (!canViewRisks) {
       threatSummary.value = template.threat_summary || '';
       note.value = template.treatment_guidance || '';
       const suggestion = template.suggested_assessment || {};
+      selectedLibraryTemplateId = template.id;
+      templateControlRefs = Array.isArray(suggestion.keen_af_control_refs) ? suggestion.keen_af_control_refs : [];
+      if (templateControlsCard) templateControlsCard.hidden = !templateControlRefs.length;
+      if (templateControlsList) templateControlsList.textContent = templateControlRefs.length
+        ? `${templateControlRefs.join(', ')}. These links are saved under KEEN-AF:1.0; mappings for other frameworks remain available.` : '';
       for (const [field, key] of [[inherentLikelihood, 'inherent_likelihood'], [inherentImpact, 'inherent_impact'],
                                   [residualLikelihood, 'residual_likelihood'], [residualImpact, 'residual_impact']]) {
         if (field && Number.isInteger(suggestion[key]) && suggestion[key] >= 1 && suggestion[key] <= 5) field.value = suggestion[key];

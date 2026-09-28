@@ -17,7 +17,7 @@ from app.api.routes.risks import (
     RiskUpsertPayload, _apply_payload, _clean_framework, _clean_risk_types,
     _replace_control_links, _risk_or_404, _risk_out, require_risk_manage, require_risk_read,
 )
-from app.db.models import Risk, RiskLibraryEntry, RiskRegisterSettings
+from app.db.models import ControlItem, Risk, RiskControlLink, RiskLibraryEntry, RiskRegisterSettings
 from app.db.session import get_db
 from app.services.entity_changelog import record_entity_changelog
 
@@ -47,6 +47,7 @@ class LibraryInput(BaseModel):
     risk_types: list[str] = Field(min_length=1)
     treatment_guidance: str = Field(default="", max_length=20000)
     suggested_assessment: dict[str, Any] = Field(default_factory=dict)
+    source_risk_id: uuid.UUID | None = None
 
 
 def _settings(db):
@@ -236,12 +237,22 @@ def add_library(payload: LibraryInput, user=Depends(require_risk_manage), db: Se
     name = payload.name.strip()
     if db.query(RiskLibraryEntry.id).filter(func.lower(RiskLibraryEntry.name) == name.lower()).first():
         raise HTTPException(409, "Library item already exists")
+    suggestion = {key: value for key, value in payload.suggested_assessment.items()
+                  if key in {"asset", "inherent_likelihood", "inherent_impact",
+                             "residual_likelihood", "residual_impact"}}
+    if payload.source_risk_id:
+        if not db.get(Risk, payload.source_risk_id):
+            raise HTTPException(400, "Source risk not found")
+        refs = (db.query(ControlItem.ref).join(RiskControlLink, RiskControlLink.control_item_id == ControlItem.id)
+                .filter(RiskControlLink.risk_id == payload.source_risk_id,
+                        RiskControlLink.framework_slug == "KEEN-AF:1.0")
+                .order_by(ControlItem.ref).all())
+        if refs:
+            suggestion["keen_af_control_refs"] = list(dict.fromkeys(ref for (ref,) in refs))
     row = RiskLibraryEntry(name=name, threat_summary=payload.threat_summary.strip(),
                            risk_types=_clean_risk_types(payload.risk_types),
                            treatment_guidance=payload.treatment_guidance.strip(),
-                           suggested_assessment={key: value for key, value in payload.suggested_assessment.items()
-                                                 if key in {"asset", "inherent_likelihood", "inherent_impact",
-                                                            "residual_likelihood", "residual_impact"}})
+                           suggested_assessment=suggestion)
     db.add(row); db.commit(); db.refresh(row)
     return _library_out(row)
 
