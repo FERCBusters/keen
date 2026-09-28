@@ -400,7 +400,6 @@ def statement_of_applicability(
     isms_org_nodes: list[dict[str, Any]] = []
     isms_assets: list[dict[str, Any]] = []
     isms_business_processes: list[dict[str, Any]] = []
-    isms_application_configurations: list[dict[str, Any]] = []
     isms_effectiveness_measures: list[dict[str, Any]] = []
     isms_meetings: list[dict[str, Any]] = []
     if can_view_isms:
@@ -438,13 +437,6 @@ def statement_of_applicability(
             .order_by(
                 IsmsBusinessProcess.sort_order.asc(), IsmsBusinessProcess.name.asc()
             )
-            .all()
-        ]
-        isms_application_configurations = [
-            _app_config_out(db, row, fw)
-            for row in db.query(IsmsApplicationConfigurationEntry)
-            .order_by(IsmsApplicationConfigurationEntry.updated_at.desc())
-            .limit(2000)
             .all()
         ]
         isms_effectiveness_measures = [
@@ -485,7 +477,6 @@ def statement_of_applicability(
             "isms_org_nodes": len(isms_org_nodes),
             "isms_assets": len(isms_assets),
             "isms_business_processes": len(isms_business_processes),
-            "isms_application_configurations": len(isms_application_configurations),
             "isms_effectiveness_measures": len(isms_effectiveness_measures),
             "isms_meetings": len(isms_meetings),
         },
@@ -500,7 +491,6 @@ def statement_of_applicability(
         "isms_org_nodes": isms_org_nodes,
         "isms_assets": isms_assets,
         "isms_business_processes": isms_business_processes,
-        "isms_application_configurations": isms_application_configurations,
         "isms_effectiveness_measures": isms_effectiveness_measures,
         "isms_meetings": isms_meetings,
     }

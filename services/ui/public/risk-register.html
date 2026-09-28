@@ -2,8 +2,8 @@
 <title>Keen – Risk register</title><link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet"><link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet"><link rel="stylesheet" href="/styles.css"><link rel="icon" href="/favicon.svg" type="image/svg+xml"></head>
 <body data-page="risks"><div id="navbar"></div><main class="container-fluid py-4">
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h1 class="h3 mb-1">Risk register</h1>
-<p class="small-muted mb-0">Conventional 5×5 likelihood × impact ratings, treatment, and the existing CIA and framework relationships. Earlier risks appear as “Needs rating” until reviewed.</p></div>
-<div class="d-flex gap-2"><a class="btn btn-outline-primary" data-nav-fw="1" href="/risks.html">Scenario assessment</a><a class="btn btn-primary" data-nav-fw="1" href="/risks.html?tab=new">New risk</a></div></div>
+<p class="small-muted mb-0">One set of risks, rated by inherent and residual likelihood × impact, with CIA associations and framework controls.</p></div>
+<div class="d-flex gap-2"><a class="btn btn-outline-primary" data-nav-fw="1" href="/risks.html">Assess risks and controls</a><a class="btn btn-primary" data-nav-fw="1" href="/risks.html?tab=new">New risk</a></div></div>
 <div id="status" class="alert alert-info" style="display:none" role="status"></div>
 <div class="row g-3 mb-3"><section class="col-12 col-xxl-5"><div class="card h-100"><div class="card-header fw-semibold">5×5 heatmap</div><div class="card-body">
 <p class="small-muted">Cells show the number of rated risks at each likelihood and impact. Choose inherent or residual scores. Thresholds apply to the entire register.</p>
@@ -24,7 +24,7 @@
 <section class="card mb-3"><div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2"><strong>Risk and treatment register</strong><input id="registerSearch" type="search" class="form-control" style="max-width:320px" placeholder="Filter scenario or asset"></div>
 <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Asset</th><th>Scenario / CIA</th><th>Owner</th><th>Inherent</th><th>Residual</th><th>Treatment</th><th>Controls</th><th></th></tr></thead><tbody id="registerRows"></tbody></table></div><div id="registerMeta" class="small-muted px-3 py-2"></div></section>
 <section class="card" id="ratingCard" style="display:none"><div class="card-header fw-semibold" id="ratingTitle">Rate risk</div><div class="card-body"><form id="ratingForm" class="row g-3">
-<div class="col-12"><div class="alert alert-light border mb-0">Likelihood and impact here are the conventional 5×5 ratings. They do not overwrite KEEN’s existing Threat × Vulnerability × Impact scenario scores.</div></div>
+<div class="col-12"><div class="alert alert-light border mb-0">These are the same ratings used in the risk editor, register, and heatmap.</div></div>
 <div class="col-md-3"><label class="form-label" for="inherentLikelihood">Inherent likelihood</label><select class="form-select" id="inherentLikelihood"></select></div><div class="col-md-3"><label class="form-label" for="inherentImpact">Inherent impact</label><select class="form-select" id="inherentImpact"></select></div>
 <div class="col-md-3"><label class="form-label" for="residualLikelihood">Residual likelihood</label><select class="form-select" id="residualLikelihood"></select></div><div class="col-md-3"><label class="form-label" for="residualImpact">Residual impact</label><select class="form-select" id="residualImpact"></select></div>
 <div class="col-md-3"><label class="form-label" for="treatmentStrategy">Treatment decision</label><select class="form-select" id="treatmentStrategy"><option value="">Undecided</option><option value="mitigate">Mitigate</option><option value="accept">Accept</option><option value="avoid">Avoid</option><option value="transfer">Transfer</option></select></div>

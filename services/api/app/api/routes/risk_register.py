@@ -46,6 +46,7 @@ class LibraryInput(BaseModel):
     threat_summary: str = Field(default="", max_length=12000)
     risk_types: list[str] = Field(min_length=1)
     treatment_guidance: str = Field(default="", max_length=20000)
+    suggested_assessment: dict[str, Any] = Field(default_factory=dict)
 
 
 def _settings(db):
@@ -67,6 +68,21 @@ def _register_out(db, row, framework):
     item["register_inherent_score"] = _score(row.register_likelihood, row.register_impact)
     item["register_residual_score"] = _score(row.register_residual_likelihood, row.register_residual_impact)
     return item
+
+
+@router.get("/v1/risks/register/heatmap")
+def register_heatmap(user=Depends(require_risk_read), db: Session = Depends(get_db)):
+    result = {}
+    for key, likelihood, impact in (
+        ("inherent", Risk.register_likelihood, Risk.register_impact),
+        ("residual", Risk.register_residual_likelihood, Risk.register_residual_impact),
+    ):
+        rows = (db.query(likelihood, impact, func.count(Risk.id))
+                .filter(likelihood.isnot(None), impact.isnot(None))
+                .group_by(likelihood, impact).all())
+        result[key] = [{"likelihood": score_l, "impact": score_i, "count": count}
+                       for score_l, score_i, count in rows]
+    return result
 
 
 @router.get("/v1/risks/register")
@@ -100,6 +116,13 @@ def rate_risk(risk_id: uuid.UUID, payload: RegisterRating, user=Depends(require_
     before = _register_out(db, row, "ISO27001:2022")
     for field, value in payload.model_dump().items():
         setattr(row, field, value.strip() if isinstance(value, str) else value)
+    row.threat_score = 1
+    row.vulnerability_score = row.register_likelihood or 1
+    row.impact_score = row.register_impact or 1
+    row.residual_vulnerability_score = row.register_residual_likelihood or 1
+    row.residual_impact_score = row.register_residual_impact or 1
+    row.risk_score = _score(row.register_likelihood, row.register_impact) or 0
+    row.residual_risk_score = _score(row.register_residual_likelihood, row.register_residual_impact) or 0
     db.add(row)
     db.flush()
     record_entity_changelog(db, entity_type="risk", entity_id=row.id, action="updated",
@@ -176,6 +199,10 @@ async def import_register(file: UploadFile = File(...), framework: str = "ISO270
             _apply_payload(db, row, payload, is_create=True)
             for field in ("register_likelihood", "register_impact", "register_residual_likelihood", "register_residual_impact"):
                 setattr(row, field, rating(field))
+            row.vulnerability_score, row.impact_score = row.register_likelihood or 1, row.register_impact or 1
+            row.residual_vulnerability_score, row.residual_impact_score = row.register_residual_likelihood or 1, row.register_residual_impact or 1
+            row.risk_score = _score(row.register_likelihood, row.register_impact) or 0
+            row.residual_risk_score = _score(row.register_residual_likelihood, row.register_residual_impact) or 0
             strategy = (entry.get("treatment_strategy") or "").strip()
             status = (entry.get("treatment_status") or "open").strip()
             if strategy not in {"", "mitigate", "accept", "avoid", "transfer"} or status not in {"open", "in_progress", "awaiting_review", "closed"}:
@@ -211,7 +238,10 @@ def add_library(payload: LibraryInput, user=Depends(require_risk_manage), db: Se
         raise HTTPException(409, "Library item already exists")
     row = RiskLibraryEntry(name=name, threat_summary=payload.threat_summary.strip(),
                            risk_types=_clean_risk_types(payload.risk_types),
-                           treatment_guidance=payload.treatment_guidance.strip())
+                           treatment_guidance=payload.treatment_guidance.strip(),
+                           suggested_assessment={key: value for key, value in payload.suggested_assessment.items()
+                                                 if key in {"asset", "inherent_likelihood", "inherent_impact",
+                                                            "residual_likelihood", "residual_impact"}})
     db.add(row); db.commit(); db.refresh(row)
     return _library_out(row)
 

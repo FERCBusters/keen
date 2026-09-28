@@ -122,12 +122,11 @@ const category = document.getElementById('category');
 const subcategory = document.getElementById('subcategory');
 const owner = document.getElementById('owner');
 const threatSummary = document.getElementById('threatSummary');
-const threatScore = document.getElementById('threatScore');
-const vulnerabilityScore = document.getElementById('vulnerabilityScore');
-const impactScore = document.getElementById('impactScore');
+const inherentLikelihood = document.getElementById('inherentLikelihood');
+const inherentImpact = document.getElementById('inherentImpact');
 const riskScorePreview = document.getElementById('riskScorePreview');
-const residualVulnerabilityScore = document.getElementById('residualVulnerabilityScore');
-const residualImpactScore = document.getElementById('residualImpactScore');
+const residualLikelihood = document.getElementById('residualLikelihood');
+const residualImpact = document.getElementById('residualImpact');
 const residualScorePreview = document.getElementById('residualScorePreview');
 const controls = document.getElementById('controls');
 const note = document.getElementById('note');
@@ -217,7 +216,7 @@ function clampScore(value) {
   const raw = value === null || value === undefined || value === '' ? 1 : value;
   const n = Math.floor(Number(raw));
   if (!Number.isFinite(n)) return 1;
-  return Math.max(0, Math.min(5, n));
+  return Math.max(1, Math.min(5, n));
 }
 
 function scoreFieldValue(value) {
@@ -225,12 +224,11 @@ function scoreFieldValue(value) {
 }
 
 function syncScorePreviews() {
-  const t = clampScore(threatScore?.value);
-  const v = clampScore(vulnerabilityScore?.value);
-  const i = clampScore(impactScore?.value);
-  const rv = clampScore(residualVulnerabilityScore?.value);
-  const ri = clampScore(residualImpactScore?.value);
-  const risk = t * v * i;
+  const v = clampScore(inherentLikelihood?.value);
+  const i = clampScore(inherentImpact?.value);
+  const rv = clampScore(residualLikelihood?.value);
+  const ri = clampScore(residualImpact?.value);
+  const risk = v * i;
   const residual = rv * ri;
   if (riskScorePreview) {
     riskScorePreview.textContent = String(risk);
@@ -833,11 +831,10 @@ function resetForm() {
   if (owner) owner.value = '';
   setRiskTypes(['Confidentiality']);
   if (threatSummary) threatSummary.value = '';
-  if (threatScore) threatScore.value = '1';
-  if (vulnerabilityScore) vulnerabilityScore.value = '1';
-  if (impactScore) impactScore.value = '1';
-  if (residualVulnerabilityScore) residualVulnerabilityScore.value = '1';
-  if (residualImpactScore) residualImpactScore.value = '1';
+  if (inherentLikelihood) inherentLikelihood.value = '1';
+  if (inherentImpact) inherentImpact.value = '1';
+  if (residualLikelihood) residualLikelihood.value = '1';
+  if (residualImpact) residualImpact.value = '1';
   setSelectedControls([]);
   if (note) note.value = '';
   if (deleteRisk) deleteRisk.style.display = 'none';
@@ -866,11 +863,10 @@ function showEditor(risk = null) {
     if (owner) owner.value = risk.risk_owner?.id || '';
     setRiskTypes(risk.risk_types || []);
     if (threatSummary) threatSummary.value = risk.threat_summary || '';
-    if (threatScore) threatScore.value = scoreFieldValue(risk.threat_score);
-    if (vulnerabilityScore) vulnerabilityScore.value = scoreFieldValue(risk.vulnerability_score);
-    if (impactScore) impactScore.value = scoreFieldValue(risk.impact_score);
-    if (residualVulnerabilityScore) residualVulnerabilityScore.value = scoreFieldValue(risk.residual_vulnerability_score);
-    if (residualImpactScore) residualImpactScore.value = scoreFieldValue(risk.residual_impact_score);
+    if (inherentLikelihood) inherentLikelihood.value = scoreFieldValue(risk.register_likelihood);
+    if (inherentImpact) inherentImpact.value = scoreFieldValue(risk.register_impact);
+    if (residualLikelihood) residualLikelihood.value = scoreFieldValue(risk.register_residual_likelihood);
+    if (residualImpact) residualImpact.value = scoreFieldValue(risk.register_residual_impact);
     if (note) note.value = risk.note || '';
     setSelectedControls(risk.controls || []);
     if (deleteRisk) deleteRisk.style.display = '';
@@ -1011,7 +1007,7 @@ function ensureControlOptions(items) {
 
 function setFormReadonly(readonly) {
   const disabled = !!readonly;
-  for (const el of [owner, threatSummary, threatScore, vulnerabilityScore, impactScore, residualVulnerabilityScore, residualImpactScore, controls, note]) {
+  for (const el of [owner, threatSummary, inherentLikelihood, inherentImpact, residualLikelihood, residualImpact, controls, note]) {
     if (el) el.disabled = disabled;
   }
   document.querySelectorAll('.risk-type').forEach((cb) => { cb.disabled = disabled; });
@@ -1201,11 +1197,10 @@ function formPayload() {
     risk_types: types,
     risk_owner_user_id: owner?.value || null,
     threat_summary: threatSummary?.value || '',
-    threat_score: clampScore(threatScore?.value),
-    vulnerability_score: clampScore(vulnerabilityScore?.value),
-    impact_score: clampScore(impactScore?.value),
-    residual_vulnerability_score: clampScore(residualVulnerabilityScore?.value),
-    residual_impact_score: clampScore(residualImpactScore?.value),
+    register_likelihood: clampScore(inherentLikelihood?.value),
+    register_impact: clampScore(inherentImpact?.value),
+    register_residual_likelihood: clampScore(residualLikelihood?.value),
+    register_residual_impact: clampScore(residualImpact?.value),
     note: note?.value || '',
     framework,
     controls: selectedControls(),
@@ -1427,7 +1422,7 @@ function renderExistingMatchesSection(existing) {
   const partyHtml = parties.map((p) => `<li><a href="${esc(interestedPartyHref(p.id || ''))}">${esc(p.label || p.name || 'Interested Party')}</a></li>`).join('');
   return `<div class="mitigator-suggestion-card border-warning-subtle">
     <div class="fw-semibold mb-2"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Existing related risks to review first</div>
-    ${ciaHtml ? `<div class="small fw-semibold mt-2">CIA Triad risks</div><ul class="small mb-1">${ciaHtml}</ul>` : ''}
+    ${ciaHtml ? `<div class="small fw-semibold mt-2">Risk scenarios</div><ul class="small mb-1">${ciaHtml}</ul>` : ''}
     ${pestleHtml ? `<div class="small fw-semibold mt-2">PESTLE(E) items</div><ul class="small mb-1">${pestleHtml}</ul>` : ''}
     ${partyHtml ? `<div class="small fw-semibold mt-2">Interested Parties</div><ul class="small mb-1">${partyHtml}</ul>` : ''}
   </div>`;
@@ -1708,7 +1703,7 @@ function setRiskPageTabQuery(tabName) {
   history.replaceState({}, '', `${location.pathname}${qs ? `?${qs}` : ''}${location.hash || ''}`);
 }
 
-for (const el of [threatScore, vulnerabilityScore, impactScore, residualVulnerabilityScore, residualImpactScore]) {
+for (const el of [inherentLikelihood, inherentImpact, residualLikelihood, residualImpact]) {
   el?.addEventListener('input', syncScorePreviews);
   el?.addEventListener('change', () => {
     el.value = String(clampScore(el.value));
@@ -1832,7 +1827,26 @@ if (!canViewRisks) {
       setRiskTypes(template.risk_types || []);
       threatSummary.value = template.threat_summary || '';
       note.value = template.treatment_guidance || '';
-      toast(status, 'Template loaded. Select an asset and review its scores and controls.', 'info');
+      const suggestion = template.suggested_assessment || {};
+      for (const [field, key] of [[inherentLikelihood, 'inherent_likelihood'], [inherentImpact, 'inherent_impact'],
+                                  [residualLikelihood, 'residual_likelihood'], [residualImpact, 'residual_impact']]) {
+        if (field && Number.isInteger(suggestion[key]) && suggestion[key] >= 1 && suggestion[key] <= 5) field.value = suggestion[key];
+      }
+      const canonicalAsset = (suggestion.asset || '').trim().toLowerCase();
+      const knownAssets = {
+        'all': 'All', 'all company policies and procedures': 'All company policies and procedures',
+        'suppliers': 'Supplier systems', '3rd party software': 'Supplier systems',
+        'paper information': 'Paper information', 'electonic information': 'Electronic information',
+        'electronic information': 'Electronic information', 'premises': 'Premises',
+        'staff': 'Staff', 'home offices': 'Home offices', 'laptops': 'Devices',
+      };
+      const assetName = knownAssets[canonicalAsset] || (canonicalAsset.includes('internal systems') ? 'Internal systems' :
+        canonicalAsset.includes('laptops') ? 'Devices' : suggestion.asset);
+      const match = assets.find(row => row.name?.toLowerCase() === assetName?.toLowerCase());
+      if (match) selectExistingAsset(match.id);
+      else if (assetName) asset.value = assetName;
+      syncScorePreviews();
+      toast(status, 'Template loaded with example ratings and a suggested asset. Review its applicability, scores and controls before saving.', 'info');
     }
   } else if (!isMitigatorPage && requestedTab === 'new') {
     showEditor();

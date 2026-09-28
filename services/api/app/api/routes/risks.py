@@ -114,6 +114,10 @@ class RiskUpsertPayload(BaseModel):
     risk_owner_user_id: uuid.UUID | None = None
     risk_owner_username: str | None = Field(default=None, max_length=128)
     threat_summary: str | None = Field(default=None, max_length=12000)
+    register_likelihood: int | None = Field(default=None, ge=1, le=5)
+    register_impact: int | None = Field(default=None, ge=1, le=5)
+    register_residual_likelihood: int | None = Field(default=None, ge=1, le=5)
+    register_residual_impact: int | None = Field(default=None, ge=1, le=5)
     threat_score: int | None = None
     vulnerability_score: int | None = None
     impact_score: int | None = None
@@ -746,6 +750,10 @@ def _risk_out(
             "username": risk.owner.username if risk.owner else None,
         },
         "threat_summary": risk.threat_summary or "",
+        "register_likelihood": risk.register_likelihood,
+        "register_impact": risk.register_impact,
+        "register_residual_likelihood": risk.register_residual_likelihood,
+        "register_residual_impact": risk.register_residual_impact,
         "threat_score": int(risk.threat_score or 0),
         "vulnerability_score": int(risk.vulnerability_score or 0),
         "impact_score": int(risk.impact_score or 0),
@@ -840,12 +848,24 @@ def _apply_payload(
             )
         risk.mitigator_context = context
 
-    risk.risk_score = (
-        int(risk.threat_score) * int(risk.vulnerability_score) * int(risk.impact_score)
-    )
-    risk.residual_risk_score = int(risk.residual_vulnerability_score) * int(
-        risk.residual_impact_score
-    )
+    # The register's four ratings are the single source of truth. Keep the
+    # historical score columns in sync for existing graph and SoA consumers.
+    rating_fields = ("register_likelihood", "register_impact", "register_residual_likelihood", "register_residual_impact")
+    if is_create or fields.intersection(rating_fields) or fields.intersection({"threat_score", "vulnerability_score", "impact_score", "residual_vulnerability_score", "residual_impact_score"}):
+        for name, legacy in (("register_likelihood", "vulnerability_score"), ("register_impact", "impact_score"),
+                             ("register_residual_likelihood", "residual_vulnerability_score"),
+                             ("register_residual_impact", "residual_impact_score")):
+            if name in fields:
+                setattr(risk, name, getattr(payload, name))
+            elif is_create or (legacy in fields and name not in fields):
+                setattr(risk, name, max(1, int(getattr(risk, legacy))))
+        risk.threat_score = 1
+        risk.vulnerability_score = risk.register_likelihood or 1
+        risk.impact_score = risk.register_impact or 1
+        risk.residual_vulnerability_score = risk.register_residual_likelihood or 1
+        risk.residual_impact_score = risk.register_residual_impact or 1
+    risk.risk_score = (risk.register_likelihood or 0) * (risk.register_impact or 0)
+    risk.residual_risk_score = (risk.register_residual_likelihood or 0) * (risk.register_residual_impact or 0)
     risk.updated_at = _utcnow()
 
 

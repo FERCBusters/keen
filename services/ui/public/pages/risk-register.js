@@ -6,6 +6,7 @@ const framework = getCurrentFramework();
 const $ = id => document.getElementById(id);
 const base = '/api/v1/risks';
 let risks = [], library = [], selected = null, thresholds = {low_max:4, moderate_max:9, high_max:16}, offset = 0, total = 0;
+let heatmapCounts = {inherent: [], residual: []};
 
 function notify(message, kind='success') { toast($('status'), message, kind); }
 function severity(score) {
@@ -29,10 +30,8 @@ function filteredRisks() {
 function renderHeatmap() {
   const mode = document.querySelector('input[name="scoreMode"]:checked')?.value || 'inherent';
   const byCell = new Map();
-  for (const r of risks) {
-    const likelihood = mode === 'residual' ? r.register_residual_likelihood : r.register_likelihood;
-    const impact = mode === 'residual' ? r.register_residual_impact : r.register_impact;
-    if (likelihood && impact) byCell.set(`${likelihood}:${impact}`, (byCell.get(`${likelihood}:${impact}`) || 0) + 1);
+  for (const cell of heatmapCounts[mode] || []) {
+    byCell.set(`${cell.likelihood}:${cell.impact}`, cell.count);
   }
   let html = '<thead><tr><th scope="col">Likelihood \\ Impact</th>' + [1,2,3,4,5].map(i => `<th scope="col">${i}</th>`).join('') + '</tr></thead><tbody>';
   for (let likelihood=5; likelihood>=1; likelihood--) {
@@ -72,7 +71,12 @@ async function loadMore() {
   } catch(e) { notify(`Could not load risk register: ${String(e)}`, 'danger'); }
 }
 async function reload() {
-  risks=[]; offset=0; await Promise.all([loadMore(), loadLibrary()]);
+  risks=[]; offset=0;
+  await Promise.all([loadMore(), loadLibrary(), loadHeatmap()]);
+}
+async function loadHeatmap() {
+  try { heatmapCounts = await apiGet(`${base}/register/heatmap`); renderHeatmap(); }
+  catch (err) { notify(`Could not load risk heatmap: ${String(err)}`, 'danger'); }
 }
 async function loadLibrary() {
   try { library = (await apiGet(`${base}/library`)).items || []; renderLibrary(); }
@@ -116,7 +120,10 @@ $('addToLibrary').addEventListener('click', async () => {
   if (!name) return;
   try {
     await apiPost(`${base}/library`, {name, threat_summary:selected.threat_summary,
-      risk_types:selected.risk_types, treatment_guidance:selected.treatment_plan || ''});
+      risk_types:selected.risk_types, treatment_guidance:selected.treatment_plan || '',
+      suggested_assessment:{asset:selected.asset, inherent_likelihood:selected.register_likelihood,
+        inherent_impact:selected.register_impact, residual_likelihood:selected.register_residual_likelihood,
+        residual_impact:selected.register_residual_impact}});
     await loadLibrary(); notify('Scenario saved to risk library.');
   } catch(err) { notify(`Could not save library item: ${String(err)}`, 'danger'); }
 });

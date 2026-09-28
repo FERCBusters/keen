@@ -279,11 +279,11 @@ function renderRisk(risk) {
   setText(riskSubcategory, risk?.subcategory?.name);
   setText(riskOwner, risk?.risk_owner?.username);
   if (riskScore) {
-    const detail = `Threat ${Number(risk?.threat_score || 0)} × Vulnerability ${Number(risk?.vulnerability_score || 0)} × Impact ${Number(risk?.impact_score || 0)}`;
+    const detail = `Inherent likelihood ${Number(risk?.register_likelihood || 0)} × impact ${Number(risk?.register_impact || 0)}`;
     riskScore.innerHTML = `${scoreBadge(risk?.risk_score, detail)} <span class="small-muted ms-1">${esc(detail)}</span>`;
   }
   if (residualScore) {
-    const detail = `Residual vulnerability ${Number(risk?.residual_vulnerability_score || 0)} × Residual impact ${Number(risk?.residual_impact_score || 0)}`;
+    const detail = `Residual likelihood ${Number(risk?.register_residual_likelihood || 0)} × impact ${Number(risk?.register_residual_impact || 0)}`;
     residualScore.innerHTML = `${scoreBadge(risk?.residual_risk_score, detail)} <span class="small-muted ms-1">${esc(detail)}</span>`;
   }
   setText(threatSummary, threat, 'No threat summary.');

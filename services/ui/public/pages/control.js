@@ -261,7 +261,6 @@ function _ismsEntityRows(data) {
     ['Organisation Chart', data.org_nodes, (x) => x.name || 'Org node', () => '/isms.html?tab=org'],
     ['Assets', data.assets, (x) => x.asset || 'Asset', () => '/isms.html?tab=assets'],
     ['Effectiveness Measures', data.effectiveness_measures, (x) => x.summary || x.metric || x.effectiveness_measure || 'Effectiveness measure', (x) => `/isms-effectiveness-measure.html?id=${encodeURIComponent(x.id)}`],
-    ['Application Configuration', data.application_configurations, (x) => x.display || x.source?.label || 'App config', () => '/isms.html?tab=appconfig'],
     ['Meetings', data.meetings, (x) => x.title || 'Meeting', (x) => x.id ? `/isms-meeting.html?id=${encodeURIComponent(x.id)}` : '/isms.html?tab=meetings'],
   ];
   const rows = [];

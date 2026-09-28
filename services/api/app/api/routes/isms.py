@@ -119,11 +119,6 @@ ISMS_SECTION_ALIASES = {
     "effectiveness_measures": "effectiveness",
     "effectiveness-measures": "effectiveness",
     "metrics": "effectiveness",
-    "app": "app",
-    "appconfig": "app",
-    "app_config": "app",
-    "application_configuration": "app",
-    "application-configuration": "app",
     "meetings": "meetings",
     "meeting": "meetings",
     "soa": "soa",
@@ -150,10 +145,6 @@ ENTITY_TYPES = {
     "org_node": (IsmsOrgNode, "isms_org_node"),
     "asset": (RiskAsset, "isms_asset"),
     "license": (IsmsLicense, "isms_license"),
-    "application_configuration": (
-        IsmsApplicationConfigurationEntry,
-        "isms_application_configuration",
-    ),
     "access_control_matrix": (
         IsmsAccessControlMatrixEntry,
         "isms_access_control_matrix",
@@ -1992,16 +1983,6 @@ def isms_meta(
             _aws_account_out(row, include_entry_count=True) for row in aws_accounts
         ]
 
-    if wants("app"):
-        bps = (
-            db.query(IsmsBusinessProcess)
-            .order_by(
-                IsmsBusinessProcess.sort_order.asc(), IsmsBusinessProcess.name.asc()
-            )
-            .all()
-        )
-        payload["business_processes"] = [_business_process_out(bp) for bp in bps]
-
     if wants("objectives", "documents", "org", "assets", "effectiveness", "meetings"):
         controls = (
             db.query(ControlItem)
@@ -2053,9 +2034,6 @@ def isms_summary(
         "assets": int(db.query(RiskAsset.id).count() or 0),
         "licenses": int(db.query(IsmsLicense.id).count() or 0),
         "aws_accounts": int(db.query(IsmsAwsAccount.id).count() or 0),
-        "application_configurations": int(
-            db.query(IsmsApplicationConfigurationEntry.id).count() or 0
-        ),
         "access_control_matrix": int(
             db.query(IsmsAccessControlMatrixEntry.id).count() or 0
         ),
@@ -2122,25 +2100,6 @@ def isms_summary(
             .all()
         )
         payload["assets"] = [_asset_out(db, row, fw) for row in assets]
-
-    if wants("app"):
-        app_config = (
-            db.query(IsmsApplicationConfigurationEntry)
-            .order_by(IsmsApplicationConfigurationEntry.updated_at.desc())
-            .limit(2000)
-            .all()
-        )
-        payload["application_configurations"] = [
-            _app_config_out(db, row, fw) for row in app_config
-        ]
-        bps = (
-            db.query(IsmsBusinessProcess)
-            .order_by(
-                IsmsBusinessProcess.sort_order.asc(), IsmsBusinessProcess.name.asc()
-            )
-            .all()
-        )
-        payload["business_processes"] = [_business_process_out(row) for row in bps]
 
     if wants("access"):
         access_control_matrix = (
@@ -3237,140 +3196,6 @@ def list_business_processes(
         .all()
     )
     return {"items": [_business_process_out(r) for r in rows]}
-
-
-@router.post("/v1/isms/application-configuration")
-def create_app_config(
-    payload: AppConfigPayload,
-    request: Request,
-    framework: str = settings.default_framework_slug,
-    user=Depends(require_isms_manage),
-    db: Session = Depends(get_db),
-):
-    fw = _clean_framework(framework)
-    source_type = (payload.source_type or "").strip()
-    value = (payload.value or "Low").strip() or "Low"
-    if source_type not in APP_SOURCE_TYPES:
-        raise HTTPException(status_code=400, detail="Invalid source_type")
-    if value not in APP_VALUES:
-        raise HTTPException(status_code=400, detail="Invalid value")
-    ids = {
-        "document": payload.document_id,
-        "person": payload.user_id,
-        "asset": payload.asset_id,
-        "org_node": payload.org_node_id,
-    }
-    if not ids[source_type]:
-        raise HTTPException(status_code=400, detail="Selected source id is required")
-    if (
-        not payload.business_process_id
-        or not db.query(IsmsBusinessProcess.id)
-        .filter(IsmsBusinessProcess.id == payload.business_process_id)
-        .first()
-    ):
-        raise HTTPException(status_code=400, detail="Unknown business process")
-    row = IsmsApplicationConfigurationEntry(
-        source_type=source_type,
-        document_id=payload.document_id if source_type == "document" else None,
-        user_id=payload.user_id if source_type == "person" else None,
-        asset_id=payload.asset_id if source_type == "asset" else None,
-        org_node_id=payload.org_node_id if source_type == "org_node" else None,
-        business_process_id=payload.business_process_id,
-        value=value,
-        notes=_clean_text(payload.notes, max_len=12000),
-        created_by_user_id=user.id,
-        created_at=_utcnow(),
-        updated_at=_utcnow(),
-    )
-    db.add(row)
-    db.flush()
-    after = _app_config_out(db, row, fw)
-    _record(db, "application_configuration", row, "created", None, after, user, request)
-    db.commit()
-    db.refresh(row)
-    return _app_config_out(db, row, fw)
-
-
-@router.get("/v1/isms/application-configuration")
-def list_app_config(
-    framework: str = settings.default_framework_slug,
-    user=Depends(require_isms_read),
-    db: Session = Depends(get_db),
-):
-    fw = _clean_framework(framework)
-    rows = (
-        db.query(IsmsApplicationConfigurationEntry)
-        .order_by(IsmsApplicationConfigurationEntry.updated_at.desc())
-        .all()
-    )
-    return {"framework": fw, "items": [_app_config_out(db, r, fw) for r in rows]}
-
-
-@router.patch("/v1/isms/application-configuration/{entry_id}")
-def update_app_config(
-    entry_id: str,
-    payload: AppConfigPayload,
-    request: Request,
-    framework: str = settings.default_framework_slug,
-    user=Depends(require_isms_manage),
-    db: Session = Depends(get_db),
-):
-    fw = _clean_framework(framework)
-    row = _by_id_or_404(
-        db, IsmsApplicationConfigurationEntry, entry_id, "Application configuration"
-    )
-    before = _app_config_out(db, row, fw)
-    fields = set(payload.model_fields_set or set())
-    if "business_process_id" in fields:
-        row.business_process_id = payload.business_process_id
-    if "value" in fields:
-        value = (payload.value or "Low").strip() or "Low"
-        if value not in APP_VALUES:
-            raise HTTPException(status_code=400, detail="Invalid value")
-        row.value = value
-    if "notes" in fields:
-        row.notes = _clean_text(payload.notes, max_len=12000)
-    if "source_type" in fields:
-        source_type = (payload.source_type or "").strip()
-        if source_type not in APP_SOURCE_TYPES:
-            raise HTTPException(status_code=400, detail="Invalid source_type")
-        row.source_type = source_type
-        row.document_id = payload.document_id if source_type == "document" else None
-        row.user_id = payload.user_id if source_type == "person" else None
-        row.asset_id = payload.asset_id if source_type == "asset" else None
-        row.org_node_id = payload.org_node_id if source_type == "org_node" else None
-    row.updated_at = _utcnow()
-    db.add(row)
-    db.flush()
-    after = _app_config_out(db, row, fw)
-    _record(
-        db, "application_configuration", row, "updated", before, after, user, request
-    )
-    _delete_entity_links(db, "application_configuration", row.id, fw)
-    db.commit()
-    return _app_config_out(db, row, fw)
-
-
-@router.delete("/v1/isms/application-configuration/{entry_id}")
-def delete_app_config(
-    entry_id: str,
-    request: Request,
-    framework: str = settings.default_framework_slug,
-    user=Depends(require_isms_manage),
-    db: Session = Depends(get_db),
-):
-    fw = _clean_framework(framework)
-    row = _by_id_or_404(
-        db, IsmsApplicationConfigurationEntry, entry_id, "Application configuration"
-    )
-    before = _app_config_out(db, row, fw)
-    _record(
-        db, "application_configuration", row, "deleted", before, None, user, request
-    )
-    _delete_entity_links(db, "application_configuration", row.id, fw)
-    db.delete(row)
-    db.commit()
-    return {"ok": True}
 
 
 @router.post("/v1/isms/aws-accounts")

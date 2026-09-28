@@ -16,9 +16,10 @@
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
         <h1 class="h3 mb-1">Risk Assessments</h1>
-        <div class="small-muted">Maintain CIA Triad risk scenarios and review related controls, visualisations, and risk coverage gaps.</div>
+        <div class="small-muted">Assess the same risks shown in the register and 5×5 heatmap, including CIA associations and linked controls.</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
+        <a class="btn btn-outline-primary" data-nav-fw="1" href="/risk-register.html">Register &amp; heatmap</a>
         <a class="btn btn-outline-primary" data-nav-fw="1" href="/pestle.html"><i class="bi bi-globe2" aria-hidden="true"></i> PESTLE(E)</a>
         <button id="newRisk" class="btn btn-primary" type="button">New risk scenario</button>
       </div>
@@ -28,7 +29,7 @@
 
     <ul class="nav nav-tabs mb-3 no-print" id="riskPageTabs" role="tablist">
       <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="risksListTab" data-bs-toggle="tab" data-bs-target="#risksListPane" type="button" role="tab" aria-controls="risksListPane" aria-selected="true">CIA Triad risks</button>
+        <button class="nav-link active" id="risksListTab" data-bs-toggle="tab" data-bs-target="#risksListPane" type="button" role="tab" aria-controls="risksListPane" aria-selected="true">Risks</button>
       </li>
 
       <li class="nav-item" role="presentation" id="riskVisualisationsTabItem">
@@ -65,7 +66,7 @@
         <div class="card">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
-              <div class="fw-bold">CIA Triad risk scenarios</div>
+              <div class="fw-bold">Risk scenarios</div>
               <div class="small-muted" id="resultMeta">—</div>
             </div>
           </div>
@@ -116,7 +117,7 @@
             <div class="card">
               <div class="card-header">
                 <div class="fw-bold">Risks → Controls graph</div>
-                <div class="small-muted" id="riskControlsGraphMeta">Framework-specific CIA Triad risk/control mappings. Link thickness follows residual risk score.</div>
+                <div class="small-muted" id="riskControlsGraphMeta">Framework-specific Risk/control mappings. Link thickness follows residual risk score.</div>
               </div>
               <div id="riskControlsGraph" class="card-body pestle-viz-box pestle-viz-box-lg small-muted">Loading visualisation…</div>
             </div>
@@ -173,7 +174,7 @@
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
               <div class="fw-bold" id="editorTitle">New risk</div>
-              <div class="small-muted">A risk scenario belongs to one asset. Type an asset name; matching existing assets can be selected and reused for another distinct threat/risk-type row with different controls. Scores are 0–5; new scenarios default to 1. Risk score = Threat × Vulnerability × Impact.</div>
+              <div class="small-muted">A risk scenario belongs to one asset. Type an asset name; matching existing assets can be selected and reused for another distinct threat/risk-type row with different controls. Assess likelihood and impact from 1 to 5. The risk register and heatmap use these same scores.</div>
             </div>
           </div>
           <div class="card-body">
@@ -217,42 +218,14 @@
                 <textarea id="threatSummary" class="form-control" rows="3" maxlength="12000" placeholder="Describe the threat scenario…"></textarea>
               </div>
 
-              <div class="col-12 col-lg-8">
-                <div class="row g-2 align-items-end">
-                  <div class="col-4 col-md-2">
-                    <label class="form-label small-muted" for="threatScore">Threat</label>
-                    <input id="threatScore" class="form-control score-input" type="number" min="0" max="5" value="1">
-                  </div>
-                  <div class="col-4 col-md-2">
-                    <label class="form-label small-muted" for="vulnerabilityScore">Vulnerability</label>
-                    <input id="vulnerabilityScore" class="form-control score-input" type="number" min="0" max="5" value="1">
-                  </div>
-                  <div class="col-4 col-md-2">
-                    <label class="form-label small-muted" for="impactScore">Impact</label>
-                    <input id="impactScore" class="form-control score-input" type="number" min="0" max="5" value="1">
-                  </div>
-                  <div class="col-12 col-md-3">
-                    <div class="small-muted mb-1">Risk score</div>
-                    <div id="riskScorePreview" class="score-pill">1</div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-12 col-lg-4">
-                <div class="row g-2 align-items-end">
-                  <div class="col-4">
-                    <label class="form-label small-muted" for="residualVulnerabilityScore">Residual vuln.</label>
-                    <input id="residualVulnerabilityScore" class="form-control score-input" type="number" min="0" max="5" value="1">
-                  </div>
-                  <div class="col-4">
-                    <label class="form-label small-muted" for="residualImpactScore">Residual impact</label>
-                    <input id="residualImpactScore" class="form-control score-input" type="number" min="0" max="5" value="1">
-                  </div>
-                  <div class="col-4">
-                    <div class="small-muted mb-1">Residual</div>
-                    <div id="residualScorePreview" class="score-pill">1</div>
-                  </div>
-                </div>
-              </div>
+              <div class="col-12"><div class="row g-2 align-items-end">
+                <div class="col-md-2"><label class="form-label" for="inherentLikelihood">Inherent likelihood</label><input id="inherentLikelihood" class="form-control score-input" type="number" min="1" max="5" value="1" required></div>
+                <div class="col-md-2"><label class="form-label" for="inherentImpact">Inherent impact</label><input id="inherentImpact" class="form-control score-input" type="number" min="1" max="5" value="1" required></div>
+                <div class="col-md-2"><div class="small-muted mb-1">Inherent score</div><div id="riskScorePreview" class="score-pill">1</div></div>
+                <div class="col-md-2"><label class="form-label" for="residualLikelihood">Residual likelihood</label><input id="residualLikelihood" class="form-control score-input" type="number" min="1" max="5" value="1" required></div>
+                <div class="col-md-2"><label class="form-label" for="residualImpact">Residual impact</label><input id="residualImpact" class="form-control score-input" type="number" min="1" max="5" value="1" required></div>
+                <div class="col-md-2"><div class="small-muted mb-1">Residual score</div><div id="residualScorePreview" class="score-pill">1</div></div>
+              </div><div class="form-text">Likelihood × impact determines the same 5×5 scores shown in the risk register and heatmap.</div></div>
 
               <div class="col-12">
                 <label class="form-label" for="controls">Controls for current framework</label>

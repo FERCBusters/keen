@@ -34,7 +34,7 @@ const status = document.getElementById('status');
 const metaEl = document.getElementById('ismsMeta');
 
 let meta = {users: [], org_nodes: [], documents: [], assets: [], asset_categories: [], licenses: [], aws_accounts: [], business_processes: [], controls: [], clauses: [], effectiveness_metric_sources: [], effectiveness_metric_source_types: [], effectiveness_threshold_operators: []};
-let data = {counts: {}, objectives: [], documents: [], org_nodes: [], assets: [], application_configurations: [], access_control_matrix: [], effectiveness_measures: [], meetings: []};
+let data = {counts: {}, objectives: [], documents: [], org_nodes: [], assets: [], access_control_matrix: [], effectiveness_measures: [], meetings: []};
 let meetingPeople = [];
 let documentFolders = [];
 let documentTags = [];
@@ -100,8 +100,7 @@ function updateMeetingPersonBubble() {
 const loadedMetaSections = new Set();
 const loadedSummarySections = new Set();
 const sectionLoadPromises = new Map();
-const sectionByKind = {objective: 'objectives', document: 'documents', org: 'org', asset: 'assets', app: 'app', access: 'access', effectiveness: 'effectiveness', meeting: 'meetings'};
-const tabIdBySection = {overview: 'overviewTab', objectives: 'objectivesTab', documents: 'documentsTab', org: 'orgTab', assets: 'assetsTab', access: 'accessControlTab', effectiveness: 'effectivenessTab', app: 'appConfigTab', meetings: 'meetingsTab', soa: 'soaTab'};
+const sectionByKind = {objective: 'objectives', document: 'documents', org: 'org', asset: 'assets', access: 'access', effectiveness: 'effectiveness', meeting: 'meetings'};
 const sectionAliases = {
   overview: 'overview', summary: 'overview',
   objective: 'objectives', objectives: 'objectives',
@@ -110,7 +109,6 @@ const sectionAliases = {
   asset: 'assets', assets: 'assets',
   access: 'access', accesscontrol: 'access', access_control: 'access', accesscontrolmatrix: 'access', access_control_matrix: 'access',
   effectiveness: 'effectiveness', effectivenessmeasure: 'effectiveness', effectiveness_measure: 'effectiveness', effectivenessmeasures: 'effectiveness', effectiveness_measures: 'effectiveness', measures: 'effectiveness', metrics: 'effectiveness',
-  app: 'app', appconfig: 'app', app_config: 'app', applicationconfiguration: 'app', application_configuration: 'app',
   meeting: 'meetings', meetings: 'meetings',
   soa: 'soa',
 };
@@ -125,7 +123,6 @@ const rows = {
   awsAccounts: $('awsAccountsRows'),
   access: $('accessMatrixRows'),
   effectiveness: $('effectivenessRows'),
-  app: $('appConfigRows'),
   meetings: $('meetingsRows'),
 };
 
@@ -135,7 +132,6 @@ const endpoints = {
   document: 'documents',
   org: 'org-nodes',
   asset: 'assets',
-  app: 'application-configuration',
   access: 'access-control-matrix',
   effectiveness: 'effectiveness-measures',
   meeting: 'meetings',
@@ -145,7 +141,6 @@ const formIds = {
   document: 'documentForm',
   org: 'orgForm',
   asset: 'assetForm',
-  app: 'appConfigForm',
   access: 'accessControlForm',
   effectiveness: 'effectivenessForm',
   meeting: 'meetingForm',
@@ -155,7 +150,6 @@ const submitLabels = {
   document: ['Create document record', 'Save document record'],
   org: ['Create org node', 'Save org node'],
   asset: ['Create asset', 'Save asset'],
-  app: ['Create matrix row', 'Save matrix row'],
   access: ['Create access control row', 'Save access control row'],
   effectiveness: ['Create effectiveness measure', 'Save effectiveness measure'],
   meeting: ['Create meeting minutes', 'Save meeting minutes'],
@@ -216,7 +210,6 @@ const formCardIds = {
   document: 'documentFormCard',
   org: 'orgFormCard',
   asset: 'assetFormCard',
-  app: 'appConfigFormCard',
   access: 'accessControlFormCard',
   effectiveness: 'effectivenessFormCard',
   meeting: 'meetingFormCard',
@@ -228,12 +221,11 @@ const ismsTableSections = [
   {key: 'assets', kind: 'asset', rowsId: 'assetsRows', countId: 'assetsCount', formCardId: 'assetFormCard', title: 'Asset Matrix filters', placeholder: 'Filter assets by name, category, owner, license, controls or clauses…', addLabel: 'Add new asset'},
   {key: 'access', kind: 'access', rowsId: 'accessMatrixRows', countId: 'accessControlCount', formCardId: 'accessControlFormCard', title: 'Access Control Matrix filters', placeholder: 'Filter access rows by task/action, service, account, role, approver or status…', addLabel: 'Add new access row'},
   {key: 'effectiveness', kind: 'effectiveness', rowsId: 'effectivenessRows', countId: 'effectivenessCount', formCardId: 'effectivenessFormCard', title: 'Effectiveness Measures filters', placeholder: 'Filter effectiveness measures by summary, description, metric, linked controls, owner, source or latest value…', addLabel: 'Add new effectiveness measure'},
-  {key: 'app', kind: 'app', rowsId: 'appConfigRows', countId: 'appConfigCount', formCardId: 'appConfigFormCard', title: 'Application Configuration filters', placeholder: 'Filter application configuration by group, linkage or business process…', addLabel: 'Add new matrix row'},
   {key: 'meetings', kind: 'meeting', rowsId: 'meetingsRows', countId: 'meetingsCount', formCardId: 'meetingFormCard', title: 'Minutes of Meetings filters', placeholder: 'Filter meetings by date, title, attendees, links, controls or clauses…', addLabel: 'Add new meeting'},
 ];
 
 function formCardIdForKind(kind) {
-  return formCardIds[kind] || (kind === 'app' ? 'appConfigFormCard' : `${kind}FormCard`);
+  return formCardIds[kind] || (`${kind}FormCard`);
 }
 
 function formCardForKind(kind) {
@@ -498,7 +490,7 @@ function actionsHtml(kind, id, extraClass = '') {
 }
 function emptyRow(colspan, message) { return `<tr><td colspan="${colspan}" class="p-4 small-muted">${esc(message)}</td></tr>`; }
 function findItem(kind, id) {
-  const key = {objective: 'objectives', document: 'documents', org: 'org_nodes', asset: 'assets', app: 'application_configurations', access: 'access_control_matrix', effectiveness: 'effectiveness_measures', meeting: 'meetings'}[kind];
+  const key = {objective: 'objectives', document: 'documents', org: 'org_nodes', asset: 'assets', access: 'access_control_matrix', effectiveness: 'effectiveness_measures', meeting: 'meetings'}[kind];
   return (data?.[key] || []).find((x) => String(x.id) === String(id)) || null;
 }
 
@@ -516,7 +508,6 @@ const auditSampleEntityTypes = {
   org: 'isms_org_node',
   asset: 'isms_asset',
   access: 'isms_access_control_matrix',
-  app: 'isms_application_configuration',
   effectiveness: 'isms_effectiveness_measure',
   metric: 'isms_effectiveness_metric',
   meeting: 'isms_meeting',
@@ -563,11 +554,6 @@ function ismsSampleTitle(kind, item) {
   if (kind === 'access') return item.task_action || 'Access control matrix row';
   if (kind === 'effectiveness') return item.summary || item.metric || item.effectiveness_measure || 'Effectiveness measure';
   if (kind === 'metric') return item.value_display || item.measure?.metric || 'Effectiveness metric';
-  if (kind === 'app') {
-    const source = item.source?.label || item.source?.title || item.source?.name || item.source?.username || item.display || item.source_type || 'Application configuration';
-    const bp = item.business_process?.name || '';
-    return [source, bp].filter(Boolean).join(' — ') || 'Application configuration row';
-  }
   if (kind === 'meeting') return item.title || 'ISMS meeting';
   return item.display || 'ISMS item';
 }
@@ -623,7 +609,6 @@ function resetForm(kind) {
   form.reset();
   setFormMode(kind, null);
   if (kind === 'document') { clearFileInput($('docFile')); documentTags = []; renderDocumentTags(); setRichTextEditorValue('docContent', ''); $('docMediumWrite').checked = true; showDocumentMedium(); }
-  if (kind === 'app') populateAppSourceOptions();
   if (kind === 'access') renderAccessFormOptions();
   if (kind === 'effectiveness') renderEffectivenessFormOptions();
   if (kind === 'asset') { populateAssetCategoryControls(); renderLicenseOptions(); }
@@ -663,26 +648,6 @@ function selectedMeetingLinks() {
   }
   return meetingLinks;
 }
-function appPayloadFromForm() {
-  const sourceType = $('appSourceType').value || 'document';
-  const sourceId = $('appSourceId').value || null;
-  const payload = {
-    source_type: sourceType,
-    business_process_id: $('appBusinessProcess').value || null,
-    value: $('appValue').value || 'Low',
-    notes: $('appNotes').value,
-    document_id: null,
-    user_id: null,
-    asset_id: null,
-    org_node_id: null,
-  };
-  if (sourceType === 'person') payload.user_id = sourceId;
-  else if (sourceType === 'asset') payload.asset_id = sourceId;
-  else if (sourceType === 'org_node') payload.org_node_id = sourceId;
-  else payload.document_id = sourceId;
-  return payload;
-}
-
 function accessPayloadFromForm() {
   return {
     task_action: $('accessTaskAction').value,
@@ -747,13 +712,6 @@ function populateEditForm(kind, item) {
     $('assetDescription').value = item.description || '';
     setSelectValues($('assetControls'), itemControls(item));
     setSelectValues($('assetClauses'), itemClauses(item));
-  } else if (kind === 'app') {
-    $('appSourceType').value = item.source_type || 'document';
-    populateAppSourceOptions();
-    $('appSourceId').value = item.document_id || item.user_id || item.asset_id || item.org_node_id || '';
-    $('appBusinessProcess').value = item.business_process_id || '';
-    $('appValue').value = item.value || 'Low';
-    $('appNotes').value = item.notes || '';
   } else if (kind === 'access') {
     renderAccessFormOptions(item.aws_account_ids || []);
     $('accessTaskAction').value = item.task_action || '';
@@ -791,7 +749,7 @@ function populateEditForm(kind, item) {
     setSelectValues($('meetingControls'), itemControls(item));
     setSelectValues($('meetingClauses'), itemClauses(item));
   }
-  const card = $(kind === 'app' ? 'appConfigFormCard' : kind === 'access' ? 'accessControlFormCard' : kind === 'effectiveness' ? 'effectivenessFormCard' : `${kind}FormCard`);
+  const card = $(kind === 'access' ? 'accessControlFormCard' : kind === 'effectiveness' ? 'effectivenessFormCard' : `${kind}FormCard`);
   if (card) card.style.display = '';
   formIds[kind] && $(formIds[kind])?.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
@@ -1349,107 +1307,6 @@ function metricEntryPayloadFromForm() {
   return raw;
 }
 
-function appSourceTypeLabel(type) {
-  if (type === 'document') return 'Policies and Processes';
-  if (type === 'person') return 'People';
-  if (type === 'asset') return 'Assets';
-  if (type === 'org_node') return 'Org chart positions';
-  return 'Other';
-}
-
-function appSourceSort(type) {
-  return {document: 1, person: 2, asset: 3, org_node: 4}[type] || 9;
-}
-
-function appSourceKey(sourceType, id) {
-  return `${sourceType || ''}:${id || ''}`;
-}
-
-function appSourceRows(items) {
-  const seen = new Set();
-  const out = [];
-  const push = (sourceType, id, label, subtitle = '', source = null) => {
-    const key = appSourceKey(sourceType, id);
-    if (!id || seen.has(key)) return;
-    seen.add(key);
-    out.push({key, source_type: sourceType, group: appSourceTypeLabel(sourceType), label: label || 'Source', subtitle, source});
-  };
-  for (const d of meta.documents || []) push('document', d.id, d.title, d.document_type || '', d);
-  for (const u of meta.users || []) push('person', u.id, u.username || u.email || 'User', u.email || '', u);
-  for (const a of meta.assets || []) push('asset', a.id, a.asset || a.name, [a.category?.name, a.subcategory?.name].filter(Boolean).join(' / ') || a.license || '', a);
-  for (const n of meta.org_nodes || []) push('org_node', n.id, n.name, n.node_type || '', n);
-  for (const entry of items || []) {
-    const src = entry.source || {};
-    push(entry.source_type, src.id || entry.document_id || entry.user_id || entry.asset_id || entry.org_node_id, src.label || entry.display || 'Source', entry.source_type || '', src);
-  }
-  return out.sort((a, b) => appSourceSort(a.source_type) - appSourceSort(b.source_type) || String(a.label).localeCompare(String(b.label), undefined, {numeric: true}));
-}
-
-function appCellClass(value) {
-  const v = String(value || '').toLowerCase();
-  if (v === 'high') return 'isms-app-cell-high';
-  if (v === 'medium') return 'isms-app-cell-medium';
-  if (v === 'low') return 'isms-app-cell-low';
-  return 'isms-app-cell-empty';
-}
-
-function appCellHtml(entries) {
-  if (!entries.length) return '<td class="isms-app-cell isms-app-cell-empty" data-sort=""></td>';
-  const best = entries[0];
-  const value = best.value || '—';
-  const buttons = (canManage || canSampleAudits) ? `<div class="isms-app-cell-actions no-print">${canSampleAudits ? `<button class="btn btn-sm btn-light py-0 px-1" type="button" data-audit-sample-entity="app" data-isms-id="${esc(best.id)}" title="Sample into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i></button>` : ''}${canManage ? `<button class="btn btn-sm btn-light py-0 px-1" type="button" data-isms-edit="app" data-isms-id="${esc(best.id)}" title="Edit matrix entry"><i class="bi bi-pencil" aria-hidden="true"></i></button><button class="btn btn-sm btn-light py-0 px-1" type="button" data-isms-delete="app" data-isms-id="${esc(best.id)}" title="Delete matrix entry"><i class="bi bi-trash" aria-hidden="true"></i></button>` : ''}</div>` : '';
-  const extra = entries.length > 1 ? `<div class="small">+${entries.length - 1}</div>` : '';
-  const title = entries.map((entry) => `${entry.value || ''}${entry.notes ? ` — ${entry.notes}` : ''}`).join('\n');
-  return `<td class="isms-app-cell ${appCellClass(value)}" data-sort="${esc(value)}" title="${esc(title)}"><div class="fw-semibold">${esc(value)}</div>${extra}${buttons}</td>`;
-}
-
-function renderAppConfig() {
-  const items = data.application_configurations || [];
-  const processes = meta.business_processes || [];
-  const head = $('appConfigHead');
-  setCount('appConfigCount', items.length);
-  if (head) {
-    head.innerHTML = `<tr><th class="isms-app-head-group">Group</th><th class="isms-app-head-linkage">Key linkages</th>${processes.map((bp) => `<th class="text-center isms-app-process-heading" title="${esc(bp.description || bp.name || '')}">${esc(bp.name || 'Business process')}</th>`).join('')}</tr>`;
-  }
-  const entryMap = new Map();
-  for (const entry of items) {
-    const srcId = entry.source?.id || entry.document_id || entry.user_id || entry.asset_id || entry.org_node_id;
-    const key = `${appSourceKey(entry.source_type, srcId)}::${entry.business_process_id || entry.business_process?.id || ''}`;
-    if (!entryMap.has(key)) entryMap.set(key, []);
-    entryMap.get(key).push(entry);
-  }
-  const sourceRows = appSourceRows(items);
-  if (!sourceRows.length || !processes.length) {
-    rows.app.innerHTML = emptyRow(Math.max(3, processes.length + 2), !processes.length ? 'No business processes are configured yet.' : 'No policy/process, people, asset or org chart rows are available yet.');
-    return;
-  }
-  const grouped = [];
-  for (const src of sourceRows) {
-    let group = grouped.find((g) => g.name === src.group);
-    if (!group) {
-      group = {name: src.group, rows: []};
-      grouped.push(group);
-    }
-    group.rows.push(src);
-  }
-  rows.app.innerHTML = grouped.map((group) => group.rows.map((src, idx) => {
-    const href = src.source_type === 'document' && src.source?.id
-      ? `/isms-document.html?id=${encodeURIComponent(src.source.id)}`
-      : (src.source_type === 'asset' && src.source?.id
-        ? `/isms-asset.html?id=${encodeURIComponent(src.source.id)}`
-        : (src.source_type === 'org_node' ? `/isms.html?tab=org` : ''));
-    const label = src.source_type === 'person'
-      ? userPillHtml(src.source || src.label)
-      : (href ? `<a class="fw-semibold" href="${esc(withFramework(href, framework))}">${esc(src.label)}</a>` : `<span class="fw-semibold">${esc(src.label)}</span>`);
-    const groupCell = idx === 0 ? `<td class="isms-app-group" rowspan="${group.rows.length}" data-sort="${esc(group.name)}"><span>${esc(group.name)}</span></td>` : '';
-    return `<tr data-isms-row="app">
-      ${groupCell}
-      <td class="wrap isms-app-key-linkage" data-sort="${esc(src.label)}">${label}${src.subtitle ? `<div class="small-muted">${esc(src.subtitle)}</div>` : ''}</td>
-      ${processes.map((bp) => appCellHtml(entryMap.get(`${src.key}::${bp.id}`) || [])).join('')}
-    </tr>`;
-  }).join('')).join('');
-}
-
 function renderMeetings() {
   const items = data.meetings || [];
   setCount('meetingsCount', items.length);
@@ -1463,7 +1320,7 @@ function renderMeetings() {
 function populateForms() {
   initRichTextEditors($('documentForm'));
   loadDocumentFolders().catch(err => toast(status, `Could not load document folders: ${String(err)}`, 'warning'));
-  for (const id of ['objectiveFormCard', 'documentFormCard', 'orgFormCard', 'assetFormCard', 'assetCategoryCard', 'licenseCard', 'awsAccountCard', 'accessControlFormCard', 'appConfigFormCard', 'meetingFormCard']) {
+  for (const id of ['objectiveFormCard', 'documentFormCard', 'orgFormCard', 'assetFormCard', 'assetCategoryCard', 'licenseCard', 'awsAccountCard', 'accessControlFormCard', 'meetingFormCard']) {
     const el = $(id); if (el) el.style.display = 'none';
   }
   for (const kind of Object.keys(formIds)) ensureCancelButton(kind);
@@ -1484,7 +1341,6 @@ function populateForms() {
   renderEffectivenessFormOptions();
   renderLicenseOptions();
   populateAssetCategoryControls();
-  populateAppSourceOptions();
 }
 
 function renderAccessFormOptions(targetAccountValues = []) {
@@ -1497,16 +1353,6 @@ function renderAccessFormOptions(targetAccountValues = []) {
   const status = $('accessStatus');
   if (status) status.innerHTML = optionList((meta.access_statuses || ['Pending Approval', 'Approved']).map((x) => ({id: x, name: x})), {label: 'name'});
   renderAwsAccountOptions(targetAccountValues);
-}
-
-function populateAppSourceOptions() {
-  const type = $('appSourceType')?.value || 'document';
-  const source = $('appSourceId');
-  if (!source) return;
-  if (type === 'person') { source.innerHTML = optionList(meta.users || [], {label: 'username'}); return; }
-  if (type === 'asset') { source.innerHTML = optionList(meta.assets || [], {label: (a) => a.asset || a.name || 'Asset'}); return; }
-  if (type === 'org_node') { source.innerHTML = optionList(meta.org_nodes || [], {label: (n) => `${n.name || 'Node'} (${n.node_type || 'role'})`}); return; }
-  source.innerHTML = optionList(meta.documents || [], {label: 'title'});
 }
 
 $('assetCategory')?.addEventListener('change', () => renderAssetSubcategoryOptions());
@@ -1562,7 +1408,6 @@ $('awsAccountForm')?.addEventListener('submit', async (ev) => {
   await reloadAfter(accountId ? 'hosting account updated' : 'hosting account added');
 });
 
-$('appSourceType')?.addEventListener('change', populateAppSourceOptions);
 
 function selectedLinkPayload(prefix) {
   return {
@@ -1604,7 +1449,7 @@ function mergePayload(target, payload) {
 function renderMetaSummary() {
   const c = data.counts || {};
   if (!metaEl) return;
-  metaEl.textContent = `${data.framework || meta.framework || framework} • ${c.objectives || 0} objectives • ${c.documents || 0} documents • ${c.org_nodes || 0} org nodes • ${c.assets || 0} assets • ${c.licenses || 0} licenses • ${c.access_control_matrix || 0} access rows • ${c.effectiveness_measures || 0} effectiveness measures • ${c.effectiveness_metric_entries || 0} metric entries • ${c.application_configurations || 0} app config rows • ${c.meetings || 0} meetings`;
+  metaEl.textContent = `${data.framework || meta.framework || framework} • ${c.objectives || 0} objectives • ${c.documents || 0} documents • ${c.org_nodes || 0} org nodes • ${c.assets || 0} assets • ${c.licenses || 0} licenses • ${c.access_control_matrix || 0} access rows • ${c.effectiveness_measures || 0} effectiveness measures • ${c.effectiveness_metric_entries || 0} metric entries • ${c.meetings || 0} meetings`;
 }
 
 function setSectionLoading(section) {
@@ -1627,14 +1472,13 @@ function renderSection(section) {
   if (section === 'assets') { renderLicenses(); renderAssets(); return; }
   if (section === 'access') { renderAwsAccounts(); renderAccessControlMatrix(); return; }
   if (section === 'effectiveness') { renderEffectivenessMeasures(); return; }
-  if (section === 'app') { renderAppConfig(); return; }
   if (section === 'meetings') { renderMeetings(); return; }
 }
 
 function renderAll() {
   renderMetaSummary();
   renderOverview();
-  for (const section of ['objectives', 'documents', 'org', 'assets', 'access', 'effectiveness', 'app', 'meetings']) renderSection(section);
+  for (const section of ['objectives', 'documents', 'org', 'assets', 'access', 'effectiveness', 'meetings']) renderSection(section);
   populateForms();
 }
 
@@ -1823,15 +1667,6 @@ $('cancelMetricEntry')?.addEventListener('click', () => {
   if (card) card.style.display = 'none';
 });
 
-$('appConfigForm')?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const editingId = ev.target.dataset.editingId || null;
-  await saveIsms('app', appPayloadFromForm(), editingId);
-  resetForm('app');
-  await reloadAfter(editingId ? 'Application configuration matrix row updated' : 'Application configuration matrix row created');
-});
-
-
 $('accessControlForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const editingId = ev.target.dataset.editingId || null;
@@ -2011,7 +1846,7 @@ async function activateInitialTab() {
 for (const btn of Array.from(document.querySelectorAll('#ismsTabs [data-bs-toggle="tab"]'))) {
   btn.addEventListener('shown.bs.tab', () => {
     const section = sectionFromTabId(btn.id);
-    const tabName = section === 'app' ? 'appconfig' : section;
+    const tabName = section;
     const url = new URL(window.location.href);
     url.searchParams.set('tab', tabName);
     window.history.replaceState({}, '', url.toString());

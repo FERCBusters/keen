@@ -35,13 +35,11 @@ const ismsDocumentsRows = document.getElementById('ismsDocumentsRows');
 const ismsEffectivenessRows = document.getElementById('ismsEffectivenessRows');
 const ismsOrgRows = document.getElementById('ismsOrgRows');
 const ismsAssetsRows = document.getElementById('ismsAssetsRows');
-const ismsAppConfigHead = document.getElementById('ismsAppConfigHead');
-const ismsAppConfigRows = document.getElementById('ismsAppConfigRows');
 const ismsObjectivesFilter = document.getElementById('ismsObjectivesFilter');
 const ismsDocumentsFilter = document.getElementById('ismsDocumentsFilter');
 const ismsEffectivenessFilter = document.getElementById('ismsEffectivenessFilter');
 
-let soa = {controls: [], clauses: [], risks: [], pestle_items: [], business_processes: [], interested_parties: [], isms_objectives: [], isms_documents: [], isms_effectiveness_measures: [], isms_org_nodes: [], isms_assets: [], isms_business_processes: [], isms_application_configurations: [], counts: {}};
+let soa = {controls: [], clauses: [], risks: [], pestle_items: [], business_processes: [], interested_parties: [], isms_objectives: [], isms_documents: [], isms_effectiveness_measures: [], isms_org_nodes: [], isms_assets: [], isms_business_processes: [], counts: {}};
 
 function stripHtml(value) {
   return String(value || '')
@@ -400,82 +398,6 @@ function renderIsmsOrgAssets() {
   }
 }
 
-function ismsAppSourceTypeLabel(type) {
-  if (type === 'document') return 'Policies and Processes';
-  if (type === 'person') return 'People';
-  if (type === 'asset') return 'Assets';
-  if (type === 'org_node') return 'Org chart positions';
-  return 'Other';
-}
-
-function ismsAppSourceSort(type) {
-  return {document: 1, person: 2, asset: 3, org_node: 4}[type] || 9;
-}
-
-function ismsAppSourceKey(sourceType, id) {
-  return `${sourceType || ''}:${id || ''}`;
-}
-
-function ismsAppCellClass(value) {
-  const v = String(value || '').toLowerCase();
-  if (v === 'high') return 'isms-app-cell-high';
-  if (v === 'medium') return 'isms-app-cell-medium';
-  if (v === 'low') return 'isms-app-cell-low';
-  return 'isms-app-cell-empty';
-}
-
-function renderIsmsAppConfig() {
-  if (!ismsAppConfigRows) return;
-  const ismsProcesses = Array.isArray(soa.isms_business_processes) ? soa.isms_business_processes : [];
-  const legacyProcesses = Array.isArray(soa.business_processes) ? soa.business_processes : [];
-  const processes = ismsProcesses.length ? ismsProcesses : legacyProcesses;
-  if (ismsAppConfigHead) ismsAppConfigHead.innerHTML = `<tr><th class="isms-app-head-group">Group</th><th class="isms-app-head-linkage">Key linkages</th>${processes.map((bp) => `<th class="text-center isms-app-process-heading" title="${esc(bp.description || bp.name || '')}">${esc(bp.name || 'Business process')}</th>`).join('')}</tr>`;
-  if (!soa.can_view_isms) { ismsAppConfigRows.innerHTML = `<tr><td colspan="${Math.max(3, processes.length + 2)}" class="p-4 small-muted">You do not have permission to view ISMS application configuration.</td></tr>`; return; }
-  const entries = soa.isms_application_configurations || [];
-  const sources = [];
-  const seen = new Set();
-  for (const entry of entries) {
-    const id = entry.source?.id || entry.document_id || entry.user_id || entry.asset_id || entry.org_node_id;
-    const key = ismsAppSourceKey(entry.source_type, id);
-    if (!id || seen.has(key)) continue;
-    seen.add(key);
-    sources.push({key, source_type: entry.source_type, group: ismsAppSourceTypeLabel(entry.source_type), label: entry.source?.label || entry.display || 'Source', source: entry.source || null});
-  }
-  sources.sort((a, b) => ismsAppSourceSort(a.source_type) - ismsAppSourceSort(b.source_type) || String(a.label).localeCompare(String(b.label), undefined, {numeric: true}));
-  const entryMap = new Map();
-  for (const entry of entries) {
-    const id = entry.source?.id || entry.document_id || entry.user_id || entry.asset_id || entry.org_node_id;
-    const key = `${ismsAppSourceKey(entry.source_type, id)}::${entry.business_process_id || entry.business_process?.id || ''}`;
-    if (!entryMap.has(key)) entryMap.set(key, []);
-    entryMap.get(key).push(entry);
-  }
-  if (!sources.length || !processes.length) {
-    ismsAppConfigRows.innerHTML = `<tr><td colspan="${Math.max(3, processes.length + 2)}" class="p-4 small-muted">No application configuration matrix entries yet.</td></tr>`;
-    return;
-  }
-  const grouped = [];
-  for (const src of sources) {
-    let group = grouped.find((g) => g.name === src.group);
-    if (!group) {
-      group = {name: src.group, rows: []};
-      grouped.push(group);
-    }
-    group.rows.push(src);
-  }
-  ismsAppConfigRows.innerHTML = grouped.map((group) => group.rows.map((src, idx) => `<tr>
-    ${idx === 0 ? `<td class="isms-app-group" rowspan="${group.rows.length}" data-sort="${esc(group.name)}"><span>${esc(group.name)}</span></td>` : ''}
-    <td class="wrap fw-semibold isms-app-key-linkage" data-sort="${esc(src.label)}">${src.source_type === 'person' ? userPillHtml(src.source || src.label) : esc(src.label)}</td>
-    ${processes.map((bp) => {
-      const cellEntries = entryMap.get(`${src.key}::${bp.id}`) || [];
-      if (!cellEntries.length) return '<td class="isms-app-cell isms-app-cell-empty" data-sort=""></td>';
-      const first = cellEntries[0];
-      const value = first.value || '—';
-      const title = cellEntries.map((entry) => `${entry.value || ''}${entry.notes ? ` — ${entry.notes}` : ''}`).join('\n');
-      return `<td class="isms-app-cell ${ismsAppCellClass(value)}" data-sort="${esc(value)}" title="${esc(title)}"><div class="fw-semibold">${esc(value)}</div>${cellEntries.length > 1 ? `<div class="small">+${cellEntries.length - 1}</div>` : ''}</td>`;
-    }).join('')}
-  </tr>`).join('')).join('');
-}
-
 function renderAll() {
   const counts = soa.counts || {};
   if (meta) {
@@ -491,7 +413,6 @@ function renderAll() {
   renderIsmsDocuments();
   renderIsmsEffectiveness();
   renderIsmsOrgAssets();
-  renderIsmsAppConfig();
 }
 
 
@@ -512,7 +433,6 @@ async function load() {
     if (ismsEffectivenessRows) ismsEffectivenessRows.innerHTML = '<tr><td colspan="8" class="p-4 small-muted">Failed to load effectiveness measures.</td></tr>';
     if (ismsOrgRows) ismsOrgRows.innerHTML = '<tr><td colspan="5" class="p-4 small-muted">Failed to load organisation chart.</td></tr>';
     if (ismsAssetsRows) ismsAssetsRows.innerHTML = '<tr><td colspan="8" class="p-4 small-muted">Failed to load assets.</td></tr>';
-    if (ismsAppConfigRows) ismsAppConfigRows.innerHTML = '<tr><td colspan="7" class="p-4 small-muted">Failed to load application configuration.</td></tr>';
   }
 }
 
@@ -528,7 +448,7 @@ ismsEffectivenessFilter?.addEventListener('input', renderIsmsEffectiveness);
 function activateInitialTab() {
   const tab = new URLSearchParams(window.location.search || '').get('tab');
   if (!tab) return;
-  const mapped = {interestedparties: 'soaInterestedPartiesTab', isms: 'soaIsmsObjectivesTab', ismsobjectives: 'soaIsmsObjectivesTab', ismsdocuments: 'soaIsmsDocumentsTab', effectiveness: 'soaIsmsEffectivenessTab', ismseffectiveness: 'soaIsmsEffectivenessTab', ismseffectivenessmeasures: 'soaIsmsEffectivenessTab', orgassets: 'soaIsmsOrgAssetsTab', appconfig: 'soaIsmsAppConfigTab'}[String(tab || '').toLowerCase()];
+  const mapped = {interestedparties: 'soaInterestedPartiesTab', isms: 'soaIsmsObjectivesTab', ismsobjectives: 'soaIsmsObjectivesTab', ismsdocuments: 'soaIsmsDocumentsTab', effectiveness: 'soaIsmsEffectivenessTab', ismseffectiveness: 'soaIsmsEffectivenessTab', ismseffectivenessmeasures: 'soaIsmsEffectivenessTab', orgassets: 'soaIsmsOrgAssetsTab'}[String(tab || '').toLowerCase()];
   const target = document.getElementById(mapped || `soa${tab.charAt(0).toUpperCase()}${tab.slice(1)}Tab`);
   if (target && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(target).show();
 }

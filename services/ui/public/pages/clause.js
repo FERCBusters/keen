@@ -128,7 +128,6 @@ function _ismsEntityRows(data) {
     ['Documents', data.documents, (x) => x.title || 'Document', '/isms.html?tab=documents'],
     ['Organisation Chart', data.org_nodes, (x) => x.name || 'Org node', '/isms.html?tab=org'],
     ['Assets', data.assets, (x) => x.asset || 'Asset', '/isms.html?tab=assets'],
-    ['Application Configuration', data.application_configurations, (x) => x.display || x.source?.label || 'App config', '/isms.html?tab=appconfig'],
     ['Meetings', data.meetings, (x) => x.title || 'Meeting', '/isms.html?tab=meetings'],
   ];
   const rows = [];
