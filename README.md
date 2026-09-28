@@ -1,4 +1,4 @@
-# Keen (Keen Auditable Notation)
+# Keen (Key Evidence ENgine)
 
 Keen is an evidence-collation engine for audit readiness, designed to turn day-to-day operational activity into **immutable, queryable evidence** mapped to controls/clauses across one or more frameworks (e.g. ISO/IEC 27001:2022, UK DVSTF).
 
