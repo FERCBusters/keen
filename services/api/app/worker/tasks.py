@@ -463,10 +463,12 @@ def send_question_reply_webhooks_task(thread_id: str, post_id: str) -> dict:
     finally:
         db.close()
 
+
 @celery_app.task(name="app.worker.tasks.backfill_rule_task")
 def backfill_rule_task(job_id: str) -> None:
     from app.db.models import RuleBackfillJob
     from app.worker.rule_backfill import process_batch
+
     try:
         for _ in range(20):
             if not process_batch(uuid.UUID(job_id)):
@@ -485,5 +487,6 @@ def backfill_rule_task(job_id: str) -> None:
 @celery_app.task(name="app.worker.tasks.recover_rule_backfills_task")
 def recover_rule_backfills_task() -> None:
     from app.worker.rule_backfill import recover_jobs
+
     for job_id in recover_jobs():
         backfill_rule_task.delay(str(job_id))

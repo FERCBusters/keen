@@ -111,6 +111,12 @@ def get_current_user_from_headers_cookies(
         delete_session(r, sid)
         return None
 
+    from app.security.hosted import hosted_session_allowed
+
+    if not hosted_session_allowed(db, user, sess):
+        delete_session(r, sid)
+        return None
+
     # Attach the server-side session authorisation snapshot to this ORM instance.
     # The middleware/route-level permission helpers will validate the authz
     # version before trusting it, so this remains a cache rather than an

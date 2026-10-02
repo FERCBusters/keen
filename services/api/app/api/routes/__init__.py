@@ -69,7 +69,10 @@ OPENAPI_TAGS = [
         "name": "ISMS",
         "description": "ISMS objectives, documents, organisation chart, assets, application configuration matrix, meetings and Statement of Applicability.",
     },
-    {"name": "Assurance", "description": "People, vendor and personnel assurance records."},
+    {
+        "name": "Assurance",
+        "description": "People, vendor and personnel assurance records.",
+    },
     {
         "name": "Statement of Applicability",
         "description": "Read-only SoA summary across controls, clauses, CIA risks, PESTLE(E), Interested Parties and ISMS.",

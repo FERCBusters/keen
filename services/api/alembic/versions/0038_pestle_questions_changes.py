@@ -38,7 +38,8 @@ def upgrade() -> None:
     # Existing question threads are evidence/event questions. Keep their historical
     # event_id relationship but also populate the generic target fields so the
     # queue, bell and account views can render all question types uniformly.
-    op.execute("""
+    op.execute(
+        """
         UPDATE event_question_threads t
         SET target_type = 'event',
             target_id = t.event_id,
@@ -47,7 +48,8 @@ def upgrade() -> None:
         FROM events e
         WHERE t.event_id = e.id
           AND t.target_type IS NULL
-        """)
+        """
+    )
     op.alter_column("event_question_threads", "target_type", nullable=False)
     op.alter_column("event_question_threads", "event_id", nullable=True)
     op.create_index(

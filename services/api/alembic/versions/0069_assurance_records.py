@@ -3,6 +3,7 @@
 Revision ID: 0069_assurance_records
 Revises: 0068_unified_evidence
 """
+
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 from alembic import op
@@ -21,8 +22,17 @@ def upgrade():
         sa.Column("email", sa.String(256), nullable=False, server_default=""),
         sa.Column("position", sa.String(256), nullable=False, server_default=""),
         sa.Column("notes", sa.Text(), nullable=False, server_default=""),
-        sa.Column("user_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), unique=True),
-        sa.Column("org_node_id", UUID(as_uuid=True), sa.ForeignKey("isms_org_nodes.id", ondelete="SET NULL")),
+        sa.Column(
+            "user_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            unique=True,
+        ),
+        sa.Column(
+            "org_node_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("isms_org_nodes.id", ondelete="SET NULL"),
+        ),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
     )
@@ -37,18 +47,42 @@ def upgrade():
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
     )
-    op.add_column("risk_assets", sa.Column("vendor_id", UUID(as_uuid=True), sa.ForeignKey("isms_vendors.id", ondelete="SET NULL")))
+    op.add_column(
+        "risk_assets",
+        sa.Column(
+            "vendor_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("isms_vendors.id", ondelete="SET NULL"),
+        ),
+    )
     op.create_index("ix_risk_assets_vendor_id", "risk_assets", ["vendor_id"])
     op.create_table(
         "isms_person_assets",
-        sa.Column("person_id", UUID(as_uuid=True), sa.ForeignKey("isms_people.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("asset_id", UUID(as_uuid=True), sa.ForeignKey("risk_assets.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("relationship_type", sa.String(32), nullable=False, server_default="uses"),
+        sa.Column(
+            "person_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("isms_people.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "asset_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("risk_assets.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "relationship_type", sa.String(32), nullable=False, server_default="uses"
+        ),
     )
     op.create_table(
         "isms_person_assurances",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("person_id", UUID(as_uuid=True), sa.ForeignKey("isms_people.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "person_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("isms_people.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("category", sa.String(64), nullable=False),
         sa.Column("name", sa.String(256), nullable=False),
         sa.Column("status", sa.String(32), nullable=False, server_default="pending"),
@@ -60,11 +94,15 @@ def upgrade():
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
     )
-    op.create_index("ix_isms_person_assurances_person_id", "isms_person_assurances", ["person_id"])
+    op.create_index(
+        "ix_isms_person_assurances_person_id", "isms_person_assurances", ["person_id"]
+    )
 
 
 def downgrade():
-    op.drop_index("ix_isms_person_assurances_person_id", table_name="isms_person_assurances")
+    op.drop_index(
+        "ix_isms_person_assurances_person_id", table_name="isms_person_assurances"
+    )
     op.drop_table("isms_person_assurances")
     op.drop_table("isms_person_assets")
     op.drop_index("ix_risk_assets_vendor_id", table_name="risk_assets")

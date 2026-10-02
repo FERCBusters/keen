@@ -246,7 +246,8 @@ def _fts_scores(db: Session, *, framework: str, terms: list[str]) -> dict[str, f
     query = " ".join(_unique_strs(q_terms)[:32])
     if not query:
         return {}
-    sql = text("""
+    sql = text(
+        """
         SELECT id::text AS id,
                ts_rank_cd(
                  to_tsvector('simple',
@@ -268,7 +269,8 @@ def _fts_scores(db: Session, *, framework: str, terms: list[str]) -> dict[str, f
             coalesce(tags::text, '') || ' ' ||
             coalesce("metadata"::text, '')
           ) @@ plainto_tsquery('simple', :q)
-        """)
+        """
+    )
     try:
         rows = db.execute(sql, {"framework": framework, "q": query}).mappings().all()
     except Exception:

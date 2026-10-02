@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -45,6 +45,67 @@ class Settings(BaseSettings):
                 "KEEN_BOOTSTRAP_ADMIN_PASSWORD must be set when bootstrapping admin user"
             )
         return v.strip()
+
+    # Hosted owner-only v1. This is a security boundary, not UI configuration.
+    hosted_mode: bool = Field(default=False)
+    hosted_owner_subject: str = Field(default="")
+
+    @model_validator(mode="after")
+    def validate_hosted_security(self):
+        if self.hosted_mode:
+            if not self.hosted_owner_subject or not self.oidc_issuer.startswith(
+                "https://"
+            ):
+                raise ValueError(
+                    "Hosted KEEN requires an exact OIDC issuer and owner subject"
+                )
+            if (
+                not self.oidc_enabled
+                or self.local_auth_enabled
+                or self.trust_remote_user
+                or self.google_sso_enabled
+                or self.github_sso_enabled
+                or self.oidc_auto_link_existing
+                or self.oidc_auto_provision
+            ):
+                raise ValueError(
+                    "Hosted KEEN requires OIDC only, with automatic account linking disabled"
+                )
+            if (
+                not self.cookie_secure
+                or self.cookie_domain
+                or self.oidc_allow_insecure_http
+                or not self.session_cookie_name.startswith("__Host-")
+            ):
+                raise ValueError(
+                    "Hosted KEEN requires secure __Host- cookies and HTTPS OIDC"
+                )
+            from urllib.parse import urlsplit
+
+            public = urlsplit(self.public_base_url)
+            if (
+                public.scheme != "https"
+                or not public.hostname
+                or public.username
+                or public.path not in ("", "/")
+                or public.query
+                or public.fragment
+            ):
+                raise ValueError("Hosted KEEN requires an exact public HTTPS origin")
+            if (
+                not self.s3_bucket
+                or self.s3_access_key
+                or self.s3_secret_key
+                or self.s3_endpoint_url
+            ):
+                raise ValueError(
+                    "Hosted KEEN requires its own AWS bucket and no static S3 credentials"
+                )
+            if self.artifact_storage_backend != "s3" or not self.s3_use_instance_role:
+                raise ValueError(
+                    "Hosted KEEN requires S3 with instance-role credentials"
+                )
+        return self
 
     # Cookie-backed sessions stored in Valkey/Redis
     session_cookie_name: str = Field(default="keen_session")
@@ -105,11 +166,17 @@ class Settings(BaseSettings):
     # Google OpenID Connect
     google_sso_enabled: bool = Field(default=False)
     google_provider_label: str = Field(default="Google")
-    google_authorization_endpoint: str = Field(default="https://accounts.google.com/o/oauth2/v2/auth")
+    google_authorization_endpoint: str = Field(
+        default="https://accounts.google.com/o/oauth2/v2/auth"
+    )
     google_token_endpoint: str = Field(default="https://oauth2.googleapis.com/token")
     google_jwks_uri: str = Field(default="https://www.googleapis.com/oauth2/v3/certs")
-    google_issuer: str = Field(default="https://accounts.google.com,accounts.google.com")
-    google_userinfo_endpoint: str = Field(default="https://openidconnect.googleapis.com/v1/userinfo")
+    google_issuer: str = Field(
+        default="https://accounts.google.com,accounts.google.com"
+    )
+    google_userinfo_endpoint: str = Field(
+        default="https://openidconnect.googleapis.com/v1/userinfo"
+    )
     google_client_id: str = Field(default="")
     google_client_secret: str = Field(default="")
     google_scopes: str = Field(default="openid email profile")
@@ -124,8 +191,12 @@ class Settings(BaseSettings):
     # GitHub OAuth
     github_sso_enabled: bool = Field(default=False)
     github_provider_label: str = Field(default="GitHub")
-    github_authorization_endpoint: str = Field(default="https://github.com/login/oauth/authorize")
-    github_token_endpoint: str = Field(default="https://github.com/login/oauth/access_token")
+    github_authorization_endpoint: str = Field(
+        default="https://github.com/login/oauth/authorize"
+    )
+    github_token_endpoint: str = Field(
+        default="https://github.com/login/oauth/access_token"
+    )
     github_user_endpoint: str = Field(default="https://api.github.com/user")
     github_emails_endpoint: str = Field(default="https://api.github.com/user/emails")
     github_issuer: str = Field(default="https://github.com/login/oauth")
@@ -218,6 +289,7 @@ class Settings(BaseSettings):
         return value
 
     # S3 (MinIO / AWS S3 / etc.), required only for S3 writes/reads.
+    s3_use_instance_role: bool = Field(default=False)
     s3_endpoint_url: str = Field(default="")
     s3_access_key: str = Field(default="")
     s3_secret_key: str = Field(default="")

@@ -70,6 +70,11 @@ def clear_csrf_cookie(response: Response) -> None:
 
 
 def csrf_valid(request: Request) -> bool:
+    if settings.hosted_mode:
+        # Sibling customer subdomains are same-site but are NOT the same origin.
+        expected = settings.public_base_url.rstrip("/")
+        if not expected or request.headers.get("origin", "") != expected:
+            return False
     cookie_token = get_csrf_token_from_request(request)
     header_token = get_csrf_token_from_header(request)
     if not cookie_token or not header_token:

@@ -145,6 +145,8 @@ def bootstrap_initial_admin():
     If KEEN_BOOTSTRAP_ADMIN_USERNAME and KEEN_BOOTSTRAP_ADMIN_PASSWORD are
     set and there are no users in the database, create an initial admin.
     """
+    if settings.hosted_mode:
+        return  # Owner is created explicitly before API startup.
     uname = (settings.bootstrap_admin_username or "").strip()
     pwd = (settings.bootstrap_admin_password or "").strip()
     if not uname or not pwd:

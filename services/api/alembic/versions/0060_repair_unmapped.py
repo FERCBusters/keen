@@ -29,12 +29,15 @@ def upgrade() -> None:
     op.execute("TRUNCATE framework_event_stats")
     op.execute("TRUNCATE global_event_stats")
 
-    op.execute("""
+    op.execute(
+        """
         INSERT INTO global_event_stats (stats_key, total_events, updated_at)
         SELECT 'events', COUNT(*)::integer, NOW()
         FROM events
-        """)
-    op.execute("""
+        """
+    )
+    op.execute(
+        """
         INSERT INTO framework_event_stats (
             framework_slug,
             mapped_event_count,
@@ -47,7 +50,8 @@ def upgrade() -> None:
         FROM mappings m
         JOIN control_items c ON c.id = m.control_item_id
         GROUP BY c.framework_slug
-        """)
+        """
+    )
 
 
 def downgrade() -> None:

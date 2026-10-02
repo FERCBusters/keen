@@ -4,6 +4,7 @@ The identity is derived from stored provenance, including events ingested before
 the evidence editor existed. A rule can therefore target a collection item
 without relying on coincidental action/system strings.
 """
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,9 @@ from typing import Any
 
 
 def collector_id(adapter: str, section: str, key: Any) -> str:
-    return json.dumps([adapter, section, str(key)], separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(
+        [adapter, section, str(key)], separators=(",", ":"), ensure_ascii=False
+    )
 
 
 def event_collector(event: dict) -> str | None:
@@ -62,7 +65,14 @@ def collector_pointer_filter(identity: str) -> dict:
             owner, repo = key.split("/", 1)
             return {"github": {"endpoint": "repo_events", "owner": owner, "repo": repo}}
         return {"github": {"feed" if section == "feeds" else "org": key}}
-    field = {"loki": "query_name", "cloudwatch_logs": "name", "jenkins": "job",
-             "rss": "feed_url", "forgejo": "feed", "taiga": "project_id",
-             "google_workspace": "stream", "bookstack": "page_id"}[adapter]
+    field = {
+        "loki": "query_name",
+        "cloudwatch_logs": "name",
+        "jenkins": "job",
+        "rss": "feed_url",
+        "forgejo": "feed",
+        "taiga": "project_id",
+        "google_workspace": "stream",
+        "bookstack": "page_id",
+    }[adapter]
     return {adapter: {field: int(key) if adapter in ("taiga", "bookstack") else key}}

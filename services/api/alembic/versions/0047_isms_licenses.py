@@ -31,12 +31,14 @@ def _table_exists(bind, table_name: str) -> bool:
 def _column_exists(bind, table_name: str, column_name: str) -> bool:
     return bool(
         bind.execute(
-            sa.text("""
+            sa.text(
+                """
                 select 1
                 from information_schema.columns
                 where table_name = :table_name
                   and column_name = :column_name
-                """),
+                """
+            ),
             {"table_name": table_name, "column_name": column_name},
         ).scalar()
     )
@@ -45,12 +47,14 @@ def _column_exists(bind, table_name: str, column_name: str) -> bool:
 def _constraint_exists(bind, table_name: str, constraint_name: str) -> bool:
     return bool(
         bind.execute(
-            sa.text("""
+            sa.text(
+                """
                 select 1
                 from information_schema.table_constraints
                 where table_name = :table_name
                   and constraint_name = :constraint_name
-                """),
+                """
+            ),
             {"table_name": table_name, "constraint_name": constraint_name},
         ).scalar()
     )
@@ -94,12 +98,20 @@ def upgrade() -> None:
         )
 
     # Backfill existing free-text license values into managed license entities.
-    rows = bind.execute(sa.text("""
+    rows = (
+        bind.execute(
+            sa.text(
+                """
             select distinct trim(license) as name
             from risk_assets
             where license is not null and trim(license) <> ''
             order by trim(license)
-            """)).mappings().all()
+            """
+            )
+        )
+        .mappings()
+        .all()
+    )
     now = datetime.utcnow()
     for row in rows:
         name = row["name"]
@@ -110,23 +122,27 @@ def upgrade() -> None:
         if not license_id:
             license_id = uuid.uuid4()
             bind.execute(
-                sa.text("""
+                sa.text(
+                    """
                     insert into isms_licenses
                         (id, name, description, created_at, updated_at)
                     values
                         (:id, :name, '', :created_at, :updated_at)
-                    """),
+                    """
+                ),
                 {"id": license_id, "name": name, "created_at": now, "updated_at": now},
             )
         bind.execute(
-            sa.text("""
+            sa.text(
+                """
                 update risk_assets
                 set license_id = :license_id
                 where license is not null
                   and trim(license) <> ''
                   and lower(trim(license)) = lower(:name)
                   and license_id is null
-                """),
+                """
+            ),
             {"license_id": license_id, "name": name},
         )
 

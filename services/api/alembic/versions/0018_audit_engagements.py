@@ -202,16 +202,20 @@ def upgrade():
     )
 
     # Permission seed. Grant these to a user/group such as "auditors" as needed.
-    op.execute("""
+    op.execute(
+        """
         INSERT INTO permissions (id, code, description, created_at)
         SELECT gen_random_uuid(), 'audits.read', 'View audit engagements, sampled evidence, scope, attendees, findings and final reports.', NOW()
         WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE code='audits.read');
-    """)
-    op.execute("""
+    """
+    )
+    op.execute(
+        """
         INSERT INTO permissions (id, code, description, created_at)
         SELECT gen_random_uuid(), 'audits.manage', 'Create and maintain audit engagements, sampled evidence, scope, attendees, findings and final reports.', NOW()
         WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE code='audits.manage');
-    """)
+    """
+    )
 
 
 def downgrade():

@@ -58,9 +58,7 @@ def auth_methods() -> dict:
         "oidc_enabled": oidc_enabled,
         "oidc": (
             {
-                "label": (
-                    oidc_provider.label if oidc_provider else "Single sign-on"
-                ),
+                "label": (oidc_provider.label if oidc_provider else "Single sign-on"),
                 "start_url": "/api/v1/auth/oidc/start",
             }
             if oidc_enabled
@@ -223,7 +221,9 @@ def login(
 @router.get("/v1/auth/oidc/start")
 async def oidc_start(request: Request, db: Session = Depends(get_db)) -> Response:
     next_url = request.query_params.get("next")
-    url = await build_authorize_redirect(request, db, next_url=next_url, provider_key="oidc")
+    url = await build_authorize_redirect(
+        request, db, next_url=next_url, provider_key="oidc"
+    )
     return RedirectResponse(url, status_code=302)
 
 
@@ -233,20 +233,30 @@ async def oidc_callback(request: Request, db: Session = Depends(get_db)) -> Resp
 
 
 @router.get("/v1/auth/sso/{provider_key}/start")
-async def sso_start(provider_key: str, request: Request, db: Session = Depends(get_db)) -> Response:
+async def sso_start(
+    provider_key: str, request: Request, db: Session = Depends(get_db)
+) -> Response:
     next_url = request.query_params.get("next")
-    url = await build_authorize_redirect(request, db, next_url=next_url, provider_key=provider_key)
+    url = await build_authorize_redirect(
+        request, db, next_url=next_url, provider_key=provider_key
+    )
     return RedirectResponse(url, status_code=302)
 
 
 @router.get("/v1/auth/sso/{provider_key}/callback")
-async def sso_callback(provider_key: str, request: Request, db: Session = Depends(get_db)) -> Response:
+async def sso_callback(
+    provider_key: str, request: Request, db: Session = Depends(get_db)
+) -> Response:
     return await _complete_sso_callback(request, db, provider_key=provider_key)
 
 
-async def _complete_sso_callback(request: Request, db: Session, *, provider_key: str) -> Response:
+async def _complete_sso_callback(
+    request: Request, db: Session, *, provider_key: str
+) -> Response:
 
-    user, next_url, id_token, provider = await handle_callback(request, db, provider_key=provider_key)
+    user, next_url, id_token, provider = await handle_callback(
+        request, db, provider_key=provider_key
+    )
     eff = attach_effective_role(db, user)
     permission_codes = get_effective_permission_codes(db, user, use_cache=False)
     authz_version = int(getattr(user, "authz_version", 0) or 0)

@@ -852,11 +852,31 @@ def _apply_payload(
 
     # The register's four ratings are the single source of truth. Keep the
     # historical score columns in sync for existing graph and SoA consumers.
-    rating_fields = ("register_likelihood", "register_impact", "register_residual_likelihood", "register_residual_impact")
-    if is_create or fields.intersection(rating_fields) or fields.intersection({"threat_score", "vulnerability_score", "impact_score", "residual_vulnerability_score", "residual_impact_score"}):
-        for name, legacy in (("register_likelihood", "vulnerability_score"), ("register_impact", "impact_score"),
-                             ("register_residual_likelihood", "residual_vulnerability_score"),
-                             ("register_residual_impact", "residual_impact_score")):
+    rating_fields = (
+        "register_likelihood",
+        "register_impact",
+        "register_residual_likelihood",
+        "register_residual_impact",
+    )
+    if (
+        is_create
+        or fields.intersection(rating_fields)
+        or fields.intersection(
+            {
+                "threat_score",
+                "vulnerability_score",
+                "impact_score",
+                "residual_vulnerability_score",
+                "residual_impact_score",
+            }
+        )
+    ):
+        for name, legacy in (
+            ("register_likelihood", "vulnerability_score"),
+            ("register_impact", "impact_score"),
+            ("register_residual_likelihood", "residual_vulnerability_score"),
+            ("register_residual_impact", "residual_impact_score"),
+        ):
             if name in fields:
                 setattr(risk, name, getattr(payload, name))
             elif is_create or (legacy in fields and name not in fields):
@@ -867,7 +887,9 @@ def _apply_payload(
         risk.residual_vulnerability_score = risk.register_residual_likelihood or 1
         risk.residual_impact_score = risk.register_residual_impact or 1
     risk.risk_score = (risk.register_likelihood or 0) * (risk.register_impact or 0)
-    risk.residual_risk_score = (risk.register_residual_likelihood or 0) * (risk.register_residual_impact or 0)
+    risk.residual_risk_score = (risk.register_residual_likelihood or 0) * (
+        risk.register_residual_impact or 0
+    )
     risk.updated_at = _utcnow()
 
 
@@ -1480,11 +1502,20 @@ def create_risk(
             raise HTTPException(status_code=400, detail="Unknown risk library template")
         refs = (template.suggested_assessment or {}).get("keen_af_control_refs", [])
         if isinstance(refs, list):
-            template_refs = _dedupe_controls([ref for ref in refs if isinstance(ref, str)])
+            template_refs = _dedupe_controls(
+                [ref for ref in refs if isinstance(ref, str)]
+            )
             # Administrators can remove framework controls later. An old
             # template should still create a risk using its remaining links.
-            available = {ref for (ref,) in db.query(ControlItem.ref).filter(
-                ControlItem.framework_slug == "KEEN-AF:1.0", ControlItem.ref.in_(template_refs)).all()}
+            available = {
+                ref
+                for (ref,) in db.query(ControlItem.ref)
+                .filter(
+                    ControlItem.framework_slug == "KEEN-AF:1.0",
+                    ControlItem.ref.in_(template_refs),
+                )
+                .all()
+            }
             template_refs = [ref for ref in template_refs if ref in available]
     now = _utcnow()
     risk = Risk(created_at=now, updated_at=now, created_by_user_id=user.id)
@@ -1493,12 +1524,18 @@ def create_risk(
     db.flush()
     fw = _clean_framework(payload.framework)
     if payload.controls is not None:
-        controls = payload.controls + template_refs if fw == "KEEN-AF:1.0" else payload.controls
+        controls = (
+            payload.controls + template_refs
+            if fw == "KEEN-AF:1.0"
+            else payload.controls
+        )
         _replace_control_links(db, risk, framework=fw, control_values=controls)
     elif fw == "KEEN-AF:1.0" and template_refs:
         _replace_control_links(db, risk, framework=fw, control_values=template_refs)
     if template_refs and fw != "KEEN-AF:1.0":
-        _replace_control_links(db, risk, framework="KEEN-AF:1.0", control_values=template_refs)
+        _replace_control_links(
+            db, risk, framework="KEEN-AF:1.0", control_values=template_refs
+        )
     db.flush()
     record_entity_changelog(
         db,

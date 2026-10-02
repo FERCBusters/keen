@@ -44,9 +44,13 @@ def downgrade() -> None:
     # zero component scores back to the previous minimum before re-adding checks.
     for _, column in _SCORE_CONSTRAINTS:
         op.execute(sa.text(f"UPDATE risks SET {column} = 1 WHERE {column} < 1"))
-    op.execute(sa.text("""
+    op.execute(
+        sa.text(
+            """
             UPDATE risks
             SET risk_score = threat_score * vulnerability_score * impact_score,
                 residual_risk_score = residual_vulnerability_score * residual_impact_score
-            """))
+            """
+        )
+    )
     _replace_constraints(minimum=1)

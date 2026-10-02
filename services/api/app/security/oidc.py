@@ -90,16 +90,10 @@ def _oidc_provider() -> SsoProvider:
         token_endpoint=_first_nonempty(_setting("oidc_token_endpoint", "")),
         jwks_uri=_first_nonempty(_setting("oidc_jwks_uri", "")),
         issuer=_first_nonempty(_setting("oidc_issuer", "")),
-        userinfo_endpoint=_first_nonempty(
-            _setting("oidc_userinfo_endpoint", "")
-        ),
-        scopes=_first_nonempty(
-            _setting("oidc_scopes", ""), "openid email profile"
-        ),
+        userinfo_endpoint=_first_nonempty(_setting("oidc_userinfo_endpoint", "")),
+        scopes=_first_nonempty(_setting("oidc_scopes", ""), "openid email profile"),
         redirect_uri=_first_nonempty(_setting("oidc_redirect_uri", "")),
-        end_session_endpoint=_first_nonempty(
-            _setting("oidc_end_session_endpoint", "")
-        ),
+        end_session_endpoint=_first_nonempty(_setting("oidc_end_session_endpoint", "")),
         post_logout_redirect_uri=_first_nonempty(
             _setting("oidc_post_logout_redirect_uri", "")
         ),
@@ -115,9 +109,7 @@ def _oidc_provider() -> SsoProvider:
         auto_link_existing=bool(_setting("oidc_auto_link_existing", True)),
         token_endpoint_auth_method="client_secret_basic",
         supports_id_token=True,
-        id_token_leeway_seconds=int(
-            _setting("oidc_id_token_leeway_seconds", 60) or 0
-        ),
+        id_token_leeway_seconds=int(_setting("oidc_id_token_leeway_seconds", 60) or 0),
     )
 
 
@@ -518,7 +510,9 @@ def _email_is_verified(provider: SsoProvider, claims: dict[str, Any]) -> bool:
 def _update_identity_metadata(identity: UserIdentity, claims: dict[str, Any]) -> None:
     identity.email = _claim_email(claims) or identity.email
     identity.preferred_username = (
-        str(claims.get("preferred_username") or identity.preferred_username or "").strip()
+        str(
+            claims.get("preferred_username") or identity.preferred_username or ""
+        ).strip()
         or None
     )
     identity.display_name = (
@@ -531,6 +525,9 @@ def _get_or_create_user_for_identity(
     db: Session, *, provider: SsoProvider, subject: str, claims: dict[str, Any]
 ) -> User:
     issuer = _canonical_issuer(provider)
+    from app.security.hosted import enforce_hosted_identity
+
+    enforce_hosted_identity(provider.key, issuer, subject)
     identity = (
         db.query(UserIdentity)
         .filter(UserIdentity.issuer == issuer, UserIdentity.subject == subject)
@@ -553,7 +550,9 @@ def _get_or_create_user_for_identity(
     if not _allowed_by_domain(provider, email):
         raise HTTPException(status_code=403, detail="Email domain is not allowed")
     if not provider.auto_link_existing:
-        raise HTTPException(status_code=403, detail="No local account linked to this identity")
+        raise HTTPException(
+            status_code=403, detail="No local account linked to this identity"
+        )
 
     candidates: dict[str, User] = {}
     link_username = _derive_link_username(provider, claims)
@@ -604,7 +603,9 @@ def _get_or_create_user_for_identity(
         db.refresh(user)
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=403, detail="SSO identity link conflict") from exc
+        raise HTTPException(
+            status_code=403, detail="SSO identity link conflict"
+        ) from exc
     return user
 
 

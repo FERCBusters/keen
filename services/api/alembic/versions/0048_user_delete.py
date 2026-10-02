@@ -28,10 +28,12 @@ def _table_exists(bind, table_name: str) -> bool:
 def _constraint_exists(bind, table_name: str, constraint_name: str) -> bool:
     return bool(
         bind.execute(
-            sa.text("""
+            sa.text(
+                """
         select 1 from information_schema.table_constraints
         where table_name = :table_name and constraint_name = :constraint_name
-        """),
+        """
+            ),
             {"table_name": table_name, "constraint_name": constraint_name},
         ).scalar()
     )

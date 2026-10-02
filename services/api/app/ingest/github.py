@@ -201,7 +201,10 @@ def _summarize_event(e: dict[str, Any], *, fallback_repo: str | None = None) -> 
 
 
 def ingest_github_repo(
-    db: Session, owner: str, repo: str, label: str | None = None,
+    db: Session,
+    owner: str,
+    repo: str,
+    label: str | None = None,
     collecting_org: str | None = None,
 ) -> dict[str, Any]:
     cursor_name = f"github:{owner}/{repo}"

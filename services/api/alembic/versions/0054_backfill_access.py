@@ -28,12 +28,14 @@ def _table_exists(bind, table_name: str) -> bool:
 def _column_exists(bind, table_name: str, column_name: str) -> bool:
     return bool(
         bind.execute(
-            sa.text("""
+            sa.text(
+                """
                 select 1
                 from information_schema.columns
                 where table_name = :table_name
                   and column_name = :column_name
-                """),
+                """
+            ),
             {"table_name": table_name, "column_name": column_name},
         ).scalar()
     )
@@ -98,26 +100,34 @@ def upgrade() -> None:
     # Preserve roles saved by the first single-select implementation, if that
     # column exists in a database that already ran the older migration.
     if _column_exists(bind, "isms_access_control_matrix_entries", "role_org_node_id"):
-        bind.execute(sa.text("""
+        bind.execute(
+            sa.text(
+                """
                 insert into isms_access_control_matrix_roles
                     (entry_id, org_node_id, created_at)
                 select id, role_org_node_id, coalesce(created_at, now())
                 from isms_access_control_matrix_entries
                 where role_org_node_id is not null
                 on conflict (entry_id, org_node_id) do nothing
-                """))
+                """
+            )
+        )
 
     # Be tolerant of any local/pre-release schema variant that used role_id as
     # the original single-select column name.
     if _column_exists(bind, "isms_access_control_matrix_entries", "role_id"):
-        bind.execute(sa.text("""
+        bind.execute(
+            sa.text(
+                """
                 insert into isms_access_control_matrix_roles
                     (entry_id, org_node_id, created_at)
                 select id, role_id, coalesce(created_at, now())
                 from isms_access_control_matrix_entries
                 where role_id is not null
                 on conflict (entry_id, org_node_id) do nothing
-                """))
+                """
+            )
+        )
 
 
 def downgrade() -> None:

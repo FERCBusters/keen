@@ -1194,14 +1194,22 @@ def _meeting_out(
         target.append(_user_summary(link.user))
     attendee_person_ids = []
     apology_person_ids = []
-    for link in db.query(IsmsMeetingPerson).filter(IsmsMeetingPerson.meeting_id == row.id).all():
-        item = {"id": str(link.person_id) if link.person_id else None,
-                "person_id": str(link.person_id) if link.person_id else None,
-                "name": link.person.name if link.person else link.name,
-                "email": link.person.email if link.person else link.email}
+    for link in (
+        db.query(IsmsMeetingPerson).filter(IsmsMeetingPerson.meeting_id == row.id).all()
+    ):
+        item = {
+            "id": str(link.person_id) if link.person_id else None,
+            "person_id": str(link.person_id) if link.person_id else None,
+            "name": link.person.name if link.person else link.name,
+            "email": link.person.email if link.person else link.email,
+        }
         (attendees if link.attendance_type == "attendee" else apologies).append(item)
         if link.person_id:
-            (attendee_person_ids if link.attendance_type == "attendee" else apology_person_ids).append(str(link.person_id))
+            (
+                attendee_person_ids
+                if link.attendance_type == "attendee"
+                else apology_person_ids
+            ).append(str(link.person_id))
     support_links = []
     for link in list(row.links or []):
         support_links.append(
@@ -1226,8 +1234,12 @@ def _meeting_out(
         "end_time": row.end_time.isoformat() if row.end_time else None,
         "attendees": attendees,
         "apologies": apologies,
-        "attendee_user_ids": [str(x.user_id) for x in row.attendees if x.attendance_type == "attendee"],
-        "apology_user_ids": [str(x.user_id) for x in row.attendees if x.attendance_type == "apology"],
+        "attendee_user_ids": [
+            str(x.user_id) for x in row.attendees if x.attendance_type == "attendee"
+        ],
+        "apology_user_ids": [
+            str(x.user_id) for x in row.attendees if x.attendance_type == "apology"
+        ],
         "attendee_person_ids": attendee_person_ids,
         "apology_person_ids": apology_person_ids,
         "links": support_links,
@@ -1797,22 +1809,38 @@ def _replace_meeting_people(
         pass
 
 
-def _replace_meeting_person_links(db: Session, meeting: IsmsMeeting,
-                                  attendees: list[uuid.UUID] | None,
-                                  apologies: list[uuid.UUID] | None) -> None:
+def _replace_meeting_person_links(
+    db: Session,
+    meeting: IsmsMeeting,
+    attendees: list[uuid.UUID] | None,
+    apologies: list[uuid.UUID] | None,
+) -> None:
     if attendees is None and apologies is None:
         return
     ids = set(attendees or []) | set(apologies or [])
-    people = {p.id: p for p in db.query(IsmsPerson).filter(IsmsPerson.id.in_(ids)).all()} if ids else {}
+    people = (
+        {p.id: p for p in db.query(IsmsPerson).filter(IsmsPerson.id.in_(ids)).all()}
+        if ids
+        else {}
+    )
     if len(people) != len(ids):
         raise HTTPException(400, "Unknown Person selected for meeting")
-    db.query(IsmsMeetingPerson).filter(IsmsMeetingPerson.meeting_id == meeting.id).delete(synchronize_session=False)
+    db.query(IsmsMeetingPerson).filter(
+        IsmsMeetingPerson.meeting_id == meeting.id
+    ).delete(synchronize_session=False)
     for kind, selected in (("attendee", attendees or []), ("apology", apologies or [])):
         for pid in dict.fromkeys(selected):
             person = people[pid]
-            db.add(IsmsMeetingPerson(meeting_id=meeting.id, person_id=pid,
-                                     attendance_type=kind, name=person.name,
-                                     email=person.email or "", created_at=_utcnow()))
+            db.add(
+                IsmsMeetingPerson(
+                    meeting_id=meeting.id,
+                    person_id=pid,
+                    attendance_type=kind,
+                    name=person.name,
+                    email=person.email or "",
+                    created_at=_utcnow(),
+                )
+            )
     db.flush()
 
 
@@ -2310,18 +2338,27 @@ def _document_folder(db: Session, folder_id: uuid.UUID | None) -> uuid.UUID | No
 
 
 def _document_tags(tags: list[str] | None) -> list[str]:
-    cleaned = list(dict.fromkeys(str(tag).strip() for tag in (tags or []) if str(tag).strip()))
+    cleaned = list(
+        dict.fromkeys(str(tag).strip() for tag in (tags or []) if str(tag).strip())
+    )
     if len(cleaned) > 30 or any(len(tag) > 64 for tag in cleaned):
-        raise HTTPException(status_code=400, detail="Use at most 30 tags, each under 65 characters")
+        raise HTTPException(
+            status_code=400, detail="Use at most 30 tags, each under 65 characters"
+        )
     return cleaned
 
 
 def _save_document_revision(db: Session, row: IsmsDocument, user: User) -> None:
-    db.add(IsmsDocumentRevision(
-        document_id=row.id, version=row.content_version, content_html=row.content_html,
-        sha256=hashlib.sha256(row.content_html.encode("utf-8")).hexdigest(),
-        created_by_user_id=user.id, created_at=_utcnow(),
-    ))
+    db.add(
+        IsmsDocumentRevision(
+            document_id=row.id,
+            version=row.content_version,
+            content_html=row.content_html,
+            sha256=hashlib.sha256(row.content_html.encode("utf-8")).hexdigest(),
+            created_by_user_id=user.id,
+            created_at=_utcnow(),
+        )
+    )
 
 
 class DocumentFolderPayload(BaseModel):
@@ -2330,24 +2367,45 @@ class DocumentFolderPayload(BaseModel):
 
 
 @router.get("/v1/isms/document-folders")
-def list_document_folders(user=Depends(require_isms_read), db: Session = Depends(get_db)):
-    return [{"id": str(row.id), "name": row.name, "parent_id": str(row.parent_id) if row.parent_id else None}
-            for row in db.query(IsmsDocumentFolder).order_by(IsmsDocumentFolder.name).all()]
+def list_document_folders(
+    user=Depends(require_isms_read), db: Session = Depends(get_db)
+):
+    return [
+        {
+            "id": str(row.id),
+            "name": row.name,
+            "parent_id": str(row.parent_id) if row.parent_id else None,
+        }
+        for row in db.query(IsmsDocumentFolder).order_by(IsmsDocumentFolder.name).all()
+    ]
 
 
 @router.post("/v1/isms/document-folders")
-def create_document_folder(payload: DocumentFolderPayload, user=Depends(require_isms_manage), db: Session = Depends(get_db)):
+def create_document_folder(
+    payload: DocumentFolderPayload,
+    user=Depends(require_isms_manage),
+    db: Session = Depends(get_db),
+):
     parent = _document_folder(db, payload.parent_id)
     row = IsmsDocumentFolder(name=payload.name.strip(), parent_id=parent)
     if not row.name:
         raise HTTPException(status_code=400, detail="Folder name is required")
     db.add(row)
     db.commit()
-    return {"id": str(row.id), "name": row.name, "parent_id": str(parent) if parent else None}
+    return {
+        "id": str(row.id),
+        "name": row.name,
+        "parent_id": str(parent) if parent else None,
+    }
 
 
 @router.patch("/v1/isms/document-folders/{folder_id}")
-def update_document_folder(folder_id: uuid.UUID, payload: DocumentFolderPayload, user=Depends(require_isms_manage), db: Session = Depends(get_db)):
+def update_document_folder(
+    folder_id: uuid.UUID,
+    payload: DocumentFolderPayload,
+    user=Depends(require_isms_manage),
+    db: Session = Depends(get_db),
+):
     row = db.get(IsmsDocumentFolder, folder_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Folder not found")
@@ -2355,23 +2413,41 @@ def update_document_folder(folder_id: uuid.UUID, payload: DocumentFolderPayload,
     current = parent
     while current is not None:
         if current == row.id:
-            raise HTTPException(status_code=400, detail="A folder cannot contain itself")
+            raise HTTPException(
+                status_code=400, detail="A folder cannot contain itself"
+            )
         current = db.get(IsmsDocumentFolder, current).parent_id
     row.name = payload.name.strip()
     if not row.name:
         raise HTTPException(status_code=400, detail="Folder name is required")
     row.parent_id = parent
     db.commit()
-    return {"id": str(row.id), "name": row.name, "parent_id": str(parent) if parent else None}
+    return {
+        "id": str(row.id),
+        "name": row.name,
+        "parent_id": str(parent) if parent else None,
+    }
 
 
 @router.delete("/v1/isms/document-folders/{folder_id}")
-def delete_document_folder(folder_id: uuid.UUID, user=Depends(require_isms_manage), db: Session = Depends(get_db)):
+def delete_document_folder(
+    folder_id: uuid.UUID,
+    user=Depends(require_isms_manage),
+    db: Session = Depends(get_db),
+):
     row = db.get(IsmsDocumentFolder, folder_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Folder not found")
-    if db.query(IsmsDocument.id).filter(IsmsDocument.folder_id == row.id).first() or db.query(IsmsDocumentFolder.id).filter(IsmsDocumentFolder.parent_id == row.id).first():
-        raise HTTPException(status_code=409, detail="Move documents and child folders before deleting this folder")
+    if (
+        db.query(IsmsDocument.id).filter(IsmsDocument.folder_id == row.id).first()
+        or db.query(IsmsDocumentFolder.id)
+        .filter(IsmsDocumentFolder.parent_id == row.id)
+        .first()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Move documents and child folders before deleting this folder",
+        )
     db.delete(row)
     db.commit()
     return {"ok": True}
@@ -2382,39 +2458,97 @@ class DocumentCommentPayload(BaseModel):
 
 
 @router.get("/v1/isms/documents/{document_id}/revisions")
-def list_document_revisions(document_id: uuid.UUID, user=Depends(require_isms_read), db: Session = Depends(get_db)):
+def list_document_revisions(
+    document_id: uuid.UUID,
+    user=Depends(require_isms_read),
+    db: Session = Depends(get_db),
+):
     if db.get(IsmsDocument, document_id) is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    return [{"version": row.version, "sha256": row.sha256, "created_at": row.created_at.isoformat(), "created_by_user_id": str(row.created_by_user_id) if row.created_by_user_id else None}
-            for row in db.query(IsmsDocumentRevision).filter_by(document_id=document_id).order_by(IsmsDocumentRevision.version.desc()).all()]
+    return [
+        {
+            "version": row.version,
+            "sha256": row.sha256,
+            "created_at": row.created_at.isoformat(),
+            "created_by_user_id": (
+                str(row.created_by_user_id) if row.created_by_user_id else None
+            ),
+        }
+        for row in db.query(IsmsDocumentRevision)
+        .filter_by(document_id=document_id)
+        .order_by(IsmsDocumentRevision.version.desc())
+        .all()
+    ]
 
 
 @router.get("/v1/isms/documents/{document_id}/revisions/{version}")
-def get_document_revision(document_id: uuid.UUID, version: int, user=Depends(require_isms_read), db: Session = Depends(get_db)):
-    row = db.query(IsmsDocumentRevision).filter_by(document_id=document_id, version=version).first()
+def get_document_revision(
+    document_id: uuid.UUID,
+    version: int,
+    user=Depends(require_isms_read),
+    db: Session = Depends(get_db),
+):
+    row = (
+        db.query(IsmsDocumentRevision)
+        .filter_by(document_id=document_id, version=version)
+        .first()
+    )
     if row is None:
         raise HTTPException(status_code=404, detail="Revision not found")
-    return {"version": row.version, "sha256": row.sha256, "content_html": row.content_html, "created_at": row.created_at.isoformat()}
+    return {
+        "version": row.version,
+        "sha256": row.sha256,
+        "content_html": row.content_html,
+        "created_at": row.created_at.isoformat(),
+    }
 
 
 @router.get("/v1/isms/documents/{document_id}/comments")
-def list_document_comments(document_id: uuid.UUID, user=Depends(require_isms_read), db: Session = Depends(get_db)):
+def list_document_comments(
+    document_id: uuid.UUID,
+    user=Depends(require_isms_read),
+    db: Session = Depends(get_db),
+):
     if db.get(IsmsDocument, document_id) is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    return [{"id": str(row.id), "body": row.body, "author": _user_summary(row.author), "created_at": row.created_at.isoformat()}
-            for row in db.query(IsmsDocumentComment).filter_by(document_id=document_id).order_by(IsmsDocumentComment.created_at.asc()).all()]
+    return [
+        {
+            "id": str(row.id),
+            "body": row.body,
+            "author": _user_summary(row.author),
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in db.query(IsmsDocumentComment)
+        .filter_by(document_id=document_id)
+        .order_by(IsmsDocumentComment.created_at.asc())
+        .all()
+    ]
 
 
 @router.post("/v1/isms/documents/{document_id}/comments")
-def create_document_comment(document_id: uuid.UUID, payload: DocumentCommentPayload, user=Depends(require_isms_manage), db: Session = Depends(get_db)):
+def create_document_comment(
+    document_id: uuid.UUID,
+    payload: DocumentCommentPayload,
+    user=Depends(require_isms_manage),
+    db: Session = Depends(get_db),
+):
     if db.get(IsmsDocument, document_id) is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    row = IsmsDocumentComment(document_id=document_id, body=payload.body.strip(), author_user_id=user.id, created_at=_utcnow())
+    row = IsmsDocumentComment(
+        document_id=document_id,
+        body=payload.body.strip(),
+        author_user_id=user.id,
+        created_at=_utcnow(),
+    )
     if not row.body:
         raise HTTPException(status_code=400, detail="Comment cannot be empty")
     db.add(row)
     db.commit()
-    return {"id": str(row.id), "body": row.body, "created_at": row.created_at.isoformat()}
+    return {
+        "id": str(row.id),
+        "body": row.body,
+        "created_at": row.created_at.isoformat(),
+    }
 
 
 @router.post("/v1/isms/documents")
@@ -2436,7 +2570,11 @@ def create_document(
         external_url=_clean_text(payload.external_url, max_len=2048) or None,
         folder_id=_document_folder(db, payload.folder_id),
         tags=_document_tags(payload.tags),
-        content_html=sanitize_rich_text_html(payload.content_html or "") if payload.content_html else "",
+        content_html=(
+            sanitize_rich_text_html(payload.content_html or "")
+            if payload.content_html
+            else ""
+        ),
         content_version=1 if payload.content_html else 0,
         created_by_user_id=user.id,
         created_at=_utcnow(),
@@ -2533,8 +2671,14 @@ def update_document(
     if "tags" in fields:
         row.tags = _document_tags(payload.tags)
     if "content_html" in fields:
-        if payload.expected_content_version is None or payload.expected_content_version != row.content_version:
-            raise HTTPException(status_code=409, detail="Document changed since it was opened. Reload before saving.")
+        if (
+            payload.expected_content_version is None
+            or payload.expected_content_version != row.content_version
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Document changed since it was opened. Reload before saving.",
+            )
         html = sanitize_rich_text_html(payload.content_html or "")
         if html != (row.content_html or ""):
             row.content_html = html
@@ -2622,8 +2766,15 @@ def delete_document(
 ):
     fw = _clean_framework(framework)
     row = _by_id_or_404(db, IsmsDocument, document_id, "Document")
-    if db.query(BookStackSectionEvidence.id).filter(BookStackSectionEvidence.document_id == row.id).first():
-        raise HTTPException(status_code=409, detail="This document has captured BookStack policy evidence and cannot be deleted")
+    if (
+        db.query(BookStackSectionEvidence.id)
+        .filter(BookStackSectionEvidence.document_id == row.id)
+        .first()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="This document has captured BookStack policy evidence and cannot be deleted",
+        )
     before = _document_out(db, row, fw)
     _record(db, "document", row, "deleted", before, None, user, request)
     _delete_entity_links(db, "document", row.id, fw)
@@ -3826,7 +3977,9 @@ def create_meeting(
     _replace_meeting_people(
         db, row, payload.attendee_user_ids or [], payload.apology_user_ids or []
     )
-    _replace_meeting_person_links(db, row, payload.attendee_person_ids or [], payload.apology_person_ids or [])
+    _replace_meeting_person_links(
+        db, row, payload.attendee_person_ids or [], payload.apology_person_ids or []
+    )
     _replace_meeting_links(db, row, payload.links or [])
     _apply_links(db, "meeting", row.id, fw, payload, user)
     after = _meeting_out(db, row, fw)
@@ -3896,7 +4049,9 @@ def update_meeting(
             db, row, payload.attendee_user_ids or [], payload.apology_user_ids or []
         )
     if "attendee_person_ids" in fields or "apology_person_ids" in fields:
-        _replace_meeting_person_links(db, row, payload.attendee_person_ids or [], payload.apology_person_ids or [])
+        _replace_meeting_person_links(
+            db, row, payload.attendee_person_ids or [], payload.apology_person_ids or []
+        )
     if "links" in fields:
         _replace_meeting_links(db, row, payload.links or [])
     _apply_links(db, "meeting", row.id, fw, payload, user)

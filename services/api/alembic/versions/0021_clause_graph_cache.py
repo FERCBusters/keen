@@ -32,7 +32,8 @@ def upgrade():
     # when 7.5.1/7.5.2/7.5.3 exist, are headings for more specific subclauses.
     # Remove direct control mappings to those intermediate parents; keep mappings
     # on leaf subclauses and top-level clauses.
-    op.execute("""
+    op.execute(
+        """
         DELETE FROM control_clause_links
         WHERE clause_id IN (
             SELECT parent.id
@@ -44,7 +45,8 @@ def upgrade():
                   WHERE child.parent_clause_id = parent.id
               )
         )
-        """)
+        """
+    )
 
 
 def downgrade():

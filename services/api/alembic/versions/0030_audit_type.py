@@ -35,7 +35,8 @@ def upgrade():
 
     # Keep previously-created audits consistent with the new rule: any audit
     # scoped to a clause also has the controls linked to that clause in scope.
-    op.execute("""
+    op.execute(
+        """
         INSERT INTO audit_scoped_controls (audit_id, control_item_id, created_at)
         SELECT DISTINCT ascopes.audit_id, links.control_item_id, CURRENT_TIMESTAMP
         FROM audit_scoped_clauses AS ascopes
@@ -44,7 +45,8 @@ def upgrade():
         JOIN control_items AS controls ON controls.id = links.control_item_id
         WHERE controls.framework_slug = audits_row.framework_slug
         ON CONFLICT (audit_id, control_item_id) DO NOTHING
-        """)
+        """
+    )
 
 
 def downgrade():

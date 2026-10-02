@@ -1326,6 +1326,9 @@ async def ws_notifications(websocket: WebSocket, db: Session = Depends(get_db)):
     """
 
     origin = websocket.headers.get("origin", "")
+    if settings.hosted_mode and origin != settings.public_base_url.rstrip("/"):
+        await websocket.close(code=1008, reason="Origin not allowed")
+        return
     if origin:
         parsed = urlparse(origin)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:

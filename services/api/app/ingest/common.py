@@ -196,7 +196,9 @@ def apply_rules(db: Session, ev: Event) -> int:
 
     created = 0
     for framework_slug, entries in matched.items():
-        controls = ensure_controls(db, framework_slug=framework_slug, refs=[item["ref"] for item in entries])
+        controls = ensure_controls(
+            db, framework_slug=framework_slug, refs=[item["ref"] for item in entries]
+        )
 
         for item in entries:
             ci = controls.get(item["ref"])
