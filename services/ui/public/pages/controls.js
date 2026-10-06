@@ -97,8 +97,8 @@ function setKpiText(id, value) {
 function applySummary(summary) {
   setKpiText('kpiEventsMapped', summary?.events?.mapped ?? '–');
   setKpiText('kpiEventsUnmapped', summary?.events?.unmapped ?? '–');
-  setKpiText('kpiControlsWith', summary?.controls?.with_evidence ?? '–');
-  setKpiText('kpiControlsWithout', summary?.controls?.without_evidence ?? '–');
+  setKpiText('kpiControlsWith', summary ? all.filter(c => c.in_scope && (c.evidence_count || 0) > 0).length : '–');
+  setKpiText('kpiControlsWithout', summary ? all.filter(c => c.in_scope && !(c.evidence_count || 0)).length : '–');
 }
 
 async function loadSummary() {
@@ -120,10 +120,10 @@ async function load() {
   setKpiText('kpiControlsWithout', '…');
   try {
     const data = await apiGet(`/api/v1/stats/controls?limit=5000&framework=${encodeURIComponent(framework)}`);
-    all = data.items || [];
+    all = (data.items || []).filter(item => item.type !== 'clause');
     if (all.length === 0) {
-      toast(status, 'No controls loaded yet. Go to Admin → Import controls.', 'warning');
-      tbody.innerHTML = '<tr><td colspan="6" class="small-muted p-4">No controls loaded yet. Go to Admin → Import controls.</td></tr>';
+      toast(status, 'No controls loaded yet. Go to Admin → Frameworks.', 'warning');
+      tbody.innerHTML = '<tr><td colspan="6" class="small-muted p-4">No controls loaded yet. Go to Admin → Frameworks.</td></tr>';
       await loadSummary();
       return;
     }

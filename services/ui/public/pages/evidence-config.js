@@ -1,3 +1,4 @@
+import {fieldLabel, draftFields} from '/pages/evidence-fields.js';
 import {apiGet, apiPost, apiPut, apiDelete} from '/app.js';
 
 const $ = suffix => document.getElementById(`ec-${suffix}`);
@@ -221,7 +222,7 @@ function showStep(number) {
   ruleSentence();
   $('editor-heading').textContent = selectedRule ? `Edit ${$('description').value || selectedRule}` : 'Create an evidence definition';
 }
-function showEditor(number = 1) { $('library').hidden = true; $('editor').hidden = false; showStep(number); }
+function showEditor(number = 1) { window.dispatchEvent(new Event('keen-show-evidence-mapping')); $('library').hidden = true; $('editor').hidden = false; showStep(number); }
 function showLibrary() { pollingJobId = null; $('editor').hidden = true; $('library').hidden = false; renderRules(); }
 function nextStep() {
   if (step === 1 && !$('description').value.trim()) { status('Describe what this evidence demonstrates before continuing.'); $('description').focus(); return; }
@@ -287,6 +288,7 @@ async function loadSamples() {
    for(const value of [...new Set(samples.map(e=>e[field]).filter(v=>v!==null&&v!==undefined&&v!==''))].sort())list.append(new Option(value,value));
   }
   $('sample-details').textContent=samples.length?'Choose an event to see the exact activity and result it recorded.':'No recent events yet. Collect an event first, or use known source values and the advanced predefine option.';
+  refreshFieldChoices();
   ruleSentence();
 }
 function textLabel(wrapper,field){wrapper.querySelector("label").htmlFor="ec-when-"+field;}
@@ -325,6 +327,8 @@ function conditionForm() {
 function readRule() {
   const definition = definitionFromForm();
   const when = {};
+  const fieldConditions = readFieldConditions();
+  if (fieldConditions.length) when.fields = fieldConditions;
   for (const field of [...conditions, ...regexConditions, ...bookstackConditions]) {
     const value = $(`when-${field}`).value.trim();
     if (value) when[field] = ['severity', 'bookstack_book_id', 'bookstack_page_id'].includes(field) ? Number(value) : value;
@@ -344,6 +348,8 @@ function readRule() {
     map_to: structuredClone(targets), confidence: Number($('confidence').value), enabled: $('enabled').checked};
 }
 function newRule() {
+  $('draft-notice').hidden=true;
+  $('field-rows').replaceChildren();
   selectedRule = null; previewedRule = null; previewCount = 0;
   $('input-picker').hidden = false; $('selected-input').hidden = true;
   $('apply-existing').checked = true; $('predefine').checked = false;
@@ -366,6 +372,7 @@ function showSelectedInput() {
 }
 async function editRule(rule) {
   newRule(); selectedRule = rule.id;
+  for(const item of rule.when?.fields || []) addFieldCondition(item);
   $('rule-id').value = rule.id; $('rule-id').disabled = true;
   $('description').value = rule.description || ''; $('confidence').value = rule.confidence ?? .8;
   $('enabled').checked = rule.enabled !== false;
@@ -714,6 +721,7 @@ async function init() {
   const fw = await apiGet('/api/v1/frameworks'); frameworks = fw.items;
   for (const item of frameworks) $('framework').add(new Option(item.name || item.slug, item.slug));
   await loadFrameworkControls();
+  await draftFromEvent();
 }
 init().catch(error => status(error.message));
 
@@ -740,3 +748,45 @@ window.addEventListener('keen-collection-create', async event => {
   await selectDefinitionAdapter();$('input-options').open=true;
 });
 window.addEventListener('keen-connections-changed', () => loadRules().catch(e=>status(e.message)));
+
+function refreshFieldChoices(){
+ const list=$('field-paths');list.replaceChildren();const paths=new Set();
+ for(const sample of samples)for(const item of sample.fields||[]){const path=JSON.stringify(item.path);if(paths.has(path))continue;paths.add(path);list.append(new Option(item.path.join(' › '),path));}
+}
+function addFieldCondition(item={}){
+ const row=document.createElement('div');row.className='d-flex flex-wrap gap-2 align-items-start';
+ const path=document.createElement('select');path.className='form-select';path.style.flex='2 1 260px';path.style.width='auto';path.setAttribute('aria-label','Event field');path.add(new Option('Choose an event field…',''));
+ const candidates=new Map();
+ for(const sample of samples)for(const observed of sample.fields||[])candidates.set(JSON.stringify(observed.path),fieldLabel(observed.path));
+ for(const [keys,label] of [[['fields','service.name'],'Service'],[['fields','process.name'],'Program'],[['fields','_SYSTEMD_UNIT'],'Journal service (also older agents)'],[['fields','SYSLOG_IDENTIFIER'],'Journal program (also older agents)'],[['fields','client.ip'],'Client IP'],[['fields','status'],'HTTP status'],[['fields','path'],'Request path'],[['fields','log.file.path'],'Log file'],[['fields','http.method'],'HTTP method'],[['fields','package'],'Package'],[['fields','package_status'],'Package state'],[['fields','job.command'],'Scheduled command'],[['source'],'Collection name']]){const key=JSON.stringify(keys);candidates.set(key,fieldLabel(keys));}
+ if(item.path&&!candidates.has(JSON.stringify(item.path)))candidates.set(JSON.stringify(item.path),fieldLabel(item.path));
+ for(const [value,label] of candidates)path.add(new Option(label,value));path.value=item.path?JSON.stringify(item.path):'';
+ const op=document.createElement('select');op.className='form-select w-auto';op.setAttribute('aria-label','Field operator');for(const [value,label] of [['equals','equals'],['starts_with','starts with'],['contains','contains'],['exists','exists'],['in_cidr','is in IP network (CIDR)']])op.add(new Option(label,value));op.value=item.operator||'equals';
+ const value=document.createElement('input');value.className='form-control';value.style.flex='2 1 200px';value.style.width='auto';value.setAttribute('aria-label','Field value');value.placeholder='Match value';value.value=item.value??'';
+ const remove=document.createElement('button');remove.type='button';remove.className='btn btn-outline-danger';remove.textContent='Remove';remove.onclick=()=>row.remove();
+ op.onchange=()=>{value.hidden=op.value==='exists';};op.onchange();
+ path.onchange=()=>{if(value.value)return;const sample=$('sample').value?samples[Number($('sample').value)]:null;const observed=sample?.fields?.find(x=>JSON.stringify(x.path)===path.value);if(observed)value.value=observed.value;};
+ row.append(path,op,value,remove);row.fieldInputs={path,op,value};$('field-rows').append(row);
+}
+function readFieldConditions(){return [...$('field-rows').children].map(row=>{const {path,op,value}=row.fieldInputs;let keys;try{keys=JSON.parse(path.value);}catch{throw new Error('Choose an event field.');}if(!Array.isArray(keys)||!keys.length||keys.some(k=>typeof k!=='string'||!k))throw new Error('Field paths must be arrays of non-empty keys.');return {path:keys,operator:op.value,...(op.value==='exists'?{}:{value:value.value})};});}
+$('field-add').onclick=()=>addFieldCondition();
+
+async function draftFromEvent(){
+ const params=new URLSearchParams(location.search), id=params.get('from_event');if(!id)return;
+ if(!/^[0-9a-f-]{36}$/i.test(id))throw new Error('Invalid event identifier for mapping draft.');
+ const framework=params.get('framework');
+ const event=await apiGet('/api/v1/events/'+encodeURIComponent(id)+(framework?'?framework='+encodeURIComponent(framework):''));
+ newRule();
+ if(![...$('definition-adapter').options].some(o=>o.value===event.source))$('definition-adapter').add(new Option(event.source,event.source));
+ $('definition-adapter').value=event.source;await selectDefinitionAdapter();
+ $('description').value='Evidence: '+(event.action||event.source);
+ for(const key of ['source','system','actor','action','outcome','severity'])if(event[key]!==null&&event[key]!==undefined)$('when-'+key).value=String(event[key]);
+ const chosen=draftFields(event.normalized_payload);
+ for(const condition of chosen)addFieldCondition(condition);
+ document.getElementById('hub-panel')?.removeAttribute('open');
+ $('sample-details').textContent='Draft from event '+id+'. Review every condition: clear System and remove Host for multiple servers; remove Client IP for multiple addresses. Transient identifiers and timestamps are omitted. Select framework targets before saving.';
+ const notice=$('draft-notice');notice.hidden=false;notice.textContent=$('sample-details').textContent;
+ showEditor(2);ruleSentence();
+ // Reloading the editor must not unexpectedly recreate the draft.
+ params.delete('from_event');history.replaceState(null,'',location.pathname+'?'+params.toString()+'#evidence-config');
+}

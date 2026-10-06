@@ -1,5 +1,6 @@
 """Database-managed collection settings and unified evidence definitions."""
 from __future__ import annotations
+from app.mapping.fields import validate_fields, observed_fields
 
 import json
 import re
@@ -682,7 +683,12 @@ def _validate_rule(rule: dict, db: Session):
         except (ValueError, TypeError, KeyError, IndexError) as exc:
             raise HTTPException(400, "Invalid collection identity or source") from exc
     for key, value in when.items():
-        if key in ("severity", "bookstack_book_id", "bookstack_page_id"):
+        if key == "fields":
+            try:
+                validate_fields(value)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+        elif key in ("severity", "bookstack_book_id", "bookstack_page_id"):
             upper = 1000 if key == "severity" else 2147483647
             if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= upper:
                 raise HTTPException(400, f"{key} must be an integer from 0 to {upper}")
@@ -789,7 +795,7 @@ def _plain_mismatch_reasons(event, when):
             actual=getattr(event,key,None)
             if str(expected)!=str(actual if actual is not None else ""):
                 reasons.append(f"{label}: the rule asks for ‘{expected}’; this event has ‘{actual if actual is not None else 'not supplied'}’.")
-    return reasons or ["A collection, label, pattern, BookStack selector or target-role condition did not match."]
+    return reasons or ["A structured field, collection, label, pattern, BookStack selector or target-role condition did not match."]
 
 
 @router.post("/v1/admin/mapping-rules/preview")
@@ -846,7 +852,8 @@ def evidence_event_samples(source: str | None = None, collector: str | None = No
     return {"items": [{"id": str(row.id), "source": row.source,
                        "system": row.system, "actor": row.actor,
                        "action": row.action, "outcome": row.outcome,
-                       "severity": row.severity, "summary": row.summary[:180]}
+                       "severity": row.severity, "summary": row.summary[:180],
+                       "fields": observed_fields(row.normalized_payload or {})}
                       for row in rows]}
 
 class RestoreInput(BaseModel):

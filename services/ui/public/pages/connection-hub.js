@@ -1,9 +1,9 @@
 import {apiGet, apiPost, apiPut} from '/app.js';
 const root='/api/v1/admin', byId=id=>document.getElementById('hub-'+id);
-let entries=[], mode='source';
+let entries=[], mode='source', surface='mapping';
 function button(text, action, danger=false){const b=document.createElement('button');b.type='button';b.className='btn btn-sm '+(danger?'btn-outline-danger':'btn-outline-primary');b.textContent=text;b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){showError(e);}finally{b.disabled=false;}};return b;}
 function showError(e){const el=byId('status');el.hidden=false;el.className='alert alert-danger';let text=e.message||String(e);try{text=JSON.parse(text).detail||text;}catch{}el.textContent=text;}
-function go(source, create=false){const panel=byId('panel');if(panel)panel.open=false;location.hash='evidence-config';window.dispatchEvent(new CustomEvent(create?'keen-collection-create':'keen-filter-source',{detail:{source}}));}
+function go(source, create=false){showSurface('mapping');location.hash='evidence-config';window.dispatchEvent(new CustomEvent(create?'keen-collection-create':'keen-filter-source',{detail:{source}}));}
 async function load(){
  const [definitions, integrations, config]=await Promise.all([apiGet(root+'/evidence-definitions'),apiGet(root+'/integrations'),apiGet(root+'/managed-configurations')]);
  entries=config.items.map(c=>({key:'builtin:'+c.name,name:c.name,source:c.name,type:'Server environment',collectors:definitions.collectors.filter(x=>x.adapter===c.name),rules:definitions.rules.filter(x=>x.when?.source===c.name || (c.name==='webhooks' && x.when?.source?.startsWith('webhook:'))),demo:integrations.demo_mode}));
@@ -11,7 +11,7 @@ async function load(){
  render();
 }
 function render(){
- for(const view of ['source','connection']){const selected=mode===view;byId(view).setAttribute('aria-pressed',String(selected));byId(view).classList.toggle('btn-primary',selected);byId(view).classList.toggle('btn-outline-primary',!selected);}
+ for(const view of ['source','connection']){const selected=surface===view;byId(view).classList.toggle('active',selected);}
  byId('view-description').textContent=mode==='source'?'Browse sources. Expand a source to manage its collections and definitions.':'All connections are expanded below. Each built-in source currently has one server-environment connection; custom API ingesters can have multiple named connections.';
  const container=byId('list');container.replaceChildren();const query=byId('search').value.toLowerCase();
  const visible=entries.filter(e=>`${e.name} ${e.source} ${e.type}`.toLowerCase().includes(query));
@@ -41,8 +41,8 @@ async function removeConnection(item){
  byId('delete').onclick=async()=>{byId('delete').disabled=true;try{await apiPost(url+'/remove',{fingerprint:plan.fingerprint});dialog.close();await load();window.dispatchEvent(new Event('keen-connections-changed'));}catch(e){dialog.close();showError(e);}};
  dialog.showModal();
 }
-byId('source').onclick=()=>{mode='source';byId('source').setAttribute('aria-pressed','true');byId('connection').setAttribute('aria-pressed','false');render();};
-byId('connection').onclick=()=>{mode='connection';byId('source').setAttribute('aria-pressed','false');byId('connection').setAttribute('aria-pressed','true');render();};
+byId('source').onclick=()=>{showSurface('source');mode='source';render();};
+byId('connection').onclick=()=>{showSurface('connection');mode='connection';render();};
 byId('search').oninput=render;byId('refresh').onclick=()=>load().catch(showError);byId('cancel').onclick=()=>byId('confirm').close();
 window.addEventListener('keen-connections-changed',()=>load().catch(showError));
 // Admin page already enforces authentication; load once and offer explicit refresh.
@@ -80,3 +80,19 @@ async function editCollection(adapter, existing=null){
  dialog.showModal();
 }
 byId('collection-cancel').onclick=()=>byId('collection').close();
+
+function showSurface(view){
+ surface=view;
+ const mapping=document.getElementById('evidence-mapping-view'), management=document.getElementById('evidence-management-view');
+ mapping.hidden=view!=='mapping';management.hidden=view==='mapping';
+ management.setAttribute('aria-labelledby','hub-'+(view==='connection'?'connection':'source'));
+ for(const name of ['mapping','source','connection']){const b=byId(name),selected=name===view;b.classList.toggle('active',selected);b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;}
+ if(view!=='mapping')byId('panel').open=true;
+}
+byId('mapping').onclick=()=>showSurface('mapping');
+for(const [index,name] of ['mapping','source','connection'].entries())byId(name).addEventListener('keydown',event=>{
+ const names=['mapping','source','connection'];let next;
+ if(event.key==='ArrowRight')next=(index+1)%3;else if(event.key==='ArrowLeft')next=(index+2)%3;else if(event.key==='Home')next=0;else if(event.key==='End')next=2;else return;
+ event.preventDefault();byId(names[next]).click();byId(names[next]).focus();
+});
+for(const event of ['keen-show-evidence-mapping','keen-filter-source','keen-integration-rule'])window.addEventListener(event,()=>showSurface('mapping'));

@@ -46,6 +46,19 @@ class AgentEvent(Strict):
 
 
 class Health(Strict):
+    filtered_by_source: dict[str, int] = Field(default_factory=dict, max_length=64)
+
+    @field_validator("filtered_by_source")
+    @classmethod
+    def filtered_counts(cls, values):
+        if any(not key or len(key) > 64 or count < 0 for key, count in values.items()):
+            raise ValueError("Invalid filtered counts")
+        return values
+
+    delivered_since_start: int = Field(default=0, ge=0)
+    delivery_batches_since_start: int = Field(default=0, ge=0)
+    delivery_events_per_second_since_start: float = Field(default=0, ge=0, allow_inf_nan=False)
+    last_delivery_at: datetime | None = None
     delivery_blocked: bool = False
     updated_at: datetime | None = None
     version: str = Field(default="", max_length=64)

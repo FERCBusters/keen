@@ -11,11 +11,14 @@ import yaml
 from app.core.config import settings
 from app.mapping.collector import event_collector, matches_collector
 
+from app.mapping.fields import validate_fields, field_matches
+
 log = logging.getLogger(__name__)
 
 
 @dataclass
 class Condition:
+    fields: list[dict] | None = None
     collector: str | None = None
     source: str | None = None
     source_regex: str | None = None
@@ -168,6 +171,7 @@ def _clean_optional_int(v: Any) -> int | None:
 
 
 _KNOWN_WHEN_KEYS = {
+    "fields",
     "bookstack_book_id", "bookstack_book_slug", "bookstack_page_id",
     "bookstack_page_slug", "bookstack_page_slug_regex",
     "bookstack_page_title", "bookstack_page_title_regex",
@@ -453,6 +457,7 @@ def parse_rules(raw: Any) -> list[Rule]:
             )
 
         cond = Condition(
+            fields=validate_fields(w["fields"]) if "fields" in w else None,
             collector=_clean_optional_str(w.get("collector")),
             source=_clean_optional_str(w.get("source")),
             source_regex=_clean_optional_str(w.get("source_regex")),
@@ -545,6 +550,8 @@ def evaluate_by_framework(
 
     for r in rules:
         c = r.when
+        if not all(field_matches(event.get("normalized_payload") or {}, item) for item in (c.fields or [])):
+            continue
         if c.collector and not matches_collector(c.collector, event):
             continue
         if any((c.bookstack_book_id is not None, c.bookstack_book_slug,

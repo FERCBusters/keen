@@ -1698,6 +1698,8 @@ async function load() {
   try {
     sourceMeta = await getSourceMeta();
     const e = await apiGet(`/api/v1/events/${encodeURIComponent(id)}?framework=${encodeURIComponent(pageFramework)}`);
+    const mappingButton=document.getElementById('btnCreateMapping');
+    if(mappingButton && me?.is_admin && !PRINT_MODE){mappingButton.hidden=false;mappingButton.href='/admin.html?framework='+encodeURIComponent(pageFramework)+'&from_event='+encodeURIComponent(e.id)+'#evidence-config';}
     currentEvent = e;
 
     document.getElementById('summary').textContent = e.summary || '(no summary)';
