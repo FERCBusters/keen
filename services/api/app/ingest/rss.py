@@ -268,6 +268,11 @@ def _safe_label_from_url(url: str) -> str:
 
 
 def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
+    if settings.demo_mode:
+        from app.ingest.demo_rss import FEED
+        if feed_cfg.get("url") != FEED["url"]:
+            return {"ok": False, "error": "Demo RSS is restricted to the preset public feed"}
+        feed_cfg = dict(FEED)  # Never accept credentials, headers or edited limits in demos.
     url = (feed_cfg.get("url") or "").strip()
     if not url:
         return {"ok": False, "error": "missing url"}
@@ -330,7 +335,17 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
         headers=headers,
         auth=auth,
     ) as c:
-        response = c.get(url)
+        if settings.demo_mode:
+            with c.stream("GET", url) as upstream:
+                body = bytearray()
+                for chunk in upstream.iter_bytes():
+                    body.extend(chunk)
+                    if len(body) > 2 * 1024 * 1024:
+                        raise ValueError("Demo RSS response exceeds 2 MiB")
+                response = httpx.Response(upstream.status_code, headers=upstream.headers,
+                                          content=bytes(body), request=upstream.request)
+        else:
+            response = c.get(url)
 
     if response.status_code == 304:
         return {
@@ -464,8 +479,12 @@ def ingest_rss_all(db: Session) -> list[dict[str, Any]]:
     if not settings.rss_enabled:
         return [{"skipped": True, "reason": "rss_enabled=false"}]
 
-    cfg = load_rss_config(settings.rss_config_path)
-    feeds = cfg.get("feeds") or []
+    if settings.demo_mode:
+        from app.ingest.demo_rss import FEED
+        feeds = [dict(FEED)]
+    else:
+        cfg = load_rss_config(settings.rss_config_path)
+        feeds = cfg.get("feeds") or []
     out: list[dict[str, Any]] = []
     if not isinstance(feeds, list) or not feeds:
         return [{"ok": True, "created_events": 0, "note": "no feeds configured"}]

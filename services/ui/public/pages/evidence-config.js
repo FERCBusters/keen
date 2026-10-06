@@ -25,7 +25,9 @@ const layouts = {
   rss: {feeds: ['name', 'label', 'system', 'url', 'enabled', 'max_items', 'overlap_minutes']},
   github: {organizations: ['org', 'label', 'include', 'org_events_mode', 'repo_limit'],
     repos: ['owner', 'repo', 'label'], feeds: ['url', 'label']},
-  forgejo: {feeds: ['url', 'label']},
+  forgejo: {organizations: ['org', 'label'], users: ['user', 'label'], feeds: ['url', 'label']},
+  gitea: {organizations: ['org', 'label'], users: ['user', 'label'], feeds: ['url', 'label']},
+  gitlab: {groups: ['group', 'label'], users: ['user', 'label']},
   cloudwatch_logs: {queries: ['name', 'region', 'log_group', 'filter_pattern', 'event.system', 'event.action', 'event.outcome']},
   taiga: {projects: ['id', 'label']},
   bookstack: {selected_pages: ['id', 'book_id', 'book_slug', 'slug', 'name'],
@@ -37,7 +39,7 @@ const apiRoot = '/api/v1/admin';
 let settingsVersion = 0;
 let rules = [], ruleVersion = 0, selectedRule = null, targets = [], frameworks = [], samples = [], reviewed = null, previewedRule = null, previewCount = 0;
 let collectors = [], definitionDocument = {}, definitionVersion = 0, definitionEntryKey = null;
-const definitionAdapters = ['jenkins', 'loki', 'rss', 'github', 'forgejo', 'cloudwatch_logs', 'taiga', 'google_workspace', 'webhooks', 'bookstack'];
+const definitionAdapters = ['jenkins', 'loki', 'rss', 'github', 'forgejo', 'gitea', 'gitlab', 'cloudwatch_logs', 'taiga', 'google_workspace', 'webhooks', 'bookstack'];
 let catalogBooks = [], catalogPages = [], catalogChapters = [], nextBookOffset = null, nextPageOffset = null;
 async function catalogRequest(kind, offset = 0, bookId = null) {
   return apiGet(`${apiRoot}/bookstack/catalog?kind=${kind}&offset=${offset}${bookId ? `&book_id=${bookId}` : ''}`);
@@ -93,7 +95,7 @@ function definitionKey(adapter, section, entry) {
   if (adapter === 'webhooks') return $('definition-entry').value === '__new' ?
     $('definition-fields').querySelector('[data-field="provider_name"]')?.value.trim() : definitionEntryKey;
   if (adapter === 'github' && section === 'repos') return `${entry.owner || ''}/${entry.repo || ''}`;
-  const field = section === 'feeds' ? 'url' : section === 'organizations' ? 'org' :
+  const field = section === 'groups' ? 'group' : section === 'users' ? 'user' : section === 'feeds' ? 'url' : section === 'organizations' ? 'org' :
     section === 'projects' || section === 'selected_pages' ? 'id' : 'name';
   return String(entry[field] ?? '').trim();
 }
@@ -111,6 +113,8 @@ function definitionEntry() {
 }
 function paintDefinitionEntry() {
   const adapter = $('definition-adapter').value, section = $('definition-section').value;
+  $('collection-settings').hidden = section === 'source';
+  if(section !== 'source') $('input-options').open=true;
   if (section === 'source') {
     definitionEntryKey = null;
     $('definition-fields').replaceChildren(); $('definition-extra').value = '{}';
@@ -186,15 +190,27 @@ function definitionFromForm() {
     entry_key: definitionEntryKey, connector_version: definitionVersion};
 }
 let step = 1, visibleRules = 20;
+const fieldTitles = {system:'Which system? (optional)',action:'What happened? (action)',outcome:'What was the result? (outcome)',actor:'Who did it? (actor)',severity:'Severity number',label:'Collection label'};
 const fieldHelp = {
-  system: 'The service or product involved, such as Jenkins, GitHub or a production server. Use this when the rule applies to that system.',
-  actor: 'The person or account that performed the action. Often changes per event; leave blank to include all actors.',
-  action: 'What happened, such as build_completed, login or deployment. Usually a useful match condition.',
-  outcome: 'The result, such as success or failure. Use this to distinguish successful checks from failed ones.',
-  severity: 'A numeric level assigned by the connector. Leave blank unless the connector consistently sets it.',
-  label: 'A connector-specific tag, such as a job or feed label. Use this to narrow the rule to a particular stream.'
+ system:'For example, web-prod-01. Leave empty to include every system within the selected source.',
+ actor:'Copy the account from an event only when the rule should apply to that account.',
+ action:'The event’s activity name. Copy an observed value such as build or package.upgrade. Typing here filters events; it does not run or rename an activity.',
+ outcome:'The recorded result. Copy its exact value, such as success, failed or info. “info” means the event reports information; it makes no success/failure claim.',
+ severity:'An exact number assigned by the source. A value of 4 matches severity 4 only.',
+ label:'A tag supplied by some collectors. Leave empty unless the source supplies the label you need.'
 };
-const stepTitles = ['Describe', 'Match evidence', 'Map frameworks', 'Preview and save'];
+function ruleSentence() {
+ if (!$('rule-sentence')) return;
+ const parts=['From '+($('definition-adapter').selectedOptions[0]?.textContent||'the selected source')];
+ for (const [key,title] of [['system','on system'],['action','where the activity is'],['outcome','and the result is']]) {
+  const value=$('when-'+key)?.value.trim();if(value)parts.push(title+' “'+value+'”');
+ }
+ const extra=[...conditions.filter(x=>!['source','system','action','outcome'].includes(x)),...regexConditions,...bookstackConditions].filter(x=>$('when-'+x)?.value.trim());
+ if(extra.length)parts.push('with '+extra.length+' additional filter'+(extra.length===1?'':'s'));
+ $('rule-sentence').textContent=parts.join(', ')+'. '+(targets.length?'Matching events link to '+targets.length+' selected control(s).':'Next: choose the controls this evidence supports.');
+ const more=$('more-filters');if(more&&['actor','severity','label'].some(x=>$('when-'+x)?.value.trim()))more.open=true;
+}
+const stepTitles = ['Describe the evidence', 'Choose matching events', 'Choose controls', 'Check and publish'];
 function showStep(number) {
   step = Math.max(1, Math.min(4, number));
   for (const section of document.querySelectorAll('[data-ec-step]')) section.hidden = Number(section.dataset.ecStep) !== step;
@@ -202,6 +218,7 @@ function showStep(number) {
   $('step-progress').style.width = `${step * 25}%`;
   $('step-progress').parentElement.setAttribute('aria-valuenow', String(step));
   $('prev-step').hidden = step === 1; $('next-step').hidden = step === 4;
+  ruleSentence();
   $('editor-heading').textContent = selectedRule ? `Edit ${$('description').value || selectedRule}` : 'Create an evidence definition';
 }
 function showEditor(number = 1) { $('library').hidden = true; $('editor').hidden = false; showStep(number); }
@@ -215,7 +232,7 @@ function nextStep() {
 }
 
 const label = field => field.replaceAll('.', ' / ').replaceAll('_', ' ');
-const inputType = section => ({queries: 'query', jobs: 'job', feeds: 'feed',
+const inputType = section => ({groups: 'group', users: 'user',queries: 'query', jobs: 'job', feeds: 'feed',
   selected_pages: 'page', organizations: 'organisation', repos: 'repository',
   projects: 'project', streams: 'stream', providers: 'provider'})[section] || label(section);
 function fieldNode(name, value, kind = 'text') {
@@ -223,7 +240,7 @@ function fieldNode(name, value, kind = 'text') {
   wrapper.className = 'mb-2';
   const text = document.createElement('label');
   text.className = 'form-label';
-  text.textContent = label(name);
+  text.textContent = fieldTitles[name] || label(name);
   wrapper.append(text);
   const input = name === 'logql' || name === 'rationale' ? document.createElement('textarea') : document.createElement('input');
   input.className = 'form-control';
@@ -236,7 +253,9 @@ function fieldNode(name, value, kind = 'text') {
     'Action assigned to Jenkins events from this job, such as build or deployment. Match it with the Action field below.' :
     name === 'label' && $('definition-adapter').value === 'jenkins' ?
       'System assigned to Jenkins events from this job. Match it with the System field below.' :
-    name === 'logql' ? 'Loki query selecting log lines to collect. A separate match below narrows the resulting events.' : '';
+    name === 'logql' ? 'Loki query selecting log lines to collect. A separate match below narrows the resulting events.' :
+    name === 'event.action' ? 'Activity name this collection assigns to incoming events. For example, login. The matching Activity field below can select this exact value.' :
+    name === 'event.outcome' ? 'Result this collection assigns to incoming events. Use success only when the query actually selects successful events. Use info when it makes no result claim.' : '';
   if (helpText) { const help = document.createElement('div'); help.className = 'form-text'; help.textContent = helpText; wrapper.append(help); }
   return wrapper;
 }
@@ -262,8 +281,15 @@ async function loadSamples() {
     await apiGet(`${apiRoot}/evidence-event-samples?source=${encodeURIComponent(source)}${filter}`) : {items: []};
   samples = result.items || [];
   $('sample').replaceChildren(new Option(samples.length ? 'Select an event' : 'No recent events for this source', ''));
-  for (const [index, event] of samples.entries()) $('sample').add(new Option(`${event.action || ''} · ${event.summary}`, String(index)));
+  for (const [index, event] of samples.entries()) $('sample').add(new Option(`${event.action || '(no action)'} · ${event.outcome || '(no result)'} · ${event.summary}`, String(index)));
+  for(const field of conditions.filter(x=>x!=='source'&&x!=='severity')) {
+   const list=$('observed-'+field);if(!list)continue;list.replaceChildren();
+   for(const value of [...new Set(samples.map(e=>e[field]).filter(v=>v!==null&&v!==undefined&&v!==''))].sort())list.append(new Option(value,value));
+  }
+  $('sample-details').textContent=samples.length?'Choose an event to see the exact activity and result it recorded.':'No recent events yet. Collect an event first, or use known source values and the advanced predefine option.';
+  ruleSentence();
 }
+function textLabel(wrapper,field){wrapper.querySelector("label").htmlFor="ec-when-"+field;}
 function conditionForm() {
   for (const field of conditions.filter(value => value !== 'source')) {
     const wrapper = fieldNode(field, '', field === 'severity' ? 'number' : 'text');
@@ -272,7 +298,12 @@ function conditionForm() {
     const help = document.createElement('div'); help.className = 'form-text'; help.id = `ec-help-${field}`;
     help.textContent = fieldHelp[field]; wrapper.append(help);
     wrapper.querySelector('[data-field]').setAttribute('aria-describedby', help.id);
-    $('conditions').append(wrapper);
+    textLabel(wrapper, field);
+    const input=wrapper.querySelector('[data-field]');
+    input.placeholder=field==='severity'?'Any severity':'Any '+field;
+    if(field!=='severity'){input.setAttribute('list','ec-observed-'+field);const choices=document.createElement('datalist');choices.id='ec-observed-'+field;wrapper.append(choices);}
+    input.addEventListener('input',ruleSentence);
+    (['system','action','outcome'].includes(field)?$('conditions'):$('extra-conditions')).append(wrapper);
   }
   for (const field of regexConditions) {
     const wrapper = fieldNode(field, ''); wrapper.className = 'col-md-6';
@@ -367,8 +398,9 @@ function renderRules() {
     ...rules.map(rule => ({rule, origin: collectors.find(item => item.collector === rule.when?.collector)})),
     ...collectors.filter(item => !linked.has(item.collector)).map(origin => ({origin})),
   ];
-  const filtered = entries.filter(({rule, origin}) => !query ||
-    `${rule?.id || ''} ${rule?.description || ''} ${rule?.when?.source || ''} ${JSON.stringify(rule?.map_to || [])} ${origin?.adapter || ''} ${origin?.key || ''}`.toLowerCase().includes(query));
+  const chosenSource = $('source-filter').value;
+  const filtered = entries.filter(({rule, origin}) => (!chosenSource || (rule?.when?.source || origin?.adapter) === chosenSource) && (!query ||
+    `${rule?.id || ''} ${rule?.description || ''} ${rule?.when?.source || ''} ${JSON.stringify(rule?.map_to || [])} ${origin?.adapter || ''} ${origin?.key || ''}`.toLowerCase().includes(query)));
   $('rule-count').textContent = `${filtered.length} of ${entries.length} evidence definitions and available collection items${filtered.length > visibleRules ? ` · showing first ${visibleRules}` : ''}`;
   $('more-rules').hidden = filtered.length <= visibleRules;
   if (!filtered.length) { const empty = document.createElement('p'); empty.className = 'small-muted'; empty.textContent = query ? 'No evidence definitions match that search.' : 'No evidence definitions yet. Create one to get started.'; list.append(empty); }
@@ -390,10 +422,48 @@ function renderRules() {
         $('definition-entry').value = origin.collector; paintDefinitionEntry();
         showSelectedInput();
       }).catch(error => status(error.message));
-    }); list.append(btn);
+    });
+    const row = document.createElement('div'); row.className = 'd-flex gap-2 align-items-center mb-2';
+    btn.classList.add('flex-grow-1'); row.append(btn);
+    if (rule) {
+      const remove = document.createElement('button'); remove.type='button'; remove.className='btn btn-outline-danger btn-sm'; remove.textContent='Delete definition';
+      remove.addEventListener('click', async () => {
+        if (!confirm(`Delete evidence definition ${rule.description || rule.id}? Collection and existing evidence are retained.`)) return;
+        try { await apiDelete(`${apiRoot}/mapping-rules/${encodeURIComponent(rule.id)}?version=${ruleVersion}`); await loadRules(); status('Evidence definition deleted. Collection and existing evidence retained.', 'success'); }
+        catch(error) { status(error.message); }
+      }); row.append(remove);
+    }
+    if (origin) {
+      const remove = document.createElement('button'); remove.type='button'; remove.className='btn btn-outline-danger btn-sm'; remove.textContent='Remove collection';
+      remove.addEventListener('click', () => removeCollection(origin)); row.append(remove);
+    }
+    row.classList.add('flex-wrap'); list.append(row);
   }
 }
+async function removeCollection(origin) {
+  const linked = rules.filter(rule => rule.when?.collector === origin.collector);
+  if (linked.length) { status(`Delete the ${linked.length} linked evidence definition(s) first. Existing evidence will be retained.`); return; }
+  if (!confirm(`Stop collecting ${origin.key}? Existing evidence is retained.`)) return;
+  try {
+    const url = `${apiRoot}/managed-configurations/${encodeURIComponent(origin.adapter)}`;
+    const config = await apiGet(url);
+    const document = structuredClone(config.document);
+    const section = document[origin.section];
+    if (origin.section === 'providers') {
+      if (!Object.hasOwn(section || {}, origin.key)) throw new Error('Collection changed. Reload before removing it.');
+      delete section[origin.key];
+    } else {
+      if (!Array.isArray(section)) throw new Error('This collection type cannot be removed here.');
+      const remaining = section.filter(entry => definitionKey(origin.adapter, origin.section, entry) !== String(origin.key));
+      if (remaining.length !== section.length - 1) throw new Error('Expected exactly one collection. Reload before removing it.');
+      document[origin.section] = remaining;
+    }
+    await apiPut(url, {version: config.version, document});
+    await loadRules(); status('Collection removed. Existing evidence retained.', 'success');
+  } catch(error) { status(error.message); }
+}
 function renderTargets() {
+  ruleSentence();
   const list = $('targets'); list.replaceChildren();
   for (const [index, target] of targets.entries()) {
     const row = document.createElement('div'); row.className = 'list-group-item d-flex justify-content-between align-items-center';
@@ -406,6 +476,10 @@ function renderTargets() {
 async function loadRules() {
   const data = await apiGet(`${apiRoot}/evidence-definitions`);
   rules = data.rules; collectors = data.collectors; ruleVersion = data.rules_version;
+  const selectedSource = $('source-filter').value;
+  $('source-filter').replaceChildren(new Option('All sources', ''));
+  for (const source of [...new Set([...rules.map(r=>r.when?.source), ...collectors.map(c=>c.adapter)])].filter(Boolean).sort()) $('source-filter').add(new Option(source,source));
+  $('source-filter').value = selectedSource;
   renderRules(); newRule(); showLibrary();
   if (data.warnings?.length) status(data.warnings.join(' · '), 'warning');
   await loadRevisions('rules', $('rule-revision'));
@@ -448,7 +522,7 @@ $('bookstack-more-pages').addEventListener('click', () => loadBookstackPages(tru
 $('sample').addEventListener('change', () => {
   const sample = samples[Number($('sample').value)];
   $('sample-details').textContent = $('sample').value && sample ?
-    ['source', 'system', 'actor', 'action', 'outcome', 'severity', 'label'].map(field => `${field}: ${sample[field] ?? '(empty)'}`).join(' · ') :
+    ['system', 'action', 'outcome', 'actor', 'severity'].map(field => `${fieldTitles[field]}: ${sample[field] ?? '(not supplied)'}`).join(' · ') :
     'Choose a recent event to inspect its fields.';
 });
 $('use-sample').addEventListener('click', () => {
@@ -458,8 +532,8 @@ $('use-sample').addEventListener('click', () => {
   $('sample').dispatchEvent(new Event('change'));
   // System, action and outcome usually identify the event type. Actor and
   // severity vary more often, so leave those for the administrator to choose.
-  for (const field of ['source', 'system', 'action', 'outcome'])
-    if (sample[field] !== null && sample[field] !== undefined) $(`when-${field}`).value = sample[field];
+  for (const field of ['system', 'action', 'outcome']) $(`when-${field}`).value = sample[field] ?? '';
+  ruleSentence();
   if (!selectedRule && !$('rule-id').value) {
     $('rule-id').value = [sample.source, sample.system, sample.action, sample.outcome]
       .filter(Boolean).join('_').toLowerCase().replace(/[^a-z0-9_-]+/g, '_').slice(0, 96);
@@ -549,7 +623,7 @@ $('preview').addEventListener('click', async () => {
       container.append(p);
     }
     for (const item of data.nonmatches || []) {
-      const p = document.createElement('p'); p.textContent = `Does not match: ${item.summary} (${item.system || 'no system'} / ${item.action || 'no action'} / ${item.outcome || 'no outcome'})`;
+      const p = document.createElement('p'); p.textContent = `Does not match: ${item.summary}. ${(item.reasons||[]).join(' ') || 'Review the additional filters.'}`;
       container.append(p);
     }
   } catch (error) { previewedRule = null; $('preview-results').textContent = error.message; }
@@ -617,7 +691,8 @@ $('backfill-start').addEventListener('click', async () => {
   } catch (error) { status(error.message); }
 });
 $('delete-rule').addEventListener('click', async () => {
-  if (!selectedRule || !confirm(`Delete mapping rule ${selectedRule}?`)) return;
+  if (!selectedRule) { status('This item has no saved mapping. Use Remove collection in the library to stop collecting it.'); return; }
+  if (!confirm(`Delete evidence definition ${selectedRule}? Collected evidence and existing mappings are retained.`)) return;
   try {
     await apiDelete(`${apiRoot}/mapping-rules/${encodeURIComponent(selectedRule)}?version=${ruleVersion}`);
     await loadRules(); status('Definition removed. Existing mappings remain until separately reviewed.', 'success');
@@ -631,9 +706,37 @@ async function init() {
     $('definition-adapter').add(new Option(adapter.replaceAll('_', ' '), adapter));
     $('settings-adapter').add(new Option(adapter.replaceAll('_', ' '), adapter));
   }
+  $('definition-adapter').add(new Option('KEEN Agent / OTLP logs','keen-agent'));
+  for (const source of observed.sources || []) if (![...$('definition-adapter').options].some(x=>x.value===source)) $('definition-adapter').add(new Option(source,source));
+  const integrations = await apiGet('/api/v1/admin/integrations');
+  for (const collector of integrations.collectors || []) {const value='integration:'+collector.id;const existing=[...$('definition-adapter').options].find(x=>x.value===value);if(existing)existing.textContent=collector.name;else $('definition-adapter').add(new Option(collector.name,value));}
   await selectDefinitionAdapter(); await loadRules(); await loadSettings();
   const fw = await apiGet('/api/v1/frameworks'); frameworks = fw.items;
   for (const item of frameworks) $('framework').add(new Option(item.name || item.slug, item.slug));
   await loadFrameworkControls();
 }
 init().catch(error => status(error.message));
+
+// Generic integrations are source-wide inputs; rules retain the existing mapping workflow.
+window.addEventListener('keen-integration-rule', async event => {
+  try {
+    const {source,name} = event.detail;
+    if (![...$('definition-adapter').options].some(o => o.value === source))
+      $('definition-adapter').add(new Option(name, source));
+    newRule(); $('definition-adapter').value = source;
+    await selectDefinitionAdapter(); $('description').value = name;
+  } catch(error) { status(error.message); }
+});
+
+$('source-filter').addEventListener('change', renderRules);
+window.addEventListener('keen-filter-source', async event => {
+  await loadRules();
+  const source=event.detail.source;
+  if (![...$('source-filter').options].some(o=>o.value===source)) $('source-filter').add(new Option(source,source));
+  $('source-filter').value=source; $('rule-filter').value=''; renderRules();
+});
+window.addEventListener('keen-collection-create', async event => {
+  await loadRules();newRule();$('definition-adapter').value=event.detail.source;
+  await selectDefinitionAdapter();$('input-options').open=true;
+});
+window.addEventListener('keen-connections-changed', () => loadRules().catch(e=>status(e.message)));

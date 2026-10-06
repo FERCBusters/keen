@@ -209,6 +209,7 @@ ALLOWED_THEMES: list[tuple[str, str]] = [
     ("teal", "Teal"),
 ]
 
+ALLOWED_THEMES += [(f"{theme_id}-dark", f"{name} (dark)") for theme_id, name in ALLOWED_THEMES.copy()]
 
 def theme_ids() -> set[str]:
     return {t[0] for t in ALLOWED_THEMES}

@@ -1,0 +1,1 @@
+const target = new URL('/isms.html', location.origin); target.searchParams.set('tab', 'documents'); target.searchParams.set('bookstack', '1'); const fw = new URLSearchParams(location.search).get('framework'); if (fw) target.searchParams.set('framework', fw); location.replace(target.pathname + target.search);

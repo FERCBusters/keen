@@ -1,0 +1,32 @@
+body[data-page=admin] .container-tight{max-width:1480px}
+.admin-tab-nav{flex:0 0 230px;align-self:flex-start;position:sticky;top:90px;padding:12px;background:#faf9ff;border:1px solid #e7e2f3;border-radius:18px}
+.admin-tab-nav .nav-link{text-align:left;width:100%;border-radius:10px;padding:11px 14px;display:flex;gap:10px;align-items:center}
+.admin-tab-nav .nav-link.active{background:#6935be;color:white;box-shadow:0 4px 12px #6935be25}
+.admin-nav-label{padding:16px 14px 6px;text-transform:uppercase;letter-spacing:.1em;font-size:.68rem;font-weight:750;color:#786e89}
+#adminTabContent{min-width:0}.admin-hero{border:1px solid #e1d6f5;background:linear-gradient(125deg,#f7f1ff,#fff 80%);border-radius:20px;padding:30px}.admin-hero h2{font-size:clamp(1.7rem,3vw,2.5rem);letter-spacing:-.04em;margin:12px 0}.admin-eyebrow{font-size:.72rem;font-weight:800;letter-spacing:.15em;color:#7244b8}.admin-quicklinks{display:grid;grid-template-columns:1fr 1fr;gap:12px}.admin-quicklinks a{padding:16px;border:1px solid #e8e1f2;border-radius:12px;display:flex;justify-content:space-between;gap:10px;text-decoration:none}.ig-steps{display:flex;gap:6px;flex-wrap:wrap}.ig-steps button{border:1px solid #ded5ed;border-radius:30px;padding:7px 12px;background:white;color:#645474}.ig-steps button[aria-current=step]{background:#6935be;color:white;border-color:#6935be}.ig-card{border:1px solid #e4deec;border-radius:16px;padding:20px;background:white}.ig-card h3{font-size:1.05rem}.ig-state{display:inline-flex;gap:6px;align-items:center;border-radius:20px;padding:4px 10px;font-size:.8rem;background:#eee}.ig-state.good{background:#e4f7ee;color:#176044}.ig-state.bad{background:#fde8eb;color:#a2263d}.ig-state.busy{background:#ede6ff;color:#6935be}.ig-stat{border:1px solid #e4deec;border-radius:14px;padding:20px;background:white}.ig-stat strong{font-size:1.8rem;display:block}.ig-field{display:grid;grid-template-columns:1fr 1.4fr 1fr 1fr auto;gap:8px;margin-bottom:10px}.ig-run{padding:14px 0;border-bottom:1px solid #eee}.ig-preview pre{max-height:350px;overflow:auto;background:#faf8ff;padding:16px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}.ig-card .small-muted{overflow-wrap:anywhere}
+@media(max-width:991px){.admin-tab-nav{position:static;flex-basis:auto;width:100%;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))}.admin-nav-label{grid-column:1/-1}.ig-field{grid-template-columns:1fr 1fr}.admin-quicklinks{grid-template-columns:1fr}.admin-hero{padding:22px}}
+@media(prefers-reduced-motion:reduce){.spinner-border{animation:none}}
+
+@media(max-width:991px){.admin-tab-nav:not(.admin-nav-open){display:none!important}.ig-field{padding:12px;background:#faf8ff;border:1px solid #e8e0f2;border-radius:12px}.ig-field .btn{grid-column:2;justify-self:end;width:40px}}
+body[data-page=admin] .btn-primary{--bs-btn-bg:#6935be;--bs-btn-border-color:#6935be;--bs-btn-hover-bg:#56289f;--bs-btn-hover-border-color:#56289f;--bs-btn-active-bg:#56289f;--bs-btn-active-border-color:#56289f}body[data-page=admin] .btn-outline-primary{--bs-btn-color:#6935be;--bs-btn-border-color:#6935be;--bs-btn-hover-bg:#6935be;--bs-btn-hover-border-color:#6935be;--bs-btn-active-bg:#56289f;--bs-btn-active-border-color:#56289f}.admin-tab-nav .nav-link:not(.active){color:#57426f}
+
+@media(max-width:991px){#adminTabContent{width:100%}}
+
+/* The tab column must shrink below its tables' intrinsic width. */
+.admin-tab-layout{width:100%;min-width:0}
+#adminTabContent{flex:1 1 0%;width:0;max-width:100%;min-width:0}
+#adminTabContent .tab-pane,#adminTabContent .card,#adminTabContent .card-body{min-width:0;max-width:100%}
+#adminTabContent .table-responsive{width:100%;max-width:100%;overflow-x:auto!important;overflow-y:auto!important;overscroll-behavior-x:contain}
+#adminTabContent pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+#adminTabContent .card-header{flex-wrap:wrap;gap:12px}
+@media(max-width:991px){#adminTabContent{flex:auto;width:100%}.admin-tab-nav{min-width:0}}
+:root[data-bs-theme=dark] .admin-tab-nav,:root[data-bs-theme=dark] .ig-card,:root[data-bs-theme=dark] .ig-stat,:root[data-bs-theme=dark] .ig-field,:root[data-bs-theme=dark] .ig-preview pre{background:var(--bs-secondary-bg);border-color:var(--bs-border-color);color:var(--bs-body-color)}
+:root[data-bs-theme=dark] .admin-hero{background:linear-gradient(125deg,var(--keen-accent-100),var(--bs-secondary-bg));border-color:var(--bs-border-color)}
+:root[data-bs-theme=dark] .admin-tab-nav .nav-link:not(.active),:root[data-bs-theme=dark] .admin-nav-label,:root[data-bs-theme=dark] .admin-eyebrow{color:var(--bs-body-color)}
+:root[data-bs-theme=dark] .ig-steps button{background:var(--bs-secondary-bg);color:var(--bs-body-color);border-color:var(--bs-border-color)}
+:root[data-bs-theme=dark] .ig-steps button[aria-current=step]{background:var(--keen-accent-700);color:white}
+
+#adminTabContent .table-responsive .table thead th{position:static}
+
+:root[data-bs-theme=dark] body[data-page=admin] .admin-tab-nav .nav-link:not(.active){color:var(--bs-body-color)}
+:root[data-bs-theme=dark] body[data-page=admin] .btn-outline-primary{--bs-btn-color:var(--bs-link-color);--bs-btn-border-color:var(--bs-link-color)}

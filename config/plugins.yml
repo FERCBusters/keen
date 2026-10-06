@@ -28,3 +28,13 @@ plugins:
   - name: "google_workspace"
     callable: "app.ingest.google_workspace:ingest_google_workspace_all"
     enabled_setting: "google_workspace_enabled"
+
+  - name: "forgejo"
+    callable: "app.ingest.forgejo:ingest_forgejo_all"
+    enabled_setting: "forgejo_enabled"
+  - name: "gitea"
+    callable: "app.ingest.gitea:ingest_gitea_all"
+    enabled_setting: "gitea_enabled"
+  - name: "gitlab"
+    callable: "app.ingest.gitlab:ingest_gitlab_all"
+    enabled_setting: "gitlab_enabled"

@@ -23,14 +23,12 @@ depends_on = None
 def _constraint_exists(bind, table_name: str, constraint_name: str) -> bool:
     return bool(
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 select 1
                 from information_schema.table_constraints
                 where table_name = :table_name
                   and constraint_name = :constraint_name
-                """
-            ),
+                """),
             {"table_name": table_name, "constraint_name": constraint_name},
         ).scalar()
     )
@@ -113,33 +111,27 @@ def upgrade() -> None:
         if not category_id:
             category_id = uuid.uuid4()
             bind.execute(
-                sa.text(
-                    """
+                sa.text("""
                     insert into risk_categories (id, name, created_at, updated_at)
                     values (:id, 'Uncategorised', :now, :now)
-                    """
-                ),
+                    """),
                 {"id": category_id, "now": datetime.utcnow()},
             )
         subcategory_id = bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 select id from risk_asset_subcategories
                 where category_id = :category_id and lower(name) = 'general'
-                """
-            ),
+                """),
             {"category_id": category_id},
         ).scalar()
         if not subcategory_id:
             subcategory_id = uuid.uuid4()
             bind.execute(
-                sa.text(
-                    """
+                sa.text("""
                     insert into risk_asset_subcategories
                         (id, category_id, name, created_at, updated_at)
                     values (:id, :category_id, 'General', :now, :now)
-                    """
-                ),
+                    """),
                 {
                     "id": subcategory_id,
                     "category_id": category_id,
@@ -147,8 +139,7 @@ def upgrade() -> None:
                 },
             )
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 insert into risk_assets (
                     id, name, category_id, subcategory_id, license,
                     owner_org_node_id, register_held_by_org_node_id,
@@ -160,16 +151,14 @@ def upgrade() -> None:
                 from isms_assets ia
                 where not exists (select 1 from risk_assets ra where ra.id = ia.id)
                 on conflict (name, category_id, subcategory_id) do nothing
-                """
-            ),
+                """),
             {"category_id": category_id, "subcategory_id": subcategory_id},
         )
         # If an ISMS asset collided with an existing canonical risk asset, point
         # matrix rows and generic ISMS links at the canonical record before the
         # application-configuration FK is moved.
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 update isms_application_configuration_entries ace
                 set asset_id = ra.id
                 from isms_assets ia
@@ -179,13 +168,11 @@ def upgrade() -> None:
                  and ra.subcategory_id = :subcategory_id
                 where ace.asset_id = ia.id
                   and not exists (select 1 from risk_assets existing where existing.id = ia.id)
-                """
-            ),
+                """),
             {"category_id": category_id, "subcategory_id": subcategory_id},
         )
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 update isms_entity_control_links l
                 set entity_id = ra.id
                 from isms_assets ia
@@ -196,13 +183,11 @@ def upgrade() -> None:
                 where l.entity_type = 'asset'
                   and l.entity_id = ia.id
                   and not exists (select 1 from risk_assets existing where existing.id = ia.id)
-                """
-            ),
+                """),
             {"category_id": category_id, "subcategory_id": subcategory_id},
         )
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 update isms_entity_clause_links l
                 set entity_id = ra.id
                 from isms_assets ia
@@ -213,8 +198,7 @@ def upgrade() -> None:
                 where l.entity_type = 'asset'
                   and l.entity_id = ia.id
                   and not exists (select 1 from risk_assets existing where existing.id = ia.id)
-                """
-            ),
+                """),
             {"category_id": category_id, "subcategory_id": subcategory_id},
         )
 
@@ -284,9 +268,7 @@ def downgrade() -> None:
     )
     op.create_index("ix_isms_assets_created_at", "isms_assets", ["created_at"])
 
-    bind.execute(
-        sa.text(
-            """
+    bind.execute(sa.text("""
             insert into isms_assets (
                 id, asset, license, owner_org_node_id,
                 register_held_by_org_node_id, description,
@@ -301,9 +283,7 @@ def downgrade() -> None:
                or license <> ''
                or description <> ''
             on conflict (id) do nothing
-            """
-        )
-    )
+            """))
 
     if _constraint_exists(
         bind,

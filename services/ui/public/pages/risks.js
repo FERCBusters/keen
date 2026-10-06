@@ -1443,7 +1443,7 @@ function renderExistingMatchesSection(existing) {
 function renderControlSuggestionsSection(suggestions) {
   if (!suggestions.length) {
     return `<div class="mitigator-suggestion-card">
-      <div class="fw-semibold mb-1">Suggested Annex A controls (if you were to create a new risk)</div>
+      <div class="fw-semibold mb-1">Suggested framework controls (if you were to create a new risk)</div>
       <div class="alert alert-warning mb-0">No controls matched strongly enough. Try adding more detail or selecting more impact prompts.</div>
     </div>`;
   }
@@ -1460,14 +1460,14 @@ function renderControlSuggestionsSection(suggestions) {
             <span class="fw-semibold"><a href="${esc(controlHref(c.id || ''))}">${esc(c.ref || 'Control')} — ${esc(c.title || '')}</a></span>
           </label>
         </div>
-        <div class="d-flex flex-wrap gap-2 align-items-center">${confidenceBadge(item.confidence)}<span class="badge text-bg-light border">Score ${esc(String(item.score || 0))}</span></div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">${c.in_scope === false ? '<span class="badge text-bg-warning">Out of scope — review applicability</span>' : ''}${confidenceBadge(item.confidence)}<span class="badge text-bg-light border">Score ${esc(String(item.score || 0))}</span></div>
       </div>
       ${reasons ? `<ul class="small mt-2 mb-2">${reasons}</ul>` : ''}
       ${terms ? `<div class="d-flex flex-wrap gap-1">${terms}</div>` : ''}
     </div>`;
   }).join('');
   return `<div>
-    <div class="fw-semibold mb-2">Suggested Annex A controls</div>
+    <div class="fw-semibold mb-2">Suggested framework controls</div>
     <div class="vstack gap-2">${rows}</div>
   </div>`;
 }
@@ -1527,6 +1527,25 @@ function renderInterestedPartySuggestionsSection(data) {
   </div>`;
 }
 
+function renderLibrarySuggestionsSection(data) {
+  const items = data?.library_suggestions || [];
+  if (data?.framework !== 'KEEN-AF:1.0') return '';
+  const cards = items.map(item => {
+    const example = item.suggested_assessment || {};
+    const href = withFramework(`/risks.html?template=${encodeURIComponent(item.id)}`, data.framework);
+    return `<div class="mitigator-suggestion-card">
+      <div class="fw-semibold">${esc(item.name)}</div>
+      <p>${esc(item.threat_summary || '')}</p>
+      <div class="small-muted">${esc(item.reason || '')}</div>
+      <div class="small-muted">Matched: ${esc((item.matched_terms || []).join(', '))}</div>
+      <div class="small-muted">Suggested controls: ${esc((item.control_refs || []).join(', ') || 'None in this framework')}</div>
+      ${example.inherent_likelihood && example.inherent_impact ? `<div class="small-muted">Example inherent rating: ${esc(example.inherent_likelihood)} × ${esc(example.inherent_impact)}. Review before saving.</div>` : ''}
+      ${canManageRisks ? `<a class="btn btn-sm btn-outline-primary mt-2" href="${esc(href)}">Review this template</a>` : ''}
+    </div>`;
+  }).join('');
+  return `<section><h2 class="h6">Reusable risk library</h2><p class="small-muted">Live library scenarios inform the KEEN Assurance Framework control suggestions. Templates are starting points, not existing assessments.</p><div class="vstack gap-2">${cards || '<p>No sufficiently specific library match. Try describing the threat, affected asset and consequence.</p>'}</div></section>`;
+}
+
 function renderMitigatorSuggestions(data) {
   lastMitigatorAnalysis = data || null;
   const suggestions = data?.control_suggestions || data?.suggestions || [];
@@ -1545,6 +1564,7 @@ function renderMitigatorSuggestions(data) {
 
   const sections = [
     renderExistingMatchesSection(existing),
+    renderLibrarySuggestionsSection(data),
     renderControlSuggestionsSection(suggestions),
     renderPestleSuggestionsSection(data),
     renderInterestedPartySuggestionsSection(data),

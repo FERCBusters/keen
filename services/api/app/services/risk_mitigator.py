@@ -14,6 +14,7 @@ from app.api.utils import control_justification as _control_justification
 from app.api.utils import control_upstream_url as _control_upstream_url
 from app.api.utils import ref_sort_key as _ref_sort_key
 from app.core.config import settings
+from app.services.mitigator_catalogue import rank_library, catalogue_tokens
 from app.db.models import (
     ControlItem,
     FrameworkClause,
@@ -25,6 +26,7 @@ from app.db.models import (
     Risk,
     RiskAsset,
     RiskCategory,
+    RiskLibraryEntry,
 )
 
 _TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9+._/-]*", re.I)
@@ -246,8 +248,7 @@ def _fts_scores(db: Session, *, framework: str, terms: list[str]) -> dict[str, f
     query = " ".join(_unique_strs(q_terms)[:32])
     if not query:
         return {}
-    sql = text(
-        """
+    sql = text("""
         SELECT id::text AS id,
                ts_rank_cd(
                  to_tsvector('simple',
@@ -269,10 +270,13 @@ def _fts_scores(db: Session, *, framework: str, terms: list[str]) -> dict[str, f
             coalesce(tags::text, '') || ' ' ||
             coalesce("metadata"::text, '')
           ) @@ plainto_tsquery('simple', :q)
-        """
-    )
+        """)
+    if db.get_bind().dialect.name != "postgresql":
+        return {}
     try:
-        rows = db.execute(sql, {"framework": framework, "q": query}).mappings().all()
+        # A failed optional search must not poison the surrounding transaction.
+        with db.begin_nested():
+            rows = db.execute(sql, {"framework": framework, "q": query}).mappings().all()
     except Exception:
         # Keep the wizard usable on non-Postgres dev/test databases. The Python
         # scorer still works; the migration provides the production FTS index.
@@ -962,6 +966,20 @@ def analyse_risk_mitigation(
         .filter(ControlItem.framework_slug == framework, ControlItem.type != "clause")
         .all()
     )
+    library_suggestions = []
+    library_by_ref: dict[str, list[dict[str, Any]]] = {}
+    if framework == "KEEN-AF:1.0":
+        entries = db.query(RiskLibraryEntry).all()
+        library_suggestions = rank_library(entries, issue=issue, asset_name=asset_name, rules=rules)
+        valid_refs = {c.ref for c in controls}
+        for item in library_suggestions:
+            item["control_refs"] = [ref for ref in item["control_refs"] if ref in valid_refs]
+            for ref in item["control_refs"]:
+                library_by_ref.setdefault(ref, []).append(item)
+        for item in library_suggestions[:3]:
+            signals.append({"kind": "risk_library", "label": item["name"],
+                            "matched_terms": item["matched_terms"], "reason": item["reason"]})
+
     suggestions: list[dict[str, Any]] = []
     lower_terms = [
         (term, _norm_text(term), _tokens(term)) for term in terms_for_matching
@@ -1025,6 +1043,22 @@ def analyse_risk_mitigation(
                 "The control catalog text matched the questionnaire terms via PostgreSQL full-text search."
             )
 
+        # The live library bridges scenario language to curated KEEN-AF mappings.
+        library_hits = library_by_ref.get(control.ref, [])
+        if library_hits:
+            score += min(80.0, max(hit["score"] for hit in library_hits) + 25.0)
+            for hit in library_hits[:2]:
+                reasons.append(f"Linked by reusable risk scenario: {hit['name']}.")
+                matched_terms.extend(hit["matched_terms"])
+        direct_terms = sorted(catalogue_tokens(issue) & catalogue_tokens(_control_doc(control)))
+        if direct_terms:
+            score += min(40.0, 8.0 * len(direct_terms))
+            matched_terms.extend(direct_terms)
+            reasons.append("Matched words in your scenario against the current control catalogue.")
+
+        # Scope alone is not evidence of relevance.
+        if score <= 0:
+            continue
         # Prefer in-scope controls but do not hide out-of-scope controls; users may
         # still want to review them and bring them into scope.
         if control.in_scope:
@@ -1180,6 +1214,7 @@ def analyse_risk_mitigation(
         "query_terms": terms_for_matching[:80],
         "suggestions": suggestions,
         "control_suggestions": suggestions,
+        "library_suggestions": library_suggestions,
         "pestle_hits": pestle_hits,
         "business_process_suggestions": business_processes,
         "pestle_suggestions": existing_pestle_items,

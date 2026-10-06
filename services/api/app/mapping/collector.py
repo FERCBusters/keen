@@ -4,7 +4,6 @@ The identity is derived from stored provenance, including events ingested before
 the evidence editor existed. A rule can therefore target a collection item
 without relying on coincidental action/system strings.
 """
-
 from __future__ import annotations
 
 import json
@@ -12,9 +11,7 @@ from typing import Any
 
 
 def collector_id(adapter: str, section: str, key: Any) -> str:
-    return json.dumps(
-        [adapter, section, str(key)], separators=(",", ":"), ensure_ascii=False
-    )
+    return json.dumps([adapter, section, str(key)], separators=(",", ":"), ensure_ascii=False)
 
 
 def event_collector(event: dict) -> str | None:
@@ -34,8 +31,10 @@ def event_collector(event: dict) -> str | None:
         section, key = "jobs", info.get("job")
     elif source == "rss":
         section, key = "feeds", info.get("feed_url")
-    elif source == "forgejo":
+    elif source in ("forgejo", "gitea"):
         section, key = "feeds", info.get("feed")
+    elif source == "gitlab":
+        section, key = info.get("section"), info.get("key")
     elif source == "taiga":
         section, key = "projects", info.get("project_id")
     elif source == "google_workspace":
@@ -60,19 +59,24 @@ def collector_pointer_filter(identity: str) -> dict:
     adapter, section, key = json.loads(identity)
     if adapter == "webhooks":
         return {"webhook": {"provider": key}}
+    if adapter == "gitlab":
+        return {"gitlab": {"section": section, "key": key}}
+    if adapter in ("forgejo", "gitea") and section in ("organizations", "users"): 
+        return {adapter: {"owner": key}}
     if adapter == "github":
         if section == "repos":
             owner, repo = key.split("/", 1)
             return {"github": {"endpoint": "repo_events", "owner": owner, "repo": repo}}
         return {"github": {"feed" if section == "feeds" else "org": key}}
-    field = {
-        "loki": "query_name",
-        "cloudwatch_logs": "name",
-        "jenkins": "job",
-        "rss": "feed_url",
-        "forgejo": "feed",
-        "taiga": "project_id",
-        "google_workspace": "stream",
-        "bookstack": "page_id",
-    }[adapter]
+    field = {"loki": "query_name", "cloudwatch_logs": "name", "jenkins": "job",
+             "rss": "feed_url", "forgejo": "feed", "gitea": "feed", "taiga": "project_id",
+             "google_workspace": "stream", "bookstack": "page_id"}[adapter]
     return {adapter: {field: int(key) if adapter in ("taiga", "bookstack") else key}}
+
+
+def matches_collector(identity: str, event: dict) -> bool:
+    adapter, section, key = json.loads(identity)
+    if adapter in ("forgejo", "gitea") and section in ("organizations", "users"):
+        info = (event.get("raw_pointer") or {}).get(adapter) or {}
+        return event.get("source") == adapter and info.get("owner") == key
+    return identity == event_collector(event)

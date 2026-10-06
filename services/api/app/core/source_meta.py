@@ -123,7 +123,7 @@ def _merge(
 def _configured_source_meta(refresh_bucket: int) -> dict[str, dict[str, str]]:
     """Load configured source meta from YAML configs + env overrides."""
 
-    meta: dict[str, dict[str, str]] = {}
+    meta: dict[str, dict[str, str]] = {"keen-agent": {"label": "KEEN Agent", "color": "#6935BE"}}
 
     # Plugin configs (poll + other ingestion providers)
     plugin_cfgs: dict[str, str] = {
@@ -131,6 +131,8 @@ def _configured_source_meta(refresh_bucket: int) -> dict[str, dict[str, str]]:
         "cloudwatch_logs": settings.cloudwatch_logs_config_path,
         "github": settings.github_config_path,
         "forgejo": settings.forgejo_config_path,
+        "gitea": settings.gitea_config_path,
+        "gitlab": settings.gitlab_config_path,
         "jenkins": settings.jenkins_config_path,
         "taiga": settings.taiga_config_path,
         "bookstack": settings.bookstack_config_path,
@@ -159,6 +161,17 @@ def _configured_source_meta(refresh_bucket: int) -> dict[str, dict[str, str]]:
                 pcfg.get("ui_color") or pcfg.get("badge_color")
             )
             _merge(meta, src, label=label, color=color)
+
+    # Generic collectors retain stable source IDs while showing their editable names.
+    try:
+        from app.db.session import SessionLocal
+        from app.db.models import IntegrationCollector
+        with SessionLocal() as db:
+            for collector in db.query(IntegrationCollector).all():
+                _merge(meta, 'integration:' + collector.id, label=collector.name, color='#6935BE')
+    except Exception:
+        # Metadata must remain available during a rolling database upgrade.
+        pass
 
     # Env overrides (highest priority)
     # - KEEN_SOURCE_NAME_TAIGA=Tracker

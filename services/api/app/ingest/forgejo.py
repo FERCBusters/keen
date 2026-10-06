@@ -190,7 +190,7 @@ def _fetch_api_activities(
     base_url: str,
     owner: str,
     repo: str,
-    max_pages: int = 10,
+    max_pages: int = 1000,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     """Fetch Forgejo repository activity from the authenticated REST API."""
@@ -228,6 +228,8 @@ def _fetch_api_activities(
             if len(data) < limit:
                 break
             page += 1
+        else:
+            raise ValueError("Activity pagination limit reached; cursor retained for retry")
 
     return all_items
 
@@ -371,7 +373,7 @@ def _store_api_activity_items(
             severity=3,
             summary=summary,
             raw_pointer={
-                "forgejo": {"api": True, "owner": owner, "repo": repo, "host": host}
+                "forgejo": {"api": True, "owner": owner, "repo": repo, "host": host, "feed": feed_url}
             },
             normalized_payload={"activity": a, "feed_url": feed_url},
             external_id=ext_id,
@@ -534,7 +536,7 @@ def ingest_forgejo_repo_feed(
                 outcome=outcome,
                 severity=severity,
                 summary=summary,
-                raw_pointer={"forgejo": {"feed": feed_url, "link": link, "guid": guid}},
+                raw_pointer={"forgejo": {"feed": feed_url, "link": link, "guid": guid, "owner": owner, "repo": repo, "host": host}},
                 normalized_payload={"rss": norm},
                 external_id=ext_id,
                 artifact_kind="forgejo_rss",
@@ -577,18 +579,77 @@ def ingest_forgejo_repo_feed(
     }
 
 
+def _discover_repositories(base_url: str, section: str, name: str) -> list[dict]:
+    """Enumerate accessible repositories owned by one account, without following URLs from responses."""
+    import re
+    from urllib.parse import quote
+    if section not in ("organizations", "users") or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", name) or name in (".", ".."):
+        raise ValueError("Invalid Forgejo account")
+    if not is_safe_url(base_url):
+        raise ValueError("Set KEEN_FORGEJO_BASE_URL to a safe HTTPS instance URL")
+    route = "orgs" if section == "organizations" else "users"
+    url = f"{base_url.rstrip('/')}/api/v1/{route}/{quote(name, safe='')}/repos"
+    headers = {"Accept": "application/json", **_auth_headers()}
+    auth = _basic_auth() if settings.forgejo_auth_mode == "basic" else None
+    repos, seen = [], set()
+    with httpx.Client(timeout=30.0, follow_redirects=False, verify=True, headers=headers, auth=auth) as client:
+        for page in range(1, 1001):
+            response = client.get(url, params={"page": page, "limit": 50})
+            error = _response_status_error(response)
+            if error:
+                raise RuntimeError(error)
+            rows = response.json()
+            if not isinstance(rows, list):
+                raise ValueError("Forgejo repository response must be a list")
+            if not rows:
+                return repos
+            added = 0
+            for repo in rows:
+                if not isinstance(repo, dict):
+                    raise ValueError("Invalid Forgejo repository response")
+                owner = (repo.get("owner") or {}).get("login")
+                repo_name = repo.get("name")
+                if not isinstance(owner, str) or owner.lower() != name.lower():
+                    raise ValueError("Forgejo returned a repository outside the requested owner")
+                if not isinstance(repo_name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", repo_name) or repo_name in (".", ".."):
+                    raise ValueError("Invalid Forgejo repository name")
+                key = (owner, repo_name)
+                if key not in seen:
+                    seen.add(key); repos.append(repo); added += 1
+            if not added:
+                raise ValueError("Forgejo repeated a repository page; discovery stopped")
+            # Continue to an empty page even if the server caps page size below 50.
+    raise ValueError("Forgejo repository discovery exceeded 1000 pages")
+
+
 def ingest_forgejo_all(db: Session) -> list[dict[str, Any]]:
     if not settings.forgejo_enabled:
         return [{"skipped": True, "reason": "KEEN_FORGEJO_ENABLED=false"}]
     cfg = load_forgejo_config(settings.forgejo_config_path)
     out: list[dict[str, Any]] = []
-    for f in cfg.get("feeds", []) or []:
+    feeds = list(cfg.get("feeds", []) or [])
+    base = settings.forgejo_base_url.rstrip("/")
+    for section, field in (("organizations", "org"), ("users", "user")):
+        for entry in cfg.get(section, []) or []:
+            name = str(entry.get(field) or "").strip()
+            try:
+                repos = _discover_repositories(base, section, name)
+                out.append({"scope": section, "account": name, "discovered_repositories": len(repos)})
+                for repo in repos:
+                    owner = repo["owner"]["login"]
+                    feeds.append({"url": f"{base}/{owner}/{repo['name']}.rss",
+                                  "label": entry.get("label") or None})
+            except Exception as exc:
+                out.append({"scope": section, "account": name, "error": str(exc)})
+    seen_feeds = set()
+    for f in feeds:
         url = f.get("url") or f.get("feed")
-        if not url:
+        if not url or url in seen_feeds:
             continue
+        seen_feeds.add(url)
         try:
             out.append(ingest_forgejo_repo_feed(db, feed_url=url, label=f.get("label")))
         except Exception as e:
             db.rollback()
             out.append({"feed": url, "error": str(e)})
-    return out
+    return out or [{"skipped": True, "reason": "No Forgejo collections configured. Add a user, organization or feed in Evidence definitions."}]

@@ -1,0 +1,130 @@
+# Generic RSS / Atom ingestion configuration
+#
+# This is intended to cover "everything else" that isn't a first-class
+# provider in Keen. You can ingest:
+#   - internal blog/news feeds
+#   - status pages that expose Atom/RSS
+#   - vendor advisories / security bulletins
+#   - custom application feeds
+#
+# Notes:
+#   - Entries are de-duplicated by (feed_url + entry_id/guid/link).
+#   - Each ingested entry stores a JSON artifact (normalized feed+entry data).
+#   - A per-feed cursor uses conditional GET (ETag/Last-Modified) when available.
+#
+# feeds:
+#   - name: "Security advisories"
+#     label: "SecAdvisory"
+#     system: "Security"
+#     url: "https://example.com/security/atom.xml"
+#     enabled: true
+#     max_items: 50
+#     overlap_minutes: 2880          # default: 2 days
+#     verify_tls: true               # default: KEEN_RSS_VERIFY_TLS
+#     headers:
+#       X-Api-Key: "..."             # optional
+#     auth:
+#       username: "..."             # optional Basic Auth
+#       password: "..."
+
+feeds:
+  - name: "Github Incidents"
+    label: "Github Incidents"
+    system: "Github"
+    url: "https://www.githubstatus.com/history.rss"
+    enabled: true
+  - name: "Google Incidents"
+    label: "Google Incidents"
+    system: "Google"
+    url: "https://www.google.com/appsstatus/dashboard/en-GB/feed.atom"
+    enabled: true
+  - name: "AWS Security Incidents"
+    label: "AWS Security Incidents"
+    system: "AWS"
+    url: "https://aws.amazon.com/security/security-bulletins/rss/feed/"
+    enabled: true
+  - name: "AWS EC2"
+    label: "AWS EC2"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/ec2-eu-west-2.rss"
+    enabled: true
+  - name: "AWS ECR"
+    label: "AWS ECR"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/ecr-eu-west-2.rss"
+    enabled: true
+  - name: "AWS ECS"
+    label: "AWS ECS"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/ecs-eu-west-2.rss"
+    enabled: true
+  - name: "AWS EFS"
+    label: "AWS EFS"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/elasticfilesystem-eu-west-2.rss"
+    enabled: true
+  - name: "AWS ELB"
+    label: "AWS ELB"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/elb-eu-west-2.rss"
+    enabled: true
+  - name: "AWS Elasticache"
+    label: "AWS Elasticache"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/elasticache-eu-west-2.rss"
+    enabled: true
+  - name: "AWS RDS"
+    label: "AWS RDS"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/rds-eu-west-2.rss"
+    enabled: true
+  - name: "AWS Route53"
+    label: "AWS Route53"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/route53privatedns-eu-west-2.rss"
+    enabled: true
+  - name: "AWS SES"
+    label: "AWS SES"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/ses-eu-west-2.rss"
+    enabled: true
+  - name: "AWS S3"
+    label: "AWS S3"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/s3-eu-west-2.rss"
+    enabled: true
+  - name: "AWS Autoscaling"
+    label: "AWS Autoscaling"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/autoscaling-eu-west-2.rss"
+    enabled: true
+  - name: "AWS Backup"
+    label: "AWS Backup"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/backup-eu-west-2.rss"
+    enabled: true
+  - name: "AWS Internet Connectivity"
+    label: "AWS Internet Connectivity"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/internetconnectivity-eu-west-2.rss"
+    enabled: true
+  - name: "AWS NAT Gateway"
+    label: "AWS NAT Gateway"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/natgateway-eu-west-2.rss"
+    enabled: true
+  - name: "AWS Multiple Services"
+    label: "AWS Multiple Services"
+    system: "AWS"
+    url: "https://status.aws.amazon.com/rss/multipleservices-eu-west-2.rss"
+    enabled: true
+  - name: "Ubuntu Security Updates"
+    label: "Ubuntu Security Updates"
+    system: "Ubuntu"
+    url: "https://ubuntu.com/security/notices/rss.xml"
+    enabled: true
+  - name: "Amazon Linux 2 Security Updates"
+    label: "Amazon Linux 2 Security Updates"
+    system: "ALAS"
+    url: "https://alas.aws.amazon.com/AL2/alas.rss"
+    enabled: true

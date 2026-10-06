@@ -1,0 +1,31 @@
+defaults:
+  lookback_minutes: 15
+  overlap_seconds: 2
+  limit: 10000
+  max_pages: 50
+
+queries:
+  - name: logs-production
+    region: eu-west-2
+    log_group: cloudwatch-logs-production
+    filter_pattern: '-"Uptime-Kuma"'
+    # Optional:
+    # log_stream_prefix: "2026/01/"
+    # log_stream_names: []
+    event:
+      system: api
+      action: api_logs_production
+      outcome: info
+      severity: 3
+  - name: logs-staging
+    region: eu-west-2
+    log_group: cloudwatch-logs-staging
+    filter_pattern: '-"Uptime-Kuma"'
+    # Optional:
+    # log_stream_prefix: "2026/01/"
+    # log_stream_names: []
+    event:
+      system: api
+      action: api_logs_sandbox
+      outcome: info
+      severity: 3

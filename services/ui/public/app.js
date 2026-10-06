@@ -58,7 +58,7 @@ function _patchRiskNavDropdown() {
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risk-register.html'))}">Risk register &amp; heatmap</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/pestle.html'))}">PESTLE(E) Impact Assessment</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/interested_parties.html'))}">Interested Parties</a></li>
-      <li><a class="dropdown-item d-inline-flex align-items-center gap-2" href="${esc(_withCurrentFramework('/mitigator.html'))}"><img src="/keen-mitigator.svg" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator</a></li>
+      <li><a class="dropdown-item d-inline-flex align-items-center gap-2" href="${esc(_withCurrentFramework('/mitigator.html'))}"><img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator</a></li>
     </ul>`;
   navRoot.dataset.pestleRiskDropdownPatched = '1';
 }
@@ -98,7 +98,6 @@ function _patchIsmsNavDropdown() {
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=objectives'))}">Objectives</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=effectiveness'))}">Effectiveness Measures</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=documents'))}">Policies &amp; Processes</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/bookstack-sections.html'))}">BookStack policy sections</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=org'))}">Organisation Chart</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=assets'))}">Asset Matrix</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/assurance.html'))}">People &amp; vendors</a></li>
@@ -144,7 +143,16 @@ function _collapseFilterSectionsByDefault() {
 }
 
 export async function initNavbar(...args) {
-  const me = await _mospInitNavbar(...args);
+  const me = await _mospInitNavbar({...args[0], brandIcon: '/keen-mitigator.png'});
+  const navRoot = document.getElementById('navbar');
+  if (navRoot && !navRoot.querySelector('[data-keen-documentation]')) {
+    const list = navRoot.querySelector('.navbar-nav');
+    const link = document.createElement('a');
+    link.href = '/help/'; link.textContent = 'Documentation';
+    link.className = 'nav-link'; link.dataset.keenDocumentation = '1';
+    if (list) { const item = document.createElement('li'); item.className = 'nav-item'; item.append(link); list.append(item); }
+    else navRoot.append(link);
+  }
   _removeHomeNavItem();
   _patchRiskNavDropdown();
   _patchIsmsNavDropdown();

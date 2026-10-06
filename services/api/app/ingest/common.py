@@ -168,6 +168,10 @@ def ensure_controls(
 
 
 def apply_rules(db: Session, ev: Event) -> int:
+    # Coordinate rule evaluation with connection removal, until this transaction commits.
+    if db.get_bind().dialect.name == 'postgresql':
+        from sqlalchemy import text
+        db.execute(text('SELECT pg_advisory_xact_lock_shared(1262830926)'))
     rules = load_rules(settings.rules_path, db=db)
     event_dict = {
         "source": ev.source,
@@ -196,9 +200,7 @@ def apply_rules(db: Session, ev: Event) -> int:
 
     created = 0
     for framework_slug, entries in matched.items():
-        controls = ensure_controls(
-            db, framework_slug=framework_slug, refs=[item["ref"] for item in entries]
-        )
+        controls = ensure_controls(db, framework_slug=framework_slug, refs=[item["ref"] for item in entries])
 
         for item in entries:
             ci = controls.get(item["ref"])
@@ -242,6 +244,7 @@ def store_event_with_artifact(
     artifact_content_type: str,
     artifact_key: str,
     captured_by: str,
+    commit: bool = True,
 ) -> dict[str, Any]:
     # --- hardening: redact secrets BEFORE persisting anything ---
     raw_pointer = redact_obj(raw_pointer) or {}
@@ -303,10 +306,12 @@ def store_event_with_artifact(
             .filter(Event.source == source, Event.external_id == external_id)
             .scalar()
         )
+        if existing_id is None:
+            raise
         return {
             "ok": True,
             "deduped": True,
-            "event_id": str(existing_id) if existing_id else None,
+            "event_id": str(existing_id),
         }
 
     stored = put_bytes(
@@ -326,7 +331,8 @@ def store_event_with_artifact(
     db.flush()
 
     created_mappings = apply_rules(db, ev)
-    db.commit()
+    if commit:
+        db.commit()
     return {
         "ok": True,
         "event_id": str(ev.id),

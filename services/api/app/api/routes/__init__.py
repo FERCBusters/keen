@@ -69,10 +69,7 @@ OPENAPI_TAGS = [
         "name": "ISMS",
         "description": "ISMS objectives, documents, organisation chart, assets, application configuration matrix, meetings and Statement of Applicability.",
     },
-    {
-        "name": "Assurance",
-        "description": "People, vendor and personnel assurance records.",
-    },
+    {"name": "Assurance", "description": "People, vendor and personnel assurance records."},
     {
         "name": "Statement of Applicability",
         "description": "Read-only SoA summary across controls, clauses, CIA risks, PESTLE(E), Interested Parties and ISMS.",
@@ -109,3 +106,9 @@ router.include_router(sources_router, tags=["Sources"])
 router.include_router(soa_router, tags=["Statement of Applicability"])
 router.include_router(stats_router, tags=["Stats"])
 router.include_router(graph_router, tags=["Graph"])
+
+from .integrations import router as integrations_router
+router.include_router(integrations_router, tags=["Admin"])
+
+from .agents import router as agents_router
+router.include_router(agents_router, tags=['KEEN Agent'])

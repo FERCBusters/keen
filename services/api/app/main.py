@@ -170,6 +170,8 @@ def bootstrap_initial_admin():
 
 
 _AUTH_EXEMPT_PATHS = {
+    "/v1/otlp/logs",
+    "/v1/agents/heartbeat",
     "/health",
     "/v1/auth/methods",
     "/v1/auth/login",
@@ -191,6 +193,8 @@ _AUTH_EXEMPT_PREFIXES = ("/v1/webhooks", "/v1/auth/sso/", "/docs", "/redoc")
 
 # CSRF: enforce for browser-session authenticated writes.
 _CSRF_EXEMPT_PATHS = {
+    "/v1/otlp/logs",
+    "/v1/agents/heartbeat",
     "/health",
     "/v1/auth/methods",
     "/v1/auth/login",
@@ -534,3 +538,7 @@ def redoc_v1():
 
 
 app.include_router(api_router, prefix="")
+
+# Outermost guard also covers auth-exempt integrations and WebSockets.
+from app.security.demo import DemoExpiryMiddleware
+app.add_middleware(DemoExpiryMiddleware)

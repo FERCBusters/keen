@@ -34,12 +34,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import get_db
-from app.services.control_inheritance import (
-    evidence_pairs,
-    effective_framework_ids,
-    event_has_control,
-    source_ids_for_control,
-)
+from app.services.control_inheritance import evidence_pairs, effective_framework_ids, event_has_control, source_ids_for_control
 from app.outbound.incidents import (
     IncidentWebhookConfig,
     build_event_url,
@@ -289,14 +284,8 @@ def _clause_event_condition(framework: str, clause: str):
     cond = (
         exists()
         .where(Mapping.event_id == Event.id)
-        .where(
-            or_(
-                Mapping.control_item_id == ControlItem.id,
-                Mapping.control_item_id.in_(
-                    source_ids_for_control(ControlItem.id).correlate(ControlItem)
-                ),
-            )
-        )
+        .where(or_(Mapping.control_item_id == ControlItem.id,
+                   Mapping.control_item_id.in_(source_ids_for_control(ControlItem.id).correlate(ControlItem))))
         .where(ControlClauseLink.control_item_id == ControlItem.id)
         .where(ControlClauseLink.clause_id == FrameworkClause.id)
         .where(ControlItem.framework_slug == framework)
@@ -349,11 +338,7 @@ def _build_event_id_query(
     if control:
         cid = _try_uuid(control)
         if cid:
-            valid = (
-                db.query(ControlItem.id)
-                .filter(ControlItem.id == cid, ControlItem.framework_slug == framework)
-                .first()
-            )
+            valid = db.query(ControlItem.id).filter(ControlItem.id == cid, ControlItem.framework_slug == framework).first()
             qry = qry.filter(event_has_control(cid, Event.id) if valid else false())
         else:
             c = (
@@ -421,11 +406,7 @@ def list_events(
     if control:
         cid = _try_uuid(control)
         if cid:
-            valid = (
-                db.query(ControlItem.id)
-                .filter(ControlItem.id == cid, ControlItem.framework_slug == framework)
-                .first()
-            )
+            valid = db.query(ControlItem.id).filter(ControlItem.id == cid, ControlItem.framework_slug == framework).first()
             qry = qry.filter(event_has_control(cid, Event.id) if valid else false())
         else:
             c = (
@@ -523,39 +504,18 @@ def list_events(
                     {"id": str(c_id), "ref": ref, "title": title, "type": ctype}
                 )
             inherited = (
-                db.query(
-                    Mapping.event_id,
-                    ControlItem,
-                    CrossFrameworkControlLink.source_control_id,
-                )
-                .join(
-                    CrossFrameworkControlLink,
-                    CrossFrameworkControlLink.source_control_id
-                    == Mapping.control_item_id,
-                )
-                .join(
-                    ControlItem,
-                    ControlItem.id == CrossFrameworkControlLink.target_control_id,
-                )
-                .filter(
-                    Mapping.event_id.in_(event_ids),
-                    ControlItem.framework_slug == framework,
-                )
+                db.query(Mapping.event_id, ControlItem, CrossFrameworkControlLink.source_control_id)
+                .join(CrossFrameworkControlLink, CrossFrameworkControlLink.source_control_id == Mapping.control_item_id)
+                .join(ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id)
+                .filter(Mapping.event_id.in_(event_ids), ControlItem.framework_slug == framework)
                 .all()
             )
             for ev_id, target, source_id in inherited:
                 existing = controls_by_event.setdefault(ev_id, [])
                 if any(item["id"] == str(target.id) for item in existing):
                     continue
-                existing.append(
-                    {
-                        "id": str(target.id),
-                        "ref": target.ref,
-                        "title": target.title,
-                        "type": target.type,
-                        "inherited_from_control_id": str(source_id),
-                    }
-                )
+                existing.append({"id": str(target.id), "ref": target.ref, "title": target.title,
+                                 "type": target.type, "inherited_from_control_id": str(source_id)})
 
         # Preload artifact counts
         artifact_counts: dict[uuid.UUID, int] = {}
@@ -788,11 +748,7 @@ def export_events(
     if control:
         cid = _try_uuid(control)
         if cid:
-            valid = (
-                db.query(ControlItem.id)
-                .filter(ControlItem.id == cid, ControlItem.framework_slug == framework)
-                .first()
-            )
+            valid = db.query(ControlItem.id).filter(ControlItem.id == cid, ControlItem.framework_slug == framework).first()
             qry = qry.filter(event_has_control(cid, Event.id) if valid else false())
         else:
             c = (
@@ -1311,13 +1267,8 @@ def get_event(
     ]
     inherited = (
         db.query(Mapping, ControlItem, CrossFrameworkControlLink)
-        .join(
-            CrossFrameworkControlLink,
-            CrossFrameworkControlLink.source_control_id == Mapping.control_item_id,
-        )
-        .join(
-            ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id
-        )
+        .join(CrossFrameworkControlLink, CrossFrameworkControlLink.source_control_id == Mapping.control_item_id)
+        .join(ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id)
         .filter(Mapping.event_id == eid, ControlItem.framework_slug == framework)
         .order_by(ControlItem.ref.asc())
         .all()
@@ -1327,27 +1278,15 @@ def get_event(
         if str(target.id) in direct_ids:
             continue
         source = link.source
-        controls.append(
-            {
-                "id": str(target.id),
-                "ref": target.ref,
-                "title": target.title,
-                "type": target.type,
-                "in_scope": target.in_scope,
-                "upstream_url": _control_upstream_url(target),
-                "confidence": mapping.confidence,
-                "method": "cross_framework",
-                "rationale": link.rationale,
-                "mapped_at": (
-                    mapping.mapped_at.isoformat() if mapping.mapped_at else None
-                ),
-                "inherited_from": {
-                    "framework": source.framework_slug,
-                    "ref": source.ref,
-                    "control_id": str(source.id),
-                },
-            }
-        )
+        controls.append({
+            "id": str(target.id), "ref": target.ref, "title": target.title,
+            "type": target.type, "in_scope": target.in_scope,
+            "upstream_url": _control_upstream_url(target),
+            "confidence": mapping.confidence, "method": "cross_framework",
+            "rationale": link.rationale, "mapped_at": mapping.mapped_at.isoformat() if mapping.mapped_at else None,
+            "inherited_from": {"framework": source.framework_slug, "ref": source.ref,
+                               "control_id": str(source.id)},
+        })
         direct_ids.add(str(target.id))
 
     arts = (

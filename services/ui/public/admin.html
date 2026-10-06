@@ -7,7 +7,9 @@
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css"/>
+  <link rel="stylesheet" href="/admin-workspace.css"/>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/demo-notice.js" defer></script>
 </head>
 <body data-page="admin">
   <div id="navbar"></div>
@@ -15,8 +17,8 @@
   <main class="container container-tight py-4">
     <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between mb-3">
       <div>
-        <h1 class="h3 mb-1">Admin</h1>
-	<div class="small-muted">Force an ingestion of source data here (it normally runs on an automatic, scheduled basis)</div>
+        <h1 class="h3 mb-1">Administration</h1>
+	<div class="small-muted">Connect your systems, shape your evidence and manage access.</div>
       </div>
       <div class="d-flex gap-2">
         <a class="btn btn-outline-primary btn-sm" href="/">Back to controls</a>
@@ -26,33 +28,89 @@
     <div id="status" class="alert alert-info" style="display:none;"></div>
     <!-- Tabs -->
     <div class="admin-tab-layout d-flex flex-column flex-lg-row gap-3">
+      <button id="admin-navigation-toggle" type="button" class="btn btn-outline-primary d-lg-none" aria-expanded="false" aria-controls="adminTabs">Administration menu</button>
       <ul class="nav nav-pills flex-column admin-tab-nav" id="adminTabs" role="tablist" aria-orientation="vertical">
-        <li class="nav-item" role="presentation">
-          <button class="nav-link active" id="tab-users" data-bs-toggle="tab" data-bs-target="#pane-users" type="button" role="tab" aria-controls="pane-users" aria-selected="true">Users</button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="tab-groups" data-bs-toggle="tab" data-bs-target="#pane-groups" type="button" role="tab" aria-controls="pane-groups" aria-selected="false">Groups &amp; permissions</button>
-        </li>
-        <li class="nav-item" role="presentation"><button class="nav-link" id="tab-framework-editor" data-bs-toggle="tab" data-bs-target="#pane-framework-editor" type="button" role="tab" aria-controls="pane-framework-editor" aria-selected="false">Frameworks</button></li>
-        <li class="nav-item" role="presentation"><button class="nav-link" id="tab-evidence-config" data-bs-toggle="tab" data-bs-target="#pane-evidence-config" type="button" role="tab" aria-controls="pane-evidence-config" aria-selected="false">Evidence sources &amp; rules</button></li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="tab-ingest" data-bs-toggle="tab" data-bs-target="#pane-ingest" type="button" role="tab" aria-controls="pane-ingest" aria-selected="false">Import & ingest</button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="tab-diary" data-bs-toggle="tab" data-bs-target="#pane-diary" type="button" role="tab" aria-controls="pane-diary" aria-selected="false">Add Diary evidence</button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="tab-remap" data-bs-toggle="tab" data-bs-target="#pane-remap" type="button" role="tab" aria-controls="pane-remap" aria-selected="false">Remap</button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="tab-audit" data-bs-toggle="tab" data-bs-target="#pane-audit" type="button" role="tab" aria-controls="pane-audit" aria-selected="false">Audit trail</button>
-        </li>
+<li class="admin-nav-label" role="presentation">Workspace</li>
+<li class="nav-item" role="presentation"><button class="nav-link active" id="tab-overview" data-bs-toggle="tab" data-bs-target="#pane-overview" type="button" role="tab" aria-controls="pane-overview" aria-selected="true"><i class="bi bi-grid" aria-hidden="true"></i> Overview</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-agents" data-bs-toggle="tab" data-bs-target="#pane-agents" type="button" role="tab" aria-controls="pane-agents" aria-selected="false"><i class="bi bi-pc-display" aria-hidden="true"></i> KEEN Agents</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-integrations" data-bs-toggle="tab" data-bs-target="#pane-integrations" type="button" role="tab" aria-controls="pane-integrations" aria-selected="false"><i class="bi bi-plug" aria-hidden="true"></i> API ingester builder</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-evidence-config" data-bs-toggle="tab" data-bs-target="#pane-evidence-config" type="button" role="tab" aria-controls="pane-evidence-config" aria-selected="false"><i class="bi bi-diagram-3" aria-hidden="true"></i> Sources &amp; evidence mapping</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-framework-editor" data-bs-toggle="tab" data-bs-target="#pane-framework-editor" type="button" role="tab" aria-controls="pane-framework-editor" aria-selected="false"><i class="bi bi-layers" aria-hidden="true"></i> Frameworks</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-ingest" data-bs-toggle="tab" data-bs-target="#pane-ingest" type="button" role="tab" aria-controls="pane-ingest" aria-selected="false"><i class="bi bi-cloud-arrow-down" aria-hidden="true"></i> Ingest runners</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-diary" data-bs-toggle="tab" data-bs-target="#pane-diary" type="button" role="tab" aria-controls="pane-diary" aria-selected="false"><i class="bi bi-journal-plus" aria-hidden="true"></i> Diary Evidence</button></li>
+<li class="admin-nav-label" role="presentation">Access</li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-users" data-bs-toggle="tab" data-bs-target="#pane-users" type="button" role="tab" aria-controls="pane-users" aria-selected="false"><i class="bi bi-people" aria-hidden="true"></i> Users</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-groups" data-bs-toggle="tab" data-bs-target="#pane-groups" type="button" role="tab" aria-controls="pane-groups" aria-selected="false"><i class="bi bi-shield-lock" aria-hidden="true"></i> Groups & permissions</button></li>
+<li class="admin-nav-label" role="presentation">System</li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-audit" data-bs-toggle="tab" data-bs-target="#pane-audit" type="button" role="tab" aria-controls="pane-audit" aria-selected="false"><i class="bi bi-clock-history" aria-hidden="true"></i> Audit trail</button></li>
+<li hidden><button id="tab-remap" class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-remap" role="tab">Historical remapping</button></li>
       </ul>
 
       <div class="tab-content flex-grow-1" id="adminTabContent">
 
+
+<section class="tab-pane fade show active" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
+  <div class="admin-hero"><span class="admin-eyebrow">YOUR ASSURANCE WORKSPACE</span><h2>Evidence with a clear path.</h2><p>Connect a system, collect its records and show what they demonstrate.</p><a href="#integrations" class="btn btn-primary">Build an API ingester <i class="bi bi-arrow-right"></i></a> <a href="#evidence-config" class="btn btn-outline-primary">Manage sources &amp; mapping</a></div>
+  <div id="ig-overview" class="row g-3 my-2" aria-live="polite"></div>
+  <div class="card mt-3"><div class="card-body"><h3 class="h5">Keep moving</h3><div class="admin-quicklinks"><a href="#framework-editor">Review frameworks <i class="bi bi-arrow-up-right"></i></a><a href="#diary">Record manual evidence <i class="bi bi-arrow-up-right"></i></a><a href="#users">Manage people’s access <i class="bi bi-arrow-up-right"></i></a><a href="/help/administrator.html">Read the administrator guide <i class="bi bi-arrow-up-right"></i></a></div></div></div>
+</section>
+<section class="tab-pane fade" id="pane-agents" role="tabpanel" aria-labelledby="tab-agents" tabindex="0">
+<div class="d-flex justify-content-between flex-wrap gap-3"><div><h1 class="h3">KEEN Agents</h1><p class="small-muted">Collect server activity as traceable evidence. Manage one identity per server or collector.</p></div><button id="ka-refresh" class="btn btn-outline-primary align-self-start">Refresh</button></div>
+<div id="ka-status" role="status" aria-live="polite" hidden></div>
+<div class="card mb-3"><div class="card-body"><h2 class="h5">Register a collector</h2><p>Use KEEN Agent or an OTLP/HTTP JSON collector. Each credential can submit evidence and health reports for its registered identity. New registrations expire after the selected lifetime.</p><form id="ka-register" class="row g-3 align-items-end"><div class="col-md-6"><label class="form-label" for="ka-agent-name">Server / collector name</label><input id="ka-agent-name" class="form-control" required maxlength="128" pattern="[a-zA-Z0-9][a-zA-Z0-9_.:\-]*" placeholder="web-prod-01" autocomplete="off"></div><div class="col-md-3"><label class="form-label" for="ka-expiry">Credential lifetime (days)</label><input id="ka-expiry" type="number" min="1" max="365" value="90" class="form-control" required></div><div class="col-md-3"><button id="ka-register-button" class="btn btn-primary" disabled>Register agent</button></div></form></div></div>
+<section id="ka-credential" class="card border-warning mb-3" hidden aria-labelledby="ka-credential-title"><div class="card-body"><h2 id="ka-credential-title" class="h5">Save this credential now</h2><p>KEEN displays it once. Save it to the agent's protected token file. Rotating a credential immediately invalidates the previous one.</p><label for="ka-token" class="form-label">Agent credential</label><input id="ka-token" type="password" class="form-control font-monospace" readonly autocomplete="off" spellcheck="false"><div class="d-flex flex-wrap gap-2 my-3"><button id="ka-copy" class="btn btn-primary">Copy credential</button><button id="ka-reveal" class="btn btn-outline-primary">Show credential</button><button id="ka-dismiss" class="btn btn-outline-secondary">Saved — dismiss</button></div></div></section>
+<details class="card mb-3"><summary class="card-header">Installation, configuration and evidence mapping</summary><div class="card-body"><p>Build the standalone Go agent from the <code>keen-agent</code> directory and follow its README and systemd installation instructions. The supplied service runs as a dedicated user. Grant read access to the selected logs and their rotated successors.</p><p>OTLP logs endpoint: <code id="ka-endpoint"></code></p><p>Save the credential in <code>/etc/keen-agent/token</code> with mode <code>0640</code>, owned by <code>root:keen-agent</code>. It is omitted from the configuration download.</p><button id="ka-yaml" class="btn btn-outline-primary mb-3">Download starter YAML</button><p>Events appear with source <strong>KEEN Agent</strong> and the registered name as their system. In Sources &amp; evidence mapping, match <code>source = keen-agent</code> and the required action, outcome or normalized payload fields, then select the relevant framework controls.</p><p class="mb-0">Review the meaning and scope of each rule: a package transaction can demonstrate maintenance activity; the organization's patching threshold still requires an appropriate measurement and review.</p></div></details>
+<div id="ka-agents" class="d-grid gap-3" aria-live="polite"></div>
+
+</section>
+<section class="tab-pane fade" id="pane-integrations" role="tabpanel" aria-labelledby="tab-integrations" tabindex="0">
+
+
+  <div class="d-flex flex-wrap justify-content-between gap-2 mb-3"><div><h2 class="h4">API ingester builder</h2><p class="small-muted">Build custom API ingesters: define authentication, requests, pagination and event fields. Configure built-in sources and map events under Sources &amp; evidence mapping.</p></div><div><button id="ig-refresh" class="btn btn-outline-primary">Refresh</button> <button id="ig-new" class="btn btn-primary"><i class="bi bi-plus-lg" aria-hidden="true"></i> New integration</button></div></div>
+  <div id="ig-status" hidden role="status" aria-live="polite"></div>
+  <div id="ig-home">
+    <label for="ig-search" class="visually-hidden">Search integrations</label><input id="ig-search" class="form-control mb-3" placeholder="Search integrations…">
+    <div id="ig-list" class="d-grid gap-3"></div>
+    <details class="card mt-4"><summary class="card-header">Custom API connections &amp; credentials</summary><div class="card-body"><p class="small-muted">These connections belong to custom API ingesters. Built-in adapters such as Forgejo, GitHub and Loki use server environment credentials and appear under Sources &amp; evidence mapping. API credentials are encrypted and never included in exported definitions.</p><div id="ig-connections" class="mb-3"></div><button id="ig-add-connection" class="btn btn-outline-primary">Add connection</button><form id="ig-connection-form" class="mt-3" hidden>
+      <input id="ig-connection-id" type="hidden"><div class="row g-3">
+      <div class="col-md-6"><label for="ig-cn" class="form-label">Connection name</label><input id="ig-cn" class="form-control" required maxlength="128"></div>
+      <div class="col-md-6"><label for="ig-cu" class="form-label">Base URL</label><input id="ig-cu" class="form-control" type="url" placeholder="https://api.example.org" required></div>
+      <div class="col-md-4"><label for="ig-ca" class="form-label">Authentication</label><select id="ig-ca" class="form-select"><option value="none">None</option><option value="bearer">Bearer token</option><option value="basic">Basic / API token</option><option value="header">Custom header</option><option value="query">Query parameter</option><option value="oauth_client_credentials">OAuth client credentials</option></select></div>
+      <div class="col-md-4"><label for="ig-ch" class="form-label">Header / parameter name</label><input id="ig-ch" class="form-control" placeholder="X-API-Key"></div>
+      <div class="col-md-4"><label for="ig-cuser" class="form-label">Username / OAuth client ID</label><input id="ig-cuser" class="form-control" autocomplete="off"></div>
+      <div class="col-md-6"><label for="ig-token-path" class="form-label">OAuth token path</label><input id="ig-token-path" class="form-control" placeholder="/oauth/token"></div><div class="col-md-6"><label for="ig-scope" class="form-label">OAuth scope (optional)</label><input id="ig-scope" class="form-control"></div><div class="col-12"><label for="ig-csecret" class="form-label">Credential</label><input id="ig-csecret" class="form-control" type="password" autocomplete="new-password"><div class="form-text">Leave blank to keep an existing credential. Destination approval and the encryption key are configured by your deployment administrator.</div></div>
+      </div><button class="btn btn-primary mt-3">Save connection</button> <button id="ig-cancel-connection" type="button" class="btn btn-outline-secondary mt-3">Cancel</button>
+    </form></div></details>
+    <div class="card mt-4"><div class="card-body"><h3 class="h5">Recent runs</h3><p class="small-muted">Previews never store evidence. Three failed collection runs pause the integration.</p><div id="ig-runs"></div></div></div>
+    <p class="mt-3 small-muted">Existing specialist adapters remain available under <a href="#ingest">Ingest runners</a>.</p>
+  </div>
+  <div id="ig-editor" hidden class="card"><div class="card-body">
+    <div class="d-flex justify-content-between gap-2"><h3 id="ig-heading" class="h5">Build an integration</h3><button id="ig-close" class="btn btn-outline-secondary btn-sm">Back to integrations</button></div>
+    <nav id="ig-steps" class="ig-steps my-3" aria-label="Integration setup"></nav>
+    <form id="ig-builder">
+      <section data-ig-step="0"><h4 class="h6">1. Connect a system</h4><label for="ig-template" class="form-label">Start from a template</label><select id="ig-template" class="form-select mb-2"></select><p id="ig-template-description" class="small-muted"></p><button type="button" id="ig-apply-template" class="btn btn-outline-primary btn-sm mb-3">Use this template</button>
+      <label for="ig-name" class="form-label d-block">Integration name</label><input id="ig-name" class="form-control mb-3" required maxlength="128" placeholder="Production backup checks">
+      <label for="ig-connection" class="form-label">Connection</label><select id="ig-connection" class="form-select" required></select><p class="form-text">Create and manage reusable connections in the integrations list.</p></section>
+      <section data-ig-step="1" hidden><h4 class="h6">2. Request records</h4><div class="row g-3"><div class="col-md-3"><label for="ig-method" class="form-label">Method</label><select id="ig-method" class="form-select"><option>GET</option><option>POST</option></select></div><div class="col-md-9"><label for="ig-path" class="form-label">Endpoint path</label><input id="ig-path" class="form-control" placeholder="/v1/checks"></div></div>
+      <label for="ig-query" class="form-label mt-3">Query parameters (JSON)</label><textarea id="ig-query" class="form-control font-monospace" rows="3"></textarea>
+      <details class="mt-3"><summary>Headers and POST body</summary><label for="ig-headers" class="form-label mt-2">Headers (JSON, no credentials)</label><textarea id="ig-headers" class="form-control font-monospace" rows="3"></textarea><label for="ig-body" class="form-label mt-2">JSON request body</label><textarea id="ig-body" class="form-control font-monospace" rows="4"></textarea></details></section>
+      <section data-ig-step="2" hidden><h4 class="h6">3. Extract and describe evidence</h4><label for="ig-records" class="form-label">Records path</label><input id="ig-records" class="form-control mb-2" placeholder="/results (blank for a top-level array)"><p class="small-muted">Use JSON pointers: /results selects a list; /job/status selects a nested field. Map a stable ID and a timestamp with timezone.</p><div id="ig-fields"></div><button type="button" id="ig-add-field" class="btn btn-outline-primary btn-sm mt-2">Add field</button>
+      <details class="mt-3"><summary>Related detail requests (advanced)</summary><p class="form-text">Fetch up to three related JSON objects per record, using the same connection. Example: [{"name":"job","path":"/jobs/{/id}"}]. Map returned fields using /_related/job/status. Runs allow at most 100 requests.</p><textarea id="ig-enrichments" class="form-control font-monospace" rows="4" aria-label="Detail request definitions"></textarea></details><details class="mt-3"><summary>Collect effectiveness measurements</summary><label for="ig-output" class="form-label mt-2">Output</label><select id="ig-output" class="form-select"><option value="evidence">Evidence</option><option value="measurement">Evidence and a measured value</option></select><label for="ig-measure" class="form-label mt-2">Effectiveness measure</label><select id="ig-measure" class="form-select"></select><label for="ig-unit" class="form-label mt-2">Exact unit</label><input id="ig-unit" class="form-control"><p class="form-text">Also map value, period_start and period_end. Periods use YYYY-MM-DD. The source evidence is linked to each measurement.</p></details></section>
+      <section data-ig-step="3" hidden><h4 class="h6">4. Collect reliably</h4><div class="row g-3"><div class="col-md-6"><label for="ig-paging" class="form-label">Pagination</label><select id="ig-paging" class="form-select"><option value="none">Single response</option><option value="page">Page number</option><option value="offset">Offset</option><option value="cursor">Cursor token</option><option value="next_url">Next URL in response</option><option value="link">Link response header</option></select></div><div class="col-md-6"><label for="ig-interval" class="form-label">Run every (minutes)</label><input id="ig-interval" class="form-control" type="number" min="5" max="10080"></div></div>
+      <div class="row g-3 mt-1"><div class="col-md-6"><label for="ig-param" class="form-label">Page / cursor parameter</label><input id="ig-param" class="form-control"></div><div class="col-md-6"><label for="ig-next-path" class="form-label">Next cursor / URL path</label><input id="ig-next-path" class="form-control"></div><div class="col-md-4"><label for="ig-size" class="form-label">Page size</label><input id="ig-size" type="number" class="form-control" min="1" max="1000"></div><div class="col-md-4"><label for="ig-size-param" class="form-label">Size parameter</label><input id="ig-size-param" class="form-control"></div><div class="col-md-4"><label for="ig-start" class="form-label">First page / offset</label><input id="ig-start" type="number" class="form-control" min="0"></div></div>
+      <details class="mt-3"><summary>Incremental collection and limits</summary><div class="row g-3 mt-1"><div class="col-md-6"><label for="ig-since" class="form-label">Since query parameter (ISO timestamp)</label><input id="ig-since" class="form-control"></div><div class="col-md-6"><label for="ig-days" class="form-label">Initial lookback (days)</label><input id="ig-days" class="form-control" type="number" min="1" max="365"></div><div class="col-md-6"><label for="ig-pages" class="form-label">Maximum pages</label><input id="ig-pages" class="form-control" type="number" min="1" max="100"></div><div class="col-md-6"><label for="ig-record-limit" class="form-label">Maximum records</label><input id="ig-record-limit" class="form-control" type="number" min="1" max="10000"></div></div><p class="form-text">A limit breach fails the run and leaves the cursor unchanged. Without a since parameter, the API determines the returned history.</p></details></section>
+      <section data-ig-step="4" hidden><h4 class="h6">5. Preview and publish</h4><p>Save a draft, then test the first page (up to ten records). Review the resulting evidence and framework matches before publishing.</p><div class="d-flex flex-wrap gap-2"><button type="button" id="ig-save" class="btn btn-outline-primary">Save draft</button><button type="button" id="ig-preview" class="btn btn-primary">Test draft</button><button type="button" id="ig-publish" class="btn btn-success">Publish &amp; schedule</button></div><div id="ig-preview-output" class="mt-3" aria-live="polite"></div>
+      <details class="mt-3"><summary>Try a sample response without connecting</summary><p class="form-text">Paste fictional JSON to check extraction and field mappings without calling an API or storing evidence. Related requests and framework rules are not executed. Use Test draft for rule matching in the bounded background worker.</p><textarea id="ig-sample-json" class="form-control font-monospace" rows="7" aria-label="Sample API response">[{"id":"check-1","created_at":"2026-01-01T12:00:00Z","title":"Restore test completed"}]</textarea><button id="ig-sample-test" type="button" class="btn btn-outline-primary mt-2">Preview sample</button></details>
+      <details class="mt-3"><summary>Advanced definition / import and export</summary><p class="form-text">The same versioned JSON format powers the guided editor. Definitions contain no connection credentials.</p><textarea id="ig-json" class="form-control font-monospace" rows="14" aria-label="Integration definition JSON"></textarea><div class="d-flex flex-wrap gap-2 mt-2"><button id="ig-read-json" type="button" class="btn btn-outline-primary">Apply JSON to form</button><button id="ig-write-json" type="button" class="btn btn-outline-primary">Refresh JSON from form</button><button id="ig-export" type="button" class="btn btn-outline-primary">Export JSON</button><label class="btn btn-outline-primary mb-0">Import JSON<input id="ig-import" type="file" accept=".json,application/json" hidden></label></div></details>
+      <details class="mt-3"><summary>Published revision history</summary><div id="ig-revisions" class="mt-2"></div><p class="form-text">Rollback preserves the cursor. Resetting it explicitly replays the configured history; stable record IDs prevent duplicate evidence.</p><button type="button" id="ig-reset" class="btn btn-outline-danger btn-sm">Reset collection cursor</button></details>
+      </section>
+      <div class="d-flex justify-content-between mt-4"><button id="ig-prev" type="button" class="btn btn-outline-secondary">Previous</button><button id="ig-next" type="button" class="btn btn-primary">Continue <i class="bi bi-arrow-right"></i></button></div>
+    </form>
+  </div></div>
+</section>
+
       <!-- Users -->
-      <div class="tab-pane fade show active" id="pane-users" role="tabpanel" aria-labelledby="tab-users" tabindex="0">
+      <div class="tab-pane fade" id="pane-users" role="tabpanel" aria-labelledby="tab-users" tabindex="0">
         <div class="card mb-3" id="usersCard">
           <div class="card-header d-flex align-items-center justify-content-between">
             <div>
@@ -92,7 +150,7 @@
               </div>
             </form>
 
-            <div class="table-responsive">
+            <div class="table-responsive" tabindex="0" role="region" aria-label="Scrollable table">
               <table class="table table-sm table-hover align-middle mb-0">
                 <thead>
                   <tr>
@@ -282,32 +340,45 @@
       </div>
 
       <div class="tab-pane fade" id="pane-evidence-config" role="tabpanel" aria-labelledby="tab-evidence-config" tabindex="0">
-        <div class="card mb-3"><div class="card-header fw-bold">Source catalogue</div><div class="card-body">
-          <p class="small-muted">These adapters are implemented by KEEN. Administrators define collection items and evidence mappings below; enabling an adapter and supplying its credentials remain Docker settings.</p>
+  <details id="hub-panel" class="mb-4" open><summary class="h4">Sources &amp; collections</summary>
+<p class="small-muted">Choose a source or connection to manage collection and its evidence definitions. Built-in adapters use server environment credentials; API connections store encrypted credentials.</p>
+    <div class="d-flex flex-wrap gap-2 mb-3"><button id="hub-source" class="btn btn-outline-primary" aria-pressed="true">View by Source</button><button id="hub-connection" class="btn btn-outline-primary" aria-pressed="false">View by Connection</button><button id="hub-refresh" class="btn btn-outline-secondary">Refresh</button><input id="hub-search" class="form-control w-auto flex-grow-1" placeholder="Find a source or connection" aria-label="Find a source or connection"></div>
+    <p><a href="#integrations">Build a custom API ingester</a> · <a href="#ingest">Run built-in adapters</a></p>
+    <dialog id="hub-collection" aria-labelledby="hub-collection-title" style="max-width:640px;width:calc(100% - 2rem);max-height:85vh;overflow:auto;background:var(--bs-body-bg);color:var(--bs-body-color);border:1px solid var(--bs-border-color);border-radius:1rem;padding:1.5rem">
+      <h2 id="hub-collection-title" class="h4">Add collection</h2><p>Choose the remote input to fetch. You can map its events to controls separately.</p><label for="hub-collection-type">Input type</label><select id="hub-collection-type" class="form-select mb-3"></select><div id="hub-collection-fields"></div><details><summary>Additional collection settings</summary><textarea id="hub-collection-extra" class="form-control font-monospace" rows="5" aria-label="Additional collection settings JSON">{}</textarea></details><p id="hub-collection-error" class="text-danger" role="alert"></p><button id="hub-collection-cancel" class="btn btn-outline-secondary">Cancel</button> <button id="hub-collection-save" class="btn btn-primary">Save collection</button>
+    </dialog>
+    <p id="hub-view-description" class="small-muted" aria-live="polite"></p>
+    <div id="hub-status" role="status" hidden></div><div id="hub-list"></div>
+    <dialog id="hub-confirm" aria-labelledby="hub-confirm-heading" style="max-width:640px;width:calc(100% - 2rem);max-height:85vh;overflow:auto;background:var(--bs-body-bg);color:var(--bs-body-color);border:1px solid var(--bs-border-color);border-radius:1rem;padding:1.5rem">
+      <h2 id="hub-confirm-heading" class="h4">Remove connection and mappings</h2><div id="hub-impact"></div><p>Collected events, evidence artifacts, manual mappings and imported mappings remain. API collector revisions and run history are removed with their connection. Server environment credentials remain in .env. Shared cross-source rules remain.</p>
+      <label for="hub-typed-name">Type <strong id="hub-confirm-name"></strong> to confirm</label><input id="hub-typed-name" class="form-control my-3" autocomplete="off"><div class="d-flex gap-2"><button id="hub-cancel" class="btn btn-outline-secondary">Cancel</button><button id="hub-delete" class="btn btn-danger" disabled>Remove connection and mappings</button></div>
+    </dialog>
+  </details>        <details class="card mb-3"><summary class="card-header fw-bold">Source catalogue and collection health</summary><div class="card-body">
+          <p class="small-muted">Review the available sources and their collected events. Built-in adapters use their configured credentials; Custom API connections are managed in API ingester builder. Agent identities and credentials are managed in KEEN Agents.</p>
           <div id="source-catalogue" class="row g-2"><div class="col-12 small-muted">Loading source catalogue…</div></div>
-        </div></div>
-        <h2 class="h5">Evidence definitions</h2>
-        <p class="small-muted">Each definition brings together a source input, the events to match, and its framework targets. A source input can support several evidence definitions.</p>
+        </div></details>
+        <h2 class="h5">Evidence mapping</h2><p><a href="#remap" class="btn btn-outline-secondary btn-sm">Review historical remapping</a></p>
+        <p class="small-muted">Collections choose remote inputs to fetch. Evidence definitions match the resulting events and link them to framework controls or clauses. A collection can support several definitions.</p>
         <div id="ec-status" role="status" hidden></div>
         <div class="card mb-3"><div class="card-header fw-bold">Collection and framework mappings</div><div class="card-body">
           <div id="ec-library"><div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h3 class="h6 mb-1">Evidence definition library</h3><p class="small-muted mb-0">One collected event can contribute to multiple frameworks.</p></div><button id="ec-new-rule" class="btn btn-primary">Create evidence definition</button></div>
-            <label for="ec-rule-filter" class="form-label">Search by name, collection item or framework</label><input id="ec-rule-filter" class="form-control mb-2" placeholder="Search evidence definitions"><div id="ec-rule-count" class="small-muted mb-2" role="status"></div><div id="ec-rules" class="list-group"></div><button id="ec-more-rules" class="btn btn-outline-secondary mt-2" hidden>Show more definitions</button></div>
+            <label for="ec-source-filter" class="form-label">Source</label><select id="ec-source-filter" class="form-select mb-2"><option value="">All sources</option></select><label for="ec-rule-filter" class="form-label">Search by name, collection item or framework</label><input id="ec-rule-filter" class="form-control mb-2" placeholder="Search evidence definitions"><div id="ec-rule-count" class="small-muted mb-2" role="status"></div><div id="ec-rules" class="list-group"></div><button id="ec-more-rules" class="btn btn-outline-secondary mt-2" hidden>Show more definitions</button></div>
           <div id="ec-editor" hidden>
             <div class="d-flex justify-content-between align-items-center mb-3"><h3 id="ec-editor-heading" class="h6 mb-0">Create evidence definition</h3><button id="ec-close-editor" type="button" class="btn btn-outline-secondary btn-sm">Back to definitions</button></div>
             <div class="small-muted mb-2">Step <span id="ec-step-number">1</span> of 4 · <span id="ec-step-title">Describe</span></div><div class="progress mb-3" role="progressbar" aria-label="Rule setup progress" aria-valuemin="0" aria-valuemax="4"><div id="ec-step-progress" class="progress-bar"></div></div>
             <section data-ec-step="1"><h4 class="h6">1. Describe the evidence</h4><p class="small-muted">Explain what the collected evidence demonstrates to an auditor.</p>
             <label class="form-label">What does this evidence demonstrate?</label><input id="ec-description" class="form-control" placeholder="Successful production deployments follow the change process">
-            </section><section data-ec-step="2"><h4 class="h6">2. Collect and recognise</h4>
-            <p class="small-muted">Choose the source input once. A Loki query or Jenkins job collects events; the conditions below decide which of those events support the selected framework targets.</p>
+            </section><section data-ec-step="2"><h4 class="h6">2. Choose the events to use</h4>
+            <p class="small-muted">Choose a source, inspect a recent event and copy the values you want to match. The next step chooses the controls that receive the matching evidence. Collection settings belong to the source; a mapping rule decides where its evidence is linked.</p>
             <div id="ec-selected-input" class="rounded bg-body-tertiary p-2 mb-2" hidden></div>
-            <div id="ec-input-picker" class="row g-2"><div class="col-md-4"><label for="ec-definition-adapter" class="form-label">Source adapter</label><select id="ec-definition-adapter" class="form-select"></select></div><div class="col-md-4"><label for="ec-definition-section" class="form-label">Input type</label><select id="ec-definition-section" class="form-select"></select></div><div class="col-md-4"><label for="ec-definition-entry" class="form-label">Query, job, feed or page</label><select id="ec-definition-entry" class="form-select"></select></div></div>
+            <div id="ec-input-picker" class="row g-2"><div class="col-md-8"><label for="ec-definition-adapter" class="form-label">Where does the evidence come from?</label><select id="ec-definition-adapter" class="form-select"></select></div><details class="col-12" id="ec-input-options"><summary>Limit to a particular query, job, feed or page (optional)</summary><div class="row g-2 mt-1"><div class="col-md-6"><label for="ec-definition-section" class="form-label">Input type</label><select id="ec-definition-section" class="form-select"></select></div><div class="col-md-6"><label for="ec-definition-entry" class="form-label">Query, job, feed or page</label><select id="ec-definition-entry" class="form-select"></select></div></div></details></div>
             <div id="ec-bookstack-picker" class="border rounded p-3 mt-3" hidden><p class="small-muted">Browse BookStack using the API credentials configured on the KEEN server. Only names and IDs are shown here.</p><div class="row g-2"><div class="col-md-5"><label for="ec-bookstack-book" class="form-label">Book</label><select id="ec-bookstack-book" class="form-select"></select></div><div class="col-md-7"><label for="ec-bookstack-page" class="form-label">Page (grouped by chapter)</label><select id="ec-bookstack-page" class="form-select"></select></div></div><div class="d-flex gap-2 mt-2"><button id="ec-bookstack-more-books" type="button" class="btn btn-sm btn-outline-secondary" hidden>More books</button><button id="ec-bookstack-more-pages" type="button" class="btn btn-sm btn-outline-secondary" hidden>More pages</button></div><div id="ec-bookstack-status" class="small mt-2" role="status"></div></div>
             <div id="ec-definition-fields" class="row g-2 mt-2"></div>
-            <details class="mt-2"><summary>Additional collection settings (advanced)</summary><p class="small-muted">Connector-specific JSON options. Credentials remain in the Docker environment.</p><textarea id="ec-definition-extra" class="form-control font-monospace" rows="5">{}</textarea></details>
+            <details id="ec-collection-settings" class="mt-2"><summary>Additional collection settings (advanced)</summary><p class="small-muted">Connector-specific JSON options. Credentials remain in the Docker environment.</p><textarea id="ec-definition-extra" class="form-control font-monospace" rows="5">{}</textarea></details>
             <input id="ec-when-source" type="hidden"><datalist id="ec-source-options"></datalist>
-            <div class="row g-2 mt-1 mb-2"><div class="col-md-9"><label class="form-label">Recent event</label><select id="ec-sample" class="form-select"></select></div><div class="col-md-3 d-flex align-items-end"><button id="ec-use-sample" class="btn btn-outline-primary w-100">Use this event</button></div></div>
+            <div class="row g-2 mt-1 mb-2"><div class="col-md-9"><label class="form-label">Start with a real event</label><select id="ec-sample" class="form-select"></select></div><div class="col-md-3 d-flex align-items-end"><button id="ec-use-sample" class="btn btn-outline-primary w-100">Copy its match values</button></div></div>
             <div id="ec-sample-details" class="small bg-body-tertiary rounded p-2 mb-2" role="status">Choose a recent event to inspect its fields. You can also define a rule before evidence arrives.</div>
-            <details class="mt-2"><summary>Narrow by event fields (optional)</summary><p class="small-muted">The selected collection item identifies the origin. Add fields only when it produces several kinds of evidence, such as both successful and failed logins. Every filled field must match.</p><div id="ec-conditions" class="row g-2"></div></details>
+            <div class="border rounded p-3 mt-3"><h4 class="h6">Which events should match?</h4><p class="small-muted">Choose an observed value or leave a field empty to allow every value. These fields filter records already collected. All filled fields must match exactly, including capital letters.</p><div id="ec-conditions" class="row g-2"></div><div id="ec-rule-sentence" class="alert alert-info mt-2 mb-0" role="status" aria-live="polite"></div><p class="small mt-2 mb-0"><a href="/help/using.html#mapping-made-simple">Action, result and mapping: a worked example</a></p></div><details id="ec-more-filters" class="mt-3"><summary>More filters: person, severity and label</summary><p class="small-muted">Use these when they matter to the evidence you want. An empty field allows every value.</p><div id="ec-extra-conditions" class="row g-2"></div></details>
             <details id="ec-bookstack-conditions-panel" class="mt-2" hidden><summary>BookStack page selectors</summary><p class="small-muted">Imported page definitions can select by book and page slug, name or pattern. New definitions can use the BookStack picker above.</p><div id="ec-bookstack-conditions" class="row g-2"></div></details>
             <details class="mt-2"><summary>Advanced match patterns (regex)</summary><p class="small-muted">Use only when exact fields cannot express the match. Preview against real evidence before saving.</p><div id="ec-regex-conditions" class="row g-2"></div></details>
             </section><section data-ec-step="3"><h4 class="h6">3. Select framework controls or clauses</h4><p class="small-muted">The selected control is included when you click Next. To map to several controls or frameworks, click Add for each extra target. Every matching event maps to all selected targets.</p>
@@ -321,7 +392,7 @@
             <details class="mt-3"><summary>Advanced rule settings</summary><div class="row g-2 mt-1"><div class="col-md-6"><label class="form-label">Rule ID</label><input id="ec-rule-id" class="form-control" placeholder="jenkins_deploy_success"></div><div class="col-md-6"><label class="form-label">Confidence (0–1)</label><input id="ec-confidence" type="number" min="0" max="1" step=".05" value=".8" class="form-control"></div></div><label class="form-check mt-2"><input id="ec-enabled" type="checkbox" class="form-check-input" checked> Rule enabled</label>
               <label class="form-check mt-2"><input id="ec-apply-existing" type="checkbox" class="form-check-input" checked> Apply this rule to previously collected evidence in the background</label>
               <label class="form-check mt-2"><input id="ec-predefine" type="checkbox" class="form-check-input"> Predefine this rule before evidence is available (skip sample preview)</label></details>
-            <div class="d-flex flex-wrap gap-2 mt-3"><button id="ec-preview" class="btn btn-outline-primary">Preview matches</button><button id="ec-save-rule" class="btn btn-primary">Save rule</button><button id="ec-backfill-start" class="btn btn-outline-primary">Apply saved rule to past evidence</button><button id="ec-delete-rule" class="btn btn-outline-danger">Delete rule</button></div>
+            <div class="d-flex flex-wrap gap-2 mt-3"><button id="ec-preview" class="btn btn-outline-primary">Preview matches</button><button id="ec-save-rule" class="btn btn-primary">Save rule</button><button id="ec-backfill-start" class="btn btn-outline-primary">Apply saved rule to past evidence</button><button id="ec-delete-rule" class="btn btn-outline-danger">Delete definition</button></div>
             <div id="ec-preview-results" class="mt-2 small" role="status"></div>
             <div id="ec-backfill" class="mt-2 small" role="status"></div>
             <details class="mt-3"><summary>Review old rule mappings after changing a rule</summary>
@@ -346,47 +417,25 @@
       <div class="tab-pane fade" id="pane-ingest" role="tabpanel" aria-labelledby="tab-ingest" tabindex="0">
         <div class="card mb-3">
           <div class="card-header">
-            <div class="fw-bold">Import controls</div>
-            <div class="small-muted">Calls <span class="mono">POST /api/v1/admin/controls/import</span>.</div>
-          </div>
-          <div class="card-body">
-            <div class="row g-2 align-items-end">
-              <div class="col-12 col-lg-4">
-                <label class="form-label small-muted mb-1">Framework</label>
-                <input id="framework" class="form-control" type="text" value=""/>
-              </div>
-              <div class="col-12 col-lg-4">
-                <label class="form-label small-muted mb-1">Load JSON</label>
-                <input id="file" class="form-control" type="file" accept="application/json"/>
-              </div>
-              <div class="col-12 col-lg-4 d-flex gap-2">
-                <button id="loadSample" class="btn btn-outline-primary">Load sample</button>
-                <button id="importBtn" class="btn btn-primary">Import</button>
-              </div>
-            </div>
-            <textarea id="payload" class="form-control mono mt-3" rows="10" placeholder='{"framework":"<framework-slug>","items":[...]}'></textarea>
-          </div>
-        </div>
-
-        <div class="card mb-3">
-          <div class="card-header">
             <div class="fw-bold">Ingest runners</div>
             <div class="small-muted">One-click ingestion for configured providers.</div>
           </div>
           <div class="card-body">
-            <div class="d-flex flex-wrap gap-2">
+            <div class="d-flex flex-wrap align-items-start gap-2">
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/loki/run">Run Loki</button>
               <button id="resetLokiCursors" class="btn btn-outline-warning">Reset Loki cursors to now</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/cloudwatch_logs/run">Run CloudWatch Logs</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/github/run">Run GitHub</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/google_workspace/run">Run Google Workspace</button>
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/gitlab/run">Run GitLab</button>
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/gitea/run">Run Gitea</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/forgejo/run">Run Forgejo</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/jenkins/run">Run Jenkins</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/taiga/run">Run Taiga</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/bookstack/run">Run BookStack</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/rss/run">Run RSS</button>
             </div>
-            <div class="small-muted mt-2">After ingest, use "Remap" to apply rules to anything that came in without a mapping.</div>
+            <p class="small-muted mt-3 mb-0">Fetch new activity from your configured collections. To apply a definition to existing events, open it in Sources &amp; evidence mapping and choose <strong>Apply saved rule to past evidence</strong>.</p>
           </div>
         </div>
       </div>
@@ -580,7 +629,7 @@
               </div>
             </div>
 
-            <div class="table-responsive mt-2">
+            <div class="table-responsive mt-2" tabindex="0" role="region" aria-label="Request audit trail table">
               <table class="table table-sm table-hover align-middle mb-0">
                 <thead>
                   <tr>
@@ -604,7 +653,7 @@
     </div>
 
     <!-- Output (auto-expands when an action writes output) -->
-    <div class="card mt-2">
+    <div class="card mt-2" id="admin-output-card" hidden>
       <div class="card-header d-flex align-items-center justify-content-between">
         <div>
           <div class="fw-bold">Output</div>
@@ -623,6 +672,9 @@
 
   <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
   <script type="module" src="/pages/admin.js"></script>
+  <script type="module" src="/pages/integrations.js"></script>
+  <script type="module" src="/pages/agents.js"></script>
+<script type="module" src="/pages/connection-hub.js"></script>
   <script type="module" src="/pages/evidence-config.js"></script>
   <script type="module" src="/pages/framework-editor.js"></script>
 

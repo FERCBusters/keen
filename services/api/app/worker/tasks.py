@@ -1,4 +1,6 @@
 from __future__ import annotations
+from app.ingest.gitea import ingest_gitea_all
+from app.ingest.gitlab import ingest_gitlab_all
 
 from sqlalchemy.orm import Session
 
@@ -463,12 +465,10 @@ def send_question_reply_webhooks_task(thread_id: str, post_id: str) -> dict:
     finally:
         db.close()
 
-
 @celery_app.task(name="app.worker.tasks.backfill_rule_task")
 def backfill_rule_task(job_id: str) -> None:
     from app.db.models import RuleBackfillJob
     from app.worker.rule_backfill import process_batch
-
     try:
         for _ in range(20):
             if not process_batch(uuid.UUID(job_id)):
@@ -487,6 +487,27 @@ def backfill_rule_task(job_id: str) -> None:
 @celery_app.task(name="app.worker.tasks.recover_rule_backfills_task")
 def recover_rule_backfills_task() -> None:
     from app.worker.rule_backfill import recover_jobs
-
     for job_id in recover_jobs():
         backfill_rule_task.delay(str(job_id))
+
+
+@celery_app.task(name='app.worker.tasks.integration_run_task', soft_time_limit=140, time_limit=160, max_retries=0)
+def integration_run_task(run_id):
+    from app.integrations.runtime import run_job
+    run_job(run_id)
+
+
+@celery_app.task(name='app.worker.tasks.integration_tick_task')
+def integration_tick_task():
+    from app.integrations.runtime import tick
+    tick()
+
+@celery_app.task(name="app.worker.tasks.ingest_gitea_all_task")
+def ingest_gitea_all_task():
+    with SessionLocal() as db:
+        return ingest_gitea_all(db)
+
+@celery_app.task(name="app.worker.tasks.ingest_gitlab_all_task")
+def ingest_gitlab_all_task():
+    with SessionLocal() as db:
+        return ingest_gitlab_all(db)

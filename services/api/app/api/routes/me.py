@@ -415,6 +415,7 @@ def me(request: Request, db: Session = Depends(get_db)) -> dict:
         "default_date_format": _validate_date_format(settings.ui_date_format),
         "preferences": prefs.model_dump(),
         "available_themes": [{"id": t[0], "name": t[1]} for t in ALLOWED_THEMES],
+        "bookstack_enabled": bool(settings.bookstack_enabled),
     }
 
 

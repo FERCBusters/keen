@@ -18,11 +18,8 @@ _LOCAL_BUCKET = "local://local"
 
 def _local_path(key: str) -> Path:
     root = Path(settings.artifact_local_dir).resolve()
-    if (
-        not key
-        or key.startswith("/")
-        or "\\" in key
-        or any(part in {"", ".", ".."} for part in key.split("/"))
+    if not key or key.startswith("/") or "\\" in key or any(
+        part in {"", ".", ".."} for part in key.split("/")
     ):
         raise ValueError("Invalid local artifact key")
     path = (root / key).resolve()
@@ -33,25 +30,16 @@ def _local_path(key: str) -> Path:
 
 def _require_s3_settings() -> None:
     if settings.s3_use_instance_role:
-        if (
-            not settings.s3_bucket
-            or settings.s3_access_key
-            or settings.s3_secret_key
-            or settings.s3_endpoint_url
-        ):
-            raise ValueError(
-                "Instance-role S3 requires a bucket and no static credentials/custom endpoint"
-            )
+        if not settings.s3_bucket or settings.s3_access_key or settings.s3_secret_key or settings.s3_endpoint_url:
+            raise ValueError("Instance-role S3 requires a bucket and no static credentials/custom endpoint")
         return
     missing = [
-        name
-        for name, value in (
+        name for name, value in (
             ("KEEN_S3_ENDPOINT_URL", settings.s3_endpoint_url),
             ("KEEN_S3_ACCESS_KEY", settings.s3_access_key),
             ("KEEN_S3_SECRET_KEY", settings.s3_secret_key),
             ("KEEN_S3_BUCKET", settings.s3_bucket),
-        )
-        if not value.strip()
+        ) if not value.strip()
     ]
     if missing:
         raise ValueError("S3 storage requires " + ", ".join(missing))
@@ -61,10 +49,8 @@ def _write_backend() -> str:
     backend = settings.artifact_storage_backend
     if backend == "auto":
         configured = (
-            settings.s3_endpoint_url,
-            settings.s3_access_key,
-            settings.s3_secret_key,
-            settings.s3_bucket,
+            settings.s3_endpoint_url, settings.s3_access_key,
+            settings.s3_secret_key, settings.s3_bucket,
         )
         if any(value.strip() for value in configured):
             _require_s3_settings()
@@ -142,9 +128,7 @@ def put_bytes(key: str, data: bytes, content_type: str) -> StoredObject:
                 output.flush()
                 os.fsync(output.fileno())
             os.link(temporary, path)  # never replace an existing evidence object
-            return StoredObject(
-                uri=f"{_LOCAL_BUCKET}/{key}", sha256=sha, size_bytes=size
-            )
+            return StoredObject(uri=f"{_LOCAL_BUCKET}/{key}", sha256=sha, size_bytes=size)
         finally:
             os.unlink(temporary)
 
@@ -164,9 +148,7 @@ def put_bytes(key: str, data: bytes, content_type: str) -> StoredObject:
     if settings.hosted_mode and (not version or version == "null"):
         raise RuntimeError("Hosted artifacts require versioned S3 storage")
     if version:
-        uri = f"s3://{settings.s3_bucket}/{quote(key, safe='/')}?versionId=" + quote(
-            version, safe=""
-        )
+        uri = f"s3://{settings.s3_bucket}/{quote(key, safe='/')}?versionId=" + quote(version, safe="")
     return StoredObject(uri=uri, sha256=sha, size_bytes=size)
 
 
@@ -176,7 +158,6 @@ class ArtifactKey(str):
     Existing callers pass the parsed key directly to the read/presign helpers.
     The string value remains the object key for backwards compatibility.
     """
-
     def __new__(cls, key, version_id=None):
         obj = super().__new__(cls, key)
         obj.version_id = version_id
@@ -208,7 +189,6 @@ def parse_s3_uri(uri: str) -> Tuple[str, str]:
         # New S3 URIs are escaped and version-pinned. Keep old unversioned keys unchanged.
         if p.query:
             from urllib.parse import unquote
-
             query = parse_qs(p.query, strict_parsing=True)
             if set(query) != {"versionId"} or len(query["versionId"]) != 1:
                 raise ValueError("Invalid S3 artifact version")
@@ -223,9 +203,7 @@ def get_object_stream(bucket: str, key: str):
     _guard_bucket(bucket)
     c = _client()
     version = getattr(key, "version_id", None)
-    return c.get_object(
-        Bucket=bucket, Key=str(key), **({"VersionId": version} if version else {})
-    )
+    return c.get_object(Bucket=bucket, Key=str(key), **({"VersionId": version} if version else {}))
 
 
 def iter_stream(body, chunk_size: int = 1024 * 1024) -> Generator[bytes, None, None]:
@@ -247,10 +225,6 @@ def presign_get_url(bucket: str, key: str, expires_in: int = 900) -> str:
     version = getattr(key, "version_id", None)
     return c.generate_presigned_url(
         "get_object",
-        Params={
-            "Bucket": bucket,
-            "Key": str(key),
-            **({"VersionId": version} if version else {}),
-        },
+        Params={"Bucket": bucket, "Key": str(key), **({"VersionId": version} if version else {})},
         ExpiresIn=expires_in,
     )

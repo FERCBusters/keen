@@ -1,0 +1,3 @@
+feeds:
+  - url: https://git.example.com/example-org/infrastructure.rss
+    label: "example-org/infrastructure (Forgejo)"

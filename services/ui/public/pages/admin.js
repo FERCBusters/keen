@@ -144,6 +144,8 @@ if (isAdmin) {
 // ------------------------------------------------------------------
 
 const TAB_HASH_TO_ID = {
+  '#overview':'tab-overview', '#agents':'tab-agents', '#integrations':'tab-integrations',
+  '#evidence-config':'tab-evidence-config', '#framework-editor':'tab-framework-editor',
   '#users': 'tab-users',
   '#groups': 'tab-groups',
   '#ingest': 'tab-ingest',
@@ -181,6 +183,7 @@ activateTabFromHash();
 window.addEventListener('hashchange', activateTabFromHash);
 
 function setOut(msg) {
+  const outputCard=document.getElementById("admin-output-card"); if(outputCard)outputCard.hidden=false;
   if (out) out.textContent = msg;
   // If output is collapsed, pop it open whenever we write something non-trivial.
   const collapseEl = document.getElementById('outCollapse');
@@ -786,39 +789,9 @@ if (permissionCreateForm) {
 
 
 // ------------------------------------------------------------------
-// Controls import / ingest runners / remap
+// Ingest runners / remap
 // ------------------------------------------------------------------
 
-document.getElementById('file')?.addEventListener('change', async (ev) => {
-  const f = ev.target.files?.[0];
-  if (!f) return;
-  const txt = await f.text();
-  document.getElementById('payload').value = txt;
-});
-
-document.getElementById('loadSample')?.addEventListener('click', () => {
-  document.getElementById('payload').value = JSON.stringify({
-    framework: selectedFrameworkFallback(),
-    items: [
-      {type: 'annex_control', ref: 'A.5.7', title: 'Threat intelligence', in_scope: true, tags: {}, metadata: {}},
-      {type: 'annex_control', ref: 'A.8.12', title: 'Data leakage prevention', in_scope: true, tags: {}, metadata: {}},
-    ],
-  }, null, 2);
-});
-
-document.getElementById('importBtn')?.addEventListener('click', async () => {
-  try {
-    const payload = document.getElementById('payload').value.trim();
-    if (!payload) throw new Error('Missing JSON payload');
-    const obj = JSON.parse(payload);
-    obj.framework = obj.framework || selectedFrameworkFallback();
-    await runJsonPost('/api/v1/admin/controls/import', obj);
-    await loadControls();
-  } catch (e) {
-    setOut(String(e));
-    toast(status, String(e), 'danger');
-  }
-});
 
 document.querySelectorAll('[data-run]').forEach((btn) => {
   btn.addEventListener('click', async () => {
@@ -1376,3 +1349,15 @@ if (!isAdmin && !canAudit) {
   await refreshEntityChanges();
   await refreshAudit();
 }
+
+const navigationToggle = document.getElementById('admin-navigation-toggle');
+navigationToggle?.addEventListener('click', () => {
+  const open = document.getElementById('adminTabs').classList.toggle('admin-nav-open');
+  navigationToggle.setAttribute('aria-expanded',String(open));
+});
+document.getElementById('adminTabs')?.addEventListener('shown.bs.tab', e => {
+  document.getElementById('adminTabs').classList.remove('admin-nav-open');
+  navigationToggle?.setAttribute('aria-expanded','false');
+  if(navigationToggle)navigationToggle.textContent=e.target.textContent.trim()+' · Menu';
+  const card=document.getElementById('admin-output-card');if(card)card.hidden=true;
+});

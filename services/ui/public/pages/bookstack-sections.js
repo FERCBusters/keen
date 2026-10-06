@@ -1,12 +1,13 @@
-import {initNavbar, apiGet, apiPost, apiPatch, esc, toast, getCurrentFramework, canSampleIntoAudit, openAuditSampleModal} from '/app.js';
+import {apiGet, apiPost, apiPatch, esc, toast, getCurrentFramework, canSampleIntoAudit, openAuditSampleModal} from '/app.js';
 
-const me = await initNavbar();
+export async function initBookstackDocuments(me, root) {
+if (!me?.bookstack_enabled) return;
 const manage = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);
-const $ = id => document.getElementById(id);
+const $ = id => root.querySelector(`#${id}`);
 const framework = getCurrentFramework();
 let pageOffset = null;
 let capturedSections = [];
-function notify(message, kind='success') { toast($('status'), message, kind); }
+function notify(message, kind='success') { toast($('bookstackStatus'), message, kind); }
 function setOptions(id, items, placeholder) {
   $(id).innerHTML = `<option value="">${esc(placeholder)}</option>` + items.map(item => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('');
 }
@@ -14,7 +15,7 @@ async function loadPages(append=false) {
   if (!$('bookSelect').value) return;
   try {
     const next = append ? pageOffset : 0;
-    const data = await apiGet(`/api/v1/admin/bookstack/catalog?kind=pages&book_id=${encodeURIComponent($('bookSelect').value)}&offset=${next || 0}`);
+    const data = await apiGet(`/api/v1/isms/bookstack-catalog?kind=pages&book_id=${encodeURIComponent($('bookSelect').value)}&offset=${next || 0}`);
     if (!append) setOptions('pageSelect', [], 'Choose page…');
     $('pageSelect').insertAdjacentHTML('beforeend', (data.items || []).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join(''));
     pageOffset = data.next_offset; $('morePages').style.display = pageOffset == null ? 'none' : '';
@@ -65,7 +66,7 @@ $('sectionRows').addEventListener('click', async e => {
     const section = capturedSections.find(item => item.id === sample.dataset.sample);
     openAuditSampleModal({me, entityType:'bookstack_section', entityId:sample.dataset.sample,
       title:'BookStack policy snapshot', evidenceUrl:`/api/v1/isms/bookstack-sections/${encodeURIComponent(sample.dataset.sample)}/snapshot`,
-      framework:section?.target_framework || framework, statusEl:$('status')});
+      framework:section?.target_framework || framework, statusEl:$('bookstackStatus')});
     return;
   }
   const button=e.target.closest('[data-archive]'); if (!button || !manage) return;
@@ -76,9 +77,10 @@ $('sectionRows').addEventListener('click', async e => {
 });
 async function init() {
   try {
+    if (!manage) { await loadSnapshots(); return; }
     const [docs, books, frameworks] = await Promise.all([
       apiGet(`/api/v1/isms/documents?framework=${encodeURIComponent(framework)}&limit=1000`),
-      apiGet('/api/v1/admin/bookstack/catalog?kind=books'),
+      apiGet('/api/v1/isms/bookstack-catalog?kind=books'),
       apiGet('/api/v1/frameworks'),
     ]);
     setOptions('policyDocument', (docs.items || []).map(d => ({id:d.id,name:d.title})), 'Choose policy or process…');
@@ -89,3 +91,5 @@ async function init() {
 }
 if (!manage) $('sectionForm').style.display='none';
 await init();
+
+}

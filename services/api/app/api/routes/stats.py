@@ -99,21 +99,10 @@ def stats_summary(
         # visible to active users, so these dashboard counters use the global
         # framework event-count cache instead of legacy trigger-maintained
         # Postgres counter tables.
-        has_inheritance = (
-            db.query(CrossFrameworkControlLink.id)
-            .join(
-                ControlItem,
-                ControlItem.id == CrossFrameworkControlLink.target_control_id,
-            )
-            .filter(ControlItem.framework_slug == framework)
-            .first()
-            is not None
-        )
-        if (
-            not has_inheritance
-            and isinstance(user, User)
-            and getattr(user, "is_active", False)
-        ):
+        has_inheritance = db.query(CrossFrameworkControlLink.id).join(
+            ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id
+        ).filter(ControlItem.framework_slug == framework).first() is not None
+        if not has_inheritance and isinstance(user, User) and getattr(user, "is_active", False):
             controls = (
                 db.query(ControlItem.id, ControlItem.in_scope)
                 .filter(ControlItem.framework_slug == framework)
@@ -230,17 +219,9 @@ def stats_controls(
     }
 
     def _load() -> dict:
-        has_inheritance = (
-            db.query(CrossFrameworkControlLink.id)
-            .join(
-                ControlItem,
-                ControlItem.id == CrossFrameworkControlLink.target_control_id,
-            )
-            .filter(ControlItem.framework_slug == framework)
-            .first()
-            is not None
-        )
-
+        has_inheritance = db.query(CrossFrameworkControlLink.id).join(
+            ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id
+        ).filter(ControlItem.framework_slug == framework).first() is not None
         def _item(c: ControlItem, evidence_count: int, last_evidence) -> dict:
             if isinstance(last_evidence, datetime):
                 last_evidence_value = last_evidence.isoformat()
@@ -307,15 +288,12 @@ def stats_controls(
         if has_inheritance:
             pairs = evidence_pairs(framework)
             evidence_sq = (
-                db.query(
-                    pairs.c.control_id.label("control_item_id"),
-                    func.count(pairs.c.event_id).label("evidence_count"),
-                    func.max(Event.timestamp).label("last_evidence"),
-                )
+                db.query(pairs.c.control_id.label("control_item_id"),
+                         func.count(pairs.c.event_id).label("evidence_count"),
+                         func.max(Event.timestamp).label("last_evidence"))
                 .join(Event, Event.id == pairs.c.event_id)
                 .filter(diary_filter_condition(db, user), *event_filters)
-                .group_by(pairs.c.control_id)
-                .subquery()
+                .group_by(pairs.c.control_id).subquery()
             )
         else:
             evidence_sq = (

@@ -22,22 +22,18 @@ depends_on = None
 
 def upgrade() -> None:
     """Remove obsolete per-diary-entry visibility ACL storage."""
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM user_permissions
         WHERE permission_id IN (
             SELECT id FROM permissions WHERE code = 'diary.read'
         )
-    """
-    )
-    op.execute(
-        """
+    """)
+    op.execute("""
         DELETE FROM group_permissions
         WHERE permission_id IN (
             SELECT id FROM permissions WHERE code = 'diary.read'
         )
-    """
-    )
+    """)
     op.execute("DELETE FROM permissions WHERE code = 'diary.read'")
 
     op.execute("DROP INDEX IF EXISTS ix_event_visible_users_user_id")

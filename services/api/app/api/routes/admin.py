@@ -1,4 +1,6 @@
 from __future__ import annotations
+from app.ingest.gitea import ingest_gitea_all
+from app.ingest.gitlab import ingest_gitlab_all
 
 import json
 import os
@@ -932,6 +934,8 @@ def admin_ingest_status(user=Depends(require_admin)):
             "github": bool(settings.github_enabled),
             "google_workspace": bool(settings.google_workspace_enabled),
             "forgejo": bool(settings.forgejo_enabled),
+            "gitlab": bool(settings.gitlab_enabled),
+            "gitea": bool(settings.gitea_enabled),
             "jenkins": bool(settings.jenkins_enabled),
             "taiga": bool(settings.taiga_enabled),
             "bookstack": bool(settings.bookstack_enabled),
@@ -1914,3 +1918,11 @@ def admin_entity_changelog(
         limit=limit,
         offset=offset,
     )
+
+@router.post("/v1/admin/ingest/gitea/run")
+def admin_run_gitea_ingest(user=Depends(require_admin), db: Session = Depends(get_db)):
+    return {"runs": ingest_gitea_all(db)}
+
+@router.post("/v1/admin/ingest/gitlab/run")
+def admin_run_gitlab_ingest(user=Depends(require_admin), db: Session = Depends(get_db)):
+    return {"runs": ingest_gitlab_all(db)}

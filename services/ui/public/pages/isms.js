@@ -1856,3 +1856,22 @@ for (const btn of Array.from(document.querySelectorAll('#ismsTabs [data-bs-toggl
 }
 
 load().then(() => activateInitialTab()).catch((e) => toast(status, `Failed to load ISMS: ${String(e)}`, 'danger'));
+
+// BookStack is part of document management and loads only when expanded.
+const bookstackDocuments = document.getElementById('bookstackDocuments');
+if (bookstackDocuments && me?.bookstack_enabled) {
+  bookstackDocuments.hidden = false;
+  let loaded = false;
+  bookstackDocuments.addEventListener('toggle', async () => {
+    if (!bookstackDocuments.open || loaded) return;
+    loaded = true;
+    try {
+      const {initBookstackDocuments} = await import('./bookstack-sections.js');
+      await initBookstackDocuments(me, document.getElementById('bookstackDocumentContent'));
+    } catch (error) {
+      loaded = false;
+      toast(status, `Could not open BookStack documents: ${String(error)}`, 'danger');
+    }
+  });
+  if (new URLSearchParams(location.search).get('bookstack') === '1') bookstackDocuments.open = true;
+}

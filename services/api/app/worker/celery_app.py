@@ -23,6 +23,8 @@ celery_app = Celery(
 
 # Beat schedules
 celery_app.conf.beat_schedule = {
+    "ingest-gitea": {"task": "app.worker.tasks.ingest_gitea_all_task", "schedule": 5700.0},
+    "ingest-gitlab": {"task": "app.worker.tasks.ingest_gitlab_all_task", "schedule": 5700.0},
     "ingest-loki-every-30m": {
         "task": "app.worker.tasks.ingest_loki_all_task",
         "schedule": crontab(minute="*/30"),
@@ -77,3 +79,7 @@ celery_app.conf.beat_schedule = {
     },
 }
 celery_app.conf.timezone = "UTC"
+
+celery_app.conf.beat_schedule['integration-schedules'] = {
+    'task': 'app.worker.tasks.integration_tick_task', 'schedule': 60.0,
+}

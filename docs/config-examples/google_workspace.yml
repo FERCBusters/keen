@@ -1,0 +1,52 @@
+# Google Workspace audit ingester (Admin SDK Reports API)
+#
+# Keen polls the Reports API Activities feed and stores each activity as a JSON
+# artifact. Map events to ISO27001:2022 controls via config/rules.yml.
+#
+# Credentials are provided via environment variables (see .env.example):
+#   - GOOGLE_WORKSPACE_SA_JSON_B64 (recommended) OR GOOGLE_WORKSPACE_SA_JSON
+#   - GOOGLE_WORKSPACE_IMPERSONATE (admin email to impersonate via DWD)
+#
+# Docs:
+# - Admin audit events: application: admin
+# - Login audit events: application: login
+
+# If false, ingester will skip regardless of KEEN_GOOGLE_WORKSPACE_ENABLED.
+enabled: true
+
+# Optional (can also be set via GOOGLE_WORKSPACE_IMPERSONATE env var)
+impersonate: ""
+
+# Defaults used when a stream has no cursor yet.
+since_minutes: 120
+
+# Small overlap reduces the chance of missing slightly delayed/out-of-order events.
+overlap_seconds: 180
+
+# Safety cap per run, per stream (prevents giant backfills on first run).
+max_items: 2000
+
+streams:
+  # --- Admin audit: user lifecycle & admin actions
+  - name: admin_user_management
+    enabled: true
+    application: admin
+    user_key: all
+    system: gws_admin
+    # Optional: if omitted, ingests ALL admin audit event types.
+    # event_names:
+    #   - CREATE_USER
+    #   - DELETE_USER
+    #   - RENAME_USER
+    #   - CHANGE_USER_PASSWORD
+
+  # --- Login audit: sign-in successes & failures
+  - name: login_activity
+    enabled: true
+    application: login
+    user_key: all
+    system: gws_login
+    # Optional filter list. If omitted, ingests ALL login audit event types.
+    # event_names:
+    #   - login_success
+    #   - login_failure

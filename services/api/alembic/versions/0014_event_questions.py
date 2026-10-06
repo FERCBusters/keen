@@ -122,13 +122,11 @@ def upgrade():
     )
 
     # Permission for creating new event questions
-    op.execute(
-        """
+    op.execute("""
         INSERT INTO permissions (id, code, description, created_at)
         SELECT gen_random_uuid(), 'event.question', 'Create auditor questions on events', NOW()
         WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE code='event.question');
-        """
-    )
+        """)
 
 
 def downgrade():

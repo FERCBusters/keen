@@ -1,0 +1,18 @@
+flowchart TB
+  subgraph Collection["Choose a collection method"]
+    A["Built-in adapters: Loki, Jenkins, RSS and others"]
+    B["Guided API integrations"]
+    C["KEEN Agent or OTLP collector"]
+    D["Authenticated webhooks"]
+  end
+  A --> N["Validate, normalize and redact"]
+  B --> N
+  C --> N
+  D --> N
+  N --> E["Event and provenance in PostgreSQL"]
+  N --> S["Evidence artifact in local or S3 storage"]
+  E --> R["Mapping rules select matching events"]
+  S --> V["Artifact reference and SHA-256"]
+  V --> E
+  R --> F["Framework controls"]
+  F --> U["Review, questions and audit samples"]

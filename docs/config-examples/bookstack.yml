@@ -1,0 +1,204 @@
+# BookStack ingester configuration
+#
+# Secrets (Token ID/Secret) should be provided via env vars:
+#   BOOKSTACK_TOKEN_ID / BOOKSTACK_TOKEN_SECRET
+#   KEEN_BOOKSTACK_BASE_URL
+
+# Label used to prefix the `system` field of ingested events.
+label: "bookstack"
+
+# Optional scope: If your ISMS lives in a single BookStack book, set one of the
+# below to restrict ingestion to that book only.
+#
+# book:
+#   slug: "my-isms-book"   # preferred (visible in URLs)
+#   # id: 123              # alternative
+
+# Evidence capture settings.
+# By default we store only a small preview snippet plus URLs (no full page content).
+capture:
+  mode: "preview"      # preview | full
+  preview_chars: 500    # number of characters to keep in the preview
+  full_content: false   # if true, also include html/raw_html/markdown in the artifact
+
+# If true (default), any pages referenced in `page_mappings` will be fetched every run
+# (dedupe prevents repeated events if unchanged). This ensures key policy pages are
+# always present as evidence even if they haven't been edited recently.
+seed_mapped_pages: true
+
+poll:
+  # On first run (no cursor), look back this many days for recent updates.
+  lookback_days: 30
+  # Max results per listing request (default 200, BookStack max 500)
+  count: 200
+  # Prevent runaway listing pagination. This is "offset", not "record" count.
+  # Example: max_pages=5000 with count=200 allows up to 25 listing pages.
+  max_pages: 5000
+  # Include drafts/templates in listing.
+  include_drafts: false
+  include_templates: false
+
+# Optional: map specific pages to ISO27001:2022 refs.
+#
+# Matching options (in "match"):
+#   - id: <int>
+#   - slug: <string>
+#   - title: <string>
+#   - title_regex: <regex string>
+#
+# map_to: list of refs to attach (A.<n>.<n> for Annex A controls, or clause refs like 5.1)
+page_mappings:
+  - match:
+      book_slug: "isms"
+      slug: "information-security-manual"
+    map_to: ["A.5.1","A.5.10","A.5.12","A.5.13","A.5.14","A.5.31","A.5.33","A.5.34","A.5.37","A.6.7","A.8.1","A.8.7","A.8.10"]
+    confidence: 0.95
+    rationale: "Information Security Manual, covers org charts, information classification, use of IT, end user devices, applicable legislation, information transmission, destruction of data"
+
+  - match:
+      book_slug: "isms"
+      slug: "it-infrastructure-management-policy"
+    map_to: ["A.5.17","A.5.37"]
+    confidence: 0.95
+    rationale: "IT Infrastructure Management Policy - documented operating procedures, access control, architecture diagrams, backup, logging. Use of passwords, SSH PKI instead of passwords, secure credential sharing via Signal, etc"
+
+  - match:
+      book_slug: "isms"
+      slug: "organisation-system-administration-handbook"
+    map_to: ["A.5.37"]
+    confidence: 0.95
+    rationale: "Sysadmin Handbook - documented operating procedures, howtos, schedules"
+
+  - match:
+      book_slug: "isms"
+      slug: "organisation-chart"
+    map_to: ["A.5.2","A.5.3","A.5.4"]
+    confidence: 0.95
+    rationale: "Information Security Roles and Responsibilities"
+
+  - match:
+      book_slug: "isms"
+      slug: "management-review-procedure"
+    map_to: ["A.5.4"]
+    confidence: 0.95
+    rationale: "Management Review Procedure"
+
+  - match:
+      book_slug: "isms"
+      slug: "management-reviews"
+    map_to: ["A.5.4","A.5.36"]
+    confidence: 0.95
+    rationale: "Management Reviews"
+
+  - match:
+      book_slug: "isms"
+      slug: "internal-audit-procedure"
+    map_to: ["A.5.35","A.5.36"]
+    confidence: 0.95
+    rationale: "The organisation carries out routine internal audit procedures to track compliance with policy and implement continual improvement and corrective actions"
+
+  - match:
+      book_slug: "isms"
+      slug: "business-continuity-procedure"
+    map_to: ["A.5.30"]
+    confidence: 0.95
+    rationale: "Business Continuity Procedure"
+
+  - match:
+      book_slug: "isms"
+      slug: "information-classification-and-document-management"
+    map_to: ["A.5.12","A.5.13"]
+    confidence: 0.95
+    rationale: "Business Continuity Procedure"
+
+  - match:
+      book_slug: "isms"
+      slug: "asset-list"
+    map_to: ["A.5.9","A.5.11","A.5.32"]
+    confidence: 0.95
+    rationale: "Asset List"
+
+  - match:
+      book_slug: "isms"
+      slug: "incident-management-and-improvement-procedure"
+    map_to: ["A.5.24","A.5.27"]
+    confidence: 0.95
+    rationale: "Incident Management and Improvement Procedure"
+
+  - match:
+      book_slug: "isms"
+      slug: "hr-management-policy"
+    map_to: ["A.5.11","A.6.1","A.6.2","A.6.4","A.6.5"]
+    confidence: 0.95
+    rationale: "HR Management Policy, including Disciplinary Process, Recruitment/Screening / Employment terms and Termination process"
+
+  - match:
+      book_slug: "isms"
+      slug: "risk-assessment"
+    map_to: ["A.5.20", "A.5.34"]
+    confidence: 0.75
+    rationale: "Risk Assessment includes supplier consideration such as AWS, Google, risk to member-controleld PII"
+
+  - match:
+      book_slug: "isms"
+      slug: "disaster-recovery-procedure"
+    map_to: ["A.5.30", "A.8.13"]
+    confidence: 0.95
+    rationale: "DR policy"
+
+  # HR
+  - match:
+      book_slug: "hr"
+      slug_regex: ".*review.*"
+    map_to: ["A.6.2"]
+    confidence: 0.75
+    rationale: "Salary and annual reviews"
+
+  - match:
+      book_slug: "hr"
+      slug_regex: ".*pension.*"
+    map_to: ["A.6.2"]
+    confidence: 0.75
+    rationale: "Pension related"
+
+  - match:
+      book_slug: "hr"
+      slug: "references-and-external-checks"
+    map_to: ["A.6.1"]
+    confidence: 0.75
+    rationale: "Screening process"
+
+  - match:
+      book_slug: "hr"
+      slug_regex: ".*recruitment.*"
+    map_to: ["A.6.1"]
+    confidence: 0.75
+    rationale: "Hiring"
+
+  - match:
+      book_slug: "hr"
+      slug_regex: ".*contract.*"
+    map_to: ["A.6.2", "A.6.7"]
+    confidence: 0.75
+    rationale: "Contracts"
+
+  - match:
+      book_slug: "hr"
+      slug_regex: ".*modern-slavery.*"
+    map_to: ["A.6.2"]
+    confidence: 0.75
+    rationale: "Modern slavery statement"
+
+  - match:   
+      book_slug: "hr"
+      slug_regex: ".*equal.*"
+    map_to: ["A.6.2"]
+    confidence: 0.75
+    rationale: "Equal Opportunity and Diversity"
+
+  - match:
+      book_slug: "hr"
+      slug_regex: ".*disciplinary.*"
+    map_to: ["A.6.4"]
+    confidence: 0.75
+    rationale: "Disciplinary process"

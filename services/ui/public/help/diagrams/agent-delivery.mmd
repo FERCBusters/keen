@@ -1,0 +1,14 @@
+flowchart TB
+  L["Selected log files or journal"] --> P["Parse and redact"]
+  P --> Q["Atomic local transaction: UUID, record and checkpoint"]
+  Q --> T["Send OTLP JSON over verified HTTPS"]
+  T --> A{"Valid scoped credential and batch?"}
+  A -->|Yes| D{"UUID already stored?"}
+  D -->|Same content| OK["Return success"]
+  D -->|New| S["Store artifact, event and mappings; commit"]
+  S --> OK
+  OK --> R["Remove acknowledged records from queue"]
+  A -->|Permanent rejection| H["Pause delivery; retain records"]
+  D -->|Conflicting content| H
+  T -->|Network error or retryable response| B["Back off and retry the same UUIDs"]
+  B --> T

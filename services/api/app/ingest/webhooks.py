@@ -138,7 +138,8 @@ def ingest_webhook(
             "webhook": {
                 "provider": provider,
                 "event_type": event_type,
-                "headers": {k: headers.get(k) for k in list(headers)[:30]},
+                "headers": {k: v for k, v in headers.items() if k.lower() in {"content-type", "user-agent", "x-webhook-timestamp"}
+                    and k.lower() != str(pol.get("secret_header") or "").lower()},
             }
         },
         normalized_payload=parsed if isinstance(parsed, dict) else {"payload": parsed},

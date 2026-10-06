@@ -3,7 +3,6 @@
 Each read opens its own short session so Celery workers, API workers and beat
 see changes on their next run without touching the read-only config mount.
 """
-
 from __future__ import annotations
 
 from typing import Any

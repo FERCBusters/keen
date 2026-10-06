@@ -72,8 +72,7 @@ def _seed_iso_clauses() -> None:
             """
         else:
             parent_expr = "NULL"
-        op.execute(
-            f"""
+        op.execute(f"""
             INSERT INTO framework_clauses
                 (id, framework_slug, ref, title, parent_clause_id, sort_order, metadata, created_at, updated_at)
             SELECT gen_random_uuid(), '{ISO_FRAMEWORK}', '{ref}', '{title.replace("'", "''")}',
@@ -82,8 +81,7 @@ def _seed_iso_clauses() -> None:
                 SELECT 1 FROM framework_clauses
                 WHERE framework_slug = '{ISO_FRAMEWORK}' AND ref = '{ref}'
             );
-        """
-        )
+        """)
 
 
 def _migrate_existing_controlitem_clauses() -> None:
@@ -94,8 +92,7 @@ def _migrate_existing_controlitem_clauses() -> None:
     already exist. They remain in control_items for compatibility with any
     existing mappings, but the new clause UI/API reads from framework_clauses.
     """
-    op.execute(
-        """
+    op.execute("""
         INSERT INTO framework_clauses
             (id, framework_slug, ref, title, parent_clause_id, sort_order, metadata, created_at, updated_at)
         SELECT gen_random_uuid(), ci.framework_slug, ci.ref,
@@ -107,8 +104,7 @@ def _migrate_existing_controlitem_clauses() -> None:
               SELECT 1 FROM framework_clauses fc
               WHERE fc.framework_slug = ci.framework_slug AND fc.ref = ci.ref
           );
-    """
-    )
+    """)
 
 
 def upgrade():

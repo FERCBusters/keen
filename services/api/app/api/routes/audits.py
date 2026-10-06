@@ -723,40 +723,20 @@ def _audit_sample_entity_reference(
             subtitle = row.document_type or ""
             controls = _isms_sample_controls(db, entity_type, row.id, framework)
     elif entity_type == "bookstack_section":
-        row = (
-            db.query(BookStackSectionEvidence)
-            .filter(BookStackSectionEvidence.id == entity_id)
-            .one_or_none()
-        )
-        if (
-            row
-            and row.target_control
-            and row.target_control.framework_slug == framework
-        ):
+        row = db.query(BookStackSectionEvidence).filter(BookStackSectionEvidence.id == entity_id).one_or_none()
+        if row and row.target_control and row.target_control.framework_slug == framework:
             controls = [_control_out(row.target_control)]
-        elif (
-            row and row.target_clause and row.target_clause.framework_slug == framework
-        ):
-            linked = (
-                db.query(ControlItem)
-                .join(
-                    ControlClauseLink,
-                    ControlClauseLink.control_item_id == ControlItem.id,
-                )
-                .filter(
-                    ControlClauseLink.clause_id == row.target_clause_id,
-                    ControlItem.framework_slug == framework,
-                )
-                .all()
-            )
+        elif row and row.target_clause and row.target_clause.framework_slug == framework:
+            linked = db.query(ControlItem).join(ControlClauseLink, ControlClauseLink.control_item_id == ControlItem.id).filter(
+                ControlClauseLink.clause_id == row.target_clause_id,
+                ControlItem.framework_slug == framework,
+            ).all()
             controls = [_control_out(c) for c in linked]
         else:
             row = None  # A snapshot may only be sampled under its target framework.
         if row:
             title = f"BookStack policy: {row.page_title}"
-            subtitle = (
-                f"Revision {row.revision_count or 'unknown'} · SHA-256 {row.sha256}"
-            )
+            subtitle = f"Revision {row.revision_count or 'unknown'} · SHA-256 {row.sha256}"
     elif entity_type == "isms_org_node":
         row = db.query(IsmsOrgNode).filter(IsmsOrgNode.id == entity_id).one_or_none()
         if row:
@@ -2806,9 +2786,7 @@ def add_attendee(
         if linked_person is None:
             raise HTTPException(status_code=400, detail="Unknown Person")
     if payload.person_id is not None and payload.user_id is not None:
-        raise HTTPException(
-            status_code=400, detail="Select a Person or KEEN user, not both"
-        )
+        raise HTTPException(status_code=400, detail="Select a Person or KEEN user, not both")
     if payload.user_id is not None:
         linked_user = (
             db.query(User)
@@ -2837,9 +2815,7 @@ def add_attendee(
         user_id=linked_user.id if linked_user is not None else None,
         person_id=linked_person.id if linked_person is not None else None,
         name=display_name,
-        email=explicit_email
-        or (linked_person.email if linked_person else None)
-        or _user_email_snapshot(linked_user),
+        email=explicit_email or (linked_person.email if linked_person else None) or _user_email_snapshot(linked_user),
         role=_clean_text(payload.role, max_len=128, label="role") or None,
         created_at=_utcnow(),
     )

@@ -15,6 +15,7 @@
 #   docker build -f keen/services/ui/Dockerfile -t keen-ui /workspace
 
 FROM node:20-alpine AS vendor
+ENV NODE_OPTIONS="--no-network-family-autoselection --dns-result-order=ipv4first"
 
 WORKDIR /build
 
@@ -29,12 +30,27 @@ RUN apk add --no-cache git ca-certificates
 # If it's missing, generate it inside this build stage so it can be copied out
 # later (see the final stage /opt/ui-build).
 COPY keen/services/ui/package*.json ./
-RUN if [ -f package-lock.json ]; then \
-      npm ci; \
-    else \
-      npm install; \
-    fi \
- && if [ ! -f package-lock.json ]; then npm install --package-lock-only; fi
+#RUN if [ -f package-lock.json ]; then \
+#      npm ci; \
+#    else \
+#      npm install; \
+#    fi \
+# && if [ ! -f package-lock.json ]; then npm install --package-lock-only; fi
+RUN node --version && npm --version \
+ && ( \
+      if [ -f package-lock.json ]; then \
+        npm ci --loglevel=verbose; \
+      else \
+        npm install --loglevel=verbose; \
+      fi; \
+      install_status=$?; \
+      cat /root/.npm/_logs/*debug*.log; \
+      if [ "$install_status" -ne 0 ]; then \
+        exit "$install_status"; \
+      fi; \
+      node --input-type=module -e \
+        "import { transformSync } from 'esbuild'; transformSync('let x = 1');" \
+    )
 
 # Inject MOSP design system (local codebase, no npm registry)
 COPY mosp-design-system/ /tmp/mosp-design-system/

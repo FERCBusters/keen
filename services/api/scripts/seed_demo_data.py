@@ -91,6 +91,7 @@ class DemoConfig:
     prefix: str
     username: str | None
     dry_run: bool
+    all_frameworks: bool = False
 
 
 class DemoSeeder:
@@ -100,6 +101,12 @@ class DemoSeeder:
         self.stats: Counter[str] = Counter()
         self.warnings: dict[str, set[str]] = defaultdict(set)
         self.user = self._select_user(config.username)
+        anchor = self.db.query(Event).filter_by(source='demo-seed', external_id=self.account_code('SEED-ANCHOR')).first()
+        if anchor is None:
+            anchor = Event(source='demo-seed', external_id=self.account_code('SEED-ANCHOR'), timestamp=datetime.utcnow(), summary=self.label('Fictional demo dataset'), raw_pointer={'seed':'demo'}, normalized_payload={'demo':True})
+            self.db.add(anchor)
+            self.db.flush()
+        self.seed_date = anchor.timestamp.date()
         self.relevance_levels: dict[str, PestleRelevanceLevel] = {}
 
     @property
@@ -527,7 +534,11 @@ class DemoSeeder:
                     "residual_vulnerability_score": rv,
                     "residual_impact_score": ri,
                     "residual_risk_score": rscore,
-                    "note": "Seeded demo CIA risk. Adjust ownership/scoring for live use.",
+                    "register_likelihood": min(5, max(1, v)),
+                    "register_impact": min(5, max(1, i)),
+                    "register_residual_likelihood": min(5, max(1, rv)),
+                    "register_residual_impact": min(5, max(1, ri)),
+                    "note": "Fictional demo risk; not a real assessment.",
                     "mitigator_context": {"seed": "demo", "prefix": self.prefix},
                     "created_by_user_id": self.user.id,
                 },
@@ -586,7 +597,7 @@ class DemoSeeder:
                 "Regional outage or office disruption affects support operations.",
                 "Continuity assumptions should be tested through tabletop and restore exercises.",
                 ["service", "incident"],
-                ["6.1", "8.4", "8.5"],
+                ["6.1", "8.1", "8.3"],
             ),
             (
                 "Ethical",
@@ -594,7 +605,7 @@ class DemoSeeder:
                 "AI-assisted administration requires transparency and human review.",
                 "Use of assistive tooling should not bypass approval, review, or accountability controls.",
                 ["service", "supplier"],
-                ["5.1", "5.4", "7.3"],
+                ["5.1", "5.3", "7.3"],
             ),
         ]
         for typ, lens, item, rationale, process_keys, clause_refs in specs:
@@ -981,7 +992,7 @@ class DemoSeeder:
         events: dict[str, Event] = {}
         for key, spec in specs.items():
             timestamp = datetime.combine(
-                date.today() - timedelta(days=int(spec["days_ago"])),
+                self.seed_date - timedelta(days=int(spec["days_ago"])),
                 time(11, 30),
             )
             summary = self.label(spec["summary"])
@@ -1079,7 +1090,7 @@ class DemoSeeder:
 
     def _demo_event_timestamp(self, days_ago: int, hour: int, minute: int) -> datetime:
         return datetime.combine(
-            date.today() - timedelta(days=days_ago), time(hour, minute)
+            self.seed_date - timedelta(days=days_ago), time(hour, minute)
         )
 
     def seed_source_events(self) -> dict[str, Event]:
@@ -1689,9 +1700,9 @@ class DemoSeeder:
                     "framework_slug": self.framework,
                     "status": spec["status"],
                     "audit_type": spec["audit_type"],
-                    "start_date": date.today()
+                    "start_date": self.seed_date
                     + timedelta(days=int(spec["start_offset"])),
-                    "end_date": date.today() + timedelta(days=int(spec["end_offset"])),
+                    "end_date": self.seed_date + timedelta(days=int(spec["end_offset"])),
                     "notes": "Seeded demonstration audit. Scope and sampled evidence can be adjusted from the UI.",
                     "executive_summary": spec["summary"],
                     "meta": {"seed": "demo", "prefix": self.prefix, "key": spec["key"]},
@@ -1743,7 +1754,7 @@ class DemoSeeder:
                 )
 
     def month_period(self, months_back: int) -> tuple[date, date]:
-        today = date.today()
+        today = self.seed_date
         month = today.month - months_back
         year = today.year
         while month <= 0:
@@ -1867,8 +1878,8 @@ class DemoSeeder:
         return measures
 
     def seed_objectives(self) -> dict[str, IsmsObjective]:
-        target_1 = (date.today() + timedelta(days=90)).isoformat()
-        target_2 = (date.today() + timedelta(days=180)).isoformat()
+        target_1 = (self.seed_date + timedelta(days=90)).isoformat()
+        target_2 = (self.seed_date + timedelta(days=180)).isoformat()
         specs = {
             "evidence_coverage": {
                 "requirement": "Improve ISMS visibility and evidence coverage across controls.",
@@ -1961,7 +1972,7 @@ class DemoSeeder:
                 IsmsMeeting,
                 {
                     "title": self.label(spec["title"]),
-                    "date": date.today() - timedelta(days=spec["days_ago"]),
+                    "date": self.seed_date - timedelta(days=spec["days_ago"]),
                 },
                 {
                     "start_time": spec["start"],
@@ -1996,6 +2007,12 @@ class DemoSeeder:
             f"Seeding KEEN demo data as user {self.user.username!r} "
             f"for framework {self.framework!r} with prefix {self.prefix!r}."
         )
+        from demo_catalogue import CATALOGUE, seed_catalogue
+        if not self.config.all_frameworks and self.framework != 'ISO27001:2022':
+            seed_catalogue(self, [self.framework])
+            return
+        from app.ingest.demo_rss import seed_preset
+        seed_preset(self.db)
         self.ensure_relevance_levels()
         org_nodes = self.seed_org_nodes()
         licenses = self.seed_licenses()
@@ -2013,6 +2030,7 @@ class DemoSeeder:
         self.seed_effectiveness_measures()
         self.seed_objectives()
         self.seed_meetings(docs)
+        seed_catalogue(self, list(CATALOGUE) if self.config.all_frameworks else [self.framework])
 
     def print_summary(self) -> None:
         print("\nSummary:")
@@ -2049,12 +2067,17 @@ def parse_args() -> DemoConfig:
         action="store_true",
         help="Run all inserts/updates and then roll back instead of committing.",
     )
+    parser.add_argument('--all-frameworks', action='store_true', help='Seed reviewed examples across all four shipped frameworks (base ISMS uses ISO 27001).')
+    parser.add_argument('--allow-non-demo', action='store_true', help='Explicitly permit writing fictional records into a non-demo installation.')
     args = parser.parse_args()
+    if not settings.demo_mode and not args.allow_non_demo:
+        parser.error('Use demo mode, or explicitly pass --allow-non-demo to seed this installation')
     return DemoConfig(
-        framework=args.framework,
+        framework="ISO27001:2022" if args.all_frameworks else args.framework,
         prefix=args.prefix,
         username=args.username,
         dry_run=args.dry_run,
+        all_frameworks=args.all_frameworks,
     )
 
 

@@ -62,15 +62,12 @@ def upgrade() -> None:
     # Historical backfill. These counters are deliberately distinct-event counts
     # per framework, not raw mapping counts, because /v1/stats/summary reports
     # "Events mapped" and "Events unmapped".
-    op.execute(
-        """
+    op.execute("""
         INSERT INTO global_event_stats (stats_key, total_events, updated_at)
         SELECT 'events', COUNT(*)::integer, NOW()
         FROM events
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         INSERT INTO framework_event_stats (
             framework_slug,
             mapped_event_count,
@@ -83,11 +80,9 @@ def upgrade() -> None:
         FROM mappings m
         JOIN control_items c ON c.id = m.control_item_id
         GROUP BY c.framework_slug
-        """
-    )
+        """)
 
-    op.execute(
-        """
+    op.execute("""
         CREATE OR REPLACE FUNCTION keen_bump_global_event_stats()
         RETURNS trigger AS $$
         BEGIN
@@ -111,27 +106,21 @@ def upgrade() -> None:
             RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE TRIGGER trg_global_event_stats_events_insert
         AFTER INSERT ON events
         FOR EACH ROW
         EXECUTE FUNCTION keen_bump_global_event_stats();
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE TRIGGER trg_global_event_stats_events_delete
         AFTER DELETE ON events
         FOR EACH ROW
         EXECUTE FUNCTION keen_bump_global_event_stats();
-        """
-    )
+        """)
 
-    op.execute(
-        """
+    op.execute("""
         CREATE OR REPLACE FUNCTION keen_increment_framework_event_stats(
             p_framework_slug text
         ) RETURNS void AS $$
@@ -150,10 +139,8 @@ def upgrade() -> None:
                 updated_at = NOW();
         END;
         $$ LANGUAGE plpgsql;
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE OR REPLACE FUNCTION keen_decrement_framework_event_stats(
             p_framework_slug text
         ) RETURNS void AS $$
@@ -175,11 +162,9 @@ def upgrade() -> None:
                 updated_at = NOW();
         END;
         $$ LANGUAGE plpgsql;
-        """
-    )
+        """)
 
-    op.execute(
-        """
+    op.execute("""
         CREATE OR REPLACE FUNCTION keen_framework_event_stats_from_mapping()
         RETURNS trigger AS $$
         DECLARE
@@ -264,37 +249,29 @@ def upgrade() -> None:
             RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE TRIGGER trg_framework_event_stats_mappings_insert
         AFTER INSERT ON mappings
         FOR EACH ROW
         EXECUTE FUNCTION keen_framework_event_stats_from_mapping();
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE TRIGGER trg_framework_event_stats_mappings_delete
         AFTER DELETE ON mappings
         FOR EACH ROW
         EXECUTE FUNCTION keen_framework_event_stats_from_mapping();
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE TRIGGER trg_framework_event_stats_mappings_update
         AFTER UPDATE OF event_id, control_item_id ON mappings
         FOR EACH ROW
         EXECUTE FUNCTION keen_framework_event_stats_from_mapping();
-        """
-    )
+        """)
 
     # Framework slug changes are rare admin operations. Rebuild the tiny summary
     # table to keep distinct event counts exact across frameworks.
-    op.execute(
-        """
+    op.execute("""
         CREATE OR REPLACE FUNCTION keen_rebuild_framework_event_stats()
         RETURNS void AS $$
         BEGIN
@@ -313,10 +290,8 @@ def upgrade() -> None:
             GROUP BY c.framework_slug;
         END;
         $$ LANGUAGE plpgsql;
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE OR REPLACE FUNCTION keen_framework_event_stats_from_control_item()
         RETURNS trigger AS $$
         BEGIN
@@ -326,16 +301,13 @@ def upgrade() -> None:
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE TRIGGER trg_framework_event_stats_control_items_framework
         AFTER UPDATE OF framework_slug ON control_items
         FOR EACH ROW
         EXECUTE FUNCTION keen_framework_event_stats_from_control_item();
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

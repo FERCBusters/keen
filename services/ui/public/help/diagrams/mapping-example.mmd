@@ -1,0 +1,8 @@
+flowchart TB
+  E["Jenkins records a build"] --> A{"Activity equals build?"}
+  A -->|Yes| O{"Result equals success?"}
+  A -->|No| K["Keep the event without this rule's mapping"]
+  O -->|No| K
+  O -->|Yes| M["Link evidence to the selected controls"]
+  M --> R["Review evidence and assess the requirement"]
+  K --> X["Other rules can still match"]

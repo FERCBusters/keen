@@ -49,8 +49,7 @@ def upgrade() -> None:
 
     # Historical backfill: mappings are the source of truth. Do this before
     # creating triggers so the existing corpus starts out correct.
-    op.execute(
-        """
+    op.execute("""
         INSERT INTO control_evidence_stats (
             control_item_id,
             evidence_count,
@@ -65,13 +64,11 @@ def upgrade() -> None:
         FROM mappings m
         JOIN events e ON e.id = m.event_id
         GROUP BY m.control_item_id
-        """
-    )
+        """)
 
     # Exact refresh helper used when a mapping is deleted/updated or an event
     # timestamp changes. Deletes the aggregate row when a control has no evidence.
-    op.execute(
-        """
+    op.execute("""
         CREATE OR REPLACE FUNCTION keen_refresh_control_evidence_stats(
             p_control_item_id uuid
         ) RETURNS void AS $$
@@ -105,14 +102,12 @@ def upgrade() -> None:
               );
         END;
         $$ LANGUAGE plpgsql;
-        """
-    )
+        """)
 
     # Mapping maintenance trigger. Inserts use an incremental bump because this
     # is the hot ingestion path. Deletes/updates recompute the affected control(s)
     # so last_evidence remains correct even when the newest mapping is removed.
-    op.execute(
-        """
+    op.execute("""
         CREATE OR REPLACE FUNCTION keen_control_evidence_stats_from_mapping()
         RETURNS trigger AS $$
         DECLARE
@@ -163,38 +158,30 @@ def upgrade() -> None:
             RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
-        """
-    )
+        """)
 
-    op.execute(
-        """
+    op.execute("""
         CREATE TRIGGER trg_control_evidence_stats_mappings_insert
         AFTER INSERT ON mappings
         FOR EACH ROW
         EXECUTE FUNCTION keen_control_evidence_stats_from_mapping();
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE TRIGGER trg_control_evidence_stats_mappings_delete
         AFTER DELETE ON mappings
         FOR EACH ROW
         EXECUTE FUNCTION keen_control_evidence_stats_from_mapping();
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE TRIGGER trg_control_evidence_stats_mappings_update
         AFTER UPDATE OF event_id, control_item_id ON mappings
         FOR EACH ROW
         EXECUTE FUNCTION keen_control_evidence_stats_from_mapping();
-        """
-    )
+        """)
 
     # If an event timestamp changes, recompute last_evidence for all controls
     # mapped to that event. This is rare, but keeps the aggregate table truthful.
-    op.execute(
-        """
+    op.execute("""
         CREATE OR REPLACE FUNCTION keen_control_evidence_stats_from_event_timestamp()
         RETURNS trigger AS $$
         DECLARE
@@ -212,16 +199,13 @@ def upgrade() -> None:
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE TRIGGER trg_control_evidence_stats_events_timestamp
         AFTER UPDATE OF timestamp ON events
         FOR EACH ROW
         EXECUTE FUNCTION keen_control_evidence_stats_from_event_timestamp();
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

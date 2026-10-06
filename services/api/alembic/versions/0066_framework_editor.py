@@ -3,7 +3,6 @@
 Revision ID: 0066_framework_editor
 Revises: 0065_drop_triggers
 """
-
 from alembic import op
 import sqlalchemy as sa
 

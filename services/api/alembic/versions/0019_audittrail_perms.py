@@ -136,13 +136,11 @@ def _merge_or_rename_permission(
         return
 
     if not old_id and not new_id:
-        op.execute(
-            f"""
+        op.execute(f"""
             INSERT INTO permissions (id, code, description, created_at)
             SELECT gen_random_uuid(), '{new_code}', '{description.replace("'", "''")}', NOW()
             WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE code='{new_code}')
-            """
-        )
+            """)
 
 
 def upgrade():

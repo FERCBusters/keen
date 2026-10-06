@@ -1,0 +1,11 @@
+flowchart TB
+  K["KEEN writes a redacted artifact"] --> W{"Configured backend"}
+  W -->|Local| L["Create a new file; refuse replacement"]
+  W -->|S3| S["PutObject to the configured bucket"]
+  P["Bucket and IAM policy"] --> S
+  H["Hosted mode: conditional create and required versioning"] --> S
+  S --> V["Return object version ID when available"]
+  L --> D["PostgreSQL: artifact URI, SHA-256 and event reference"]
+  V --> D
+  D --> R["Read the recorded object version for review or export"]
+  O["Optional Object Lock: operator-configured retention or legal hold"] -.-> S

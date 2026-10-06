@@ -1,3 +1,4 @@
-feeds:
-  - url: https://git.example.com/example-org/infrastructure.rss
-    label: "example-org/infrastructure (Forgejo)"
+# Configure in Admin → Evidence definitions, or manage this YAML before saving UI overrides.
+feeds: []
+organizations: []
+users: []
