@@ -58,6 +58,8 @@ def list_sections(document_id: uuid.UUID | None = None, user=Depends(require_ism
 def capture_section(payload: SectionInput, user=Depends(require_isms_manage), db: Session = Depends(get_db)):
     if not settings.bookstack_enabled:
         raise HTTPException(409, "BookStack ingestion is disabled")
+    from app.services.ingestion_pause import require_receiving
+    require_receiving(db, 'bookstack')
     document = db.get(IsmsDocument, payload.document_id)
     if not document: raise HTTPException(400, "Select an ISMS policy or process document")
     if bool(payload.target_control_id) == bool(payload.target_clause_id):

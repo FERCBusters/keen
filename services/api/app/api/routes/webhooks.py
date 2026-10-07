@@ -144,6 +144,8 @@ async def isms_effectiveness_metric_webhook(
     headers = {k: v for k, v in request.headers.items()}
     if not verify_secret("isms_metrics", headers):
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
+    from app.services.ingestion_pause import require_receiving
+    require_receiving(db, "webhooks")
     body = await request.body()
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
@@ -274,6 +276,8 @@ async def webhook_ingest(
     headers = {k: v for k, v in request.headers.items()}
     if not verify_secret(provider, headers):
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
+    from app.services.ingestion_pause import require_receiving
+    require_receiving(db, "webhooks")
     body = await request.body()
     try:
         return ingest_webhook(

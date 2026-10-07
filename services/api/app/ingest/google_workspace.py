@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.services.ingestion_pause import pausable
 
 """Google Workspace audit ingester.
 
@@ -493,6 +494,7 @@ def ingest_google_workspace_stream(
     }
 
 
+@pausable('google_workspace')
 def ingest_google_workspace_all(db: Session) -> list[dict[str, Any]]:
     if not settings.google_workspace_enabled:
         return [{"skipped": True, "reason": "google_workspace_enabled=false"}]

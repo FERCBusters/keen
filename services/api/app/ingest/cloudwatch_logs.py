@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.services.ingestion_pause import pausable
 
 import hashlib
 import json
@@ -551,6 +552,7 @@ def ingest_cloudwatch_logs_once(
     }
 
 
+@pausable('cloudwatch_logs')
 def ingest_cloudwatch_logs_all(db: Session) -> list[dict[str, Any]]:
     if not settings.cloudwatch_logs_enabled:
         return [{"skipped": True, "reason": "KEEN_CLOUDWATCH_LOGS_ENABLED=false"}]

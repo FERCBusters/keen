@@ -1,3 +1,4 @@
+from app.services.ingestion_pause import pausable
 """GitLab project activity collection for user-owned projects and groups/subgroups."""
 from datetime import datetime, timedelta
 import hashlib
@@ -69,6 +70,7 @@ def _project_events(db, client, base, section, key, project, label):
     return {'project': project.get('path_with_namespace', project_id), 'created_events': count}
 
 
+@pausable('gitlab')
 def ingest_gitlab_all(db):
     if not settings.gitlab_enabled:
         return [{'skipped': True, 'reason': 'KEEN_GITLAB_ENABLED=false'}]

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.services.ingestion_pause import pausable
 
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -348,6 +349,7 @@ def ingest_taiga_project_timeline(
     }
 
 
+@pausable('taiga')
 def ingest_taiga_all(db: Session) -> list[dict[str, Any]]:
     if not settings.taiga_enabled:
         return [{"skipped": True, "reason": "KEEN_TAIGA_ENABLED=false"}]

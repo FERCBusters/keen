@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.services.ingestion_pause import pausable
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -825,6 +826,7 @@ def ingest_github_atom_feed(
     }
 
 
+@pausable('github')
 def ingest_github_all(db: Session) -> list[dict[str, Any]]:
     if not settings.github_enabled:
         return [{"skipped": True, "reason": "KEEN_GITHUB_ENABLED=false"}]

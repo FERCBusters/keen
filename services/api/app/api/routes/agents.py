@@ -194,6 +194,8 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
     if not ok:
         raise HTTPException(429, "Rate limited", headers={"Retry-After": str(retry)})
     a = authenticate(request, db, lock=False)
+    from app.services.ingestion_pause import require_receiving
+    require_receiving(db, 'keen-agent')
     agent_id = a.id
     db.rollback()
     ok, retry = fixed_window_allow(

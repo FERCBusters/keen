@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.services.ingestion_pause import pausable
 
 import hashlib
 import json
@@ -684,6 +685,7 @@ def ingest_loki_once(
     }
 
 
+@pausable('loki')
 def ingest_loki_all(db: Session) -> list[dict[str, Any]]:
     if not settings.loki_enabled:
         return [{"skipped": True, "reason": "KEEN_LOKI_ENABLED=false"}]

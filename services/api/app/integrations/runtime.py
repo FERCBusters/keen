@@ -1,4 +1,5 @@
 """Background runs, progress, failure budgets and evidence provenance."""
+from app.services.ingestion_pause import is_paused
 import json
 import uuid
 import socket
@@ -33,6 +34,8 @@ def scrub(value, secrets):
 
 
 def queue_run(db, collector, preview=False):
+    if is_paused(db, 'api-ingesters'):
+        raise ValueError('API ingester collection is paused in Sources & Evidence Mapping')
     if db.query(Run).filter(Run.collector_id==collector.id, Run.status.in_(['queued','running'])).first():
         raise ValueError('This integration already has a queued or running job')
     rev = db.get(Revision,(collector.id,collector.live_revision)) if collector.live_revision else None
@@ -70,6 +73,12 @@ def run_job(run_id):
         if not claimed.rowcount:
             return
         run = db.get(Run,run_id)
+        if is_paused(db, 'api-ingesters'):
+            run.status = 'cancelled'
+            run.message = 'Source ingestion paused before collection began'
+            run.finished_at = datetime.utcnow()
+            db.commit()
+            return
         c = db.get(Collector,run.collector_id)
         conn = db.get(Connection,run.connection_id)
         d = Definition.model_validate(run.definition)
@@ -155,6 +164,11 @@ def tick():
     db = SessionLocal()
     try:
         now = datetime.utcnow()
+        if is_paused(db, 'api-ingesters'):
+            db.execute(update(Run).where(Run.status == 'queued').values(
+                status='cancelled', message='Source ingestion paused before collection began', finished_at=now))
+            db.commit()
+            return
         # A lost worker is surfaced, never automatically requeued in a tight loop.
         cutoff = now-timedelta(minutes=10)
         stale = db.query(Run).filter(((Run.status=='queued') & (Run.created_at<cutoff)) |

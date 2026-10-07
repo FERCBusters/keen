@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.services.ingestion_pause import pausable
 
 """Forgejo (Gitea-compatible) ingestion.
 
@@ -622,6 +623,7 @@ def _discover_repositories(base_url: str, section: str, name: str) -> list[dict]
     raise ValueError("Forgejo repository discovery exceeded 1000 pages")
 
 
+@pausable('forgejo')
 def ingest_forgejo_all(db: Session) -> list[dict[str, Any]]:
     if not settings.forgejo_enabled:
         return [{"skipped": True, "reason": "KEEN_FORGEJO_ENABLED=false"}]

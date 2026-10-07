@@ -478,6 +478,20 @@ def source_catalogue(db: Session = Depends(get_db)):
         'collection_items':agents_count,'definitions':sum(1 for r in rules if (r.get('when') or {}).get('source')=='keen-agent'),
         'observed_events':agent_events,'last_seen':agent_last,'managed_version':0,
         'description':'Register scoped identities under Integrations → Manage agents.'})
+    from app.db.models import SourceIngestionState, IntegrationCollector
+    from app.services.ingestion_pause import PAUSABLE_SOURCES
+    custom_count = db.query(IntegrationCollector).filter(IntegrationCollector.enabled.is_(True)).count()
+    items.append({'adapter':'api-ingesters', 'enabled':not settings.demo_mode, 'mapping_source':False,
+        'collection_items':custom_count, 'definitions':0, 'observed_events':sum(n for src,(n,_) in observed.items() if src.startswith('integration:')),
+        'last_seen':None, 'managed_version':0,
+        'description':'Custom API ingesters configured in the API Ingester builder.'})
+    states = {row.source: row for row in db.query(SourceIngestionState).all()}
+    for item in items:
+        state = states.get(item['adapter'])
+        item['paused'] = bool(state and state.paused)
+        item['can_pause'] = item['adapter'] in PAUSABLE_SOURCES
+        item['pause_updated_by'] = state.updated_by if state else None
+        item['pause_updated_at'] = state.updated_at.isoformat() if state else None
     return {"items": items, "warnings": definition_data["warnings"]}
 
 
@@ -1149,3 +1163,24 @@ def remove_evidence_connection(key: str, payload: ConnectionRemovalInput,
     rebuild_framework_event_stats(db, clear_cache=False)
     db.commit(); clear_stats_caches()
     return {'deleted_definitions':len(ids), 'deleted_automatic_mappings':deleted, 'retained_evidence':True}
+
+
+class SourcePauseInput(BaseModel):
+    paused: bool
+
+
+@router.put("/v1/admin/sources/{source}/ingestion-state")
+def set_source_ingestion_state(source: str, payload: SourcePauseInput,
+                               db: Session = Depends(get_db), user=Depends(require_admin)):
+    from datetime import datetime, timezone
+    from sqlalchemy.dialects.postgresql import insert
+    from app.db.models import SourceIngestionState
+    from app.services.ingestion_pause import PAUSABLE_SOURCES
+    if source not in PAUSABLE_SOURCES:
+        raise HTTPException(404, "Unknown ingestion source type")
+    values = dict(source=source, paused=payload.paused,
+                  updated_at=datetime.now(timezone.utc).replace(tzinfo=None), updated_by=user.username)
+    db.execute(insert(SourceIngestionState).values(**values).on_conflict_do_update(
+        index_elements=['source'], set_={key:value for key,value in values.items() if key != 'source'}))
+    db.commit()
+    return {'source':source, 'paused':payload.paused}

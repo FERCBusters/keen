@@ -2811,3 +2811,11 @@ class SecurityNotification(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(100), nullable=True)
     __table_args__ = (Index('ix_security_notifications_pending', 'status', 'next_attempt_at'),)
+
+
+class SourceIngestionState(Base):
+    __tablename__ = 'source_ingestion_states'
+    source: Mapped[str] = mapped_column(String(64), primary_key=True)
+    paused: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    updated_by: Mapped[str | None] = mapped_column(String(256), nullable=True)

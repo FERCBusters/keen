@@ -1,5 +1,6 @@
 """Read-only Redmine issues and journals, using the standard REST JSON API."""
 from __future__ import annotations
+from app.services.ingestion_pause import pausable
 
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -244,6 +245,7 @@ def _run_lock(db, base):
                     raise
 
 
+@pausable('redmine')
 def ingest_redmine_all(db):
     if settings.demo_mode or not settings.redmine_enabled:
         return [{'skipped': True, 'reason': 'Redmine disabled (or demo mode)'}]

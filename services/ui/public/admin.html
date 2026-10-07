@@ -380,6 +380,7 @@
 </div>
 <section id="evidence-mapping-view" role="tabpanel" aria-labelledby="hub-mapping">        <details id="evidence-source-health" class="card mb-3"><summary class="card-header fw-bold">Source catalogue and collection health</summary><div class="card-body">
           <p class="small-muted">Review the available sources and their collected events. Built-in adapters use their configured credentials; Custom API connections are managed in API ingester builder. Agent identities and credentials are managed in KEEN Agents.</p>
+          <p class="small text-secondary">Pause or resume collection across all connections of a source type. Evidence, mappings and cursors are retained. Runs already in progress may finish; resume uses the next scheduled run.</p>
           <div id="source-catalogue" class="row g-2"><div class="col-12 small-muted">Loading source catalogue…</div></div>
         </div></details>
         <h2 class="h5">Evidence mapping</h2><p><a href="#remap" class="btn btn-outline-secondary btn-sm">Review historical remapping</a></p>

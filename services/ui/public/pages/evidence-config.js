@@ -642,11 +642,11 @@ $('preview').addEventListener('click', async () => {
     const heading = document.createElement('p'); heading.textContent = `${data.matched} of ${data.examined} recent ${rule.when.source} events matched. ${data.note || ''}`;
     container.append(heading);
     for (const item of data.examples) {
-      const p = document.createElement('p'); p.textContent = `Matches: ${item.summary} → ${Object.entries(item.targets).map(([fw, refs]) => `${fw}: ${refs.join(', ')}`).join('; ')}`;
+      const p = document.createElement('p'); p.className = 'alert alert-success py-2 mb-2'; p.textContent = `✓ Matches: ${item.summary} → ${Object.entries(item.targets).map(([fw, refs]) => `${fw}: ${refs.join(', ')}`).join('; ')}`;
       container.append(p);
     }
     for (const item of data.nonmatches || []) {
-      const p = document.createElement('p'); p.textContent = `Does not match: ${item.summary}. ${(item.reasons||[]).join(' ') || 'Review the additional filters.'}`;
+      const p = document.createElement('p'); p.className = 'alert alert-warning py-2 mb-2'; p.textContent = `— Does not match: ${item.summary}. ${(item.reasons||[]).join(' ') || 'Review the additional filters.'}`;
       container.append(p);
     }
   } catch (error) { previewedRule = null; $('preview-results').textContent = error.message; }
@@ -726,7 +726,7 @@ async function init() {
   const observed = await apiGet(`${apiRoot}/evidence-event-samples`);
   for (const source of observed.sources || []) $('source-options').append(new Option(source, source));
   const catalogue = await apiGet(`${apiRoot}/source-catalogue`);
-  enabledSources=(catalogue.items||[]).filter(item=>item.enabled).map(item=>({value:item.adapter,label:item.adapter==='keen-agent'?'KEEN Agent / OTLP logs':item.adapter.replaceAll('_',' ')}));
+  enabledSources=(catalogue.items||[]).filter(item=>item.enabled && item.mapping_source !== false).map(item=>({value:item.adapter,label:item.adapter==='keen-agent'?'KEEN Agent / OTLP logs':item.adapter.replaceAll('_',' ')}));
   for (const adapter of definitionAdapters) $('settings-adapter').add(new Option(adapter.replaceAll('_',' '),adapter));
   const integrations = await apiGet('/api/v1/admin/integrations');
   for(const collector of integrations.collectors||[])if(collector.enabled && collector.live_revision)enabledSources.push({value:'integration:'+collector.id,label:collector.name});

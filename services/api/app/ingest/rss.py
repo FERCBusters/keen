@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.services.ingestion_pause import pausable
 
 """Generic RSS/Atom feed ingester.
 
@@ -475,6 +476,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@pausable('rss')
 def ingest_rss_all(db: Session) -> list[dict[str, Any]]:
     if not settings.rss_enabled:
         return [{"skipped": True, "reason": "rss_enabled=false"}]

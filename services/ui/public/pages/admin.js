@@ -17,10 +17,27 @@ async function loadSourceCatalogue() {
     const data = await apiGet('/api/v1/admin/source-catalogue');
     node.innerHTML = (data.items || []).map(item => `
       <div class="col-md-6 col-xl-4"><div class="border rounded p-3 h-100">
-        <strong>${esc(item.adapter)}</strong> <span class="badge ${item.enabled ? 'text-bg-success' : 'text-bg-secondary'}">${item.enabled ? 'Enabled' : 'Disabled'}</span>
+        <strong>${esc(item.adapter)}</strong> <span class="badge ${item.paused ? 'text-bg-warning' : item.enabled ? 'text-bg-success' : 'text-bg-secondary'}">${item.paused ? 'Paused' : item.enabled ? 'Enabled' : 'Disabled'}</span>
         <div class="small-muted">${item.collection_items} collection items · ${item.definitions} definitions</div>
         <div class="small-muted">${item.observed_events} events · last seen ${esc(item.last_seen || 'never')}</div>
+        ${item.paused ? '<p class="small mt-2 mb-1">Collection is paused across all connections of this type. Existing evidence is retained.</p>' : ''}
+        ${item.can_pause ? `<button type="button" class="btn btn-sm ${item.paused ? 'btn-outline-success' : 'btn-outline-warning'} mt-2" data-source-pause="${esc(item.adapter)}" data-paused="${!item.paused}" ${!item.enabled && !item.paused ? 'disabled' : ''}>${item.paused ? 'Resume ingestion' : 'Pause ingestion'}</button>` : ''}
+        ${!item.enabled ? '<div class="small-muted mt-1">Disabled by installation settings; resuming does not enable it.</div>' : ''}
       </div></div>`).join('');
+    for (const button of node.querySelectorAll('[data-source-pause]')) {
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          const paused = button.dataset.paused === 'true';
+          await apiPut(`/api/v1/admin/sources/${encodeURIComponent(button.dataset.sourcePause)}/ingestion-state`, {paused});
+          toast(document.getElementById('status'), paused ? 'Ingestion paused. A run already in progress may finish.' : 'Ingestion resumed. Scheduled collectors continue on their next run.', 'success');
+          await loadSourceCatalogue();
+        } catch (error) {
+          button.disabled = false;
+          toast(document.getElementById('status'), `Could not change ingestion state: ${String(error)}`, 'danger');
+        }
+      });
+    }
   } catch (e) { node.textContent = `Could not load source catalogue: ${String(e)}`; }
 }
 document.getElementById('tab-evidence-config')?.addEventListener('shown.bs.tab', loadSourceCatalogue);
@@ -1365,3 +1382,6 @@ document.getElementById('adminTabs')?.addEventListener('shown.bs.tab', e => {
 
 import {initEvidenceRetention} from '/pages/evidence-retention.js';
 initEvidenceRetention(isAdmin);
+
+// Populate the collapsed source catalogue even when its tab starts active.
+loadSourceCatalogue();

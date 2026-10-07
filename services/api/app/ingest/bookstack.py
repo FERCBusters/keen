@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.services.ingestion_pause import pausable
 
 import json
 import re
@@ -756,6 +757,7 @@ def apply_bookstack_config_mappings(db: Session, ev: Event) -> int:
     return created
 
 
+@pausable('bookstack')
 def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
     """Poll BookStack for page changes and store each page snapshot as an evidence event."""
     if not settings.bookstack_enabled:

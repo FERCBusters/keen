@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.services.ingestion_pause import pausable
 
 from datetime import datetime
 from typing import Any
@@ -172,6 +173,7 @@ def ingest_jenkins_job(
     }
 
 
+@pausable('jenkins')
 def ingest_jenkins_all(db: Session) -> list[dict[str, Any]]:
     if not settings.jenkins_enabled:
         return [{"skipped": True, "reason": "KEEN_JENKINS_ENABLED=false"}]
