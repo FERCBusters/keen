@@ -1,4 +1,5 @@
 """Collector contract, network boundary and durable lifecycle regressions."""
+from tests.db_helpers import create_sqlite_schema
 import json
 import socket
 import uuid
@@ -137,7 +138,7 @@ def database(monkeypatch):
     engine=create_engine('sqlite://')
     @event.listens_for(engine,'connect')
     def functions(c,r):c.create_function('NOW',0,lambda:datetime.utcnow().isoformat(' '))
-    Base.metadata.create_all(engine)
+    create_sqlite_schema(engine)
     factory=sessionmaker(bind=engine)
     monkeypatch.setattr(runtime,'SessionLocal',factory)
     db=factory()

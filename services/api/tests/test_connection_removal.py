@@ -2,7 +2,7 @@ from types import SimpleNamespace
 import uuid
 import pytest
 from fastapi import HTTPException
-from test_integration_builder import database
+from tests.test_integration_builder import database
 from app.api.routes import managed_configurations as api
 from app.db.models import (ManagedConfiguration, IntegrationConnection, IntegrationCollector,
     IntegrationRun, IntegrationRevision, Event, Mapping, ControlItem)

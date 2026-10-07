@@ -20,10 +20,10 @@ COPY pyproject.toml poetry.lock* /app/
 RUN poetry config virtualenvs.in-project true \
  && poetry env use /usr/local/bin/python \
  && if [ -f poetry.lock ]; then \
-      poetry install --no-interaction --no-ansi --no-root; \
+      poetry install --only main --no-interaction --no-ansi --no-root; \
     else \
       poetry lock --no-interaction --no-ansi \
-   && poetry install --no-interaction --no-ansi --no-root; \
+   && poetry install --only main --no-interaction --no-ansi --no-root; \
     fi
 
 # Make the venv the default Python for runtime

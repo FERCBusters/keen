@@ -1,4 +1,5 @@
 """Offline ORM/SQL semantics. PostgreSQL migrations still need a deployment rehearsal."""
+from tests.db_helpers import create_sqlite_schema
 import importlib.util
 import json
 import os
@@ -28,7 +29,7 @@ def db():
     engine=create_engine('sqlite://')
     @event.listens_for(engine,'connect')
     def functions(conn,record):conn.create_function('NOW',0,lambda:datetime.utcnow().isoformat(' '))
-    Base.metadata.create_all(engine)
+    create_sqlite_schema(engine)
     session=Session(engine)
     session.add(User(username='demo',password_hash='disabled',role='admin',is_active=True))
     data=json.loads((ROOT/'alembic/seed_frameworks.json').read_text())

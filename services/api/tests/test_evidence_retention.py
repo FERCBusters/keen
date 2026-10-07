@@ -3,6 +3,7 @@
 Uses an isolated schema and actual retention SQL/transactions. Storage calls are
 mocked except for temporary local files. No production database is required.
 """
+from tests.db_helpers import schema_engine
 import importlib.util
 import json
 import os
@@ -71,7 +72,7 @@ class RetentionDatabaseTests(unittest.TestCase):
             cls.engine=create_engine(url)
             with cls.engine.begin() as c:c.execute(text(f'CREATE SCHEMA {cls.schema}'))
             cls.engine.dispose()
-            cls.engine=create_engine(url,connect_args={'options':f'-csearch_path={cls.schema}'})
+            cls.engine=schema_engine(url, cls.schema)
             Base.metadata.create_all(cls.engine, tables=[t for t in Base.metadata.sorted_tables
                 if t.name not in {'evidence_retention_policy','evidence_purge_jobs','evidence_object_cleanup','audit_event_retention_holds'}])
             path=Path(__file__).parents[1]/'alembic/versions/0083_evidence_retention.py'
@@ -128,7 +129,9 @@ class RetentionDatabaseTests(unittest.TestCase):
         return self.insert(models.Artifact,event_id=e,kind='test',storage_uri=uri,sha256='0'*64,**extra)
     def sql(self,q,**params):
         with self.session() as db:
-            result=list(db.execute(text(q),params).mappings());db.commit();return result
+            cursor=db.execute(text(q),params)
+            result=list(cursor.mappings()) if cursor.returns_rows else []
+            db.commit();return result
     def job(self,mode='all',value=None):
         with self.session() as db:r.enqueue(db,mode,value,False,'test');db.commit()
     def left(self):return {str(x['id']) for x in self.sql('SELECT id FROM events')}

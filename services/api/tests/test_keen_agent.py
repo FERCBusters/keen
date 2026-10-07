@@ -1,4 +1,5 @@
 """OTLP contract, scoped credentials, atomic acceptance and redaction regressions."""
+from tests.db_helpers import create_sqlite_schema
 
 import copy
 import gzip
@@ -71,7 +72,7 @@ def setup(monkeypatch):
     def begin(conn):
         conn.exec_driver_sql("BEGIN")
 
-    Base.metadata.create_all(engine)
+    create_sqlite_schema(engine)
     factory = sessionmaker(bind=engine, autoflush=False)
 
     def db():
@@ -286,8 +287,7 @@ def test_go_agent_wire_contract():
     from pathlib import Path
 
     data = (
-        Path(__file__).resolve().parents[4]
-        / "keen-agent/cmd/keen-agent/testdata/otlp.json"
+        Path(__file__).resolve().parent / "fixtures/keen-agent-otlp.json"
     ).read_bytes()
     event = decode(data, "agent-1")[0]
     assert str(event.id) == "6f8459a2-2768-41a4-94d5-a0cdcc2d7187"

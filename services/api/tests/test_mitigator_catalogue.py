@@ -1,4 +1,5 @@
 """Exercise recommendations against the shipped catalogue and live ORM changes."""
+from tests.db_helpers import create_sqlite_schema
 import json
 import os
 import sys
@@ -60,7 +61,7 @@ def db():
     @event.listens_for(engine,'connect')
     def functions(conn, record):
         conn.create_function('NOW', 0, lambda: datetime.utcnow().isoformat(' '))
-    Base.metadata.create_all(engine)
+    create_sqlite_schema(engine)
     with Session(engine) as session:
         for slug, framework in FRAMEWORKS.items():
             for control in framework['controls']:

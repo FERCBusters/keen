@@ -3,6 +3,7 @@
 KEEN_MFA_TEST_DATABASE_URL=postgresql+psycopg2://... python -m unittest tests.test_local_mfa
 Creates and drops a random schema; never uses production tables.
 """
+from tests.db_helpers import schema_engine
 import base64
 import hashlib
 import importlib.util
@@ -46,7 +47,7 @@ class LocalMfaTests(unittest.TestCase):
         cls.schema='test_mfa_'+uuid.uuid4().hex
         with cls.engine.begin() as conn:conn.execute(text(f'CREATE SCHEMA {cls.schema}'))
         cls.engine.dispose()
-        cls.engine=create_engine(URL,connect_args={'options':f'-c search_path={cls.schema} -c timezone=UTC'})
+        cls.engine=schema_engine(URL, cls.schema)
         cls.Session=sessionmaker(bind=cls.engine)
         names={'users','groups','permissions','user_groups','user_permissions','group_permissions','audit_logs'}
         Base.metadata.create_all(cls.engine,tables=[t for t in Base.metadata.sorted_tables if t.name in names])

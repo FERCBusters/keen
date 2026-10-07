@@ -1,4 +1,5 @@
 """Framework home tests. Set KEEN_HOME_TEST_DATABASE_URL to an isolated PostgreSQL DB."""
+from tests.db_helpers import schema_engine
 import os
 import unittest
 import uuid
@@ -38,7 +39,7 @@ class HomeDatabaseTests(unittest.TestCase):
         engine=create_engine(url)
         with engine.begin() as c:c.execute(text(f'CREATE SCHEMA {cls.schema}'))
         engine.dispose()
-        cls.engine=create_engine(url,connect_args={'options':f'-c search_path={cls.schema} -c timezone=UTC'})
+        cls.engine=schema_engine(url, cls.schema)
         names={m.__tablename__ for m in (ControlItem,FrameworkClause,Audit,IsmsEffectivenessMeasure,IsmsEffectivenessMetricEntry,IntegrationConnection,IntegrationCollector,CrossFrameworkControlLink)}
         while True:
             more={fk.column.table.name for n in names for fk in Base.metadata.tables[n].foreign_keys}
