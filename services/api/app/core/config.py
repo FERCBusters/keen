@@ -331,6 +331,12 @@ class Settings(BaseSettings):
     gitea_username: str = Field(default="", validation_alias="GITEA_USERNAME")
     gitea_auth_mode: str = Field(default="token", validation_alias="GITEA_AUTH_MODE")
     gitea_cookie: str = Field(default="", validation_alias="GITEA_COOKIE")
+    redmine_enabled: bool = False
+    redmine_base_url: str = ""
+    redmine_api_key: str = ""
+    redmine_config_path: str = "/app/config/redmine.yml"
+    redmine_poll_seconds: int = Field(default=600, ge=60, le=86400)
+
     gitlab_enabled: bool = False
     gitlab_base_url: str = "https://gitlab.com"
     gitlab_config_path: str = "/app/config/gitlab.yml"

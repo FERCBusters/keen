@@ -35,10 +35,12 @@ def list_frameworks(db: Session = Depends(get_db)):
         )
     }
 
+    clause_slugs = {slug for (slug,) in db.query(FrameworkClause.framework_slug).distinct().all()}
+
     rows = db.query(Framework).order_by(Framework.slug.asc()).all()
     by_slug = {f.slug: f for f in rows}
 
-    all_slugs = set(by_slug.keys()) | set(control_counts.keys())
+    all_slugs = set(by_slug.keys()) | set(control_counts.keys()) | clause_slugs
     all_slugs.add(settings.default_framework_slug)
 
     items: list[FrameworkListItem] = []
@@ -61,6 +63,7 @@ def list_frameworks(db: Session = Depends(get_db)):
                 version=version,
                 description=description,
                 upstream_url=upstream_url,
+                has_clauses=slug in clause_slugs,
                 control_count=control_counts.get(slug, 0),
                 is_default=(slug == settings.default_framework_slug),
             )

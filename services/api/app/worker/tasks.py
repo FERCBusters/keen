@@ -1,5 +1,6 @@
 from __future__ import annotations
 from app.ingest.gitea import ingest_gitea_all
+from app.ingest.redmine import ingest_redmine_all
 from app.ingest.gitlab import ingest_gitlab_all
 
 from sqlalchemy.orm import Session
@@ -511,3 +512,16 @@ def ingest_gitea_all_task():
 def ingest_gitlab_all_task():
     with SessionLocal() as db:
         return ingest_gitlab_all(db)
+
+
+@celery_app.task(name="app.worker.tasks.ingest_redmine_all_task")
+def ingest_redmine_all_task():
+    with SessionLocal() as db:
+        return ingest_redmine_all(db)
+
+
+@celery_app.task(name='app.worker.tasks.evidence_retention_task')
+def evidence_retention_task():
+    from app.services.evidence_retention import run_retention
+    if run_retention():
+        evidence_retention_task.apply_async(countdown=1)

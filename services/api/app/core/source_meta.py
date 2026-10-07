@@ -132,6 +132,7 @@ def _configured_source_meta(refresh_bucket: int) -> dict[str, dict[str, str]]:
         "github": settings.github_config_path,
         "forgejo": settings.forgejo_config_path,
         "gitea": settings.gitea_config_path,
+        "redmine": settings.redmine_config_path,
         "gitlab": settings.gitlab_config_path,
         "jenkins": settings.jenkins_config_path,
         "taiga": settings.taiga_config_path,

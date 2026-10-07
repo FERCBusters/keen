@@ -3,7 +3,7 @@ export * from '/vendor/mosp-design-system/app.js';
 
 // Keen's UI pages historically imported a couple of helpers from /app.js.
 // Keep them here so older pages (e.g. account.js) continue to work.
-import { apiGet, apiPost, esc, fmtTs, getUiConfig, safeExternalHref, toast, sourceBadgeHtml as _mospSourceBadgeHtml, initNavbar as _mospInitNavbar, initCollapsibleFilterSections as _mospInitCollapsibleFilterSections } from '/vendor/mosp-design-system/app.js';
+import { getCurrentFramework, apiGet, apiPost, esc, fmtTs, getUiConfig, safeExternalHref, toast, sourceBadgeHtml as _mospSourceBadgeHtml, initNavbar as _mospInitNavbar, initCollapsibleFilterSections as _mospInitCollapsibleFilterSections } from '/vendor/mosp-design-system/app.js';
 
 
 function _frameworkForHref() {
@@ -153,6 +153,13 @@ export async function initNavbar(...args) {
     if (list) { const item = document.createElement('li'); item.className = 'nav-item'; item.append(link); list.append(item); }
     else navRoot.append(link);
   }
+  const clauseLinks = [...(navRoot?.querySelectorAll('a[href]') || [])].filter(a=>new URL(a.href,location.origin).pathname==='/clauses.html');
+  for(const a of clauseLinks)(a.closest('li')||a).hidden=true;
+  try {
+    const catalog=await getFrameworkCatalog();
+    const framework=catalog.items.find(item=>item.slug===getCurrentFramework());
+    for(const a of clauseLinks)(a.closest('li')||a).hidden=framework?.has_clauses!==true;
+  } catch { /* Keep optional navigation hidden until the catalogue is available. */ }
   _removeHomeNavItem();
   _patchRiskNavDropdown();
   _patchIsmsNavDropdown();

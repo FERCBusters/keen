@@ -68,6 +68,7 @@ function editNode(item) {
 
 function renderTree() {
   const query = $('search').value.toLowerCase();
+  const byKey=new Map(nodes.map(node=>[key(node),node]));
   const container = $('tree');
   container.replaceChildren();
   const ordered = [];
@@ -85,6 +86,12 @@ function renderTree() {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'list-group-item list-group-item-action text-start';
+    let root=item; const ancestors=new Set();
+    while(root.parent_ref && !ancestors.has(key(root))){ancestors.add(key(root));const parent=byKey.get(`${root.kind}\0${root.parent_ref}`);if(!parent)break;root=parent;}
+    const group=(root.ref.match(/^[A-Za-z]+|^\d+/)||[root.ref])[0];
+    let hue=0; for(const character of group)hue=(hue*31+character.charCodeAt(0))%360;
+    button.classList.add('framework-section-row'); button.style.setProperty('--section-hue',String((hue*137.508)%360));
+    button.title=`Section ${group} · ${item.kind}`;
     button.style.paddingLeft = `${12 + Math.min(depth, 8) * 18}px`;
     button.textContent = `${item.ref}  ${item.title} · ${item.kind}`;
     button.addEventListener('click', () => editNode(item));

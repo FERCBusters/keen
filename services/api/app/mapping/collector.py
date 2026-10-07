@@ -33,6 +33,8 @@ def event_collector(event: dict) -> str | None:
         section, key = "feeds", info.get("feed_url")
     elif source in ("forgejo", "gitea"):
         section, key = "feeds", info.get("feed")
+    elif source == "redmine":
+        section, key = "projects", info.get("project_selector")
     elif source == "gitlab":
         section, key = info.get("section"), info.get("key")
     elif source == "taiga":
@@ -59,8 +61,10 @@ def collector_pointer_filter(identity: str) -> dict:
     adapter, section, key = json.loads(identity)
     if adapter == "webhooks":
         return {"webhook": {"provider": key}}
+    if adapter == "redmine":
+        return {"redmine": {"section": section, "project_selector": key}}
     if adapter == "gitlab":
-        return {"gitlab": {"section": section, "key": key}}
+        return {adapter: {"section": section, "key": key}}
     if adapter in ("forgejo", "gitea") and section in ("organizations", "users"): 
         return {adapter: {"owner": key}}
     if adapter == "github":

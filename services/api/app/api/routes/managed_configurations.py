@@ -35,6 +35,7 @@ CONNECTORS = {
     "github": ("github_config_path", "organizations", "org"),
     "forgejo": ("forgejo_config_path", "feeds", "url"),
     "gitea": ("gitea_config_path", "feeds", "url"),
+    "redmine": ("redmine_config_path", "projects", "project"),
     "gitlab": ("gitlab_config_path", "groups", "group"),
     "cloudwatch_logs": ("cloudwatch_logs_config_path", "queries", "name"),
     "taiga": ("taiga_config_path", "projects", "id"),
@@ -200,6 +201,12 @@ def _validate_connector(name: str, document: dict):
     if settings.demo_mode and name == 'rss':
         raise HTTPException(403, 'The public mig5 RSS preset is fixed in demo environments.')
     _safe_document(document)
+    if name == "redmine":
+        from app.ingest.redmine import validate_config, RedmineError
+        try:
+            validate_config(document)
+        except RedmineError as exc:
+            raise HTTPException(400, str(exc)) from None
     key = CONNECTORS[name][1]
     rows = document.get(key, {} if name == "webhooks" else [])
     if name == "webhooks":
@@ -329,7 +336,7 @@ def _collector_key(adapter: str, section: str, entry: dict, provider: str | None
         return f'{entry.get("owner", "")}/{entry.get("repo", "")}'
     if adapter == "bookstack" and section == "selected_pages":
         return str(entry.get("id") or "")
-    field = {"jenkins": "name", "loki": "name", "rss": "url", "github": "org",
+    field = {"redmine": "project", "jenkins": "name", "loki": "name", "rss": "url", "github": "org",
              "forgejo": "url", "gitea": "url", "gitlab": "group", "cloudwatch_logs": "name", "taiga": "id",
              "google_workspace": "name"}.get(adapter)
     if adapter == "github" and section == "feeds":
@@ -341,7 +348,7 @@ def _editable_collector(adapter: str, section: str) -> bool:
     return (adapter in CONNECTORS and section in {
         "jenkins": {"jobs"}, "loki": {"queries"}, "rss": {"feeds"},
         "github": {"organizations", "repos", "feeds"}, "forgejo": {"feeds", "organizations", "users"}, "gitea": {"feeds", "organizations", "users"}, "gitlab": {"groups", "users"},
-        "cloudwatch_logs": {"queries"}, "taiga": {"projects"},
+        "redmine": {"projects"}, "cloudwatch_logs": {"queries"}, "taiga": {"projects"},
         "google_workspace": {"streams"}, "webhooks": {"providers"},
         "bookstack": {"selected_pages"},
     }.get(adapter, set()))
@@ -411,7 +418,7 @@ def get_evidence_definitions(db: Session = Depends(get_db)):
     warnings = []
     sections = {"jenkins": ["jobs"], "loki": ["queries"], "rss": ["feeds"],
                 "github": ["organizations", "repos", "feeds"], "forgejo": ["feeds", "organizations", "users"], "gitea": ["feeds", "organizations", "users"], "gitlab": ["groups", "users"],
-                "cloudwatch_logs": ["queries"], "taiga": ["projects"],
+                "redmine": ["projects"], "cloudwatch_logs": ["queries"], "taiga": ["projects"],
                 "google_workspace": ["streams"], "webhooks": ["providers"],
                 "bookstack": ["selected_pages"]}
     for adapter, groups in sections.items():
@@ -451,6 +458,8 @@ def source_catalogue(db: Session = Depends(get_db)):
     items = []
     for name in CONNECTORS:
         enabled = True if name == "webhooks" else bool(getattr(settings, f"{name}_enabled", False))
+        if name == "redmine" and settings.demo_mode:
+            enabled = False
         count = sum(1 for item in collectors if item["adapter"] == name)
         matching_rules = sum(1 for rule in rules if (
             str((rule.get("when") or {}).get("source") or "").split(":")[0] == name

@@ -38,6 +38,7 @@
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-framework-editor" data-bs-toggle="tab" data-bs-target="#pane-framework-editor" type="button" role="tab" aria-controls="pane-framework-editor" aria-selected="false"><i class="bi bi-layers" aria-hidden="true"></i> Frameworks</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-ingest" data-bs-toggle="tab" data-bs-target="#pane-ingest" type="button" role="tab" aria-controls="pane-ingest" aria-selected="false"><i class="bi bi-cloud-arrow-down" aria-hidden="true"></i> Ingest runners</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-diary" data-bs-toggle="tab" data-bs-target="#pane-diary" type="button" role="tab" aria-controls="pane-diary" aria-selected="false"><i class="bi bi-journal-plus" aria-hidden="true"></i> Diary Evidence</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-retention" data-bs-toggle="tab" data-bs-target="#pane-retention" type="button" role="tab" aria-controls="pane-retention" aria-selected="false"><i class="bi bi-database" aria-hidden="true"></i> Evidence retention</button></li>
 <li class="admin-nav-label" role="presentation">Access</li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-users" data-bs-toggle="tab" data-bs-target="#pane-users" type="button" role="tab" aria-controls="pane-users" aria-selected="false"><i class="bi bi-people" aria-hidden="true"></i> Users</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-groups" data-bs-toggle="tab" data-bs-target="#pane-groups" type="button" role="tab" aria-controls="pane-groups" aria-selected="false"><i class="bi bi-shield-lock" aria-hidden="true"></i> Groups & permissions</button></li>
@@ -48,6 +49,38 @@
 
       <div class="tab-content flex-grow-1" id="adminTabContent">
 
+
+<section class="tab-pane fade" id="pane-retention" role="tabpanel" aria-labelledby="tab-retention" tabindex="0">
+  <h2 class="h4">Evidence retention</h2>
+  <p>Manage collected events across <strong>all sources and frameworks</strong>. Audit-sampled events and their stored files remain protected until every audit holding them is deleted.</p>
+  <div id="retention-status" role="status" aria-live="polite"></div>
+  <div class="card mb-3"><div class="card-body">
+    <h3 class="h5">Automatic retention</h3>
+    <p class="small-muted">Disabled by default. Cleanup runs in the background using the KEEN worker and scheduler.</p>
+    <form id="retention-form">
+      <div class="row g-3 align-items-end"><div class="col-md-7"><label for="retention-mode" class="form-label">Keep evidence by</label>
+      <select id="retention-mode" class="form-select"><option value="disabled">Keep everything</option><option value="age">Maximum event age</option><option value="count">Maximum number of events</option></select></div>
+      <div class="col-md-5" id="retention-value-wrap" hidden><label for="retention-value" id="retention-value-label" class="form-label">Days</label><input id="retention-value" class="form-control" type="number" min="1" step="1"></div></div>
+      <p id="retention-explanation" class="form-text mt-2"></p>
+      <div class="d-flex flex-wrap gap-2"><button id="retention-preview" type="button" class="btn btn-outline-primary">Preview changes</button><button type="submit" class="btn btn-primary">Save retention policy</button></div>
+      <p id="retention-preview-result" class="mt-3 mb-0" aria-live="polite"></p>
+    </form>
+  </div></div>
+  <div class="card border-danger mb-3"><div class="card-body">
+    <h3 class="h5">Purge all collected evidence</h3>
+    <p>Delete all eligible events up to the time you start the purge, including event mappings, attached files, event questions and incident links. Audit-protected evidence is kept. Frameworks, mapping rules, source configuration, ISMS records and the administrative audit trail remain.</p>
+    <p class="small-muted">New ingestion continues. Pause ingesters and agents first if you want the workspace to stay empty. Upstream systems may send previously deleted events again.</p>
+    <label class="form-label" for="retention-confirm">Type <strong>PURGE EVIDENCE</strong> to enable the purge</label>
+    <input id="retention-confirm" class="form-control mb-3" autocomplete="off" spellcheck="false">
+    <button type="button" id="retention-purge" class="btn btn-danger" disabled>Preview and purge all evidence</button>
+  </div></div>
+  <div class="card"><div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between gap-2"><h3 class="h5">Cleanup status</h3><button type="button" id="retention-refresh" class="btn btn-outline-secondary btn-sm">Refresh</button></div>
+    <div id="retention-progress" aria-live="polite"></div>
+    <div class="d-flex flex-wrap gap-2 mt-3"><button id="retention-cancel" type="button" class="btn btn-outline-danger" hidden>Cancel active purge</button><button id="retention-retry" type="button" class="btn btn-outline-primary" hidden>Retry stored-file cleanup</button><a class="btn btn-outline-secondary" href="/audits.html">Manage audits</a></div>
+    <p class="small-muted mt-3 mb-0">S3 retention locks and legal holds are respected. Stored files awaiting deletion stay in the cleanup queue and retry automatically. Removing a sample from an audit does not release its retention protection; delete the audit to release it.</p>
+  </div></div>
+</section>
 
 <section class="tab-pane fade show active" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
   <div class="admin-hero"><span class="admin-eyebrow">YOUR ASSURANCE WORKSPACE</span><h2>Evidence with a clear path.</h2><p>Connect a system, collect its records and show what they demonstrate.</p><a href="#integrations" class="btn btn-primary">Build an API ingester <i class="bi bi-arrow-right"></i></a> <a href="#evidence-config" class="btn btn-outline-primary">Manage sources &amp; mapping</a></div>
@@ -352,15 +385,13 @@
         <h2 class="h5">Evidence mapping</h2><p><a href="#remap" class="btn btn-outline-secondary btn-sm">Review historical remapping</a></p>
         <p class="small-muted">Collections choose remote inputs to fetch. Evidence definitions match the resulting events and link them to framework controls or clauses. A collection can support several definitions.</p>
         <div id="ec-status" role="status" hidden></div>
-        <div class="card mb-3"><div class="card-header fw-bold">Collection and framework mappings</div><div class="card-body">
-          <div id="ec-library"><div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h3 class="h6 mb-1">Evidence definition library</h3><p class="small-muted mb-0">One collected event can contribute to multiple frameworks.</p></div><button id="ec-new-rule" class="btn btn-primary">Create evidence definition</button></div>
-            <label for="ec-source-filter" class="form-label">Source</label><select id="ec-source-filter" class="form-select mb-2"><option value="">All sources</option></select><label for="ec-rule-filter" class="form-label">Search by name, collection item or framework</label><input id="ec-rule-filter" class="form-control mb-2" placeholder="Search evidence definitions"><div id="ec-rule-count" class="small-muted mb-2" role="status"></div><div id="ec-rules" class="list-group"></div><button id="ec-more-rules" class="btn btn-outline-secondary mt-2" hidden>Show more definitions</button></div>
+        <div class="card mb-3"><div class="card-header fw-bold">Create and manage evidence mappings</div><div class="card-body">
+          <div id="ec-library"><div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h3 class="h6 mb-1">Create a new mapping</h3><p class="small-muted mb-0">Choose matching events and the controls they support.</p></div><button id="ec-new-rule" class="btn btn-primary">Create mapping</button></div>
+            <details id="ec-browse"><summary class="fw-semibold mb-3">Browse existing mappings</summary><label for="ec-source-filter" class="form-label">Source</label><select id="ec-source-filter" class="form-select mb-2"><option value="">All sources</option></select><label for="ec-rule-filter" class="form-label">Search by name, collection item or framework</label><input id="ec-rule-filter" class="form-control mb-2" placeholder="Search evidence definitions"><div id="ec-rule-count" class="small-muted mb-2" role="status"></div><div id="ec-rules" class="list-group"></div><button id="ec-more-rules" class="btn btn-outline-secondary mt-2" hidden>Next page</button><button id="ec-previous-rules" class="btn btn-outline-secondary mt-2 me-2" hidden>Previous page</button></details></div>
           <div id="ec-editor" hidden>
             <div class="d-flex justify-content-between align-items-center mb-3"><h3 id="ec-editor-heading" class="h6 mb-0">Create evidence definition</h3><button id="ec-close-editor" type="button" class="btn btn-outline-secondary btn-sm">Back to definitions</button></div>
-            <div class="small-muted mb-2">Step <span id="ec-step-number">1</span> of 4 · <span id="ec-step-title">Describe</span></div><div class="progress mb-3" role="progressbar" aria-label="Rule setup progress" aria-valuemin="0" aria-valuemax="4"><div id="ec-step-progress" class="progress-bar"></div></div>
-            <section data-ec-step="1"><h4 class="h6">1. Describe the evidence</h4><p class="small-muted">Explain what the collected evidence demonstrates to an auditor.</p>
-            <label class="form-label">What does this evidence demonstrate?</label><input id="ec-description" class="form-control" placeholder="Successful production deployments follow the change process">
-            </section><section data-ec-step="2"><div id="ec-draft-notice" class="alert alert-info" hidden></div><h4 class="h6">2. Choose the events to use</h4>
+            <div class="small-muted mb-2">Step <span id="ec-step-number">1</span> of 3 · <span id="ec-step-title">Choose matching events</span></div><div class="progress mb-3" role="progressbar" aria-label="Rule setup progress" aria-valuemin="0" aria-valuemax="3"><div id="ec-step-progress" class="progress-bar"></div></div>
+            <section data-ec-step="1"><div id="ec-draft-notice" class="alert alert-info" hidden></div><h4 class="h6">1. Choose the events to use</h4>
             <p class="small-muted">Choose a source, inspect a recent event and copy the values you want to match. The next step chooses the controls that receive the matching evidence. Collection settings belong to the source; a mapping rule decides where its evidence is linked.</p>
             <div id="ec-selected-input" class="rounded bg-body-tertiary p-2 mb-2" hidden></div>
             <div id="ec-input-picker" class="row g-2"><div class="col-md-8"><label for="ec-definition-adapter" class="form-label">Where does the evidence come from?</label><select id="ec-definition-adapter" class="form-select"></select></div><details class="col-12" id="ec-input-options"><summary>Limit to a particular query, job, feed or page (optional)</summary><div class="row g-2 mt-1"><div class="col-md-6"><label for="ec-definition-section" class="form-label">Input type</label><select id="ec-definition-section" class="form-select"></select></div><div class="col-md-6"><label for="ec-definition-entry" class="form-label">Query, job, feed or page</label><select id="ec-definition-entry" class="form-select"></select></div></div></details></div>
@@ -373,14 +404,14 @@
             <div class="border rounded p-3 mt-3"><h4 class="h6">Which events should match?</h4><p class="small-muted">Choose an observed value or leave a field empty to allow every value. These fields filter records already collected. All filled fields must match exactly, including capital letters.</p><div id="ec-conditions" class="row g-2"></div><div id="ec-rule-sentence" class="alert alert-info mt-2 mb-0" role="status" aria-live="polite"></div><p class="small mt-2 mb-0"><a href="/help/using.html#mapping-made-simple">Action, result and mapping: a worked example</a></p></div><section class="border rounded p-3 mt-3"><h4 class="h6">Match structured event fields</h4><p class="small-muted">Choose a sample event to discover fields such as service, program and package. All added conditions must match. Service and Program identify the application that wrote the log. Observed fields retain their original names.</p><div id="ec-field-rows" class="d-grid gap-2"></div><button type="button" id="ec-field-add" class="btn btn-outline-primary btn-sm mt-2">Add field condition</button><datalist id="ec-field-paths"></datalist></section><details id="ec-more-filters" class="mt-3"><summary>More filters: person, severity and label</summary><p class="small-muted">Use these when they matter to the evidence you want. An empty field allows every value.</p><div id="ec-extra-conditions" class="row g-2"></div></details>
             <details id="ec-bookstack-conditions-panel" class="mt-2" hidden><summary>BookStack page selectors</summary><p class="small-muted">Imported page definitions can select by book and page slug, name or pattern. New definitions can use the BookStack picker above.</p><div id="ec-bookstack-conditions" class="row g-2"></div></details>
             <details class="mt-2"><summary>Advanced match patterns (regex)</summary><p class="small-muted">Use only when exact fields cannot express the match. Preview against real evidence before saving.</p><div id="ec-regex-conditions" class="row g-2"></div></details>
-            </section><section data-ec-step="3"><h4 class="h6">3. Select framework controls or clauses</h4><p class="small-muted">The selected control is included when you click Next. To map to several controls or frameworks, click Add for each extra target. Every matching event maps to all selected targets.</p>
+            </section><section data-ec-step="2"><label for="ec-description" class="form-label fw-semibold">Mapping name — what does this evidence demonstrate?</label><input id="ec-description" class="form-control mb-2" placeholder="Successful production deployments follow the change process"><p class="form-text">Use a meaningful name. Control suggestions use this text; change it and request suggestions again to explore other matches.</p><h4 class="h6">2. Select framework controls or clauses</h4><p class="small-muted">The selected control is included when you click Next. To map to several controls or frameworks, click Add for each extra target. Every matching event maps to all selected targets.</p>
             <div class="row g-2"><div class="col-md-4"><label class="form-label">Framework</label><select id="ec-framework" class="form-select"></select></div>
               <div class="col-md-6"><label class="form-label">Control or clause</label><select id="ec-control" class="form-select"></select></div>
               <div class="col-md-2 d-flex align-items-end"><button id="ec-add-target" class="btn btn-outline-primary w-100">Add</button></div></div>
             <div id="ec-targets" class="list-group mt-2"></div>
-            <div class="mt-3"><button id="ec-suggest-controls" class="btn btn-sm btn-outline-primary" type="button">Suggest controls from description</button>
+            <div class="mt-3"><button id="ec-suggest-controls" class="btn btn-sm btn-outline-primary" type="button">Suggest relevant controls</button>
               <div id="ec-control-suggestions" class="list-group mt-2 small" role="status"></div></div>
-            </section><section data-ec-step="4"><h4 class="h6">4. Preview and save</h4><p class="small-muted">Check recent matches and nonmatches before publishing. Saving applies this rule to new events; historical evaluation is selected below.</p>
+            </section><section data-ec-step="3"><h4 class="h6">3. Preview and save</h4><p class="small-muted">Check recent matches and nonmatches before publishing. Saving applies this rule to new events; historical evaluation is selected below.</p>
             <details class="mt-3"><summary>Advanced rule settings</summary><div class="row g-2 mt-1"><div class="col-md-6"><label class="form-label">Rule ID</label><input id="ec-rule-id" class="form-control" placeholder="jenkins_deploy_success"></div><div class="col-md-6"><label class="form-label">Confidence (0–1)</label><input id="ec-confidence" type="number" min="0" max="1" step=".05" value=".8" class="form-control"></div></div><label class="form-check mt-2"><input id="ec-enabled" type="checkbox" class="form-check-input" checked> Rule enabled</label>
               <label class="form-check mt-2"><input id="ec-apply-existing" type="checkbox" class="form-check-input" checked> Apply this rule to previously collected evidence in the background</label>
               <label class="form-check mt-2"><input id="ec-predefine" type="checkbox" class="form-check-input"> Predefine this rule before evidence is available (skip sample preview)</label></details>
@@ -436,6 +467,7 @@
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/cloudwatch_logs/run">Run CloudWatch Logs</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/github/run">Run GitHub</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/google_workspace/run">Run Google Workspace</button>
+              <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/redmine/run">Run Redmine</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/gitlab/run">Run GitLab</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/gitea/run">Run Gitea</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/forgejo/run">Run Forgejo</button>

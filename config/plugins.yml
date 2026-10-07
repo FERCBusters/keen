@@ -38,3 +38,7 @@ plugins:
   - name: "gitlab"
     callable: "app.ingest.gitlab:ingest_gitlab_all"
     enabled_setting: "gitlab_enabled"
+
+  - name: "redmine"
+    callable: "app.ingest.redmine:ingest_redmine_all"
+    enabled_setting: "redmine_enabled"

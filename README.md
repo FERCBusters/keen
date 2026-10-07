@@ -254,3 +254,15 @@ curl -b cookies.txt -X POST http://localhost:8181/v1/admin/diary \
 ## Optional S3 storage
 
 To use an S3-compatible provider, configure `KEEN_S3_ENDPOINT_URL`, `KEEN_S3_ACCESS_KEY`, `KEEN_S3_SECRET_KEY`, and `KEEN_S3_BUCKET` in `.env`. Set `KEEN_ARTIFACT_STORAGE_BACKEND=s3` explicitly or leave it at `auto`. To resume writing evidence to disk, set the backend to `local`; retain the S3 settings if old S3 evidence still needs to be downloaded.
+
+## Redmine
+
+For Redmine issue and journal ingestion, see [the Redmine setup and mapping guide](docs/redmine.md).
+
+## Evidence retention
+
+Administrators can configure age/count retention or purge collected events under
+**Administration → Evidence retention**. Retention is disabled by default. Events
+sampled into audits remain protected until those audits are deleted. Read
+[Evidence retention and purging](docs/evidence-retention.md) for deployment,
+worker/storage permissions, S3 Object Lock, recovery and deletion scope.

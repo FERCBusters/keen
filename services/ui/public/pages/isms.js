@@ -1,3 +1,4 @@
+import {mountMeasurementExamples} from '/pages/measurement-examples.js';
 import {
   initNavbar,
   apiGet,
@@ -731,6 +732,7 @@ function populateEditForm(kind, item) {
     $('effThresholdOperator').value = item.threshold_operator || '';
     $('effTargetValue').value = item.target_value ?? '';
     $('effTargetUnit').value = item.target_unit || '';
+    measureExampleUpdate();
     $('effOwner').value = item.owner_user_id || '';
     $('effFrequency').value = item.frequency || '';
     $('effNotes').value = item.notes || '';
@@ -1875,3 +1877,7 @@ if (bookstackDocuments && me?.bookstack_enabled) {
   });
   if (new URLSearchParams(location.search).get('bookstack') === '1') bookstackDocuments.open = true;
 }
+
+const measureExampleUpdate=mountMeasurementExamples($('effectivenessForm'),()=>({key:$('effMetricKey').value,framework,unit:$('effTargetUnit').value}));
+$('effectivenessForm').addEventListener('input',measureExampleUpdate);
+$('effectivenessForm').addEventListener('reset',()=>queueMicrotask(measureExampleUpdate));

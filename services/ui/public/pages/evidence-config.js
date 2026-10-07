@@ -28,6 +28,7 @@ const layouts = {
     repos: ['owner', 'repo', 'label'], feeds: ['url', 'label']},
   forgejo: {organizations: ['org', 'label'], users: ['user', 'label'], feeds: ['url', 'label']},
   gitea: {organizations: ['org', 'label'], users: ['user', 'label'], feeds: ['url', 'label']},
+  redmine: {projects: ['project', 'label']},
   gitlab: {groups: ['group', 'label'], users: ['user', 'label']},
   cloudwatch_logs: {queries: ['name', 'region', 'log_group', 'filter_pattern', 'event.system', 'event.action', 'event.outcome']},
   taiga: {projects: ['id', 'label']},
@@ -40,7 +41,7 @@ const apiRoot = '/api/v1/admin';
 let settingsVersion = 0;
 let rules = [], ruleVersion = 0, selectedRule = null, targets = [], frameworks = [], samples = [], reviewed = null, previewedRule = null, previewCount = 0;
 let collectors = [], definitionDocument = {}, definitionVersion = 0, definitionEntryKey = null;
-const definitionAdapters = ['jenkins', 'loki', 'rss', 'github', 'forgejo', 'gitea', 'gitlab', 'cloudwatch_logs', 'taiga', 'google_workspace', 'webhooks', 'bookstack'];
+const definitionAdapters = ['jenkins', 'loki', 'rss', 'github', 'forgejo', 'gitea', 'gitlab', 'redmine', 'cloudwatch_logs', 'taiga', 'google_workspace', 'webhooks', 'bookstack'];
 let catalogBooks = [], catalogPages = [], catalogChapters = [], nextBookOffset = null, nextPageOffset = null;
 async function catalogRequest(kind, offset = 0, bookId = null) {
   return apiGet(`${apiRoot}/bookstack/catalog?kind=${kind}&offset=${offset}${bookId ? `&book_id=${bookId}` : ''}`);
@@ -96,6 +97,7 @@ function definitionKey(adapter, section, entry) {
   if (adapter === 'webhooks') return $('definition-entry').value === '__new' ?
     $('definition-fields').querySelector('[data-field="provider_name"]')?.value.trim() : definitionEntryKey;
   if (adapter === 'github' && section === 'repos') return `${entry.owner || ''}/${entry.repo || ''}`;
+  if (adapter === 'redmine') return String(entry.project || '').trim();
   const field = section === 'groups' ? 'group' : section === 'users' ? 'user' : section === 'feeds' ? 'url' : section === 'organizations' ? 'org' :
     section === 'projects' || section === 'selected_pages' ? 'id' : 'name';
   return String(entry[field] ?? '').trim();
@@ -183,6 +185,7 @@ async function selectDefinitionAdapter() {
 }
 function definitionFromForm() {
   const adapter = $('definition-adapter').value, section = $('definition-section').value;
+  if (!adapter) throw new Error('Enable an ingester before creating a mapping.');
   if (section === 'source') return {adapter, section, entry: {}, key: '__all__', collector: null,
     entry_key: null, connector_version: 0};
   const entry = definitionEntry(), key = definitionKey(adapter, section, entry);
@@ -190,7 +193,14 @@ function definitionFromForm() {
   return {adapter, section, entry, key, collector: definitionId(adapter, section, key),
     entry_key: definitionEntryKey, connector_version: definitionVersion};
 }
-let step = 1, visibleRules = 20;
+let step = 1, rulePage = 0;
+let enabledSources = [];
+function sourceChoices(extra) {
+ const select=$('definition-adapter'); const current=extra || select.value;
+ select.replaceChildren(...enabledSources.map(item=>new Option(item.label,item.value)));
+ if(extra && !enabledSources.some(item=>item.value===extra))select.add(new Option(extra+' (inactive / existing evidence)',extra));
+ if([...select.options].some(o=>o.value===current))select.value=current;
+}
 const fieldTitles = {system:'Which system? (optional)',action:'What happened? (action)',outcome:'What was the result? (outcome)',actor:'Who did it? (actor)',severity:'Severity number',label:'Collection label'};
 const fieldHelp = {
  system:'For example, web-prod-01. Leave empty to include every system within the selected source.',
@@ -211,24 +221,24 @@ function ruleSentence() {
  $('rule-sentence').textContent=parts.join(', ')+'. '+(targets.length?'Matching events link to '+targets.length+' selected control(s).':'Next: choose the controls this evidence supports.');
  const more=$('more-filters');if(more&&['actor','severity','label'].some(x=>$('when-'+x)?.value.trim()))more.open=true;
 }
-const stepTitles = ['Describe the evidence', 'Choose matching events', 'Choose controls', 'Check and publish'];
+const stepTitles = ['Choose matching events', 'Name and choose controls', 'Check and publish'];
 function showStep(number) {
-  step = Math.max(1, Math.min(4, number));
+  step = Math.max(1, Math.min(3, number));
   for (const section of document.querySelectorAll('[data-ec-step]')) section.hidden = Number(section.dataset.ecStep) !== step;
   $('step-number').textContent = step; $('step-title').textContent = stepTitles[step - 1];
-  $('step-progress').style.width = `${step * 25}%`;
+  $('step-progress').style.width = `${step * 100 / 3}%`;
   $('step-progress').parentElement.setAttribute('aria-valuenow', String(step));
-  $('prev-step').hidden = step === 1; $('next-step').hidden = step === 4;
+  $('prev-step').hidden = step === 1; $('next-step').hidden = step === 3;
   ruleSentence();
   $('editor-heading').textContent = selectedRule ? `Edit ${$('description').value || selectedRule}` : 'Create an evidence definition';
 }
 function showEditor(number = 1) { window.dispatchEvent(new Event('keen-show-evidence-mapping')); $('library').hidden = true; $('editor').hidden = false; showStep(number); }
 function showLibrary() { pollingJobId = null; $('editor').hidden = true; $('library').hidden = false; renderRules(); }
 function nextStep() {
-  if (step === 1 && !$('description').value.trim()) { status('Describe what this evidence demonstrates before continuing.'); $('description').focus(); return; }
-  if (step === 2) { try { definitionFromForm(); } catch (error) { status(error.message); return; } }
-  if (step === 3) addSelectedTarget();
-  if (step === 3 && !targets.length) { status('Add at least one framework control or clause before continuing.'); $('framework').focus(); return; }
+  if (step === 2 && !$('description').value.trim()) { status('Describe what this evidence demonstrates before continuing.'); $('description').focus(); return; }
+  if (step === 1) { try { definitionFromForm(); } catch (error) { status(error.message); return; } }
+  if (step === 2) addSelectedTarget();
+  if (step === 2 && !targets.length) { status('Add at least one framework control or clause before continuing.'); $('framework').focus(); return; }
   status(''); showStep(step + 1);
 }
 
@@ -250,7 +260,7 @@ function fieldNode(name, value, kind = 'text') {
     input.type = 'checkbox'; input.className = 'form-check-input'; input.checked = Boolean(value);
   } else { input.value = value ?? ''; if (kind === 'number') input.type = 'number'; }
   wrapper.append(input);
-  const helpText = name === 'kind' && $('definition-adapter').value === 'jenkins' ?
+  const helpText = name === 'project' && $('definition-adapter').value === 'redmine' ? 'Project ID or identifier. Use * as the sole collection to discover all projects accessible to the API key.' : name === 'kind' && $('definition-adapter').value === 'jenkins' ?
     'Action assigned to Jenkins events from this job, such as build or deployment. Match it with the Action field below.' :
     name === 'label' && $('definition-adapter').value === 'jenkins' ?
       'System assigned to Jenkins events from this job. Match it with the System field below.' :
@@ -326,6 +336,7 @@ function conditionForm() {
 }
 function readRule() {
   const definition = definitionFromForm();
+  if (!$('description').value.trim()) throw new Error('Give the mapping a name.');
   const when = {};
   const fieldConditions = readFieldConditions();
   if (fieldConditions.length) when.fields = fieldConditions;
@@ -347,7 +358,8 @@ function readRule() {
   return {id: $('rule-id').value.trim(), description: $('description').value.trim(), when,
     map_to: structuredClone(targets), confidence: Number($('confidence').value), enabled: $('enabled').checked};
 }
-function newRule() {
+async function newRule() {
+  sourceChoices();
   $('draft-notice').hidden=true;
   $('field-rows').replaceChildren();
   selectedRule = null; previewedRule = null; previewCount = 0;
@@ -359,7 +371,7 @@ function newRule() {
   targets = []; renderTargets(); $('preview-results').textContent = ''; $('backfill').replaceChildren();
   $('sample').replaceChildren(new Option('Choose a source to see recent events', ''));
   $('sample-details').textContent = 'Choose a recent event to inspect its fields. You can also define a rule before evidence arrives.';
-  if ($('definition-section').options.length) paintDefinitionChoices();
+  await selectDefinitionAdapter();
   showEditor(1);
 }
 function showSelectedInput() {
@@ -371,7 +383,7 @@ function showSelectedInput() {
   $('input-picker').hidden = true; $('selected-input').hidden = false;
 }
 async function editRule(rule) {
-  newRule(); selectedRule = rule.id;
+  await newRule(); selectedRule = rule.id;
   for(const item of rule.when?.fields || []) addFieldCondition(item);
   $('rule-id').value = rule.id; $('rule-id').disabled = true;
   $('description').value = rule.description || ''; $('confidence').value = rule.confidence ?? .8;
@@ -380,7 +392,7 @@ async function editRule(rule) {
   targets = structuredClone(rule.map_to || []); renderTargets();
   const linked = collectors.find(item => item.collector === rule.when?.collector);
   if (linked) {
-    $('definition-adapter').value = linked.adapter;
+    sourceChoices(linked.adapter); $('definition-adapter').value = linked.adapter;
     await selectDefinitionAdapter();
     $('definition-section').value = linked.section;
     paintDefinitionChoices(); $('definition-entry').value = linked.collector; paintDefinitionEntry();
@@ -400,18 +412,21 @@ async function editRule(rule) {
 function renderRules() {
   const list = $('rules'); list.replaceChildren();
   const query = $('rule-filter').value.trim().toLowerCase();
-  const linked = new Set(rules.map(rule => rule.when?.collector).filter(Boolean));
+
   const entries = [
     ...rules.map(rule => ({rule, origin: collectors.find(item => item.collector === rule.when?.collector)})),
-    ...collectors.filter(item => !linked.has(item.collector)).map(origin => ({origin})),
+
   ];
   const chosenSource = $('source-filter').value;
   const filtered = entries.filter(({rule, origin}) => (!chosenSource || (rule?.when?.source || origin?.adapter) === chosenSource) && (!query ||
     `${rule?.id || ''} ${rule?.description || ''} ${rule?.when?.source || ''} ${JSON.stringify(rule?.map_to || [])} ${origin?.adapter || ''} ${origin?.key || ''}`.toLowerCase().includes(query)));
-  $('rule-count').textContent = `${filtered.length} of ${entries.length} evidence definitions and available collection items${filtered.length > visibleRules ? ` · showing first ${visibleRules}` : ''}`;
+  rulePage=Math.min(rulePage,Math.max(0,Math.ceil(filtered.length/20)-1));
+  const visibleRules=(rulePage+1)*20;
+  $('previous-rules').hidden=rulePage===0;
+  $('rule-count').textContent = `${filtered.length} of ${entries.length} mapping rules · page ${rulePage+1} of ${Math.max(1,Math.ceil(filtered.length/20))}`;
   $('more-rules').hidden = filtered.length <= visibleRules;
   if (!filtered.length) { const empty = document.createElement('p'); empty.className = 'small-muted'; empty.textContent = query ? 'No evidence definitions match that search.' : 'No evidence definitions yet. Create one to get started.'; list.append(empty); }
-  for (const {rule, origin} of filtered.slice(0, visibleRules)) {
+  for (const {rule, origin} of filtered.slice(rulePage*20, visibleRules)) {
     const btn = document.createElement('button'); btn.type = 'button';
     btn.className = 'list-group-item list-group-item-action text-start';
     const title = document.createElement('strong'); title.textContent = rule?.description || rule?.id || `${origin.key} · needs framework mappings`;
@@ -421,9 +436,9 @@ function renderRules() {
       `All ${rule.when?.source || 'source'} events`} · ${rule.map_to?.length || 0} framework targets` :
       `${origin.adapter} ${inputType(origin.section)}: ${origin.key} · add framework targets`;
     btn.append(title, meta);
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       if (rule) { editRule(rule).catch(error => status(error.message)); return; }
-      newRule(); $('definition-adapter').value = origin.adapter;
+      await newRule(); $('definition-adapter').value = origin.adapter;
       selectDefinitionAdapter().then(() => {
         $('definition-section').value = origin.section; paintDefinitionChoices();
         $('definition-entry').value = origin.collector; paintDefinitionEntry();
@@ -487,7 +502,7 @@ async function loadRules() {
   $('source-filter').replaceChildren(new Option('All sources', ''));
   for (const source of [...new Set([...rules.map(r=>r.when?.source), ...collectors.map(c=>c.adapter)])].filter(Boolean).sort()) $('source-filter').add(new Option(source,source));
   $('source-filter').value = selectedSource;
-  renderRules(); newRule(); showLibrary();
+  renderRules(); await newRule(); showLibrary();
   if (data.warnings?.length) status(data.warnings.join(' · '), 'warning');
   await loadRevisions('rules', $('rule-revision'));
 }
@@ -577,12 +592,13 @@ $('prune-apply').addEventListener('click', async () => {
     $('prune-results').textContent = `Removed ${result.deleted} stale automatic mappings. Review again to continue.`;
   } catch (error) { $('prune-results').textContent = error.message; $('prune-apply').disabled = true; }
 });
-$('rule-filter').addEventListener('input', () => { visibleRules = 20; renderRules(); });
-$('more-rules').addEventListener('click', () => { visibleRules += 20; renderRules(); });
+$('rule-filter').addEventListener('input', () => { rulePage = 0; renderRules(); });
+$('more-rules').addEventListener('click', () => { rulePage++; renderRules(); });
+$('previous-rules').onclick=()=>{rulePage=Math.max(0,rulePage-1);renderRules();};
 $('close-editor').addEventListener('click', showLibrary);
 $('prev-step').addEventListener('click', () => showStep(step - 1));
 $('next-step').addEventListener('click', nextStep);
-$('new-rule').addEventListener('click', newRule);
+$('new-rule').addEventListener('click', ()=>newRule().catch(error=>status(error.message)));
 function addSelectedTarget() {
   const framework = $('framework').value, ref = $('control').value;
   if (!framework || !ref) return;
@@ -682,7 +698,7 @@ $('save-rule').addEventListener('click', async () => {
       entry: definition.entry, rule, connector_version: definition.connector_version,
       rules_version: ruleVersion, apply_existing: $('apply-existing').checked});
     await loadRules(); await editRule(rules.find(item => item.id === rule.id));
-    showStep(4);
+    showStep(3);
     if (saved.backfill?.id) await pollBackfill(saved.backfill.id);
     else if (saved.backfill) showBackfill(saved.backfill);
     status('Evidence definition saved. Future evidence uses it immediately; historical evaluation runs in the background when selected.', 'success');
@@ -709,14 +725,12 @@ async function init() {
   conditionForm();
   const observed = await apiGet(`${apiRoot}/evidence-event-samples`);
   for (const source of observed.sources || []) $('source-options').append(new Option(source, source));
-  for (const adapter of definitionAdapters) {
-    $('definition-adapter').add(new Option(adapter.replaceAll('_', ' '), adapter));
-    $('settings-adapter').add(new Option(adapter.replaceAll('_', ' '), adapter));
-  }
-  $('definition-adapter').add(new Option('KEEN Agent / OTLP logs','keen-agent'));
-  for (const source of observed.sources || []) if (![...$('definition-adapter').options].some(x=>x.value===source)) $('definition-adapter').add(new Option(source,source));
+  const catalogue = await apiGet(`${apiRoot}/source-catalogue`);
+  enabledSources=(catalogue.items||[]).filter(item=>item.enabled).map(item=>({value:item.adapter,label:item.adapter==='keen-agent'?'KEEN Agent / OTLP logs':item.adapter.replaceAll('_',' ')}));
+  for (const adapter of definitionAdapters) $('settings-adapter').add(new Option(adapter.replaceAll('_',' '),adapter));
   const integrations = await apiGet('/api/v1/admin/integrations');
-  for (const collector of integrations.collectors || []) {const value='integration:'+collector.id;const existing=[...$('definition-adapter').options].find(x=>x.value===value);if(existing)existing.textContent=collector.name;else $('definition-adapter').add(new Option(collector.name,value));}
+  for(const collector of integrations.collectors||[])if(collector.enabled && collector.live_revision)enabledSources.push({value:'integration:'+collector.id,label:collector.name});
+  sourceChoices();
   await selectDefinitionAdapter(); await loadRules(); await loadSettings();
   const fw = await apiGet('/api/v1/frameworks'); frameworks = fw.items;
   for (const item of frameworks) $('framework').add(new Option(item.name || item.slug, item.slug));
@@ -731,20 +745,20 @@ window.addEventListener('keen-integration-rule', async event => {
     const {source,name} = event.detail;
     if (![...$('definition-adapter').options].some(o => o.value === source))
       $('definition-adapter').add(new Option(name, source));
-    newRule(); $('definition-adapter').value = source;
+    await newRule(); sourceChoices(source); $('definition-adapter').value = source;
     await selectDefinitionAdapter(); $('description').value = name;
   } catch(error) { status(error.message); }
 });
 
-$('source-filter').addEventListener('change', renderRules);
+$('source-filter').addEventListener('change', ()=>{rulePage=0;renderRules();});
 window.addEventListener('keen-filter-source', async event => {
   await loadRules();
   const source=event.detail.source;
   if (![...$('source-filter').options].some(o=>o.value===source)) $('source-filter').add(new Option(source,source));
-  $('source-filter').value=source; $('rule-filter').value=''; renderRules();
+  $('browse').open=true; $('source-filter').value=source; $('rule-filter').value=''; renderRules();
 });
 window.addEventListener('keen-collection-create', async event => {
-  await loadRules();newRule();$('definition-adapter').value=event.detail.source;
+  await loadRules();await newRule();$('definition-adapter').value=event.detail.source;
   await selectDefinitionAdapter();$('input-options').open=true;
 });
 window.addEventListener('keen-connections-changed', () => loadRules().catch(e=>status(e.message)));
@@ -776,7 +790,7 @@ async function draftFromEvent(){
  if(!/^[0-9a-f-]{36}$/i.test(id))throw new Error('Invalid event identifier for mapping draft.');
  const framework=params.get('framework');
  const event=await apiGet('/api/v1/events/'+encodeURIComponent(id)+(framework?'?framework='+encodeURIComponent(framework):''));
- newRule();
+ await newRule();
  if(![...$('definition-adapter').options].some(o=>o.value===event.source))$('definition-adapter').add(new Option(event.source,event.source));
  $('definition-adapter').value=event.source;await selectDefinitionAdapter();
  $('description').value='Evidence: '+(event.action||event.source);
@@ -786,7 +800,9 @@ async function draftFromEvent(){
  document.getElementById('hub-panel')?.removeAttribute('open');
  $('sample-details').textContent='Draft from event '+id+'. Review every condition: clear System and remove Host for multiple servers; remove Client IP for multiple addresses. Transient identifiers and timestamps are omitted. Select framework targets before saving.';
  const notice=$('draft-notice');notice.hidden=false;notice.textContent=$('sample-details').textContent;
- showEditor(2);ruleSentence();
+ showEditor(1);ruleSentence();
  // Reloading the editor must not unexpectedly recreate the draft.
  params.delete('from_event');history.replaceState(null,'',location.pathname+'?'+params.toString()+'#evidence-config');
 }
+
+$('description').addEventListener('input',()=>{ $('control-suggestions').replaceChildren(); });

@@ -146,6 +146,7 @@ if (isAdmin) {
 const TAB_HASH_TO_ID = {
   '#overview':'tab-overview', '#agents':'tab-agents', '#integrations':'tab-integrations',
   '#evidence-config':'tab-evidence-config', '#framework-editor':'tab-framework-editor',
+  '#retention': 'tab-retention',
   '#users': 'tab-users',
   '#groups': 'tab-groups',
   '#ingest': 'tab-ingest',
@@ -1361,3 +1362,6 @@ document.getElementById('adminTabs')?.addEventListener('shown.bs.tab', e => {
   if(navigationToggle)navigationToggle.textContent=e.target.textContent.trim()+' · Menu';
   const card=document.getElementById('admin-output-card');if(card)card.hidden=true;
 });
+
+import {initEvidenceRetention} from '/pages/evidence-retention.js';
+initEvidenceRetention(isAdmin);

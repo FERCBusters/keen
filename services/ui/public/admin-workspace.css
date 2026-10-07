@@ -30,3 +30,7 @@ body[data-page=admin] .btn-primary{--bs-btn-bg:#6935be;--bs-btn-border-color:#69
 
 :root[data-bs-theme=dark] body[data-page=admin] .admin-tab-nav .nav-link:not(.active){color:var(--bs-body-color)}
 :root[data-bs-theme=dark] body[data-page=admin] .btn-outline-primary{--bs-btn-color:var(--bs-link-color);--bs-btn-border-color:var(--bs-link-color)}
+
+/* Pastel section grouping; body colours preserve contrast across themes. */
+.framework-section-row {background:color-mix(in srgb, hsl(var(--section-hue) 65% 80%) 28%, var(--bs-body-bg));border-inline-start:4px solid hsl(var(--section-hue) 45% 60%);color:var(--bs-body-color);}
+.framework-section-row:hover,.framework-section-row:focus-visible {background:color-mix(in srgb, hsl(var(--section-hue) 65% 80%) 42%, var(--bs-body-bg));color:var(--bs-body-color);}

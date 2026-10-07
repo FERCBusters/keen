@@ -2696,3 +2696,61 @@ class KeenAgent(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime)
     health: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+# Retention is managed with explicit SQL so database row locks, the storage
+# outbox and deletion are one transaction. Register its tables for metadata and
+# migration tooling as well (there are deliberately no ORM cascade relationships).
+from sqlalchemy import BigInteger, Index, text as sql_text
+
+_evidence_retention_policy = Table(
+    'evidence_retention_policy', Base.metadata,
+    Column('id', Integer, primary_key=True),
+    Column('mode', Text, nullable=False, server_default='disabled'),
+    Column('value', BigInteger),
+    Column('updated_at', DateTime, nullable=False, server_default=sql_text("now() AT TIME ZONE 'UTC'")),
+    Column('updated_by', Text),
+    CheckConstraint('id = 1'),
+    CheckConstraint("mode IN ('disabled','age','count')"),
+    CheckConstraint('value > 0'),
+    CheckConstraint("(mode = 'disabled' AND value IS NULL) OR (mode <> 'disabled' AND value IS NOT NULL)"),
+)
+_evidence_purge_jobs = Table(
+    'evidence_purge_jobs', Base.metadata,
+    Column('id', UUID(as_uuid=True), primary_key=True),
+    Column('mode', Text, nullable=False),
+    Column('value', BigInteger),
+    Column('automatic', Boolean, nullable=False),
+    Column('cutoff', DateTime, nullable=False),
+    Column('status', Text, nullable=False, server_default='queued'),
+    Column('deleted', BigInteger, nullable=False, server_default='0'),
+    Column('requested_by', Text),
+    Column('created_at', DateTime, nullable=False, server_default=sql_text("now() AT TIME ZONE 'UTC'")),
+    Column('updated_at', DateTime, nullable=False, server_default=sql_text("now() AT TIME ZONE 'UTC'")),
+    Column('last_error', Text),
+    CheckConstraint("mode IN ('age','count','all')"),
+)
+Index('evidence_purge_one_active', sql_text('(true)'),
+      unique=True, postgresql_where=sql_text("status IN ('queued','running')"),
+      _table=_evidence_purge_jobs)
+_evidence_object_cleanup = Table(
+    'evidence_object_cleanup', Base.metadata,
+    Column('id', BigInteger, primary_key=True),
+    Column('storage_uri', Text, nullable=False, unique=True),
+    Column('attempts', Integer, nullable=False, server_default='0'),
+    Column('next_attempt_at', DateTime, nullable=False, server_default=sql_text("now() AT TIME ZONE 'UTC'")),
+    Column('last_error', Text),
+    Column('created_at', DateTime, nullable=False, server_default=sql_text("now() AT TIME ZONE 'UTC'")),
+    Index('evidence_object_cleanup_due', 'next_attempt_at', 'id'),
+)
+_audit_event_retention_holds = Table(
+    'audit_event_retention_holds', Base.metadata,
+    Column('audit_id', UUID(as_uuid=True), ForeignKey('audits.id', ondelete='CASCADE'), primary_key=True),
+    Column('event_id', UUID(as_uuid=True), ForeignKey('events.id', ondelete='RESTRICT'), primary_key=True),
+    Index('audit_event_retention_holds_event', 'event_id'),
+)
+
+Index('ix_artifacts_storage_uri', Artifact.storage_uri)
+Index('ix_isms_documents_storage_uri', IsmsDocument.storage_uri)
+Index('ix_bookstack_section_storage_uri', Base.metadata.tables['bookstack_section_evidence'].c.storage_uri)
+Index('ix_audits_report_storage_uri', Audit.final_report_storage_uri)
+Index('ix_question_attachments_artifact', EventQuestionPostAttachment.artifact_id)

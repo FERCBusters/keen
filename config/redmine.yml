@@ -1,0 +1,10 @@
+# Add project collections in Admin → Sources & Evidence Mapping → By source.
+# An empty list collects nothing. See docs/redmine.md for the all-projects option.
+ui_name: Redmine
+badge_color: "#B73939"
+projects: []
+include_journals: true
+initial_lookback_days: 0
+overlap_seconds: 300
+max_pages: 1000
+full_scan_hours: 24

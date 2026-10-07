@@ -164,6 +164,7 @@ class FrameworkListItem(BaseModel):
     version: str | None = None
     description: str | None = None
     upstream_url: str | None = None
+    has_clauses: bool = False
     control_count: int = 0
     is_default: bool = False
 

@@ -2306,6 +2306,8 @@ def delete_scheduled_audit(
     a = _audit_or_404(db, audit_id)
     if a.status != "template":
         raise HTTPException(status_code=400, detail="Audit is not a scheduled template")
+    from app.services.evidence_retention import queue_object
+    queue_object(db, a.final_report_storage_uri)
     db.delete(a)
     db.commit()
     return {"ok": True}
@@ -2328,6 +2330,8 @@ def delete_audit(
     db.query(Audit).filter(Audit.schedule_last_created_audit_id == a.id).update(
         {Audit.schedule_last_created_audit_id: None}, synchronize_session=False
     )
+    from app.services.evidence_retention import queue_object
+    queue_object(db, a.final_report_storage_uri)
     db.delete(a)
     db.commit()
     return {"ok": True}

@@ -1,3 +1,4 @@
+import {mountMeasurementExamples} from '/pages/measurement-examples.js';
 import {
   initNavbar,
   apiGet,
@@ -79,6 +80,7 @@ function renderMeasure(row) {
   $('metricCount').innerHTML = measure.metric_entry_count ? `<a href="#metrics">${esc(measure.metric_entry_count)} metric ${measure.metric_entry_count === 1 ? 'entry' : 'entries'}</a>` : '0';
   $('measureFrequency').textContent = measure.frequency || '—';
   $('measureOwner').innerHTML = userPillHtml(measure.owner);
+  if(canManageIsms && !document.getElementById('measurement-examples')) {const panel=document.createElement('div');panel.id='measurement-examples';$('metricKey').closest('.card').after(panel);mountMeasurementExamples(panel,()=>({key:measure.metric_key,framework:measure.framework||framework,unit:measure.target_unit||''}));}
   $('metricKey').innerHTML = measure.metric_key ? `<code>${esc(measure.metric_key)}</code>` : '—';
   $('measureUpdated').textContent = fmtTs(measure.updated_at) || '—';
   $('linkedControls').innerHTML = controlBadges(measure.controls);

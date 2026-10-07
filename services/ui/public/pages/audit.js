@@ -2279,7 +2279,7 @@ document.getElementById('deleteAudit')?.addEventListener('click', async () => {
     return;
   }
   const title = audit?.title || 'this audit';
-  if (!confirm(`Delete audit "${title}"? This permanently removes the audit, its scope, attendees, sampled evidence and findings.`)) return;
+  if (!confirm(`Delete audit "${title}"? This permanently removes the audit, its scope, attendees, sample links and findings. Events protected only by this audit become eligible for evidence retention or purge.`)) return;
   try {
     await apiDelete(`/api/v1/audits/${encodeURIComponent(auditId)}`);
     toast(status, 'Audit deleted', 'success');

@@ -94,7 +94,7 @@ def _compat_config() -> Config | None:
     )
 
 
-def _client():
+def _client(*, cleanup=False):
     _require_s3_settings()
     kwargs = {
         "endpoint_url": settings.s3_endpoint_url,
@@ -106,6 +106,9 @@ def _client():
     if settings.s3_use_instance_role:
         kwargs = {"region_name": settings.s3_region, "use_ssl": True}
     config = None if settings.s3_use_instance_role else _compat_config()
+    if cleanup:
+        bounded = Config(connect_timeout=5, read_timeout=15, retries={"max_attempts": 1})
+        config = config.merge(bounded) if config else bounded
     if config is not None:
         kwargs["config"] = config
     return boto3.client("s3", **kwargs)
@@ -228,3 +231,30 @@ def presign_get_url(bucket: str, key: str, expires_in: int = 900) -> str:
         Params={"Bucket": bucket, "Key": str(key), **({"VersionId": version} if version else {})},
         ExpiresIn=expires_in,
     )
+
+
+class UnpinnedVersionedObject(ValueError):
+    """Legacy URI needs an explicit version before permanent removal is safe."""
+
+
+def delete_stored_object(uri: str) -> None:
+    """Delete one stored object permanently, without bypassing retention locks.
+
+    Version-pinned S3 URIs remove that exact version. Refuse to create a delete
+    marker for legacy, unversioned URIs in versioned buckets: that would hide
+    evidence while continuing to consume storage.
+    """
+    bucket, key = parse_s3_uri(uri)
+    if bucket == _LOCAL_BUCKET:
+        if not Path(settings.artifact_local_dir).is_dir():
+            raise FileNotFoundError("Artifact storage root is not mounted")
+        _local_path(key).unlink(missing_ok=True)
+        return
+    if bucket != settings.s3_bucket:
+        raise ValueError('Cleanup bucket differs from the configured artifact bucket')
+    client = _client(cleanup=True)
+    version = getattr(key, 'version_id', None)
+    if not version:
+        if client.get_bucket_versioning(Bucket=bucket).get('Status') in {'Enabled', 'Suspended'}:
+            raise UnpinnedVersionedObject('Versioned artifact requires a pinned version ID')
+    client.delete_object(Bucket=bucket, Key=str(key), **({'VersionId': version} if version else {}))

@@ -354,7 +354,7 @@ function renderAudits(items) {
       return;
     }
     const title = btn.getAttribute('data-delete-audit-title') || 'this audit';
-    if (!confirm(`Delete audit "${title}"? This permanently removes the audit, its scope, attendees, sampled evidence and findings.`)) return;
+    if (!confirm(`Delete audit "${title}"? This permanently removes the audit, its scope, attendees, sample links and findings. Events protected only by this audit become eligible for evidence retention or purge.`)) return;
     try {
       await apiDelete(`/api/v1/audits/${encodeURIComponent(btn.getAttribute('data-delete-audit'))}`);
       toast(status, 'Audit deleted', 'success');
