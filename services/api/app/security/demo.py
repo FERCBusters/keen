@@ -25,7 +25,7 @@ class DemoExpiryMiddleware:
             return await self.app(scope, receive, send)
         if scope['type'] == 'http':
             if demo_expired() and scope['path'] not in ('/v1/auth/methods', '/health'):
-                return await JSONResponse({"detail": "This seven-day KEEN demo has ended.",
+                return await JSONResponse({"detail": "This KEEN demo has ended.",
                     "consultation_url": settings.demo_consultation_url}, status_code=401 if scope["path"] == "/v1/auth/check" else 410)(scope, receive, send)
             return await self.app(scope, receive, send)
         seconds = (settings.demo_expires_at - datetime.now(timezone.utc)).total_seconds()

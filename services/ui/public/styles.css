@@ -1721,3 +1721,19 @@ button.keen-filter-pill-chip:focus-visible {
 .keen-home .home-progress { height:.45rem;background:var(--bs-secondary-bg);border-radius:1rem;overflow:hidden;margin-top:.65rem; }
 .keen-home .home-progress span { display:block;height:100%;background:var(--bs-primary); }
 @media(max-width:420px){.keen-home .home-overview-grid{grid-template-columns:1fr;}}
+
+/* Keep the full navigation available at ordinary laptop widths. */
+@media (min-width: 992px) {
+  #navbar .navbar-keen .navbar-collapse { padding-top: 0; min-width: 0; flex-wrap: wrap; row-gap: .35rem; }
+  #navbar .navbar-keen .navbar-nav { flex-wrap: wrap; margin-bottom: 0 !important; }
+  #navbar .navbar-keen .mosp-nav-framework,
+  #navbar .navbar-keen .mosp-nav-search,
+  #navbar .navbar-keen .mosp-nav-actions { margin-top: 0; }
+  #navbar .navbar-keen .mosp-nav-framework-label { display: none; }
+  #navbar .navbar-keen .mosp-nav-framework-select { width: 11rem; max-width: 11rem; }
+  #navbar .navbar-keen .mosp-nav-actions { flex-wrap: nowrap; white-space: nowrap; gap: .25rem; }
+}
+@media (min-width: 992px) and (max-width: 1399.98px) {
+  #navbar .navbar-keen .nav-link { font-size: .875rem; padding-left: .4rem; padding-right: .4rem; }
+  #navbar .navbar-keen .navbar-brand { margin-right: .45rem; }
+}

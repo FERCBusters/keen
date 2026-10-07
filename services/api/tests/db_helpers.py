@@ -1,4 +1,13 @@
 """Test-only database setup; production metadata is never modified."""
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
+
+
+@compiles(JSONB, "sqlite")
+def sqlite_jsonb(_type, _compiler, **_kw):
+    return "JSON"
+
+
 from sqlalchemy import DefaultClause, MetaData, create_engine, event, text
 
 

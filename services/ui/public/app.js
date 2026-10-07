@@ -143,7 +143,10 @@ function _collapseFilterSectionsByDefault() {
 }
 
 export async function initNavbar(...args) {
-  const me = await _mospInitNavbar({...args[0], brandIcon: '/keen-mitigator.png'});
+  const cfg = getUiConfig(args[0]);
+  const me = await _mospInitNavbar({...cfg, brandIcon: '/keen-mitigator.png',
+    nav: {...cfg.nav, expandClass: 'navbar-expand-lg'},
+    framework: {...cfg.framework, selectMaxChars: 19, selectMinChars: 14}});
   const navRoot = document.getElementById('navbar');
   if (navRoot && !navRoot.querySelector('[data-keen-documentation]')) {
     const list = navRoot.querySelector('.navbar-nav');
@@ -157,7 +160,35 @@ export async function initNavbar(...args) {
   for(const a of clauseLinks)(a.closest('li')||a).hidden=true;
   try {
     const catalog=await getFrameworkCatalog();
-    const framework=catalog.items.find(item=>item.slug===getCurrentFramework());
+    const allowed = new Set(catalog.items.map(item=>item.slug));
+    let selected = getCurrentFramework();
+    if (!allowed.has(selected) && catalog.default) {
+      selected = catalog.default;
+      const url = new URL(location.href); url.searchParams.set('framework', selected);
+      history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+      window.mospFramework = selected; window.keenFramework = selected;
+      try { localStorage.setItem(cfg.storage.frameworkKey, selected); } catch {}
+      for (const link of navRoot.querySelectorAll('[data-nav-fw]')) {
+        const target = new URL(link.href, location.origin); target.searchParams.set('framework', selected);
+        link.href = target.pathname + target.search + target.hash;
+      }
+    }
+    const picker = navRoot?.querySelector('#navFrameworkSelect');
+    if (picker) {
+      picker.replaceChildren(...catalog.items.map(item=> {
+        const option = new Option(item.slug, item.slug);
+        option.title = `${item.name} (${item.slug})`; return option;
+      }));
+      picker.value = selected;
+      picker.disabled = !catalog.items.length;
+      const describe = () => {
+        const item = catalog.items.find(item=>item.slug===picker.value);
+        picker.title = item ? `${item.name} (${item.slug})` : 'No frameworks available; ask an administrator to check organisation settings';
+        picker.setAttribute('aria-label', `Framework: ${picker.title}`);
+      };
+      describe(); picker.addEventListener('change', describe);
+    }
+    const framework=catalog.items.find(item=>item.slug===selected);
     for(const a of clauseLinks)(a.closest('li')||a).hidden=framework?.has_clauses!==true;
   } catch { /* Keep optional navigation hidden until the catalogue is available. */ }
   _removeHomeNavItem();

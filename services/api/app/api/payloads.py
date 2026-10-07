@@ -11,7 +11,8 @@ from app.security.auth import ROLE_NORMAL
 
 class LoginPayload(BaseModel):
     username: str
-    password: str
+    password: str = Field(max_length=1024)
+    method: str = Field(default="local", pattern="^(local|ldap)$")
 
 
 class ChangePasswordPayload(BaseModel):
@@ -88,6 +89,7 @@ class UserUpdatePayload(BaseModel):
 
 
 class UserOut(BaseModel):
+    auth_backend: str = "local"
     id: uuid.UUID
     username: str
     email: str | None = None

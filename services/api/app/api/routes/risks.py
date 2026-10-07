@@ -18,6 +18,8 @@ from app.core.config import settings
 from app.db.models import (
     ControlItem,
     IsmsLicense,
+    IsmsOrgNode,
+    IsmsOrgNodeUser,
     Risk,
     RiskAsset,
     RiskAssetSubcategory,
@@ -112,6 +114,7 @@ class RiskUpsertPayload(BaseModel):
     subcategory_id: uuid.UUID | None = None
     subcategory_name: str | None = Field(default=None, max_length=128)
     risk_types: list[str] | None = None
+    risk_owner_role_id: uuid.UUID | None = None
     risk_owner_user_id: uuid.UUID | None = None
     risk_owner_username: str | None = Field(default=None, max_length=128)
     threat_summary: str | None = Field(default=None, max_length=12000)
@@ -163,12 +166,22 @@ def require_risk_manage(request: Request, db: Session = Depends(get_db)) -> User
     return user
 
 
+def risk_owner_out(risk):
+    if risk.owner_role:
+        return {"id": str(risk.owner_role.id), "type": "role", "name": risk.owner_role.name,
+                "username": risk.owner_role.name + " (role)"}
+    return {"id": str(risk.owner.id) if risk.owner else None, "type": "user",
+            "name": risk.owner.username if risk.owner else None,
+            "username": risk.owner.username if risk.owner else None}
+
+
 def _is_risk_owner(user: User | None, risk: Risk | None) -> bool:
     if not isinstance(user, User) or not getattr(user, "is_active", False):
         return False
-    if risk is None or risk.risk_owner_user_id is None:
+    if risk is None:
         return False
-    return risk.risk_owner_user_id == user.id
+    return risk.risk_owner_user_id == user.id or bool(
+        risk.owner_role and any(link.user_id == user.id for link in risk.owner_role.users))
 
 
 def _can_read_specific_risk(db: Session, user: User | None, risk: Risk | None) -> bool:
@@ -747,10 +760,7 @@ def _risk_out(
         "category": _category_out(category),
         "subcategory": _subcategory_out(subcategory),
         "risk_types": list(risk.risk_types or []),
-        "risk_owner": {
-            "id": str(risk.owner.id) if risk.owner else None,
-            "username": risk.owner.username if risk.owner else None,
-        },
+        "risk_owner": risk_owner_out(risk),
         "threat_summary": risk.threat_summary or "",
         "register_likelihood": risk.register_likelihood,
         "register_impact": risk.register_impact,
@@ -801,8 +811,18 @@ def _apply_payload(
     if is_create or "risk_types" in fields:
         risk.risk_types = _clean_risk_types(payload.risk_types)
 
-    if is_create or "risk_owner_user_id" in fields or "risk_owner_username" in fields:
-        risk.owner = _owner_or_none(db, payload, existing=None if is_create else risk)
+    if is_create or fields & {"risk_owner_user_id", "risk_owner_username", "risk_owner_role_id"}:
+        if payload.risk_owner_role_id:
+            if payload.risk_owner_user_id or (payload.risk_owner_username or "").strip():
+                raise HTTPException(400, "Choose one owner: a user or an organisational role")
+            role = db.query(IsmsOrgNode).filter_by(id=payload.risk_owner_role_id, node_type="role").one_or_none()
+            if role is None:
+                raise HTTPException(400, "Unknown organisational role")
+            risk.owner = None
+            risk.owner_role = role
+        else:
+            risk.owner_role = None
+            risk.owner = _owner_or_none(db, payload)
 
     if is_create or "threat_summary" in fields:
         risk.threat_summary = _clean_text(
@@ -1241,7 +1261,9 @@ def list_risk_owner_users(
         .order_by(User.username.asc())
         .all()
     )
-    return {"items": [{"id": str(u.id), "username": u.username} for u in rows]}
+    roles = db.query(IsmsOrgNode).filter_by(node_type="role").order_by(IsmsOrgNode.name, IsmsOrgNode.id).all()
+    return {"items": [{"id": str(u.id), "username": u.username} for u in rows],
+            "roles": [{"id": str(r.id), "name": r.name} for r in roles]}
 
 
 @router.get("/v1/me/risks")
@@ -1261,7 +1283,8 @@ def list_my_owned_risks(
     qry = (
         db.query(Risk)
         .join(RiskAsset, RiskAsset.id == Risk.asset_id)
-        .filter(Risk.risk_owner_user_id == user.id)
+        .filter(or_(Risk.risk_owner_user_id == user.id, Risk.risk_owner_role_id.in_(
+            db.query(IsmsOrgNodeUser.org_node_id).filter(IsmsOrgNodeUser.user_id == user.id))))
     )
 
     total = int(qry.count() or 0)
@@ -1294,6 +1317,7 @@ def list_risks(
     subcategory_id: str = "",
     risk_type: str = "",
     owner_user_id: str = "",
+    owner_role_id: str = "",
     limit: int = 200,
     offset: int = 0,
     user=Depends(require_risk_read),
@@ -1337,6 +1361,10 @@ def list_risks(
         qry = qry.filter(
             or_(*(Risk.risk_types.contains([canon]) for canon in set(risk_types)))
         )
+    if owner_role_id:
+        role_id = _try_uuid(owner_role_id)
+        if role_id is None: raise HTTPException(400, "owner_role_id must be a UUID")
+        qry = qry.filter(Risk.risk_owner_role_id == role_id)
     oid = _try_uuid(owner_user_id) if owner_user_id else None
     if owner_user_id and not oid:
         raise HTTPException(status_code=400, detail="owner_user_id must be a UUID")

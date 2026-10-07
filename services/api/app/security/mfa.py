@@ -49,8 +49,8 @@ def origin_config():
 
 
 def check_origin(request):
-    if not settings.local_auth_enabled:
-        raise HTTPException(404, 'Local authentication is disabled')
+    if not (settings.local_auth_enabled or settings.ldap_enabled):
+        raise HTTPException(404, 'Password authentication is disabled')
     origin, _ = origin_config()
     if request.headers.get('origin') != origin:
         raise HTTPException(403, 'Authentication request origin is not allowed')
@@ -75,7 +75,7 @@ def required(db, user):
 
 
 def local_session_allowed(db, user, session):
-    if session.get('auth_method', 'local') != 'local':
+    if session.get('auth_method', 'local') not in {'local', 'ldap'}:
         return True
     if int(session.get('mfa_version', 0)) != user.mfa_version:
         return False

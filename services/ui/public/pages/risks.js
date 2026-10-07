@@ -190,6 +190,7 @@ const mitigatorWeightOutputs = {
 let categories = [];
 let assets = [];
 let users = [];
+let ownerRoles = [];
 let allControls = [];
 let currentItems = [];
 let controlsWithoutRisksLoaded = false;
@@ -869,7 +870,7 @@ function showEditor(risk = null) {
     }
     ensureOwnerOption(risk);
     ensureControlOptions(risk.controls || []);
-    if (owner) owner.value = risk.risk_owner?.id || '';
+    if (owner) owner.value = risk.risk_owner?.id ? `${risk.risk_owner.type === 'role' ? 'role:' : ''}${risk.risk_owner.id}` : '';
     setRiskTypes(risk.risk_types || []);
     if (threatSummary) threatSummary.value = risk.threat_summary || '';
     if (inherentLikelihood) inherentLikelihood.value = scoreFieldValue(risk.register_likelihood);
@@ -976,7 +977,7 @@ function renderCategories() {
 function renderUsers() {
   if (!owner) return;
   const cur = owner.value || '';
-  owner.innerHTML = `<option value="">No owner</option>${users.map((u) => `<option value="${esc(u.id)}">${esc(u.username)}</option>`).join('')}`;
+  owner.innerHTML = `<option value="">No owner</option><optgroup label="Organisational roles">${ownerRoles.map(r => `<option value="role:${esc(r.id)}">${esc(r.name)}</option>`).join('')}</optgroup><optgroup label="Users">${users.map((u) => `<option value="${esc(u.id)}">${esc(u.username)}</option>`).join('')}</optgroup>`;
   owner.value = cur;
 }
 
@@ -991,6 +992,7 @@ function renderControlOptions() {
 
 function ensureOwnerOption(risk) {
   const ro = risk?.risk_owner || null;
+  if (ro?.type === 'role') return;
   if (!ro?.id || users.some((u) => String(u.id) === String(ro.id))) return;
   users = [...users, {id: String(ro.id), username: ro.username || 'Risk owner'}];
   renderUsers();
@@ -1155,6 +1157,7 @@ async function loadUsers() {
   if (!canManageRisks) return;
   const data = await apiGet('/api/v1/risks/users');
   users = data?.items || [];
+  ownerRoles = data?.roles || [];
   renderUsers();
 }
 
@@ -1204,7 +1207,8 @@ function formPayload() {
   if (!types.length) throw new Error('Select at least one risk type');
   const payload = {
     risk_types: types,
-    risk_owner_user_id: owner?.value || null,
+    risk_owner_user_id: owner?.value?.startsWith('role:') ? null : (owner?.value || null),
+    risk_owner_role_id: owner?.value?.startsWith('role:') ? owner.value.slice(5) : null,
     threat_summary: threatSummary?.value || '',
     register_likelihood: clampScore(inherentLikelihood?.value),
     register_impact: clampScore(inherentImpact?.value),

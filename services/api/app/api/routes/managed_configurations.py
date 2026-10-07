@@ -740,6 +740,24 @@ def _validate_rule(rule: dict, db: Session):
         raise HTTPException(400, "Invalid rule targets")
 
 
+@router.get("/v1/admin/mapping-rules/export.yaml")
+def export_rules(source: str = "", db: Session = Depends(get_db)):
+    """Export effective rules in the same format consumed by KEEN_RULES_PATH."""
+    import yaml
+    from fastapi.responses import Response
+    if len(source) > 256:
+        raise HTTPException(400, "Source is too long")
+    rules = _normalized_rules(db)
+    if source:
+        rules = [r for r in rules if r.get("when", {}).get("source") == source]
+    document = {"rules": sorted(rules, key=lambda r: r.get("id", ""))}
+    filename = re.sub(r"[^a-zA-Z0-9_-]", "_", source)[:80] or "all"
+    return Response(yaml.safe_dump(document, sort_keys=False, allow_unicode=True),
+                    media_type="application/yaml",
+                    headers={"Content-Disposition": f'attachment; filename="keen-rules-{filename}.yaml"',
+                             "Cache-Control": "no-store"})
+
+
 @router.get("/v1/admin/mapping-rules")
 def get_rules(db: Session = Depends(get_db)):
     rules = _normalized_rules(db)

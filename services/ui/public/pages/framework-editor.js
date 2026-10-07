@@ -9,7 +9,8 @@ const key = node => `${node.kind}\0${node.ref}`;
 const url = (kind, ref) => `/api/v1/admin/frameworks/${encodeURIComponent($('frameworks').value)}/nodes/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}`;
 
 async function refreshFrameworks(preferred) {
-  const data = await apiGet('/api/v1/frameworks');
+  const data = await apiGet('/api/v1/admin/framework-selection');
+  renderOrganisationFrameworks(data);
   frameworks = data.items || [];
   $('frameworks').replaceChildren();
   for (const fw of frameworks) $('frameworks').add(new Option(`${fw.name} (${fw.slug})`, fw.slug));
@@ -144,3 +145,37 @@ $('delete-node').addEventListener('click', async () => {
   } catch (error) { message(error.message); }
 });
 refreshFrameworks().catch(error => message(error.message));
+
+let selectionVersion = 0;
+function renderOrganisationFrameworks(data) {
+  selectionVersion = data.version;
+  const container = $('organisation-frameworks'); container.replaceChildren();
+  for (const framework of data.items || []) {
+    const wrapper = document.createElement('div'); wrapper.className = 'col-md-6 col-xl-4';
+    const label = document.createElement('label'); label.className = 'd-flex align-items-start gap-2 border rounded p-2 h-100';
+    const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.className = 'form-check-input flex-shrink-0';
+    checkbox.value = framework.slug; checkbox.checked = framework.enabled; checkbox.disabled = !framework.allowed;
+    const text = document.createElement('span'); text.textContent = `${framework.name} (${framework.slug})${framework.allowed ? '' : ' · excluded by environment'}`;
+    label.append(checkbox, text); wrapper.append(label); container.append(wrapper);
+  }
+  const refreshDefaults = () => {
+    const previous = $('organisation-default').value || data.default;
+    $('organisation-default').replaceChildren();
+    for (const checkbox of container.querySelectorAll('input:checked')) $('organisation-default').add(new Option(checkbox.value, checkbox.value));
+    if ([...$('organisation-default').options].some(option=>option.value===previous)) $('organisation-default').value=previous;
+  };
+  container.onchange = refreshDefaults; refreshDefaults();
+  $('organisation-note').textContent = (data.environment_restricted ? 'KEEN_ENABLED_FRAMEWORKS limits the available choices. ' : '') +
+    (data.unknown_environment_slugs?.length ? `Unknown environment slugs: ${data.unknown_environment_slugs.join(', ')}` : 'Choose at least one framework. Changes take effect when pages reload.');
+}
+$('save-selection').addEventListener('click', async () => {
+  const button=$('save-selection'); button.disabled=true;
+  try {
+    const enabled=[...$('organisation-frameworks').querySelectorAll('input:checked')].map(input=>input.value);
+    if (!enabled.length) throw new Error('Choose at least one framework.');
+    const data=await apiPut('/api/v1/admin/framework-selection', {enabled, default:$('organisation-default').value, version:selectionVersion});
+    renderOrganisationFrameworks(data);
+    $('organisation-note').textContent='Organisation selection saved. Reload the page to refresh the navigation.';
+  } catch(error) { $('organisation-note').textContent=error.message; }
+  finally {button.disabled=false;}
+});

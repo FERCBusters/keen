@@ -9,15 +9,14 @@ from sqlalchemy.orm import Session
 
 from app.api.payloads import FrameworkListItem, FrameworkUpsert
 from app.core.config import settings
-from app.db.models import ControlItem, Framework, FrameworkClause, ControlClauseLink, Mapping
+from app.db.models import ControlItem, Framework, FrameworkClause, ControlClauseLink, Mapping, ManagedConfiguration
 from app.db.session import get_db
 from app.security.auth import require_admin
 
 router = APIRouter()
 
 
-@router.get("/v1/frameworks")
-def list_frameworks(db: Session = Depends(get_db)):
+def _framework_catalog(db: Session):
     """List known framework slugs.
 
     Sources:
@@ -73,6 +72,63 @@ def list_frameworks(db: Session = Depends(get_db)):
         "items": [i.model_dump() for i in items],
         "default": settings.default_framework_slug,
     }
+
+
+def _framework_selection(db):
+    catalog = _framework_catalog(db)
+    known = {item['slug'] for item in catalog['items']}
+    permitted = {slug.strip() for slug in settings.enabled_frameworks.split(',') if slug.strip()}
+    eligible = known & permitted if permitted else known
+    row = db.get(ManagedConfiguration, 'organisation-frameworks')
+    configured = row.document.get('enabled') if row else None
+    enabled = eligible & set(configured) if configured is not None else eligible
+    if not enabled:
+        # Keep one usable framework if an operator changes the environment restriction.
+        # Never reintroduce a framework excluded by the environment.
+        enabled = eligible
+    preferred = row.document.get('default') if row else None
+    default = next((slug for slug in [preferred, settings.default_framework_slug] if slug in enabled),
+                   min(enabled) if enabled else '')
+    return catalog, row, permitted, enabled, default
+
+
+@router.get("/v1/frameworks")
+def list_frameworks(db: Session = Depends(get_db)):
+    catalog, _, _, enabled, default = _framework_selection(db)
+    return {'items': [{**item, 'is_default': item['slug'] == default}
+                      for item in catalog['items'] if item['slug'] in enabled], 'default': default}
+
+
+@router.get("/v1/admin/framework-selection", dependencies=[Depends(require_admin)])
+def framework_selection(db: Session = Depends(get_db)):
+    catalog, row, permitted, enabled, default = _framework_selection(db)
+    return {'items': [{**item, 'enabled': item['slug'] in enabled,
+                       'allowed': not permitted or item['slug'] in permitted} for item in catalog['items']],
+            'default': default, 'version': row.version if row else 0,
+            'environment_restricted': bool(permitted),
+            'unknown_environment_slugs': sorted(permitted - {item['slug'] for item in catalog['items']})}
+
+
+class FrameworkSelectionInput(BaseModel):
+    enabled: list[str] = Field(min_length=1, max_length=500)
+    default: str = Field(min_length=1, max_length=64)
+    version: int = Field(ge=0)
+
+
+@router.put("/v1/admin/framework-selection")
+def save_framework_selection(payload: FrameworkSelectionInput, user=Depends(require_admin), db: Session = Depends(get_db)):
+    catalog, _, permitted, _, _ = _framework_selection(db)
+    known = {item['slug'] for item in catalog['items']}
+    selected = set(payload.enabled)
+    if len(selected) != len(payload.enabled) or not selected <= known:
+        raise HTTPException(400, 'Choose distinct frameworks from the catalogue')
+    if permitted and not selected <= permitted:
+        raise HTTPException(400, 'A selected framework is excluded by KEEN_ENABLED_FRAMEWORKS')
+    if payload.default not in selected:
+        raise HTTPException(400, 'The default framework must be selected')
+    from .managed_configurations import _save
+    _save(db, 'organisation-frameworks', {'enabled': sorted(selected), 'default': payload.default}, payload.version, user)
+    return framework_selection(db)
 
 
 @router.post("/v1/frameworks", dependencies=[Depends(require_admin)])

@@ -320,7 +320,7 @@ function renderUsers(users) {
         <td class="d-flex flex-wrap gap-2">
           <button class="btn btn-outline-primary btn-sm" type="button" data-save>Save</button>
           <button class="btn btn-outline-primary btn-sm" type="button" data-access>Access…</button>
-          <button class="btn btn-outline-primary btn-sm" type="button" data-reset>Password…</button>
+          <button class="btn btn-outline-primary btn-sm" type="button" data-reset ${u.auth_backend === 'ldap' ? 'disabled title="Change this password in your LDAP directory"' : ''}>${u.auth_backend === 'ldap' ? 'LDAP password' : 'Password…'}</button>
           <button class="btn btn-outline-danger btn-sm" type="button" data-delete>Delete</button>
         </td>
       </tr>

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.api.routes.risks import risk_owner_out
 
 from typing import Any
 
@@ -269,10 +270,7 @@ def _risk_summary(db: Session, risk: Risk, framework: str) -> dict[str, Any]:
             "name": subcategory.name if subcategory else None,
         },
         "risk_types": list(risk.risk_types or []),
-        "risk_owner": {
-            "id": str(risk.owner.id) if risk.owner else None,
-            "username": risk.owner.username if risk.owner else None,
-        },
+        "risk_owner": risk_owner_out(risk),
         "threat_summary": risk.threat_summary or "",
         "threat_score": int(risk.threat_score or 0),
         "vulnerability_score": int(risk.vulnerability_score or 0),

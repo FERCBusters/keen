@@ -534,6 +534,8 @@ def risk_changelog_state(
         "subcategory": subcategory.name if subcategory else None,
         "risk_types": list(risk.risk_types or []),
         "owner": owner.username if owner else None,
+        "owner_role": risk.owner_role.name if risk.owner_role else None,
+        "owner_role_id": str(risk.risk_owner_role_id) if risk.risk_owner_role_id else None,
         "threat_summary": risk.threat_summary,
         "threat_score": risk.threat_score,
         "vulnerability_score": risk.vulnerability_score,

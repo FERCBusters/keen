@@ -345,6 +345,13 @@
 
       <!-- Framework editor -->
       <div class="tab-pane fade" id="pane-framework-editor" role="tabpanel" aria-labelledby="tab-framework-editor" tabindex="0">
+        <div class="card mb-3"><div class="card-header fw-bold">Frameworks used by your organisation</div><div class="card-body">
+          <p class="small-muted">Choose the frameworks offered in workspace selectors. Existing controls, evidence, audits and mapping rules are retained. This selection is independent of access permissions.</p>
+          <div id="fe-organisation-frameworks" class="row g-2"></div>
+          <label class="form-label mt-3" for="fe-organisation-default">Organisation default</label><select id="fe-organisation-default" class="form-select" style="max-width:30rem"></select>
+          <p id="fe-organisation-note" class="small-muted mt-2" role="status"></p>
+          <button id="fe-save-selection" type="button" class="btn btn-primary">Save organisation selection</button>
+        </div></div>
         <div class="card mb-3"><div class="card-header fw-bold">Framework details</div><div class="card-body">
           <div class="row g-2"><div class="col-md-4"><label class="form-label">Slug</label><input id="fe-slug" class="form-control" maxlength="64"></div>
           <div class="col-md-5"><label class="form-label">Name</label><input id="fe-name" class="form-control"></div>
@@ -388,7 +395,7 @@
         <div id="ec-status" role="status" hidden></div>
         <div class="card mb-3"><div class="card-header fw-bold">Create and manage evidence mappings</div><div class="card-body">
           <div id="ec-library"><div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h3 class="h6 mb-1">Create a new mapping</h3><p class="small-muted mb-0">Choose matching events and the controls they support.</p></div><button id="ec-new-rule" class="btn btn-primary">Create mapping</button></div>
-            <details id="ec-browse"><summary class="fw-semibold mb-3">Browse existing mappings</summary><label for="ec-source-filter" class="form-label">Source</label><select id="ec-source-filter" class="form-select mb-2"><option value="">All sources</option></select><label for="ec-rule-filter" class="form-label">Search by name, collection item or framework</label><input id="ec-rule-filter" class="form-control mb-2" placeholder="Search evidence definitions"><div id="ec-rule-count" class="small-muted mb-2" role="status"></div><div id="ec-rules" class="list-group"></div><button id="ec-more-rules" class="btn btn-outline-secondary mt-2" hidden>Next page</button><button id="ec-previous-rules" class="btn btn-outline-secondary mt-2 me-2" hidden>Previous page</button></details></div>
+            <details id="ec-browse"><summary class="fw-semibold mb-3">Browse existing mappings</summary><label for="ec-source-filter" class="form-label">Source</label><select id="ec-source-filter" class="form-select mb-2"><option value="">All sources</option></select><button type="button" id="ec-export-rules" class="btn btn-outline-primary mb-2">Export YAML for selected source</button><p class="small-muted">With All sources selected, exports every mapping rule. Search text does not limit the export.</p><label for="ec-rule-filter" class="form-label">Search by name, collection item or framework</label><input id="ec-rule-filter" class="form-control mb-2" placeholder="Search evidence definitions"><div id="ec-rule-count" class="small-muted mb-2" role="status"></div><div id="ec-rules" class="list-group"></div><button id="ec-more-rules" class="btn btn-outline-secondary mt-2" hidden>Next page</button><button id="ec-previous-rules" class="btn btn-outline-secondary mt-2 me-2" hidden>Previous page</button></details></div>
           <div id="ec-editor" hidden>
             <div class="d-flex justify-content-between align-items-center mb-3"><h3 id="ec-editor-heading" class="h6 mb-0">Create evidence definition</h3><button id="ec-close-editor" type="button" class="btn btn-outline-secondary btn-sm">Back to definitions</button></div>
             <div class="small-muted mb-2">Step <span id="ec-step-number">1</span> of 3 · <span id="ec-step-title">Choose matching events</span></div><div class="progress mb-3" role="progressbar" aria-label="Rule setup progress" aria-valuemin="0" aria-valuemax="3"><div id="ec-step-progress" class="progress-bar"></div></div>

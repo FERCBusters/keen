@@ -133,7 +133,7 @@ def rate_risk(risk_id: uuid.UUID, payload: RegisterRating, user=Depends(require_
     return _register_out(db, row, "ISO27001:2022")
 
 
-_CSV_COLUMNS = ["asset", "category", "subcategory", "threat_summary", "risk_types", "owner_username",
+_CSV_COLUMNS = ["asset", "category", "subcategory", "threat_summary", "risk_types", "owner_username", "owner_role_id",
                 "register_likelihood", "register_impact", "register_residual_likelihood", "register_residual_impact",
                 "treatment_strategy", "treatment_status", "treatment_plan", "treatment_due_at", "controls"]
 
@@ -155,7 +155,8 @@ def export_register(framework: str = "ISO27001:2022", user=Depends(require_risk_
             values = {"asset": item["asset"], "category": item["category"]["name"],
                       "subcategory": item["subcategory"]["name"], "threat_summary": item["threat_summary"],
                       "risk_types": ";".join(item["risk_types"]),
-                      "owner_username": item["risk_owner"]["username"] or "",
+                      "owner_username": row.owner.username if row.owner else "",
+                      "owner_role_id": str(row.risk_owner_role_id) if row.risk_owner_role_id else "",
                       "controls": ";".join(c["ref"] for c in item["controls"] or [])}
             values.update({k: item.get(k) for k in _CSV_COLUMNS if k not in values})
             writer.writerow({k: _csv_safe(v) for k, v in values.items()})
@@ -194,6 +195,7 @@ async def import_register(file: UploadFile = File(...), framework: str = "ISO270
                 subcategory_name=entry["subcategory"], threat_summary=entry["threat_summary"],
                 risk_types=[part.strip() for part in (entry["risk_types"] or "").split(";") if part.strip()],
                 risk_owner_username=(entry.get("owner_username") or "").strip() or None,
+                risk_owner_role_id=(entry.get("owner_role_id") or "").strip() or None,
                 framework=fw, controls=[s.strip() for s in (entry.get("controls") or "").split(";") if s.strip()],
             )
             row = Risk(created_by_user_id=user.id)

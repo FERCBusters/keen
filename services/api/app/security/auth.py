@@ -188,7 +188,7 @@ def authenticate_user(db: Session, username: str, password: str) -> User | None:
     if not u:
         return None
     user = db.query(User).filter(User.username == u).one_or_none()
-    if not user or not user.is_active:
+    if not user or not user.is_active or user.auth_backend == "ldap":
         return None
     if not verify_password(password or "", user.password_hash):
         return None

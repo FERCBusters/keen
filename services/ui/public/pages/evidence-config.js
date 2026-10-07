@@ -592,6 +592,19 @@ $('prune-apply').addEventListener('click', async () => {
     $('prune-results').textContent = `Removed ${result.deleted} stale automatic mappings. Review again to continue.`;
   } catch (error) { $('prune-results').textContent = error.message; $('prune-apply').disabled = true; }
 });
+$('export-rules').addEventListener('click', async () => {
+  const button = $('export-rules'); button.disabled = true;
+  try {
+    const source = $('source-filter').value;
+    const response = await fetch(`${apiRoot}/mapping-rules/export.yaml?source=${encodeURIComponent(source)}`, {credentials:'same-origin'});
+    if (!response.ok) throw new Error('Could not export mapping rules. Check your session and permissions.');
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a'); link.href=url;
+    link.download=`keen-rules-${source.replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,80)||'all'}.yaml`;
+    document.body.append(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+  } catch(error) {status(error.message);}
+  finally {button.disabled=false;}
+});
 $('rule-filter').addEventListener('input', () => { rulePage = 0; renderRules(); });
 $('more-rules').addEventListener('click', () => { rulePage++; renderRules(); });
 $('previous-rules').onclick=()=>{rulePage=Math.max(0,rulePage-1);renderRules();};

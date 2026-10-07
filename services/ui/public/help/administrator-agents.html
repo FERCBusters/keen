@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>KEEN Agent installation and operation — KEEN documentation</title><link href="docs.css" rel="stylesheet"/><script defer="" src="chapter-links.js"></script><script defer="" src="search-index.js"></script><script defer="" src="docs.js"></script></head><body><a class="skip" href="#content">Skip to content</a><header><a href="index.html">KEEN documentation</a><a href="/">Open KEEN</a></header><div class="layout"><aside><label for="search">Search all handbooks</label><input id="search" placeholder="Mapping, audit, LDAP…" type="search"/><div aria-live="polite" id="results" role="status"></div><nav aria-label="Handbooks"><a href="using.html">Using KEEN</a><a aria-current="true" href="administrator.html">Administering KEEN</a><a href="developer.html">Developing KEEN</a></nav><details class="chapter-menu" open=""><summary>Chapters</summary><nav aria-label="Chapters"><a href="administrator-deployment.html">1. Install and configure KEEN</a><a href="administrator-identity.html">2. Local accounts, MFA and security email</a><a href="administrator-sso-ldap.html">3. SSO linking and LDAP authentication</a><a href="administrator-frameworks.html">4. Organisation frameworks and risk library</a><a href="administrator-sources.html">5. Sources, connections and API ingesters</a><a href="administrator-rules.html">6. Manage rules, YAML and historical mapping</a><a href="administrator-scheduling.html">7. Schedules, pauses and metric submissions</a><a href="administrator-git.html">8. Forgejo, Gitea and GitLab</a><a href="administrator-redmine.html">9. Redmine issues and journals</a><a aria-current="page" href="administrator-agents.html">10. KEEN Agent installation and operation</a><a href="administrator-retention.html">11. Evidence storage and retention</a><a href="administrator-maintenance.html">12. Upgrades, backups and troubleshooting</a></nav></details><nav aria-label="On this page"><a href="#keen-agent">Operate KEEN Agent and OTLP collectors</a><a href="#agent-install-the-keen-receiver">Install the KEEN receiver</a><a href="#agent-build-and-install-on-a-linux-server">Build and install on a Linux server</a><a href="#agent-configuration-and-log-semantics">Configuration and log semantics</a><a href="#agent-delivery-rotation-and-retention">Delivery, rotation and retention</a><a href="#agent-evidence-and-framework-mapping">Evidence and framework mapping</a><a href="#agent-security-and-privacy">Security and privacy</a><a href="#agent-otlp-interoperability">OTLP interoperability</a><a href="#agent-development-and-checks">Development and checks</a><a href="#agent-013">Agent heartbeat compatibility</a><a href="#structured-agent-filtering">Filter before agent delivery</a></nav></aside><main id="content"><p class="eyebrow">Administering KEEN</p><h1>KEEN Agent installation and operation</h1><p class="edition">Chapter 10 of 12</p><h2 id="keen-agent">Operate KEEN Agent and OTLP collectors</h2><figure class="diagram"><img alt="The agent persists records and checkpoints together, retries stable UUIDs and removes records after acknowledgement." loading="lazy" src="diagrams/agent-delivery.svg"/><figcaption>The agent persists records and checkpoints together, retries stable UUIDs and removes records after acknowledgement.</figcaption><details><summary>Diagram source (Mermaid)</summary><pre><code>flowchart TB
+  L["Selected log files or journal"] --&gt; P["Parse and redact"]
+  P --&gt; Q["Atomic local transaction: UUID, record and checkpoint"]
+  Q --&gt; T["Send OTLP JSON over verified HTTPS"]
+  T --&gt; A{"Valid scoped credential and batch?"}
+  A --&gt;|Yes| D{"UUID already stored?"}
+  D --&gt;|Same content| OK["Return success"]
+  D --&gt;|New| S["Store artifact, event and mappings; commit"]
+  S --&gt; OK
+  OK --&gt; R["Remove acknowledged records from queue"]
+  A --&gt;|Permanent rejection| H["Pause delivery; retain records"]
+  D --&gt;|Conflicting content| H
+  T --&gt;|Network error or retryable response| B["Back off and retry the same UUIDs"]
+  B --&gt; T
+</code></pre></details><a href="diagrams/agent-delivery.svg" rel="noopener" target="_blank">Open full-size diagram</a></figure>
+<p>KEEN Agent is a standalone Linux Go service that collects selected host logs and sends OTLP/HTTP JSON to KEEN. It enriches records with patching, HTTP, PHP and Linux Audit context. KEEN stores the events and their redacted artifacts, then applies the existing framework mapping rules.</p>
+<h3 id="agent-install-the-keen-receiver">Install the KEEN receiver</h3>
+<p>Apply the accompanying incremental patch to the KEEN platform tree, rebuild the API and UI, and run the normal Alembic database migration (<code>alembic upgrade head</code> inside the API service). Revision <code>0081_keen_agent</code> adds agent identities. Keep the database backup and normal rollout procedure used by your installation. Existing ingesters remain available.</p>
+<p>Open <strong>Admin → Integrations → Manage agents</strong>, register one identity per server, and save the one-time credential. Choose its expiry (1–365 days, default 90). No Fernet integration key is needed: the server stores only a SHA-256 hash of the randomly generated 256-bit credential. Outbound API integration credentials continue to use their existing encryption mechanism.</p>
+<p>The standard reverse proxy endpoint is <code>https://keen.example.org/api/v1/otlp/logs</code>. Direct API deployments use <code>/v1/otlp/logs</code>. Ensure TLS terminates at a trusted reverse proxy. Agent ingestion and credential management are disabled when KEEN demo mode is enabled.</p>
+<h3 id="agent-build-and-install-on-a-linux-server">Build and install on a Linux server</h3><p>KEEN Agent is maintained in its own repository. Prefer the package and installation instructions shipped with that release. Packaged binaries and vendor systemd units may use different paths from a manual build; remove a stale manually installed service override before switching installation methods. Keep the token, config and spool during an upgrade.</p>
+<p>Use a maintained Go toolchain supporting Go 1.25 or newer. Dependencies are pinned in <code>go.mod</code> and <code>go.sum</code>.</p>
+<pre><code class="language-sh">cd keen-agent
+make build
+sudo useradd --system --home-dir /var/lib/keen-agent --shell /usr/sbin/nologin keen-agent
+sudo install -m 0755 dist/keen-agent /usr/local/bin/keen-agent
+sudo install -d -o root -g keen-agent -m 0750 /etc/keen-agent
+sudo install -o root -g keen-agent -m 0640 examples/config.yaml /etc/keen-agent/config.yaml
+sudo install -o root -g keen-agent -m 0640 /dev/null /etc/keen-agent/token
+sudoedit /etc/keen-agent/config.yaml
+sudoedit /etc/keen-agent/token
+sudo install -m 0644 packaging/keen-agent.service /etc/systemd/system/keen-agent.service
+</code></pre>
+<p>Paste the issued credential into the token file as a single line. Adjust the endpoint and enable only sources that exist on the server. Do not put credentials in command-line arguments, YAML or shell history. On systems without <code>useradd</code>, create the equivalent system account through the operating system's account manager. Skip account creation if it already exists.</p>
+<p>Grant the service account read access to selected logs. For journald, where the group exists:</p>
+<pre><code class="language-sh">sudo usermod -aG systemd-journal keen-agent
+</code></pre>
+<p>For files, use a dedicated log-reader group or narrowly scoped ACLs. Auditd commonly restricts both <code>/var/log/audit</code> traversal and the log file itself: configure its <code>log_group</code> and directory permissions according to local policy. Ensure logrotate/auditd rotation creates replacement files with the same read access. Avoid granting write access, <code>CAP_AUDIT_CONTROL</code>, or <code>CAP_DAC_READ_SEARCH</code>. The shipped service runs without capabilities; it does not need root when these permissions are configured.</p>
+<pre><code class="language-sh">sudo -u keen-agent /usr/local/bin/keen-agent -command check
+sudo systemctl daemon-reload
+sudo systemctl enable --now keen-agent
+sudo journalctl -u keen-agent -f
+sudo -u keen-agent /usr/local/bin/keen-agent -command status
+</code></pre>
+<p><code>check</code> validates configuration, file permissions and CA loading. Collection permissions and connectivity are verified during normal operation and appear in source health. <code>status</code> reads the latest local report while the service is running. The service uses <code>/var/lib/keen-agent</code> with mode 0700 and reports health to KEEN approximately once a minute. Large or slow collections can delay reports. Restart after changing configuration or replacing a blocked/expired credential.</p>
+<p>The systemd unit limits privileges, memory, process count and writable paths. Keep <code>state_dir</code> at its default unless you also update the unit's <code>StateDirectory</code> and <code>ReadWritePaths</code>. Test the unit against your distribution's security policy (including SELinux/AppArmor).</p>
+<h3 id="agent-configuration-and-log-semantics">Configuration and log semantics</h3>
+<p>See <code>examples/config.yaml</code> for the complete configuration and commented source examples. Unknown YAML keys and unknown parsers are rejected. Configuration must be non-writable by group/others; credential files must also deny all access to others. Source paths are restricted to <code>/var/log</code>; symlinks in any path component and non-regular files are refused. Keep log directories and configuration owned by trusted administrators.</p>
+<table>
+<thead>
+<tr>
+<th>Parser</th>
+<th>Enrichment</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>raw</code></td>
+<td>Original redacted text, collection time and source</td>
+</tr>
+<tr>
+<td><code>syslog</code></td>
+<td>RFC 5424/ISO timestamps; RFC 3164 host-local timestamp with year inference</td>
+</tr>
+<tr>
+<td><code>json</code></td>
+<td>Bounded top-level JSON fields; malformed JSON retained with a parse marker</td>
+</tr>
+<tr>
+<td><code>nginx</code></td>
+<td>Common access-log request path (without query), HTTP status; 5xx outcome</td>
+</tr>
+<tr>
+<td><code>php</code></td>
+<td>PHP fatal/parse error outcome; optional multiline grouping</td>
+</tr>
+<tr>
+<td><code>dpkg</code></td>
+<td>Timestamp, install/upgrade/remove/purge/status, package and available versions</td>
+</tr>
+<tr>
+<td><code>apt</code></td>
+<td>History transaction grouped from Start-Date to End-Date, package lists and requester</td>
+</tr>
+<tr>
+<td><code>dnf</code></td>
+<td>Recognized Installed/Upgraded/Removed/Erased/Downgraded messages; raw RPM/DNF messages retained</td>
+</tr>
+<tr>
+<td><code>auditd</code></td>
+<td>Group by audit timestamp/serial, record type, auid, syscall fields and success/failure</td>
+</tr>
+</tbody>
+</table>
+<p>Parsing is intentionally conservative. An unrecognized format remains evidence as redacted text. Dpkg and legacy syslog times use the agent host's timezone. Auditd records are grouped across reads and restarts, with interleaved IDs supported; an EOE record closes a group. Groups also close after three seconds without a new record or at the size limit and carry <code>group_completion=timeout_or_size</code>. Late records can therefore form another event. Raw grouped records preserve fields that repeat across audit record types; enrichment uses the first occurrence. Hex-encoded audit EXECVE/PROCTITLE values remain encoded. This release does not decode syscall numbers against architecture tables.</p>
+<p><code>multiline_start</code> groups file records until the next matching line or idle/size boundary. Journald uses its native message boundaries and durable cursors; auditd grouping and multiline options apply to file sources. A journal source's initial read uses <code>initial_lookback</code>. A newly discovered file starts at byte zero. Select paths carefully to avoid importing an unintended archive.</p>
+<h3 id="agent-delivery-rotation-and-retention">Delivery, rotation and retention</h3>
+<p>Events receive a random UUID before being durably queued. The event and its file offset/journal cursor are committed in one bbolt transaction with disk synchronization enabled. Pending multiline/audit groups are also persisted. After a successful receiver response, the acknowledged batch is removed. A crash before acknowledgement resends the same UUIDs; KEEN deduplicates by registered identity plus UUID and rejects conflicting content.</p>
+<p>This provides at-least-once delivery for records durably collected, with server-side deduplication while their KEEN events remain retained. Source deletion, log rotation during a long outage, disk failure, explicit queue expiry or deleting KEEN evidence can affect these guarantees. Clearing the state directory or registering a new identity breaks continuity. Never copy one agent's state/credential to another server.</p>
+<ul>
+<li>Network errors, 408, 429 and server errors retry with exponential backoff and jitter, honoring Retry-After up to one hour. Redirects are refused and TLS certificates/hostnames are verified; there is no insecure TLS switch.</li>
+<li>Permanent client errors (including 400, 401, 403, 409, 413 and 415) pause delivery. Records remain queued, collection continues until capacity, and health reports show the pause. Fix the problem and restart the service. A partial-success response with rejected records also pauses delivery for review; the KEEN receiver itself uses whole-batch acceptance.</li>
+<li><code>queue_mb</code> bounds serialized queued payload and checkpoint bytes. Pending groups/checkpoints are additionally capped at a quarter of that budget or 16 MiB, whichever is smaller. At capacity, collection pauses without advancing the affected checkpoint. Database allocation adds overhead. bbolt reuses freed pages and retains its allocated high-water size; allow disk headroom above the payload limit. It is not a hard filesystem quota.</li>
+<li><code>retention_days: 0</code> retains unsent records indefinitely. A positive value permits removal of records older than that many days <strong>since queueing</strong>. Removal increments the dropped/gap counter. Choose this only when the operational policy permits lost evidence.</li>
+<li>File identity uses device/inode plus a prefix fingerprint. Configure both the live filename and uncompressed rotated files. Rename rotation is supported when the rotated file remains matched. Copy-truncate is detected when its size/prefix changes and increments the gap counter; a truncate-and-regrow race with an identical prefix cannot be reliably detected by polling.</li>
+<li>Compressed archives are not replayed. Set an uncompressed retention window longer than expected outages. A missing/vacuumed journal cursor reports an error; resolve journal retention or explicitly start a new source name with a chosen lookback, accepting possible replay.</li>
+<li>Lines over 60,000 bytes are consumed without unbounded allocation and counted as dropped. Incomplete lines wait for a newline. Source paths are capped at 256 matched files, each source at 32 pending groups, and retained checkpoints at 4,096. Reaching a checkpoint limit pauses new-file collection; inspect state/rotation policy before planning a fresh state directory and replay.</li>
+<li>Delivery batches records and retries failures with backoff. Filter high-volume access logs according to the evidence you need. Monitor queue growth and choose filters and retention appropriate to the expected event volume.</li>
+</ul>
+<p>The status file and agent UI show queue bytes, record count, dropped/gap count, source errors, credential expiry and last contact. “Connected” means recent authenticated contact; inspect source status and queue growth to assess collection health. A quiet generic OTLP collector may have no recent contact because it does not send KEEN heartbeats.</p>
+<h3 id="agent-evidence-and-framework-mapping">Evidence and framework mapping</h3>
+<p>The server assigns <code>source=keen-agent</code> and binds <code>system</code> to the administrator-registered name. Client-supplied host names remain descriptive attributes and cannot replace that identity. Normalized payload includes <code>source</code> (configured log source), <code>action</code>, <code>outcome</code>, <code>actor</code>, <code>raw</code>, <code>fields</code> and the stable event ID. The artifact contains this normalized, redacted record; raw pointers include agent ID, event ID, receive time and the canonical received-record digest.</p>
+<p>Use <strong>Admin → Evidence definitions</strong> to create rules against these fields, selecting the framework and controls appropriate to your organization. Useful criteria include <code>source=keen-agent</code>, <code>action=package.upgrade</code>, <code>action=auditd.SYSCALL</code> or <code>action=http.request</code> with <code>outcome=failure</code>. Parsed fields are available as structured-field conditions in the rule editor, alongside event fields and summary patterns. Validate them using KEEN's existing rule editor and test tools; rules are not automatically installed for an assumed framework version.</p>
+<p>A recorded update demonstrates an observed maintenance action. A compliance claim about patch timeliness additionally needs asset scope, applicable requirements, deadlines and measurements. Host logs and heartbeats are claims from a credentialed collector; a compromised host can falsify them. Preserve independent corroboration where required.</p>
+<h3 id="agent-security-and-privacy">Security and privacy</h3>
+<p>The agent has no inbound listener, remote command channel, plugin loading, template execution or shell-based parser. Its only child process is <code>/usr/bin/journalctl</code> with fixed arguments and validated unit names. Parsing uses bounded inputs and Go regular expressions. Install the binary, configuration, CA files, log directories and token under trusted ownership.</p>
+<p>Default redaction covers common password/token assignments, bearer tokens and authentication/cookie headers. <code>redact</code> adds RE2 expressions, applied before the spool. KEEN applies its existing redaction and optional privacy masking again before evidence storage. These patterns cannot guarantee removal of every secret or personal datum: review actual source formats, minimize selected logs and add organization-specific rules. The private spool is <strong>not encrypted</strong> by the agent; use host disk encryption if required. Inbound agent tokens are hashed in Postgres, and the agent must retain its plaintext token in a protected file. KEEN's existing database/object-storage encryption policies govern received evidence.</p>
+<p>Rotate through the UI, replace the host token atomically with its protected permissions, then restart. Revocation is permanent for the identity and takes effect after any already-running locked ingestion transaction completes. It preserves historical evidence. A token only authenticates log submission and heartbeat updates; it cannot read evidence, edit controls or administer KEEN.</p>
+<h3 id="agent-otlp-interoperability">OTLP interoperability</h3><p>Fluent Bit’s OpenTelemetry output currently sends OTLP Protobuf, which this JSON receiver cannot accept directly. An OTLP-capable intermediary must export JSON, use the KEEN logs endpoint and bearer credential, and limit batches to 64 records and the receiver’s byte bounds. Verify exporter retry behaviour and stable record timestamps/identity before rollout. Prometheus metrics require a separate conversion into effectiveness-measure submissions; KEEN’s OTLP endpoint accepts logs only.</p>
+<p>The receiver implements the <strong>logs signal over OTLP/HTTP JSON</strong>, at <code>/v1/otlp/logs</code> (or <code>/api/v1/otlp/logs</code> through the UI proxy). Protobuf, gRPC, traces and metrics are not implemented in this release. Standard collectors must select JSON and override their logs endpoint. KEEN-specific enrichment is optional; see <code>examples/alloy.alloy</code>.</p>
+<p>KEEN Agent emits these optional log attributes:</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>keen.event.id</code></td>
+<td>Stable UUID; assigned once before queueing</td>
+</tr>
+<tr>
+<td><code>keen.source</code></td>
+<td>Configured log source name</td>
+</tr>
+<tr>
+<td><code>keen.action</code>, <code>keen.outcome</code>, <code>keen.actor</code></td>
+<td>Parsed activity</td>
+</tr>
+<tr>
+<td><code>keen.summary</code></td>
+<td>Bounded summary</td>
+</tr>
+<tr>
+<td><code>keen.field.*</code></td>
+<td>Additional parsed context</td>
+</tr>
+</tbody>
+</table>
+<p>Generic records use <code>action=log.record</code>, <code>source=otlp</code> within their normalized payload, and a deterministic UUID derived from the authenticated identity and canonical record content. This deduplicates identical retries; identical records with the same timestamp/content also collapse. Supply a stable <code>keen.event.id</code> when distinct identical records must be preserved. Avoid changing resource/scope metadata during replay. The actual KEEN event source remains <code>keen-agent</code> for both senders.</p>
+<p>Receiver limits: 64 records/request; 1 MiB compressed and decompressed body; gzip or identity encoding; raw body 65,536 characters; 128 normalized fields, each value up to 4,096 characters and aggregate serialized fields up to 32 KiB. Timestamps must be timezone-aware via OTLP epoch nanoseconds, between year 2000 and five minutes into the future. Attribute nesting is limited to eight levels. Client enrichments beginning <code>resource.</code> or <code>otel.</code> are reserved. Rate limits are 60 log requests/minute per identity and 120/minute per observed client IP, plus separate heartbeat limits. Shared NAT/proxy deployments must account for the aggregate limit. The receiver fails closed if its rate-limit store is unavailable.</p>
+<p>A successful response is <code>{}</code> after the complete batch commits. UUID conflicts return 409; invalid batches return 400; oversized requests 413; unsupported encodings 415. Server errors leave the transaction uncommitted for retry. An object-store write followed by database rollback can leave an unreferenced, redacted object. Each persistence attempt uses a fresh artifact key, so retries also work with write-once local storage and hosted S3 conditional writes. Configure operational cleanup for unreferenced objects in accordance with your retention policy; database rollback never deletes retained evidence objects.</p>
+<h3 id="agent-development-and-checks">Development and checks</h3>
+<pre><code class="language-sh">make test
+make release  # Linux amd64 and arm64 binaries, with SHA256SUMS
+</code></pre>
+<p>Receiver tests are in <code>keen/services/api/tests/test_keen_agent.py</code>; run them with the API's dependencies and required test environment variables. They use SQLite with explicit transaction boundaries and mocked object storage/rate-limit decisions. Production PostgreSQL, Valkey, S3, reverse-proxy behavior and distribution-specific log permissions still require deployment validation. The included tests cover TLS/redirect protection, credentials, retries, queue atomicity, rotation, partial lines, audit grouping, redaction, batch rollback, format/body limits and deduplication.</p><h2 id="agent-013">Agent heartbeat compatibility</h2><p>The API accepts delivery counters from 0.1.1 onward while validating known fields. Restart API and worker services for mapping changes and rebuild the UI. Existing queues and checkpoints remain compatible.</p><p>Journal records include available service.name, process.name, process.pid, user.id, group.id, host.name and log.syslog.priority. Original metadata remains and is redacted before queuing. Known agent failures, cron command starts and SSH authentication results receive specific actions; unrecognized messages remain syslog.record. Old events can be matched using their original structured fields. Maintain and release keen-agent from its separate repository.</p>
+<h2 id="structured-agent-filtering">Filter before agent delivery</h2><p>The agent supports include_when and exclude_when under each source. Each condition has field (a literal parsed field key), operator and value. Operators: equals, starts_with, contains, exists, in_cidr. Quote numeric values such as "404". By default each list uses OR: match any include condition if provided, then discard on any exclusion match. Missing fields do not match. Redaction precedes structured filtering. Excluded records advance checkpoints but never enter the queue; already queued events are unaffected.</p><p>Status and heartbeats report persistent filtered_by_source counters for structured filters, separately from rejected records. Raw regex filters are not included in those counters. Keep checkpoints when adjusting collection filters.</p>
+<p>For agent exclusions, set <code>exclude_match: all</code> under the source to require all exclude_when conditions (AND). The default <code>any</code> uses OR. Empty exclusion lists discard nothing; missing fields prevent an AND exclusion. Include conditions remain OR. For example, client.ip in 192.0.2.0/24 AND status equals "200" discards only status 200 requests from that network.</p>
+<nav aria-label="Chapter pagination" class="chapter-pagination"><a href="administrator-redmine.html" rel="prev">← Previous: Redmine issues and journals</a><a href="administrator-retention.html" rel="next">Next: Evidence storage and retention →</a></nav></main></div></body></html>

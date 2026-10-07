@@ -55,6 +55,7 @@ def auth_methods() -> dict:
     return {
         "demo": demo_metadata(),
         "local_enabled": bool(getattr(settings, "local_auth_enabled", True)),
+        "ldap_enabled": settings.ldap_enabled,
         "remote_user_enabled": bool(
             getattr(settings, "trust_remote_user", False)
             and not getattr(settings, "oidc_enabled", False)
@@ -79,8 +80,8 @@ def auth_methods() -> dict:
 def login(
     payload: LoginPayload, request: Request, db: Session = Depends(get_db)
 ) -> Response:
-    if not bool(getattr(settings, "local_auth_enabled", True)):
-        raise HTTPException(status_code=404, detail="Local login is disabled")
+    if not (settings.ldap_enabled if payload.method == "ldap" else settings.local_auth_enabled):
+        raise HTTPException(status_code=404, detail="Login method is disabled")
 
     # Defense-in-depth: rate limit login attempts (also enforce at reverse proxy).
     # Fail closed on Redis unavailability to prevent brute force attacks.
@@ -124,7 +125,11 @@ def login(
         )
         return resp
 
-    user = authenticate_user(db, payload.username, payload.password)
+    if payload.method == "ldap":
+        from app.security.ldap import authenticate_ldap
+        user = authenticate_ldap(db, payload.username, payload.password)
+    else:
+        user = authenticate_user(db, payload.username, payload.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
@@ -163,7 +168,7 @@ def complete_local_login(db, user, request, *, mfa_verified=False, verified_vers
         get_valkey(),
         user_id=str(user.id),
         ttl_seconds=int(settings.session_ttl_seconds),
-        auth_method="local",
+        auth_method=user.auth_backend or "local",
         mfa_version=session_version,
         mfa_verified=mfa_verified,
         effective_role=eff,

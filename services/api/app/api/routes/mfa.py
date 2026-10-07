@@ -45,7 +45,7 @@ def status(request: Request, db: Session=Depends(get_db), user=Depends(require_a
     return {'enabled':user.mfa_enabled,'totp':bool(user.mfa_totp_secret),
         'credentials':[{'id':str(c.id),'name':c.name,'last_used_at':c.last_used_at} for c in mfa.registered(db,user)],
         'recovery_codes_remaining':db.query(MfaRecoveryCode).filter(MfaRecoveryCode.user_id==user.id).count(),
-        'policy':settings.mfa_policy,'required':mfa.required(db,user),'local_enabled':settings.local_auth_enabled}
+        'policy':settings.mfa_policy,'required':mfa.required(db,user),'local_enabled':settings.local_auth_enabled or settings.ldap_enabled}
 
 
 @router.post('/v1/auth/mfa/manage/start')
@@ -54,7 +54,12 @@ def start_management(payload: Password,request: Request,db: Session=Depends(get_
     user=get_current_user_from_request(request,db)
     if not user:raise HTTPException(401,'Sign in before managing local account security')
     mfa.limit(request,user.id)
-    if not verify_password(payload.password,user.password_hash):raise HTTPException(401,'Invalid password')
+    if user.auth_backend == 'ldap':
+        from app.security.ldap import verify_ldap_user
+        valid = verify_ldap_user(db, user, payload.password)
+    else:
+        valid = verify_password(payload.password,user.password_hash)
+    if not valid:raise HTTPException(401,'Invalid password')
     return mfa.start(db,user,request,'manage')
 
 

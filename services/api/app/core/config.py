@@ -72,7 +72,7 @@ class Settings(BaseSettings):
         if self.hosted_mode:
             if not self.hosted_owner_subject or not self.oidc_issuer.startswith("https://"):
                 raise ValueError("Hosted KEEN requires an exact OIDC issuer and owner subject")
-            if (not self.oidc_enabled or self.local_auth_enabled or self.trust_remote_user
+            if (not self.oidc_enabled or self.local_auth_enabled or self.ldap_enabled or self.trust_remote_user
                     or self.google_sso_enabled or self.github_sso_enabled
                     or self.oidc_auto_link_existing or self.oidc_auto_provision):
                 raise ValueError("Hosted KEEN requires OIDC only, with automatic account linking disabled")
@@ -102,6 +102,20 @@ class Settings(BaseSettings):
     # Local username/password login. Disable this when native OIDC is the only
     # allowed interactive login path.
     local_auth_enabled: bool = Field(default=True)
+    ldap_enabled: bool = False
+    ldap_url: str = "ldaps://localhost:636"
+    ldap_bind_dn: str = ""
+    ldap_bind_password: str = ""
+    # Search below this DN; set it to an OU DN to restrict access to that OU.
+    ldap_base_dn: str = ""
+    ldap_username_attribute: str = "uid"
+    ldap_email_attribute: str = "mail"
+    ldap_id_attribute: str = "entryUUID"
+    ldap_user_filter: str = "(objectClass=person)"
+    ldap_ca_cert_path: str = ""
+    ldap_timeout_seconds: int = Field(default=5, ge=1, le=30)
+    ldap_auto_provision: bool = True
+
     mfa_policy: str = Field(default="optional")
     mfa_encryption_key: str = Field(default="", repr=False)
     mfa_origin: str = Field(default="")
@@ -435,6 +449,7 @@ class Settings(BaseSettings):
     )
 
     # Config paths inside container
+    enabled_frameworks: str = ""  # Comma-separated organisation catalogue restriction; empty means all.
     rules_path: str = Field(default="/app/config/rules.yml")
     control_links_path: str = Field(default="/app/config/control_links.yml")
     risk_mitigator_rules_path: str = Field(default="/app/config/risk_mitigator.yml")

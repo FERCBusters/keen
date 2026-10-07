@@ -87,6 +87,7 @@ def list_users(request: Request, db: Session = Depends(get_db)) -> list[UserOut]
             id=x.id,
             username=x.username,
             email=x.email,
+            auth_backend=x.auth_backend,
             role=x.role,
             effective_role=(
                 ROLE_ADMIN
@@ -222,6 +223,7 @@ def update_user_admin(
         id=target.id,
         username=target.username,
         email=target.email,
+        auth_backend=target.auth_backend,
         role=target.role,
         effective_role=compute_effective_role(db, target),
         is_active=target.is_active,
@@ -280,6 +282,8 @@ def set_user_password_admin(
         raise HTTPException(status_code=404, detail="User not found")
 
     try:
+        if target.auth_backend == "ldap":
+            raise HTTPException(400, "Change LDAP passwords in the directory")
         target.password_hash = hash_password(payload.new_password or "")
         target.mfa_version += 1
     except ValueError as e:

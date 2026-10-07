@@ -632,6 +632,7 @@ class User(Base):
         String(128), unique=True, nullable=False, index=True
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    auth_backend: Mapped[str] = mapped_column(String(16), nullable=False, default="local", server_default="local")
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     mfa_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     mfa_totp_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -988,6 +989,9 @@ class Risk(Base):
     )
 
     asset = relationship("RiskAsset", back_populates="risks")
+    risk_owner_role_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_org_nodes.id", ondelete="SET NULL"), nullable=True, index=True)
+    owner_role = relationship("IsmsOrgNode", foreign_keys=[risk_owner_role_id])
     owner = relationship("User", foreign_keys=[risk_owner_user_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     control_links = relationship(
@@ -995,6 +999,7 @@ class Risk(Base):
     )
 
     __table_args__ = (
+        CheckConstraint("risk_owner_user_id IS NULL OR risk_owner_role_id IS NULL", name="ck_risks_one_owner"),
         CheckConstraint("threat_score between 0 and 5", name="ck_risks_threat_score"),
         CheckConstraint(
             "vulnerability_score between 0 and 5",

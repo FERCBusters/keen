@@ -109,7 +109,16 @@ async function loadAuthMethods() {
   if (!providers.length && methods?.oidc_enabled && methods?.oidc) providers = [methods.oidc];
   renderSsoButtons(providers);
 
-  if (methods && methods.local_enabled === false) {
+  if (methods?.ldap_enabled && form) {
+    const label = document.createElement('label');
+    label.className = 'form-label'; label.htmlFor = 'login-method'; label.textContent = 'Sign-in method';
+    const select = document.createElement('select'); select.id = 'login-method'; select.className = 'form-select mb-3';
+    select.add(new Option('LDAP directory', 'ldap'));
+    if (methods.local_enabled) select.add(new Option('Local KEEN account', 'local'));
+    form.prepend(label, select);
+    if (localLoginHint) localLoginHint.textContent = 'Use your directory username and password, or select a local KEEN account.';
+  }
+  if (methods && methods.local_enabled === false && !methods.ldap_enabled) {
     if (form) form.classList.add('d-none');
     if (localLoginHint) localLoginHint.classList.add('d-none');
     if (!providers.length) toast(status, 'No interactive login method is enabled.', 'danger');
@@ -145,7 +154,7 @@ if (form) {
         method: 'POST',
         credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({username, password}),
+        body: JSON.stringify({username, password, method: document.getElementById('login-method')?.value || 'local'}),
       });
       if (!r.ok) {
         let msg = `HTTP ${r.status}`;

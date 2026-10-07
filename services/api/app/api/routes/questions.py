@@ -177,7 +177,8 @@ def _risk_question_target(
     row = db.query(Risk).filter(Risk.id == entity_id).one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="CIA Triad risk not found")
-    is_owner = bool(row.risk_owner_user_id and row.risk_owner_user_id == user.id)
+    from app.api.routes.risks import _is_risk_owner
+    is_owner = _is_risk_owner(user, row)
     if not (
         is_effective_admin(db, user)
         or has_permission(db, user, "risk.read")

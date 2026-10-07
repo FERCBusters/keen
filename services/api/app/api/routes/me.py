@@ -401,7 +401,7 @@ def me(request: Request, db: Session = Depends(get_db)) -> dict:
         "can_delete_incidents": can_delete_incidents,
         "unread_question_replies_count": unread_question_replies_count,
         "password_change_enabled": bool(
-            local_auth_enabled and not trust_remote and not oidc_enabled
+            local_auth_enabled and user.auth_backend != "ldap" and not trust_remote and not oidc_enabled
         ),
         # In native OIDC mode, logout_url clears KEEN's session and then starts
         # RP-initiated logout when the provider end-session endpoint is configured.
@@ -694,6 +694,9 @@ def change_my_password(
             status_code=503,
             detail="Service temporarily unavailable. Please try again later.",
         )
+
+    if user.auth_backend == "ldap":
+        raise HTTPException(403, "Change your password in your LDAP directory")
 
     # In remote-user proxy mode, the upstream IdP/proxy is authoritative.
     # Disallow local password changes to avoid confusing users.
