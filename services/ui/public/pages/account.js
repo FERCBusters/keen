@@ -20,9 +20,6 @@ import {
 } from '/app.js';
 
 const status = document.getElementById('status');
-const meUser = document.getElementById('meUser');
-const meRole = document.getElementById('meRole');
-const meAdmin = document.getElementById('meAdmin');
 
 const pwForm = document.getElementById('pwForm');
 const curPw = document.getElementById('curPw');
@@ -128,9 +125,6 @@ const sourceColorsResetAll = document.getElementById('sourceColorsResetAll');
 const me = await initNavbar();
 const canDeleteQuestions = Boolean(me?.is_admin || me?.can_delete_questions);
 
-if (meUser) meUser.textContent = me?.user || '–';
-if (meRole) meRole.textContent = me?.effective_role || me?.role || '–';
-if (meAdmin) meAdmin.textContent = me?.is_admin ? 'Yes' : 'No';
 
 // Hide local password management when using trusted proxy auth.
 if (pwCard && me?.password_change_enabled === false) {
@@ -598,8 +592,7 @@ loadSavedSearches();
 
 function accountTabTargetFromHash(hash) {
   const h = String(hash || '').trim().toLowerCase();
-  if (h === '#profile') return '#profile-pane';
-  if (h === '#preferences') return '#preferences-pane';
+  if (h === '#profile' || h === '#preferences') return '#preferences-pane';
   if (h === '#saved-searches' || h === '#savedsearches') return '#saved-searches-pane';
   if (h === '#my-questions' || h === '#questions') return '#my-questions-pane';
   if (h === '#my-audits' || h === '#audits') return '#my-audits-pane';
@@ -647,7 +640,7 @@ function bindAccountTabs() {
       return;
     }
   }
-  maybeLoadActiveAccountTab('#profile-pane');
+  maybeLoadActiveAccountTab('#preferences-pane');
 }
 
 

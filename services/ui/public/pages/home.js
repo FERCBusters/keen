@@ -12,6 +12,30 @@ import {
   collapseToggleButtonHtml,
 } from '/app.js';
 
+// HTML and unversioned modules must come from the same UI release. A browser
+// can still hold HTML cached before the server's no-store policy was deployed.
+function ensureHomeLayout() {
+  const required = ['homeRefresh', 'homeTasks', 'homeKpis', 'homeAttention',
+    'homeOverview', 'homeExploreHeading', 'homeExplorer', 'homeFrameworkName'];
+  if (required.every(id => document.getElementById(id))) return true;
+  const url = new URL(location.href);
+  const revision = '20261007-home-2';
+  if (url.searchParams.get('__keen_home') !== revision) {
+    // Preserve the chosen framework and other parameters. A different URL
+    // bypasses a fresh cached document without creating a reload loop.
+    url.searchParams.set('__keen_home', revision);
+    location.replace(url.pathname + url.search + url.hash);
+  } else {
+    const message = document.createElement('div');
+    message.className = 'alert alert-warning m-4';
+    message.setAttribute('role', 'alert');
+    message.textContent = 'The home page and its scripts are from different UI versions. Please reload without cache. If this persists, rebuild and redeploy the KEEN UI and clear any reverse-proxy HTML cache.';
+    (document.querySelector('main') || document.body).prepend(message);
+  }
+  return false;
+}
+
+if (ensureHomeLayout()) {
 const me = await initNavbar();
 
 const status = document.getElementById('status');
@@ -1298,3 +1322,4 @@ async function loadOverview() {
   } finally { button.disabled = false; }
 }
 document.getElementById('homeRefresh').addEventListener('click', async () => { await loadOverview(); await loadEntryCards(); });
+}

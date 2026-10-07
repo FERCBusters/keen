@@ -17,7 +17,7 @@
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
         <h1 class="h3 mb-1">Account</h1>
-        <div class="small-muted">Manage your profile, preferences, saved searches, questions, audits, meetings and risks.</div>
+        <div class="small-muted">Manage your preferences, security, saved searches, questions, audits, meetings and risks.</div>
       </div>
       <div class="d-flex gap-2">
         <button id="logoutBtn" class="btn btn-outline-primary" type="button">Logout</button>
@@ -27,13 +27,10 @@
     <div id="status" class="alert alert-info" style="display:none;"></div>
 
     <ul class="nav nav-tabs mb-3" id="accountTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="preferences-tab" data-bs-toggle="tab" data-bs-target="#preferences-pane" type="button" role="tab" aria-controls="preferences-pane" aria-selected="true" data-tab-hash="#preferences">Preferences</button>
+      </li>
       <li class="nav-item" role="presentation"><button class="nav-link" id="security-tab" data-bs-toggle="tab" data-bs-target="#security-pane" type="button" role="tab" aria-controls="security-pane" aria-selected="false" data-tab-hash="#security">Security</button></li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile-pane" type="button" role="tab" aria-controls="profile-pane" aria-selected="true" data-tab-hash="#profile">Profile</button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="preferences-tab" data-bs-toggle="tab" data-bs-target="#preferences-pane" type="button" role="tab" aria-controls="preferences-pane" aria-selected="false" data-tab-hash="#preferences">Preferences</button>
-      </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="saved-searches-tab" data-bs-toggle="tab" data-bs-target="#saved-searches-pane" type="button" role="tab" aria-controls="saved-searches-pane" aria-selected="false" data-tab-hash="#saved-searches">Saved searches</button>
       </li>
@@ -61,33 +58,20 @@
     </ul>
 
     <div class="tab-content" id="accountTabContent">
-      <section class="tab-pane fade" id="security-pane" role="tabpanel" aria-labelledby="security-tab" tabindex="0"><div class="card mb-3"><div class="card-body"><h2 class="h5">Two-factor authentication</h2><p id="securitySummary" role="status">Loading…</p><p>Protect local sign-in with an authenticator app, security key or passkey. Recovery codes let you sign in if you lose access to your authenticator.</p><form id="securityForm"><label for="securityPassword" class="form-label">Confirm your local password to manage authenticators</label><input id="securityPassword" type="password" class="form-control mb-3" autocomplete="current-password" required><button class="btn btn-primary" type="submit">Manage account security</button></form></div></div></section>
-      <section class="tab-pane fade show active" id="profile-pane" role="tabpanel" aria-labelledby="profile-tab" tabindex="0">
-        <div class="card mb-3">
-          <div class="card-header">
-            <div class="fw-bold">Profile</div>
-            <div class="small-muted">Your current session identity.</div>
-          </div>
+      <section class="tab-pane fade" id="security-pane" role="tabpanel" aria-labelledby="security-tab" tabindex="0">
+        <div id="pwCard" class="card mb-3">
           <div class="card-body">
-            <div class="row g-2">
-              <div class="col-12 col-lg-4">
-                <div class="small-muted">Username</div>
-                <div class="fw-semibold" id="meUser">–</div>
-              </div>
-              <div class="col-12 col-lg-4">
-                <div class="small-muted">Role</div>
-                <div class="fw-semibold" id="meRole">–</div>
-              </div>
-              <div class="col-12 col-lg-4">
-                <div class="small-muted">Admin</div>
-                <div class="fw-semibold" id="meAdmin">–</div>
-              </div>
-            </div>
+            <h2 class="h5">Change password</h2>
+            <p class="text-secondary">Change the password for your local KEEN account. You will need to sign in again afterwards.</p>
+            <form id="pwForm">
+              <div class="mb-3"><label for="curPw" class="form-label">Current password</label><input id="curPw" type="password" class="form-control" autocomplete="current-password" required></div>
+              <div class="mb-3"><label for="newPw" class="form-label">New password</label><input id="newPw" type="password" class="form-control" autocomplete="new-password" required></div>
+              <button class="btn btn-primary" type="submit">Change password</button>
+            </form>
           </div>
         </div>
-      </section>
-
-      <section class="tab-pane fade" id="preferences-pane" role="tabpanel" aria-labelledby="preferences-tab" tabindex="0">
+<div class="card mb-3"><div class="card-body"><h2 class="h5">Two-factor authentication</h2><p id="securitySummary" role="status">Loading…</p><p>Protect local sign-in with an authenticator app, security key or passkey. Recovery codes let you sign in if you lose access to your authenticator.</p><form id="securityForm"><label for="securityPassword" class="form-label">Confirm your local password to manage authenticators</label><input id="securityPassword" type="password" class="form-control mb-3" autocomplete="current-password" required><button class="btn btn-primary" type="submit">Manage account security</button></form></div></div></section>
+      <section class="tab-pane fade show active" id="preferences-pane" role="tabpanel" aria-labelledby="preferences-tab" tabindex="0">
         <div class="card mb-3">
           <div class="card-header">
             <div class="fw-bold">Preferences</div>

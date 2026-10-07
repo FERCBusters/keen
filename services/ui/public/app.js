@@ -148,7 +148,7 @@ export async function initNavbar(...args) {
   if (navRoot && !navRoot.querySelector('[data-keen-documentation]')) {
     const list = navRoot.querySelector('.navbar-nav');
     const link = document.createElement('a');
-    link.href = '/help/'; link.textContent = 'Documentation';
+    link.href = '/help/'; link.textContent = 'Help';
     link.className = 'nav-link'; link.dataset.keenDocumentation = '1';
     if (list) { const item = document.createElement('li'); item.className = 'nav-item'; item.append(link); list.append(item); }
     else navRoot.append(link);
