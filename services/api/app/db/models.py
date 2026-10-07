@@ -632,6 +632,10 @@ class User(Base):
         String(128), unique=True, nullable=False, index=True
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    mfa_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    mfa_totp_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mfa_totp_last_step: Mapped[int] = mapped_column(Integer, nullable=False, default=-1, server_default="-1")
     email: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     # One of: admin | normal
@@ -2754,3 +2758,56 @@ Index('ix_isms_documents_storage_uri', IsmsDocument.storage_uri)
 Index('ix_bookstack_section_storage_uri', Base.metadata.tables['bookstack_section_evidence'].c.storage_uri)
 Index('ix_audits_report_storage_uri', Audit.final_report_storage_uri)
 Index('ix_question_attachments_artifact', EventQuestionPostAttachment.artifact_id)
+
+
+class MfaCredential(Base):
+    __tablename__ = 'mfa_credentials'
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    credential_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    public_key: Mapped[str] = mapped_column(Text, nullable=False)
+    sign_count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class MfaRecoveryCode(Base):
+    __tablename__ = 'mfa_recovery_codes'
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+
+class MfaChallenge(Base):
+    __tablename__ = 'mfa_challenges'
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    purpose: Mapped[str] = mapped_column(String(16), nullable=False)
+    stage: Mapped[str] = mapped_column(String(16), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    password_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class UserLoginIP(Base):
+    __tablename__ = 'user_login_ips'
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    address: Mapped[str] = mapped_column(String(45), primary_key=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+
+class SecurityNotification(Base):
+    __tablename__ = 'security_notifications'
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    recipient: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default='pending', nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    __table_args__ = (Index('ix_security_notifications_pending', 'status', 'next_attempt_at'),)

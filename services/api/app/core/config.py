@@ -102,6 +102,18 @@ class Settings(BaseSettings):
     # Local username/password login. Disable this when native OIDC is the only
     # allowed interactive login path.
     local_auth_enabled: bool = Field(default=True)
+    mfa_policy: str = Field(default="optional")
+    mfa_encryption_key: str = Field(default="", repr=False)
+    mfa_origin: str = Field(default="")
+    mfa_rp_id: str = Field(default="")
+
+    @field_validator("mfa_policy")
+    @classmethod
+    def validate_mfa_policy(cls, value):
+        if value not in {"optional", "admins", "all"}:
+            raise ValueError("MFA policy must be optional, admins or all")
+        return value
+
 
     # Trusted proxy auth (REMOTE_USER)
     # When enabled, an upstream reverse proxy can authenticate a user and pass
@@ -229,6 +241,17 @@ class Settings(BaseSettings):
     # SMTP outbound mail
     # -----------------------------------------------------------------------------
     # Used for scheduled audit attendee notifications.
+    security_trusted_proxy_cidrs: str = Field(default="")
+
+    @field_validator("security_trusted_proxy_cidrs")
+    @classmethod
+    def validate_security_proxies(cls, value):
+        import ipaddress
+        for entry in value.split(','):
+            if entry.strip():
+                ipaddress.ip_network(entry.strip())
+        return value
+
     smtp_host: str = Field(default="")
     smtp_port: int = Field(default=587)
     smtp_username: str = Field(default="")

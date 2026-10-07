@@ -1312,7 +1312,8 @@ if (pwForm && me?.password_change_enabled !== false) {
 
     try {
       await apiPost('/api/v1/me/password', {current_password, new_password});
-      toast(status, 'Password updated', 'success');
+      toast(status, 'Password updated. Sign in again to continue.', 'success');
+      location.assign('/login.html');
       if (curPw) curPw.value = '';
       if (newPw) newPw.value = '';
     } catch (e) {

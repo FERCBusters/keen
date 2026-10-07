@@ -88,3 +88,7 @@ celery_app.conf.beat_schedule['integration-schedules'] = {
 celery_app.conf.beat_schedule['evidence-retention'] = {
     'task': 'app.worker.tasks.evidence_retention_task', 'schedule': 60.0,
 }
+
+celery_app.conf.beat_schedule['security-notifications'] = {
+    'task': 'app.worker.tasks.security_notifications_task', 'schedule': 60.0,
+}

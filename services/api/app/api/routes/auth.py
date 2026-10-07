@@ -126,6 +126,15 @@ def login(
     if not user:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
+    from app.security import mfa
+    if user.mfa_enabled or mfa.required(db, user):
+        return mfa.start(db, user, request)
+    return complete_local_login(db, user, request)
+
+
+def complete_local_login(db, user, request, *, mfa_verified=False, verified_version=None):
+    # Freeze the version proven by this ceremony before any commit expires ORM state.
+    session_version = user.mfa_version if verified_version is None else verified_version
     # Delete any existing session for this user to prevent session fixation.
     existing_sid = request.cookies.get(settings.session_cookie_name)
     if existing_sid:
@@ -153,6 +162,8 @@ def login(
         user_id=str(user.id),
         ttl_seconds=int(settings.session_ttl_seconds),
         auth_method="local",
+        mfa_version=session_version,
+        mfa_verified=mfa_verified,
         effective_role=eff,
         permission_codes=permission_codes,
         authz_version=authz_version,
@@ -163,6 +174,10 @@ def login(
         setattr(user, "effective_permission_codes", set(permission_codes))
     except Exception:
         pass
+
+    from app.services.security_notifications import record_login
+    record_login(db, user, request)
+    db.commit()
 
     can_manage_audits = has_permission(db, user, "audits.manage")
     can_view_audits = can_manage_audits or has_permission(db, user, "audits.read")
@@ -263,6 +278,10 @@ async def _complete_sso_callback(request: Request, db: Session, *, provider_key:
         authz_version=authz_version,
     )
 
+    from app.services.security_notifications import record_login
+    record_login(db, user, request)
+    db.commit()
+
     dest = next_url or "/"
     resp = RedirectResponse(dest, status_code=302)
     set_session_cookie(resp, sid)
@@ -271,17 +290,19 @@ async def _complete_sso_callback(request: Request, db: Session, *, provider_key:
 
 
 @router.post("/v1/auth/logout")
-def logout(request: Request) -> Response:
+def logout(request: Request, db: Session = Depends(get_db)) -> Response:
     sid = request.cookies.get(settings.session_cookie_name) or ""
     if sid:
         delete_session(get_valkey(), sid)
     resp = Response(status_code=204)
+    from app.security import mfa
+    mfa.cancel(db, request, resp)
     clear_session_cookie(resp)
     clear_csrf_cookie(resp)
     return resp
 
 
-def _browser_logout_response(request: Request) -> Response:
+def _browser_logout_response(request: Request, db: Session) -> Response:
     sid = (request.cookies.get(settings.session_cookie_name) or "").strip()
     session_row = get_session(get_valkey(), sid) if sid else None
     id_token = str((session_row or {}).get("oidc_id_token") or "").strip()
@@ -305,21 +326,23 @@ def _browser_logout_response(request: Request) -> Response:
     else:
         resp = RedirectResponse(post_logout or "/login.html", status_code=302)
 
+    from app.security import mfa
+    mfa.cancel(db, request, resp)
     clear_session_cookie(resp)
     clear_csrf_cookie(resp)
     return resp
 
 
 @router.get("/v1/auth/logout")
-def browser_logout(request: Request) -> Response:
-    return _browser_logout_response(request)
+def browser_logout(request: Request, db: Session = Depends(get_db)) -> Response:
+    return _browser_logout_response(request, db)
 
 
 @router.get("/v1/auth/oidc/logout")
-def oidc_logout(request: Request) -> Response:
+def oidc_logout(request: Request, db: Session = Depends(get_db)) -> Response:
     """Clear KEEN's session and start RP-initiated logout when available."""
 
-    return _browser_logout_response(request)
+    return _browser_logout_response(request, db)
 
 
 @router.get("/v1/auth/check")

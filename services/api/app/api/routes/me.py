@@ -703,14 +703,18 @@ def change_my_password(
             detail="Password changes are disabled when KEEN_TRUST_REMOTE_USER is enabled",
         )
 
+    user = db.query(User).filter(User.id == user.id).populate_existing().with_for_update().one()
     if not verify_password(payload.current_password or "", user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
     try:
         user.password_hash = hash_password(payload.new_password or "")
+        user.mfa_version += 1
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    from app.services.security_notifications import enqueue
+    enqueue(db, user, 'password-changed', request)
     db.add(user)
     db.commit()
     return {"ok": True}

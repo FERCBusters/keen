@@ -115,3 +115,6 @@ router.include_router(agents_router, tags=['KEEN Agent'])
 
 from .evidence_retention import router as evidence_retention_router
 router.include_router(evidence_retention_router, tags=['Admin'])
+
+from .mfa import router as mfa_router
+router.include_router(mfa_router, tags=['Auth'])

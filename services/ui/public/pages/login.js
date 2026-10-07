@@ -155,6 +155,12 @@ if (form) {
         } catch {}
         throw new Error(msg);
       }
+      const result = await r.json();
+      if (result.mfa_required) {
+        passwordEl.value = "";
+        location.assign("/mfa.html?next=" + encodeURIComponent(computeNext()));
+        return;
+      }
       let n = computeNext();
       if (!hadExplicitNext && (n === '/' || n === '/index.html')) {
         n = await fetchLandingPage();

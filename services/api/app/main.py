@@ -188,7 +188,7 @@ _AUTH_EXEMPT_PATHS = {
     "/v1/redoc",
     "/v1/docs/oauth2-redirect",
 }
-_AUTH_EXEMPT_PREFIXES = ("/v1/webhooks", "/v1/auth/sso/", "/docs", "/redoc")
+_AUTH_EXEMPT_PREFIXES = ("/v1/webhooks", "/v1/auth/sso/", "/v1/auth/mfa/", "/docs", "/redoc")
 
 
 # CSRF: enforce for browser-session authenticated writes.
@@ -211,7 +211,7 @@ _CSRF_EXEMPT_PATHS = {
     "/v1/redoc",
     "/v1/docs/oauth2-redirect",
 }
-_CSRF_EXEMPT_PREFIXES = ("/v1/webhooks", "/v1/auth/sso/", "/docs", "/redoc")
+_CSRF_EXEMPT_PREFIXES = ("/v1/webhooks", "/v1/auth/sso/", "/v1/auth/mfa/", "/docs", "/redoc")
 
 
 @app.middleware("http")
@@ -542,3 +542,12 @@ app.include_router(api_router, prefix="")
 # Outermost guard also covers auth-exempt integrations and WebSockets.
 from app.security.demo import DemoExpiryMiddleware
 app.add_middleware(DemoExpiryMiddleware)
+
+
+@app.middleware("http")
+async def mfa_no_store(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith('/v1/auth/mfa/') or request.url.path == '/v1/me/mfa':
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Pragma'] = 'no-cache'
+    return response

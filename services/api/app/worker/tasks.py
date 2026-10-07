@@ -525,3 +525,9 @@ def evidence_retention_task():
     from app.services.evidence_retention import run_retention
     if run_retention():
         evidence_retention_task.apply_async(countdown=1)
+
+
+@celery_app.task
+def security_notifications_task():
+    from app.services.security_notifications import deliver_pending
+    return deliver_pending()

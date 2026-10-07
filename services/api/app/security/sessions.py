@@ -72,6 +72,8 @@ def create_session(
     ttl_seconds: int,
     auth_method: str = "local",
     oidc_id_token: str | None = None,
+    mfa_version: int = 0,
+    mfa_verified: bool = False,
     effective_role: str | None = None,
     permission_codes: list[str] | set[str] | tuple[str, ...] | None = None,
     authz_version: int | None = None,
@@ -81,6 +83,8 @@ def create_session(
     payload = {
         "user_id": user_id,
         "created_at": _utc_iso(),
+        "mfa_version": int(mfa_version),
+        "mfa_verified": bool(mfa_verified),
         "auth_method": (auth_method or "local")[:20],
     }
     if oidc_id_token:

@@ -275,15 +275,18 @@ def set_user_password_admin(
     if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
         raise HTTPException(status_code=403, detail="Admin role required")
 
-    target = db.query(User).filter(User.id == user_id).one_or_none()
+    target = db.query(User).filter(User.id == user_id).populate_existing().with_for_update().one_or_none()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
 
     try:
         target.password_hash = hash_password(payload.new_password or "")
+        target.mfa_version += 1
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    from app.services.security_notifications import enqueue
+    enqueue(db, target, 'password-reset', request)
     db.add(target)
     _bump_user_authz(db, [target.id])
     db.commit()
