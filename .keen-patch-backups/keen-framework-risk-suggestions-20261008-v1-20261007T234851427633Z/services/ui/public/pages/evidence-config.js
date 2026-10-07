@@ -627,14 +627,14 @@ $('suggest-controls').addEventListener('click', async () => {
   list.replaceChildren();
   if (!framework || !description) { status('Choose a framework and describe the evidence first.', 'warning'); return; }
   try {
-    const result = await apiPost(`${apiRoot}/control-suggestions`, {framework, description, sample_summary:String(sample?.summary || '').slice(0, 4000)});
+    const result = await apiPost(`${apiRoot}/control-suggestions`, {framework, description, sample_summary:sample?.summary || ''});
     if (!result.items.length) { list.textContent = 'No clear matches in this framework. Search the control list or try a more specific description.'; return; }
     for (const suggestion of result.items) {
       const button = document.createElement('button'); button.type = 'button';
       button.className = 'list-group-item list-group-item-action text-start';
       const title = document.createElement('strong'); title.textContent = `${suggestion.ref} · ${suggestion.title || 'Control'}`;
       const reason = document.createElement('div'); reason.className = 'small-muted';
-      reason.textContent = `${suggestion.reason || `Matched: ${(suggestion.matched_terms || []).join(', ')}.`} Click to add; review suitability before publishing.`;
+      reason.textContent = `Matched: ${suggestion.matched_terms.join(', ')}. Click to add; review suitability before publishing.`;
       button.append(title, reason);
       button.addEventListener('click', () => {
         if (!targets.some(t => t.framework === framework && t.ref === suggestion.ref)) {

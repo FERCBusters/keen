@@ -142,53 +142,6 @@ function _collapseFilterSectionsByDefault() {
   _mospInitCollapsibleFilterSections();
 }
 
-// Reconcile organisation changes without reinitialising the navbar or navigating away.
-// Accept the successful save response so an old cached catalogue cannot overwrite it.
-export async function refreshFrameworkNavigation(savedCatalog = null, cfgOverrides = null) {
-  const cfg = getUiConfig(cfgOverrides);
-  const navRoot = document.getElementById('navbar');
-  const clauseLinks = [...(navRoot?.querySelectorAll('a[href]') || [])].filter(a=>new URL(a.href,location.origin).pathname==='/clauses.html');
-  for (const link of clauseLinks) (link.closest('li') || link).hidden = true;
-  const data = savedCatalog || await getFrameworkCatalog(cfgOverrides);
-  const catalog = {...data, items: (data.items || []).filter(item => item.enabled !== false)};
-  const allowed = new Set(catalog.items.map(item=>item.slug));
-  let selected = getCurrentFramework();
-  window.mospFrameworkDefault = catalog.default || '';
-  window.keenFrameworkDefault = catalog.default || '';
-  if (!allowed.has(selected) && catalog.default) {
-    selected = catalog.default;
-    const url = new URL(location.href); url.searchParams.set('framework', selected);
-    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
-    window.mospFramework = selected; window.keenFramework = selected;
-    try { localStorage.setItem(cfg.storage.frameworkKey, selected); } catch {}
-    for (const link of (navRoot?.querySelectorAll('a[href]') || [])) {
-      const target = new URL(link.href, location.origin);
-      if (target.origin !== location.origin || (!link.hasAttribute('data-nav-fw') && !target.searchParams.has('framework'))) continue;
-      target.searchParams.set('framework', selected);
-      link.href = target.pathname + target.search + target.hash;
-    }
-  }
-  const picker = navRoot?.querySelector('#navFrameworkSelect');
-  if (picker) {
-    picker.replaceChildren(...catalog.items.map(item=> {
-      const option = new Option(item.slug, item.slug);
-      option.title = `${item.name} (${item.slug})`; return option;
-    }));
-    picker.value = selected;
-    picker.disabled = !catalog.items.length;
-    const describe = () => {
-      const item = catalog.items.find(item=>item.slug===picker.value);
-      picker.title = item ? `${item.name} (${item.slug})` : 'No frameworks available; ask an administrator to check organisation settings';
-      picker.setAttribute('aria-label', `Framework: ${picker.title}`);
-    };
-    describe();
-  }
-  const framework=catalog.items.find(item=>item.slug===selected);
-  for(const a of clauseLinks)(a.closest('li')||a).hidden=framework?.has_clauses!==true;
-  window.dispatchEvent(new CustomEvent('keen:framework-catalog-changed', {detail: catalog}));
-  return catalog;
-}
-
 export async function initNavbar(...args) {
   const cfg = getUiConfig(args[0]);
   const me = await _mospInitNavbar({...cfg, brandIcon: '/keen-mitigator.png',
@@ -203,13 +156,41 @@ export async function initNavbar(...args) {
     if (list) { const item = document.createElement('li'); item.className = 'nav-item'; item.append(link); list.append(item); }
     else navRoot.append(link);
   }
-  try { await refreshFrameworkNavigation(null, cfg); }
-  catch {
-    // Keep optional navigation hidden when the catalogue cannot be checked.
-    for (const link of navRoot?.querySelectorAll('a[href]') || []) {
-      if (new URL(link.href, location.origin).pathname === '/clauses.html') (link.closest('li') || link).hidden = true;
+  const clauseLinks = [...(navRoot?.querySelectorAll('a[href]') || [])].filter(a=>new URL(a.href,location.origin).pathname==='/clauses.html');
+  for(const a of clauseLinks)(a.closest('li')||a).hidden=true;
+  try {
+    const catalog=await getFrameworkCatalog();
+    const allowed = new Set(catalog.items.map(item=>item.slug));
+    let selected = getCurrentFramework();
+    if (!allowed.has(selected) && catalog.default) {
+      selected = catalog.default;
+      const url = new URL(location.href); url.searchParams.set('framework', selected);
+      history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+      window.mospFramework = selected; window.keenFramework = selected;
+      try { localStorage.setItem(cfg.storage.frameworkKey, selected); } catch {}
+      for (const link of navRoot.querySelectorAll('[data-nav-fw]')) {
+        const target = new URL(link.href, location.origin); target.searchParams.set('framework', selected);
+        link.href = target.pathname + target.search + target.hash;
+      }
     }
-  }
+    const picker = navRoot?.querySelector('#navFrameworkSelect');
+    if (picker) {
+      picker.replaceChildren(...catalog.items.map(item=> {
+        const option = new Option(item.slug, item.slug);
+        option.title = `${item.name} (${item.slug})`; return option;
+      }));
+      picker.value = selected;
+      picker.disabled = !catalog.items.length;
+      const describe = () => {
+        const item = catalog.items.find(item=>item.slug===picker.value);
+        picker.title = item ? `${item.name} (${item.slug})` : 'No frameworks available; ask an administrator to check organisation settings';
+        picker.setAttribute('aria-label', `Framework: ${picker.title}`);
+      };
+      describe(); picker.addEventListener('change', describe);
+    }
+    const framework=catalog.items.find(item=>item.slug===selected);
+    for(const a of clauseLinks)(a.closest('li')||a).hidden=framework?.has_clauses!==true;
+  } catch { /* Keep optional navigation hidden until the catalogue is available. */ }
   _removeHomeNavItem();
   _patchRiskNavDropdown();
   _patchIsmsNavDropdown();

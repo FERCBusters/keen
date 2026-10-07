@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -79,27 +79,47 @@ class AdapterSettingsInput(BaseModel):
 
 
 class ControlSuggestionInput(BaseModel):
-    framework: str = Field(min_length=1, max_length=64)
-    description: str = Field(min_length=1, max_length=4000)
-    sample_summary: str = Field(default="", max_length=4000)
+    framework: str
+    description: str
+    sample_summary: str = ""
+
+
+_EVIDENCE_SYNONYMS = {
+    "supplier": {"vendor", "third party", "outsourcing", "supply chain"},
+    "change": {"deployment", "release", "pull request", "peer review"},
+    "configuration": {"patch", "baseline", "hardening", "config"},
+    "access": {"login", "mfa", "privilege", "authentication"},
+    "incident": {"alert", "detection", "security event"},
+    "backup": {"restore", "recovery", "continuity"},
+}
 
 
 @router.post("/v1/admin/control-suggestions")
 def suggest_controls(payload: ControlSuggestionInput, db: Session = Depends(get_db)):
-    """Explainable catalogue and related-concept suggestions, for human review."""
-    from app.api.routes.frameworks import list_frameworks
-    from app.services.control_suggestions import rank_controls
-
-    enabled = {item["slug"] for item in list_frameworks(db)["items"]}
-    if payload.framework not in enabled:
-        raise HTTPException(400, "Choose an enabled framework for control suggestions")
-    candidates = db.query(ControlItem).filter(
-        ControlItem.framework_slug == payload.framework,
-        ControlItem.in_scope.is_(True),
-    ).order_by(ControlItem.ref, ControlItem.id).limit(5000).all()
-    return {"items": rank_controls(candidates, description=payload.description,
-                                   sample_summary=payload.sample_summary),
-            "note": "Suggestions use catalogue text and related concepts. Review each control before mapping evidence."}
+    """Transparent catalogue-word suggestions; an admin must confirm mappings."""
+    text = " ".join((payload.description, payload.sample_summary)).lower()[:4000]
+    words = set(re.findall(r"[a-z][a-z0-9]{3,}", text))
+    if not words:
+        return {"items": []}
+    terms = {word for word in words if word not in {"that", "this", "with", "from", "which", "event", "evidence", "control"}}
+    for concept, synonyms in _EVIDENCE_SYNONYMS.items():
+        if concept in words or any(term in text for term in synonyms):
+            terms.add(concept)
+            terms.update(word for phrase in synonyms for word in phrase.split() if len(word) >= 4)
+    candidates = db.query(ControlItem).filter(ControlItem.framework_slug == payload.framework).limit(5000).all()
+    ranked = []
+    for control in candidates:
+        catalog = " ".join((control.title or "", str(control.tags or ""), str(control.meta or ""))).lower()
+        title = (control.title or "").lower()
+        hits = sorted(term for term in terms if re.search(r"\b" + re.escape(term) + r"\b", catalog))
+        if not hits:
+            continue
+        title_hits = sum(1 for term in hits if re.search(r"\b" + re.escape(term) + r"\b", title))
+        ranked.append({"id": str(control.id), "framework": control.framework_slug,
+                       "ref": control.ref, "title": control.title, "score": 3*title_hits + len(hits),
+                       "matched_terms": hits[:8], "reason": "Words in the description or sample match the control catalogue."})
+    ranked.sort(key=lambda x: (-x["score"], x["ref"]))
+    return {"items": ranked[:10], "note": "Suggestions are based on catalogue words and must be reviewed before mapping evidence."}
 
 
 @router.get("/v1/admin/adapter-settings/{adapter}")

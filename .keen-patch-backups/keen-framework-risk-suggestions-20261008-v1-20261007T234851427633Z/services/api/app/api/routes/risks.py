@@ -1507,9 +1507,7 @@ def create_risk(
         if template is None:
             raise HTTPException(status_code=400, detail="Unknown risk library template")
         refs = (template.suggested_assessment or {}).get("keen_af_control_refs", [])
-        from app.api.routes.frameworks import list_frameworks
-        enabled = {item["slug"] for item in list_frameworks(db)["items"]}
-        if "KEEN-AF:1.0" in enabled and isinstance(refs, list):
+        if isinstance(refs, list):
             template_refs = _dedupe_controls([ref for ref in refs if isinstance(ref, str)])
             # Administrators can remove framework controls later. An old
             # template should still create a risk using its remaining links.

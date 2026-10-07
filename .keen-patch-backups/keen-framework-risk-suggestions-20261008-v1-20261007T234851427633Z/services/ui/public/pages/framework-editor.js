@@ -1,4 +1,4 @@
-import {apiGet, apiPost, apiPut, apiDelete, refreshFrameworkNavigation} from '/app.js';
+import {apiGet, apiPost, apiPut, apiDelete} from '/app.js';
 
 const $ = id => document.getElementById(`fe-${id}`);
 let frameworks = [];
@@ -166,7 +166,7 @@ function renderOrganisationFrameworks(data) {
   };
   container.onchange = refreshDefaults; refreshDefaults();
   $('organisation-note').textContent = (data.environment_restricted ? 'KEEN_ENABLED_FRAMEWORKS limits the available choices. ' : '') +
-    (data.unknown_environment_slugs?.length ? `Unknown environment slugs: ${data.unknown_environment_slugs.join(', ')}` : 'Choose at least one framework. Saving also updates the navigation.');
+    (data.unknown_environment_slugs?.length ? `Unknown environment slugs: ${data.unknown_environment_slugs.join(', ')}` : 'Choose at least one framework. Changes take effect when pages reload.');
 }
 $('save-selection').addEventListener('click', async () => {
   const button=$('save-selection'); button.disabled=true;
@@ -175,8 +175,7 @@ $('save-selection').addEventListener('click', async () => {
     if (!enabled.length) throw new Error('Choose at least one framework.');
     const data=await apiPut('/api/v1/admin/framework-selection', {enabled, default:$('organisation-default').value, version:selectionVersion});
     renderOrganisationFrameworks(data);
-    await refreshFrameworkNavigation(data);
-    $('organisation-note').textContent='Organisation selection saved. Navigation updated.';
+    $('organisation-note').textContent='Organisation selection saved. Reload the page to refresh the navigation.';
   } catch(error) { $('organisation-note').textContent=error.message; }
   finally {button.disabled=false;}
 });

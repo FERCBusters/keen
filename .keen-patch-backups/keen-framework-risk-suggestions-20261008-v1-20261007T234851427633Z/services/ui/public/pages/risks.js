@@ -9,7 +9,6 @@ import {
   debounce,
   enableTableSorting,
   getCurrentFramework,
-  getFrameworkCatalog,
   withFramework,
   showTableLoading,
   userPillHtml,
@@ -135,7 +134,6 @@ const templateControlsList = document.getElementById('templateControlsList');
 const templateIncludeControls = document.getElementById('templateIncludeControls');
 let selectedLibraryTemplateId = null;
 let templateControlRefs = [];
-let templateFrameworkEnabled = false;
 const note = document.getElementById('note');
 const deleteRisk = document.getElementById('deleteRisk');
 const saveRisk = document.getElementById('saveRisk');
@@ -1244,7 +1242,7 @@ async function saveCurrentRisk(ev) {
   try {
     const id = riskId?.value || '';
     const payload = formPayload();
-    if (!id && selectedLibraryTemplateId && templateFrameworkEnabled && templateIncludeControls?.checked && templateControlRefs.length) {
+    if (!id && selectedLibraryTemplateId && templateIncludeControls?.checked && templateControlRefs.length) {
       payload.library_template_id = selectedLibraryTemplateId;
     }
     const saved = id
@@ -1858,11 +1856,7 @@ if (!canViewRisks) {
     // The register is now list/edit-only; specific risk viewing has its own page.
     location.replace(riskHref(requestedRiskId));
   } else if (!isMitigatorPage && requestedTemplateId) {
-    const [library, catalog] = await Promise.all([
-      apiGet('/api/v1/risks/library'),
-      getFrameworkCatalog().catch(() => ({items: []})),
-    ]);
-    templateFrameworkEnabled = catalog.items.some(item => item.slug === 'KEEN-AF:1.0');
+    const library = await apiGet('/api/v1/risks/library');
     const template = (library.items || []).find(item => item.id === requestedTemplateId);
     if (template) {
       showEditor();
@@ -1872,11 +1866,7 @@ if (!canViewRisks) {
       const suggestion = template.suggested_assessment || {};
       selectedLibraryTemplateId = template.id;
       templateControlRefs = Array.isArray(suggestion.keen_af_control_refs) ? suggestion.keen_af_control_refs : [];
-      if (templateControlsCard) templateControlsCard.hidden = !templateFrameworkEnabled || !templateControlRefs.length;
-      if (templateIncludeControls) {
-        templateIncludeControls.disabled = !templateFrameworkEnabled || !canManageRisks;
-        templateIncludeControls.checked = templateFrameworkEnabled;
-      }
+      if (templateControlsCard) templateControlsCard.hidden = !templateControlRefs.length;
       if (templateControlsList) templateControlsList.textContent = templateControlRefs.length
         ? `${templateControlRefs.join(', ')}. These links are saved under KEEN-AF:1.0; mappings for other frameworks remain available.` : '';
       for (const [field, key] of [[inherentLikelihood, 'inherent_likelihood'], [inherentImpact, 'inherent_impact'],
