@@ -1704,3 +1704,20 @@ button.keen-filter-pill-chip:focus-visible {
     max-height: 22rem;
   }
 }
+
+/* Framework home overview: inherit colours from the active light/dark theme. */
+.keen-home .home-framework-label { display:inline-flex;align-items:center;gap:.6rem;padding:.5rem .85rem;border:1px solid var(--bs-border-color);border-radius:2rem;font-weight:600;max-width:100%;overflow-wrap:anywhere; }
+.keen-home .home-overview-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1rem; }
+.keen-home .home-kpi { padding:1.1rem 1.25rem;border:1px solid var(--bs-border-color);border-radius:1rem;background:var(--bs-body-bg);color:var(--bs-body-color); }
+.keen-home .home-kpi strong { display:block;font-size:1.85rem;font-weight:700;line-height:1.25;margin:.25rem 0; }
+.keen-home .home-task-list { display:grid;gap:.5rem;margin-top:1rem; }
+.keen-home .home-task { display:flex;align-items:center;gap:.8rem;padding:.7rem .8rem;border-radius:.7rem;color:var(--bs-body-color);text-decoration:none;background:var(--bs-tertiary-bg); }
+.keen-home .home-task:hover,.keen-home .home-task:focus-visible { outline:2px solid var(--bs-primary);outline-offset:1px; }
+.keen-home .home-attention-item { display:block;padding:.7rem 0;border-bottom:1px solid var(--bs-border-color);color:var(--bs-body-color);text-decoration:none; }
+.keen-home .home-attention-item:hover { color:var(--bs-primary); }
+.keen-home .home-attention-items { max-height:22rem;overflow:auto; }
+.keen-home .home-entry-card .card-body { padding:1.1rem; }
+.keen-home .home-entry-card p { font-size:.9rem; }
+.keen-home .home-progress { height:.45rem;background:var(--bs-secondary-bg);border-radius:1rem;overflow:hidden;margin-top:.65rem; }
+.keen-home .home-progress span { display:block;height:100%;background:var(--bs-primary); }
+@media(max-width:420px){.keen-home .home-overview-grid{grid-template-columns:1fr;}}

@@ -12,7 +12,7 @@ import {
   collapseToggleButtonHtml,
 } from '/app.js';
 
-await initNavbar();
+const me = await initNavbar();
 
 const status = document.getElementById('status');
 const entryCards = document.getElementById('entryCards');
@@ -24,6 +24,8 @@ const btnBack = document.getElementById('explorerBack');
 const btnRoot = document.getElementById('explorerRoot');
 
 let framework = getCurrentFramework();
+let overview = null;
+let frameworkInfo = null;
 let stack = [];
 let current = null;
 let clauseCache = null;
@@ -54,7 +56,7 @@ const ROOT_NODE = {
 const KINDS = {
   controls: {singular: 'control', label: 'Controls', icon: 'bi-shield-check', href: '/controls.html', tone: 'primary'},
   clauses: {singular: 'clause', label: 'Clauses', icon: 'bi-diagram-3', href: '/clauses.html', tone: 'info'},
-  risks: {singular: 'risk', label: 'CIA Triad Risks', icon: 'bi-exclamation-triangle', href: '/risks.html', tone: 'warning'},
+  risks: {singular: 'risk', label: 'Risk register', icon: 'bi-exclamation-triangle', href: '/risks.html', tone: 'warning'},
   pestle: {singular: 'pestle_item', label: 'PESTLE(E)', icon: 'bi-globe2', href: '/pestle.html', tone: 'info'},
   interested_parties: {singular: 'interested_party', label: 'Interested Parties', icon: 'bi-people', href: '/interested_parties.html', tone: 'primary'},
   audits: {singular: 'audit', label: 'Audits', icon: 'bi-clipboard2-check', href: '/audits.html', tone: 'success'},
@@ -91,6 +93,7 @@ function pluralKind(kind) {
 }
 
 function collectionConfig(kind) {
+  if (kind === 'control_section') return KINDS.controls;
   return KIND_CONFIGS[kind] || KIND_CONFIGS[pluralKind(kind)] || KINDS.evidence;
 }
 
@@ -407,11 +410,15 @@ function setEmpty(message) {
 
 function setEntryCardsVisible(visible) {
   entryCards?.classList.toggle('d-none', !visible);
+  document.getElementById('homeOverview').hidden = !visible;
+  document.getElementById('homeExploreHeading').hidden = !visible;
+  document.getElementById('homeExplorer').hidden = visible;
 }
 
 function entityHref(kind, item) {
   const id = item?.id || item?.event_id || '';
   const fw = framework;
+  if (kind === 'control_section') return withFramework('/controls.html?q=' + encodeURIComponent(item.id || ''), fw);
   if (kind === 'control') return id ? withFramework(`/control.html?id=${encodeURIComponent(id)}`, fw) : withFramework('/controls.html', fw);
   if (kind === 'clause') return id ? withFramework(`/clause.html?id=${encodeURIComponent(id)}`, fw) : withFramework('/clauses.html', fw);
   if (kind === 'risk') return id ? withFramework(`/risk.html?id=${encodeURIComponent(id)}`, fw) : withFramework('/risks.html', fw);
@@ -444,6 +451,7 @@ function entityHref(kind, item) {
 }
 
 function primaryText(kind, item) {
+  if (kind === 'control_section') return 'Section ' + item.id;
   if (kind === 'control') return `${item.ref || ''} ${item.title || ''}`.trim() || 'Control';
   if (kind === 'clause') return `${item.ref || ''} ${item.title || ''}`.trim() || 'Clause';
   if (kind === 'risk') return item.title || [item.asset_name || item.asset, item.threat_summary].filter(Boolean).join(' – ') || 'Risk';
@@ -462,6 +470,7 @@ function primaryText(kind, item) {
 }
 
 function secondaryText(kind, item) {
+  if (kind === 'control_section') return `${item.count} controls · explore this section`;
   if (kind === 'evidence') return [item.timestamp ? fmtTs(item.timestamp) : '', item.source || ''].filter(Boolean).join(' · ');
   if (kind === 'audit') return item.status || '';
   if (kind === 'effectiveness_measure') return [item.metric_key ? `key: ${item.metric_key}` : '', item.target_display ? `target ${item.target_display}` : ''].filter(Boolean).join(' · ');
@@ -618,6 +627,7 @@ function hasDeeperLayer(kind, item = {}) {
   // and the entity card kind.
   if (kind === 'evidence') return false;
 
+  if (kind === 'control_section') return true;
   if (KINDS[kind]) return true;
 
   const id = item?.id || item?.event_id || item?.source || item?.label || '';
@@ -683,7 +693,7 @@ function renderCrumbs() {
   const parts = [...stack, current]
     .filter((x) => x && x.kind !== 'root')
     .map((x) => esc(x.label || collectionConfig(x.kind).label));
-  crumbs.innerHTML = parts.length ? parts.join(' <span class="mx-1">/</span> ') : '';
+  crumbs.innerHTML = `<span>${esc(frameworkInfo?.name || framework)}</span>` + (parts.length ? ' / ' + parts.join(' <span class="mx-1">/</span> ') : '');
   btnBack.disabled = stack.length === 0;
 }
 
@@ -750,9 +760,9 @@ function enter(node, push = true) {
 
 async function loadEntryCards() {
   const defs = [
-    {kind: 'controls', title: 'Controls', description: 'Start with an Annex A control and move to evidence, clauses and risks.'},
-    {kind: 'clauses', title: 'Clauses', description: 'Start from ISO27001 clauses, then zoom into linked controls and evidence.'},
-    {kind: 'risks', title: 'CIA Triad Risks', description: 'Start from Confidentiality, Integrity and Availability asset/threat scenarios and move to mapped controls.'},
+    {kind: 'controls', title: 'Controls', description: 'Explore framework sections, controls and their supporting evidence.'},
+    {kind: 'clauses', title: 'Clauses', description: 'Follow this framework’s clause hierarchy and its linked evidence.'},
+    {kind: 'risks', title: 'Risk register', description: 'Explore risk scenarios, affected assets and the requirements that mitigate them.'},
     {kind: 'pestle', title: 'PESTLE(E)', description: 'Start from strategic/contextual impact items and move to relevant clauses, controls and business processes.'},
     {kind: 'interested_parties', title: 'Interested Parties', description: 'Start from interested parties and move to linked controls or communication audiences.'},
     {kind: 'audits', title: 'Audits', description: 'Start from an engagement and move through scope and sampled evidence.'},
@@ -761,11 +771,12 @@ async function loadEntryCards() {
     {kind: 'sources', title: 'Sources', description: 'Start from a source and inspect the evidence it produced.'},
   ];
 
-  entryCards.innerHTML = defs.map((d) => {
+  const allowed = {controls: overview ? overview.control_count > 0 : frameworkInfo?.control_count > 0, clauses: overview ? overview.clause_count > 0 : frameworkInfo?.has_clauses === true, risks: me?.can_view_risks, pestle: me?.can_view_pestle, interested_parties: me?.can_view_interested_parties, audits: me?.can_view_audits, effectiveness_measures: me?.can_view_isms, evidence: me?.can_view_events, sources: me?.can_view_events};
+  entryCards.innerHTML = defs.filter(d => allowed[d.kind] || (me?.is_admin && !['controls','clauses'].includes(d.kind))).map((d) => {
     const cfg = collectionConfig(d.kind);
     return `<div class="col-12 col-md-6 col-xl-4">
       <div class="card h-100 home-entry-card" data-kind="${esc(d.kind)}">
-        <div class="card-body d-flex flex-column gap-3">
+        <div class="card-body d-flex flex-column gap-2">
           <div class="d-flex align-items-start gap-3 min-w-0">
             <div class="home-entry-icon text-bg-${esc(cfg.tone)}"><i class="bi ${esc(cfg.icon)}" aria-hidden="true"></i></div>
             <div class="flex-grow-1 min-w-0">
@@ -774,8 +785,8 @@ async function loadEntryCards() {
           </div>
           <p class="mb-0 text-secondary">${esc(d.description)}</p>
           <div class="d-flex flex-wrap gap-2 mt-auto">
-            <button class="btn btn-primary js-entry-zoom" type="button"><i class="bi bi-zoom-in" aria-hidden="true"></i> Zoom in</button>
-            <a class="btn btn-outline-secondary" href="${esc(withFramework(cfg.href, framework))}"${openAttrs()}><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> Open this</a>
+            <button class="btn btn-sm btn-primary js-entry-zoom" type="button"><i class="bi bi-zoom-in" aria-hidden="true"></i> Zoom in</button>
+            <a class="btn btn-sm btn-outline-secondary" href="${esc(withFramework(cfg.href, framework))}"${openAttrs()}><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> Open this</a>
           </div>
         </div>
       </div>
@@ -917,7 +928,7 @@ async function loadControl(id, push = true) {
 
   explorerCanvas.innerHTML = `
     ${nodeHeader('control', control, control.in_scope ? 'In scope' : 'Out of scope')}
-    ${paginatedSectionHtml('Linked clauses', 'Move from this control to the ISO27001 clause structure.', clauses, (c) => gridItem(cardHtml('clause', {id: c.clause_id, ref: c.ref, title: c.title})), {sectionKey: 'control-clauses'})}
+    ${clauses.length ? paginatedSectionHtml('Linked clauses', 'Explore linked clauses in this framework.', clauses, (c) => gridItem(cardHtml('clause', {id: c.clause_id, ref: c.ref, title: c.title})), {sectionKey: 'control-clauses'}) : ''}
     ${paginatedSectionHtml('Recent evidence', 'Events mapped to this control.', evItems, (e) => gridItem(cardHtml('evidence', e)), {sectionKey: 'control-evidence'})}
     ${paginatedSectionHtml('Related risks', 'Risk scenarios mapped to this control.', riskItems, (r) => gridItem(cardHtml('risk', r)), {sectionKey: 'control-risks'})}
     ${paginatedSectionHtml('Effectiveness Measures', 'Measures that use this control as part of the ISMS effectiveness ledger.', effectivenessItems, (m) => gridItem(cardHtml('effectiveness_measure', m)), {sectionKey: 'control-effectiveness-measures'})}
@@ -1149,6 +1160,7 @@ async function zoomTo(kind, id, push = true, options = {}) {
   const k = String(kind || '');
   try {
     if (k === 'root') return showRoot();
+    if (k === 'controls' || k === 'control_section') return await loadControlTree(k === 'control_section' ? id : '', push);
     if (KINDS[k]) return await loadCollection(k, push, options.offset || 0);
     if (k === 'control') return await loadControl(id, push);
     if (k === 'clause') return await loadClause(id, push);
@@ -1207,6 +1219,82 @@ document.getElementById('homeSearch')?.addEventListener('submit', (ev) => {
 });
 
 await resolveFramework();
+await loadOverview();
 await loadEntryCards();
 showRoot();
-startLatestEvidenceTicker();
+if (me?.can_view_events || me?.is_admin) startLatestEvidenceTicker();
+
+async function loadControlTree(prefix = '', push = true) {
+  enter({kind: prefix ? 'control_section' : 'controls', id: prefix, label: prefix ? `Section ${prefix}` : 'Controls', title: prefix ? `Section ${prefix}` : 'Framework controls', subtitle: 'Explore the reference hierarchy, then open a control and its evidence.'}, push);
+  setLoading('Loading framework structure…');
+  const data = await apiGet(apiUrl('/api/v1/home/controls', {prefix}));
+  const groups = data.groups || [], items = data.items || [];
+  if (!groups.length && !items.length) return setEmpty('No controls in this section.');
+  explorerCanvas.innerHTML =
+    (groups.length ? paginatedSectionHtml('Sections', 'Zoom into a branch of this framework.', groups, item => gridItem(cardHtml('control_section', item)), {sectionKey:'control-sections'}) : '') +
+    (items.length ? paginatedSectionHtml('Controls', 'Follow a control to its evidence and related records.', items, item => gridItem(cardHtml('control', item)), {sectionKey:'section-controls'}) : '');
+  wireHomeControls();
+}
+
+function homeLink(href) { return esc(withFramework(href, framework)); }
+function homeNumber(value) { return Number.isFinite(value) ? value.toLocaleString() : '—'; }
+function renderHomeTasks() {
+  const admin = me?.is_admin;
+  const tasks = [
+    [admin || me?.can_view_events, 'bi-search', 'Review evidence', '/events.html'],
+    [admin, 'bi-diagram-3', 'Create an evidence mapping', '/admin.html#evidence-config'],
+    [admin || me?.can_manage_audits, 'bi-clipboard2-check', 'Plan or run an audit', '/audits.html'],
+    [!admin && me?.can_view_audits && !me?.can_manage_audits, 'bi-clipboard2-check', 'Review audits', '/audits.html'],
+    [admin || me?.can_view_risks, 'bi-exclamation-triangle', 'Review the risk register', '/risks.html'],
+    [admin || me?.can_manage_isms, 'bi-speedometer2', 'Record an effectiveness measurement', '/isms.html?tab=effectiveness'],
+    [!admin && me?.can_view_isms && !me?.can_manage_isms, 'bi-speedometer2', 'Review effectiveness measures', '/isms.html?tab=effectiveness'],
+    [admin || me?.can_view_isms, 'bi-folder2-open', (admin || me?.can_manage_isms) ? 'Manage documents and assets' : 'Review documents and assets', '/isms.html'],
+  ];
+  document.getElementById('homeTasks').innerHTML = tasks.filter(t => t[0]).map(([,icon,label,href]) => `<a class="home-task" href="${homeLink(href)}"><i class="bi ${icon}" aria-hidden="true"></i><span>${esc(label)}</span><i class="bi bi-arrow-right ms-auto" aria-hidden="true"></i></a>`).join('') || '<p class="small-muted">Explore the framework cards below.</p>';
+  document.getElementById('homeSearch').hidden = !(admin || me?.can_view_events);
+}
+function renderOverview() {
+  const kpis = document.getElementById('homeKpis'), attention = document.getElementById('homeAttention');
+  document.getElementById('homeFrameworkName').textContent = frameworkInfo?.name || framework || 'No framework selected';
+  if (!overview) {
+    kpis.innerHTML = '';
+    attention.innerHTML = '<p class="text-secondary mb-0">The overview could not be loaded. Use Refresh to try again; workspace links remain available.</p>';
+    return;
+  }
+  const cards = [];
+  function kpi(label, value, detail, href, progress = null) {
+    return `<a class="home-kpi text-decoration-none" href="${homeLink(href)}"><span class="small">${esc(label)}</span><strong>${esc(value)}</strong><span class="small text-secondary">${esc(detail)}</span>${progress === null ? '' : `<div class="home-progress" role="progressbar" aria-label="In-scope control evidence coverage" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress}%"></span></div>`}</a>`;
+  }
+  const coverage = overview.coverage;
+  if (overview.control_count > 0) {
+    const percent = coverage?.in_scope ? Math.round(100 * coverage.with_evidence / coverage.in_scope) : null;
+    cards.push(kpi('Control evidence coverage', percent === null ? homeNumber(overview.control_count) + ' controls' : `${percent}%`, coverage ? `${coverage.with_evidence} of ${coverage.in_scope} in-scope controls have evidence` : 'Explore this framework’s controls', '/controls.html', percent));
+  }
+  if (overview.clause_count > 0) cards.push(kpi('Framework clauses', homeNumber(overview.clause_count), 'Explore the clause hierarchy', '/clauses.html'));
+  if (overview.events) {
+    cards.push(kpi('Events mapped', homeNumber(overview.events.mapped), 'Attributed to this framework', '/events.html'));
+    cards.push(kpi('Events awaiting mapping', homeNumber(overview.events.unmapped), 'Not mapped to this framework', '/events.html?unmapped=true'));
+  }
+  if (!cards.length) cards.push(kpi('Framework structure', 'No entries yet', 'Add this framework’s requirements to begin', me?.is_admin ? '/admin.html#framework-editor' : '/help/using.html'));
+  kpis.innerHTML = cards.join('');
+  const counts = [
+    [coverage?.without_evidence, 'control gaps', '/controls.html?gaps=1'],
+    [overview.overdue_audits, 'overdue audits', '/audits.html'],
+    [overview.measures_outside_threshold, 'measures outside threshold', '/isms.html?tab=effectiveness'],
+    [overview.collectors_with_failures, 'API collectors with failures · all frameworks', '/admin.html#integrations'],
+  ].filter(([count]) => Number.isFinite(count));
+  const highlights = counts.map(([count,label,href]) => `<a class="badge rounded-pill ${count ? 'text-bg-warning' : 'text-bg-secondary'} text-decoration-none me-1 mb-2 p-2" href="${homeLink(href)}">${homeNumber(count)} ${esc(label)}</a>`).join('');
+  const items = overview.attention || [];
+  const unmapped = overview.events?.unmapped > 0 ? `<a class="home-attention-item" href="${homeLink('/events.html?unmapped=true')}"><strong>${homeNumber(overview.events.unmapped)} events awaiting mapping</strong><div class="small text-secondary">Review events and create rules for the evidence you need.</div></a>` : '';
+  attention.innerHTML = highlights + `<div class="home-attention-items">${unmapped}${items.map(item => `<a class="home-attention-item" href="${homeLink(item.href)}"><strong>${esc(item.label)}</strong><div class="small text-secondary">${esc(item.detail)}</div></a>`).join('')}</div>` + (!items.length && !unmapped ? '<p class="small text-secondary mb-2">No attention items found in the checks available to your account.</p>' : '<p class="small text-secondary mt-2 mb-1">Showing up to five items per category. Open an item to review it.</p>') + '<p class="small text-secondary mb-0">Coverage shows evidence presence; assess its relevance and quality during review.</p>';
+}
+async function loadOverview() {
+  const button = document.getElementById('homeRefresh'); button.disabled = true;
+  try {
+    const [catalog, data] = await Promise.all([safeGet('/api/v1/frameworks'), safeGet(apiUrl('/api/v1/home'))]);
+    frameworkInfo = catalog?.items?.find(item => item.slug === framework) || frameworkInfo;
+    overview = data;
+    renderHomeTasks(); renderOverview();
+  } finally { button.disabled = false; }
+}
+document.getElementById('homeRefresh').addEventListener('click', async () => { await loadOverview(); await loadEntryCards(); });
