@@ -2819,3 +2819,21 @@ class SourceIngestionState(Base):
     paused: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
     updated_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+
+class UserSsoEmail(Base):
+    """Addresses whose ownership KEEN has verified for future SSO linking."""
+    __tablename__ = 'user_sso_emails'
+    email: Mapped[str] = mapped_column(String(256), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    verified_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class SsoEmailChallenge(Base):
+    __tablename__ = 'sso_email_challenges'
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(256), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    mfa_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    password_digest: Mapped[str] = mapped_column(String(64), nullable=False)

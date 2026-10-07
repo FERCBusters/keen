@@ -75,17 +75,7 @@ def _maybe_mask_event_sample_value(value: Any, sample_export: bool) -> Any:
     return _mask_event_data_obj(value)
 
 
-def _client_ip(request: Request) -> str | None:
-    xff = (request.headers.get("x-forwarded-for") or "").strip()
-    if xff:
-        return xff.split(",")[0].strip() or None
-    xri = (request.headers.get("x-real-ip") or "").strip()
-    if xri:
-        return xri or None
-    try:
-        return request.client.host if request.client else None
-    except Exception:
-        return None
+from app.security.client_ip import request_ip as _client_ip
 
 
 def _audit_action(

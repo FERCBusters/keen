@@ -121,3 +121,6 @@ router.include_router(mfa_router, tags=['Auth'])
 
 from .home import router as home_router
 router.include_router(home_router, tags=['Home'])
+
+from .sso_emails import router as sso_emails_router
+router.include_router(sso_emails_router, tags=["Me"])

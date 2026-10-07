@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -16,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import OidcLoginState, User, UserIdentity
+from app.db.models import OidcLoginState, User, UserIdentity, UserSsoEmail
 
 
 @dataclass(frozen=True)
@@ -379,8 +380,8 @@ def _redirect_uri_from_request(request: Request, provider: SsoProvider) -> str:
     return f"{base}/api/v1/auth/sso/{provider.key}/callback"
 
 
-def create_login_state(db: Session, *, next_url: str | None) -> OidcLoginState:
-    state = secrets.token_urlsafe(24)
+def create_login_state(db: Session, *, next_url: str | None, state: str | None = None) -> OidcLoginState:
+    state = state or secrets.token_urlsafe(24)
     nonce = secrets.token_urlsafe(24)
     code_verifier = secrets.token_urlsafe(48)
 
@@ -414,20 +415,36 @@ def pop_login_state(db: Session, *, state: str) -> OidcLoginState | None:
             db.rollback()
         return None
 
-    try:
-        db.delete(row)
-        db.commit()
-    except Exception:
-        db.rollback()
+    db.expunge(row)  # Retain loaded nonce/verifier after the database deletion.
+    # Atomic consumption: concurrent callbacks cannot both redeem one transaction.
+    consumed = db.query(OidcLoginState).filter(
+        OidcLoginState.state == key, OidcLoginState.expires_at > _now()
+    ).delete(synchronize_session=False)
+    db.commit()
+    return row if consumed == 1 else None
 
-    return row
+
+def sso_binding_cookie() -> str:
+    return "__Host-keen_sso" if settings.cookie_secure else "keen_sso"
+
+
+def _browser_state(provider_key: str, secret: str) -> str:
+    return hashlib.sha256((provider_key + "\0" + secret).encode()).hexdigest()
+
+
+def set_sso_binding(response, request):
+    response.set_cookie(sso_binding_cookie(), request.state.sso_browser_secret,
+                        max_age=600, httponly=True, secure=settings.cookie_secure,
+                        samesite="lax", path="/")
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def _normalize_next(next_url: str | None) -> str | None:
     raw = (next_url or "").strip()
     if not raw:
         return None
-    if raw.startswith("/") and not raw.startswith("//") and "://" not in raw:
+    if raw.startswith("/") and not raw.startswith("//") and "://" not in raw and "\\" not in raw and not any(ord(c) < 32 for c in raw):
         return raw
     return None
 
@@ -505,14 +522,8 @@ def _claim_email(claims: dict[str, Any]) -> str | None:
 
 
 def _email_is_verified(provider: SsoProvider, claims: dict[str, Any]) -> bool:
-    raw = claims.get("email_verified")
-    if isinstance(raw, bool):
-        return raw
-    if isinstance(raw, str):
-        return raw.strip().lower() in {"1", "true", "yes"}
-    # The GitHub callback only sets email after selecting a verified address from
-    # /user/emails, so an email in its synthetic claims is safe to link on.
-    return provider.key == "github" and bool(_claim_email(claims))
+    # OIDC uses a JSON boolean; GitHub synthesizes one from /user/emails.
+    return claims.get("email_verified") is True
 
 
 def _update_identity_metadata(identity: UserIdentity, claims: dict[str, Any]) -> None:
@@ -558,22 +569,12 @@ def _get_or_create_user_for_identity(
         raise HTTPException(status_code=403, detail="No local account linked to this identity")
 
     candidates: dict[str, User] = {}
-    link_username = _derive_link_username(provider, claims)
-    if link_username:
-        user = (
-            db.query(User)
-            .filter(func.lower(User.username) == link_username.lower())
-            .one_or_none()
-        )
-        if user:
-            candidates[str(user.id)] = user
-
-    # Email linking is allowed only for an address the provider verified.
+    # Both KEEN mailbox verification and provider verification are required.
     if email and _email_is_verified(provider, claims):
         for user in (
             db.query(User)
-            .filter(User.email.isnot(None))
-            .filter(func.lower(User.email) == email)
+            .join(UserSsoEmail, UserSsoEmail.user_id == User.id)
+            .filter(UserSsoEmail.email == email)
             .all()
         ):
             candidates[str(user.id)] = user
@@ -615,7 +616,10 @@ async def build_authorize_redirect(
 ) -> str:
     provider = _require_provider_config(provider_key)
     redirect_uri = _redirect_uri_from_request(request, provider)
-    state_row = create_login_state(db, next_url=_normalize_next(next_url))
+    secret = secrets.token_urlsafe(32)
+    request.state.sso_browser_secret = secret
+    state_row = create_login_state(db, next_url=_normalize_next(next_url),
+                                   state=_browser_state(provider.key, secret))
 
     client = _new_client(provider, redirect_uri=redirect_uri)
     url, _ = client.create_authorization_url(
@@ -787,6 +791,11 @@ async def handle_callback(
 ) -> tuple[User, str | None, str | None, SsoProvider]:
     provider = _require_provider_config(provider_key)
     state = (request.query_params.get("state") or "").strip()
+    secret = request.cookies.get(sso_binding_cookie(), "")
+    if len(state) != 64 or not state.isascii() or not secret or len(secret) > 128 or not secrets.compare_digest(
+        state, _browser_state(provider.key, secret)
+    ):
+        raise HTTPException(status_code=400, detail="SSO browser verification failed; start sign-in again")
     row = pop_login_state(db, state=state)
     if not row:
         raise HTTPException(status_code=400, detail="SSO state missing or expired")

@@ -58,18 +58,7 @@ def _count_open_questions(db: Session) -> int:
     )
 
 
-def _client_ip(request: Request) -> str | None:
-    # Prefer reverse-proxy headers if present (nginx).
-    xff = (request.headers.get("x-forwarded-for") or "").strip()
-    if xff:
-        return xff.split(",")[0].strip() or None
-    xri = (request.headers.get("x-real-ip") or "").strip()
-    if xri:
-        return xri or None
-    try:
-        return request.client.host if request.client else None
-    except Exception:
-        return None
+from app.security.client_ip import request_ip as _client_ip
 
 
 def _audit_action(
@@ -168,6 +157,8 @@ def _get_user(request: Request) -> User:
 
 
 def _ensure_event_visible(db: Session, user: User, event_id: uuid.UUID) -> Event:
+    if not is_effective_admin(db, user) and not has_permission(db, user, "events.read"):
+        raise HTTPException(status_code=403, detail="events.read permission required")
     ev = db.query(Event).filter(Event.id == event_id).first()
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -942,6 +933,12 @@ def my_questions_list(request: Request, db: Session = Depends(get_db)):
         }
 
     for t in threads:
+        try:
+            _ensure_thread_visible_for_user(db, user, t)
+        except HTTPException as exc:
+            if exc.status_code in {403, 404}:
+                continue
+            raise
         ev = events_by_id.get(t.event_id) if t.event_id else None
         unread = bool(
             t.last_admin_reply_at

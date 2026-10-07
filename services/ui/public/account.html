@@ -70,6 +70,7 @@
             </form>
           </div>
         </div>
+<div class="card mb-3"><div class="card-body"><h2 class="h5">SSO email addresses</h2><p>SSO providers must report a verified email that exactly matches an address verified here. Verify your primary address or additional addresses you own. Existing linked SSO identities continue working independently of this list.</p><p id="ssoEmailStatus" role="status">Loading…</p><ul id="ssoEmailList" class="list-unstyled"></ul><form id="ssoEmailForm"><label for="ssoEmail" class="form-label">Email address</label><input id="ssoEmail" type="email" class="form-control mb-3" maxlength="256" autocomplete="email" required><button class="btn btn-primary" type="submit">Send verification link</button></form></div></div>
 <div class="card mb-3"><div class="card-body"><h2 class="h5">Two-factor authentication</h2><p id="securitySummary" role="status">Loading…</p><p>Protect local sign-in with an authenticator app, security key or passkey. Recovery codes let you sign in if you lose access to your authenticator.</p><form id="securityForm"><label for="securityPassword" class="form-label">Confirm your local password to manage authenticators</label><input id="securityPassword" type="password" class="form-control mb-3" autocomplete="current-password" required><button class="btn btn-primary" type="submit">Manage account security</button></form></div></div></section>
       <section class="tab-pane fade show active" id="preferences-pane" role="tabpanel" aria-labelledby="preferences-tab" tabindex="0">
         <div class="card mb-3">
@@ -402,5 +403,6 @@
   <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
   <script type="module" src="/pages/account.js"></script>
 <script type="module" src="/pages/account-security.js"></script>
+<script type="module" src="/pages/sso-emails.js"></script>
 </body>
 </html>

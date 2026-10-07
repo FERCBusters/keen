@@ -126,16 +126,7 @@ async def _shutdown_realtime_notifications() -> None:
         pass
 
 
-def _client_ip(request: Request) -> str | None:
-    # Prefer proxied headers (nginx sets these)
-    xff = (request.headers.get("x-forwarded-for") or "").strip()
-    if xff:
-        # First address is the original client
-        return xff.split(",")[0].strip() or None
-    xri = (request.headers.get("x-real-ip") or "").strip()
-    if xri:
-        return xri
-    return getattr(getattr(request, "client", None), "host", None)
+from app.security.client_ip import request_ip as _client_ip
 
 
 @app.on_event("startup")
@@ -324,7 +315,7 @@ async def auth_middleware(request: Request, call_next):
                 "/v1/me/password",
                 "/v1/me/preferences",
                 "/v1/auth/logout",
-            } or path.startswith("/v1/me/saved-searches"):
+            } or path.startswith("/v1/me/saved-searches") or path in {"/v1/me/sso-emails/request", "/v1/me/sso-emails/confirm", "/v1/me/sso-emails/remove"}:
                 pass  # self-service
             elif (
                 request.method.upper() == "POST"
@@ -547,7 +538,7 @@ app.add_middleware(DemoExpiryMiddleware)
 @app.middleware("http")
 async def mfa_no_store(request: Request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith('/v1/auth/mfa/') or request.url.path == '/v1/me/mfa':
+    if request.url.path.startswith('/v1/auth/mfa/') or request.url.path == '/v1/me/mfa' or request.url.path.startswith('/v1/me/sso-emails'):
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Pragma'] = 'no-cache'
     return response

@@ -6,22 +6,7 @@ from fastapi import Request
 from redis import Redis
 
 
-def client_ip(request: Request) -> Optional[str]:
-    """Best-effort client IP for rate limiting.
-
-    NOTE: these headers must be set by a trusted reverse proxy. If your API is
-    directly internet-facing, relying on X-Forwarded-For is unsafe.
-    """
-    try:
-        xff = (request.headers.get("x-forwarded-for") or "").strip()
-        if xff:
-            return xff.split(",")[0].strip() or None
-        xri = (request.headers.get("x-real-ip") or "").strip()
-        if xri:
-            return xri
-        return getattr(getattr(request, "client", None), "host", None)
-    except Exception:
-        return None
+from app.security.client_ip import request_ip as client_ip
 
 
 def fixed_window_allow(

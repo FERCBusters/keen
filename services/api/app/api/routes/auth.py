@@ -30,6 +30,8 @@ from app.security.rate_limit import client_ip as _client_ip, fixed_window_allow
 from app.security.oidc import (
     any_sso_enabled,
     build_authorize_redirect,
+    set_sso_binding,
+    sso_binding_cookie,
     configured_sso_providers,
     get_sso_provider,
     handle_callback,
@@ -241,7 +243,7 @@ def complete_local_login(db, user, request, *, mfa_verified=False, verified_vers
 async def oidc_start(request: Request, db: Session = Depends(get_db)) -> Response:
     next_url = request.query_params.get("next")
     url = await build_authorize_redirect(request, db, next_url=next_url, provider_key="oidc")
-    return RedirectResponse(url, status_code=302)
+    return set_sso_binding(RedirectResponse(url, status_code=302), request)
 
 
 @router.get("/v1/auth/oidc/callback")
@@ -253,7 +255,7 @@ async def oidc_callback(request: Request, db: Session = Depends(get_db)) -> Resp
 async def sso_start(provider_key: str, request: Request, db: Session = Depends(get_db)) -> Response:
     next_url = request.query_params.get("next")
     url = await build_authorize_redirect(request, db, next_url=next_url, provider_key=provider_key)
-    return RedirectResponse(url, status_code=302)
+    return set_sso_binding(RedirectResponse(url, status_code=302), request)
 
 
 @router.get("/v1/auth/sso/{provider_key}/callback")
@@ -286,6 +288,8 @@ async def _complete_sso_callback(request: Request, db: Session, *, provider_key:
     resp = RedirectResponse(dest, status_code=302)
     set_session_cookie(resp, sid)
     set_csrf_cookie(resp, generate_csrf_token())
+    resp.delete_cookie(sso_binding_cookie(), path="/", secure=settings.cookie_secure, httponly=True, samesite="lax")
+    resp.headers["Cache-Control"] = "no-store"
     return resp
 
 

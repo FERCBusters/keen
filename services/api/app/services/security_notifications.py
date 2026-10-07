@@ -15,37 +15,7 @@ def now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def normalise_ip(value):
-    try:
-        ip = ipaddress.ip_address(value)
-        return str(ip.ipv4_mapped or ip) if isinstance(ip, ipaddress.IPv6Address) else str(ip)
-    except (ValueError, TypeError):
-        return None
-
-
-def request_ip(request):
-    if request is None:
-        return None
-    peer = normalise_ip(getattr(request.client, 'host', '') or '')
-    if not peer:
-        return None
-    networks = [ipaddress.ip_network(x.strip()) for x in settings.security_trusted_proxy_cidrs.split(',') if x.strip()]
-    def trusted(value):
-        return any(ipaddress.ip_address(value) in network for network in networks)
-    if not trusted(peer):
-        return peer
-    chain = request.headers.get('x-forwarded-for', '')
-    if not chain or len(chain) > 2048:
-        return peer
-    addresses = [normalise_ip(x.strip()) for x in chain.split(',')]
-    if not all(addresses):
-        return peer
-    current = peer
-    for address in reversed(addresses):
-        if not trusted(current):
-            break
-        current = address
-    return current
+from app.security.client_ip import normalise_ip, request_ip
 
 
 def enqueue(db, user, event, request=None, *, ip=None):
@@ -54,6 +24,8 @@ def enqueue(db, user, event, request=None, *, ip=None):
         return
     address = ip or request_ip(request) or 'Unavailable (operator action or unknown address)'
     titles = {
+        'sso-email-added': 'An SSO email address was verified for your KEEN account',
+        'sso-email-removed': 'An SSO email address was removed from your KEEN account',
         'login-ip': 'Sign-in from an unfamiliar IP address',
         'password-changed': 'Your KEEN password was changed',
         'password-reset': 'Your KEEN password was reset by an administrator',
