@@ -1,4 +1,5 @@
 """Offline ORM/SQL semantics. PostgreSQL migrations still need a deployment rehearsal."""
+from app.core.datetime_utils import utc_now_naive
 from tests.db_helpers import create_sqlite_schema
 import importlib.util
 import json
@@ -28,7 +29,7 @@ def sqlite_json(*a,**k):return 'JSON'
 def db():
     engine=create_engine('sqlite://')
     @event.listens_for(engine,'connect')
-    def functions(conn,record):conn.create_function('NOW',0,lambda:datetime.utcnow().isoformat(' '))
+    def functions(conn,record):conn.create_function('NOW',0,lambda:utc_now_naive().isoformat(' '))
     create_sqlite_schema(engine)
     session=Session(engine)
     session.add(User(username='demo',password_hash='disabled',role='admin',is_active=True))
@@ -79,11 +80,11 @@ def test_evidence_inherits_one_hop_without_false_reverse_ce_mapping(db,monkeypat
     migrate(db,monkeypatch)
     ce=db.query(ControlItem).filter_by(framework_slug='CYBER-ESSENTIALS:2026',ref='A8.1').one()
     iso=db.query(ControlItem).filter_by(framework_slug='iso_27001_2022',ref='A.8.7').one()
-    e=Event(source='test',external_id='one',timestamp=datetime.utcnow(),summary='Synthetic malware check')
+    e=Event(source='test',external_id='one',timestamp=utc_now_naive(),summary='Synthetic malware check')
     db.add(e);db.flush();db.add(Mapping(event_id=e.id,control_item_id=ce.id,confidence=1,method='test',rationale='test'));db.flush()
     pairs=evidence_pairs('iso_27001_2022')
     assert db.scalar(select(pairs.c.event_id).where(pairs.c.control_id==iso.id))==e.id
-    e2=Event(source='test',external_id='two',timestamp=datetime.utcnow(),summary='General ISO evidence')
+    e2=Event(source='test',external_id='two',timestamp=utc_now_naive(),summary='General ISO evidence')
     db.add(e2);db.flush();db.add(Mapping(event_id=e2.id,control_item_id=iso.id,confidence=1,method='test',rationale='test'));db.flush()
     pairs=evidence_pairs('CYBER-ESSENTIALS:2026')
     assert db.scalar(select(pairs.c.event_id).where(pairs.c.control_id==ce.id,pairs.c.event_id==e2.id)) is None

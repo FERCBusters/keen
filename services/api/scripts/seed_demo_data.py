@@ -16,6 +16,7 @@ instead of creating a fresh copy, provided the same --prefix is used.
 """
 
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import argparse
 import re
@@ -103,7 +104,7 @@ class DemoSeeder:
         self.user = self._select_user(config.username)
         anchor = self.db.query(Event).filter_by(source='demo-seed', external_id=self.account_code('SEED-ANCHOR')).first()
         if anchor is None:
-            anchor = Event(source='demo-seed', external_id=self.account_code('SEED-ANCHOR'), timestamp=datetime.utcnow(), summary=self.label('Fictional demo dataset'), raw_pointer={'seed':'demo'}, normalized_payload={'demo':True})
+            anchor = Event(source='demo-seed', external_id=self.account_code('SEED-ANCHOR'), timestamp=utc_now_naive(), summary=self.label('Fictional demo dataset'), raw_pointer={'seed':'demo'}, normalized_payload={'demo':True})
             self.db.add(anchor)
             self.db.flush()
         self.seed_date = anchor.timestamp.date()

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
 """Generic RSS/Atom feed ingester.
@@ -461,7 +462,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
     # advance cursor
     if newest_ts:
         cur.last_ts = newest_ts
-    cur.updated_at = datetime.utcnow()
+    cur.updated_at = utc_now_naive()
     db.add(cur)
     db.commit()
 

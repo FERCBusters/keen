@@ -1,4 +1,5 @@
 """Administrator-owned connections, draft/live collectors and asynchronous previews."""
+from app.core.datetime_utils import utc_now_naive
 import json
 import re
 import uuid
@@ -187,7 +188,7 @@ def action_collector(key:str,action:str,body:Action,db:Session=Depends(get_db)):
         c.live_revision = c.version
         # Publishing is explicit but does not silently reset a exhausted failure budget.
         c.enabled = c.failures < 3
-        c.next_run = datetime.utcnow()
+        c.next_run = utc_now_naive()
     elif action=='rollback':
         revision = db.get(Revision,(key,body.revision))
         if not revision:
@@ -200,7 +201,7 @@ def action_collector(key:str,action:str,body:Action,db:Session=Depends(get_db)):
     elif action=='resume':
         if not c.live_revision:
             raise HTTPException(422,'Publish first')
-        c.enabled,c.failures,c.next_run = True,0,datetime.utcnow()
+        c.enabled,c.failures,c.next_run = True,0,utc_now_naive()
     elif action=='reset-cursor':
         c.cursor = None
     elif action in ('preview','run'):

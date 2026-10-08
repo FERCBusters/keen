@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import logging
 from calendar import monthrange
@@ -23,7 +24,7 @@ ZERO_TARGET_OPERATORS = {"", "eq", "lte"}
 
 
 def utcnow() -> datetime:
-    return datetime.utcnow()
+    return utc_now_naive()
 
 
 def _today_for_effectiveness_metrics() -> date:

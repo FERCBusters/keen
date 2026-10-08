@@ -1,4 +1,5 @@
 """Collector contract, network boundary and durable lifecycle regressions."""
+from app.core.datetime_utils import utc_now_naive
 from tests.db_helpers import create_sqlite_schema
 import json
 import socket
@@ -137,7 +138,7 @@ def sqlite_json(*a,**k):return 'JSON'
 def database(monkeypatch):
     engine=create_engine('sqlite://')
     @event.listens_for(engine,'connect')
-    def functions(c,r):c.create_function('NOW',0,lambda:datetime.utcnow().isoformat(' '))
+    def functions(c,r):c.create_function('NOW',0,lambda:utc_now_naive().isoformat(' '))
     create_sqlite_schema(engine)
     factory=sessionmaker(bind=engine)
     monkeypatch.setattr(runtime,'SessionLocal',factory)
@@ -228,12 +229,12 @@ def test_failure_transition_consumes_budget_once(database):
 def test_recently_started_job_is_not_stale(database,monkeypatch):
     db,_=database
     api.action_collector('collector','publish',api.Action(version=1),db)
-    r=runtime.queue_run(db,db.get(Collector,'collector'));r.created_at=datetime.utcnow()-timedelta(minutes=20)
-    r.started_at=datetime.utcnow();r.status='running';db.commit()
+    r=runtime.queue_run(db,db.get(Collector,'collector'));r.created_at=utc_now_naive()-timedelta(minutes=20)
+    r.started_at=utc_now_naive();r.status='running';db.commit()
     monkeypatch.setattr(runtime,'dispatch',lambda *a:None)
     runtime.tick();db.expire_all()
     assert db.get(Run,r.id).status=='running'
-    r.started_at=datetime.utcnow()-timedelta(minutes=11);db.commit()
+    r.started_at=utc_now_naive()-timedelta(minutes=11);db.commit()
     runtime.tick();db.expire_all()
     assert db.get(Run,r.id).status=='failed' and db.get(Collector,'collector').failures==1
 

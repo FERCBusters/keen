@@ -1,4 +1,5 @@
 """Framework home tests. Set KEEN_HOME_TEST_DATABASE_URL to an isolated PostgreSQL DB."""
+from app.core.datetime_utils import utc_now_naive
 from tests.db_helpers import schema_engine
 import os
 import unittest
@@ -132,7 +133,7 @@ class HomeDatabaseTests(unittest.TestCase):
         # ingestion/purge Session hooks (covered by the retention test suite).
         event_id=uuid.uuid4()
         self.db.execute(Event.__table__.insert().values(id=event_id,source='test',
-            external_id=str(uuid.uuid4()),timestamp=datetime.utcnow(),summary='Evidence'))
+            external_id=str(uuid.uuid4()),timestamp=utc_now_naive(),summary='Evidence'))
         self.db.execute(Mapping.__table__.insert().values(event_id=event_id,
             control_item_id=source.id,confidence=1,method='test',mapped_by='test'))
         self.assertEqual(self.overview()['coverage']['with_evidence'],1)

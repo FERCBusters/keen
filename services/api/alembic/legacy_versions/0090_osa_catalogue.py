@@ -3,6 +3,7 @@
 Offline, intentionally canonical reset. Subsequent startups never re-import it.
 OSA data and KEEN's adaptation: CC BY-SA 4.0; see catalogues/OSA-LICENSE.txt.
 """
+from app.core.datetime_utils import utc_now_naive
 import json
 import uuid
 from datetime import datetime
@@ -47,7 +48,7 @@ def seed_catalogue(bind):
     bind.execute(controls.delete().where(obsolete))
     bind.execute(clauses.delete().where(clauses.c.framework_slug.not_in(KEEP), ~clauses.c.framework_slug.like('RISKLEDGER:%')))
     bind.execute(frameworks.delete().where(frameworks.c.slug.not_in(KEEP), ~frameworks.c.slug.like('RISKLEDGER:%')))
-    now = datetime.utcnow()
+    now = utc_now_naive()
     for framework in data['frameworks']:
         slug = framework['id']
         url = 'https://www.opensecurityarchitecture.org/frameworks/' + framework['slug'] + '/'

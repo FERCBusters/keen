@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import secrets
 import hashlib
@@ -58,7 +59,7 @@ class SsoProvider:
 
 
 def _now() -> datetime:
-    return datetime.utcnow()
+    return utc_now_naive()
 
 
 def _split_csv(value: str) -> list[str]:

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
 from datetime import datetime, timedelta, timezone
@@ -290,7 +291,7 @@ def ingest_github_repo(
 
     # advance cursor
     cur.last_ts = newest_ts or cur.last_ts
-    cur.updated_at = datetime.utcnow()
+    cur.updated_at = utc_now_naive()
     db.add(cur)
     db.commit()
 
@@ -425,7 +426,7 @@ def ingest_github_org_events(
 
     cur.last_ts = newest_ts or cur.last_ts
     cur.meta = {**(cur.meta or {}), "mode": chosen_mode}
-    cur.updated_at = datetime.utcnow()
+    cur.updated_at = utc_now_naive()
     db.add(cur)
     db.commit()
 
@@ -542,7 +543,7 @@ def ingest_github_org_auditlog(
         db.add(cur)
         db.flush()
 
-    now = datetime.utcnow()
+    now = utc_now_naive()
     since = (
         _to_utc_naive(cur.last_ts)
         if cur.last_ts
@@ -635,7 +636,7 @@ def ingest_github_org_auditlog(
             newest_ts = ts
 
     cur.last_ts = newest_ts or cur.last_ts
-    cur.updated_at = datetime.utcnow()
+    cur.updated_at = utc_now_naive()
     db.add(cur)
     db.commit()
 
@@ -674,7 +675,7 @@ def ingest_github_atom_feed(
         db.add(cur)
         db.flush()
 
-    now = datetime.utcnow()
+    now = utc_now_naive()
     since = (
         _to_utc_naive(cur.last_ts)
         if cur.last_ts
@@ -813,7 +814,7 @@ def ingest_github_atom_feed(
             newest_ts = ts
 
     cur.last_ts = newest_ts or cur.last_ts
-    cur.updated_at = datetime.utcnow()
+    cur.updated_at = utc_now_naive()
     db.add(cur)
     db.commit()
 

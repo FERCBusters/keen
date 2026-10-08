@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import asyncio
 import os
@@ -80,7 +81,7 @@ _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _utcnow() -> datetime:
-    return datetime.utcnow()
+    return utc_now_naive()
 
 
 def _can_read_audits(db: Session, user: User | None) -> bool:

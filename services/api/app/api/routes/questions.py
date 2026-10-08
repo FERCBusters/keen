@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import asyncio
 import os
@@ -91,7 +92,7 @@ def _audit_action(
 
     db.add(
         AuditLog(
-            ts=datetime.utcnow(),
+            ts=utc_now_naive(),
             username=username,
             method="ACTION",
             path=f"/action/{action}",

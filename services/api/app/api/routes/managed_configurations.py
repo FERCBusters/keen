@@ -1,5 +1,6 @@
 """Database-managed collection settings and unified evidence definitions."""
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 from app.mapping.fields import validate_fields, observed_fields
 
 import json
@@ -774,7 +775,7 @@ def _queue_rule_backfill(db: Session, rule: dict, version: int) -> dict | None:
     if current:
         return {"id": str(current.id), "status": current.status,
                 "total_estimate": current.total_estimate}
-    cutoff = datetime.utcnow()
+    cutoff = utc_now_naive()
     exists = db.query(Event.id).filter(
         Event.source == source, Event.created_at <= cutoff).first()
     if not exists:

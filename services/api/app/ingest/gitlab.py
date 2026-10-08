@@ -1,3 +1,4 @@
+from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 """GitLab project activity collection for user-owned projects and groups/subgroups."""
 from datetime import datetime, timedelta
@@ -39,7 +40,7 @@ def _project_events(db, client, base, section, key, project, label):
     digest = hashlib.sha256(identity.encode()).hexdigest()
     cursor_name = 'gitlab:' + digest
     cur = db.query(IngestionCursor).filter_by(name=cursor_name).one_or_none()
-    since = cur.last_ts if cur and cur.last_ts else datetime.utcnow() - timedelta(days=14)
+    since = cur.last_ts if cur and cur.last_ts else utc_now_naive() - timedelta(days=14)
     # Date-based API filter overlaps the cursor day; stable IDs deduplicate retries.
     events = _pages(client, base, f'projects/{project_id}/events',
                     {'after': (since - timedelta(days=1)).date().isoformat(), 'sort': 'asc'})
@@ -65,7 +66,7 @@ def _project_events(db, client, base, section, key, project, label):
         newest = max(newest, timestamp)
     if cur is None:
         cur = IngestionCursor(name=cursor_name, meta={})
-    cur.last_ts = newest; cur.updated_at = datetime.utcnow()
+    cur.last_ts = newest; cur.updated_at = utc_now_naive()
     db.add(cur); db.commit()
     return {'project': project.get('path_with_namespace', project_id), 'created_events': count}
 

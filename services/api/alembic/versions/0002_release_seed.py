@@ -1,4 +1,5 @@
 """Final starter data and installation-specific configuration for KEEN 1.0."""
+from app.core.datetime_utils import utc_now_naive
 import gzip
 import importlib.util
 import json
@@ -46,7 +47,7 @@ def upgrade():
     if default is None:
         raise RuntimeError('KEEN_ENABLED_FRAMEWORKS excludes every seeded framework')
     document = json.dumps({'enabled': [default], 'default': default})
-    now = datetime.utcnow()
+    now = utc_now_naive()
     bind.execute(sa.text("INSERT INTO managed_configurations (name,document,version,updated_at) VALUES ('organisation-frameworks',cast(:doc AS jsonb),1,:at)"), {'doc':document,'at':now})
     bind.execute(sa.text("INSERT INTO managed_configuration_revisions (id,name,document,version,updated_at) VALUES (:id,'organisation-frameworks',cast(:doc AS jsonb),1,:at)"), {'id':uuid.uuid4(),'doc':document,'at':now})
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
 """Forgejo (Gitea-compatible) ingestion.
@@ -391,7 +392,7 @@ def _store_api_activity_items(
             newest_ts = ts
 
     cur.last_ts = newest_ts or cur.last_ts
-    cur.updated_at = datetime.utcnow()
+    cur.updated_at = utc_now_naive()
     db.add(cur)
     db.commit()
 
@@ -433,7 +434,7 @@ def ingest_forgejo_repo_feed(
         db.add(cur)
         db.flush()
 
-    now = datetime.utcnow()
+    now = utc_now_naive()
     since = (
         _to_utc_naive(cur.last_ts)
         if cur.last_ts
@@ -553,7 +554,7 @@ def ingest_forgejo_repo_feed(
                 newest_ts = ts
 
         cur.last_ts = newest_ts or cur.last_ts
-        cur.updated_at = datetime.utcnow()
+        cur.updated_at = utc_now_naive()
         db.add(cur)
         db.commit()
         result = {

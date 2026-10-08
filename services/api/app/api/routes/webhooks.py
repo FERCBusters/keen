@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import json
 import uuid
@@ -192,7 +193,7 @@ async def isms_effectiveness_metric_webhook(
     row = IsmsEffectivenessMetricEntry(
         measure_id=measure.id,
         recorded_at=_webhook_parse_datetime(payload.get("recorded_at"))
-        or datetime.utcnow(),
+        or utc_now_naive(),
         period_start=period_start,
         period_end=period_end,
         metric_value=metric_value,
@@ -217,11 +218,11 @@ async def isms_effectiveness_metric_webhook(
         source_event_id=source_event_id,
         notes=_webhook_clean_text(payload.get("notes"), 12000),
         raw_payload=payload,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=utc_now_naive(),
+        updated_at=utc_now_naive(),
     )
     db.add(row)
-    measure.updated_at = datetime.utcnow()
+    measure.updated_at = utc_now_naive()
     db.add(measure)
     db.flush()
     out = {

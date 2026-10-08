@@ -1,4 +1,5 @@
 """Agent administration is session-admin only; ingest uses its own scoped token."""
+from app.core.datetime_utils import utc_now_naive
 
 import asyncio
 import gzip
@@ -110,7 +111,7 @@ def view(agent):
 def issue(agent, days):
     token = "ka_" + agent.id + "." + secrets.token_urlsafe(32)
     agent.token_hash = hashlib.sha256(token.encode()).hexdigest()
-    agent.expires_at = datetime.utcnow() + timedelta(days=days)
+    agent.expires_at = utc_now_naive() + timedelta(days=days)
     return token
 
 
@@ -178,7 +179,7 @@ def authenticate(request, db, *, lock=True):
         not a
         or not hmac.compare_digest(a.token_hash, digest)
         or not a.enabled
-        or a.expires_at <= datetime.utcnow()
+        or a.expires_at <= utc_now_naive()
     ):
         raise HTTPException(401, "Invalid agent credential")
     return a
@@ -279,7 +280,7 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
                 commit=False,
             )
         accepted.append(str(event.id))
-    a.last_seen = datetime.utcnow()
+    a.last_seen = utc_now_naive()
     a.health = {
         **a.health,
         "last_batch_records": len(events),
@@ -328,11 +329,11 @@ async def heartbeat(
     except ValidationError:
         raise HTTPException(400, "Invalid health report")
     a = authenticate(request, db)
-    a.last_seen = datetime.utcnow()
+    a.last_seen = utc_now_naive()
     a.health = {
         **a.health,
         **redact_obj(health.model_dump(mode="json")),
-        "health_received_at": datetime.utcnow().isoformat(),
+        "health_received_at": utc_now_naive().isoformat(),
     }
     db.commit()
     response.headers["Cache-Control"] = "no-store"

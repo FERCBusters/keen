@@ -7,6 +7,7 @@ Create Date: 2026-05-20
 """
 
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import datetime
@@ -85,7 +86,7 @@ def upgrade():
                     "id": uuid.uuid4(),
                     "code": INCIDENT_CREATE,
                     "description": "Can create an external incident from an event when the incident webhook is configured.",
-                    "created_at": datetime.utcnow(),
+                    "created_at": utc_now_naive(),
                 }
             ],
         )

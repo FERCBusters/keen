@@ -1,5 +1,6 @@
 """BookStack policy-section references with retained page-version evidence."""
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import json
 import re
@@ -84,7 +85,7 @@ def capture_section(payload: SectionInput, user=Depends(require_isms_manage), db
         raise HTTPException(502, "BookStack returned an unexpected page")
     base_url = settings.bookstack_base_url.rstrip("/")
     permalink = f"{base_url}/link/{payload.page_id}" + (f"#{anchor}" if anchor else "")
-    captured = datetime.utcnow()
+    captured = utc_now_naive()
     snapshot = {"captured_at": captured.isoformat() + "Z", "page_id": payload.page_id,
                 "anchor": anchor, "permalink": permalink, "bookstack_page": page}
     raw = json.dumps(snapshot, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import date, datetime, time as dtime
@@ -23,7 +24,7 @@ from app.db.session import Base
 
 
 def utcnow() -> datetime:
-    return datetime.utcnow()
+    return utc_now_naive()
 
 
 class Framework(Base):

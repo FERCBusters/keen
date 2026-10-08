@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import os
 import hashlib
@@ -325,7 +326,7 @@ class MeetingPayload(IsmsLinksPayload):
 
 
 def _utcnow() -> datetime:
-    return datetime.utcnow()
+    return utc_now_naive()
 
 
 def _can_read_isms(db: Session, user: User | None) -> bool:

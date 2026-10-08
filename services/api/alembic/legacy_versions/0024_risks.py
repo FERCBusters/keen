@@ -7,6 +7,7 @@ Create Date: 2026-05-20
 """
 
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import datetime
@@ -44,7 +45,7 @@ def _insert_permission(code: str, description: str) -> None:
                     "id": uuid.uuid4(),
                     "code": code,
                     "description": description,
-                    "created_at": datetime.utcnow(),
+                    "created_at": utc_now_naive(),
                 }
             ],
         )
@@ -198,7 +199,7 @@ def upgrade():
         sa.Column("created_at", sa.DateTime()),
         sa.Column("updated_at", sa.DateTime()),
     )
-    now = datetime.utcnow()
+    now = utc_now_naive()
     op.bulk_insert(
         categories,
         [

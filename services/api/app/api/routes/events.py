@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 from app.services.control_inheritance import enabled_control_ids
 
 import csv
@@ -104,7 +105,7 @@ def _audit_action(
 
     db.add(
         AuditLog(
-            ts=datetime.utcnow(),
+            ts=utc_now_naive(),
             username=getattr(user, "username", None) if user else None,
             method="ACTION",
             path=f"/action/{action}",
@@ -1096,7 +1097,7 @@ def create_event_incident(
         raise HTTPException(status_code=400, detail="Title is required")
 
     incident_id = uuid.uuid4()
-    created_at = datetime.utcnow()
+    created_at = utc_now_naive()
     event_url = build_event_url(request, str(event.id))
     event_payload = {
         "id": str(event.id),

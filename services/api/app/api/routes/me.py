@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import re
 from datetime import datetime
@@ -586,7 +587,7 @@ def upsert_my_saved_search(
 
     if existing:
         existing.url = url
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = utc_now_naive()
         db.add(existing)
         db.commit()
         db.refresh(existing)
@@ -596,8 +597,8 @@ def upsert_my_saved_search(
             user_id=user.id,
             name=name,
             url=url,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=utc_now_naive(),
+            updated_at=utc_now_naive(),
         )
         db.add(r)
         db.commit()

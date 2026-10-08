@@ -1,4 +1,5 @@
 """Exercise recommendations against the shipped catalogue and live ORM changes."""
+from app.core.datetime_utils import utc_now_naive
 from tests.db_helpers import create_sqlite_schema
 import json
 import os
@@ -60,7 +61,7 @@ def db():
     engine=create_engine('sqlite://')
     @event.listens_for(engine,'connect')
     def functions(conn, record):
-        conn.create_function('NOW', 0, lambda: datetime.utcnow().isoformat(' '))
+        conn.create_function('NOW', 0, lambda: utc_now_naive().isoformat(' '))
     create_sqlite_schema(engine)
     with Session(engine) as session:
         for slug, framework in FRAMEWORKS.items():

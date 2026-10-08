@@ -1,4 +1,5 @@
 """Background runs, progress, failure budgets and evidence provenance."""
+from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import is_paused
 import json
 import uuid
@@ -52,7 +53,7 @@ def queue_run(db, collector, preview=False):
 def fail(db, run, message):
     # Only the first failure transition consumes budget, including overlapping ticks.
     changed = db.execute(update(Run).where(Run.id==run.id, Run.status.in_(['queued','running']))
-        .values(status='failed',message=message,finished_at=datetime.utcnow()))
+        .values(status='failed',message=message,finished_at=utc_now_naive()))
     if not changed.rowcount:
         db.rollback()
         return
@@ -68,7 +69,7 @@ def fail(db, run, message):
 def run_job(run_id):
     db = SessionLocal()
     try:
-        claimed = db.execute(update(Run).where(Run.id==run_id,Run.status=='queued').values(status='running',started_at=datetime.utcnow()))
+        claimed = db.execute(update(Run).where(Run.id==run_id,Run.status=='queued').values(status='running',started_at=utc_now_naive()))
         db.commit()
         if not claimed.rowcount:
             return
@@ -76,7 +77,7 @@ def run_job(run_id):
         if is_paused(db, 'api-ingesters'):
             run.status = 'cancelled'
             run.message = 'Source ingestion paused before collection began'
-            run.finished_at = datetime.utcnow()
+            run.finished_at = utc_now_naive()
             db.commit()
             return
         c = db.get(Collector,run.collector_id)
@@ -126,12 +127,12 @@ def run_job(run_id):
             run.result = {'processed':index+1,'records':len(records),'pages':pages}
             run.message = f'Storing evidence: {index+1} of {len(records)} records processed.'
             db.commit()
-        run.status,run.finished_at = 'succeeded',datetime.utcnow()
+        run.status,run.finished_at = 'succeeded',utc_now_naive()
         run.result = {'pages':pages,'samples':samples,'records':len(records),
             'request': {'method':d.method,'path':d.path,'query_parameters':list(d.query),'headers':list(d.headers),'has_body':d.body is not None}}
         run.message = 'Preview only: no evidence stored.' if run.preview else f'{run.new_records} new records; {run.duplicates} duplicates.'
         if not run.preview:
-            c.cursor,c.last_success,c.failures = cursor,datetime.utcnow(),0
+            c.cursor,c.last_success,c.failures = cursor,utc_now_naive(),0
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -163,7 +164,7 @@ def dispatch(run_id):
 def tick():
     db = SessionLocal()
     try:
-        now = datetime.utcnow()
+        now = utc_now_naive()
         if is_paused(db, 'api-ingesters'):
             db.execute(update(Run).where(Run.status == 'queued').values(
                 status='cancelled', message='Source ingestion paused before collection began', finished_at=now))

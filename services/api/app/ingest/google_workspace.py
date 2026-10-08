@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
 """Google Workspace audit ingester.
@@ -478,7 +479,7 @@ def ingest_google_workspace_stream(
 
     if newest_ts:
         cur.last_ts = newest_ts
-    cur.updated_at = datetime.utcnow()
+    cur.updated_at = utc_now_naive()
     db.add(cur)
     db.commit()
 

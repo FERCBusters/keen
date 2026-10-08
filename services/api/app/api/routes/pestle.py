@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import re
 import uuid
@@ -113,7 +114,7 @@ class ClauseLinksPayload(BaseModel):
 
 
 def _utcnow() -> datetime:
-    return datetime.utcnow()
+    return utc_now_naive()
 
 
 def _can_read_pestle(db: Session, user: User | None) -> bool:

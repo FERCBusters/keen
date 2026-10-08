@@ -1,5 +1,6 @@
 """Bounded, resumable backfill of one saved mapping rule."""
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 import logging
@@ -114,7 +115,7 @@ def process_batch(job_id: uuid.UUID) -> bool:
 def recover_jobs():
     """Reschedule jobs after a worker or broker interruption."""
     with SessionLocal() as db:
-        cutoff = datetime.utcnow() - timedelta(minutes=5)
+        cutoff = utc_now_naive() - timedelta(minutes=5)
         return [job.id for job in db.query(RuleBackfillJob)
                 .filter(or_(RuleBackfillJob.status == "queued",
                             and_(RuleBackfillJob.status == "running",

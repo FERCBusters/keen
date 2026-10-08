@@ -7,6 +7,7 @@ Create Date: 2026-01-20
 """
 
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import datetime
@@ -37,7 +38,7 @@ def upgrade():
         ),
         sa.Column("name", sa.String(length=64), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False, default=datetime.utcnow),
+        sa.Column("created_at", sa.DateTime(), nullable=False, default=utc_now_naive),
         sa.UniqueConstraint("name", name="uq_groups_name"),
     )
     op.create_index("ix_groups_name", "groups", ["name"], unique=True)
@@ -53,7 +54,7 @@ def upgrade():
         ),
         sa.Column("code", sa.String(length=128), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False, default=datetime.utcnow),
+        sa.Column("created_at", sa.DateTime(), nullable=False, default=utc_now_naive),
         sa.UniqueConstraint("code", name="uq_permissions_code"),
     )
     op.create_index("ix_permissions_code", "permissions", ["code"], unique=True)
@@ -224,7 +225,7 @@ def upgrade():
                 "id": uuid.uuid4(),
                 "code": "diary.read",
                 "description": "Can view diary (manual evidence) events, subject to per-entry visibility rules.",
-                "created_at": datetime.utcnow(),
+                "created_at": utc_now_naive(),
             }
         ],
     )

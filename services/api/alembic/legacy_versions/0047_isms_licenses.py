@@ -6,6 +6,7 @@ Create Date: 2026-05-27
 """
 
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import datetime
@@ -100,7 +101,7 @@ def upgrade() -> None:
             where license is not null and trim(license) <> ''
             order by trim(license)
             """)).mappings().all()
-    now = datetime.utcnow()
+    now = utc_now_naive()
     for row in rows:
         name = row["name"]
         license_id = bind.execute(

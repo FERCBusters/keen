@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
 import hashlib
@@ -534,7 +535,7 @@ def ingest_cloudwatch_logs_once(
             break
 
     cur.last_ts = max_seen_ts or end
-    cur.updated_at = datetime.utcnow()
+    cur.updated_at = utc_now_naive()
     db.add(cur)
     db.commit()
 

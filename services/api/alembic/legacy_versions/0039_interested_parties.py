@@ -6,6 +6,7 @@ Create Date: 2026-05-26
 """
 
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import datetime
@@ -43,7 +44,7 @@ def _insert_permission(code: str, description: str) -> None:
                     "id": uuid.uuid4(),
                     "code": code,
                     "description": description,
-                    "created_at": datetime.utcnow(),
+                    "created_at": utc_now_naive(),
                 }
             ],
         )

@@ -1,4 +1,5 @@
 """Canonical catalogue, editable nodes, and one-hop evidence crosswalks."""
+from app.core.datetime_utils import utc_now_naive
 import importlib.util
 import json
 from pathlib import Path
@@ -84,7 +85,7 @@ def test_shared_nist_dedup_explicit_precedence_and_no_transitive_evidence(db):
         OsaControlMapping(control_id=b.id,nist_ref='AC-02'),
         OsaControlMapping(control_id=b.id,nist_ref='SC-07'),
         OsaControlMapping(control_id=c.id,nist_ref='SC-07')])
-    event=Event(source='test',external_id='test',timestamp=datetime.utcnow(),summary='Test')
+    event=Event(source='test',external_id='test',timestamp=utc_now_naive(),summary='Test')
     db.add(event);db.flush()
     db.add(Mapping(event_id=event.id,control_item_id=a.id,confidence=1,method='test',mapped_by='test'))
     db.flush()
@@ -110,7 +111,7 @@ def test_only_enabled_frameworks_contribute_inherited_evidence(db, monkeypatch):
     db.add_all([a,b]);db.flush()
     db.add_all([OsaControlMapping(control_id=a.id,nist_ref='AC-01'),
                 OsaControlMapping(control_id=b.id,nist_ref='AC-01')])
-    event=Event(source='test',external_id='enabled',timestamp=datetime.utcnow(),summary='Enabled inheritance')
+    event=Event(source='test',external_id='enabled',timestamp=utc_now_naive(),summary='Enabled inheritance')
     db.add(event);db.flush()
     db.add(Mapping(event_id=event.id,control_item_id=a.id,method='test'))
     config=ManagedConfiguration(name='organisation-frameworks',version=1,
@@ -139,7 +140,7 @@ def test_inheritance_fast_path_requires_actual_enabled_evidence(db, monkeypatch)
         document={'enabled':['A','B'],'default':'B'})
     db.add(selection);db.flush()
     assert not has_inherited_evidence(db, 'B')
-    event=Event(source='test',external_id='fast-path',timestamp=datetime.utcnow(),summary='Test')
+    event=Event(source='test',external_id='fast-path',timestamp=utc_now_naive(),summary='Test')
     db.add(event);db.flush()
     db.add(Mapping(event_id=event.id,control_item_id=a.id,confidence=1,method='test',mapped_by='test'));db.flush()
     assert has_inherited_evidence(db, 'B')

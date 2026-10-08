@@ -6,6 +6,7 @@ Create Date: 2026-05-27
 """
 
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import datetime
@@ -115,7 +116,7 @@ def upgrade() -> None:
                     insert into risk_categories (id, name, created_at, updated_at)
                     values (:id, 'Uncategorised', :now, :now)
                     """),
-                {"id": category_id, "now": datetime.utcnow()},
+                {"id": category_id, "now": utc_now_naive()},
             )
         subcategory_id = bind.execute(
             sa.text("""
@@ -135,7 +136,7 @@ def upgrade() -> None:
                 {
                     "id": subcategory_id,
                     "category_id": category_id,
-                    "now": datetime.utcnow(),
+                    "now": utc_now_naive(),
                 },
             )
         bind.execute(

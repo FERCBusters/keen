@@ -7,6 +7,7 @@ Create Date: 2026-01-20
 """
 
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import datetime
@@ -42,7 +43,7 @@ def upgrade():
     }
 
     rows = []
-    now = datetime.utcnow()
+    now = utc_now_naive()
 
     if DIARY_READ not in existing_codes:
         rows.append(

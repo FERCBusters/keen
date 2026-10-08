@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
@@ -404,7 +405,7 @@ def stats_events_timeseries(
     # Note: end_ts is treated as an exclusive bound.
     if start_ts is not None or end_ts is not None:
         if end_ts is None:
-            end_ts = datetime.utcnow()
+            end_ts = utc_now_naive()
         if start_ts is None:
             days = max(1, min(int(days or 120), 3650))
             start_ts = end_ts - timedelta(days=days)
@@ -428,7 +429,7 @@ def stats_events_timeseries(
     # Otherwise: date window if provided.
     elif start_date or end_date:
         if end_date is None:
-            end_date = datetime.utcnow().date()
+            end_date = utc_now_naive().date()
         if start_date is None:
             # Backfill start from `days` (inclusive window).
             days = max(1, min(int(days or 120), 3650))
@@ -441,7 +442,7 @@ def stats_events_timeseries(
     # Fallback: last N days ending "now".
     else:
         days = max(1, min(int(days or 120), 3650))
-        end_excl = datetime.utcnow()
+        end_excl = utc_now_naive()
         start = end_excl - timedelta(days=days)
         # Bucket boundaries start at midnight for day-level buckets.
         start = _floor(start, interval_req)
@@ -452,7 +453,7 @@ def stats_events_timeseries(
     start_bucket = _floor(start, interval_eff)
     if end_excl is None:
         # Safety: should not happen (end_excl is always set in the branches above).
-        end_excl = datetime.utcnow()
+        end_excl = utc_now_naive()
     # end_excl is an exclusive bound; generate buckets up to the last bucket
     # that has any overlap with the window.
     end_bucket = _floor(end_excl - timedelta(microseconds=1), interval_eff)

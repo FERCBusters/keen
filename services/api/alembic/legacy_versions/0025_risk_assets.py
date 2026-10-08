@@ -7,6 +7,7 @@ Create Date: 2026-05-20
 """
 
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import datetime
@@ -37,7 +38,7 @@ def _get_or_create_category(bind, name: str) -> uuid.UUID:
     if row_id:
         return row_id
     row_id = uuid.uuid4()
-    now = datetime.utcnow()
+    now = utc_now_naive()
     op.bulk_insert(
         categories,
         [{"id": row_id, "name": name, "created_at": now, "updated_at": now}],
@@ -63,7 +64,7 @@ def _get_or_create_subcategory(bind, category_id: uuid.UUID, name: str) -> uuid.
     if row_id:
         return row_id
     row_id = uuid.uuid4()
-    now = datetime.utcnow()
+    now = utc_now_naive()
     op.bulk_insert(
         subcategories,
         [

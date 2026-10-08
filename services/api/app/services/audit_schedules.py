@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import logging
 import uuid
@@ -43,7 +44,7 @@ FUZZY_MONTH_DATE_RULES = SCHEDULE_DATE_RULES - {"exact"}
 
 
 def utcnow() -> datetime:
-    return datetime.utcnow()
+    return utc_now_naive()
 
 
 def _today_for_schedule() -> date:

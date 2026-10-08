@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import datetime
@@ -336,7 +337,7 @@ def record_entity_changelog(
         changed_by_username=getattr(user, "username", None),
         request_method=(request_method or None),
         request_path=(request_path or None),
-        changed_at=datetime.utcnow(),
+        changed_at=utc_now_naive(),
     )
     db.add(entry)
     db.flush()

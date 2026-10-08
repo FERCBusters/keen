@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
 import hashlib
@@ -447,7 +448,7 @@ def ingest_loki_once(
         )
         cur.meta = meta
         cur.last_ts = now
-        cur.updated_at = datetime.utcnow()
+        cur.updated_at = utc_now_naive()
         db.add(cur)
         db.commit()
         return {
@@ -632,7 +633,7 @@ def ingest_loki_once(
             hit_limit = chunk_returned_values >= limit
             advance_to = chunk_max_seen_ts if (hit_limit and chunk_max_seen_ts) else end
             cur.last_ts = advance_to
-            cur.updated_at = datetime.utcnow()
+            cur.updated_at = utc_now_naive()
             meta = dict(cur.meta or {})
             meta.update(
                 {

@@ -7,6 +7,7 @@ All writes occur in Alembic's transaction. A conversion error rolls back the
 entire upgrade; previously imported events and mappings are never rewritten.
 """
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import json
 import uuid
@@ -52,7 +53,7 @@ def upgrade():
             docs[name] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
             old_versions[name] = 0
     converted, _ = unify(docs, settings.default_framework_slug)
-    now = datetime.utcnow()
+    now = utc_now_naive()
     for name, document in converted.items():
         # Copy every source into Postgres so first boot and subsequent restarts
         # use exactly the same preset definitions regardless of mounted files.

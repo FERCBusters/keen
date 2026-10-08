@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import time
 from datetime import datetime
@@ -451,7 +452,7 @@ async def audit_trail_middleware(request: Request, call_next):
             try:
                 db.add(
                     AuditLog(
-                        ts=datetime.utcnow(),
+                        ts=utc_now_naive(),
                         username=username,
                         method=request.method,
                         path=path,

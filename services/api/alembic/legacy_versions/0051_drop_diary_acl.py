@@ -6,6 +6,7 @@ Create Date: 2026-05-28
 """
 
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import datetime
@@ -126,7 +127,7 @@ def downgrade() -> None:
                     "id": uuid.uuid4(),
                     "code": "diary.read",
                     "description": "Can view diary (manual evidence) events.",
-                    "created_at": datetime.utcnow(),
+                    "created_at": utc_now_naive(),
                 }
             ],
         )

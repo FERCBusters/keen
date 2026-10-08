@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 from app.ingest.gitea import ingest_gitea_all
 from app.ingest.redmine import ingest_redmine_all
 from app.ingest.riskledger import ingest_riskledger_all
@@ -157,7 +158,7 @@ def admin_import_controls(
         if payload.framework_source and hasattr(fw, "source"):
             fw.source = payload.framework_source.strip() or getattr(fw, "source", None)
         if hasattr(fw, "imported_at"):
-            fw.imported_at = datetime.utcnow()
+            fw.imported_at = utc_now_naive()
     else:
         fw = Framework(slug=framework_slug)
         # Some deployments extend the Framework model with metadata columns.
@@ -172,7 +173,7 @@ def admin_import_controls(
         if hasattr(fw, "url"):
             fw.url = payload.framework_url or None
         if hasattr(fw, "imported_at"):
-            fw.imported_at = datetime.utcnow()
+            fw.imported_at = utc_now_naive()
         db.add(fw)
 
     created = 0
@@ -422,7 +423,7 @@ def admin_update_control_clauses(
     db.query(ControlClauseLink).filter(
         ControlClauseLink.control_item_id == control.id
     ).delete()
-    now = datetime.utcnow()
+    now = utc_now_naive()
     for clause_id, applicability in selected:
         db.add(
             ControlClauseLink(
@@ -732,7 +733,7 @@ def admin_update_clause_controls(
     db.query(ControlClauseLink).filter(
         ControlClauseLink.clause_id == clause.id
     ).delete()
-    now = datetime.utcnow()
+    now = utc_now_naive()
     for control_id, applicability in selected:
         db.add(
             ControlClauseLink(
@@ -845,7 +846,7 @@ def admin_reset_loki_cursors(
         )
         cur.meta = meta
         cur.last_ts = now
-        cur.updated_at = datetime.utcnow()
+        cur.updated_at = utc_now_naive()
         db.add(cur)
         reset_cursors.append(cursor_name)
 

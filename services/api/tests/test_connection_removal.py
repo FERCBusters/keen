@@ -1,3 +1,4 @@
+from app.core.datetime_utils import utc_now_naive
 from types import SimpleNamespace
 import uuid
 import pytest
@@ -67,8 +68,8 @@ def test_removes_automatic_links_preserves_manual_links_and_events(database,monk
     from app.services import control_evidence_stats
     monkeypatch.setattr(control_evidence_stats,'rebuild_framework_event_stats',lambda *a,**k:None)
     monkeypatch.setattr(control_evidence_stats,'clear_stats_caches',lambda:None)
-    ev=Event(timestamp=datetime.utcnow(),source='integration:collector',summary='Keep this evidence',external_id='1')
-    other=Event(timestamp=datetime.utcnow(),source='github',summary='Other connection',external_id='2')
+    ev=Event(timestamp=utc_now_naive(),source='integration:collector',summary='Keep this evidence',external_id='1')
+    other=Event(timestamp=utc_now_naive(),source='github',summary='Other connection',external_id='2')
     controls=[ControlItem(framework_slug='test',type='custom',ref='A.'+str(i)) for i in range(3)]
     db.add_all([ev,other,*controls]);db.flush()
     db.add_all([Mapping(event_id=ev.id,control_item_id=controls[0].id,method='rule'),Mapping(event_id=ev.id,control_item_id=controls[1].id,method='manual'),Mapping(event_id=other.id,control_item_id=controls[2].id,method='rule')]);db.commit()

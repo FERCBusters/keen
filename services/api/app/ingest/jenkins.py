@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_from_timestamp_naive
 from app.services.ingestion_pause import pausable
 
 from datetime import datetime
@@ -99,7 +100,7 @@ def ingest_jenkins_job(
         if not ts_ms:
             continue
         # Jenkins gives epoch milliseconds. Store as naive UTC to match DB.
-        ts = datetime.utcfromtimestamp(ts_ms / 1000.0)
+        ts = utc_from_timestamp_naive(ts_ms / 1000.0)
         last_ts = _to_utc_naive(cur.last_ts)
         if last_ts and ts <= last_ts:
             continue

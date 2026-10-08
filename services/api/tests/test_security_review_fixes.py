@@ -1,4 +1,5 @@
 """Security boundary regressions using disposable databases and synthetic identities."""
+from app.core.datetime_utils import utc_now_naive
 import asyncio
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -75,7 +76,7 @@ def test_correct_browser_single_use_and_expiry(db,user,monkeypatch):
     r=req(cookie=f'{oidc.sso_binding_cookie()}=secret',query=f'state={state}')
     assert asyncio.run(oidc.handle_callback(r,db,'google'))[0].id==user.id
     with pytest.raises(HTTPException):asyncio.run(oidc.handle_callback(r,db,'google'))
-    row=oidc.create_login_state(db,next_url='/');state=row.state;row.expires_at=datetime.utcnow()-timedelta(seconds=1);db.commit()
+    row=oidc.create_login_state(db,next_url='/');state=row.state;row.expires_at=utc_now_naive()-timedelta(seconds=1);db.commit()
     assert oidc.pop_login_state(db,state=state) is None
 
 def test_cookie_flags(monkeypatch):
@@ -85,7 +86,7 @@ def test_cookie_flags(monkeypatch):
     assert all(x in header for x in ['__Host-keen_sso=','HttpOnly','Secure','SameSite=lax']) and 'Domain=' not in header
 
 def test_event_questions_and_owner_listing(db,user):
-    ev=Event(timestamp=datetime.utcnow(),source='loki',summary='private',external_id='1');db.add(ev);db.flush()
+    ev=Event(timestamp=utc_now_naive(),source='loki',summary='private',external_id='1');db.add(ev);db.flush()
     thread=EventQuestionThread(event_id=ev.id,created_by_user_id=user.id);db.add(thread);db.flush()
     db.add(EventQuestionPost(thread_id=thread.id,author_user_id=user.id,body='secret'));db.commit()
     with pytest.raises(HTTPException) as e:questions.list_event_questions(str(ev.id),req(user),db)
@@ -135,7 +136,7 @@ def test_ownership_confirmation_replay_and_removal(db,user,mail):
 @pytest.mark.parametrize('change',['expire','password','mfa','replace'])
 def test_invalidated_email_proofs(db,user,mail,change):
     token=send(db,user,mail);row=db.get(SsoEmailChallenge,sso_emails.digest(token))
-    if change=='expire':row.expires_at=datetime.utcnow()-timedelta(seconds=1)
+    if change=='expire':row.expires_at=utc_now_naive()-timedelta(seconds=1)
     if change=='password':user.password_hash='changed'
     if change=='mfa':user.mfa_version+=1
     if change=='replace':send(db,user,mail)

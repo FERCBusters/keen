@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
 from datetime import datetime, timezone
@@ -338,7 +339,7 @@ def ingest_taiga_project_timeline(
 
     cur.last_ts = newest_ts or cur.last_ts
     # updated_at is stored as a naive UTC timestamp in DB.
-    cur.updated_at = datetime.utcnow()
+    cur.updated_at = utc_now_naive()
     db.add(cur)
     db.commit()
 

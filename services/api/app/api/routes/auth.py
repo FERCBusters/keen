@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.core.datetime_utils import utc_now_naive
 
 from datetime import datetime
 from urllib.parse import urlencode
@@ -152,7 +153,7 @@ def complete_local_login(db, user, request, *, mfa_verified=False, verified_vers
 
     # Best-effort last-login timestamp
     try:
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = utc_now_naive()
         db.add(user)
         db.commit()
     except Exception:

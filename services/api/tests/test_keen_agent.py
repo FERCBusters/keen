@@ -1,4 +1,5 @@
 """OTLP contract, scoped credentials, atomic acceptance and redaction regressions."""
+from app.core.datetime_utils import utc_now_naive
 from tests.db_helpers import create_sqlite_schema
 
 import copy
@@ -66,7 +67,7 @@ def setup(monkeypatch):
     @sql_event.listens_for(engine, "connect")
     def connected(c, r):
         c.isolation_level = None
-        c.create_function("NOW", 0, lambda: datetime.utcnow().isoformat(" "))
+        c.create_function("NOW", 0, lambda: utc_now_naive().isoformat(" "))
 
     @sql_event.listens_for(engine, "begin")
     def begin(conn):
@@ -199,7 +200,7 @@ def test_expiry_demo_admin_boundary_and_health(setup, monkeypatch):
     )
     with f() as db:
         a = db.get(KeenAgent, info["agent"]["id"])
-        a.expires_at = datetime.utcnow() - timedelta(seconds=1)
+        a.expires_at = utc_now_naive() - timedelta(seconds=1)
         db.commit()
     assert c.post("/v1/otlp/logs", json=record(), headers=h).status_code == 401
     monkeypatch.setattr(api.settings, "demo_mode", True)

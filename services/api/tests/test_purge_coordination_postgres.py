@@ -1,4 +1,5 @@
 """Real PostgreSQL concurrency regression. Runs in the normal GitHub CI database."""
+from app.core.datetime_utils import utc_now_naive
 import os
 import threading
 import time
@@ -45,14 +46,14 @@ def database():
 def test_purge_drains_transactions_rejects_writes_and_preserves_manual_pause(database):
     engine,factory=database
     with factory() as db:
-        db.add(Event(source='test',external_id='before',timestamp=datetime.utcnow(),summary='Before purge'))
+        db.add(Event(source='test',external_id='before',timestamp=utc_now_naive(),summary='Before purge'))
         db.add(SourceIngestionState(source='rss',paused=True))
         db.commit()
         retention.enqueue(db,'all',None,False,'test');db.commit()
     with factory() as db:
         assert is_paused(db,'keen-agent')
         with pytest.raises(HTTPException):require_receiving(db,'webhooks')
-        db.add(Event(source='test',external_id='during',timestamp=datetime.utcnow(),summary='Must not arrive'))
+        db.add(Event(source='test',external_id='during',timestamp=utc_now_naive(),summary='Must not arrive'))
         with pytest.raises(HTTPException):db.flush()
         db.rollback()
     held=factory()
