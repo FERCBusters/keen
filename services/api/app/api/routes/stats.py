@@ -21,7 +21,7 @@ from app.services.control_evidence_stats import (
     get_control_evidence_stats_by_id,
     get_framework_event_counts,
 )
-from app.services.control_inheritance import evidence_pairs, effective_framework_ids
+from app.services.control_inheritance import evidence_pairs, effective_framework_ids, has_inherited_evidence
 from app.core.source_meta import get_source_meta, apply_user_source_overrides
 
 router = APIRouter()
@@ -99,9 +99,7 @@ def stats_summary(
         # visible to active users, so these dashboard counters use the global
         # framework event-count cache instead of legacy trigger-maintained
         # Postgres counter tables.
-        has_inheritance = db.query(EffectiveCrossFrameworkControlLink.id).join(
-            ControlItem, ControlItem.id == EffectiveCrossFrameworkControlLink.target_control_id
-        ).filter(ControlItem.framework_slug == framework).first() is not None
+        has_inheritance = has_inherited_evidence(db, framework)
         if not has_inheritance and isinstance(user, User) and getattr(user, "is_active", False):
             controls = (
                 db.query(ControlItem.id, ControlItem.in_scope)
@@ -219,9 +217,7 @@ def stats_controls(
     }
 
     def _load() -> dict:
-        has_inheritance = db.query(EffectiveCrossFrameworkControlLink.id).join(
-            ControlItem, ControlItem.id == EffectiveCrossFrameworkControlLink.target_control_id
-        ).filter(ControlItem.framework_slug == framework).first() is not None
+        has_inheritance = has_inherited_evidence(db, framework)
         def _item(c: ControlItem, evidence_count: int, last_evidence) -> dict:
             if isinstance(last_evidence, datetime):
                 last_evidence_value = last_evidence.isoformat()

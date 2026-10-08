@@ -2,26 +2,29 @@
 
 ## Framework catalogue
 
-Migration `0090_osa_catalogue` installs an offline Open Security Architecture snapshot:
-88 frameworks, 3,608 clause/control entries and 23,140 NIST-to-clause associations.
-KEEN Assurance (`KEEN-AF:1.0`), DVSTF (`UK-DVSTF:1.0`), Cyber Essentials (`CYBER-ESSENTIALS:2026`) and all
-`RISKLEDGER:*` catalogues are retained. Risk Ledger is visible before its first import.
+Fresh installations run two migrations: `0001_release_schema` and
+`0002_release_seed`. They install 88 OSA frameworks, 3,608 OSA clause/control
+entries and 23,140 NIST associations, plus KEEN Assurance, DVSTF, Cyber Essentials
+and the Risk Ledger catalogue placeholder. Only **KEEN Assurance Framework** is
+enabled by default. Explicit environment defaults/restrictions are respected;
+all other catalogues remain available for administrators to enable.
 
-This is the requested pre-production reset: every other old framework catalogue,
-its controls and dependent control mappings are removed. Existing events remain.
-The old HIPAA Privacy/Breach catalogues are not part of
-OSA's catalogue. OSA supplies HIPAA Security Rule as `hipaa_sr`. Its catalogues
-represent its published coverage, not complete normative texts for every standard.
+Framework selectors show human-friendly names while IDs remain stable. Admin →
+Frameworks includes Select all and Deselect all; Save applies the pending choices.
+Environment-excluded frameworks cannot be selected. At least one enabled
+framework and an enabled default are required.
 
-The default ISO machine name is now `iso_27001_2022`. Update existing `.env` values
-for `KEEN_DEFAULT_FRAMEWORK_SLUG`/`KEEN_DEFAULT_FRAMEWORK` and any
-`KEEN_ENABLED_FRAMEWORKS` list. Saved organisation selections and persisted ISO
-mapping rules are updated by the migration. Review other old rules in Admin:
-removed frameworks cannot be recreated accidentally by a stale rule.
+Existing installations at `0090_osa_catalogue` must follow
+[migration adoption](migration-consolidation.md#existing-installations) before
+starting the new application. Adoption verifies the schema and changes only the
+Alembic marker; existing catalogues, edits, evidence and saved selections remain.
+Do not delete the database, rerun seeds, or stamp without verification.
+Earlier versions must first reach `0090_osa_catalogue` using the previous release
+candidate. Historical sources are retained outside Alembic's active versions folder.
 
-All imported nodes remain editable and support local additions. A migration runs
-once; neither startup nor normal operation fetches OSA data or overwrites edits.
-Earlier seed-only steps are skipped while their revision IDs remain in the chain.
+OSA supplies HIPAA Security Rule (`hipaa_sr`); its published mapped catalogues
+are not a claim of complete normative standard coverage. Ordinary restarts
+never download catalogues or overwrite administrator edits.
 
 OSA's canonical API associations link framework clauses through shared NIST
 controls. These derived links expose related evidence in control details, event
@@ -146,3 +149,13 @@ new history. Existing recorded snapshots supply this history without a database
 migration; unrecorded YAML edits cannot be reconstructed. The global version is
 still used internally for concurrent-edit protection. Historical evidence is not
 automatically remapped by restoring a rule.
+
+## Read performance
+
+Dashboard and control-statistics fast paths now check for actual inherited
+evidence from enabled frameworks rather than merely the existence of catalogue
+cross-references. Unmapped events do not generate cross-framework mapping rows.
+An agent backlog still incurs database, artefact storage and rule-evaluation work.
+Observe queue drain rate and active database queries before increasing concurrency.
+The change addresses an identified query path; it does not prove the cause of
+an unobserved CPU spike on an existing installation.

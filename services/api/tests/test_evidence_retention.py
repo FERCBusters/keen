@@ -75,7 +75,7 @@ class RetentionDatabaseTests(unittest.TestCase):
             cls.engine=schema_engine(url, cls.schema)
             Base.metadata.create_all(cls.engine, tables=[t for t in Base.metadata.sorted_tables
                 if t.name not in {'evidence_retention_policy','evidence_purge_jobs','evidence_object_cleanup','audit_event_retention_holds'}])
-            path=Path(__file__).parents[1]/'alembic/versions/0083_evidence_retention.py'
+            path=Path(__file__).parents[1]/'alembic/legacy_versions/0083_evidence_retention.py'
             spec=importlib.util.spec_from_file_location('retention_migration',path)
             module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
             with cls.engine.begin() as c, patch.object(module,'op',SimpleNamespace(execute=lambda q:c.execute(text(q)))):module.upgrade()

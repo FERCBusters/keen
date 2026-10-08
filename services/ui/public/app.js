@@ -171,7 +171,7 @@ export async function refreshFrameworkNavigation(savedCatalog = null, cfgOverrid
   const picker = navRoot?.querySelector('#navFrameworkSelect');
   if (picker) {
     picker.replaceChildren(...catalog.items.map(item=> {
-      const option = new Option(item.slug, item.slug);
+      const option = new Option(item.name || item.slug, item.slug);
       option.title = `${item.name} (${item.slug})`; return option;
     }));
     picker.value = selected;

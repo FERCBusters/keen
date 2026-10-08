@@ -200,7 +200,7 @@ def test_migration_upgrade_and_downgrade():
     engine=create_engine('sqlite://')
     with engine.begin() as connection:
         connection.execute(text('CREATE TABLE users (id UUID PRIMARY KEY)'))
-        path=Path(__file__).parents[1]/'alembic/versions/0087_sso_verified_emails.py'
+        path=Path(__file__).parents[1]/'alembic/legacy_versions/0087_sso_verified_emails.py'
         spec=importlib.util.spec_from_file_location('sso_email_migration',path)
         migration=importlib.util.module_from_spec(spec);spec.loader.exec_module(migration)
         with Operations.context(MigrationContext.configure(connection)):

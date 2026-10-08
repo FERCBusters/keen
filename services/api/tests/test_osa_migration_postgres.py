@@ -29,6 +29,7 @@ def test_full_migration_and_existing_preproduction_catalogue(monkeypatch):
             monkeypatch.setattr(settings,field,str(root.parents[1]/'config'/Path(value).name))
     config=Config(str(root/'alembic.ini'))
     config.set_main_option('script_location',str(root/'alembic'))
+    config.set_main_option('version_locations',str(root/'alembic/legacy_versions'))
     engine=schema_engine(url,schema)
     connection=engine.connect()
     connection.execute(text(f'SET search_path TO {schema},public'))

@@ -61,7 +61,7 @@ curl -b cookies.txt -X POST http://localhost:8181/v1/admin/ingest/loki/run
   - Bootstrap admin (first-run only): `KEEN_BOOTSTRAP_ADMIN_USERNAME`, `KEEN_BOOTSTRAP_ADMIN_PASSWORD`
   - Session cookies: `KEEN_SESSION_*`, `KEEN_COOKIE_*`
 - Mapping rules: `KEEN_RULES_PATH` (default `./config/rules.yml`)
-- Default framework slug for API/UI filtering: `KEEN_DEFAULT_FRAMEWORK` (default `iso_27001_2022`)
+- Default framework slug for API/UI filtering: `KEEN_DEFAULT_FRAMEWORK` (default `KEEN-AF:1.0`)
 - Framework seed files directory: `KEEN_FRAMEWORKS_DIR` (default `./frameworks`)
 - Loki queries: `KEEN_LOKI_QUERIES_PATH` (default `./config/loki.yml`)
 - CloudWatch Logs queries: `KEEN_CLOUDWATCH_LOGS_CONFIG_PATH` (default `./config/cloudwatch_logs.yml`)

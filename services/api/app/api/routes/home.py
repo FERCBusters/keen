@@ -13,7 +13,7 @@ from app.security.auth import require_authenticated
 from app.security.roles import attach_effective_role
 from app.security.permissions import has_permission
 from app.services.control_evidence_stats import get_control_evidence_stats_by_id
-from app.services.control_inheritance import evidence_pairs
+from app.services.control_inheritance import evidence_pairs, has_inherited_evidence
 from .stats import stats_summary
 
 router = APIRouter()
@@ -43,7 +43,7 @@ def home_overview(request: Request, framework: str = settings.default_framework_
     result = {'framework': framework, 'control_count': len(controls), 'clause_count': int(clauses or 0),
               'coverage': None, 'events': None, 'attention': [], 'checked_at': datetime.now(timezone.utc).isoformat()}
     if events:
-        inherited = db.query(EffectiveCrossFrameworkControlLink.id).join(ControlItem, ControlItem.id == EffectiveCrossFrameworkControlLink.target_control_id).filter(ControlItem.framework_slug == framework).first()
+        inherited = has_inherited_evidence(db, framework)
         if inherited:
             pairs = evidence_pairs(framework, db)
             supported = {row[0] for row in db.query(pairs.c.control_id).distinct().all()}

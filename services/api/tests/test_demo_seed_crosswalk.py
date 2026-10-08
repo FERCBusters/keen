@@ -46,7 +46,7 @@ def db():
 
 
 def migrate(db,monkeypatch):
-    spec=importlib.util.spec_from_file_location('crosswalk',ROOT/'alembic/versions/0079_seed_control_crosswalk.py')
+    spec=importlib.util.spec_from_file_location('crosswalk',ROOT/'alembic/legacy_versions/0079_seed_control_crosswalk.py')
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     monkeypatch.setattr(module.op,'get_bind',lambda:db.connection())
     module.upgrade();db.flush()

@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def migration():
-    spec = importlib.util.spec_from_file_location('osa_migration', ROOT/'alembic/versions/0090_osa_catalogue.py')
+    spec = importlib.util.spec_from_file_location('osa_migration', ROOT/'alembic/legacy_versions/0090_osa_catalogue.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -124,3 +124,29 @@ def test_only_enabled_frameworks_contribute_inherited_evidence(db, monkeypatch):
     assert db.query(Event).filter(event_has_control(b.id,Event.id,db)).count()==0
     # Direct mappings remain; hiding a framework is not evidence deletion.
     assert db.query(Mapping).count()==1
+
+
+def test_inheritance_fast_path_requires_actual_enabled_evidence(db, monkeypatch):
+    from app.services.control_inheritance import has_inherited_evidence
+    from app.db.models import ManagedConfiguration
+    from app.core.config import settings
+    monkeypatch.setattr(settings, 'enabled_frameworks', '')
+    a, b = [ControlItem(framework_slug=s, type='annex_control', ref='1') for s in ['A','B']]
+    db.add_all([a,b]);db.flush()
+    db.add_all([OsaControlMapping(control_id=a.id,nist_ref='AC-01'),
+                OsaControlMapping(control_id=b.id,nist_ref='AC-01')])
+    selection=ManagedConfiguration(name='organisation-frameworks',version=1,
+        document={'enabled':['A','B'],'default':'B'})
+    db.add(selection);db.flush()
+    assert not has_inherited_evidence(db, 'B')
+    event=Event(source='test',external_id='fast-path',timestamp=datetime.utcnow(),summary='Test')
+    db.add(event);db.flush()
+    db.add(Mapping(event_id=event.id,control_item_id=a.id,confidence=1,method='test',mapped_by='test'));db.flush()
+    assert has_inherited_evidence(db, 'B')
+    selection.document={'enabled':['B'],'default':'B'};db.flush()
+    assert not has_inherited_evidence(db, 'B')
+    db.add(CrossFrameworkControlLink(source_control_id=a.id,target_control_id=b.id,rationale='Direct'))
+    db.flush()
+    assert not has_inherited_evidence(db, 'B')
+    selection.document={'enabled':['A','B'],'default':'B'};db.flush()
+    assert has_inherited_evidence(db, 'B')

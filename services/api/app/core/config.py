@@ -460,7 +460,7 @@ class Settings(BaseSettings):
     control_links_path: str = Field(default="/app/config/control_links.yml")
     risk_mitigator_rules_path: str = Field(default="/app/config/risk_mitigator.yml")
     default_framework_slug: str = Field(
-        default="iso_27001_2022",
+        default="KEEN-AF:1.0",
         validation_alias=AliasChoices(
             "DEFAULT_FRAMEWORK_SLUG",
             "DEFAULT_FRAMEWORK",

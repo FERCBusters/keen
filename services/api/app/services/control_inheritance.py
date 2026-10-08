@@ -80,3 +80,37 @@ def evidence_pairs(framework, db=None):
                                   CrossFrameworkControlLink.target_control_id.in_(enabled))
         osa = osa.where(sc.c.id.in_(enabled), tc.c.id.in_(enabled))
     return direct.union(explicit, osa).subquery()
+
+
+def has_inherited_evidence(db, framework):
+    """Only leave cached direct-count paths when enabled sources have evidence.
+
+    Start with actual mappings, never the global control-pair relation. Empty
+    mapping tables and disabled crosswalks must not cause catalogue expansion.
+    """
+    from app.api.routes.frameworks import _framework_selection
+    enabled = _framework_selection(db)[3]
+    if framework not in enabled:
+        return False
+    source_control = ControlItem.__table__.alias('inherited_source')
+    target_control = ControlItem.__table__.alias('inherited_target')
+    links = CrossFrameworkControlLink.__table__
+    explicit = select(Mapping.id).select_from(
+        Mapping.__table__.join(links, links.c.source_control_id == Mapping.control_item_id)
+        .join(source_control, source_control.c.id == links.c.source_control_id)
+        .join(target_control, target_control.c.id == links.c.target_control_id)
+    ).where(source_control.c.framework_slug.in_(enabled),
+            target_control.c.framework_slug == framework).limit(1)
+    if db.execute(explicit).first() is not None:
+        return True
+    if not (enabled - {framework}):
+        return False
+    source, target, sc, tc = osa_pairs()
+    derived = select(Mapping.id).select_from(
+        Mapping.__table__.join(source, source.c.control_id == Mapping.control_item_id)
+        .join(sc, sc.c.id == source.c.control_id)
+        .join(target, target.c.nist_ref == source.c.nist_ref)
+        .join(tc, tc.c.id == target.c.control_id)
+    ).where(sc.c.framework_slug.in_(enabled - {framework}),
+            tc.c.framework_slug == framework).limit(1)
+    return db.execute(derived).first() is not None

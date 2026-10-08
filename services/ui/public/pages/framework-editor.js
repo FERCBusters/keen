@@ -164,10 +164,23 @@ function renderOrganisationFrameworks(data) {
   const refreshDefaults = () => {
     const previous = $('organisation-default').value || data.default;
     $('organisation-default').replaceChildren();
-    for (const checkbox of container.querySelectorAll('input:checked')) $('organisation-default').add(new Option(checkbox.value, checkbox.value));
+    for (const checkbox of container.querySelectorAll('input:checked')) {
+      const framework = data.items.find(item => item.slug === checkbox.value);
+      $('organisation-default').add(new Option(framework?.name || checkbox.value, checkbox.value));
+    }
+    $('organisation-default').disabled = !$('organisation-default').options.length;
     if ([...$('organisation-default').options].some(option=>option.value===previous)) $('organisation-default').value=previous;
   };
   container.onchange = refreshDefaults; refreshDefaults();
+  const selectAll = checked => {
+    for (const checkbox of container.querySelectorAll('input:not(:disabled)')) checkbox.checked = checked;
+    refreshDefaults();
+    $('organisation-note').textContent = checked
+      ? 'All available frameworks selected. Save to apply.'
+      : 'All frameworks deselected. Choose at least one framework before saving.';
+  };
+  $('select-all').onclick = () => selectAll(true);
+  $('deselect-all').onclick = () => selectAll(false);
   $('organisation-note').textContent = (data.environment_restricted ? 'KEEN_ENABLED_FRAMEWORKS limits the available choices. ' : '') +
     (data.unknown_environment_slugs?.length ? `Unknown environment slugs: ${data.unknown_environment_slugs.join(', ')}` : 'Choose at least one framework. Saving also updates the navigation.');
 }

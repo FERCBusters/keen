@@ -348,6 +348,10 @@
         <div class="card mb-3"><div class="card-header fw-bold">Frameworks used by your organisation</div><div class="card-body">
           <p class="small-muted">Choose the frameworks offered in workspace selectors. Existing controls, evidence, audits and mapping rules are retained. This selection is independent of access permissions.</p>
           <p class="small-muted">Framework data and crosswalks: <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>. KEEN derives related-control links through shared NIST controls. Coverage notes identify gaps; linked evidence needs review. Imported frameworks and nodes remain editable.</p>
+<div class="d-flex gap-2 mb-3" role="group" aria-label="Select organisation frameworks">
+            <button id="fe-select-all" type="button" class="btn btn-outline-secondary btn-sm">Select all</button>
+            <button id="fe-deselect-all" type="button" class="btn btn-outline-secondary btn-sm">Deselect all</button>
+          </div>
 <div id="fe-organisation-frameworks" class="row g-2"></div>
           <label class="form-label mt-3" for="fe-organisation-default">Organisation default</label><select id="fe-organisation-default" class="form-select" style="max-width:30rem"></select>
           <p id="fe-organisation-note" class="small-muted mt-2" role="status"></p>

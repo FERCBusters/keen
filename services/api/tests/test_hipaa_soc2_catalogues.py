@@ -5,7 +5,7 @@ from pathlib import Path
 from sqlalchemy import create_engine, select, update
 from tests.db_helpers import create_sqlite_schema
 from app.db.models import Framework, ControlItem, FrameworkClause
-PATH = Path(__file__).resolve().parents[1] / 'alembic/versions/0089_hipaa_soc2_catalogues.py'
+PATH = Path(__file__).resolve().parents[1] / 'alembic/legacy_versions/0089_hipaa_soc2_catalogues.py'
 spec = importlib.util.spec_from_file_location('catalogue_migration', PATH)
 migration = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(migration)

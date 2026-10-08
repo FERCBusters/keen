@@ -54,10 +54,10 @@ class LocalMfaTests(unittest.TestCase):
         # Exercise the shipped migration against the pre-MFA user shape.
         with cls.engine.begin() as conn:
             conn.execute(text('ALTER TABLE users DROP COLUMN mfa_enabled,DROP COLUMN mfa_version,DROP COLUMN mfa_totp_secret,DROP COLUMN mfa_totp_last_step'))
-            spec=importlib.util.spec_from_file_location('mfa_migration',Path(__file__).parents[1]/'alembic/versions/0084_local_mfa.py')
+            spec=importlib.util.spec_from_file_location('mfa_migration',Path(__file__).parents[1]/'alembic/legacy_versions/0084_local_mfa.py')
             migration=importlib.util.module_from_spec(spec);spec.loader.exec_module(migration)
             with patch.object(migration,'op',Operations(MigrationContext.configure(conn))):migration.upgrade()
-            spec=importlib.util.spec_from_file_location('notification_migration',Path(__file__).parents[1]/'alembic/versions/0085_security_notifications.py')
+            spec=importlib.util.spec_from_file_location('notification_migration',Path(__file__).parents[1]/'alembic/legacy_versions/0085_security_notifications.py')
             migration=importlib.util.module_from_spec(spec);spec.loader.exec_module(migration)
             with patch.object(migration,'op',Operations(MigrationContext.configure(conn))):migration.upgrade()
         cls.app=FastAPI();cls.app.include_router(login_routes.router);cls.app.include_router(routes.router)

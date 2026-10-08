@@ -288,7 +288,7 @@ async function loadDefaultFrameworkOptions(meObj) {
   try {
     const catalog = await getFrameworkCatalog();
     const items = Array.isArray(catalog?.items) ? catalog.items.slice() : [];
-    const defaultSlug = String(catalog?.default || '').trim() || 'iso_27001_2022';
+    const defaultSlug = String(catalog?.default || '').trim() || 'KEEN-AF:1.0';
 
     // Keep options unique by slug and stable for rendering.
     const seen = new Set();
