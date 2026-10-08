@@ -10,10 +10,11 @@ from fastapi import Request
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from app.api.routes import home
+from app.core.config import settings
 from app.db.session import Base
 from app.db.models import (ControlItem, FrameworkClause, Audit, IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry, IntegrationConnection, IntegrationCollector,
-    CrossFrameworkControlLink, OsaControlMapping)
+    CrossFrameworkControlLink, OsaControlMapping, Framework, ManagedConfiguration, Mapping, Event)
 
 class HomeLogicTests(unittest.TestCase):
     def test_threshold_operators_and_incomparable_values(self):
@@ -40,7 +41,7 @@ class HomeDatabaseTests(unittest.TestCase):
         with engine.begin() as c:c.execute(text(f'CREATE SCHEMA {cls.schema}'))
         engine.dispose()
         cls.engine=schema_engine(url, cls.schema)
-        names={m.__tablename__ for m in (ControlItem,FrameworkClause,Audit,IsmsEffectivenessMeasure,IsmsEffectivenessMetricEntry,IntegrationConnection,IntegrationCollector,CrossFrameworkControlLink,OsaControlMapping)}
+        names={m.__tablename__ for m in (ControlItem,FrameworkClause,Audit,IsmsEffectivenessMeasure,IsmsEffectivenessMetricEntry,IntegrationConnection,IntegrationCollector,CrossFrameworkControlLink,OsaControlMapping,Framework,ManagedConfiguration,Mapping)}
         while True:
             more={fk.column.table.name for n in names for fk in Base.metadata.tables[n].foreign_keys}
             if more<=names:break
@@ -56,13 +57,19 @@ class HomeDatabaseTests(unittest.TestCase):
     def setUp(self):
         self.db=self.Session();self.addCleanup(self.db.close)
         self.fw='TEST:'+uuid.uuid4().hex
+        # These are runtime dependencies of the enabled-evidence check, not
+        # foreign-key dependencies of the home-page tables above.
+        self.selection=ManagedConfiguration(name='organisation-frameworks', version=1,
+            document={'enabled':[self.fw], 'default':self.fw})
+        self.db.add_all([Framework(slug=self.fw, name='Test framework'), self.selection])
+        self.addCleanup(patch.stopall)
+        patch.object(settings, 'enabled_frameworks', '').start()
         self.request=Request({'type':'http','headers':[]})
         self.user=SimpleNamespace()
         self.stats=patch.object(home,'stats_summary',return_value={'events':{'total':3,'mapped':1,'unmapped':2}}).start()
         self.coverage=patch.object(home,'get_control_evidence_stats_by_id',return_value={}).start()
         self.role=patch.object(home,'attach_effective_role',return_value='admin').start()
         self.permission=patch.object(home,'has_permission',return_value=False).start()
-        self.addCleanup(patch.stopall)
 
     def overview(self):return home.home_overview(self.request,self.fw,self.db,self.user)
 
@@ -104,3 +111,35 @@ class HomeDatabaseTests(unittest.TestCase):
         self.assertEqual([x['label'] for x in result['attention'] if x['kind']=='measure'],['Measure 0'])
         self.assertEqual(result['collectors_with_failures'],1)
         self.assertIn('installation-wide',next(x['detail'] for x in result['attention'] if x['kind']=='collection'))
+
+    def test_inherited_coverage_requires_enabled_source_with_mapped_evidence(self):
+        source_fw='SOURCE:'+uuid.uuid4().hex
+        self.db.add(Framework(slug=source_fw, name='Source framework'))
+        target=ControlItem(framework_slug=self.fw,type='custom',ref='A.1',title='Target')
+        source=ControlItem(framework_slug=source_fw,type='custom',ref='B.1',title='Source')
+        self.db.add_all([target,source]);self.db.flush()
+        self.db.add_all([OsaControlMapping(control_id=target.id,nist_ref='AC-01'),
+                         OsaControlMapping(control_id=source.id,nist_ref='AC-01')])
+        self.selection.document={'enabled':[self.fw,source_fw], 'default':self.fw}
+        self.db.flush()
+
+        # Cross-references without mapped evidence still use cached direct counts.
+        self.assertEqual(self.overview()['coverage']['with_evidence'],0)
+        self.coverage.assert_called_once()
+        self.coverage.reset_mock()
+
+        # Seed persisted evidence directly: this tests home-page reads, not the
+        # ingestion/purge Session hooks (covered by the retention test suite).
+        event_id=uuid.uuid4()
+        self.db.execute(Event.__table__.insert().values(id=event_id,source='test',
+            external_id=str(uuid.uuid4()),timestamp=datetime.utcnow(),summary='Evidence'))
+        self.db.execute(Mapping.__table__.insert().values(event_id=event_id,
+            control_item_id=source.id,confidence=1,method='test',mapped_by='test'))
+        self.assertEqual(self.overview()['coverage']['with_evidence'],1)
+        self.coverage.assert_not_called()
+
+        # Disabling the source returns to direct counts without removing evidence.
+        self.selection.document={'enabled':[self.fw], 'default':self.fw};self.db.flush()
+        self.assertEqual(self.overview()['coverage']['with_evidence'],0)
+        self.coverage.assert_called_once()
+        self.assertEqual(self.db.query(Mapping).filter_by(event_id=event_id).count(),1)
