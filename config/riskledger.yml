@@ -1,0 +1,17 @@
+# Configure an organization collection in Sources & Evidence Mapping.
+# org: '*' selects the authenticated organisation; a UUID pins the expected account.
+ui_name: Risk Ledger
+badge_color: '#7C3AED'
+organizations: []
+# Optional UUIDs from Risk Ledger. Controls are also discovered from risk links;
+# domains are discovered from supplier compliance and framework add-on data.
+control_ids: []
+domain_ids: []
+# Empty includes all connected suppliers. Filters by supplier framework.level.id.
+framework_level_ids: []
+import_suppliers: true
+import_risks: true
+import_framework: true
+page_size: 100
+max_pages: 100
+max_run_seconds: 300

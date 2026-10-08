@@ -1,6 +1,7 @@
 from __future__ import annotations
 from app.ingest.gitea import ingest_gitea_all
 from app.ingest.redmine import ingest_redmine_all
+from app.ingest.riskledger import ingest_riskledger_all
 from app.ingest.gitlab import ingest_gitlab_all
 
 from sqlalchemy.orm import Session
@@ -531,3 +532,9 @@ def evidence_retention_task():
 def security_notifications_task():
     from app.services.security_notifications import deliver_pending
     return deliver_pending()
+
+
+@celery_app.task(name="app.worker.tasks.ingest_riskledger_all_task")
+def ingest_riskledger_all_task():
+    with SessionLocal() as db:
+        return ingest_riskledger_all(db)

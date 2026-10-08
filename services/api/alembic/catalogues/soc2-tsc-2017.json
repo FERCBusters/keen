@@ -1,0 +1,2329 @@
+{
+  "SOC2-TSC:2017": {
+    "name": "SOC 2 — Trust Services Criteria (OSA)",
+    "version": "2017; OSA snapshot 2026-10-08",
+    "description": "SOC 2 Trust Services Criteria: 122 criteria and points of focus from Open Security Architecture. OSA summaries, under CC BY-SA 4.0: https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/ . Formatting changes: source titles split into title and description; complete original wording retained in source_title. No SP 800-53 mappings included. Select the trust-service categories and points of focus appropriate to your engagement; this catalogue does not establish an attestation.",
+    "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+    "controls": [
+      {
+        "ref": "A1.1",
+        "title": "The entity maintains, monitors, and evaluates current processing capacity and use of system components (infrastructure, data, and software) to manage capacity demand and to enable the implementation of additional capacity to help meet its objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity maintains, monitors, and evaluates current processing capacity and use of system components (infrastructure, data, and software) to manage capacity demand and to enable the implementation of additional capacity to help meet its objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity maintains, monitors, and evaluates current processing capacity and use of system components (infrastructure, data, and software) to manage capacity demand and to enable the implementation of additional capacity to help meet its objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 1
+        }
+      },
+      {
+        "ref": "A1.1-POF1",
+        "title": "A1.1 POF1: Manages capacity to meet objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Processing capacity and use of system components are managed",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "A1.1 POF1: Manages capacity to meet objectives — Processing capacity and use of system components are managed",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "A1.1",
+          "sort_order": 2
+        }
+      },
+      {
+        "ref": "A1.2",
+        "title": "The entity authorizes, designs, develops or acquires, implements, operates, approves, maintains, and monitors environmental protections, software, data backup processes, and recovery infrastructure to meet its objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity authorizes, designs, develops or acquires, implements, operates, approves, maintains, and monitors environmental protections, software, data backup processes, and recovery infrastructure to meet its objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity authorizes, designs, develops or acquires, implements, operates, approves, maintains, and monitors environmental protections, software, data backup processes, and recovery infrastructure to meet its objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 3
+        }
+      },
+      {
+        "ref": "A1.2-POF1",
+        "title": "A1.2 POF1: Implements recovery infrastructure and software",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Recovery infrastructure is implemented and maintained",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "A1.2 POF1: Implements recovery infrastructure and software — Recovery infrastructure is implemented and maintained",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "A1.2",
+          "sort_order": 4
+        }
+      },
+      {
+        "ref": "A1.2-POF2",
+        "title": "A1.2 POF2: Implements environmental protections",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Environmental protections for data centers and facilities are implemented",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "A1.2 POF2: Implements environmental protections — Environmental protections for data centers and facilities are implemented",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "A1.2",
+          "sort_order": 5
+        }
+      },
+      {
+        "ref": "A1.2-POF3",
+        "title": "A1.2 POF3: Implements data backup processes",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Data backup and recovery processes are implemented and maintained",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "A1.2 POF3: Implements data backup processes — Data backup and recovery processes are implemented and maintained",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "A1.2",
+          "sort_order": 6
+        }
+      },
+      {
+        "ref": "A1.3",
+        "title": "The entity tests recovery plan procedures supporting system recovery to meet its objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity tests recovery plan procedures supporting system recovery to meet its objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity tests recovery plan procedures supporting system recovery to meet its objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 7
+        }
+      },
+      {
+        "ref": "C1.1",
+        "title": "The entity identifies and maintains confidential information to meet the entity's objectives related to confidentiality",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity identifies and maintains confidential information to meet the entity's objectives related to confidentiality",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity identifies and maintains confidential information to meet the entity's objectives related to confidentiality",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 8
+        }
+      },
+      {
+        "ref": "C1.1-POF1",
+        "title": "C1.1 POF1: Identifies confidential information",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity has procedures to identify confidential information",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "C1.1 POF1: Identifies confidential information — The entity has procedures to identify confidential information",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "C1.1",
+          "sort_order": 9
+        }
+      },
+      {
+        "ref": "C1.2",
+        "title": "The entity disposes of confidential information to meet the entity's objectives related to confidentiality",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity disposes of confidential information to meet the entity's objectives related to confidentiality",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity disposes of confidential information to meet the entity's objectives related to confidentiality",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 10
+        }
+      },
+      {
+        "ref": "CC1.1",
+        "title": "COSO Principle 1: The entity demonstrates a commitment to integrity and ethical values",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 1: The entity demonstrates a commitment to integrity and ethical values",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 1: The entity demonstrates a commitment to integrity and ethical values",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 11
+        }
+      },
+      {
+        "ref": "CC1.1-POF1",
+        "title": "CC1.1 POF1: Sets the tone at the top",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The board of directors and management demonstrate commitment to integrity and ethical values",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC1.1 POF1: Sets the tone at the top — The board of directors and management demonstrate commitment to integrity and ethical values",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC1.1",
+          "sort_order": 12
+        }
+      },
+      {
+        "ref": "CC1.1-POF2",
+        "title": "CC1.1 POF2: Establishes standards of conduct",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Expectations of the board and senior management concerning integrity and ethical values are defined",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC1.1 POF2: Establishes standards of conduct — Expectations of the board and senior management concerning integrity and ethical values are defined",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC1.1",
+          "sort_order": 13
+        }
+      },
+      {
+        "ref": "CC1.1-POF3",
+        "title": "CC1.1 POF3: Evaluates adherence to standards of conduct",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Processes are in place to evaluate performance against standards of conduct",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC1.1 POF3: Evaluates adherence to standards of conduct — Processes are in place to evaluate performance against standards of conduct",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC1.1",
+          "sort_order": 14
+        }
+      },
+      {
+        "ref": "CC1.1-POF4",
+        "title": "CC1.1 POF4: Addresses deviations in a timely manner",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Deviations from standards of conduct are identified and remedied in a timely manner",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC1.1 POF4: Addresses deviations in a timely manner — Deviations from standards of conduct are identified and remedied in a timely manner",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC1.1",
+          "sort_order": 15
+        }
+      },
+      {
+        "ref": "CC1.2",
+        "title": "COSO Principle 2: The board of directors demonstrates independence from management and exercises oversight of the development and performance of internal control",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 2: The board of directors demonstrates independence from management and exercises oversight of the development and performance of internal control",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 2: The board of directors demonstrates independence from management and exercises oversight of the development and performance of internal control",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 16
+        }
+      },
+      {
+        "ref": "CC1.2-POF1",
+        "title": "CC1.2 POF1: Establishes oversight responsibilities",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The board identifies and accepts its oversight responsibilities in relation to established requirements and expectations",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC1.2 POF1: Establishes oversight responsibilities — The board identifies and accepts its oversight responsibilities in relation to established requirements and expectations",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC1.2",
+          "sort_order": 17
+        }
+      },
+      {
+        "ref": "CC1.3",
+        "title": "COSO Principle 3: Management establishes, with board oversight, structures, reporting lines, and appropriate authorities and responsibilities in the pursuit of objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 3: Management establishes, with board oversight, structures, reporting lines, and appropriate authorities and responsibilities in the pursuit of objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 3: Management establishes, with board oversight, structures, reporting lines, and appropriate authorities and responsibilities in the pursuit of objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 18
+        }
+      },
+      {
+        "ref": "CC1.3-POF1",
+        "title": "CC1.3 POF1: Considers all structures of the entity",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Management and the board consider the multiple structures used to support the achievement of objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC1.3 POF1: Considers all structures of the entity — Management and the board consider the multiple structures used to support the achievement of objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC1.3",
+          "sort_order": 19
+        }
+      },
+      {
+        "ref": "CC1.4",
+        "title": "COSO Principle 4: The entity demonstrates a commitment to attract, develop, and retain competent individuals in alignment with objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 4: The entity demonstrates a commitment to attract, develop, and retain competent individuals in alignment with objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 4: The entity demonstrates a commitment to attract, develop, and retain competent individuals in alignment with objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 20
+        }
+      },
+      {
+        "ref": "CC1.4-POF1",
+        "title": "CC1.4 POF1: Establishes policies and practices",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Policies and practices reflect expectations of competence necessary to support the achievement of objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC1.4 POF1: Establishes policies and practices — Policies and practices reflect expectations of competence necessary to support the achievement of objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC1.4",
+          "sort_order": 21
+        }
+      },
+      {
+        "ref": "CC1.4-POF2",
+        "title": "CC1.4 POF2: Evaluates competence and addresses shortcomings",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The board and management evaluate competence and address shortcomings",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC1.4 POF2: Evaluates competence and addresses shortcomings — The board and management evaluate competence and address shortcomings",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC1.4",
+          "sort_order": 22
+        }
+      },
+      {
+        "ref": "CC1.4-POF3",
+        "title": "CC1.4 POF3: Attracts, develops, and retains individuals",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity provides mentoring and training to attract, develop, and retain sufficient and competent personnel",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC1.4 POF3: Attracts, develops, and retains individuals — The entity provides mentoring and training to attract, develop, and retain sufficient and competent personnel",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC1.4",
+          "sort_order": 23
+        }
+      },
+      {
+        "ref": "CC1.4-POF4",
+        "title": "CC1.4 POF4: Plans and prepares for succession",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Senior management and the board develop succession plans for key roles",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC1.4 POF4: Plans and prepares for succession — Senior management and the board develop succession plans for key roles",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC1.4",
+          "sort_order": 24
+        }
+      },
+      {
+        "ref": "CC1.5",
+        "title": "COSO Principle 5: The entity holds individuals accountable for their internal control responsibilities in the pursuit of objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 5: The entity holds individuals accountable for their internal control responsibilities in the pursuit of objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 5: The entity holds individuals accountable for their internal control responsibilities in the pursuit of objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 25
+        }
+      },
+      {
+        "ref": "CC1.5-POF1",
+        "title": "CC1.5 POF1: Enforces accountability through structures, authorities, and responsibilities",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Management and the board establish mechanisms to communicate and hold individuals accountable",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC1.5 POF1: Enforces accountability through structures, authorities, and responsibilities — Management and the board establish mechanisms to communicate and hold individuals accountable",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC1.5",
+          "sort_order": 26
+        }
+      },
+      {
+        "ref": "CC2.1",
+        "title": "COSO Principle 13: The entity obtains or generates and uses relevant, quality information to support the functioning of internal control",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 13: The entity obtains or generates and uses relevant, quality information to support the functioning of internal control",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 13: The entity obtains or generates and uses relevant, quality information to support the functioning of internal control",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 27
+        }
+      },
+      {
+        "ref": "CC2.1-POF1",
+        "title": "CC2.1 POF1: Identifies information requirements",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "A process is in place to identify information required to support internal control",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC2.1 POF1: Identifies information requirements — A process is in place to identify information required to support internal control",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC2.1",
+          "sort_order": 28
+        }
+      },
+      {
+        "ref": "CC2.2",
+        "title": "COSO Principle 14: The entity internally communicates information, including objectives and responsibilities for internal control, necessary to support the functioning of internal control",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 14: The entity internally communicates information, including objectives and responsibilities for internal control, necessary to support the functioning of internal control",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 14: The entity internally communicates information, including objectives and responsibilities for internal control, necessary to support the functioning of internal control",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 29
+        }
+      },
+      {
+        "ref": "CC2.2-POF1",
+        "title": "CC2.2 POF1: Communicates internal control information",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "A process is in place to communicate required information to enable all personnel to understand and carry out their responsibilities",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC2.2 POF1: Communicates internal control information — A process is in place to communicate required information to enable all personnel to understand and carry out their responsibilities",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC2.2",
+          "sort_order": 30
+        }
+      },
+      {
+        "ref": "CC2.2-POF3",
+        "title": "CC2.2 POF3: Communicates with the board of directors",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Information necessary for the board to oversee internal control is communicated",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC2.2 POF3: Communicates with the board of directors — Information necessary for the board to oversee internal control is communicated",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC2.2",
+          "sort_order": 31
+        }
+      },
+      {
+        "ref": "CC2.2-POF7",
+        "title": "CC2.2 POF7: Communicates objectives and changes to objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity communicates its objectives and changes to those objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC2.2 POF7: Communicates objectives and changes to objectives — The entity communicates its objectives and changes to those objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC2.2",
+          "sort_order": 32
+        }
+      },
+      {
+        "ref": "CC2.2-POF10",
+        "title": "CC2.2 POF10: Provides separate communication lines",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Separate communication channels such as whistle-blower hotlines are in place and serve as fail-safe mechanisms",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC2.2 POF10: Provides separate communication lines — Separate communication channels such as whistle-blower hotlines are in place and serve as fail-safe mechanisms",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC2.2",
+          "sort_order": 33
+        }
+      },
+      {
+        "ref": "CC2.3",
+        "title": "COSO Principle 15: The entity communicates with external parties regarding matters affecting the functioning of internal control",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 15: The entity communicates with external parties regarding matters affecting the functioning of internal control",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 15: The entity communicates with external parties regarding matters affecting the functioning of internal control",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 34
+        }
+      },
+      {
+        "ref": "CC2.3-POF1",
+        "title": "CC2.3 POF1: Communicates to external parties",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Processes are in place to communicate relevant information to external parties",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC2.3 POF1: Communicates to external parties — Processes are in place to communicate relevant information to external parties",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC2.3",
+          "sort_order": 35
+        }
+      },
+      {
+        "ref": "CC2.3-POF12",
+        "title": "CC2.3 POF12: Provides information on notification agreements",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity notifies external parties of system changes affecting their operation",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC2.3 POF12: Provides information on notification agreements — The entity notifies external parties of system changes affecting their operation",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC2.3",
+          "sort_order": 36
+        }
+      },
+      {
+        "ref": "CC3.1",
+        "title": "COSO Principle 6: The entity specifies objectives with sufficient clarity to enable the identification and assessment of risks relating to objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 6: The entity specifies objectives with sufficient clarity to enable the identification and assessment of risks relating to objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 6: The entity specifies objectives with sufficient clarity to enable the identification and assessment of risks relating to objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 37
+        }
+      },
+      {
+        "ref": "CC3.2",
+        "title": "COSO Principle 7: The entity identifies risks to the achievement of its objectives across the entity and analyzes risks as a basis for determining how the risks should be managed",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 7: The entity identifies risks to the achievement of its objectives across the entity and analyzes risks as a basis for determining how the risks should be managed",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 7: The entity identifies risks to the achievement of its objectives across the entity and analyzes risks as a basis for determining how the risks should be managed",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 38
+        }
+      },
+      {
+        "ref": "CC3.2-POF1",
+        "title": "CC3.2 POF1: Includes entity, subsidiary, division, operating unit, and functional levels",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "CC3.2 POF1: Includes entity, subsidiary, division, operating unit, and functional levels",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC3.2 POF1: Includes entity, subsidiary, division, operating unit, and functional levels",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC3.2",
+          "sort_order": 39
+        }
+      },
+      {
+        "ref": "CC3.3",
+        "title": "COSO Principle 8: The entity considers the potential for fraud in assessing risks to the achievement of objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 8: The entity considers the potential for fraud in assessing risks to the achievement of objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 8: The entity considers the potential for fraud in assessing risks to the achievement of objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 40
+        }
+      },
+      {
+        "ref": "CC3.3-POF1",
+        "title": "CC3.3 POF1: Considers various types of fraud",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity considers fraudulent reporting, possible loss of assets, and corruption",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC3.3 POF1: Considers various types of fraud — The entity considers fraudulent reporting, possible loss of assets, and corruption",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC3.3",
+          "sort_order": 41
+        }
+      },
+      {
+        "ref": "CC3.4",
+        "title": "COSO Principle 9: The entity identifies and assesses changes that could significantly impact the system of internal control",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 9: The entity identifies and assesses changes that could significantly impact the system of internal control",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 9: The entity identifies and assesses changes that could significantly impact the system of internal control",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 42
+        }
+      },
+      {
+        "ref": "CC3.4-POF1",
+        "title": "CC3.4 POF1: Assesses changes in the external environment",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity considers changes in regulatory, economic, and physical environments",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC3.4 POF1: Assesses changes in the external environment — The entity considers changes in regulatory, economic, and physical environments",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC3.4",
+          "sort_order": 43
+        }
+      },
+      {
+        "ref": "CC3.4-POF2",
+        "title": "CC3.4 POF2: Assesses changes in the business model",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity considers the impact of new business lines, altered compositions of existing business lines, and acquired or divested business operations",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC3.4 POF2: Assesses changes in the business model — The entity considers the impact of new business lines, altered compositions of existing business lines, and acquired or divested business operations",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC3.4",
+          "sort_order": 44
+        }
+      },
+      {
+        "ref": "CC3.4-POF3",
+        "title": "CC3.4 POF3: Assesses changes in leadership",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity considers changes in management and other personnel",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC3.4 POF3: Assesses changes in leadership — The entity considers changes in management and other personnel",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC3.4",
+          "sort_order": 45
+        }
+      },
+      {
+        "ref": "CC4.1",
+        "title": "COSO Principle 16: The entity selects, develops, and performs ongoing and/or separate evaluations to ascertain whether the components of internal control are present and functioning",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 16: The entity selects, develops, and performs ongoing and/or separate evaluations to ascertain whether the components of internal control are present and functioning",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 16: The entity selects, develops, and performs ongoing and/or separate evaluations to ascertain whether the components of internal control are present and functioning",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 46
+        }
+      },
+      {
+        "ref": "CC4.1-POF1",
+        "title": "CC4.1 POF1: Considers a mix of ongoing and separate evaluations",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Management includes a balance of ongoing evaluations built into processes and separate evaluations",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC4.1 POF1: Considers a mix of ongoing and separate evaluations — Management includes a balance of ongoing evaluations built into processes and separate evaluations",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC4.1",
+          "sort_order": 47
+        }
+      },
+      {
+        "ref": "CC4.2",
+        "title": "COSO Principle 17: The entity evaluates and communicates internal control deficiencies in a timely manner to those parties responsible for taking corrective action, including senior management and the board of directors, as appropriate",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 17: The entity evaluates and communicates internal control deficiencies in a timely manner to those parties responsible for taking corrective action, including senior management and the board of directors, as appropriate",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 17: The entity evaluates and communicates internal control deficiencies in a timely manner to those parties responsible for taking corrective action, including senior management and the board of directors, as appropriate",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 48
+        }
+      },
+      {
+        "ref": "CC4.2-POF1",
+        "title": "CC4.2 POF1: Assesses results",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Management and the board assess results of ongoing and separate evaluations",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC4.2 POF1: Assesses results — Management and the board assess results of ongoing and separate evaluations",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC4.2",
+          "sort_order": 49
+        }
+      },
+      {
+        "ref": "CC4.2-POF2",
+        "title": "CC4.2 POF2: Communicates deficiencies",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Deficiencies are communicated to parties responsible for taking corrective action and to senior management and the board as appropriate",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC4.2 POF2: Communicates deficiencies — Deficiencies are communicated to parties responsible for taking corrective action and to senior management and the board as appropriate",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC4.2",
+          "sort_order": 50
+        }
+      },
+      {
+        "ref": "CC5.1",
+        "title": "COSO Principle 10: The entity selects and develops control activities that contribute to the mitigation of risks to the achievement of objectives to acceptable levels",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 10: The entity selects and develops control activities that contribute to the mitigation of risks to the achievement of objectives to acceptable levels",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 10: The entity selects and develops control activities that contribute to the mitigation of risks to the achievement of objectives to acceptable levels",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 51
+        }
+      },
+      {
+        "ref": "CC5.2",
+        "title": "COSO Principle 11: The entity also selects and develops general control activities over technology to support the achievement of objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 11: The entity also selects and develops general control activities over technology to support the achievement of objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 11: The entity also selects and develops general control activities over technology to support the achievement of objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 52
+        }
+      },
+      {
+        "ref": "CC5.2-POF1",
+        "title": "CC5.2 POF1: Determines dependency between the use of technology in business processes and technology general controls",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "CC5.2 POF1: Determines dependency between the use of technology in business processes and technology general controls",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC5.2 POF1: Determines dependency between the use of technology in business processes and technology general controls",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC5.2",
+          "sort_order": 53
+        }
+      },
+      {
+        "ref": "CC5.3",
+        "title": "COSO Principle 12: The entity deploys control activities through policies that establish what is expected and in procedures that put policies into action",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "COSO Principle 12: The entity deploys control activities through policies that establish what is expected and in procedures that put policies into action",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "COSO Principle 12: The entity deploys control activities through policies that establish what is expected and in procedures that put policies into action",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 54
+        }
+      },
+      {
+        "ref": "CC5.3-POF1",
+        "title": "CC5.3 POF1: Establishes policies and procedures to support deployment of management's directives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "CC5.3 POF1: Establishes policies and procedures to support deployment of management's directives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC5.3 POF1: Establishes policies and procedures to support deployment of management's directives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC5.3",
+          "sort_order": 55
+        }
+      },
+      {
+        "ref": "CC5.3-POF6",
+        "title": "CC5.3 POF6: Reassesses policies and procedures",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Management periodically reassesses policies and procedures for continued relevance and effectiveness",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC5.3 POF6: Reassesses policies and procedures — Management periodically reassesses policies and procedures for continued relevance and effectiveness",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC5.3",
+          "sort_order": 56
+        }
+      },
+      {
+        "ref": "CC6.1",
+        "title": "Logical and Physical Access Controls",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity implements logical access security software, infrastructure, and architectures over protected information assets to protect them from security events to meet the entity's objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "Logical and Physical Access Controls — The entity implements logical access security software, infrastructure, and architectures over protected information assets to protect them from security events to meet the entity's objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 57
+        }
+      },
+      {
+        "ref": "CC6.1-POF1",
+        "title": "CC6.1 POF1: Identifies and manages the inventory of information assets",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity identifies and manages information assets",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.1 POF1: Identifies and manages the inventory of information assets — The entity identifies and manages information assets",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.1",
+          "sort_order": 58
+        }
+      },
+      {
+        "ref": "CC6.1-POF2",
+        "title": "CC6.1 POF2: Restricts logical access",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Access to information assets is restricted through logical access security measures",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.1 POF2: Restricts logical access — Access to information assets is restricted through logical access security measures",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.1",
+          "sort_order": 59
+        }
+      },
+      {
+        "ref": "CC6.1-POF3",
+        "title": "CC6.1 POF3: Considers network segmentation",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Network segmentation is implemented to restrict access",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.1 POF3: Considers network segmentation — Network segmentation is implemented to restrict access",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.1",
+          "sort_order": 60
+        }
+      },
+      {
+        "ref": "CC6.1-POF4",
+        "title": "CC6.1 POF4: Manages points of access",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Points of access to information assets are managed and protected",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.1 POF4: Manages points of access — Points of access to information assets are managed and protected",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.1",
+          "sort_order": 61
+        }
+      },
+      {
+        "ref": "CC6.1-POF5",
+        "title": "CC6.1 POF5: Restricts access to information assets",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Access to information assets is restricted through identity management",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.1 POF5: Restricts access to information assets — Access to information assets is restricted through identity management",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.1",
+          "sort_order": 62
+        }
+      },
+      {
+        "ref": "CC6.1-POF6",
+        "title": "CC6.1 POF6: Manages identification and authentication",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "User identification and authentication is managed",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.1 POF6: Manages identification and authentication — User identification and authentication is managed",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.1",
+          "sort_order": 63
+        }
+      },
+      {
+        "ref": "CC6.1-POF7",
+        "title": "CC6.1 POF7: Manages credentials for infrastructure and software",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "System and application credentials are managed",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.1 POF7: Manages credentials for infrastructure and software — System and application credentials are managed",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.1",
+          "sort_order": 64
+        }
+      },
+      {
+        "ref": "CC6.1-POF8",
+        "title": "CC6.1 POF8: Uses encryption to protect data",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Encryption is used to protect data at rest and in transit",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.1 POF8: Uses encryption to protect data — Encryption is used to protect data at rest and in transit",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.1",
+          "sort_order": 65
+        }
+      },
+      {
+        "ref": "CC6.1-POF9",
+        "title": "CC6.1 POF9: Protects encryption keys",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Encryption keys are managed to protect data",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.1 POF9: Protects encryption keys — Encryption keys are managed to protect data",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.1",
+          "sort_order": 66
+        }
+      },
+      {
+        "ref": "CC6.2",
+        "title": "Prior to issuing system credentials and granting system access, the entity registers and authorizes new internal and external users whose access is administered by the entity",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "Prior to issuing system credentials and granting system access, the entity registers and authorizes new internal and external users whose access is administered by the entity",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "Prior to issuing system credentials and granting system access, the entity registers and authorizes new internal and external users whose access is administered by the entity",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 67
+        }
+      },
+      {
+        "ref": "CC6.2-POF1",
+        "title": "CC6.2 POF1: Controls access credentials to protected assets",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "New internal and external users are registered and authorized prior to being issued credentials and granted access",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.2 POF1: Controls access credentials to protected assets — New internal and external users are registered and authorized prior to being issued credentials and granted access",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.2",
+          "sort_order": 68
+        }
+      },
+      {
+        "ref": "CC6.3",
+        "title": "The entity authorizes, modifies, or removes access to data, software, functions, and other protected information assets based on roles, responsibilities, or the system design and changes, giving consideration to the",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity authorizes, modifies, or removes access to data, software, functions, and other protected information assets based on roles, responsibilities, or the system design and changes, giving consideration to the concepts of least privilege and segregation of duties",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity authorizes, modifies, or removes access to data, software, functions, and other protected information assets based on roles, responsibilities, or the system design and changes, giving consideration to the concepts of least privilege and segregation of duties",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 69
+        }
+      },
+      {
+        "ref": "CC6.3-POF1",
+        "title": "CC6.3 POF1: Creates or modifies access",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Processes are in place to create or modify access to protected assets",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.3 POF1: Creates or modifies access — Processes are in place to create or modify access to protected assets",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.3",
+          "sort_order": 70
+        }
+      },
+      {
+        "ref": "CC6.4",
+        "title": "The entity restricts physical access to facilities and protected information assets to authorized personnel to meet the entity's objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity restricts physical access to facilities and protected information assets to authorized personnel to meet the entity's objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity restricts physical access to facilities and protected information assets to authorized personnel to meet the entity's objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 71
+        }
+      },
+      {
+        "ref": "CC6.5",
+        "title": "The entity discontinues logical and physical access to protected information assets when that access is no longer required",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity discontinues logical and physical access to protected information assets when that access is no longer required",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity discontinues logical and physical access to protected information assets when that access is no longer required",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 72
+        }
+      },
+      {
+        "ref": "CC6.6",
+        "title": "The entity implements logical access security measures to protect against threats from sources outside its system boundaries",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity implements logical access security measures to protect against threats from sources outside its system boundaries",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity implements logical access security measures to protect against threats from sources outside its system boundaries",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 73
+        }
+      },
+      {
+        "ref": "CC6.6-POF1",
+        "title": "CC6.6 POF1: Restricts access",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity restricts access through network security and entry points",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.6 POF1: Restricts access — The entity restricts access through network security and entry points",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.6",
+          "sort_order": 74
+        }
+      },
+      {
+        "ref": "CC6.6-POF2",
+        "title": "CC6.6 POF2: Protects identification and authentication credentials",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Identification and authentication credentials are protected during transmission outside system boundaries",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.6 POF2: Protects identification and authentication credentials — Identification and authentication credentials are protected during transmission outside system boundaries",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.6",
+          "sort_order": 75
+        }
+      },
+      {
+        "ref": "CC6.6-POF3",
+        "title": "CC6.6 POF3: Requires additional authentication or credentials",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Additional authentication measures are required for access from outside system boundaries",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.6 POF3: Requires additional authentication or credentials — Additional authentication measures are required for access from outside system boundaries",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.6",
+          "sort_order": 76
+        }
+      },
+      {
+        "ref": "CC6.7",
+        "title": "The entity restricts the transmission, movement, and removal of information to authorized internal and external users and processes, and protects it during transmission, movement, or removal to meet the entity's objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity restricts the transmission, movement, and removal of information to authorized internal and external users and processes, and protects it during transmission, movement, or removal to meet the entity's objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity restricts the transmission, movement, and removal of information to authorized internal and external users and processes, and protects it during transmission, movement, or removal to meet the entity's objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 77
+        }
+      },
+      {
+        "ref": "CC6.7-POF1",
+        "title": "CC6.7 POF1: Restricts the ability to perform transmission",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Data loss prevention processes are in place to detect and prevent unauthorized transmission",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC6.7 POF1: Restricts the ability to perform transmission — Data loss prevention processes are in place to detect and prevent unauthorized transmission",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC6.7",
+          "sort_order": 78
+        }
+      },
+      {
+        "ref": "CC6.8",
+        "title": "The entity implements controls to prevent or detect and act upon the introduction of unauthorized or malicious software to meet the entity's objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity implements controls to prevent or detect and act upon the introduction of unauthorized or malicious software to meet the entity's objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity implements controls to prevent or detect and act upon the introduction of unauthorized or malicious software to meet the entity's objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 79
+        }
+      },
+      {
+        "ref": "CC7.1",
+        "title": "To meet its objectives, the entity uses detection and monitoring procedures to identify changes to configurations that result in the introduction of new vulnerabilities, and susceptibilities to newly discovered vulnerabilities",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "To meet its objectives, the entity uses detection and monitoring procedures to identify changes to configurations that result in the introduction of new vulnerabilities, and susceptibilities to newly discovered vulnerabilities",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "To meet its objectives, the entity uses detection and monitoring procedures to identify changes to configurations that result in the introduction of new vulnerabilities, and susceptibilities to newly discovered vulnerabilities",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 80
+        }
+      },
+      {
+        "ref": "CC7.1-POF1",
+        "title": "CC7.1 POF1: Uses defined configuration standards",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity uses defined configuration standards to assess newly deployed or changed IT assets",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.1 POF1: Uses defined configuration standards — The entity uses defined configuration standards to assess newly deployed or changed IT assets",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.1",
+          "sort_order": 81
+        }
+      },
+      {
+        "ref": "CC7.2",
+        "title": "The entity monitors system components and the operation of those components for anomalies that are indicative of malicious acts, natural disasters, and errors affecting the entity's ability to meet its objectives;",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity monitors system components and the operation of those components for anomalies that are indicative of malicious acts, natural disasters, and errors affecting the entity's ability to meet its objectives; anomalies are analyzed to determine whether they represent security events",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity monitors system components and the operation of those components for anomalies that are indicative of malicious acts, natural disasters, and errors affecting the entity's ability to meet its objectives; anomalies are analyzed to determine whether they represent security events",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 82
+        }
+      },
+      {
+        "ref": "CC7.2-POF1",
+        "title": "CC7.2 POF1: Implements detection policies, procedures, and tools",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity implements and maintains detection policies, procedures, and tools",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.2 POF1: Implements detection policies, procedures, and tools — The entity implements and maintains detection policies, procedures, and tools",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.2",
+          "sort_order": 83
+        }
+      },
+      {
+        "ref": "CC7.2-POF2",
+        "title": "CC7.2 POF2: Designs detection measures",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Detection measures are designed to identify anomalies including known and unknown threats",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.2 POF2: Designs detection measures — Detection measures are designed to identify anomalies including known and unknown threats",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.2",
+          "sort_order": 84
+        }
+      },
+      {
+        "ref": "CC7.3",
+        "title": "The entity evaluates security events to determine whether they could or have resulted in a failure of the entity to meet its objectives (security incidents) and, if so, takes actions to prevent or address such failures",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity evaluates security events to determine whether they could or have resulted in a failure of the entity to meet its objectives (security incidents) and, if so, takes actions to prevent or address such failures",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity evaluates security events to determine whether they could or have resulted in a failure of the entity to meet its objectives (security incidents) and, if so, takes actions to prevent or address such failures",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 85
+        }
+      },
+      {
+        "ref": "CC7.3-POF1",
+        "title": "CC7.3 POF1: Responds to security incidents",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Procedures are in place to respond to security incidents",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.3 POF1: Responds to security incidents — Procedures are in place to respond to security incidents",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.3",
+          "sort_order": 86
+        }
+      },
+      {
+        "ref": "CC7.4",
+        "title": "The entity responds to identified security incidents by executing a defined incident response program to understand, contain, remediate, and communicate security incidents, as appropriate",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity responds to identified security incidents by executing a defined incident response program to understand, contain, remediate, and communicate security incidents, as appropriate",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity responds to identified security incidents by executing a defined incident response program to understand, contain, remediate, and communicate security incidents, as appropriate",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 87
+        }
+      },
+      {
+        "ref": "CC7.4-POF1",
+        "title": "CC7.4 POF1: Assigns roles and responsibilities",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Roles and responsibilities for responding to incidents are assigned",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.4 POF1: Assigns roles and responsibilities — Roles and responsibilities for responding to incidents are assigned",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.4",
+          "sort_order": 88
+        }
+      },
+      {
+        "ref": "CC7.4-POF2",
+        "title": "CC7.4 POF2: Contains security incidents",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Processes are in place to contain security incidents",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.4 POF2: Contains security incidents — Processes are in place to contain security incidents",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.4",
+          "sort_order": 89
+        }
+      },
+      {
+        "ref": "CC7.4-POF3",
+        "title": "CC7.4 POF3: Mitigates ongoing security incidents",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Procedures are in place to mitigate the effects of ongoing incidents",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.4 POF3: Mitigates ongoing security incidents — Procedures are in place to mitigate the effects of ongoing incidents",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.4",
+          "sort_order": 90
+        }
+      },
+      {
+        "ref": "CC7.4-POF4",
+        "title": "CC7.4 POF4: Ends threats posed by security incidents",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Steps are taken to end the threats posed by security incidents",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.4 POF4: Ends threats posed by security incidents — Steps are taken to end the threats posed by security incidents",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.4",
+          "sort_order": 91
+        }
+      },
+      {
+        "ref": "CC7.4-POF5",
+        "title": "CC7.4 POF5: Restores operations",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Procedures are in place to restore normal operations",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.4 POF5: Restores operations — Procedures are in place to restore normal operations",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.4",
+          "sort_order": 92
+        }
+      },
+      {
+        "ref": "CC7.4-POF6",
+        "title": "CC7.4 POF6: Develops and implements communication protocols for security incidents",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "CC7.4 POF6: Develops and implements communication protocols for security incidents",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.4 POF6: Develops and implements communication protocols for security incidents",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.4",
+          "sort_order": 93
+        }
+      },
+      {
+        "ref": "CC7.4-POF10",
+        "title": "CC7.4 POF10: Meets regulatory notification requirements",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity meets notification requirements for security incidents",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.4 POF10: Meets regulatory notification requirements — The entity meets notification requirements for security incidents",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.4",
+          "sort_order": 94
+        }
+      },
+      {
+        "ref": "CC7.4-POF11",
+        "title": "CC7.4 POF11: Obtains understanding of nature of incident",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity obtains understanding of the incident nature and scope",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.4 POF11: Obtains understanding of nature of incident — The entity obtains understanding of the incident nature and scope",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.4",
+          "sort_order": 95
+        }
+      },
+      {
+        "ref": "CC7.4-POF12",
+        "title": "CC7.4 POF12: Remediates identified vulnerabilities",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity remediates identified vulnerabilities following incidents",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.4 POF12: Remediates identified vulnerabilities — The entity remediates identified vulnerabilities following incidents",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.4",
+          "sort_order": 96
+        }
+      },
+      {
+        "ref": "CC7.4-POF13",
+        "title": "CC7.4 POF13: Evaluates the effectiveness of incident response",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity evaluates incident response effectiveness",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC7.4 POF13: Evaluates the effectiveness of incident response — The entity evaluates incident response effectiveness",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC7.4",
+          "sort_order": 97
+        }
+      },
+      {
+        "ref": "CC7.5",
+        "title": "The entity identifies, develops, and implements activities to recover from identified security incidents",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity identifies, develops, and implements activities to recover from identified security incidents",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity identifies, develops, and implements activities to recover from identified security incidents",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 98
+        }
+      },
+      {
+        "ref": "CC8.1",
+        "title": "The entity authorizes, designs, develops or acquires, configures, documents, tests, approves, and implements changes to infrastructure, data, software, and procedures required to meet its objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity authorizes, designs, develops or acquires, configures, documents, tests, approves, and implements changes to infrastructure, data, software, and procedures required to meet its objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity authorizes, designs, develops or acquires, configures, documents, tests, approves, and implements changes to infrastructure, data, software, and procedures required to meet its objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 99
+        }
+      },
+      {
+        "ref": "CC8.1-POF1",
+        "title": "CC8.1 POF1: Manages changes throughout the system life cycle",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Processes are in place to manage changes to system components through the life cycle",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC8.1 POF1: Manages changes throughout the system life cycle — Processes are in place to manage changes to system components through the life cycle",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC8.1",
+          "sort_order": 100
+        }
+      },
+      {
+        "ref": "CC9.1",
+        "title": "The entity identifies, selects, and develops risk mitigation activities for risks arising from potential business disruptions",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity identifies, selects, and develops risk mitigation activities for risks arising from potential business disruptions",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity identifies, selects, and develops risk mitigation activities for risks arising from potential business disruptions",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 101
+        }
+      },
+      {
+        "ref": "CC9.1-POF1",
+        "title": "CC9.1 POF1: Considers mitigation through business continuity",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity considers mitigation through contingency planning",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC9.1 POF1: Considers mitigation through business continuity — The entity considers mitigation through contingency planning",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC9.1",
+          "sort_order": 102
+        }
+      },
+      {
+        "ref": "CC9.2",
+        "title": "The entity assesses and manages risks associated with vendors and business partners",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity assesses and manages risks associated with vendors and business partners",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity assesses and manages risks associated with vendors and business partners",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 103
+        }
+      },
+      {
+        "ref": "CC9.2-POF1",
+        "title": "CC9.2 POF1: Creates policies for vendor and business partner risk management",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Vendor risk management processes are established",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC9.2 POF1: Creates policies for vendor and business partner risk management — Vendor risk management processes are established",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC9.2",
+          "sort_order": 104
+        }
+      },
+      {
+        "ref": "CC9.2-POF13",
+        "title": "CC9.2 POF13: Assesses vendor and business partner risks",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "The entity periodically assesses vendor and business partner risks",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "CC9.2 POF13: Assesses vendor and business partner risks — The entity periodically assesses vendor and business partner risks",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "CC9.2",
+          "sort_order": 105
+        }
+      },
+      {
+        "ref": "P1.0",
+        "title": "Privacy Criteria Introduction",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity's privacy practices meet its objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "Privacy Criteria Introduction — The entity's privacy practices meet its objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 106
+        }
+      },
+      {
+        "ref": "P1.1",
+        "title": "The entity provides notice to data subjects about its privacy practices to meet the entity's objectives related to privacy",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity provides notice to data subjects about its privacy practices to meet the entity's objectives related to privacy",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity provides notice to data subjects about its privacy practices to meet the entity's objectives related to privacy",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 107
+        }
+      },
+      {
+        "ref": "P1.1-POF1",
+        "title": "P1.1 POF1: Communicates to data subjects",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Privacy notices are provided to data subjects",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "P1.1 POF1: Communicates to data subjects — Privacy notices are provided to data subjects",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "P1.1",
+          "sort_order": 108
+        }
+      },
+      {
+        "ref": "P1.1-POF5",
+        "title": "P1.1 POF5: Provides notice of changes",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "point_of_focus"
+        },
+        "metadata": {
+          "description": "Data subjects are notified of changes to the entity's privacy practices",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "P1.1 POF5: Provides notice of changes — Data subjects are notified of changes to the entity's privacy practices",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": "P1.1",
+          "sort_order": 109
+        }
+      },
+      {
+        "ref": "P1.2",
+        "title": "The entity communicates choices available regarding the collection, use, retention, disclosure, and disposal of personal information to data subjects and obtains consent",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity communicates choices available regarding the collection, use, retention, disclosure, and disposal of personal information to data subjects and obtains consent",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity communicates choices available regarding the collection, use, retention, disclosure, and disposal of personal information to data subjects and obtains consent",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 110
+        }
+      },
+      {
+        "ref": "P1.3",
+        "title": "The entity collects personal information only for the purposes identified in the notice to the data subject",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity collects personal information only for the purposes identified in the notice to the data subject",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity collects personal information only for the purposes identified in the notice to the data subject",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 111
+        }
+      },
+      {
+        "ref": "P1.4",
+        "title": "The entity limits the use of personal information to the purposes identified in the notice and for which the data subject has provided explicit consent",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity limits the use of personal information to the purposes identified in the notice and for which the data subject has provided explicit consent",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity limits the use of personal information to the purposes identified in the notice and for which the data subject has provided explicit consent",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 112
+        }
+      },
+      {
+        "ref": "P1.5",
+        "title": "The entity retains personal information consistent with the entity's objectives related to privacy",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity retains personal information consistent with the entity's objectives related to privacy",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity retains personal information consistent with the entity's objectives related to privacy",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 113
+        }
+      },
+      {
+        "ref": "P1.6",
+        "title": "The entity disposes of personal information to meet the entity's privacy objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity disposes of personal information to meet the entity's privacy objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity disposes of personal information to meet the entity's privacy objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 114
+        }
+      },
+      {
+        "ref": "P1.7",
+        "title": "The entity discloses personal information to third parties with the consent of the data subject or as authorized under applicable law or regulation",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity discloses personal information to third parties with the consent of the data subject or as authorized under applicable law or regulation",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity discloses personal information to third parties with the consent of the data subject or as authorized under applicable law or regulation",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 115
+        }
+      },
+      {
+        "ref": "P1.8",
+        "title": "The entity provides data subjects with access to their personal information for review and correction",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity provides data subjects with access to their personal information for review and correction",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity provides data subjects with access to their personal information for review and correction",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 116
+        }
+      },
+      {
+        "ref": "P1.9",
+        "title": "The entity provides data subjects the ability to update and correct personal information",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity provides data subjects the ability to update and correct personal information",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity provides data subjects the ability to update and correct personal information",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 117
+        }
+      },
+      {
+        "ref": "PI1.1",
+        "title": "The entity obtains or generates, uses, and communicates relevant, quality information regarding the objectives related to processing, including definitions of data processed and product and service specifications, to",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity obtains or generates, uses, and communicates relevant, quality information regarding the objectives related to processing, including definitions of data processed and product and service specifications, to support the use of products and services",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity obtains or generates, uses, and communicates relevant, quality information regarding the objectives related to processing, including definitions of data processed and product and service specifications, to support the use of products and services",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 118
+        }
+      },
+      {
+        "ref": "PI1.2",
+        "title": "The entity implements policies and procedures over system inputs, including controls over completeness and accuracy, to result in products, services, and reporting to meet the entity's objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity implements policies and procedures over system inputs, including controls over completeness and accuracy, to result in products, services, and reporting to meet the entity's objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity implements policies and procedures over system inputs, including controls over completeness and accuracy, to result in products, services, and reporting to meet the entity's objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 119
+        }
+      },
+      {
+        "ref": "PI1.3",
+        "title": "The entity implements policies and procedures over system processing to result in products, services, and reporting to meet the entity's objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity implements policies and procedures over system processing to result in products, services, and reporting to meet the entity's objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity implements policies and procedures over system processing to result in products, services, and reporting to meet the entity's objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 120
+        }
+      },
+      {
+        "ref": "PI1.4",
+        "title": "The entity implements policies and procedures to make available or deliver output completely, accurately, and timely in accordance with specifications to meet the entity's objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity implements policies and procedures to make available or deliver output completely, accurately, and timely in accordance with specifications to meet the entity's objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity implements policies and procedures to make available or deliver output completely, accurately, and timely in accordance with specifications to meet the entity's objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 121
+        }
+      },
+      {
+        "ref": "PI1.5",
+        "title": "The entity implements policies and procedures to store inputs, items in processing, and outputs completely, accurately, and timely in accordance with system specifications to meet the entity's objectives",
+        "type": "control",
+        "in_scope": true,
+        "tags": {
+          "category": "criterion"
+        },
+        "metadata": {
+          "description": "The entity implements policies and procedures to store inputs, items in processing, and outputs completely, accurately, and timely in accordance with system specifications to meet the entity's objectives",
+          "upstream_url": "https://www.opensecurityarchitecture.org/frameworks/soc2-tsc/",
+          "source": "Open Security Architecture",
+          "source_title": "The entity implements policies and procedures to store inputs, items in processing, and outputs completely, accurately, and timely in accordance with system specifications to meet the entity's objectives",
+          "license": "CC-BY-SA-4.0",
+          "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "parent_ref": null,
+          "sort_order": 122
+        }
+      }
+    ],
+    "clauses": []
+  }
+}

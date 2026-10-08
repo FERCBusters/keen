@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.db.models import SourceIngestionState
 
 POLLING_SOURCES = frozenset(('loki', 'cloudwatch_logs', 'github', 'forgejo', 'gitea',
-    'gitlab', 'redmine', 'jenkins', 'taiga', 'bookstack', 'rss', 'google_workspace'))
+    'gitlab', 'redmine', 'riskledger', 'jenkins', 'taiga', 'bookstack', 'rss', 'google_workspace'))
 PAUSABLE_SOURCES = POLLING_SOURCES | {'webhooks', 'keen-agent', 'api-ingesters'}
 
 

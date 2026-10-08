@@ -24,6 +24,7 @@ celery_app = Celery(
 # Beat schedules
 celery_app.conf.beat_schedule = {
     "ingest-gitea": {"task": "app.worker.tasks.ingest_gitea_all_task", "schedule": 5700.0},
+    "ingest-riskledger": {"task": "app.worker.tasks.ingest_riskledger_all_task", "schedule": float(settings.riskledger_poll_seconds)},
     "ingest-redmine": {"task": "app.worker.tasks.ingest_redmine_all_task", "schedule": float(settings.redmine_poll_seconds)},
     "ingest-gitlab": {"task": "app.worker.tasks.ingest_gitlab_all_task", "schedule": 5700.0},
     "ingest-loki-every-30m": {

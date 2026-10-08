@@ -28,6 +28,7 @@ const layouts = {
     repos: ['owner', 'repo', 'label'], feeds: ['url', 'label']},
   forgejo: {organizations: ['org', 'label'], users: ['user', 'label'], feeds: ['url', 'label']},
   gitea: {organizations: ['org', 'label'], users: ['user', 'label'], feeds: ['url', 'label']},
+  riskledger: {organizations: ['org', 'label']},
   redmine: {projects: ['project', 'label']},
   gitlab: {groups: ['group', 'label'], users: ['user', 'label']},
   cloudwatch_logs: {queries: ['name', 'region', 'log_group', 'filter_pattern', 'event.system', 'event.action', 'event.outcome']},
@@ -41,7 +42,7 @@ const apiRoot = '/api/v1/admin';
 let settingsVersion = 0;
 let rules = [], ruleVersion = 0, selectedRule = null, targets = [], frameworks = [], samples = [], reviewed = null, previewedRule = null, previewCount = 0;
 let collectors = [], definitionDocument = {}, definitionVersion = 0, definitionEntryKey = null;
-const definitionAdapters = ['jenkins', 'loki', 'rss', 'github', 'forgejo', 'gitea', 'gitlab', 'redmine', 'cloudwatch_logs', 'taiga', 'google_workspace', 'webhooks', 'bookstack'];
+const definitionAdapters = ['jenkins', 'loki', 'rss', 'github', 'forgejo', 'gitea', 'gitlab', 'redmine', 'riskledger', 'cloudwatch_logs', 'taiga', 'google_workspace', 'webhooks', 'bookstack'];
 let catalogBooks = [], catalogPages = [], catalogChapters = [], nextBookOffset = null, nextPageOffset = null;
 async function catalogRequest(kind, offset = 0, bookId = null) {
   return apiGet(`${apiRoot}/bookstack/catalog?kind=${kind}&offset=${offset}${bookId ? `&book_id=${bookId}` : ''}`);
@@ -97,6 +98,7 @@ function definitionKey(adapter, section, entry) {
   if (adapter === 'webhooks') return $('definition-entry').value === '__new' ?
     $('definition-fields').querySelector('[data-field="provider_name"]')?.value.trim() : definitionEntryKey;
   if (adapter === 'github' && section === 'repos') return `${entry.owner || ''}/${entry.repo || ''}`;
+  if (adapter === 'riskledger') return String(entry.org || '').trim();
   if (adapter === 'redmine') return String(entry.project || '').trim();
   const field = section === 'groups' ? 'group' : section === 'users' ? 'user' : section === 'feeds' ? 'url' : section === 'organizations' ? 'org' :
     section === 'projects' || section === 'selected_pages' ? 'id' : 'name';
@@ -260,7 +262,7 @@ function fieldNode(name, value, kind = 'text') {
     input.type = 'checkbox'; input.className = 'form-check-input'; input.checked = Boolean(value);
   } else { input.value = value ?? ''; if (kind === 'number') input.type = 'number'; }
   wrapper.append(input);
-  const helpText = name === 'project' && $('definition-adapter').value === 'redmine' ? 'Project ID or identifier. Use * as the sole collection to discover all projects accessible to the API key.' : name === 'kind' && $('definition-adapter').value === 'jenkins' ?
+  const helpText = name === 'org' && $('definition-adapter').value === 'riskledger' ? 'Use * for the authenticated organisation, or its UUID to pin the expected API account. Imports supplier/risk snapshots; assessment answers and evidence files are unavailable through the public API.' : name === 'project' && $('definition-adapter').value === 'redmine' ? 'Project ID or identifier. Use * as the sole collection to discover all projects accessible to the API key.' : name === 'kind' && $('definition-adapter').value === 'jenkins' ?
     'Action assigned to Jenkins events from this job, such as build or deployment. Match it with the Action field below.' :
     name === 'label' && $('definition-adapter').value === 'jenkins' ?
       'System assigned to Jenkins events from this job. Match it with the System field below.' :

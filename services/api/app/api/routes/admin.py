@@ -1,6 +1,7 @@
 from __future__ import annotations
 from app.ingest.gitea import ingest_gitea_all
 from app.ingest.redmine import ingest_redmine_all
+from app.ingest.riskledger import ingest_riskledger_all
 from app.ingest.gitlab import ingest_gitlab_all
 
 import json
@@ -936,6 +937,7 @@ def admin_ingest_status(user=Depends(require_admin)):
             "google_workspace": bool(settings.google_workspace_enabled),
             "forgejo": bool(settings.forgejo_enabled),
             "redmine": bool(settings.redmine_enabled) and not settings.demo_mode,
+            "riskledger": bool(settings.riskledger_enabled) and not settings.demo_mode,
             "gitlab": bool(settings.gitlab_enabled),
             "gitea": bool(settings.gitea_enabled),
             "jenkins": bool(settings.jenkins_enabled),
@@ -1933,3 +1935,8 @@ def admin_run_gitlab_ingest(user=Depends(require_admin), db: Session = Depends(g
 @router.post("/v1/admin/ingest/redmine/run")
 def admin_run_redmine_ingest(user=Depends(require_admin), db: Session = Depends(get_db)):
     return {"runs": ingest_redmine_all(db)}
+
+
+@router.post("/v1/admin/ingest/riskledger/run")
+def admin_run_riskledger_ingest(user=Depends(require_admin), db: Session = Depends(get_db)):
+    return {"runs": ingest_riskledger_all(db)}

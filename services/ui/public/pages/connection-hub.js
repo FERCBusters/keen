@@ -49,6 +49,7 @@ window.addEventListener('keen-connections-changed',()=>load().catch(showError));
 load().catch(showError);
 
 const layouts={
+ riskledger:{organizations:['org','label']},
  redmine:{projects:['project','label']},
  forgejo:{organizations:['org','label'],users:['user','label'],feeds:['url','label']},
  gitea:{organizations:['org','label'],users:['user','label'],feeds:['url','label']},
@@ -65,7 +66,7 @@ async function editCollection(adapter, existing=null){
  type.replaceChildren();for(const key of Object.keys(layouts[adapter]))type.add(new Option(key,key));
  type.value=existing?.section||Object.keys(layouts[adapter])[0];type.disabled=!!existing;
  const paint=()=>{byId('collection-fields').replaceChildren();for(const name of layouts[adapter][type.value]){
-  const label=document.createElement('label');label.className='form-label d-block';label.textContent=adapter==='redmine'&&name==='project'?'Project ID / identifier (or * for all accessible projects)':name;
+  const label=document.createElement('label');label.className='form-label d-block';label.textContent=adapter==='riskledger'&&name==='org'?'Organisation UUID (or * for the API key’s organisation)':adapter==='redmine'&&name==='project'?'Project ID / identifier (or * for all accessible projects)':name;
   const input=document.createElement('input');input.className='form-control';input.dataset.field=name;input.value=existing?.entry?.[name]??'';label.append(input);byId('collection-fields').append(label);
  }byId('collection-extra').value=JSON.stringify(existing?.entry||{},null,2);};
  type.onchange=paint;paint();byId('collection-title').textContent=(existing?'Edit ':'Add ')+adapter+' collection';byId('collection-error').textContent='';

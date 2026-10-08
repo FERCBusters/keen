@@ -368,6 +368,12 @@ class Settings(BaseSettings):
     gitea_username: str = Field(default="", validation_alias="GITEA_USERNAME")
     gitea_auth_mode: str = Field(default="token", validation_alias="GITEA_AUTH_MODE")
     gitea_cookie: str = Field(default="", validation_alias="GITEA_COOKIE")
+    # Risk Ledger public alpha API (fixed HTTPS origin; one key/organisation).
+    riskledger_enabled: bool = False
+    riskledger_api_key: str = ""
+    riskledger_config_path: str = "/app/config/riskledger.yml"
+    riskledger_poll_seconds: int = Field(default=3600, ge=60, le=86400)
+
     redmine_enabled: bool = False
     redmine_base_url: str = ""
     redmine_api_key: str = ""

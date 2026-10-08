@@ -36,6 +36,7 @@ CONNECTORS = {
     "forgejo": ("forgejo_config_path", "feeds", "url"),
     "gitea": ("gitea_config_path", "feeds", "url"),
     "redmine": ("redmine_config_path", "projects", "project"),
+    "riskledger": ("riskledger_config_path", "organizations", "org"),
     "gitlab": ("gitlab_config_path", "groups", "group"),
     "cloudwatch_logs": ("cloudwatch_logs_config_path", "queries", "name"),
     "taiga": ("taiga_config_path", "projects", "id"),
@@ -181,6 +182,12 @@ def _validate_connector(name: str, document: dict):
     if settings.demo_mode and name == 'rss':
         raise HTTPException(403, 'The public mig5 RSS preset is fixed in demo environments.')
     _safe_document(document)
+    if name == "riskledger":
+        from app.ingest.riskledger import validate_config, RiskLedgerError
+        try:
+            validate_config(document)
+        except RiskLedgerError as exc:
+            raise HTTPException(400, str(exc)) from None
     if name == "redmine":
         from app.ingest.redmine import validate_config, RedmineError
         try:
@@ -316,7 +323,7 @@ def _collector_key(adapter: str, section: str, entry: dict, provider: str | None
         return f'{entry.get("owner", "")}/{entry.get("repo", "")}'
     if adapter == "bookstack" and section == "selected_pages":
         return str(entry.get("id") or "")
-    field = {"redmine": "project", "jenkins": "name", "loki": "name", "rss": "url", "github": "org",
+    field = {"riskledger": "org", "redmine": "project", "jenkins": "name", "loki": "name", "rss": "url", "github": "org",
              "forgejo": "url", "gitea": "url", "gitlab": "group", "cloudwatch_logs": "name", "taiga": "id",
              "google_workspace": "name"}.get(adapter)
     if adapter == "github" and section == "feeds":
@@ -328,7 +335,7 @@ def _editable_collector(adapter: str, section: str) -> bool:
     return (adapter in CONNECTORS and section in {
         "jenkins": {"jobs"}, "loki": {"queries"}, "rss": {"feeds"},
         "github": {"organizations", "repos", "feeds"}, "forgejo": {"feeds", "organizations", "users"}, "gitea": {"feeds", "organizations", "users"}, "gitlab": {"groups", "users"},
-        "redmine": {"projects"}, "cloudwatch_logs": {"queries"}, "taiga": {"projects"},
+        "riskledger": {"organizations"}, "redmine": {"projects"}, "cloudwatch_logs": {"queries"}, "taiga": {"projects"},
         "google_workspace": {"streams"}, "webhooks": {"providers"},
         "bookstack": {"selected_pages"},
     }.get(adapter, set()))
@@ -352,6 +359,12 @@ def _check_linked_collectors(adapter: str, document: dict, db: Session):
 
 def _validate_collection_entry(adapter: str, section: str, entry: dict, key: str):
     """Reject entries that cannot be ingested even if the generic JSON is valid."""
+    if adapter == "riskledger":
+        from app.ingest.riskledger import validate_config, RiskLedgerError
+        try:
+            validate_config({"organizations": [entry]})
+        except RiskLedgerError as exc:
+            raise HTTPException(400, str(exc)) from None
     if adapter == "webhooks" and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", key):
         raise HTTPException(400, "Webhook provider name must use letters, numbers, underscores or hyphens")
     if section == "feeds":
@@ -398,7 +411,7 @@ def get_evidence_definitions(db: Session = Depends(get_db)):
     warnings = []
     sections = {"jenkins": ["jobs"], "loki": ["queries"], "rss": ["feeds"],
                 "github": ["organizations", "repos", "feeds"], "forgejo": ["feeds", "organizations", "users"], "gitea": ["feeds", "organizations", "users"], "gitlab": ["groups", "users"],
-                "redmine": ["projects"], "cloudwatch_logs": ["queries"], "taiga": ["projects"],
+                "riskledger": ["organizations"], "redmine": ["projects"], "cloudwatch_logs": ["queries"], "taiga": ["projects"],
                 "google_workspace": ["streams"], "webhooks": ["providers"],
                 "bookstack": ["selected_pages"]}
     for adapter, groups in sections.items():
@@ -438,7 +451,7 @@ def source_catalogue(db: Session = Depends(get_db)):
     items = []
     for name in CONNECTORS:
         enabled = True if name == "webhooks" else bool(getattr(settings, f"{name}_enabled", False))
-        if name == "redmine" and settings.demo_mode:
+        if name in ("redmine", "riskledger") and settings.demo_mode:
             enabled = False
         count = sum(1 for item in collectors if item["adapter"] == name)
         matching_rules = sum(1 for rule in rules if (
@@ -450,7 +463,7 @@ def source_catalogue(db: Session = Depends(get_db)):
         items.append({"adapter": name, "enabled": enabled, "collection_items": count,
                       "definitions": matching_rules, "observed_events": events,
                       "last_seen": last_seen, "managed_version": _version(db, name),
-                      "description": "Use the evidence definition wizard to choose inputs and map matched events. Adapter credentials and enablement are configured in Docker."})
+                      "description": ("Risk Ledger pulls supplier/risk snapshots and a discovered subset of framework controls. Assessment answers and evidence files are not exposed by its public API. See the Risk Ledger help chapter." if name == "riskledger" else "Use the evidence definition wizard to choose inputs and map matched events. Adapter credentials and enablement are configured in Docker.")})
     from app.db.models import KeenAgent
     agents_count=db.query(KeenAgent).filter(KeenAgent.enabled.is_(True)).count()
     agent_events,agent_last=observed.get('keen-agent',(0,None))
