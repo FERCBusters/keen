@@ -69,7 +69,7 @@
   <div class="card border-danger mb-3"><div class="card-body">
     <h3 class="h5">Purge all collected evidence</h3>
     <p>Delete all eligible events up to the time you start the purge, including event mappings, attached files, event questions and incident links. Audit-protected evidence is kept. Frameworks, mapping rules, source configuration, ISMS records and the administrative audit trail remain.</p>
-    <p class="small-muted">New ingestion continues. Pause ingesters and agents first if you want the workspace to stay empty. Upstream systems may send previously deleted events again.</p>
+    <p class="small-muted">All ingesters, agents and webhook intake pause automatically while a manual purge is queued or running and for five minutes after completion or cancellation. In-flight database work drains before deletion. Your existing source pause settings are preserved. Upstream systems may send previously deleted events again after ingestion resumes.</p>
     <label class="form-label" for="retention-confirm">Type <strong>PURGE EVIDENCE</strong> to enable the purge</label>
     <input id="retention-confirm" class="form-control mb-3" autocomplete="off" spellcheck="false">
     <button type="button" id="retention-purge" class="btn btn-danger" disabled>Preview and purge all evidence</button>
@@ -347,7 +347,8 @@
       <div class="tab-pane fade" id="pane-framework-editor" role="tabpanel" aria-labelledby="tab-framework-editor" tabindex="0">
         <div class="card mb-3"><div class="card-header fw-bold">Frameworks used by your organisation</div><div class="card-body">
           <p class="small-muted">Choose the frameworks offered in workspace selectors. Existing controls, evidence, audits and mapping rules are retained. This selection is independent of access permissions.</p>
-          <div id="fe-organisation-frameworks" class="row g-2"></div>
+          <p class="small-muted">Framework data and crosswalks: <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>. KEEN derives related-control links through shared NIST controls. Coverage notes identify gaps; linked evidence needs review. Imported frameworks and nodes remain editable.</p>
+<div id="fe-organisation-frameworks" class="row g-2"></div>
           <label class="form-label mt-3" for="fe-organisation-default">Organisation default</label><select id="fe-organisation-default" class="form-select" style="max-width:30rem"></select>
           <p id="fe-organisation-note" class="small-muted mt-2" role="status"></p>
           <button id="fe-save-selection" type="button" class="btn btn-primary">Save organisation selection</button>
@@ -451,7 +452,7 @@
               <div id="ec-prune-results" class="small mt-2" role="status"></div>
               <button id="ec-prune-apply" class="btn btn-outline-danger mt-2" disabled>Remove reviewed stale mappings</button>
             </details>
-            <div class="d-flex gap-2 align-items-center mt-3"><label for="ec-rule-revision">Restore a prior rule set</label><select id="ec-rule-revision" class="form-select w-auto"></select><button id="ec-rule-restore" class="btn btn-sm btn-outline-warning">Restore</button></div>
+            <div id="ec-rule-history" class="mt-3" hidden><p class="small-muted">History for this rule only. Restoring changes this rule; other rules and collection settings are retained.</p><label for="ec-rule-revision">Restore this rule’s revision</label><select id="ec-rule-revision" class="form-select w-auto"></select><button id="ec-rule-restore" class="btn btn-sm btn-outline-warning">Restore</button></div>
             </section><div class="d-flex justify-content-between mt-4"><button id="ec-prev-step" class="btn btn-outline-secondary" type="button">Previous</button><button id="ec-next-step" class="btn btn-outline-primary" type="button">Next</button></div>
           </div>
         </div></div>

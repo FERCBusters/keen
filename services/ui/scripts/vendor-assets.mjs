@@ -31,9 +31,9 @@ copyIfExists(nm("html2canvas", "dist", "html2canvas.min.js"), out("html2canvas",
 copyIfExists(nm("html2canvas", "dist", "html2canvas.min.js.map"), out("html2canvas", "html2canvas.min.js.map"));
 
 // MOSP design system
-copyIfExists(nm("@FERCBusters", "mosp-design-system", "dist", "styles.css"), out("mosp-design-system", "styles.css"));
-copyIfExists(nm("@FERCBusters", "mosp-design-system", "dist", "app.js"), out("mosp-design-system", "app.js"));
-copyIfExists(nm("@FERCBusters", "mosp-design-system", "dist", "BUILD_INFO.txt"), out("mosp-design-system", "BUILD_INFO.txt"));
+copyIfExists(nm("@fercbusters", "mosp-design-system", "dist", "styles.css"), out("mosp-design-system", "styles.css"));
+copyIfExists(nm("@fercbusters", "mosp-design-system", "dist", "app.js"), out("mosp-design-system", "app.js"));
+copyIfExists(nm("@fercbusters", "mosp-design-system", "dist", "BUILD_INFO.txt"), out("mosp-design-system", "BUILD_INFO.txt"));
 
 function copyRequired(src, dest) {
   if (!fs.existsSync(src)) {
@@ -48,3 +48,6 @@ copyRequired(nm("wysi", "dist", "wysi.min.css"), out("wysi", "wysi.min.css"));
 copyRequired(nm("wysi", "dist", "wysi.min.js"), out("wysi", "wysi.min.js"));
 
 console.log("Vendored assets into public/vendor");
+
+// Preserve the public design-system package licence with its distributed assets.
+copyIfExists(nm("@fercbusters", "mosp-design-system", "LICENSE"), out("mosp-design-system", "LICENSE"));

@@ -607,13 +607,13 @@ def load_control_links(path: str) -> dict[str, dict[str, str]]:
 
       Framework buckets:
         frameworks:
-          ISO27001:2022:
+          iso_27001_2022:
             A.5.1: https://...
           UK-DVSTF:1.0:
             12.5.a: https://...
 
       Short framework-map form:
-        ISO27001:2022:
+        iso_27001_2022:
           A.5.1: https://...
         UK-DVSTF:1.0:
           12.5.a: https://...

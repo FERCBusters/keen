@@ -38,20 +38,17 @@ The frontend check is a syntax check. There is currently no repository-wide npm
 browser-test command. UI behaviour tests from separate patch bundles are not
 silently counted as part of this Python suite.
 
-## Forgejo Actions
+## GitHub Actions
 
-`.forgejo/workflows/tests.yml` targets a Docker-backed runner labelled `docker`,
-with a Debian 13 job container. Install system dependencies before checkout so
-Node and Git are available for the checkout action. Poetry is installed in its
-own virtual environment, then locked application/dev dependencies are installed
-in the project's Poetry environment.
+`.github/workflows/tests.yml` runs on a GitHub-hosted Ubuntu runner with a Debian
+13 job container, PostgreSQL 16 and Valkey services. Upstream actions use full
+commit-SHA pins. It is also reusable by the release workflow to test the exact
+release tag before publication. The optional failure webhook is preserved via
+`NODERED_WEBHOOK_URL`.
 
-PostgreSQL 17 and Valkey 8 run as disposable Forgejo service containers. They need
-no published host ports and no Docker socket mounted into the job. The existing
-Docker-in-Docker runner can manage these containers. Its `container.network`
-setting must be empty so Forgejo can create the per-job service network.
-
-The workflow runs on pushes, pull requests and manual dispatch. JUnit results are
-uploaded even when tests fail, using Forgejo's compatible v3 artifact uploader.
-If your server mirrors Actions to another location, adapt that action URL to your
-mirror.
+The suite includes the offline OSA catalogue's counts, node editing, one-hop
+inheritance and event deduplication, plus PostgreSQL tests for migration from
+an existing pre-production catalogue and for purge transaction coordination.
+The concurrency test holds an application transaction open and verifies that
+purge waits, rejects new evidence, and preserves manually paused sources after
+its five-minute cooldown expires.

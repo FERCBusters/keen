@@ -37,7 +37,7 @@ from app.realtime.notifications import (
 
 app = FastAPI(
     title="Keen API",
-    version="0.1.0",
+    version="1.0.0",
     description=(
         "Keen backend API. Use /docs (or /v1/docs) for interactive Swagger UI, "
         "/redoc (or /v1/redoc) for ReDoc, and /openapi.json "

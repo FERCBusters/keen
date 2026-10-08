@@ -1,18 +1,6 @@
-# Keen UI Dockerfile
-#
-# IMPORTANT: This Dockerfile expects the *build context* to be a directory that
-# contains BOTH:
-#   - keen/
-#   - mosp-design-system/
-# (i.e. siblings).
-#
-# Example:
-#   /workspace/
-#     keen/
-#     mosp-design-system/
-#
-# Build with:
-#   docker build -f keen/services/ui/Dockerfile -t keen-ui /workspace
+# Build from the KEEN repository root:
+# docker build -f services/ui/Dockerfile -t keen-ui .
+# MOSP is a public Git-backed npm dependency pinned by commit in package.json/lock.
 
 FROM node:20-alpine AS vendor
 ENV NODE_OPTIONS="--no-network-family-autoselection --dns-result-order=ipv4first"
@@ -22,52 +10,31 @@ WORKDIR /build
 
 # npm needs git when installing GitHub dependencies such as Wysi.
 # This is only installed in the build/vendor stage, not the runtime nginx image.
-RUN apk add --no-cache git ca-certificates
+RUN apk add --no-cache git ca-certificates \
+ && git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" \
+ && git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 
-# Install pinned frontend deps.
-#
-# If package-lock.json is present, use npm ci for a reproducible install.
-# If it's missing, generate it inside this build stage so it can be copied out
-# later (see the final stage /opt/ui-build).
-COPY keen/services/ui/package*.json ./
-#RUN if [ -f package-lock.json ]; then \
-#      npm ci; \
-#    else \
-#      npm install; \
-#    fi \
-# && if [ ! -f package-lock.json ]; then npm install --package-lock-only; fi
-RUN node --version && npm --version \
- && ( \
-      if [ -f package-lock.json ]; then \
-        npm ci --loglevel=verbose; \
-      else \
-        npm install --loglevel=verbose; \
-      fi; \
-      install_status=$?; \
-      cat /root/.npm/_logs/*debug*.log; \
-      if [ "$install_status" -ne 0 ]; then \
-        exit "$install_status"; \
-      fi; \
-      node --input-type=module -e \
-        "import { transformSync } from 'esbuild'; transformSync('let x = 1');" \
-    )
+# Lockfile includes the full public Git commit for the design system.
+COPY services/ui/package.json services/ui/package-lock.json ./
+RUN npm ci \
+ && node --input-type=module -e "import { transformSync } from 'esbuild'; transformSync('let x = 1');"
 
-# Inject MOSP design system (local codebase, no npm registry)
-COPY mosp-design-system/ /tmp/mosp-design-system/
-RUN (cd /tmp/mosp-design-system && node scripts/build.mjs) \
- && mkdir -p /build/node_modules/@FERCBusters \
- && rm -rf /build/node_modules/@FERCBusters/mosp-design-system \
- && cp -a /tmp/mosp-design-system /build/node_modules/@FERCBusters/mosp-design-system \
- && rm -rf /build/node_modules/@FERCBusters/mosp-design-system/node_modules
+# Preserve KEEN's existing dark-theme/statistics helpers until upstream includes them.
+COPY services/ui/patches ./patches
+RUN git -C node_modules/@fercbusters/mosp-design-system apply --check /build/patches/mosp-design-system.patch \
+ && git -C node_modules/@fercbusters/mosp-design-system apply /build/patches/mosp-design-system.patch
+
+# Build the pinned npm package's assets (uses only its included source/scripts).
+RUN npm --prefix node_modules/@fercbusters/mosp-design-system run build
 
 # Copy source and build vendored static assets into public/vendor
-COPY keen/services/ui/scripts ./scripts
-COPY keen/services/ui/public ./public
+COPY services/ui/scripts ./scripts
+COPY services/ui/public ./public
 RUN npm run build
 
 FROM nginx:1.30.4-alpine
 
-COPY keen/services/ui/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY services/ui/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=vendor /build/public/ /usr/share/nginx/html/
 
 # Make the npm manifests available in the runtime image so you can copy them

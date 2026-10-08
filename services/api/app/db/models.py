@@ -33,7 +33,7 @@ class Framework(Base):
     )
     slug: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False
-    )  # e.g. ISO27001:2022
+    )  # e.g. iso_27001_2022
     name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     version: Mapped[str | None] = mapped_column(String(128), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -143,6 +143,61 @@ class CrossFrameworkControlLink(Base):
         UniqueConstraint("source_control_id", "target_control_id", name="uq_cross_framework_link"),
         CheckConstraint("source_control_id <> target_control_id", name="ck_cross_framework_distinct"),
     )
+
+
+class OsaControlMapping(Base):
+    """Frozen OSA clause-to-NIST memberships; administrator nodes remain ordinary controls."""
+    __tablename__ = "osa_control_mappings"
+    control_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("control_items.id", ondelete="CASCADE"), primary_key=True)
+    nist_ref: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
+
+
+# Keep the original table writable. All evidence readers use this compact,
+# one-hop relation, so an inherited event never propagates transitively.
+from sqlalchemy import select, literal, cast, exists, and_
+from sqlalchemy.orm import foreign
+_osa_source = OsaControlMapping.__table__.alias("osa_source")
+_osa_target = OsaControlMapping.__table__.alias("osa_target")
+_source_control = ControlItem.__table__.alias("osa_source_control")
+_target_control = ControlItem.__table__.alias("osa_target_control")
+_explicit = CrossFrameworkControlLink.__table__
+# EXISTS prevents duplicate pairs without a global DISTINCT/materialisation.
+# Filters on event/source/target can then be pushed down before joining memberships.
+_shared_nist = exists(select(_osa_source.c.nist_ref).select_from(
+    _osa_source.join(_osa_target, _osa_source.c.nist_ref == _osa_target.c.nist_ref)
+).where(_osa_source.c.control_id == _source_control.c.id,
+        _osa_target.c.control_id == _target_control.c.id))
+_derived_pairs = select(
+    _source_control.c.id.label("source_control_id"),
+    _target_control.c.id.label("target_control_id"),
+).select_from(_source_control.join(_target_control, _shared_nist)).where(
+    _source_control.c.framework_slug != _target_control.c.framework_slug).subquery()
+
+_effective_links = select(
+    cast(_explicit.c.id, String).label("id"), _explicit.c.source_control_id,
+    _explicit.c.target_control_id, _explicit.c.rationale, _explicit.c.created_at,
+    literal(False).label("derived"),
+).union_all(select(
+    (cast(_derived_pairs.c.source_control_id, String) + literal(":") +
+     cast(_derived_pairs.c.target_control_id, String)).label("id"),
+    _derived_pairs.c.source_control_id, _derived_pairs.c.target_control_id,
+    literal("Related evidence via shared NIST controls in Open Security Architecture (CC BY-SA 4.0). "
+            "KEEN-derived crosswalk; review relevance and coverage gaps. This is not full equivalence."),
+    literal(None, type_=DateTime), literal(True),
+).where(~exists(select(_explicit.c.id).where(
+    _explicit.c.source_control_id == _derived_pairs.c.source_control_id,
+    _explicit.c.target_control_id == _derived_pairs.c.target_control_id,
+)))).subquery("effective_cross_framework_links")
+
+
+class EffectiveCrossFrameworkControlLink(Base):
+    __table__ = _effective_links
+    __mapper_args__ = {"primary_key": [_effective_links.c.id]}
+    source = relationship(ControlItem,
+        primaryjoin=foreign(_effective_links.c.source_control_id) == ControlItem.id, viewonly=True)
+    target = relationship(ControlItem,
+        primaryjoin=foreign(_effective_links.c.target_control_id) == ControlItem.id, viewonly=True)
 
 
 class FrameworkClause(Base):
@@ -448,7 +503,7 @@ class IngestionCursor(Base):
 class AuditLog(Base):
     """Record UI -> backend requests as an internal audit trail.
 
-    This is intended to support ISO27001:2022 A.8.34 by providing evidence of
+    This is intended to support iso_27001_2022 A.8.34 by providing evidence of
     access/actions taken during audit testing.
     """
 
@@ -708,7 +763,7 @@ class User(Base):
         String(2048), default="/", nullable=False
     )
 
-    # Preferred default framework slug for this user (e.g. "ISO27001:2022").
+    # Preferred default framework slug for this user (e.g. "iso_27001_2022").
     # When unset, the application-level default framework is used.
     pref_default_framework: Mapped[str | None] = mapped_column(
         String(64), nullable=True

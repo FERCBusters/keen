@@ -18,7 +18,8 @@ cp .env.example .env
 
 2. Start:
 ```bash
-docker compose up --build
+docker compose pull
+docker compose up -d
 ```
 
 3. Smoke test:
@@ -60,7 +61,7 @@ curl -b cookies.txt -X POST http://localhost:8181/v1/admin/ingest/loki/run
   - Bootstrap admin (first-run only): `KEEN_BOOTSTRAP_ADMIN_USERNAME`, `KEEN_BOOTSTRAP_ADMIN_PASSWORD`
   - Session cookies: `KEEN_SESSION_*`, `KEEN_COOKIE_*`
 - Mapping rules: `KEEN_RULES_PATH` (default `./config/rules.yml`)
-- Default framework slug for API/UI filtering: `KEEN_DEFAULT_FRAMEWORK` (default `ISO27001:2022`)
+- Default framework slug for API/UI filtering: `KEEN_DEFAULT_FRAMEWORK` (default `iso_27001_2022`)
 - Framework seed files directory: `KEEN_FRAMEWORKS_DIR` (default `./frameworks`)
 - Loki queries: `KEEN_LOKI_QUERIES_PATH` (default `./config/loki.yml`)
 - CloudWatch Logs queries: `KEEN_CLOUDWATCH_LOGS_CONFIG_PATH` (default `./config/cloudwatch_logs.yml`)
@@ -266,3 +267,7 @@ Administrators can configure age/count retention or purge collected events under
 sampled into audits remain protected until those audits are deleted. Read
 [Evidence retention and purging](docs/evidence-retention.md) for deployment,
 worker/storage permissions, S3 Object Lock, recovery and deletion scope.
+
+## Release 1.0.0
+
+See [release and upgrade instructions](docs/release-1.0.0.md) for the OSA framework reset, purge coordination, GitHub Actions and GHCR images. Local builds use `docker-compose.build.yml`; the default Compose file pulls versioned release images.

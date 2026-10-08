@@ -150,6 +150,9 @@ def ensure_controls(
 ) -> dict[str, ControlItem]:
     if not refs:
         return {}
+    from app.db.models import Framework
+    if not db.query(Framework.id).filter_by(slug=framework_slug).first():
+        return {}  # A stale rule must not resurrect a removed catalogue.
     found = (
         db.query(ControlItem)
         .filter(ControlItem.framework_slug == framework_slug, ControlItem.ref.in_(refs))
@@ -246,6 +249,8 @@ def store_event_with_artifact(
     captured_by: str,
     commit: bool = True,
 ) -> dict[str, Any]:
+    from app.services.ingestion_pause import require_purge_receiving
+    require_purge_receiving(db)
     # --- hardening: redact secrets BEFORE persisting anything ---
     raw_pointer = redact_obj(raw_pointer) or {}
     normalized_payload = redact_obj(normalized_payload) or {}

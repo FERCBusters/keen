@@ -7,7 +7,7 @@ FEED = {'name': 'mig5 supplier news (live demo)', 'label': 'mig5 supplier news',
 RULE = {'id': 'demo_mig5_supplier_news',
         'description': 'Public supplier communications collected for review. Collection alone does not establish compliance or completion of a supplier review.',
         'when': {'source': 'rss', 'system': FEED['system']},
-        'map_to': {'ISO27001:2022': ['A.5.19', 'A.5.22'], 'KEEN-AF:1.0': ['TPM-2']},
+        'map_to': {'iso_27001_2022': ['A.5.19', 'A.5.22'], 'KEEN-AF:1.0': ['TPM-2']},
         'confidence': 0.6}
 
 

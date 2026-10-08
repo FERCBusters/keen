@@ -7,7 +7,7 @@ from app.db.models import (ControlItem, Event, Mapping, Risk, RiskControlLink, R
     IsmsDocumentRevision, IsmsEntityControlLink, Audit, AuditScopedControl, AuditEvidence)
 
 CATALOGUE = {
- 'ISO27001:2022': [
+ 'iso_27001_2022': [
   ('A.5.9','Asset register reconciliation','12 fictional devices reconciled; one retired laptop removed.'),
   ('A.5.18','Quarterly access review','17 fictional accounts reviewed; two revoked and one exception assigned an expiry.'),
   ('A.8.8','Vulnerability remediation','A simulated critical update was applied to three lab servers.'),
@@ -28,13 +28,7 @@ CATALOGUE = {
   ('A7.3','Leaver account closure','A fictional leaver account was disabled on the agreed departure date.'),
   ('A7.16','Administrator MFA check','All three fictional cloud administrators use MFA; test evidence only.'),
   ('A8.3','Malware scan review','A synthetic scan log records a successful scheduled scan of lab endpoints.')],
- 'UK-DVSTF:1.0': [
-  ('11.6.1.d','Information classification review','Fictional identity data classes have named owners and access rules.'),
-  ('11.6.3.a','Recovery objectives review','Sample backup policy records an agreed recovery-time objective.'),
-  ('11.8.1.a','Records policy approval','The fictional service approved its records management policy.'),
-  ('11.8.3.a','Disposal exercise','Expired synthetic records were deleted according to a sample retention schedule.'),
-  ('12.5.a','Identity-service incident exercise','A fictional service outage exercised triage, escalation and user communications.'),
-  ('12.7.1.a','Privacy notice review','A sample notice was reviewed for fictional data flows and transparency gaps.')],
+
 }
 
 

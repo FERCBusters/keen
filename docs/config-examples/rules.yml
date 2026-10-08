@@ -1,6 +1,6 @@
 # Suggested rules for Keen for sysadmin / CI/CD / SDLC evidence
 # IMPORTANT: Review with your ISMS owner/auditor and tune for your environment.
-# These rules assume you imported ISO27001:2022 Annex A refs like "A.8.32" etc.
+# These rules assume you imported iso_27001_2022 Annex A refs like "A.8.32" etc.
 
 # Multi-framework mapping patterns supported:
 #
@@ -9,12 +9,12 @@
 #
 # 2) Framework map:
 #    map_to:
-#      ISO27001:2022: ["A.8.15", "A.8.16"]
+#      iso_27001_2022: ["A.8.15", "A.8.16"]
 #      UK-DVSTF:1.0: ["11.8.1.a", "11.8.1.b"]
 #
 # 3) Target objects with optional role gating:
 #    map_to:
-#      - framework: "ISO27001:2022"
+#      - framework: "iso_27001_2022"
 #        ref: "A.8.15"
 #      - framework: "UK-DVSTF:1.0"
 #        refs: ["11.8.1.a", "11.8.1.b"]
@@ -731,7 +731,7 @@ rules:
       action: "unexpected_source_ip"
       outcome: "info"
     map_to:
-      ISO27001:2022:
+      iso_27001_2022:
         - "A.5.15"  # Access control
         - "A.5.16"  # Identity management
         - "A.5.17"  # Authentication information

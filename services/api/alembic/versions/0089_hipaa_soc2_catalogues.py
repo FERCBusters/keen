@@ -71,7 +71,7 @@ def seed_catalogues(bind):
 
 
 def upgrade():
-    seed_catalogues(op.get_bind())
+    pass  # Superseded by 0090; keep the revision for already provisioned instances.
 
 
 def downgrade():

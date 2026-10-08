@@ -8,7 +8,7 @@ Typical use from the project root:
     docker compose exec api python scripts/seed_demo_data.py
 
 Or, from inside the API container's services/api working directory:
-    python scripts/seed_demo_data.py --framework ISO27001:2022 --prefix Demo
+    python scripts/seed_demo_data.py --framework iso_27001_2022 --prefix Demo
 
 The script writes directly through KEEN's SQLAlchemy models. It is deliberately
 idempotent for the demo records it creates: re-running it updates matching rows
@@ -2008,7 +2008,7 @@ class DemoSeeder:
             f"for framework {self.framework!r} with prefix {self.prefix!r}."
         )
         from demo_catalogue import CATALOGUE, seed_catalogue
-        if not self.config.all_frameworks and self.framework != 'ISO27001:2022':
+        if not self.config.all_frameworks and self.framework != 'iso_27001_2022':
             seed_catalogue(self, [self.framework])
             return
         from app.ingest.demo_rss import seed_preset
@@ -2067,13 +2067,13 @@ def parse_args() -> DemoConfig:
         action="store_true",
         help="Run all inserts/updates and then roll back instead of committing.",
     )
-    parser.add_argument('--all-frameworks', action='store_true', help='Seed reviewed examples across all four shipped frameworks (base ISMS uses ISO 27001).')
+    parser.add_argument('--all-frameworks', action='store_true', help='Seed reviewed examples across ISO 27001, KEEN Assurance and Cyber Essentials (base ISMS uses ISO 27001).')
     parser.add_argument('--allow-non-demo', action='store_true', help='Explicitly permit writing fictional records into a non-demo installation.')
     args = parser.parse_args()
     if not settings.demo_mode and not args.allow_non_demo:
         parser.error('Use demo mode, or explicitly pass --allow-non-demo to seed this installation')
     return DemoConfig(
-        framework="ISO27001:2022" if args.all_frameworks else args.framework,
+        framework="iso_27001_2022" if args.all_frameworks else args.framework,
         prefix=args.prefix,
         username=args.username,
         dry_run=args.dry_run,

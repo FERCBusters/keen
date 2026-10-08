@@ -87,7 +87,7 @@ def register_heatmap(user=Depends(require_risk_read), db: Session = Depends(get_
 
 
 @router.get("/v1/risks/register")
-def list_register(framework: str = "ISO27001:2022", limit: int = 200, offset: int = 0,
+def list_register(framework: str = "iso_27001_2022", limit: int = 200, offset: int = 0,
                   user=Depends(require_risk_read), db: Session = Depends(get_db)):
     fw = _clean_framework(framework)
     limit, offset = max(1, min(limit, 1000)), max(0, offset)
@@ -114,7 +114,7 @@ def rate_risk(risk_id: uuid.UUID, payload: RegisterRating, user=Depends(require_
         raise HTTPException(400, "Invalid treatment strategy")
     if payload.treatment_status not in {"open", "in_progress", "awaiting_review", "closed"}:
         raise HTTPException(400, "Invalid treatment status")
-    before = _register_out(db, row, "ISO27001:2022")
+    before = _register_out(db, row, "iso_27001_2022")
     for field, value in payload.model_dump().items():
         setattr(row, field, value.strip() if isinstance(value, str) else value)
     row.threat_score = 1
@@ -127,10 +127,10 @@ def rate_risk(risk_id: uuid.UUID, payload: RegisterRating, user=Depends(require_
     db.add(row)
     db.flush()
     record_entity_changelog(db, entity_type="risk", entity_id=row.id, action="updated",
-        before=before, after=_register_out(db, row, "ISO27001:2022"), user=user,
+        before=before, after=_register_out(db, row, "iso_27001_2022"), user=user,
         request_method="PATCH", request_path=f"/v1/risks/{risk_id}/register")
     db.commit()
-    return _register_out(db, row, "ISO27001:2022")
+    return _register_out(db, row, "iso_27001_2022")
 
 
 _CSV_COLUMNS = ["asset", "category", "subcategory", "threat_summary", "risk_types", "owner_username", "owner_role_id",
@@ -144,7 +144,7 @@ def _csv_safe(value: Any) -> Any:
 
 
 @router.get("/v1/risks/register/export.csv")
-def export_register(framework: str = "ISO27001:2022", user=Depends(require_risk_read), db: Session = Depends(get_db)):
+def export_register(framework: str = "iso_27001_2022", user=Depends(require_risk_read), db: Session = Depends(get_db)):
     fw = _clean_framework(framework)
     def generate():
         output = io.StringIO()
@@ -165,7 +165,7 @@ def export_register(framework: str = "ISO27001:2022", user=Depends(require_risk_
 
 
 @router.post("/v1/risks/register/import.csv")
-async def import_register(file: UploadFile = File(...), framework: str = "ISO27001:2022",
+async def import_register(file: UploadFile = File(...), framework: str = "iso_27001_2022",
                           user=Depends(require_risk_manage), db: Session = Depends(get_db)):
     fw = _clean_framework(framework)
     raw = await file.read(2_000_001)

@@ -41,6 +41,7 @@ export function initEvidenceRetention(isAdmin) {
       $('retry').hidden = !data.storage.pending_objects;
       $('purge').disabled = !!active || busy || $('confirm').value !== 'PURGE EVIDENCE';
       $('progress').innerHTML = `<p><strong>${data.total_events.toLocaleString()}</strong> events remain · <strong>${data.audit_protected_events.toLocaleString()}</strong> audit-protected</p>`
+        + (data.ingestion_pause?.paused ? '<p class="text-warning">Ingestion paused for purge or its five-minute cooldown.</p>' : '')
         + (latest ? `<p class="${latest.last_error ? 'text-danger' : active ? '' : 'text-success'}">${active ? '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>' : ''}${esc(latest.status)} · ${Number(latest.deleted).toLocaleString()} events removed from the database${latest.automatic ? ' · automatic retention' : ''}</p>${latest.last_error ? `<p class="text-danger">${esc(latest.last_error)}</p>` : ''}` : '<p>No purge has run yet.</p>')
         + `<p>${data.storage.pending_objects.toLocaleString()} stored files awaiting cleanup${data.storage.waiting_objects ? ` · ${data.storage.waiting_objects.toLocaleString()} waiting for references, permissions or retention locks` : ''}.</p>`
         + (data.storage.errors || []).map(e => `<p class="text-warning-emphasis">${esc(e)}</p>`).join('');

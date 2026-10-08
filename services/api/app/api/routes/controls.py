@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.db.models import (
     ControlClauseLink,
     ControlItem,
-    CrossFrameworkControlLink,
+    EffectiveCrossFrameworkControlLink,
     Event,
     FrameworkClause,
     Mapping,
@@ -179,7 +179,7 @@ def control_evidence(
             partition_by=Mapping.event_id,
             order_by=(case((Mapping.control_item_id == cid, 0), else_=1), Mapping.mapped_at.desc()),
         ).label("rank"),
-    ).filter(Mapping.control_item_id.in_(effective_control_ids(cid))).subquery()
+    ).filter(Mapping.control_item_id.in_(effective_control_ids(cid, db))).subquery()
     base_q = db.query(Mapping).join(ranked, ranked.c.mapping_id == Mapping.id).join(
         Event, Event.id == Mapping.event_id
     ).filter(ranked.c.rank == 1, diary_filter_condition(db, user))

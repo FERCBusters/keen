@@ -11,7 +11,7 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def seed_legacy_crosswalk():
     bind = op.get_bind()
     seed = json.loads((Path(__file__).resolve().parents[1] / 'seed_control_links.json').read_text())
     for link in seed['links']:
@@ -32,6 +32,10 @@ def upgrade():
             dict(id=uuid.uuid4().hex, source=ids[0], target=ids[1],
                  rationale='KEEN starter crosswalk v1 ['+link['scope']+']: '+link['rationale']))
     # Evidence is inherited at query time; no historical Mapping rows are duplicated.
+
+
+def upgrade():
+    pass  # 0090 seeds retained bridges after the canonical catalogue is installed.
 
 
 def downgrade():

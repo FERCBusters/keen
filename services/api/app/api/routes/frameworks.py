@@ -40,7 +40,7 @@ def _framework_catalog(db: Session):
     by_slug = {f.slug: f for f in rows}
 
     all_slugs = set(by_slug.keys()) | set(control_counts.keys()) | clause_slugs
-    all_slugs.add(settings.default_framework_slug)
+    # Catalogue rows are authoritative; stale environment names must not create ghosts.
 
     items: list[FrameworkListItem] = []
     for slug in sorted(all_slugs):
@@ -221,7 +221,7 @@ def framework_nodes(slug: str, db: Session = Depends(get_db)):
     return {"items": [_node(row, clauses, links) for row in rows]}
 
 
-@router.put("/v1/admin/frameworks/{slug}/nodes/{kind}/{ref}", dependencies=[Depends(require_admin)])
+@router.put("/v1/admin/frameworks/{slug}/nodes/{kind}/{ref:path}", dependencies=[Depends(require_admin)])
 def save_framework_node(slug: str, kind: str, ref: str, payload: FrameworkNodeInput, db: Session = Depends(get_db)):
     kind, ref = kind.strip(), ref.strip()
     if kind != payload.kind.strip() or ref != payload.ref.strip() or not kind or not ref:
@@ -288,7 +288,7 @@ def save_framework_node(slug: str, kind: str, ref: str, payload: FrameworkNodeIn
     return {"ok": True, "created": created, "id": str(row.id)}
 
 
-@router.delete("/v1/admin/frameworks/{slug}/nodes/{kind}/{ref}", dependencies=[Depends(require_admin)])
+@router.delete("/v1/admin/frameworks/{slug}/nodes/{kind}/{ref:path}", dependencies=[Depends(require_admin)])
 def delete_framework_node(slug: str, kind: str, ref: str, db: Session = Depends(get_db)):
     row = db.query(ControlItem).filter_by(framework_slug=slug, type=kind, ref=ref).one_or_none()
     if not row:

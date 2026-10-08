@@ -1,7 +1,7 @@
 # Map control refs to upstream guidance URLs.
 #
 frameworks:
-  ISO27001:2022:
+  iso_27001_2022:
     A.5.1: https://www.isms.online/iso-27001/annex-a-2022/5-1-information-security-policies-2022/
     A.5.2: https://www.isms.online/iso-27001/annex-a-2022/5-2-information-security-roles-responsibilities-2022/
     A.5.3: https://www.isms.online/iso-27001/annex-a-2022/5-3-segregation-of-duties-2022/

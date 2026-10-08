@@ -18,10 +18,9 @@ SPECS = {
         action='Breach: restore exceeded the objective; improve recovery automation and repeat the measured exercise.'),
 }
 LINKS = {
-    'ISO27001:2022': {'availability':'A.8.14', 'patch_sla':'A.8.8', 'recovery':'A.8.13'},
+    'iso_27001_2022': {'availability':'A.8.14', 'patch_sla':'A.8.8', 'recovery':'A.8.13'},
     'KEEN-AF:1.0': {'availability':'TPM-2', 'patch_sla':'VPM-2', 'recovery':'BCD-2'},
     'CYBER-ESSENTIALS:2026': {'patch_sla':'A6.4'},
-    'UK-DVSTF:1.0': {'recovery':'11.6.3.a'},
 }
 
 

@@ -460,7 +460,7 @@ class Settings(BaseSettings):
     control_links_path: str = Field(default="/app/config/control_links.yml")
     risk_mitigator_rules_path: str = Field(default="/app/config/risk_mitigator.yml")
     default_framework_slug: str = Field(
-        default="ISO27001:2022",
+        default="iso_27001_2022",
         validation_alias=AliasChoices(
             "DEFAULT_FRAMEWORK_SLUG",
             "DEFAULT_FRAMEWORK",

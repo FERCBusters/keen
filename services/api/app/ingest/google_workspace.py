@@ -9,7 +9,7 @@ Applications you likely care about:
   - admin: Admin audit events (user provisioning, settings changes, etc.)
   - login: Login audit events (success/failure, suspicious logins, etc.)
 
-Each activity is stored as a JSON artifact and can be mapped to ISO27001:2022 controls via config/rules.yml.
+Each activity is stored as a JSON artifact and can be mapped to iso_27001_2022 controls via config/rules.yml.
 
 Configuration:
   - Enable with KEEN_GOOGLE_WORKSPACE_ENABLED=true

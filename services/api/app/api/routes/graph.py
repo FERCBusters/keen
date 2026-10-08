@@ -118,7 +118,7 @@ def graph_control_source(
         event_filters = _event_filters(start_date, end_date)
         if source:
             event_filters.append(Event.source == source)
-        pairs = evidence_pairs(framework)
+        pairs = evidence_pairs(framework, db)
 
         edge_rows = (
             db.query(
@@ -233,7 +233,7 @@ def graph_clause_source(
 
     def _load():
         event_filters = _event_filters(start_date, end_date)
-        pairs = evidence_pairs(framework)
+        pairs = evidence_pairs(framework, db)
 
         edge_rows = (
             db.query(
@@ -414,7 +414,7 @@ def graph_risk_control(
     """Static relationship graph: Risks -> Controls for the selected framework.
 
     Risks are global, but their mitigating-control assignments are scoped by
-    framework_slug, because a DVSTF control set and an ISO27001:2022 control set
+    framework_slug, because a DVSTF control set and an iso_27001_2022 control set
     are different catalogues even when the underlying risk is the same.
     """
 

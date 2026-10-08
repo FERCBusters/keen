@@ -216,8 +216,8 @@ def _as_rule_entries(raw: Any) -> list[tuple[str | None, dict[str, Any]]]:
       2) Legacy dict with `rules`
          - {rules: [{...}]}
       3) Framework bucket map
-         - {frameworks: {"ISO27001:2022": [{...}], "UK-DVSTF:1.0": [{...}]}}
-         - {"ISO27001:2022": [{...}], "UK-DVSTF:1.0": [{...}]}
+         - {frameworks: {"iso_27001_2022": [{...}], "UK-DVSTF:1.0": [{...}]}}
+         - {"iso_27001_2022": [{...}], "UK-DVSTF:1.0": [{...}]}
 
     Rule-level keys (`framework` / `frameworks`) override the inherited bucket.
     """
@@ -308,7 +308,7 @@ def _targets_from_dict_map(
 
     Example:
       map_to:
-        ISO27001:2022: [A.8.16]
+        iso_27001_2022: [A.8.16]
         UK-DVSTF:1.0: [11.8.1.a]
         "*": [fallback_ref]
     """
@@ -352,7 +352,7 @@ def _targets_from_list_objects(
     """Parse object targets.
 
     Supported forms:
-      - {framework: "ISO27001:2022", ref: "A.8.16"}
+      - {framework: "iso_27001_2022", ref: "A.8.16"}
       - {framework: "UK-DVSTF:1.0", refs: ["11.8.1.a", "11.8.2.b"]}
       - {ref: "A.8.16"}  # uses inherited/default framework(s)
       - {ref: "11.8.1.a", framework: "UK-DVSTF:1.0", roles_any: ["admin","ops"]}

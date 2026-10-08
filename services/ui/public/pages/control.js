@@ -98,7 +98,7 @@ async function loadCrossFrameworkLinks() {
       <div class="d-flex flex-wrap gap-2 align-items-center border-bottom py-2">
         <a href="${withFramework(`/control.html?id=${encodeURIComponent(link.source_control_id)}`, link.source_framework)}">${esc(link.source_framework)} · ${esc(link.source_ref)} ${esc(link.source_title || '')}</a>
         <span class="small-muted">${esc(link.rationale)}</span>
-        ${me?.is_admin ? `<button class="btn btn-sm btn-outline-danger ms-auto" type="button" data-remove-cross-link="${esc(link.id)}">Remove</button>` : ''}
+        ${me?.is_admin && !link.derived ? `<button class="btn btn-sm btn-outline-danger ms-auto" type="button" data-remove-cross-link="${esc(link.id)}">Remove</button>` : ''}
       </div>`).join('') : '<span class="small-muted">No cross-framework inheritance has been approved for this control.</span>';
     if (!me?.is_admin || !ctrl) return;
     crossForm.style.display = '';
@@ -172,6 +172,24 @@ function renderControlChrome() {
   const bits = [ctrl.framework, ctrl.type, ctrl.in_scope ? 'in scope' : 'out of scope'];
   if (ctrl.justification) bits.push(`Justification: ${ctrl.justification}`);
   if (metaEl) metaEl.textContent = bits.filter(Boolean).join(' • ');
+  let description = document.getElementById('osaControlDescription');
+  if (!description && metaEl) {
+    description = document.createElement('div'); description.id = 'osaControlDescription';
+    description.className = 'mt-3'; metaEl.after(description);
+  }
+  if (description) {
+    description.replaceChildren();
+    if (ctrl.metadata?.description) {
+      const text = document.createElement('p'); text.style.whiteSpace = 'pre-wrap';
+      text.textContent = ctrl.metadata.description; description.append(text);
+    }
+    if (ctrl.metadata?.source === 'https://www.opensecurityarchitecture.org/') {
+      const credit = document.createElement('p'); credit.className = 'small-muted';
+      credit.innerHTML = 'Adapted from <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Shared NIST controls identify related evidence; coverage estimates do not certify compliance.';
+      description.append(credit);
+    }
+  }
+
 }
 
 function renderControlJustificationCard() {

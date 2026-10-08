@@ -184,7 +184,7 @@ def upgrade():
         "ix_control_clause_links_clause_id", "control_clause_links", ["clause_id"]
     )
 
-    _seed_iso_clauses()
+    # ISO catalogue is now seeded canonically by 0090.
     _migrate_existing_controlitem_clauses()
 
 

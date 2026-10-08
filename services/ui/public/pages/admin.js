@@ -49,7 +49,7 @@ const out = document.getElementById('out');
 
 function selectedFrameworkFallback() {
   const f = (document.getElementById('framework')?.value || '').trim();
-  return f || currentFramework || 'ISO27001:2022';
+  return f || currentFramework || 'iso_27001_2022';
 }
 
 // Questions (admin queue)

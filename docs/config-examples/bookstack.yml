@@ -38,7 +38,7 @@ poll:
   include_drafts: false
   include_templates: false
 
-# Optional: map specific pages to ISO27001:2022 refs.
+# Optional: map specific pages to iso_27001_2022 refs.
 #
 # Matching options (in "match"):
 #   - id: <int>

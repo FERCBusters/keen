@@ -2,18 +2,27 @@ name: KEEN CI
 
 on:
   push:
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+
+permissions:
+  contents: read
 
 jobs:
   test:
-    runs-on: docker
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
       image: docker.io/library/debian:13
     services:
       postgres:
-        image: docker.io/library/postgres:17
+        image: docker.io/library/postgres:16
         env:
           POSTGRES_USER: keen_test
           POSTGRES_PASSWORD: keen_test
@@ -47,8 +56,9 @@ jobs:
             python3 python3-venv python3-pip build-essential poppler-utils
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
 
       - name: Install Poetry
@@ -75,7 +85,7 @@ jobs:
 
       - name: Upload test results
         if: ${{ always() }}
-        uses: https://code.forgejo.org/actions/upload-artifact@v3
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: keen-test-results
           path: |
@@ -87,9 +97,10 @@ jobs:
         if: ${{ failure() }}
         env:
           WEBHOOK_URL: ${{ secrets.NODERED_WEBHOOK_URL }}
-          REPOSITORY: ${{ forgejo.repository }}
-          RUN_NUMBER: ${{ forgejo.run_number }}
-          SERVER_URL: ${{ forgejo.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          SERVER_URL: ${{ github.server_url }}
         run: |
           set -eu
           if [ -z "${WEBHOOK_URL:-}" ]; then
@@ -102,7 +113,7 @@ jobs:
           print(json.dumps({
               "repository": e["REPOSITORY"], "run_number": e["RUN_NUMBER"],
               "status": "failure",
-              "url": f'{e["SERVER_URL"]}/{e["REPOSITORY"]}/actions/runs/{e["RUN_NUMBER"]}'
+              "url": f'{e["SERVER_URL"]}/{e["REPOSITORY"]}/actions/runs/{e["RUN_ID"]}'
           }))
           PY
           curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \

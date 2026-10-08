@@ -294,7 +294,10 @@ def put_configuration(name: str, payload: DocumentInput, user=Depends(require_ad
 
 
 def _normalized_rules(db: Session) -> list[dict]:
-    raw = load_document("rules", settings.rules_path, db=db)
+    return _normalize_rule_document(load_document("rules", settings.rules_path, db=db))
+
+
+def _normalize_rule_document(raw: dict) -> list[dict]:
     out = []
     for hint, item in _as_rule_entries(raw):
         # A single rule under its inherited framework is parsed exactly as it
@@ -892,6 +895,61 @@ def evidence_event_samples(source: str | None = None, collector: str | None = No
 
 class RestoreInput(BaseModel):
     version: int  # current revision, for optimistic concurrency
+
+
+def _rule_history(db: Session, rule_id: str) -> list[dict]:
+    """Derive this rule's changes from retained whole-configuration snapshots.
+
+    Unrelated edits and no-op saves do not create rule revisions. A deletion
+    resets history so a newly created rule reusing an ID has its own lifetime.
+    """
+    history = []
+    previous = None
+    rows = db.query(ManagedConfigurationRevision).filter_by(name="rules").order_by(
+        ManagedConfigurationRevision.version, ManagedConfigurationRevision.updated_at,
+        ManagedConfigurationRevision.id).yield_per(100)
+    for row in rows:
+        matches = [r for r in _normalize_rule_document(row.document) if r["id"] == rule_id]
+        if len(matches) > 1:
+            raise HTTPException(409, "Duplicate rule IDs in recorded history; resolve before restoring")
+        rule = matches[0] if matches else None
+        if rule is None:
+            history = []
+        elif rule != previous:
+            history.append({"revision": len(history) + 1, "version": row.version,
+                            "at": row.updated_at.isoformat(), "rule": rule})
+        previous = rule
+    return history
+
+
+def _require_current_rule(db: Session, rule_id: str):
+    matches = [r for r in _normalized_rules(db) if r["id"] == rule_id]
+    if not matches:
+        raise HTTPException(404, "Rule not found")
+    if len(matches) != 1:
+        raise HTTPException(409, "Duplicate rule IDs; resolve before editing")
+
+
+@router.get("/v1/admin/mapping-rules/{rule_id}/revisions")
+def list_rule_revisions(rule_id: str, db: Session = Depends(get_db)):
+    _require_current_rule(db, rule_id)
+    history = _rule_history(db, rule_id)
+    return {"rule_id": rule_id, "total": len(history),
+            "items": [{k: v for k, v in entry.items() if k != "rule"}
+                      for entry in reversed(history[-50:])]}
+
+
+@router.post("/v1/admin/mapping-rules/{rule_id}/revisions/{revision}/restore")
+def restore_rule_revision(rule_id: str, revision: int, payload: RestoreInput,
+                          user=Depends(require_admin), db: Session = Depends(get_db)):
+    _require_current_rule(db, rule_id)
+    entry = next((r for r in _rule_history(db, rule_id) if r["version"] == revision), None)
+    if entry is None:
+        raise HTTPException(404, "Revision not found for this rule")
+    # put_rule validates targets and uses the global version for conflict detection,
+    # but replaces only the selected rule. Collection settings remain independent.
+    return put_rule(rule_id, RuleInput(version=payload.version,
+                    rule=deepcopy(entry["rule"]), apply_existing=False), user, db)
 
 
 @router.get("/v1/admin/configuration-revisions/{name}")

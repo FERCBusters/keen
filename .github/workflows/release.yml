@@ -1,0 +1,117 @@
+name: Publish release images
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag, for example v1.0.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    uses: ./.github/workflows/tests.yml
+    with:
+      ref: ${{ inputs.tag || github.ref_name }}
+    secrets: inherit
+
+  publish:
+    needs: test
+    if: github.repository_owner == 'FERCBusters'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate release tag and version
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable vMAJOR.MINOR.PATCH tag'; exit 1; }
+          git show-ref --verify "refs/tags/$RELEASE_TAG"
+          test "$(git rev-parse HEAD)" = "$(git rev-list -n 1 "$RELEASE_TAG")"
+          version="${RELEASE_TAG#v}"
+          test "$(cat VERSION)" = "$version"
+          python3 - "$version" <<'PY'
+          import json, sys, tomllib
+          expected = sys.argv[1]
+          with open('services/api/pyproject.toml', 'rb') as f:
+              assert tomllib.load(f)['tool']['poetry']['version'] == expected
+          with open('services/ui/package.json') as f:
+              assert json.load(f)['version'] == expected
+          PY
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build API, worker and scheduler image
+        id: api
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: services/api
+          file: services/api/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/fercbusters/keen-api:sha-${{ steps.release.outputs.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.release.outputs.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+          provenance: true
+          sbom: true
+      - name: Build UI image
+        id: ui
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: services/ui/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/fercbusters/keen-ui:sha-${{ steps.release.outputs.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.release.outputs.sha }}
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,mode=max,scope=ui
+          provenance: true
+          sbom: true
+      - name: Publish version tags after both builds succeed
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          API_DIGEST: ${{ steps.api.outputs.digest }}
+          UI_DIGEST: ${{ steps.ui.outputs.digest }}
+        run: |
+          set -eu
+          docker buildx imagetools create --tag "ghcr.io/fercbusters/keen-api:$VERSION" "ghcr.io/fercbusters/keen-api@$API_DIGEST"
+          docker buildx imagetools create --tag "ghcr.io/fercbusters/keen-ui:$VERSION" "ghcr.io/fercbusters/keen-ui@$UI_DIGEST"
+          {
+            echo 'Published release images:'
+            echo "- ghcr.io/fercbusters/keen-api:$VERSION (API, worker and beat)"
+            echo "- ghcr.io/fercbusters/keen-ui:$VERSION"
+          } >> "$GITHUB_STEP_SUMMARY"

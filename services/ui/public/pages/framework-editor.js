@@ -152,7 +152,10 @@ function renderOrganisationFrameworks(data) {
   const container = $('organisation-frameworks'); container.replaceChildren();
   for (const framework of data.items || []) {
     const wrapper = document.createElement('div'); wrapper.className = 'col-md-6 col-xl-4';
-    const label = document.createElement('label'); label.className = 'd-flex align-items-start gap-2 border rounded p-2 h-100';
+    const label = document.createElement('label'); label.className = 'd-flex align-items-start gap-2 border rounded p-2 h-100 framework-colour-card';
+    let hash = 2166136261;
+    for (const c of framework.slug) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
+    label.style.setProperty('--framework-hue', String((hash >>> 0) % 360));
     const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.className = 'form-check-input flex-shrink-0';
     checkbox.value = framework.slug; checkbox.checked = framework.enabled; checkbox.disabled = !framework.allowed;
     const text = document.createElement('span'); text.textContent = `${framework.name} (${framework.slug})${framework.allowed ? '' : ' · excluded by environment'}`;

@@ -58,6 +58,8 @@ def upgrade():
                      ELSE '{}'::jsonb END
     """)
     for slug, framework in seed.items():
+        if slug not in {"KEEN-AF:1.0", "UK-DVSTF:1.0", "CYBER-ESSENTIALS:2026"}:
+            continue  # Replaced by the canonical offline OSA snapshot in 0090.
         bind.execute(framework_insert, dict(
             id=str(uuid.uuid4()), slug=slug, name=framework['name'],
             version=framework.get('version'), description=framework.get('description'),

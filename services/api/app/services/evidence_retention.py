@@ -97,6 +97,7 @@ def queue_object(db, uri):
 def database_batch():
     """Delete a bounded batch; FK holds arbitrate concurrent audit sampling."""
     with SessionLocal() as db:
+        db.info["evidence_purge_batch"] = True
         lock(db)
         job = db.execute(text("SELECT * FROM evidence_purge_jobs WHERE status IN ('queued','running')")).mappings().first()
         if not job:

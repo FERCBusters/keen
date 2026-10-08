@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db
 from app.db.models import (ControlItem, FrameworkClause, Audit, IsmsEffectivenessMeasure,
-    IsmsEffectivenessMetricEntry, IntegrationCollector, CrossFrameworkControlLink)
+    IsmsEffectivenessMetricEntry, IntegrationCollector, EffectiveCrossFrameworkControlLink)
 from app.security.auth import require_authenticated
 from app.security.roles import attach_effective_role
 from app.security.permissions import has_permission
@@ -43,9 +43,9 @@ def home_overview(request: Request, framework: str = settings.default_framework_
     result = {'framework': framework, 'control_count': len(controls), 'clause_count': int(clauses or 0),
               'coverage': None, 'events': None, 'attention': [], 'checked_at': datetime.now(timezone.utc).isoformat()}
     if events:
-        inherited = db.query(CrossFrameworkControlLink.id).join(ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id).filter(ControlItem.framework_slug == framework).first()
+        inherited = db.query(EffectiveCrossFrameworkControlLink.id).join(ControlItem, ControlItem.id == EffectiveCrossFrameworkControlLink.target_control_id).filter(ControlItem.framework_slug == framework).first()
         if inherited:
-            pairs = evidence_pairs(framework)
+            pairs = evidence_pairs(framework, db)
             supported = {row[0] for row in db.query(pairs.c.control_id).distinct().all()}
         else:
             stats = get_control_evidence_stats_by_id(db, framework)

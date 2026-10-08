@@ -14,7 +14,7 @@ from app.api.utils import (
 )
 from app.core.config import settings
 from app.core.cache import cached_json
-from app.db.models import ControlItem, CrossFrameworkControlLink, Event, Mapping, User
+from app.db.models import ControlItem, EffectiveCrossFrameworkControlLink, Event, Mapping, User
 from app.db.session import get_db
 from app.security.diary_visibility import diary_filter_condition
 from app.services.control_evidence_stats import (
@@ -99,8 +99,8 @@ def stats_summary(
         # visible to active users, so these dashboard counters use the global
         # framework event-count cache instead of legacy trigger-maintained
         # Postgres counter tables.
-        has_inheritance = db.query(CrossFrameworkControlLink.id).join(
-            ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id
+        has_inheritance = db.query(EffectiveCrossFrameworkControlLink.id).join(
+            ControlItem, ControlItem.id == EffectiveCrossFrameworkControlLink.target_control_id
         ).filter(ControlItem.framework_slug == framework).first() is not None
         if not has_inheritance and isinstance(user, User) and getattr(user, "is_active", False):
             controls = (
@@ -138,7 +138,7 @@ def stats_summary(
 
         total_events = db.query(func.count(Event.id)).filter(visibility).scalar() or 0
 
-        pairs = evidence_pairs(framework)
+        pairs = evidence_pairs(framework, db)
         mapped_events = (
             db.query(func.count(func.distinct(pairs.c.event_id)))
             .join(Event, Event.id == pairs.c.event_id)
@@ -219,8 +219,8 @@ def stats_controls(
     }
 
     def _load() -> dict:
-        has_inheritance = db.query(CrossFrameworkControlLink.id).join(
-            ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id
+        has_inheritance = db.query(EffectiveCrossFrameworkControlLink.id).join(
+            ControlItem, ControlItem.id == EffectiveCrossFrameworkControlLink.target_control_id
         ).filter(ControlItem.framework_slug == framework).first() is not None
         def _item(c: ControlItem, evidence_count: int, last_evidence) -> dict:
             if isinstance(last_evidence, datetime):
@@ -286,7 +286,7 @@ def stats_controls(
         # small controls table. This remains the exact path for date-filtered
         # requests.
         if has_inheritance:
-            pairs = evidence_pairs(framework)
+            pairs = evidence_pairs(framework, db)
             evidence_sq = (
                 db.query(pairs.c.control_id.label("control_item_id"),
                          func.count(pairs.c.event_id).label("evidence_count"),
@@ -505,7 +505,7 @@ def stats_events_timeseries(
         )
         .join(Mapping, Mapping.event_id == Event.id)
         .filter(Event.timestamp >= start)
-        .filter(Mapping.control_item_id.in_(effective_framework_ids(framework)))
+        .filter(Mapping.control_item_id.in_(effective_framework_ids(framework, db)))
         .filter(diary_filter_condition(db, user))
     )
     mapped_q = mapped_q.filter(Event.timestamp < end_excl)

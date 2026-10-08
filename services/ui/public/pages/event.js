@@ -1343,7 +1343,7 @@ let editAllControlsFramework = null;
 let editSelectedRefs = [];
 
 async function loadAllControlsOnce(frameworkSlug = null) {
-  const fw = String(frameworkSlug || pageFramework || getCurrentFramework() || '').trim() || 'ISO27001:2022';
+  const fw = String(frameworkSlug || pageFramework || getCurrentFramework() || '').trim() || 'iso_27001_2022';
   if (editAllControls && editAllControlsFramework === fw) return editAllControls;
   try {
     const res = await apiGet(`/api/v1/controls?framework=${encodeURIComponent(fw)}&limit=5000`);

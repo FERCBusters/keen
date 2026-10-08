@@ -1,0 +1,9 @@
+**/.git
+**/.env
+**/.env.*
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/*.tar.gz
+test-results

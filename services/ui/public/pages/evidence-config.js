@@ -279,10 +279,18 @@ function pathSet(obj, path, value) {
   for (const part of parts.slice(0, -1)) cursor = cursor[part] ||= {};
   cursor[parts.at(-1)] = value;
 }
-async function loadRevisions(name, element) {
-  const data = await apiGet(`${apiRoot}/configuration-revisions/${encodeURIComponent(name)}`);
-  element.replaceChildren(new Option('Select revision', ''));
-  for (const row of data.items) element.add(new Option(`#${row.version} · ${row.at}`, String(row.version)));
+async function loadRuleRevisions() {
+  const ruleId = selectedRule;
+  const element = $('rule-revision');
+  element.replaceChildren(new Option('No saved revisions', ''));
+  $('rule-history').hidden = !ruleId;
+  $('rule-restore').disabled = true;
+  if (!ruleId) return;
+  const data = await apiGet(`${apiRoot}/mapping-rules/${encodeURIComponent(ruleId)}/revisions`);
+  if (selectedRule !== ruleId) return;
+  element.replaceChildren(new Option('Select this rule’s revision', ''));
+  for (const row of data.items) element.add(new Option(`#${row.revision} · ${row.at}`, String(row.version)));
+  $('rule-restore').disabled = !data.items.length;
 }
 
 async function loadSamples() {
@@ -365,6 +373,7 @@ async function newRule() {
   $('draft-notice').hidden=true;
   $('field-rows').replaceChildren();
   selectedRule = null; previewedRule = null; previewCount = 0;
+  await loadRuleRevisions();
   $('input-picker').hidden = false; $('selected-input').hidden = true;
   $('apply-existing').checked = true; $('predefine').checked = false;
   $('rule-id').value = ''; $('rule-id').disabled = false;
@@ -408,6 +417,7 @@ async function editRule(rule) {
     $('when-source').value = source;
   }
   showSelectedInput();
+  await loadRuleRevisions();
   loadRecentBackfill(rule.id).catch(error => status(error.message));
   showStep(1);
 }
@@ -506,7 +516,7 @@ async function loadRules() {
   $('source-filter').value = selectedSource;
   renderRules(); await newRule(); showLibrary();
   if (data.warnings?.length) status(data.warnings.join(' · '), 'warning');
-  await loadRevisions('rules', $('rule-revision'));
+
 }
 async function loadFrameworkControls() {
   const data = await apiGet(`/api/v1/controls?framework=${encodeURIComponent($('framework').value)}&limit=5000`);
@@ -515,9 +525,13 @@ async function loadFrameworkControls() {
 }
 $('framework').addEventListener('change', () => loadFrameworkControls().catch(error => status(error.message)));
 async function restore(selectedRevision) {
-  if (!selectedRevision || !confirm(`Restore rules revision #${selectedRevision}? This creates a new revision.`)) return;
-  const result = await apiPost(`${apiRoot}/configuration-revisions/rules/${encodeURIComponent(selectedRevision)}/restore`, {version: ruleVersion});
-  await loadRules(); status(`Restored rules as revision ${result.version}.`, 'success');
+  const ruleId = selectedRule;
+  if (!ruleId || !selectedRevision || !confirm('Restore this rule to the selected revision? Other rules and collection settings are unchanged.')) return;
+  await apiPost(`${apiRoot}/mapping-rules/${encodeURIComponent(ruleId)}/revisions/${encodeURIComponent(selectedRevision)}/restore`, {version: ruleVersion});
+  await loadRules();
+  const restored = rules.find(rule => rule.id === ruleId);
+  if (restored) await editRule(restored);
+  status('Restored this rule. New evidence uses the restored settings; remap existing evidence separately.', 'success');
 }
 $('rule-restore').addEventListener('click', () => restore($('rule-revision').value).catch(error => status(error.message)));
 async function loadSettings() {

@@ -87,7 +87,7 @@ def list_sources(
         # this framework.
         mapped_event_ids = (
             db.query(Mapping.event_id.label("event_id"))
-            .filter(Mapping.control_item_id.in_(effective_framework_ids(framework)))
+            .filter(Mapping.control_item_id.in_(effective_framework_ids(framework, db)))
             .distinct()
             .subquery()
         )

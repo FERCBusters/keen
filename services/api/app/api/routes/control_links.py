@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import ControlItem, CrossFrameworkControlLink, User
+from app.db.models import ControlItem, CrossFrameworkControlLink, EffectiveCrossFrameworkControlLink, User
 from app.db.session import get_db
 from app.core.cache import cache_delete_prefix
 from app.security.auth import require_admin
@@ -28,20 +28,26 @@ def _control(db, cid):
 
 def _out(row):
     source = row.source
+    rationale = row.rationale
+    if getattr(row, "derived", False):
+        shared = sorted(set((source.meta or {}).get('osa_nist_controls', [])) &
+                        set((row.target.meta or {}).get('osa_nist_controls', [])))
+        if shared:
+            rationale += ' Shared NIST controls: ' + ', '.join(shared) + '.'
     return {
         "id": str(row.id), "source_control_id": str(source.id),
         "source_framework": source.framework_slug, "source_ref": source.ref,
         "source_title": source.title, "target_control_id": str(row.target_control_id),
-        "rationale": row.rationale,
+        "rationale": rationale, "derived": getattr(row, "derived", False),
     }
 
 
 @router.get("/v1/controls/{target_id}/cross-framework")
 def list_control_links(target_id: uuid.UUID, db: Session = Depends(get_db)):
     _control(db, target_id)
-    rows = db.query(CrossFrameworkControlLink).options(joinedload(CrossFrameworkControlLink.source)).filter(
-        CrossFrameworkControlLink.target_control_id == target_id
-    ).order_by(CrossFrameworkControlLink.created_at).all()
+    rows = db.query(EffectiveCrossFrameworkControlLink).options(joinedload(EffectiveCrossFrameworkControlLink.source)).filter(
+        EffectiveCrossFrameworkControlLink.target_control_id == target_id
+    ).order_by(EffectiveCrossFrameworkControlLink.created_at).all()
     return {"items": [_out(row) for row in rows]}
 
 

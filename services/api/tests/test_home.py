@@ -13,7 +13,7 @@ from app.api.routes import home
 from app.db.session import Base
 from app.db.models import (ControlItem, FrameworkClause, Audit, IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry, IntegrationConnection, IntegrationCollector,
-    CrossFrameworkControlLink)
+    CrossFrameworkControlLink, OsaControlMapping)
 
 class HomeLogicTests(unittest.TestCase):
     def test_threshold_operators_and_incomparable_values(self):
@@ -40,7 +40,7 @@ class HomeDatabaseTests(unittest.TestCase):
         with engine.begin() as c:c.execute(text(f'CREATE SCHEMA {cls.schema}'))
         engine.dispose()
         cls.engine=schema_engine(url, cls.schema)
-        names={m.__tablename__ for m in (ControlItem,FrameworkClause,Audit,IsmsEffectivenessMeasure,IsmsEffectivenessMetricEntry,IntegrationConnection,IntegrationCollector,CrossFrameworkControlLink)}
+        names={m.__tablename__ for m in (ControlItem,FrameworkClause,Audit,IsmsEffectivenessMeasure,IsmsEffectivenessMetricEntry,IntegrationConnection,IntegrationCollector,CrossFrameworkControlLink,OsaControlMapping)}
         while True:
             more={fk.column.table.name for n in names for fk in Base.metadata.tables[n].foreign_keys}
             if more<=names:break

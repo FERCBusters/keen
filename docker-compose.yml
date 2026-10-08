@@ -28,8 +28,13 @@ services:
     restart: unless-stopped
 
   keen-api:
-    build:
-      context: ./services/api
+    image: ${KEEN_API_IMAGE:-ghcr.io/fercbusters/keen-api:1.0.0}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
     env_file: .env
     depends_on:
       postgres:
@@ -46,11 +51,12 @@ services:
     restart: unless-stopped
 
   keen-worker:
-    build:
-      context: ./services/api
+    image: ${KEEN_API_IMAGE:-ghcr.io/fercbusters/keen-api:1.0.0}
     command: ["bash", "-c", "celery -A app.worker.celery_app worker -l INFO"]
     env_file: .env
     depends_on:
+      keen-api:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       valkey:
@@ -63,11 +69,12 @@ services:
     restart: unless-stopped
 
   keen-beat:
-    build:
-      context: ./services/api
+    image: ${KEEN_API_IMAGE:-ghcr.io/fercbusters/keen-api:1.0.0}
     command: ["bash", "-c", "celery -A app.worker.celery_app beat -l INFO --schedule=/var/lib/keen/celerybeat-schedule"]
     env_file: .env
     depends_on:
+      keen-api:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       valkey:
@@ -80,9 +87,7 @@ services:
     restart: unless-stopped
 
   keen-ui:
-    build:
-      context: ..
-      dockerfile: keen/services/ui/Dockerfile
+    image: ${KEEN_UI_IMAGE:-ghcr.io/fercbusters/keen-ui:1.0.0}
     depends_on:
       - keen-api
     ports:

@@ -47,7 +47,8 @@ def get_status(db: Session = Depends(get_db)):
     cleanup['errors'] = list(db.execute(text('''SELECT DISTINCT last_error FROM evidence_object_cleanup
         WHERE last_error IS NOT NULL LIMIT 5''')).scalars())
     counts = retention.preview(db, 'disabled', None)
-    return {'policy': p, 'jobs': jobs, 'storage': cleanup, **counts}
+    from app.services.ingestion_pause import purge_pause_status
+    return {'policy': p, 'jobs': jobs, 'storage': cleanup, 'ingestion_pause': purge_pause_status(db), **counts}
 
 
 @router.post('/preview')

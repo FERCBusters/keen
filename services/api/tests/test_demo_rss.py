@@ -24,6 +24,6 @@ def test_demo_uses_only_preset(monkeypatch):
 def test_supplier_rule_matches_only_preset_source():
     rules = parse_rules({'rules':[RULE]})
     hits = evaluate_by_framework({'source':'rss','system':FEED['system']}, rules)
-    assert set(hits['ISO27001:2022']) == {'A.5.19','A.5.22'}
+    assert set(hits['iso_27001_2022']) == {'A.5.19','A.5.22'}
     assert hits['KEEN-AF:1.0'] == ['TPM-2']
     assert not evaluate_by_framework({'source':'rss','system':'Another feed'},rules)

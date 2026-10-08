@@ -1,7 +1,7 @@
 # Google Workspace audit ingester (Admin SDK Reports API)
 #
 # Keen polls the Reports API Activities feed and stores each activity as a JSON
-# artifact. Map events to ISO27001:2022 controls via config/rules.yml.
+# artifact. Map events to iso_27001_2022 controls via config/rules.yml.
 #
 # Credentials are provided via environment variables (see .env.example):
 #   - GOOGLE_WORKSPACE_SA_JSON_B64 (recommended) OR GOOGLE_WORKSPACE_SA_JSON
