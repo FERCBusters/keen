@@ -84,3 +84,28 @@ test('source-wide rules explain collection scope and offer a setup shortcut', as
  assert.equal(requested,'forgejo');
  await new Promise(resolve=>setTimeout(resolve,10));
 });
+
+test('Next never adds the dropdown control or restores a removed target', async t => {
+ const {document,window}=await fixture(t);
+ const control=document.getElementById('ec-control');
+ assert.equal(control.value,'');
+ document.getElementById('ec-next-step').click();
+ document.getElementById('ec-description').value='Selected evidence';
+ control.add(new window.Option('A.5.1 — Policies','A.5.1'));
+ control.value='A.5.1';
+ document.getElementById('ec-next-step').click();
+ assert.equal(document.getElementById('ec-step-number').textContent,'2');
+ assert.equal(document.getElementById('ec-targets').children.length,0);
+ control.value='A1';document.getElementById('ec-add-target').click();
+ control.value='A.5.1';document.getElementById('ec-add-target').click();
+ const targets=document.getElementById('ec-targets');
+ [...targets.children].find(row=>row.textContent.includes('A.5.1')).querySelector('button').click();
+ document.getElementById('ec-next-step').click();
+ assert.equal(document.getElementById('ec-step-number').textContent,'3');
+ assert.equal(targets.children.length,1);
+ assert.match(targets.textContent,/A1/);
+ assert.doesNotMatch(targets.textContent,/A\.5\.1/);
+ document.getElementById('ec-prev-step').click();
+ document.getElementById('ec-next-step').click();
+ assert.equal(targets.children.length,1);
+});

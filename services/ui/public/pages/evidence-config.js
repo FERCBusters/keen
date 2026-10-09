@@ -246,7 +246,6 @@ function showLibrary() { pollingJobId = null; $('editor').hidden = true; $('libr
 function nextStep() {
   if (step === 2 && !$('description').value.trim()) { status('Describe what this evidence demonstrates before continuing.'); $('description').focus(); return; }
   if (step === 1) { try { definitionFromForm(); } catch (error) { status(error.message); return; } }
-  if (step === 2) addSelectedTarget();
   if (step === 2 && !targets.length) { status('Add at least one framework control or clause before continuing.'); $('framework').focus(); return; }
   status(''); showStep(step + 1);
 }
@@ -528,7 +527,7 @@ async function loadRules() {
 }
 async function loadFrameworkControls() {
   const data = await apiGet(`/api/v1/controls?framework=${encodeURIComponent($('framework').value)}&limit=5000`);
-  $('control').replaceChildren();
+  $('control').replaceChildren(new Option('Choose a control or clause', ''));
   for (const control of data.items) $('control').add(new Option(`${control.ref} — ${control.title || control.type}`, control.ref));
 }
 $('framework').addEventListener('change', () => loadFrameworkControls().catch(error => status(error.message)));
