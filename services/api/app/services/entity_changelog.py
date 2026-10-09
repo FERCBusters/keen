@@ -159,12 +159,6 @@ _ENTITY_LABELS = {
 }
 
 
-def _stringify_id(value: Any) -> str | None:
-    if value is None:
-        return None
-    return str(value)
-
-
 def _clean_scalar(value: Any) -> Any:
     if isinstance(value, uuid.UUID):
         return str(value)

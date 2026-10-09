@@ -1,8 +1,7 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
-import secrets
 import hashlib
+import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -10,15 +9,15 @@ from urllib.parse import urlsplit
 
 import httpx2 as httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
-from joserfc import jwt
-from joserfc.jwk import KeySet
 from authlib.oidc.core import CodeIDToken
 from fastapi import HTTPException, Request
-from sqlalchemy import func
+from joserfc import jwt
+from joserfc.jwk import KeySet
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import OidcLoginState, User, UserIdentity, UserSsoEmail
 
 
@@ -459,61 +458,6 @@ def _allowed_by_domain(provider: SsoProvider, email: str | None) -> bool:
         return False
     dom = email.split("@", 1)[1].lower()
     return any(dom == d.lower() for d in domains)
-
-
-def _claim_first(claims: dict[str, Any], keys: list[str]) -> str | None:
-    for k in keys:
-        v = claims.get(k)
-        if v is None:
-            continue
-        s = str(v).strip()
-        if s:
-            return s
-    return None
-
-
-def _clean_username(candidate: str | None) -> str | None:
-    if not candidate:
-        return None
-    if "@" in candidate:
-        candidate = candidate.split("@", 1)[0]
-    cleaned = "".join(
-        ch for ch in candidate if ch.isalnum() or ch in ("_", "-", ".")
-    ).strip("._-")
-    return cleaned or None
-
-
-def _derive_username(provider: SsoProvider, claims: dict[str, Any]) -> str | None:
-    order = _split_csv(provider.username_claims or "preferred_username,email")
-    if not order:
-        order = ["preferred_username", "email"]
-    candidate = _clean_username(_claim_first(claims, order))
-    if candidate:
-        return candidate
-
-    sub = str(claims.get("sub") or "").strip()
-    if sub:
-        return _clean_username(sub[:160])
-    return None
-
-
-def _derive_link_username(provider: SsoProvider, claims: dict[str, Any]) -> str | None:
-    order = _split_csv(provider.username_claims or "preferred_username,email")
-    if not order:
-        order = ["preferred_username", "email"]
-    return _clean_username(_claim_first(claims, order))
-
-
-def _unique_username(db: Session, base: str) -> str:
-    base_clean = (base or "").strip()[:160] or "user"
-    if not get_user_by_username(db, base_clean):
-        return base_clean
-
-    for i in range(2, 1000):
-        cand = f"{base_clean[:150]}_{i}"
-        if not get_user_by_username(db, cand):
-            return cand
-    return f"{base_clean[:140]}_{secrets.token_hex(6)}"
 
 
 def _claim_email(claims: dict[str, Any]) -> str | None:

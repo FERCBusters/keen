@@ -41,20 +41,6 @@ const ismsEffectivenessFilter = document.getElementById('ismsEffectivenessFilter
 
 let soa = {controls: [], clauses: [], risks: [], pestle_items: [], business_processes: [], interested_parties: [], isms_objectives: [], isms_documents: [], isms_effectiveness_measures: [], isms_org_nodes: [], isms_assets: [], isms_business_processes: [], counts: {}};
 
-function stripHtml(value) {
-  return String(value || '')
-    .replace(/<\/?(?:p|div|h[1-6]|li|ul|ol|blockquote|br|hr)\b[^>]*>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 function applicabilityLabel(value) {
   if (value === 'applicable') return 'Applicable';
   if (value === 'partially_applicable') return 'Partially applicable';

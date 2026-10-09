@@ -388,12 +388,6 @@ function _localIsoDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function _daysAgoIso(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - Number(days || 0));
-  return _localIsoDate(d);
-}
-
 function _yearStartIso() {
   const d = new Date();
   d.setMonth(0, 1); // January 1

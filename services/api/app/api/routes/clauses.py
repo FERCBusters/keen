@@ -58,10 +58,6 @@ def _clause_evidence_mappings(c: FrameworkClause) -> list[dict]:
     return out
 
 
-def _clause_evidence_urls(c: FrameworkClause) -> list[str]:
-    return [item["url"] for item in _clause_evidence_mappings(c)]
-
-
 def _clause_out(c: FrameworkClause, link_count: int | None = None) -> dict:
     evidence_mappings = _clause_evidence_mappings(c)
     return {

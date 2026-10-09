@@ -652,11 +652,6 @@ async function loadRiskVisualisations(opts = {}) {
   riskVisualisationsLoaded = true;
 }
 
-function controlTypeLabel(type) {
-  const value = String(type || '').replace(/_/g, ' ').trim();
-  return value ? value.replace(/\b\w/g, (ch) => ch.toUpperCase()) : 'Control';
-}
-
 function assetLabel(assetRow) {
   const parts = [assetRow?.category?.name, assetRow?.subcategory?.name].filter(Boolean).join(' / ');
   return parts ? `${assetRow?.name || 'Asset'} — ${parts}` : (assetRow?.name || 'Asset');

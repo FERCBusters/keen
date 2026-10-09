@@ -1176,10 +1176,6 @@ function renderAccessControlMatrix() {
 }
 
 
-function thresholdLabel(op) {
-  return {lt: '<', lte: '≤', eq: '=', gte: '≥', gt: '>'}[String(op || '')] || '';
-}
-
 function measureTitle(item) {
   return item?.summary || item?.metric || item?.effectiveness_measure || 'Effectiveness measure';
 }
