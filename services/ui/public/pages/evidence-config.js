@@ -41,7 +41,7 @@ const layouts = {
 const apiRoot = '/api/v1/admin';
 let settingsVersion = 0;
 let draftEventFields = [];
-let rules = [], ruleVersion = 0, selectedRule = null, targets = [], frameworks = [], samples = [], reviewed = null, previewedRule = null, previewCount = 0;
+let rules = [], ruleVersion = 0, selectedRule = null, targets = [], frameworks = [], samples = [], previewedRule = null, previewCount = 0;
 let collectors = [], definitionDocument = {}, definitionVersion = 0, definitionEntryKey = null;
 const definitionAdapters = ['jenkins', 'loki', 'rss', 'github', 'forgejo', 'gitea', 'gitlab', 'redmine', 'riskledger', 'cloudwatch_logs', 'taiga', 'google_workspace', 'webhooks', 'bookstack'];
 let catalogBooks = [], catalogPages = [], catalogChapters = [], nextBookOffset = null, nextPageOffset = null;
@@ -588,35 +588,6 @@ $('use-sample').addEventListener('click', () => {
   $('preview-results').textContent = 'Review the filled fields, select framework targets, then preview matches.';
   previewedRule = null;
 });
-$('prune-source').addEventListener('input', () => { reviewed = null; $('prune-apply').disabled = true; });
-$('prune-offset').addEventListener('input', () => { reviewed = null; $('prune-apply').disabled = true; });
-$('prune-preview').addEventListener('click', async () => {
-  try {
-    const source = $('prune-source').value.trim();
-    if (!source) throw new Error('Enter the evidence source first');
-    const offset = Number($('prune-offset').value);
-    reviewed = await apiGet(`${apiRoot}/stale-rule-mappings?source=${encodeURIComponent(source)}&offset=${offset}`);
-    $('prune-apply').disabled = reviewed.stale.length === 0;
-    const out = $('prune-results'); out.replaceChildren();
-    const heading = document.createElement('p');
-    heading.textContent = `${reviewed.stale.length} stale of ${reviewed.examined} rule mappings examined. Batch starts at ${offset}. ${reviewed.next_offset !== null ? `Continue at offset ${reviewed.next_offset} to review older records.` : 'End of results.'}`;
-    out.append(heading);
-    for (const item of reviewed.stale) {
-      const line = document.createElement('p'); line.textContent = `${item.framework} / ${item.ref}: ${item.summary}`; out.append(line);
-    }
-  } catch (error) { reviewed = null; $('prune-apply').disabled = true; $('prune-results').textContent = error.message; }
-});
-$('prune-apply').addEventListener('click', async () => {
-  if (!reviewed?.stale?.length) return;
-  if (!confirm(`Remove ${reviewed.stale.length} reviewed automatic mappings? Manual mappings are retained.`)) return;
-  try {
-    const result = await apiPost(`${apiRoot}/stale-rule-mappings/prune`, {
-      version: reviewed.version, source: reviewed.source,
-      mapping_ids: reviewed.stale.map(item => item.mapping_id)});
-    reviewed = null; $('prune-apply').disabled = true;
-    $('prune-results').textContent = `Removed ${result.deleted} stale automatic mappings. Review again to continue.`;
-  } catch (error) { $('prune-results').textContent = error.message; $('prune-apply').disabled = true; }
-});
 $('export-rules').addEventListener('click', async () => {
   const button = $('export-rules'); button.disabled = true;
   try {
@@ -697,7 +668,7 @@ function showBackfill(data) {
     return;
   }
   const message = document.createElement('span');
-  message.textContent = `Historical evidence: ${data.status}. Checked ${data.examined || 0} of ${data.total_estimate ? `about ${data.total_estimate}` : 'an estimated total being calculated'} events; ${data.matched || 0} matched, ${data.created_mappings || 0} new mappings.${data.error ? ` Error: ${data.error}` : ''}`;
+  message.textContent = `Historical evidence: ${data.status}. Checked ${data.examined || 0} of ${data.total_estimate ? `about ${data.total_estimate}` : 'an estimated total being calculated'} events; ${data.matched || 0} matched, ${data.created_mappings || 0} new mappings.${data.status === 'completed' ? ' Automatic mappings have been reconciled with the saved rule.' : ''}${data.error ? ` Error: ${data.error}` : ''}`;
   element.append(message);
   if (['queued', 'running'].includes(data.status)) {
     const cancel = document.createElement('button'); cancel.type = 'button';
@@ -756,7 +727,7 @@ $('delete-rule').addEventListener('click', async () => {
   if (!confirm(`Delete evidence definition ${selectedRule}? Collected evidence and existing mappings are retained.`)) return;
   try {
     await apiDelete(`${apiRoot}/mapping-rules/${encodeURIComponent(selectedRule)}?version=${ruleVersion}`);
-    await loadRules(); status('Definition removed. Existing mappings remain until separately reviewed.', 'success');
+    await loadRules(); status('Definition removed. Existing evidence and mappings are retained.', 'success');
   } catch (error) { status(error.message); }
 });
 async function init() {
