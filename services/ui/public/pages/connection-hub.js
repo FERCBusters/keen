@@ -18,6 +18,7 @@ function render(){
  const groups=new Map();for(const e of visible){const key=mode==='source'?e.source:e.key;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(e);}
  for(const [key,items] of groups){const section=document.createElement(mode==='source'?'details':'section');section.className='card mb-3';if(mode==='source')section.open=items.some(e=>e.collectors.length||e.rules.length);const head=document.createElement(mode==='source'?'summary':'h3');head.className='card-header h6 mb-0';head.textContent=mode==='source'?`${key} · ${items.length} connection${items.length===1?'':'s'}`:(items[0].key.startsWith('builtin:')?`${items[0].source} — Server environment`:items[0].name);section.append(head);const body=document.createElement('div');body.className='card-body';
  for(const item of items){const row=document.createElement('div');row.className='border-bottom pb-3 mb-3';const title=document.createElement('h4');title.className='h6';title.textContent=item.key.startsWith('builtin:')?'Server environment':item.name;const meta=document.createElement('p');meta.className='small text-break';meta.textContent=`${item.type} · ${item.collectors.length} collections · ${item.rules.length} definitions`;if(mode==='source')row.append(title);row.append(meta);
+ if(item.source==='forgejo'&&!item.collectors.length){const hint=document.createElement('p');hint.className='alert alert-info';hint.textContent='Forgejo needs a collection before it can fetch events. Choose Add collection, then users for a personal account, organizations for an organisation, or feeds for one repository RSS URL. Your server credentials are reused. An “all events” mapping rule does not create a collection.';row.append(hint);}
  if(item.key.startsWith('builtin:')) for(const c of item.collectors){
   const line=document.createElement('div');line.className='d-flex flex-wrap align-items-center gap-2 my-2';
   const label=document.createElement('span');label.textContent=c.section+': '+c.key;label.className='text-break';
@@ -98,3 +99,12 @@ for(const [index,name] of ['mapping','source','connection'].entries())byId(name)
  event.preventDefault();byId(names[next]).click();byId(names[next]).focus();
 });
 for(const event of ['keen-show-evidence-mapping','keen-filter-source','keen-integration-rule'])window.addEventListener(event,()=>showSurface('mapping'));
+
+window.addEventListener('keen-manage-source', event => {
+  mode = 'source';
+  byId('search').value = event.detail?.source || '';
+  showSurface('source');
+  render();
+  for (const section of byId('list').querySelectorAll('details')) section.open = true;
+  byId('search').focus();
+});

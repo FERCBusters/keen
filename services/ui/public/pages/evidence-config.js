@@ -120,6 +120,12 @@ function definitionEntry() {
 function paintDefinitionEntry() {
   const adapter = $('definition-adapter').value, section = $('definition-section').value;
   $('collection-settings').hidden = section === 'source';
+  $('source-scope-help').hidden = section !== 'source';
+  $('manage-collections').hidden = !layouts[adapter];
+  const needsCollection = layouts[adapter] && !collectors.some(item => item.adapter === adapter);
+  $('source-scope-description').textContent =
+    'This matches events already collected from this source, including events from any configured collection. It does not discover or start collecting from users, organisations, repositories or other remote inputs.' +
+    (needsCollection ? ` No collections are configured for ${adapter}. Set up a collection first so the ingester has something to fetch.` : '');
   if(section !== 'source') $('input-options').open=true;
   if (section === 'source') {
     definitionEntryKey = null;
@@ -164,7 +170,7 @@ function paintDefinitionEntry() {
 function paintDefinitionChoices() {
   const adapter = $('definition-adapter').value, section = $('definition-section').value;
   const choice = $('definition-entry');
-  if (section === 'source') { choice.replaceChildren(new Option(`All events from ${adapter}`, '__all__')); paintDefinitionEntry(); return; }
+  if (section === 'source') { choice.replaceChildren(new Option(`Collected events from ${adapter}`, '__all__')); paintDefinitionEntry(); return; }
   choice.replaceChildren(new Option('Create a new collection item', '__new'));
   for (const item of collectors.filter(item => item.adapter === adapter && item.section === section))
     choice.add(new Option(item.key, item.collector));
@@ -177,7 +183,7 @@ async function selectDefinitionAdapter() {
     definitionDocument = data.document; definitionVersion = data.version;
   } else { definitionDocument = {}; definitionVersion = 0; }
   $('definition-section').replaceChildren();
-  $('definition-section').add(new Option('All events from this source', 'source'));
+  $('definition-section').add(new Option('All collected events (any collection)', 'source'));
   for (const section of Object.keys(layouts[adapter] || {}))
     if (section !== 'page_mappings') $('definition-section').add(new Option(label(section), section));
   paintDefinitionChoices();
@@ -855,3 +861,7 @@ async function draftFromEvent(){
 }
 
 $('description').addEventListener('input',()=>{ $('control-suggestions').replaceChildren(); });
+
+$('manage-collections').addEventListener('click', () => {
+  window.dispatchEvent(new CustomEvent('keen-manage-source', {detail: {source: $('definition-adapter').value}}));
+});

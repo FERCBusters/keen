@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
@@ -776,8 +776,10 @@ def _queue_rule_backfill(db: Session, rule: dict, version: int) -> dict | None:
         return {"id": str(current.id), "status": current.status,
                 "total_estimate": current.total_estimate}
     cutoff = utc_now_naive()
+    from app.worker.rule_backfill import rule_owned_event_ids
     exists = db.query(Event.id).filter(
-        Event.source == source, Event.created_at <= cutoff).first()
+        or_(Event.source == source, Event.id.in_(rule_owned_event_ids(rule["id"]))),
+        Event.created_at <= cutoff).first()
     if not exists:
         return {"status": "no_previous_evidence", "total_estimate": 0}
     job = RuleBackfillJob(rule_id=rule["id"], source=source,

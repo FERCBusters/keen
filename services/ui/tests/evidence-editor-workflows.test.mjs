@@ -66,3 +66,21 @@ test('initialisation errors are exposed accessibly without interpreting markup',
  const status=document.getElementById('ec-status');assert.equal(status.getAttribute('role'),'alert');
  assert.equal(status.hidden,false);assert.equal(status.querySelector('img'),null);assert.match(status.textContent,/<img/);
 });
+
+test('source-wide rules explain collection scope and offer a setup shortcut', async t => {
+ const {document,window}=await fixture(t);
+ const select=document.getElementById('ec-definition-adapter');
+ select.add(new window.Option('Forgejo','forgejo'));select.value='forgejo';
+ // Select the source-wide scope without requesting a new adapter configuration.
+ document.getElementById('ec-definition-section').value='source';
+ document.getElementById('ec-definition-section').dispatchEvent(new window.Event('change'));
+ const help=document.getElementById('ec-source-scope-help');
+ assert.equal(help.hidden,false);
+ assert.match(help.textContent,/does not discover or start collecting/);
+ assert.match(help.textContent,/No collections are configured for forgejo/);
+ let requested;
+ window.addEventListener('keen-manage-source',event=>{requested=event.detail.source;});
+ document.getElementById('ec-manage-collections').click();
+ assert.equal(requested,'forgejo');
+ await new Promise(resolve=>setTimeout(resolve,10));
+});

@@ -31,7 +31,18 @@
     <div class="card mb-3" id="crossFrameworkCard">
       <div class="card-header"><div class="fw-bold">Related controls in other frameworks</div>
         <div class="small-muted">Evidence mapped to a source control appears here too. Links are directional and apply to existing and future evidence. Review overlap before linking.</div></div>
-      <div class="card-body"><div id="crossFrameworkLinks" class="mb-3 small-muted">Loading linked controls…</div>
+      <div class="card-body">
+        <div id="crossFrameworkBrowser" class="mb-3" hidden>
+          <label class="form-label" for="crossFrameworkView">View related controls from</label>
+          <select class="form-select mb-2" id="crossFrameworkView" aria-describedby="crossFrameworkSummary"></select>
+          <div id="crossFrameworkSummary" class="small-muted" role="status"></div>
+        </div>
+        <div id="crossFrameworkLinks" class="mb-3 small-muted">Loading linked controls…</div>
+        <nav id="crossFrameworkPager" class="d-flex gap-2 align-items-center mb-3" aria-label="Related controls pages" hidden>
+          <button id="crossFrameworkPrevious" class="btn btn-sm btn-outline-secondary" type="button">Previous</button>
+          <span id="crossFrameworkPage" class="small-muted"></span>
+          <button id="crossFrameworkNext" class="btn btn-sm btn-outline-secondary" type="button">Next</button>
+        </nav>
         <form id="crossFrameworkForm" class="row g-2 align-items-end" style="display:none">
           <div class="col-md-3"><label class="form-label" for="crossFrameworkSource">Source framework</label><select class="form-select" id="crossFrameworkSource" required></select></div>
           <div class="col-md-4"><label class="form-label" for="crossFrameworkControl">Source control</label><select class="form-select" id="crossFrameworkControl" required></select></div>

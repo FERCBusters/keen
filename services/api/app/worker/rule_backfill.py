@@ -6,7 +6,7 @@ import uuid
 import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, or_, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.models import ControlItem, Event, Mapping, ManagedConfiguration, RuleBackfillJob
@@ -17,6 +17,13 @@ from app.services.control_evidence_stats import clear_stats_caches
 
 log = logging.getLogger(__name__)
 BATCH_SIZE = 200
+
+
+def rule_owned_event_ids(rule_id: str):
+    """Identify exact system-rule provenance, never manual/imported mappings."""
+    return (select(Mapping.event_id).join(ControlItem, ControlItem.id == Mapping.control_item_id)
+            .where(Mapping.method == "rule", Mapping.mapped_by == "system",
+                   Mapping.rationale == "auto by rule " + rule_id + " (" + ControlItem.framework_slug + ")"))
 
 
 def process_batch(job_id: uuid.UUID) -> bool:
@@ -39,20 +46,21 @@ def process_batch(job_id: uuid.UUID) -> bool:
                 return False
             job.rules_version = current.version
         identity = job.rule_document.get("when", {}).get("collector")
+        scope = Event.source == job.source
+        if identity:
+            scope = and_(scope, Event.raw_pointer.contains(collector_pointer_filter(identity)))
+        # Also revisit prior matches when the source/collector or conditions changed.
+        scope = or_(scope, Event.id.in_(rule_owned_event_ids(job.rule_id)))
         if job.total_estimate == 0:
-            count_q = db.query(func.count(Event.id)).filter(
-                Event.source == job.source, Event.created_at <= job.cutoff)
-            if identity:
-                count_q = count_q.filter(Event.raw_pointer.contains(collector_pointer_filter(identity)))
-            job.total_estimate = int(count_q.scalar() or 0)
+            job.total_estimate = int(db.query(func.count(Event.id)).filter(
+                scope, Event.created_at <= job.cutoff).scalar() or 0)
         rule = parse_rules({"rules": [job.rule_document]})
         if len(rule) != 1:
             raise ValueError("The saved rule cannot be parsed")
+        active_rules = parse_rules(current.document)
         q = (db.query(Event)
-             .filter(Event.source == job.source, Event.created_at <= job.cutoff)
+             .filter(scope, Event.created_at <= job.cutoff)
              .order_by(Event.timestamp.asc(), Event.id.asc()))
-        if identity:
-            q = q.filter(Event.raw_pointer.contains(collector_pointer_filter(identity)))
         if job.cursor_timestamp is not None:
             q = q.filter(or_(Event.timestamp > job.cursor_timestamp,
                              and_(Event.timestamp == job.cursor_timestamp, Event.id > job.cursor_id)))
@@ -69,19 +77,45 @@ def process_batch(job_id: uuid.UUID) -> bool:
         if missing:
             raise ValueError(f"Framework targets were removed: {sorted(missing)}")
         event_ids = [event.id for event in events]
-        existing = {(event_id, control_id) for event_id, control_id in
-                    db.query(Mapping.event_id, Mapping.control_item_id)
-                    .filter(Mapping.event_id.in_(event_ids)).all()}
+        mappings = (db.query(Mapping, ControlItem.framework_slug, ControlItem.ref)
+                    .join(ControlItem, ControlItem.id == Mapping.control_item_id)
+                    .filter(Mapping.event_id.in_(event_ids))
+                    .order_by(Mapping.id).with_for_update(of=Mapping).all())
+        existing = {(mapping.event_id, mapping.control_item_id)
+                    for mapping, _, _ in mappings}
+        owned = {}
+        for mapping, framework, ref in mappings:
+            if (mapping.method == "rule" and mapping.mapped_by == "system"
+                    and mapping.rationale == f"auto by rule {job.rule_id} ({framework})"):
+                owned.setdefault(mapping.event_id, []).append((mapping, framework, ref))
         created = 0
+        changed = False
         matched = 0
         for event in events:
-            result = evaluate_by_framework({
+            event_data = {
                 "source": event.source, "system": event.system, "actor": event.actor,
                 "action": event.action, "outcome": event.outcome, "severity": event.severity,
                 "summary": event.summary, "raw_pointer": event.raw_pointer,
-                "normalized_payload": event.normalized_payload}, rule, details=True)
+                "normalized_payload": event.normalized_payload}
+            result = evaluate_by_framework(event_data, rule, details=True)
             if result:
                 matched += 1
+            if event.id in owned:
+                supported = {(framework, hit["ref"]): hit
+                             for framework, hits in evaluate_by_framework(
+                                 event_data, active_rules, details=True).items()
+                             for hit in hits}
+                for mapping, framework, ref in owned[event.id]:
+                    hit = supported.get((framework, ref))
+                    if hit is None:
+                        db.delete(mapping)
+                        existing.discard((event.id, mapping.control_item_id))
+                        changed = True
+                    elif (mapping.confidence, mapping.rationale) != (hit["confidence"], hit["rationale"]):
+                        # Another saved rule may still justify this control.
+                        mapping.confidence = hit["confidence"]
+                        mapping.rationale = hit["rationale"]
+                        changed = True
             for framework, hits in result.items():
                 for hit in hits:
                     control_id = targets[(framework, hit["ref"])]
@@ -104,7 +138,7 @@ def process_batch(job_id: uuid.UUID) -> bool:
         job.created_mappings += created
         job.status = "running" if len(events) == BATCH_SIZE else "completed"
         db.commit()
-        if created:
+        if created or changed:
             try:
                 clear_stats_caches()
             except Exception:

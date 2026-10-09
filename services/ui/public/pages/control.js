@@ -1,3 +1,4 @@
+import {createRelatedControlsBrowser} from './related-controls.js';
 import {
   initNavbar,
   apiGet,
@@ -89,28 +90,28 @@ const pagerButtons = collectOffsetPagerButtons();
 let sourceMeta = {};
 let ctrl = null;
 let crossFrameworks = [];
+const relatedControls = createRelatedControlsBrowser(document, {isAdmin: !!me?.is_admin});
 
 async function loadCrossFrameworkLinks() {
   if (!id) return;
   try {
     const data = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}/cross-framework`);
-    crossList.innerHTML = (data.items || []).length ? data.items.map(link => `
-      <div class="d-flex flex-wrap gap-2 align-items-center border-bottom py-2">
-        <a href="${withFramework(`/control.html?id=${encodeURIComponent(link.source_control_id)}`, link.source_framework)}">${esc(link.source_framework)} · ${esc(link.source_ref)} ${esc(link.source_title || '')}</a>
-        <span class="small-muted">${esc(link.rationale)}</span>
-        ${me?.is_admin && !link.derived ? `<button class="btn btn-sm btn-outline-danger ms-auto" type="button" data-remove-cross-link="${esc(link.id)}">Remove</button>` : ''}
-      </div>`).join('') : '<span class="small-muted">No cross-framework inheritance has been approved for this control.</span>';
+    if (!crossFrameworks.length) {
+      try {
+        const frameworks = await apiGet('/api/v1/frameworks');
+        crossFrameworks = (frameworks.items || []).filter(f => f.slug !== ctrl?.framework);
+      } catch {
+        // Links remain browsable by framework slug when the catalogue is unavailable.
+      }
+    }
+    relatedControls.update(data.items || [], crossFrameworks);
     if (!me?.is_admin || !ctrl) return;
     crossForm.style.display = '';
-    if (!crossFrameworks.length) {
-      const frameworks = await apiGet('/api/v1/frameworks');
-      crossFrameworks = (frameworks.items || []).filter(f => f.slug !== ctrl.framework);
-    }
     const previous = crossFrameworkSource.value;
     crossFrameworkSource.innerHTML = '<option value="">Choose framework…</option>' + crossFrameworks.map(f => `<option value="${esc(f.slug)}">${esc(f.name || f.slug)}</option>`).join('');
     if (crossFrameworks.some(f => f.slug === previous)) crossFrameworkSource.value = previous;
     if (crossFrameworkSource.value) await loadCrossSourceControls();
-  } catch (e) { crossList.textContent = `Could not load control links: ${String(e)}`; }
+  } catch (e) { relatedControls.showError(`Could not load control links: ${String(e)}`); }
 }
 
 async function loadCrossSourceControls() {
