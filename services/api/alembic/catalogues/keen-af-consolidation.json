@@ -1,0 +1,782 @@
+[
+  {
+    "keep": "AST-1",
+    "remove": "DCH-48",
+    "title": "Asset disposal procedures utilized",
+    "description": "The company has electronic media containing confidential information purged or destroyed in accordance with best practices, and certificates of destruction are issued for each device destroyed.",
+    "sources": [
+      {
+        "ref": "AST-1",
+        "uid": "asset-disposal-procedures-utilized",
+        "domain": "ASSET_MANAGEMENT",
+        "framework_references": {
+          "SOC 2": "CC 6.5,C 1.2",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "DCH-48",
+        "uid": "asset-disposal-procedures-utilized-gdpr",
+        "domain": "DATA_CLASSIFICATION_HANDLING",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "AST-3",
+    "remove": "AST-45",
+    "title": "Production inventory maintained",
+    "description": "The company maintains a formal inventory of production system assets.",
+    "sources": [
+      {
+        "ref": "AST-3",
+        "uid": "production-inventory-maintained",
+        "domain": "ASSET_MANAGEMENT",
+        "framework_references": {
+          "SOC 2": "CC 6.1",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "AST-45",
+        "uid": "production-inventory-maintained-gdpr",
+        "domain": "ASSET_MANAGEMENT",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "BCD-1",
+    "remove": "BCD-22",
+    "title": "Continuity and Disaster Recovery plans established",
+    "description": "The company has Business Continuity and Disaster Recovery Plans in place that outline communication plans in order to maintain information security continuity in the event of the unavailability of key personnel.",
+    "sources": [
+      {
+        "ref": "BCD-1",
+        "uid": "continuity-and-disaster-recovery-plans-established",
+        "domain": "BUSINESS_CONTINUITY_DISASTER_RECOVERY",
+        "framework_references": {
+          "SOC 2": "CC 9.1,A 1.3",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "BCD-22",
+        "uid": "continuity-and-disaster-recovery-plans-established-gdpr",
+        "domain": "BUSINESS_CONTINUITY_DISASTER_RECOVERY",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "IAC-11",
+    "remove": "CFG-19",
+    "title": "Password policy enforced",
+    "description": "The company requires passwords for in-scope system components to be configured according to the company's policy.",
+    "sources": [
+      {
+        "ref": "IAC-11",
+        "uid": "policies-password-complexity",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "CC 6.1",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "CFG-19",
+        "uid": "policies-password-complexity-gdpr",
+        "domain": "CONFIGURATION_MANAGEMENT",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "CHG-2",
+    "remove": "IAC-87",
+    "title": "Production deployment access restricted",
+    "description": "The company restricts access to migrate changes to production to authorized personnel.",
+    "sources": [
+      {
+        "ref": "CHG-2",
+        "uid": "changes-approval-required",
+        "domain": "CHANGE_MANAGEMENT",
+        "framework_references": {
+          "SOC 2": "CC 6.1,CC 8.1",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "IAC-87",
+        "uid": "changes-approval-required-gdpr",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "CRY-3",
+    "remove": "DCH-49",
+    "title": "Portable media encrypted",
+    "description": "The company encrypts portable and removable media devices when used.",
+    "sources": [
+      {
+        "ref": "CRY-3",
+        "uid": "assets-portable-media-encrypted",
+        "domain": "CRYPTOGRAPHIC_PROTECTIONS",
+        "framework_references": {
+          "SOC 2": "CC 6.7",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "DCH-49",
+        "uid": "assets-portable-media-encrypted-gdpr",
+        "domain": "DATA_CLASSIFICATION_HANDLING",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "CRY-4",
+    "remove": "CRY-56",
+    "title": "Data encryption utilized",
+    "description": "The company's datastores housing sensitive customer data are encrypted at rest.",
+    "sources": [
+      {
+        "ref": "CRY-4",
+        "uid": "data-encrypted",
+        "domain": "CRYPTOGRAPHIC_PROTECTIONS",
+        "framework_references": {
+          "SOC 2": "CC 6.1,PI 1.4",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "CRY-56",
+        "uid": "data-encrypted-gdpr",
+        "domain": "CRYPTOGRAPHIC_PROTECTIONS",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "CRY-5",
+    "remove": "IAC-89",
+    "title": "Unique account authentication enforced",
+    "description": "The company requires authentication to systems and applications to use unique username and password or authorized Secure Socket Shell (SSH) keys.",
+    "sources": [
+      {
+        "ref": "CRY-5",
+        "uid": "unique-account-authentication-enforced",
+        "domain": "CRYPTOGRAPHIC_PROTECTIONS",
+        "framework_references": {
+          "SOC 2": "CC 6.1,C 1.1",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "IAC-89",
+        "uid": "unique-account-authentication-enforced-gdpr",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "IAC-13",
+    "remove": "CRY-57",
+    "title": "Remote access encrypted enforced",
+    "description": "The company's production systems can only be remotely accessed by authorized employees via an approved encrypted connection.",
+    "sources": [
+      {
+        "ref": "IAC-13",
+        "uid": "remote-access-vpn-enforced",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "CC 6.1,CC 6.6",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "CRY-57",
+        "uid": "remote-access-vpn-enforced-gdpr",
+        "domain": "CRYPTOGRAPHIC_PROTECTIONS",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "NET-1",
+    "remove": "CRY-58",
+    "title": "Data transmission encrypted",
+    "description": "The company uses secure data transmission protocols to encrypt confidential and sensitive data when transmitted over public networks.",
+    "sources": [
+      {
+        "ref": "NET-1",
+        "uid": "data-encrypted-in-transit",
+        "domain": "NETWORK_SECURITY",
+        "framework_references": {
+          "SOC 2": "CC 6.6,CC 6.7",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "CRY-58",
+        "uid": "data-encrypted-in-transit-gdpr",
+        "domain": "CRYPTOGRAPHIC_PROTECTIONS",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "DCH-5",
+    "remove": "DCH-43",
+    "title": "Data classification policy established",
+    "description": "The company has a data classification policy in place to help ensure that confidential data is properly secured and restricted to authorized personnel.",
+    "sources": [
+      {
+        "ref": "DCH-5",
+        "uid": "data-classification-policy",
+        "domain": "DATA_CLASSIFICATION_HANDLING",
+        "framework_references": {
+          "SOC 2": "CC 6.1,C 1.1",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "DCH-43",
+        "uid": "data-classification-policy-gdpr",
+        "domain": "DATA_CLASSIFICATION_HANDLING",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 25,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "END-1",
+    "remove": "THR-3",
+    "title": "Anti-malware technology utilized",
+    "description": "The company deploys anti-malware technology to environments commonly susceptible to malicious attacks and configures this to be updated routinely, logged, and installed on all relevant systems.",
+    "sources": [
+      {
+        "ref": "END-1",
+        "uid": "assets-anti-malware",
+        "domain": "ENDPOINT_SECURITY",
+        "framework_references": {
+          "SOC 2": "CC 6.8",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "THR-3",
+        "uid": "assets-anti-malware-gdpr",
+        "domain": "THREAT_MANAGEMENT",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "IAC-8",
+    "remove": "HRS-29",
+    "title": "Access revoked upon termination",
+    "description": "The company completes termination checklists to ensure that access is revoked for terminated employees within SLAs.",
+    "sources": [
+      {
+        "ref": "IAC-8",
+        "uid": "access-revoked-termination",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "CC 6.2,CC 6.3,CC 6.5",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "HRS-29",
+        "uid": "access-revoked-termination-gdpr",
+        "domain": "HUMAN_RESOURCES_SECURITY",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "IAC-6",
+    "remove": "IAC-86",
+    "title": "Production network access restricted",
+    "description": "The company restricts privileged access to the production network to authorized users with a business need.",
+    "sources": [
+      {
+        "ref": "IAC-6",
+        "uid": "access-production-network-restricted",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "CC 6.1,PI 1.5",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "IAC-86",
+        "uid": "access-production-network-restricted-gdpr",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "IAC-9",
+    "remove": "IAC-83",
+    "title": "Access requests required",
+    "description": "The company ensures that user access to in-scope system components is based on job role and function or requires a documented access request form and manager approval prior to access being provisioned.",
+    "sources": [
+      {
+        "ref": "IAC-9",
+        "uid": "access-role-based",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "CC 6.1,CC 6.2,CC 6.3",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "IAC-83",
+        "uid": "access-role-based-gdpr",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "IAC-10",
+    "remove": "IAC-88",
+    "title": "Unique network system authentication enforced",
+    "description": "The company requires authentication to the \"production network\" to use unique usernames and passwords or authorized Secure Socket Shell (SSH) keys.",
+    "sources": [
+      {
+        "ref": "IAC-10",
+        "uid": "access-ssh-required",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "CC 6.1,CC 6.2,CC 6.3,CC 6.6",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "IAC-88",
+        "uid": "access-ssh-required-gdpr",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "IAC-12",
+    "remove": "IAC-85",
+    "title": "Remote access MFA enforced",
+    "description": "The company's production systems can only be remotely accessed by authorized employees possessing a valid multi-factor authentication (MFA) method.",
+    "sources": [
+      {
+        "ref": "IAC-12",
+        "uid": "remote-access-mfa-enforced",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "CC 6.1,CC 6.6",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "IAC-85",
+        "uid": "remote-access-mfa-enforced-gdpr",
+        "domain": "IDENTIFICATION_AUTHENTICATION",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "IRO-2",
+    "remove": "IRO-34",
+    "title": "Incident response policies established",
+    "description": "The company has security and privacy incident response policies and procedures that are documented and communicated to authorized users.",
+    "sources": [
+      {
+        "ref": "IRO-2",
+        "uid": "incident-response-policies-established",
+        "domain": "INCIDENT_RESPONSE",
+        "framework_references": {
+          "SOC 2": "CC 2.2,CC 5.3,CC 7.3,CC 7.4,CC 7.5,P 6.3,P 6.4,P 6.5,P 6.6",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "IRO-34",
+        "uid": "incident-response-policies-established-gdpr",
+        "domain": "INCIDENT_RESPONSE",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32,Article 33,Article 34",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "IRO-3",
+    "remove": "IRO-32",
+    "title": "Incident management procedures followed",
+    "description": "The company's security and privacy incidents are logged, tracked, resolved, and communicated to affected or relevant parties by management according to the company's security incident response policy and procedures.",
+    "sources": [
+      {
+        "ref": "IRO-3",
+        "uid": "policies-incident-management",
+        "domain": "INCIDENT_RESPONSE",
+        "framework_references": {
+          "SOC 2": "CC 7.3,CC 7.4,CC 7.5,P 6.3,P 6.4,P 6.5,P 6.6,P 8.1",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "IRO-32",
+        "uid": "policies-incident-management-gdpr",
+        "domain": "INCIDENT_RESPONSE",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 33,Article 34",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "MDM-1",
+    "remove": "MDM-2",
+    "title": "MDM system utilized",
+    "description": "The company has a mobile device management (MDM) system in place to centrally manage mobile devices supporting the service.",
+    "sources": [
+      {
+        "ref": "MDM-1",
+        "uid": "MDM-system-utilized",
+        "domain": "MOBILE_DEVICE_MANAGEMENT",
+        "framework_references": {
+          "SOC 2": "CC 6.7",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "MDM-2",
+        "uid": "MDM-system-utilized-gdpr",
+        "domain": "MOBILE_DEVICE_MANAGEMENT",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "MON-1",
+    "remove": "THR-2",
+    "title": "Intrusion detection system utilized",
+    "description": "The company uses an intrusion detection system to provide continuous monitoring of the company's network and early detection of potential security breaches.",
+    "sources": [
+      {
+        "ref": "MON-1",
+        "uid": "intrusion-detection-system",
+        "domain": "CONTINUOUS_MONITORING",
+        "framework_references": {
+          "SOC 2": "CC 6.6,CC 7.2,A 1.3",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "THR-2",
+        "uid": "intrusion-detection-system-gdpr",
+        "domain": "THREAT_MANAGEMENT",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "NET-2",
+    "remove": "NET-38",
+    "title": "Network segmentation implemented",
+    "description": "The company's network is segmented to prevent unauthorized access to customer data.",
+    "sources": [
+      {
+        "ref": "NET-2",
+        "uid": "infra-network-segregation",
+        "domain": "NETWORK_SECURITY",
+        "framework_references": {
+          "SOC 2": "CC 6.1",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "NET-38",
+        "uid": "infra-network-segregation-gdpr",
+        "domain": "NETWORK_SECURITY",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "NET-3",
+    "remove": "NET-39",
+    "title": "Network firewalls reviewed",
+    "description": "The company reviews its firewall rulesets at least annually. Required changes are tracked to completion.",
+    "sources": [
+      {
+        "ref": "NET-3",
+        "uid": "network-firewalls-reviewed",
+        "domain": "NETWORK_SECURITY",
+        "framework_references": {
+          "SOC 2": "CC 6.6",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "NET-39",
+        "uid": "network-firewalls-reviewed-gdpr",
+        "domain": "NETWORK_SECURITY",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "NET-4",
+    "remove": "NET-37",
+    "title": "Network firewalls utilized",
+    "description": "The company uses firewalls and configures them to prevent unauthorized access.",
+    "sources": [
+      {
+        "ref": "NET-4",
+        "uid": "network-firewalls-utilized",
+        "domain": "NETWORK_SECURITY",
+        "framework_references": {
+          "SOC 2": "CC 6.6",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "NET-37",
+        "uid": "network-firewalls-utilized-gdpr",
+        "domain": "NETWORK_SECURITY",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "NET-5",
+    "remove": "SEA-23",
+    "title": "Network and system hardening standards maintained",
+    "description": "The company's network and system hardening standards are documented, based on industry best practices, and reviewed at least annually.",
+    "sources": [
+      {
+        "ref": "NET-5",
+        "uid": "system-network-hardening",
+        "domain": "NETWORK_SECURITY",
+        "framework_references": {
+          "SOC 2": "CC 6.6,CC 8.1",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "SEA-23",
+        "uid": "system-network-hardening-gdpr",
+        "domain": "SECURE_ENGINEERING_ARCHITECTURE",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  },
+  {
+    "keep": "VPM-1",
+    "remove": "VPM-38",
+    "title": "Service infrastructure maintained",
+    "description": "The company has infrastructure supporting the service patched as a part of routine maintenance and as a result of identified vulnerabilities to help ensure that servers supporting the service are hardened against security threats.",
+    "sources": [
+      {
+        "ref": "VPM-1",
+        "uid": "support-infra-patched",
+        "domain": "VULNERABILITY_PATCH_MANAGEMENT",
+        "framework_references": {
+          "SOC 2": "CC 6.6,CC 6.8,CC 7.2,CC 7.4,CC 8.1",
+          "ISO 27001:2022": "",
+          "GDPR": "",
+          "ISO 27001:2013": ""
+        }
+      },
+      {
+        "ref": "VPM-38",
+        "uid": "support-infra-patched-gdpr",
+        "domain": "VULNERABILITY_PATCH_MANAGEMENT",
+        "framework_references": {
+          "SOC 2": "",
+          "ISO 27001:2022": "",
+          "GDPR": "Article 24,Article 28,Article 32",
+          "ISO 27001:2013": ""
+        }
+      }
+    ]
+  }
+]

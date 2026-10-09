@@ -1,0 +1,23 @@
+Open Security Architecture catalogue data
+
+Copyright Open Security Architecture and contributors.
+Source: https://www.opensecurityarchitecture.org/
+Source terms: https://www.opensecurityarchitecture.org/about/license-terms/
+Licence: Creative Commons Attribution-ShareAlike 4.0 International
+https://creativecommons.org/licenses/by-sa/4.0/
+Legal code: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+KEEN includes an offline OSA catalogue snapshot dated 8 October 2026.
+Individual records retain their upstream framework URL, licence and source
+commit. KEEN adaptations include database identifiers, hierarchy, shortened
+display titles, combined descriptions and relationships derived from shared
+NIST control references. Original source fields remain in record metadata.
+
+The OSA-derived catalogue data and KEEN's adaptations are distributed under
+CC BY-SA 4.0. When sharing them, retain attribution, identify modifications,
+link to the licence and apply its ShareAlike terms to adaptations.
+KEEN's software is licensed separately under Apache License 2.0.
+
+OSA coverage estimates and mappings are interpretive guidance. Refer to the
+underlying standards for their requirements. Attribution does not imply
+endorsement by OSA or the standards' publishers.

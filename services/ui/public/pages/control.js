@@ -184,9 +184,14 @@ function renderControlChrome() {
       const text = document.createElement('p'); text.style.whiteSpace = 'pre-wrap';
       text.textContent = ctrl.metadata.description; description.append(text);
     }
+    if (ctrl.framework === 'KEEN-AF:1.0' || ctrl.metadata?.source_url === 'https://github.com/VantaInc/vanta-control-set') {
+      const credit = document.createElement('p'); credit.className = 'small-muted';
+      credit.innerHTML = 'KEEN Assurance Framework is based on <a href="https://github.com/VantaInc/vanta-control-set" target="_blank" rel="noopener">Vanta’s controls</a>, licensed under <a href="/licenses/VANTA-LICENSE.txt" target="_blank" rel="noopener">Apache 2.0</a>. Copyright 2021 Vanta Inc. Adapted by KEEN. KEEN is also licensed under Apache 2.0.';
+      description.append(credit);
+    }
     if (ctrl.metadata?.source === 'https://www.opensecurityarchitecture.org/') {
       const credit = document.createElement('p'); credit.className = 'small-muted';
-      credit.innerHTML = 'Adapted from <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Shared NIST controls identify related evidence; coverage estimates do not certify compliance.';
+      credit.innerHTML = 'Adapted from <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a> · <a href="/licenses/OSA-LICENSE.txt" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Copyright Open Security Architecture and contributors. <a href="/licenses/OSA-NOTICE.txt" target="_blank" rel="noopener">Attribution and KEEN adaptations</a>. Shared NIST controls identify related evidence; coverage estimates do not certify compliance.';
       description.append(credit);
     }
   }

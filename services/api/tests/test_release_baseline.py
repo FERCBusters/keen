@@ -38,8 +38,12 @@ def test_release_schema_and_final_seed_data(monkeypatch):
                 actual = list(conn.scalars(text(f'SELECT row_to_json(t) FROM {table} t')))
                 canonical = lambda items: sorted(json.dumps(row, sort_keys=True) for row in items)
                 assert canonical(actual) == canonical(rows), table
+            assert conn.scalar(text('SELECT count(*) FROM frameworks')) == 94
+            assert conn.scalar(text("SELECT count(*) FROM control_items WHERE framework_slug='KEEN-AF:1.0'")) == 253
             command.upgrade(config, 'head')
             assert conn.scalar(text('SELECT count(*) FROM source_connections')) == 0
+            assert conn.scalar(text("SELECT count(*) FROM control_items WHERE framework_slug='KEEN-AF:1.0'")) == 253
+            assert 'Apache' in conn.scalar(text("SELECT description FROM frameworks WHERE slug='KEEN-AF:1.0'"))
             conn.execute(text('SELECT connection_id, connection_name FROM events LIMIT 1'))
             assert conn.scalar(text('SELECT count(*) FROM frameworks')) == 94
             for slug, count in (('iso_9001_2015', 37), ('iso_9001_2026', 39)):
@@ -52,3 +56,13 @@ def test_release_schema_and_final_seed_data(monkeypatch):
     finally:
         with engine.begin() as conn:conn.execute(text(f'DROP SCHEMA {schema} CASCADE'))
         engine.dispose()
+
+
+def test_release_revision_chain_contains_no_catalogue_transformations():
+    from alembic.script import ScriptDirectory
+    root = Path(__file__).resolve().parents[1]
+    config = Config(str(root/'alembic.ini'))
+    config.set_main_option('script_location', str(root/'alembic'))
+    script = ScriptDirectory.from_config(config)
+    assert [r.revision for r in script.walk_revisions()] == [
+        '0004_source_connections', '0002_release_seed', '0001_release_schema']

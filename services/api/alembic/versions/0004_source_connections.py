@@ -3,7 +3,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 revision = '0004_source_connections'
-down_revision = '0003_iso_9001'
+down_revision = '0002_release_seed'
 branch_labels = None
 depends_on = None
 
