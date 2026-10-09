@@ -2776,11 +2776,36 @@ class IntegrationRun(Base):
     result: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
+class AgentEnrollmentProfile(Base):
+    __tablename__ = 'agent_enrollment_profiles'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default='active')
+    token_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    max_enrollments: Mapped[int | None] = mapped_column(Integer)
+    enrollment_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    allowed_cidrs: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    labels: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class KeenAgent(Base):
     __tablename__ = 'keen_agents'
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    enrollment_profile_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('agent_enrollment_profiles.id'), index=True)
+    enrollment_nonce_hash: Mapped[str | None] = mapped_column(String(64))
+    enrollment_ip: Mapped[str | None] = mapped_column(String(64))
+    enrollment_labels: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    previous_token_hash: Mapped[str | None] = mapped_column(String(64))
+    renewal_nonce_hash: Mapped[str | None] = mapped_column(String(64))
+    renewal_retry_until: Mapped[datetime | None] = mapped_column(DateTime)
+    __table_args__ = (UniqueConstraint('enrollment_profile_id', 'enrollment_nonce_hash', name='uq_agent_enrollment_attempt'),)
+
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

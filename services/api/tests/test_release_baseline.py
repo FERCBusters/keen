@@ -40,7 +40,12 @@ def test_release_schema_and_final_seed_data(monkeypatch):
                 assert canonical(actual) == canonical(rows), table
             assert conn.scalar(text('SELECT count(*) FROM frameworks')) == 94
             assert conn.scalar(text("SELECT count(*) FROM control_items WHERE framework_slug='KEEN-AF:1.0'")) == 253
+            conn.execute(text("INSERT INTO keen_agents (id,name,token_hash,enabled,created_at,expires_at,health) VALUES ('baseline-pet','static-pet',:hash,true,now(),now()+interval '90 days','{}'::jsonb)"), {'hash':'a'*64})
+            conn.commit()
             command.upgrade(config, 'head')
+            assert conn.scalar(text('SELECT count(*) FROM agent_enrollment_profiles')) == 0
+            pet = conn.execute(text("SELECT enrollment_profile_id,enrollment_labels,token_hash FROM keen_agents WHERE id='baseline-pet'")).one()
+            assert tuple(pet) == (None, {}, 'a'*64)
             assert conn.scalar(text('SELECT count(*) FROM source_connections')) == 0
             assert conn.scalar(text("SELECT count(*) FROM control_items WHERE framework_slug='KEEN-AF:1.0'")) == 253
             assert 'Apache' in conn.scalar(text("SELECT description FROM frameworks WHERE slug='KEEN-AF:1.0'"))
@@ -65,4 +70,4 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option('script_location', str(root/'alembic'))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
-        '0004_source_connections', '0002_release_seed', '0001_release_schema']
+        '0005_agent_enrollment', '0004_source_connections', '0002_release_seed', '0001_release_schema']

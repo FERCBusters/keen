@@ -173,6 +173,8 @@ def bootstrap_initial_admin():
 _AUTH_EXEMPT_PATHS = {
     "/v1/otlp/logs",
     "/v1/agents/heartbeat",
+    "/v1/agents/enroll",
+    "/v1/agents/renew",
     "/health",
     "/v1/auth/methods",
     "/v1/auth/login",
@@ -196,6 +198,8 @@ _AUTH_EXEMPT_PREFIXES = ("/v1/webhooks", "/v1/auth/sso/", "/v1/auth/mfa/", "/doc
 _CSRF_EXEMPT_PATHS = {
     "/v1/otlp/logs",
     "/v1/agents/heartbeat",
+    "/v1/agents/enroll",
+    "/v1/agents/renew",
     "/health",
     "/v1/auth/methods",
     "/v1/auth/login",

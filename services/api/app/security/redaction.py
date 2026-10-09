@@ -53,6 +53,10 @@ _IPV6_CANDIDATE_RE = re.compile(
 # NOTE: Defaults are intentionally broad; users can tighten/override via env vars.
 DEFAULT_SENSITIVE_KEYS: set[str] = {
     "token",
+    "bootstrap_key",
+    "enrollment_nonce",
+    "nonce",
+    "renewal_nonce",
     "access_token",
     "api_key",
     "apikey",

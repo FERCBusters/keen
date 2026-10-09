@@ -5,9 +5,7 @@ import asyncio
 import gzip
 import io
 import hashlib
-import hmac
 import json
-import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -18,6 +16,7 @@ import logging
 from pydantic import Field, ValidationError
 from sqlalchemy.orm import Session
 from app.agents.schema import Strict, Health, fingerprint
+from app.agents.credentials import authenticate, live_only, view
 from app.agents.otlp import decode
 from app.core.config import settings
 from app.core.valkey import get_valkey
@@ -85,32 +84,12 @@ class Rotation(Strict):
     expires_days: int = Field(default=90, ge=1, le=365)
 
 
-def live_only():
-    if settings.demo_mode:
-        raise HTTPException(
-            403,
-            "Agent ingestion and credential management are disabled in demo environments",
-        )
-
-
-def view(agent):
-    return {
-        key: getattr(agent, key)
-        for key in (
-            "id",
-            "name",
-            "enabled",
-            "created_at",
-            "expires_at",
-            "last_seen",
-            "health",
-        )
-    }
-
-
 def issue(agent, days):
     token = "ka_" + agent.id + "." + secrets.token_urlsafe(32)
     agent.token_hash = hashlib.sha256(token.encode()).hexdigest()
+    agent.previous_token_hash = None
+    agent.renewal_nonce_hash = None
+    agent.renewal_retry_until = None
     agent.expires_at = utc_now_naive() + timedelta(days=days)
     return token
 
@@ -163,26 +142,6 @@ def revoke(agent_id: str, db: Session = Depends(get_db)):
     a.token_hash = ""
     db.commit()
     return {"ok": True}
-
-
-def authenticate(request, db, *, lock=True):
-    header = request.headers.get("authorization", "")
-    match = re.fullmatch(r"Bearer (ka_([0-9a-f-]{36})\.[A-Za-z0-9_-]{43})", header)
-    if not match:
-        raise HTTPException(401, "Invalid agent credential")
-    query = db.query(KeenAgent).filter_by(id=match[2])
-    if lock:
-        query = query.with_for_update()
-    a = query.one_or_none()
-    digest = hashlib.sha256(match[1].encode()).hexdigest()
-    if (
-        not a
-        or not hmac.compare_digest(a.token_hash, digest)
-        or not a.enabled
-        or a.expires_at <= utc_now_naive()
-    ):
-        raise HTTPException(401, "Invalid agent credential")
-    return a
 
 
 @router.post("/v1/otlp/logs")
@@ -265,6 +224,8 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
                 raw_pointer={
                     "agent": {
                         "id": a.id,
+                        "enrollment_profile_id": a.enrollment_profile_id,
+                        "enrollment_labels": a.enrollment_labels,
                         "event_id": str(event.id),
                         "sha256": digest,
                         "received_at": datetime.now(timezone.utc).isoformat(),
@@ -341,3 +302,6 @@ async def heartbeat(
 
 
 router.include_router(admin)
+
+from .agent_enrollment import router as enrollment_router
+router.include_router(enrollment_router)

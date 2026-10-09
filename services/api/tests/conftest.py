@@ -35,6 +35,7 @@ def contract_postgres_engine():
             import runpy
             with Operations.context(MigrationContext.configure(connection)):
                 runpy.run_path(str(root/'alembic/versions/0004_source_connections.py'))['upgrade']()
+                runpy.run_path(str(root/'alembic/versions/0005_agent_enrollment.py'))['upgrade']()
         yield engine
     finally:
         try:
