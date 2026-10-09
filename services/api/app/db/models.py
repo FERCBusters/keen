@@ -163,33 +163,55 @@ _osa_target = OsaControlMapping.__table__.alias("osa_target")
 _source_control = ControlItem.__table__.alias("osa_source_control")
 _target_control = ControlItem.__table__.alias("osa_target_control")
 _explicit = CrossFrameworkControlLink.__table__
-# EXISTS prevents duplicate pairs without a global DISTINCT/materialisation.
-# Filters on event/source/target can then be pushed down before joining memberships.
-_shared_nist = exists(select(_osa_source.c.nist_ref).select_from(
-    _osa_source.join(_osa_target, _osa_source.c.nist_ref == _osa_target.c.nist_ref)
-).where(_osa_source.c.control_id == _source_control.c.id,
-        _osa_target.c.control_id == _target_control.c.id))
-_derived_pairs = select(
-    _source_control.c.id.label("source_control_id"),
-    _target_control.c.id.label("target_control_id"),
-).select_from(_source_control.join(_target_control, _shared_nist)).where(
-    _source_control.c.framework_slug != _target_control.c.framework_slug).subquery()
+def effective_cross_framework_links(*, source_ids=None, target_framework=None, enabled=None):
+    """Resolve indexed NIST memberships, never compare every pair of controls.
 
-_effective_links = select(
-    cast(_explicit.c.id, String).label("id"), _explicit.c.source_control_id,
-    _explicit.c.target_control_id, _explicit.c.rationale, _explicit.c.created_at,
-    literal(False).label("derived"),
-).union_all(select(
-    (cast(_derived_pairs.c.source_control_id, String) + literal(":") +
-     cast(_derived_pairs.c.target_control_id, String)).label("id"),
-    _derived_pairs.c.source_control_id, _derived_pairs.c.target_control_id,
-    literal("Related evidence via shared NIST controls in Open Security Architecture (CC BY-SA 4.0). "
-            "KEEN-derived crosswalk; review relevance and coverage gaps. This is not full equivalence."),
-    literal(None, type_=DateTime), literal(True),
-).where(~exists(select(_explicit.c.id).where(
-    _explicit.c.source_control_id == _derived_pairs.c.source_control_id,
-    _explicit.c.target_control_id == _derived_pairs.c.target_control_id,
-)))).subquery("effective_cross_framework_links")
+    Optional restrictions belong INSIDE both UNION arms, before deduplication.
+    Event readers pass the distinct source controls from their bounded page.
+    The unrestricted form remains available for catalogue readers.
+    """
+    explicit = select(
+        cast(_explicit.c.id, String).label("id"), _explicit.c.source_control_id,
+        _explicit.c.target_control_id, _explicit.c.rationale, _explicit.c.created_at,
+        literal(False).label("derived"),
+    )
+    pairs = select(
+        _osa_source.c.control_id.label("source_control_id"),
+        _osa_target.c.control_id.label("target_control_id"),
+    ).select_from(
+        _osa_source.join(_osa_target, _osa_source.c.nist_ref == _osa_target.c.nist_ref)
+        .join(_source_control, _source_control.c.id == _osa_source.c.control_id)
+        .join(_target_control, _target_control.c.id == _osa_target.c.control_id)
+    ).where(_source_control.c.framework_slug != _target_control.c.framework_slug)
+    if source_ids is not None:
+        explicit = explicit.where(_explicit.c.source_control_id.in_(source_ids))
+        pairs = pairs.where(_osa_source.c.control_id.in_(source_ids))
+    if target_framework is not None:
+        targets = select(ControlItem.id).where(ControlItem.framework_slug == target_framework)
+        explicit = explicit.where(_explicit.c.target_control_id.in_(targets))
+        pairs = pairs.where(_target_control.c.framework_slug == target_framework)
+    if enabled is not None:
+        allowed = select(ControlItem.id).where(ControlItem.framework_slug.in_(enabled))
+        explicit = explicit.where(_explicit.c.source_control_id.in_(allowed),
+                                  _explicit.c.target_control_id.in_(allowed))
+        pairs = pairs.where(_source_control.c.framework_slug.in_(enabled),
+                            _target_control.c.framework_slug.in_(enabled))
+    pairs = pairs.distinct().subquery()
+    derived = select(
+        (cast(pairs.c.source_control_id, String) + literal(":") +
+         cast(pairs.c.target_control_id, String)).label("id"),
+        pairs.c.source_control_id, pairs.c.target_control_id,
+        literal("Related evidence via shared NIST controls in Open Security Architecture (CC BY-SA 4.0). "
+                "KEEN-derived crosswalk; review relevance and coverage gaps. This is not full equivalence."),
+        literal(None, type_=DateTime), literal(True),
+    ).where(~exists(select(_explicit.c.id).where(
+        _explicit.c.source_control_id == pairs.c.source_control_id,
+        _explicit.c.target_control_id == pairs.c.target_control_id,
+    )))
+    return explicit.union_all(derived).subquery("effective_cross_framework_links")
+
+
+_effective_links = effective_cross_framework_links()
 
 
 class EffectiveCrossFrameworkControlLink(Base):

@@ -1,6 +1,5 @@
 from __future__ import annotations
 from app.core.datetime_utils import utc_now_naive
-from app.services.control_inheritance import enabled_control_ids
 
 import csv
 import io
@@ -12,7 +11,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, exists, false, func, or_, select, text
-from sqlalchemy.orm import Session, load_only
+from sqlalchemy.orm import Session, load_only, aliased, joinedload
 
 from app.core.config import settings
 from app.api.payloads import IncidentCreatePayload
@@ -29,6 +28,7 @@ from app.db.models import (
     ControlClauseLink,
     ControlItem,
     EffectiveCrossFrameworkControlLink,
+    effective_cross_framework_links,
     Event,
     EventIncident,
     FrameworkClause,
@@ -36,7 +36,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import get_db
-from app.services.control_inheritance import evidence_pairs, effective_framework_ids, event_has_control, source_ids_for_control
+from app.services.control_inheritance import page_controls, evidence_pairs, effective_framework_ids, event_has_control, source_ids_for_control
 from app.outbound.incidents import (
     IncidentWebhookConfig,
     build_event_url,
@@ -247,7 +247,7 @@ def _event_text_search_condition(q: str | None):
     )
 
 
-def _unmapped_event_condition(framework: str):
+def _unmapped_event_condition(framework: str, db=None):
     """Return a NOT EXISTS predicate for events without framework mappings.
 
     Keep this anti-join focused on ``mappings`` by using a small framework-control
@@ -349,7 +349,7 @@ def _build_event_id_query(
         qry = qry.filter(_clause_event_condition(framework, clause))
 
     if unmapped:
-        qry = qry.filter(_unmapped_event_condition(framework))
+        qry = qry.filter(_unmapped_event_condition(framework, db))
 
     return qry.distinct()
 
@@ -416,7 +416,7 @@ def list_events(
         qry = qry.filter(_clause_event_condition(framework, clause))
 
     if unmapped:
-        qry = qry.filter(_unmapped_event_condition(framework))
+        qry = qry.filter(_unmapped_event_condition(framework, db))
 
     cache_parts = {
         "framework": framework,
@@ -434,7 +434,7 @@ def list_events(
         "limit": limit,
         "offset": offset,
         "user": user_cache_scope(user),
-        "query_version": "inherited-controls-v1",
+        "query_version": "inherited-controls-v2",
     }
 
     def _load_page() -> dict[str, Any]:
@@ -471,45 +471,7 @@ def list_events(
 
         event_ids = [e.id for e in events]
 
-        # Preload controls per event. Unmapped result pages cannot have
-        # framework controls by definition, so skip the extra query entirely.
-        controls_by_event: dict[uuid.UUID, list[dict[str, Any]]] = {}
-        if event_ids and not unmapped:
-            rows = (
-                db.query(
-                    Mapping.event_id,
-                    ControlItem.id,
-                    ControlItem.ref,
-                    ControlItem.title,
-                    ControlItem.type,
-                )
-                .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-                .filter(
-                    Mapping.event_id.in_(event_ids),
-                    ControlItem.framework_slug == framework,
-                )
-                .order_by(ControlItem.ref.asc())
-                .all()
-            )
-            for ev_id, c_id, ref, title, ctype in rows:
-                controls_by_event.setdefault(ev_id, []).append(
-                    {"id": str(c_id), "ref": ref, "title": title, "type": ctype}
-                )
-            inherited = (
-                db.query(Mapping.event_id, ControlItem, EffectiveCrossFrameworkControlLink.source_control_id)
-                .join(EffectiveCrossFrameworkControlLink, EffectiveCrossFrameworkControlLink.source_control_id == Mapping.control_item_id)
-                .join(ControlItem, ControlItem.id == EffectiveCrossFrameworkControlLink.target_control_id)
-        .filter(EffectiveCrossFrameworkControlLink.source_control_id.in_(enabled_control_ids(db)),
-                ControlItem.id.in_(enabled_control_ids(db)))
-                .filter(Mapping.event_id.in_(event_ids), ControlItem.framework_slug == framework)
-                .all()
-            )
-            for ev_id, target, source_id in inherited:
-                existing = controls_by_event.setdefault(ev_id, [])
-                if any(item["id"] == str(target.id) for item in existing):
-                    continue
-                existing.append({"id": str(target.id), "ref": target.ref, "title": target.title,
-                                 "type": target.type, "inherited_from_control_id": str(source_id)})
+        controls_by_event = page_controls(db, framework, event_ids) if not unmapped else {}
 
         # Preload artifact counts
         artifact_counts: dict[uuid.UUID, int] = {}
@@ -662,7 +624,7 @@ def event_facets(
                 user=user,
             ).subquery()
 
-            pairs = evidence_pairs(framework, db)
+            pairs = evidence_pairs(framework, db, select(ctl_ids.c.id))
             ctl_rows = (
                 db.query(
                     ControlItem.ref.label("ref"),
@@ -764,7 +726,7 @@ def export_events(
         qry = qry.filter(_clause_event_condition(framework, clause))
 
     if unmapped:
-        qry = qry.filter(_unmapped_event_condition(framework))
+        qry = qry.filter(_unmapped_event_condition(framework, db))
 
     total = qry.order_by(None).count()
     returned = min(total, max_rows)
@@ -839,7 +801,7 @@ def export_events(
             event_ids = [e.id for e in batch]
             controls_by_event: dict[uuid.UUID, list[str]] = {}
             if event_ids:
-                pairs = evidence_pairs(framework, db)
+                pairs = evidence_pairs(framework, db, event_ids)
                 rows = (
                     db.query(pairs.c.event_id, ControlItem.ref)
                     .join(ControlItem, ControlItem.id == pairs.c.control_id)
@@ -1044,7 +1006,7 @@ def unmapped_events(
             )
         )
         .filter(diary_filter_condition(db, user))
-        .filter(_unmapped_event_condition(framework))
+        .filter(_unmapped_event_condition(framework, db))
         .order_by(desc(Event.timestamp))
         .limit(limit)
     )
@@ -1259,14 +1221,19 @@ def get_event(
         }
         for mp, ci in mapped
     ]
+    from app.api.routes.frameworks import _framework_selection
+    enabled = _framework_selection(db)[3]
+    source_ids = select(Mapping.control_item_id).where(Mapping.event_id == eid)
+    scoped_links = effective_cross_framework_links(source_ids=source_ids,
+        target_framework=framework, enabled=enabled)
+    link_model = aliased(EffectiveCrossFrameworkControlLink, scoped_links, adapt_on_names=True)
     inherited = (
-        db.query(Mapping, ControlItem, EffectiveCrossFrameworkControlLink)
-        .join(EffectiveCrossFrameworkControlLink, EffectiveCrossFrameworkControlLink.source_control_id == Mapping.control_item_id)
-        .join(ControlItem, ControlItem.id == EffectiveCrossFrameworkControlLink.target_control_id)
-        .filter(EffectiveCrossFrameworkControlLink.source_control_id.in_(enabled_control_ids(db)),
-                ControlItem.id.in_(enabled_control_ids(db)))
-        .filter(Mapping.event_id == eid, ControlItem.framework_slug == framework)
-        .order_by(ControlItem.ref.asc())
+        db.query(Mapping, ControlItem, link_model)
+        .join(link_model, link_model.source_control_id == Mapping.control_item_id)
+        .join(ControlItem, ControlItem.id == link_model.target_control_id)
+        .options(joinedload(link_model.source))
+        .filter(Mapping.event_id == eid)
+        .order_by(ControlItem.ref.asc(), link_model.source_control_id.asc())
         .all()
     )
     direct_ids = {item["id"] for item in controls}
