@@ -61,6 +61,12 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
 
+      - name: Run frontend regression tests
+        run: |
+          set -eu
+          if [ -f keen/services/ui/package.json ]; then cd keen; fi
+          node --test services/ui/tests/*.test.mjs
+
       - name: Install Poetry
         run: |
           set -eu
