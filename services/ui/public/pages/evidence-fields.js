@@ -31,3 +31,22 @@ export function draftFields(payload){
  if(!f['process.name'])add(['fields','SYSLOG_IDENTIFIER'],f.SYSLOG_IDENTIFIER);
  return result.slice(0,20);
 }
+
+// Match the backend's literal-key paths and scalar comparison representation.
+// Keep dotted attribute names intact; arrays are not addressable conditions.
+export function observedPayloadFields(payload){
+ const result=[];
+ function visit(value,path){
+  if(path.length>8||value===null||Array.isArray(value))return;
+  if(typeof value==='object'){
+   for(const [key,child] of Object.entries(value)){
+    if(key.length&&key.length<=256)visit(child,[...path,key]);
+   }
+  }else if(path.length&&['string','number','boolean'].includes(typeof value)){
+   const text=typeof value==='string'?value:JSON.stringify(value);
+   if(text.length<=4096)result.push({path,value:text});
+  }
+ }
+ visit(payload,[]);
+ return result;
+}
