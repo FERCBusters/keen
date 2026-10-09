@@ -22,11 +22,13 @@ test('Forgejo with rules but no collections explains setup and saves a user coll
   }});
   t.after(ui.close);
   await settle(() => ui.document.getElementById('hub-list').textContent.includes('Add collection'));
+  ui.document.getElementById('hub-start-setup').click();
+  assert.equal(ui.document.getElementById('evidence-management-view').hidden, false);
   ui.window.dispatchEvent(new ui.window.CustomEvent('keen-manage-source', {detail:{source:'forgejo'}}));
   assert.equal(ui.document.getElementById('hub-search').value, 'forgejo');
   assert.equal(ui.document.getElementById('evidence-management-view').hidden, false);
   const list = ui.document.getElementById('hub-list');
-  assert.match(list.textContent, /mapping rule does not create a collection/);
+  assert.match(list.textContent, /use an “all collected events” rule/);
   [...list.querySelectorAll('button')].find(b => b.textContent === 'Add collection').click();
   await settle(() => ui.document.getElementById('hub-collection').open);
   const type = ui.document.getElementById('hub-collection-type');

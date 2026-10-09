@@ -1161,6 +1161,18 @@ def _connection_plan(key: str, db: Session):
             collector = db.get(IntegrationCollector, revision.collector_id)
             if collector and collector.id not in ids and collector.live_revision == revision.revision:
                 blocked = 'Another collector still has a published revision using this connection. Republish it with its new connection first.'
+    elif kind == 'collector':
+        collector = db.get(IntegrationCollector, identity)
+        if collector is None:
+            raise HTTPException(404, 'API ingester not found')
+        name = collector.name
+        children = [collector]
+        sources = ['integration:' + identity]
+        versions = {'collector': [collector.id, collector.version, collector.live_revision,
+                                  collector.connection_id]}
+        count = 1
+        active = db.query(IntegrationRun).filter_by(collector_id=identity, status='running').count()
+        blocked = 'A collection run is active. Wait for it to finish, then preview again.' if active else None
     else:
         raise HTTPException(404, 'Unknown connection')
     rules = _normalized_rules(db)
@@ -1173,7 +1185,8 @@ def _connection_plan(key: str, db: Session):
     return {'key':key, 'name':name, 'kind':kind, 'collections':count,
             'definitions':[{'id':r['id'],'name':r.get('description') or r['id']} for r in related],
             'automatic_mappings':mappings, 'fingerprint':fingerprint, 'blocked':blocked,
-            'sources':sources, 'collector_ids':[c.id for c in children]}
+            'sources':sources, 'collector_ids':[c.id for c in children],
+            'collectors':[{'id':c.id,'name':c.name} for c in children]}
 
 
 @router.get('/v1/admin/evidence-connections/{key}/removal')
@@ -1198,6 +1211,9 @@ def remove_evidence_connection(key: str, payload: ConnectionRemovalInput,
         db.query(IntegrationConnection).filter_by(id=identity).with_for_update().all()
         children = db.query(IntegrationCollector).filter_by(connection_id=identity).with_for_update().all()
         db.query(IntegrationRun).filter((IntegrationRun.connection_id==identity) | IntegrationRun.collector_id.in_([c.id for c in children])).with_for_update().all()
+    elif kind == 'collector':
+        db.query(IntegrationCollector).filter_by(id=identity).with_for_update().all()
+        db.query(IntegrationRun).filter_by(collector_id=identity).with_for_update().all()
     db.query(RuleBackfillJob).filter(RuleBackfillJob.status.in_(['queued','running'])).with_for_update().all()
     db.query(ManagedConfiguration).filter(ManagedConfiguration.name.in_(['rules',identity])).order_by(ManagedConfiguration.name).with_for_update().all()
     plan = _connection_plan(key, db)
@@ -1223,6 +1239,10 @@ def remove_evidence_connection(key: str, payload: ConnectionRemovalInput,
             if section in document:
                 document[section] = {} if isinstance(document[section], dict) else []
         save_document(identity, document)
+    elif kind == 'collector':
+        db.query(IntegrationRun).filter_by(collector_id=identity).delete(synchronize_session=False)
+        db.query(IntegrationRevision).filter_by(collector_id=identity).delete(synchronize_session=False)
+        db.query(IntegrationCollector).filter_by(id=identity).delete(synchronize_session=False)
     else:
         children = plan['collector_ids']
         db.query(IntegrationRun).filter((IntegrationRun.connection_id==identity) | IntegrationRun.collector_id.in_(children)).delete(synchronize_session=False)

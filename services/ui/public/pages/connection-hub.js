@@ -1,4 +1,5 @@
-import {apiGet, apiPost, apiPut} from '/app.js';
+import {confirmEvidenceRemoval} from './evidence-removal.js';
+import {apiGet, apiPut} from '/app.js';
 const root='/api/v1/admin', byId=id=>document.getElementById('hub-'+id);
 let entries=[], mode='source', surface='mapping';
 function button(text, action, danger=false){const b=document.createElement('button');b.type='button';b.className='btn btn-sm '+(danger?'btn-outline-danger':'btn-outline-primary');b.textContent=text;b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){showError(e);}finally{b.disabled=false;}};return b;}
@@ -18,7 +19,7 @@ function render(){
  const groups=new Map();for(const e of visible){const key=mode==='source'?e.source:e.key;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(e);}
  for(const [key,items] of groups){const section=document.createElement(mode==='source'?'details':'section');section.className='card mb-3';if(mode==='source')section.open=items.some(e=>e.collectors.length||e.rules.length);const head=document.createElement(mode==='source'?'summary':'h3');head.className='card-header h6 mb-0';head.textContent=mode==='source'?`${key} · ${items.length} connection${items.length===1?'':'s'}`:(items[0].key.startsWith('builtin:')?`${items[0].source} — Server environment`:items[0].name);section.append(head);const body=document.createElement('div');body.className='card-body';
  for(const item of items){const row=document.createElement('div');row.className='border-bottom pb-3 mb-3';const title=document.createElement('h4');title.className='h6';title.textContent=item.key.startsWith('builtin:')?'Server environment':item.name;const meta=document.createElement('p');meta.className='small text-break';meta.textContent=`${item.type} · ${item.collectors.length} collections · ${item.rules.length} definitions`;if(mode==='source')row.append(title);row.append(meta);
- if(item.source==='forgejo'&&!item.collectors.length){const hint=document.createElement('p');hint.className='alert alert-info';hint.textContent='Forgejo needs a collection before it can fetch events. Choose Add collection, then users for a personal account, organizations for an organisation, or feeds for one repository RSS URL. Your server credentials are reused. An “all events” mapping rule does not create a collection.';row.append(hint);}
+ if(item.source==='forgejo'&&!item.collectors.length){const hint=document.createElement('p');hint.className='alert alert-info';hint.textContent='Forgejo needs a collection before it can fetch events. Choose Add collection, then User for a personal account, Organisation for an organisation, or Feed for one repository RSS URL. Your server credentials are reused. After collecting, use an “all collected events” rule to map evidence from these collections.';row.append(hint);}
  if(item.key.startsWith('builtin:')) for(const c of item.collectors){
   const line=document.createElement('div');line.className='d-flex flex-wrap align-items-center gap-2 my-2';
   const label=document.createElement('span');label.textContent=c.section+': '+c.key;label.className='text-break';
@@ -32,16 +33,9 @@ function render(){
  if(!visible.length){const p=document.createElement('p');p.textContent='No matching sources or connections.';container.append(p);}
 }
 async function removeConnection(item){
- const url=root+'/evidence-connections/'+encodeURIComponent(item.key);
- const plan=await apiGet(url+'/removal');if(plan.blocked)throw new Error(plan.blocked);
- const dialog=byId('confirm');const detail=byId('impact');detail.replaceChildren();
- const p=document.createElement('p');p.textContent=`${item.name}: remove ${plan.collections} collections, ${plan.definitions.length} definitions and ${plan.automatic_mappings} automatic evidence-to-control links.`;detail.append(p);
- const list=document.createElement('ul');for(const rule of plan.definitions){const li=document.createElement('li');li.textContent=rule.name;list.append(li);}detail.append(list);
- byId('confirm-name').textContent=item.name;byId('typed-name').value='';byId('delete').disabled=true;
- byId('typed-name').oninput=()=>{byId('delete').disabled=byId('typed-name').value!==item.name;};
- byId('delete').onclick=async()=>{byId('delete').disabled=true;try{await apiPost(url+'/remove',{fingerprint:plan.fingerprint});dialog.close();await load();window.dispatchEvent(new Event('keen-connections-changed'));}catch(e){dialog.close();showError(e);}};
- dialog.showModal();
+ await confirmEvidenceRemoval(item, {onRemoved: load, onError: showError});
 }
+byId('start-setup').onclick=()=>byId('source').click();
 byId('source').onclick=()=>{showSurface('source');mode='source';render();};
 byId('connection').onclick=()=>{showSurface('connection');mode='connection';render();};
 byId('search').oninput=render;byId('refresh').onclick=()=>load().catch(showError);byId('cancel').onclick=()=>byId('confirm').close();
@@ -64,7 +58,7 @@ async function editCollection(adapter, existing=null){
  if(!layouts[adapter])throw new Error('Use the evidence editor for this specialised collection type.');
  const config=await apiGet(root+'/managed-configurations/'+encodeURIComponent(adapter));
  const dialog=byId('collection');const type=byId('collection-type');
- type.replaceChildren();for(const key of Object.keys(layouts[adapter]))type.add(new Option(key,key));
+ type.replaceChildren();for(const key of Object.keys(layouts[adapter]))type.add(new Option(({users:'User',organizations:'Organisation',feeds:'Feed'})[key]||key,key));
  type.value=existing?.section||Object.keys(layouts[adapter])[0];type.disabled=!!existing;
  const paint=()=>{byId('collection-fields').replaceChildren();for(const name of layouts[adapter][type.value]){
   const label=document.createElement('label');label.className='form-label d-block';label.textContent=adapter==='riskledger'&&name==='org'?'Organisation UUID (or * for the API key’s organisation)':adapter==='redmine'&&name==='project'?'Project ID / identifier (or * for all accessible projects)':name;

@@ -79,3 +79,59 @@ def test_removes_automatic_links_preserves_manual_links_and_events(database,monk
     assert result['deleted_automatic_mappings']==1
     assert db.query(Event).count()==2
     assert sorted(m.method for m in db.query(Mapping))==['manual','rule']
+
+
+def test_individual_ingester_removal_preserves_connection_siblings_and_evidence(database, monkeypatch):
+    db, _ = database
+    seed_rules(db)
+    from app.services import control_evidence_stats
+    monkeypatch.setattr(control_evidence_stats, 'rebuild_framework_event_stats', lambda *a, **k: None)
+    monkeypatch.setattr(control_evidence_stats, 'clear_stats_caches', lambda: None)
+    db.add(IntegrationCollector(id='sibling', name='Other checks', connection_id='connection', draft={}))
+    db.add(IntegrationRevision(collector_id='collector', revision=1, connection_id='connection', definition={}))
+    db.add(IntegrationRun(id='queued', collector_id='collector', connection_id='connection', revision=1, definition={}, status='queued'))
+    evidence = Event(timestamp=utc_now_naive(), source='integration:collector', summary='Retained evidence', external_id='kept')
+    controls = [ControlItem(framework_slug='test', type='custom', ref=f'A.{i}') for i in range(3)]
+    db.add_all([evidence, *controls]); db.flush()
+    db.add_all([Mapping(event_id=evidence.id, control_item_id=c.id, method=method)
+                for c, method in zip(controls, ['rule', 'manual', 'import'])])
+    db.commit()
+    plan = api.preview_connection_removal('collector:collector', db)
+    assert plan['collectors'] == [{'id': 'collector', 'name': 'Checks'}]
+    assert plan['collections'] == 1
+    result = api.remove_evidence_connection('collector:collector', api.ConnectionRemovalInput(fingerprint=plan['fingerprint']), SimpleNamespace(id=None), db)
+    assert result['deleted_definitions'] == result['deleted_automatic_mappings'] == 1
+    assert db.get(IntegrationCollector, 'collector') is None
+    assert db.get(IntegrationCollector, 'sibling') is not None
+    assert db.get(IntegrationConnection, 'connection') is not None
+    assert db.query(IntegrationRevision).count() == db.query(IntegrationRun).count() == 0
+    assert db.query(Event).count() == 1
+    assert sorted(m.method for m in db.query(Mapping)) == ['import', 'manual']
+    assert [r['id'] for r in db.get(ManagedConfiguration, 'rules').document['rules']] == ['other']
+
+
+@pytest.mark.parametrize('change', ['version', 'running'])
+def test_individual_removal_rechecks_preview(database, change):
+    db, _ = database
+    seed_rules(db)
+    plan = api.preview_connection_removal('collector:collector', db)
+    if change == 'version':
+        db.get(IntegrationCollector, 'collector').version += 1
+    else:
+        db.add(IntegrationRun(id='active', collector_id='collector', connection_id='connection', revision=1, definition={}, status='running'))
+    db.commit()
+    with pytest.raises(HTTPException) as error:
+        api.remove_evidence_connection('collector:collector', api.ConnectionRemovalInput(fingerprint=plan['fingerprint']), SimpleNamespace(id=None), db)
+    assert error.value.status_code == 409
+    assert db.get(IntegrationCollector, 'collector') is not None
+
+
+def test_individual_removal_demo_guard(database, monkeypatch):
+    db, _ = database
+    seed_rules(db)
+    plan = api.preview_connection_removal('collector:collector', db)
+    monkeypatch.setattr(api.settings, 'demo_mode', True)
+    with pytest.raises(HTTPException) as error:
+        api.remove_evidence_connection('collector:collector', api.ConnectionRemovalInput(fingerprint=plan['fingerprint']), SimpleNamespace(id=None), db)
+    assert error.value.status_code == 403
+    assert db.get(IntegrationCollector, 'collector') is not None

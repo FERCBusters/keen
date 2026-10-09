@@ -385,6 +385,7 @@
       </div>
 
       <div class="tab-pane fade" id="pane-evidence-config" role="tabpanel" aria-labelledby="tab-evidence-config" tabindex="0">
+<p class="small-muted">Getting started: configure access to a source, choose its collections, run an ingestion, then map the collected events to controls. <button id="hub-start-setup" type="button" class="btn btn-link btn-sm p-0 align-baseline">Set up a source</button></p>
 <div class="nav nav-tabs mb-3" role="tablist" aria-label="Evidence workspace views">
 <button id="hub-mapping" class="nav-link active" type="button" role="tab" aria-selected="true" aria-controls="evidence-mapping-view">Evidence Mapping</button>
 <button id="hub-source" class="nav-link" type="button" role="tab" aria-selected="false" aria-controls="evidence-management-view" tabindex="-1">By source</button>
@@ -407,7 +408,7 @@
             <section data-ec-step="1"><div id="ec-draft-notice" class="alert alert-info" hidden></div><h4 class="h6">1. Choose the events to use</h4>
             <p class="small-muted">Choose a source, inspect a recent event and copy the values you want to match. The next step chooses the controls that receive the matching evidence. Collection settings belong to the source; a mapping rule decides where its evidence is linked.</p>
             <div id="ec-selected-input" class="rounded bg-body-tertiary p-2 mb-2" hidden></div>
-            <div id="ec-input-picker" class="row g-2"><div class="col-md-8"><label for="ec-definition-adapter" class="form-label">Where does the evidence come from?</label><select id="ec-definition-adapter" class="form-select"></select></div><details class="col-12" id="ec-input-options"><summary>Limit to a particular query, job, feed or page (optional)</summary><div class="row g-2 mt-1"><div class="col-md-6"><label for="ec-definition-section" class="form-label">Input type</label><select id="ec-definition-section" class="form-select"></select></div><div class="col-md-6"><label for="ec-definition-entry" class="form-label">Query, job, feed or page</label><select id="ec-definition-entry" class="form-select"></select></div></div></details></div>
+            <div id="ec-input-picker" class="row g-2"><div class="col-md-8"><label for="ec-definition-adapter" class="form-label">Where does the evidence come from?</label><select id="ec-definition-adapter" class="form-select"></select></div><details class="col-12" id="ec-input-options"><summary>Limit to a particular query, job, feed or page (optional)</summary><div class="row g-2 mt-1"><div class="col-md-6"><label for="ec-definition-section" class="form-label">Mapping scope</label><select id="ec-definition-section" class="form-select"></select></div><div class="col-md-6"><label for="ec-definition-entry" class="form-label">Collection to match</label><select id="ec-definition-entry" class="form-select"></select></div></div></details></div>
             <div id="ec-source-scope-help" class="alert alert-info mt-2" hidden>
               <p id="ec-source-scope-description" class="mb-2"></p>
               <button id="ec-manage-collections" type="button" class="btn btn-sm btn-outline-primary">Set up collections</button>
@@ -484,7 +485,7 @@
       <h2 id="hub-collection-title" class="h4">Add collection</h2><p>Choose the remote input to fetch. You can map its events to controls separately.</p><label for="hub-collection-type">Input type</label><select id="hub-collection-type" class="form-select mb-3"></select><div id="hub-collection-fields"></div><details><summary>Additional collection settings</summary><textarea id="hub-collection-extra" class="form-control font-monospace" rows="5" aria-label="Additional collection settings JSON">{}</textarea></details><p id="hub-collection-error" class="text-danger" role="alert"></p><button id="hub-collection-cancel" class="btn btn-outline-secondary">Cancel</button> <button id="hub-collection-save" class="btn btn-primary">Save collection</button>
     </dialog>
     <dialog id="hub-confirm" aria-labelledby="hub-confirm-heading" style="max-width:640px;width:calc(100% - 2rem);max-height:85vh;overflow:auto;background:var(--bs-body-bg);color:var(--bs-body-color);border:1px solid var(--bs-border-color);border-radius:1rem;padding:1.5rem">
-      <h2 id="hub-confirm-heading" class="h4">Remove connection and mappings</h2><div id="hub-impact"></div><p>Collected events, evidence artifacts, manual mappings and imported mappings remain. API collector revisions and run history are removed with their connection. Server environment credentials remain in .env. Shared cross-source rules remain.</p>
+      <h2 id="hub-confirm-heading" class="h4">Remove connection and mappings</h2><div id="hub-impact"></div><p id="hub-retained"></p>
       <label for="hub-typed-name">Type <strong id="hub-confirm-name"></strong> to confirm</label><input id="hub-typed-name" class="form-control my-3" autocomplete="off"><div class="d-flex gap-2"><button id="hub-cancel" class="btn btn-outline-secondary">Cancel</button><button id="hub-delete" class="btn btn-danger" disabled>Remove connection and mappings</button></div>
     </dialog>
 
