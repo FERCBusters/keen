@@ -8,9 +8,10 @@ from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
-import httpx
+import httpx2 as httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
-from authlib.jose import jwt
+from joserfc import jwt
+from joserfc.jwk import KeySet
 from authlib.oidc.core import CodeIDToken
 from fastapi import HTTPException, Request
 from sqlalchemy import func
@@ -762,13 +763,18 @@ async def _handle_oidc_callback(
         "access_token": (token or {}).get("access_token"),
     }
 
-    claims = jwt.decode(
+    # Signature verification and claim validation are distinct in joserfc.
+    # Keep the existing signed JWT algorithms explicit; never accept "none"
+    # or let a token header determine the verification policy.
+    decoded = jwt.decode(
         id_token,
-        jwks,
-        claims_cls=CodeIDToken,
-        claims_options=claims_options,
-        claims_params=claims_params,
+        KeySet.import_key_set(jwks),
+        algorithms=["HS256", "HS384", "HS512", "RS256", "RS384", "RS512",
+                    "ES256", "ES384", "ES512", "ES256K", "PS256", "PS384",
+                    "PS512", "EdDSA"],
     )
+    claims = CodeIDToken(decoded.claims, decoded.header,
+                         options=claims_options, params=claims_params)
     claims.validate(leeway=int(provider.id_token_leeway_seconds or 0))
 
     claims_dict: dict[str, Any] = dict(claims)

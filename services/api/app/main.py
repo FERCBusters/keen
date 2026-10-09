@@ -2,6 +2,7 @@ from __future__ import annotations
 from app.core.datetime_utils import utc_now_naive
 
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI, Request
@@ -36,7 +37,18 @@ from app.realtime.notifications import (
     stop_notification_listener,
 )
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await _startup_realtime_notifications()
+    try:
+        bootstrap_initial_admin()
+        yield
+    finally:
+        await _shutdown_realtime_notifications()
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Keen API",
     version="1.0.0",
     description=(
@@ -109,7 +121,6 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
-@app.on_event("startup")
 async def _startup_realtime_notifications() -> None:
     # Best-effort; the app should still start even if Redis is temporarily
     # unavailable.
@@ -119,7 +130,6 @@ async def _startup_realtime_notifications() -> None:
         pass
 
 
-@app.on_event("shutdown")
 async def _shutdown_realtime_notifications() -> None:
     try:
         await stop_notification_listener()
@@ -130,7 +140,6 @@ async def _shutdown_realtime_notifications() -> None:
 from app.security.client_ip import request_ip as _client_ip
 
 
-@app.on_event("startup")
 def bootstrap_initial_admin():
     """Create the first admin user on fresh installs.
 
