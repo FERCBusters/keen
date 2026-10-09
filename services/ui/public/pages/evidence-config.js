@@ -1,4 +1,4 @@
-import {fieldLabel, draftFields, observedPayloadFields} from '/pages/evidence-fields.js';
+import {fieldLabel, draftFields, observedPayloadFields, fieldChoiceGroups} from '/pages/evidence-fields.js';
 import {apiGet, apiPost, apiPut, apiDelete} from '/app.js';
 
 const $ = suffix => document.getElementById(`ec-${suffix}`);
@@ -564,6 +564,7 @@ $('sample').addEventListener('change', () => {
   $('sample-details').textContent = $('sample').value && sample ?
     ['system', 'action', 'outcome', 'actor', 'severity'].map(field => `${fieldTitles[field]}: ${sample[field] ?? '(not supplied)'}`).join(' · ') :
     'Choose a recent event to inspect its fields.';
+  refreshFieldChoices();
 });
 $('use-sample').addEventListener('click', () => {
   if (!$('sample').value) return;
@@ -794,33 +795,38 @@ window.addEventListener('keen-collection-create', async event => {
 });
 window.addEventListener('keen-connections-changed', () => loadRules().catch(e=>status(e.message)));
 
+function currentEventFields(){
+ const index=$('sample').value;
+ return index!==''&&samples[Number(index)] ? samples[Number(index)].fields||[] : draftEventFields;
+}
 function availableEventFields(){return [...draftEventFields,...samples.flatMap(sample=>sample.fields||[])];}
+function populateFieldChoices(select,selectedPath=null){
+ select.replaceChildren(new Option('Choose an event field…',''));
+ for(const group of fieldChoiceGroups(currentEventFields(),availableEventFields(),selectedPath)){
+  const optgroup=document.createElement('optgroup');optgroup.label=group.label;
+  for(const item of group.items)optgroup.append(new Option(item.label,JSON.stringify(item.path)));
+  select.append(optgroup);
+ }
+ select.value=selectedPath?JSON.stringify(selectedPath):'';
+}
 function refreshFieldChoices(){
  const list=$('field-paths');list.replaceChildren();const paths=new Set();
  for(const item of availableEventFields()){const path=JSON.stringify(item.path);if(paths.has(path))continue;paths.add(path);list.append(new Option(item.path.join(' › '),path));}
- // Update existing rows without changing chosen paths, operators or values.
+ // Regroup rows as the inspected sample changes, preserving all conditions.
  for(const row of $('field-rows').children){
   const select=row.fieldInputs.path;
-  const known=new Set([...select.options].map(option=>option.value));
-  for(const item of availableEventFields()){
-   const key=JSON.stringify(item.path);
-   if(!known.has(key)){select.add(new Option(fieldLabel(item.path),key));known.add(key);}
-  }
+  populateFieldChoices(select,select.value?JSON.parse(select.value):null);
  }
 }
 function addFieldCondition(item={}){
  const row=document.createElement('div');row.className='d-flex flex-wrap gap-2 align-items-start';
  const path=document.createElement('select');path.className='form-select';path.style.flex='2 1 260px';path.style.width='auto';path.setAttribute('aria-label','Event field');path.add(new Option('Choose an event field…',''));
- const candidates=new Map();
- for(const observed of availableEventFields())candidates.set(JSON.stringify(observed.path),fieldLabel(observed.path));
- for(const [keys,label] of [[['fields','service.name'],'Service'],[['fields','process.name'],'Program'],[['fields','_SYSTEMD_UNIT'],'Journal service (also older agents)'],[['fields','SYSLOG_IDENTIFIER'],'Journal program (also older agents)'],[['fields','client.ip'],'Client IP'],[['fields','status'],'HTTP status'],[['fields','path'],'Request path'],[['fields','log.file.path'],'Log file'],[['fields','http.method'],'HTTP method'],[['fields','package'],'Package'],[['fields','package_status'],'Package state'],[['fields','job.command'],'Scheduled command'],[['source'],'Collection name']]){const key=JSON.stringify(keys);candidates.set(key,fieldLabel(keys));}
- if(item.path&&!candidates.has(JSON.stringify(item.path)))candidates.set(JSON.stringify(item.path),fieldLabel(item.path));
- for(const [value,label] of candidates)path.add(new Option(label,value));path.value=item.path?JSON.stringify(item.path):'';
+ populateFieldChoices(path,item.path||null);
  const op=document.createElement('select');op.className='form-select w-auto';op.setAttribute('aria-label','Field operator');for(const [value,label] of [['equals','equals'],['starts_with','starts with'],['contains','contains'],['exists','exists'],['in_cidr','is in IP network (CIDR)']])op.add(new Option(label,value));op.value=item.operator||'equals';
  const value=document.createElement('input');value.className='form-control';value.style.flex='2 1 200px';value.style.width='auto';value.setAttribute('aria-label','Field value');value.placeholder='Match value';value.value=item.value??'';
  const remove=document.createElement('button');remove.type='button';remove.className='btn btn-outline-danger';remove.textContent='Remove';remove.onclick=()=>row.remove();
  op.onchange=()=>{value.hidden=op.value==='exists';};op.onchange();
- path.onchange=()=>{if(value.value)return;const sample=$('sample').value?samples[Number($('sample').value)]:null;const observed=(sample?.fields||draftEventFields).find(x=>JSON.stringify(x.path)===path.value);if(observed)value.value=observed.value;};
+ path.onchange=()=>{if(value.value)return;const observed=currentEventFields().find(x=>JSON.stringify(x.path)===path.value);if(observed)value.value=observed.value;};
  row.append(path,op,value,remove);row.fieldInputs={path,op,value};$('field-rows').append(row);
 }
 function readFieldConditions(){return [...$('field-rows').children].map(row=>{const {path,op,value}=row.fieldInputs;let keys;try{keys=JSON.parse(path.value);}catch{throw new Error('Choose an event field.');}if(!Array.isArray(keys)||!keys.length||keys.some(k=>typeof k!=='string'||!k))throw new Error('Field paths must be arrays of non-empty keys.');return {path:keys,operator:op.value,...(op.value==='exists'?{}:{value:value.value})};});}

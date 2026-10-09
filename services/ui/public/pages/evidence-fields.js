@@ -50,3 +50,27 @@ export function observedPayloadFields(payload){
  visit(payload,[]);
  return result;
 }
+
+export function fieldChoiceGroups(currentFields, otherFields, selectedPath=null){
+ const seen=new Set();
+ const groups=[];
+ function add(label,fields){
+  const items=[];
+  for(const {path} of fields){
+   const key=JSON.stringify(path);
+   if(seen.has(key))continue;
+   seen.add(key);items.push({path,label:fieldLabel(path)});
+  }
+  items.sort((a,b)=>a.label.localeCompare(b.label));
+  if(items.length)groups.push({label,items});
+ }
+ add('Fields in this event',currentFields);
+ add('Fields seen in other samples',otherFields);
+ add('Predefined fields (not observed)',[
+  ...['service.name','process.name','_SYSTEMD_UNIT','SYSLOG_IDENTIFIER','client.ip',
+   'status','path','log.file.path','http.method','package','package_status','job.command']
+   .map(key=>({path:['fields',key]})),{path:['source']}
+ ]);
+ if(selectedPath)add('Selected field (not observed)',[{path:selectedPath}]);
+ return groups;
+}
