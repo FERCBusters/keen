@@ -1,0 +1,28 @@
+# Mount this file on API and worker and set KEEN_SOURCE_CONNECTIONS_FILE to it.
+# Enable each source type with its KEEN_<TYPE>_ENABLED flag.
+# IDs are stable identities: retain them when changing a name or credential.
+connections:
+  - id: production-loki
+    source: loki
+    name: Production logs
+    enabled: true
+    configuration:
+      base_url: https://logs.example.org
+      username: keen
+    credentials:
+      password: {env: PRODUCTION_LOKI_PASSWORD}
+    inputs:
+      queries:
+        - name: authentication
+          logql: '{service="authentication"}'
+  - id: engineering-forgejo
+    source: forgejo
+    name: Engineering Forgejo
+    configuration:
+      base_url: https://git.example.org
+      auth_mode: token
+    credentials:
+      token: {file: /run/secrets/engineering-forgejo-token}
+    inputs:
+      users:
+        - user: alice

@@ -304,6 +304,9 @@ class Event(Base):
     )
 
     timestamp: Mapped[datetime] = mapped_column(DateTime, index=True, nullable=False)
+    # Snapshots survive connection deletion and identify the origin of historical evidence.
+    connection_id: Mapped[str | None] = mapped_column(String(96), nullable=True, index=True)
+    connection_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     source: Mapped[str] = mapped_column(
         String(64), index=True, nullable=False
     )  # loki, webhook:something, etc.
@@ -2920,3 +2923,17 @@ class SsoEmailChallenge(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     mfa_version: Mapped[int] = mapped_column(Integer, nullable=False)
     password_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class SourceConnection(Base):
+    """A named endpoint and encrypted credentials for a built-in source adapter."""
+    __tablename__ = "source_connections"
+    id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    configuration: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    encrypted_credentials: Mapped[str | None] = mapped_column(Text, nullable=True)
+    inputs: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)

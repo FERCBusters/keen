@@ -256,33 +256,44 @@ async def isms_effectiveness_metric_webhook(
     return {"ok": True, "metric_entry": out}
 
 
+@router.post("/v1/webhooks/connections/{connection_id}/{provider}/{event_type}")
 @router.post("/v1/webhooks/{provider}/{event_type}")
 async def webhook_ingest(
-    provider: str, event_type: str, request: Request, db: Session = Depends(get_db)
+    provider: str, event_type: str, request: Request, db: Session = Depends(get_db), connection_id: str | None = None
 ):
-    # Rate limiting: 100 requests per minute per IP
-    # Fail closed to prevent DoS during Redis outages
-    ip = request.client.host if request.client else "unknown"
-    r = get_valkey()
-    ok, retry = fixed_window_allow(
-        r, f"keen:rl:webhook:{provider}:ip:{ip}", 100, 60, fail_closed=True
-    )
-    if not ok:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Rate limit exceeded. Retry after {retry} seconds.",
-            headers={"Retry-After": str(retry)},
-        )
-
-    headers = {k: v for k, v in request.headers.items()}
-    if not verify_secret(provider, headers):
-        raise HTTPException(status_code=403, detail="Invalid webhook secret")
+    from app.ingest.connections import connections, connection_scope, deployment_settings, resolve
+    if not deployment_settings.webhooks_enabled:
+        raise HTTPException(503, 'Webhook ingestion is disabled')
     from app.services.ingestion_pause import require_receiving
-    require_receiving(db, "webhooks")
-    body = await request.body()
-    try:
-        return ingest_webhook(
-            db, provider=provider, event_type=event_type, body=body, headers=headers
+    require_receiving(db, 'webhooks')
+    key = connection_id or 'env:webhooks'
+    connection = next((c for c in connections(db, 'webhooks') if c.id == key and c.enabled), None)
+    if connection is None:
+        raise HTTPException(404, 'Connection not found')
+    with connection_scope(resolve(connection)):
+        # Rate limiting: 100 requests per minute per IP
+        # Fail closed to prevent DoS during Redis outages
+        ip = request.client.host if request.client else "unknown"
+        r = get_valkey()
+        ok, retry = fixed_window_allow(
+            r, f"keen:rl:webhook:{provider}:ip:{ip}", 100, 60, fail_closed=True
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        if not ok:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Retry after {retry} seconds.",
+                headers={"Retry-After": str(retry)},
+            )
+
+        headers = {k: v for k, v in request.headers.items()}
+        if not verify_secret(provider, headers):
+            raise HTTPException(status_code=403, detail="Invalid webhook secret")
+        from app.services.ingestion_pause import require_receiving
+        require_receiving(db, "webhooks")
+        body = await request.body()
+        try:
+            return ingest_webhook(
+                db, provider=provider, event_type=event_type, body=body, headers=headers
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))

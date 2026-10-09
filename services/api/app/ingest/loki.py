@@ -13,8 +13,8 @@ import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.core.managed_configuration import load_document
-from app.core.config import settings
+from app.ingest.connections import load_document
+from app.ingest.connections import settings, connection_runs, namespace, identity, artifact_key
 from app.db.models import Event, Artifact, IngestionCursor, ControlItem, Mapping
 from app.ingest.common import is_safe_url
 from app.storage.s3 import put_bytes
@@ -217,6 +217,7 @@ def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
     rules = load_rules(settings.rules_path, db=db)
     event_dict = {
         "source": ev.source,
+        "connection_id": ev.connection_id,
         "system": ev.system,
         "actor": ev.actor,
         "action": ev.action,
@@ -333,7 +334,7 @@ def ingest_loki_once(
     query_config = query_config or {}
 
     # Cursor
-    cursor_name = f"loki:{query_name}"
+    cursor_name = namespace(f"loki:{query_name}")
     cur = (
         db.query(IngestionCursor)
         .filter(IngestionCursor.name == cursor_name)
@@ -562,7 +563,8 @@ def ingest_loki_once(
                             summary=summary,
                             raw_pointer=raw_pointer_r,
                             normalized_payload=normalized_r,
-                            external_id=external_id,
+                            external_id=namespace(external_id),
+                            **identity(),
                         )
                         .on_conflict_do_nothing(
                             index_elements=["source", "external_id"]
@@ -592,7 +594,7 @@ def ingest_loki_once(
                     line_bytes, redaction_status = redact_bytes(
                         line.encode("utf-8", errors="replace"), ctype
                     )
-                    stored = put_bytes(key=key, data=line_bytes, content_type=ctype)
+                    stored = put_bytes(key=artifact_key(key), data=line_bytes, content_type=ctype)
                     art = Artifact(
                         event_id=inserted_id,
                         kind="log_line",
@@ -621,7 +623,8 @@ def ingest_loki_once(
                         summary=summary,
                         raw_pointer=raw_pointer_r,
                         normalized_payload=normalized_r,
-                        external_id=external_id,
+                        external_id=namespace(external_id),
+                        **identity(),
                     )
                     mapped = _apply_rules_and_store_mappings(db, ev_for_rules)
                     created_mappings += mapped
@@ -687,6 +690,7 @@ def ingest_loki_once(
 
 
 @pausable('loki')
+@connection_runs('loki')
 def ingest_loki_all(db: Session) -> list[dict[str, Any]]:
     if not settings.loki_enabled:
         return [{"skipped": True, "reason": "KEEN_LOKI_ENABLED=false"}]

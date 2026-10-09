@@ -12,6 +12,7 @@ test('Forgejo with rules but no collections explains setup and saves a user coll
     window.HTMLDialogElement.prototype.close = function() {this.open = false;};
   }, vendor:{
     apiGet: async url => {
+      if (url.endsWith('/source-connections')) return {connections:[],types:[{source:'forgejo',enabled:true,fields:['base_url','username','auth_mode'],credential_fields:['token','cookie']}]};
       if (url.endsWith('/evidence-definitions')) return {collectors:[], rules:[{id:'any', when:{source:'forgejo'}}]};
       if (url.endsWith('/integrations')) return {connections:[], collectors:[], demo_mode:false};
       if (url.endsWith('/managed-configurations')) return {items:[{name:'forgejo'}]};
@@ -21,15 +22,16 @@ test('Forgejo with rules but no collections explains setup and saves a user coll
     apiPut: async (url, body) => {saved = {url, body};},
   }});
   t.after(ui.close);
-  await settle(() => ui.document.getElementById('hub-list').textContent.includes('Add collection'));
+  await settle(() => ui.document.getElementById('hub-list').textContent.includes('Add input'));
   ui.document.getElementById('hub-start-setup').click();
-  assert.equal(ui.document.getElementById('evidence-management-view').hidden, false);
+  assert.match(ui.document.querySelector('dialog[open]').textContent,/Set up a source/);
+  ui.document.querySelector('dialog[open]').close();
   ui.window.dispatchEvent(new ui.window.CustomEvent('keen-manage-source', {detail:{source:'forgejo'}}));
   assert.equal(ui.document.getElementById('hub-search').value, 'forgejo');
   assert.equal(ui.document.getElementById('evidence-management-view').hidden, false);
   const list = ui.document.getElementById('hub-list');
   assert.match(list.textContent, /use an “all collected events” rule/);
-  [...list.querySelectorAll('button')].find(b => b.textContent === 'Add collection').click();
+  [...list.querySelectorAll('button')].find(b => b.textContent === 'Add input').click();
   await settle(() => ui.document.getElementById('hub-collection').open);
   const type = ui.document.getElementById('hub-collection-type');
   type.value = 'users'; type.dispatchEvent(new ui.window.Event('change'));

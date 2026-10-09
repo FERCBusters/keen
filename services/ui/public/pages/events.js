@@ -470,7 +470,7 @@ function renderRows(items) {
           .join('') + (more ? `<span class="badge text-bg-light">+${more}</span>` : '');
 
     const sourceHref = e.source ? withFramework(`/source.html?source=${encodeURIComponent(e.source)}`, framework) : '';
-    const sourceHtml = e.source ? sourceBadgeHtml(e.source, sourceMeta, sourceHref) : '';
+    const sourceHtml = (e.source ? sourceBadgeHtml(e.source, sourceMeta, sourceHref) : '') + (e.connection_id ? `<div class="small text-muted" title="${esc(e.connection_id)}">${esc(e.connection_name || e.connection_id)}</div>` : '');
 
     const artifactHtml = e.artifact_count ?
       `<span class="badge badge-soft">${e.artifact_count}</span>` :

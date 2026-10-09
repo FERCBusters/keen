@@ -30,6 +30,11 @@ def contract_postgres_engine():
         with engine.begin() as connection:
             config.attributes['connection']=connection
             command.upgrade(config,'0001_release_schema')
+            from alembic.migration import MigrationContext
+            from alembic.operations import Operations
+            import runpy
+            with Operations.context(MigrationContext.configure(connection)):
+                runpy.run_path(str(root/'alembic/versions/0004_source_connections.py'))['upgrade']()
         yield engine
     finally:
         try:

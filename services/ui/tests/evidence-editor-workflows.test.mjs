@@ -16,6 +16,7 @@ async function fixture(t,{fail=false}={}){
   if(url.pathname==='/api/v1/admin/evidence-event-samples')return {sources:['keen-agent'],items:[sample]};
   if(url.pathname==='/api/v1/admin/source-catalogue')return {items:[{adapter:'keen-agent',enabled:true}]};
   if(url.pathname==='/api/v1/admin/integrations')return {collectors:[]};
+  if(url.pathname==='/api/v1/admin/source-connections')return {connections:[],types:[]};
   if(url.pathname==='/api/v1/admin/evidence-definitions')return {rules:[],collectors:[],rules_version:1};
   if(url.pathname.startsWith('/api/v1/admin/adapter-settings/'))return {settings:{},version:1};
   if(url.pathname==='/api/v1/frameworks')return {items:[{slug:'A',name:'Framework A'}]};

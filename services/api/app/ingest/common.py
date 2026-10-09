@@ -178,6 +178,7 @@ def apply_rules(db: Session, ev: Event) -> int:
     rules = load_rules(settings.rules_path, db=db)
     event_dict = {
         "source": ev.source,
+        "connection_id": ev.connection_id,
         "system": ev.system,
         "actor": ev.actor,
         "action": ev.action,
@@ -251,6 +252,9 @@ def store_event_with_artifact(
 ) -> dict[str, Any]:
     from app.services.ingestion_pause import require_purge_receiving
     require_purge_receiving(db)
+    from app.ingest.connections import namespace, identity, artifact_key as scoped_artifact_key
+    external_id = namespace(external_id)
+    artifact_key = scoped_artifact_key(artifact_key)
     # --- hardening: redact secrets BEFORE persisting anything ---
     raw_pointer = redact_obj(raw_pointer) or {}
     normalized_payload = redact_obj(normalized_payload) or {}
@@ -297,6 +301,7 @@ def store_event_with_artifact(
         raw_pointer=raw_pointer,
         normalized_payload=normalized_payload,
         external_id=external_id,
+        **identity(),
     )
     try:
         # Use a SAVEPOINT so an integrity error here doesn't force a full

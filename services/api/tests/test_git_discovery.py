@@ -55,11 +55,11 @@ class GitDiscoveryTests(unittest.TestCase):
 
     def test_empty_configuration_is_explicit(self):
         with patch.object(forgejo.settings,'forgejo_enabled',True),patch.object(forgejo,'load_forgejo_config',return_value={}):
-            self.assertIn('No Forgejo collections',forgejo.ingest_forgejo_all(Mock())[0]['reason'])
+            self.assertIn('No Forgejo collections',forgejo.ingest_forgejo_all(None)[0]['reason'])
 
     def test_gitlab_group_discovery_and_storage(self):
         from types import SimpleNamespace
-        db=Mock();db.query.return_value.filter_by.return_value.one_or_none.return_value=None
+        db=Mock();db.scalars.return_value.all.return_value=[];db.query.return_value.filter_by.return_value.one_or_none.return_value=None
         events=[{'id':2,'created_at':'2026-10-06T00:00:00Z','action_name':'pushed','author_username':'mig5'}]
         with patch.object(gitlab.settings,'gitlab_enabled',True),patch.object(gitlab,'is_safe_url',return_value=True),patch.object(gitlab,'load_document',return_value={'groups':[{'group':'team/sub'}]}),patch.object(gitlab.httpx,'Client'),patch.object(gitlab,'_pages',side_effect=[[{'id':3,'path_with_namespace':'team/sub/repo'}],events]) as pages,patch.object(gitlab,'store_event_with_artifact',return_value={'deduped':False}) as store:
             result=gitlab.ingest_gitlab_all(db)
@@ -72,7 +72,7 @@ class GitDiscoveryTests(unittest.TestCase):
         db.commit.assert_called_once()
 
     def test_discovery_inputs_reach_runner(self):
-        db=Mock()
+        db=Mock();db.scalars.return_value.all.return_value=[]
         with patch.object(forgejo.settings,'forgejo_enabled',True),patch.object(forgejo.settings,'forgejo_base_url','https://git.example.org'),patch.object(forgejo,'load_forgejo_config',return_value={'users':[{'user':'mig5'}]}),patch.object(forgejo,'_discover_repositories',return_value=[{'owner':{'login':'mig5'},'name':'repo'}]),patch.object(forgejo,'ingest_forgejo_repo_feed',return_value={'created_events':1}) as ingest:
             result=forgejo.ingest_forgejo_all(db)
         self.assertEqual(ingest.call_args.kwargs['feed_url'],'https://git.example.org/mig5/repo.rss')

@@ -124,3 +124,6 @@ router.include_router(home_router, tags=['Home'])
 
 from .sso_emails import router as sso_emails_router
 router.include_router(sso_emails_router, tags=["Me"])
+
+from .source_connections import router as source_connections_router
+router.include_router(source_connections_router, tags=['Admin'])

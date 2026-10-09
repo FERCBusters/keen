@@ -11,8 +11,8 @@ from xml.etree import ElementTree as ET
 import httpx
 from sqlalchemy.orm import Session
 
-from app.core.managed_configuration import load_document
-from app.core.config import settings
+from app.ingest.connections import load_document
+from app.ingest.connections import settings, connection_runs, namespace
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact
 from app.security.redaction import redact_url
@@ -202,7 +202,7 @@ def ingest_github_repo(
     db: Session, owner: str, repo: str, label: str | None = None,
     collecting_org: str | None = None,
 ) -> dict[str, Any]:
-    cursor_name = f"github:{owner}/{repo}"
+    cursor_name = namespace(f"github:{owner}/{repo}")
     cur = (
         db.query(IngestionCursor)
         .filter(IngestionCursor.name == cursor_name)
@@ -327,7 +327,7 @@ def ingest_github_org_events(
       - /users/{username}/events/orgs/{org} (authenticated user's org dashboard)
     """
 
-    cursor_name = f"github:org-events:{org}:{mode}"
+    cursor_name = namespace(f"github:org-events:{org}:{mode}")
     cur = (
         db.query(IngestionCursor)
         .filter(IngestionCursor.name == cursor_name)
@@ -528,7 +528,7 @@ def ingest_github_org_auditlog(
     This avoids enumerating every repo. It requires an org owner token with the `read:audit_log` scope.
     """
 
-    cursor_name = f"github:audit:{org}"
+    cursor_name = namespace(f"github:audit:{org}")
     cur = (
         db.query(IngestionCursor)
         .filter(IngestionCursor.name == cursor_name)
@@ -657,7 +657,7 @@ def ingest_github_atom_feed(
 
     # Normalize the cursor name based on the URL path.
     u = urlparse(feed_url)
-    cursor_name = f"github:feed:{u.netloc}{u.path}"
+    cursor_name = namespace(f"github:feed:{u.netloc}{u.path}")
     cur = (
         db.query(IngestionCursor)
         .filter(IngestionCursor.name == cursor_name)
@@ -824,6 +824,7 @@ def ingest_github_atom_feed(
 
 
 @pausable('github')
+@connection_runs('github')
 def ingest_github_all(db: Session) -> list[dict[str, Any]]:
     if not settings.github_enabled:
         return [{"skipped": True, "reason": "KEEN_GITHUB_ENABLED=false"}]

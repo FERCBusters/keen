@@ -47,6 +47,9 @@ def process_batch(job_id: uuid.UUID) -> bool:
             job.rules_version = current.version
         identity = job.rule_document.get("when", {}).get("collector")
         scope = Event.source == job.source
+        connection_id = job.rule_document.get("when", {}).get("connection_id")
+        if connection_id:
+            scope = and_(scope, Event.connection_id == connection_id)
         if identity:
             scope = and_(scope, Event.raw_pointer.contains(collector_pointer_filter(identity)))
         # Also revisit prior matches when the source/collector or conditions changed.
@@ -93,7 +96,9 @@ def process_batch(job_id: uuid.UUID) -> bool:
         matched = 0
         for event in events:
             event_data = {
-                "source": event.source, "system": event.system, "actor": event.actor,
+                "source": event.source,
+        "connection_id": event.connection_id,
+        "connection_name": event.connection_name, "system": event.system, "actor": event.actor,
                 "action": event.action, "outcome": event.outcome, "severity": event.severity,
                 "summary": event.summary, "raw_pointer": event.raw_pointer,
                 "normalized_payload": event.normalized_payload}

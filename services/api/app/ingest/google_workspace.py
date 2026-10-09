@@ -34,8 +34,8 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from app.core.managed_configuration import load_document
-from app.core.config import settings
+from app.ingest.connections import load_document
+from app.ingest.connections import settings, connection_runs, namespace
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact
 
@@ -283,7 +283,7 @@ def ingest_google_workspace_stream(
     max_results = int(cfg.get("max_results") or 1000)
     max_results = max(1, min(max_results, 1000))  # API max
 
-    cursor_name = _cursor_name({**cfg, "name": name})
+    cursor_name = namespace(_cursor_name({**cfg, "name": name}))
     cur = (
         db.query(IngestionCursor)
         .filter(IngestionCursor.name == cursor_name)
@@ -496,6 +496,7 @@ def ingest_google_workspace_stream(
 
 
 @pausable('google_workspace')
+@connection_runs('google_workspace')
 def ingest_google_workspace_all(db: Session) -> list[dict[str, Any]]:
     if not settings.google_workspace_enabled:
         return [{"skipped": True, "reason": "google_workspace_enabled=false"}]

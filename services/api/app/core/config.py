@@ -325,6 +325,9 @@ class Settings(BaseSettings):
             )
         return value
 
+    # Global receiving gate for all webhook connections.
+    webhooks_enabled: bool = Field(default=True)
+
     # Loki
     loki_enabled: bool = Field(default=False)
     loki_base_url: str = Field(default="http://localhost:3100")

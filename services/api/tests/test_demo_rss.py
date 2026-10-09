@@ -16,7 +16,7 @@ def test_demo_uses_only_preset(monkeypatch):
     fn = Mock(return_value={'ok':True})
     monkeypatch.setattr(rss, 'ingest_rss_feed', fn)
     monkeypatch.setattr(rss, 'load_rss_config', lambda *a: (_ for _ in ()).throw(AssertionError('Demo must ignore arbitrary config')))
-    db = Mock()
+    db = Mock();db.scalars.return_value.all.return_value=[]
     rss.ingest_rss_all(db)
     fn.assert_called_once_with(db, FEED)
 

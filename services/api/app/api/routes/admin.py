@@ -784,43 +784,33 @@ def admin_run_loki_ingest(
 @router.post("/v1/admin/ingest/loki/reset")
 def admin_reset_loki_cursors(
     query_name: str = "",
+    connection_id: str | None = None,
     user=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """Reset Loki ingestion cursors to now.
 
     If query_name is omitted, reset all configured Loki query cursors plus any
-    existing loki:* cursors. This intentionally does not delete events; it only
+    existing cursors for the selected connections. This retains events and
     moves the checkpoint so future runs start from the reset time.
     """
     now = datetime.now(timezone.utc)
     raw_query_name = (query_name or "").strip()
 
-    if raw_query_name:
-        cursor_names = [
-            (
-                raw_query_name
-                if raw_query_name.startswith("loki:")
-                else f"loki:{raw_query_name}"
-            )
-        ]
-    else:
-        cursor_names = []
-        try:
-            cfg = load_loki_queries(settings.loki_queries_path)
-            cursor_names.extend(
-                f"loki:{q.get('name')}"
-                for q in (cfg.get("queries", []) or [])
-                if q.get("name")
-            )
-        except Exception:
-            # Fall back to known cursors if the config file is unavailable.
-            cursor_names = []
-
-        existing = (
-            db.query(IngestionCursor).filter(IngestionCursor.name.like("loki:%")).all()
-        )
-        cursor_names.extend(c.name for c in existing)
+    from app.ingest.connections import connections, connection_scope, namespace
+    selected = [c for c in connections(db, 'loki') if not connection_id or c.id == connection_id]
+    if connection_id and not selected:
+        raise HTTPException(404, 'Connection not found')
+    cursor_names = []
+    for connection in selected:
+        with connection_scope(connection):
+            if raw_query_name:
+                cursor_names.append(namespace(raw_query_name if raw_query_name.startswith('loki:') else 'loki:'+raw_query_name))
+            else:
+                cfg = load_loki_queries(settings.loki_queries_path)
+                cursor_names.extend(namespace('loki:'+q['name']) for q in cfg.get('queries',[]) if q.get('name'))
+                cursor_names.extend(c.name for c in db.query(IngestionCursor).filter(
+                    IngestionCursor.name.startswith(connection.id+':', autoescape=True)).all())
 
     cursor_names = sorted(set(cursor_names))
     reset_cursors: list[str] = []

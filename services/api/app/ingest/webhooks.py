@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.core.managed_configuration import load_document
+from app.ingest.connections import load_document, current_connection, namespace
 from app.core.config import settings
 from app.core.valkey import get_valkey
 from app.ingest.common import store_event_with_artifact
@@ -24,6 +24,14 @@ def load_webhook_policies(path: str) -> dict[str, Any]:
 
 
 def verify_secret(provider: str, headers: dict[str, str]) -> bool:
+    connection = current_connection()
+    if connection and connection.managed_by != 'environment':
+        if provider != connection.configuration.get('provider'):
+            return False
+        expected = connection.credentials.get('secret')
+        header = connection.configuration.get('secret_header', 'X-Webhook-Secret').lower()
+        got = {k.lower():v for k,v in headers.items()}.get(header)
+        return bool(expected and got and hmac.compare_digest(got, expected))
     pol = (
         load_webhook_policies(settings.webhooks_path)
         .get("providers", {})
@@ -87,6 +95,7 @@ def _check_replay_protection(
     payload_hash = hashlib.sha256(body).hexdigest()
     replay_key = f"keen:webhook:replay:{provider}:{event_type}:{payload_hash}"
 
+    replay_key = namespace(replay_key)
     existing = r.set(
         replay_key, "1", nx=True, ex=_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS + 60
     )

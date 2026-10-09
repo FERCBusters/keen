@@ -12,8 +12,8 @@ from urllib.parse import quote, urlsplit
 import httpx
 from sqlalchemy import text
 
-from app.core.config import settings
-from app.core.managed_configuration import load_document
+from app.ingest.connections import settings, connection_runs, namespace, identity
+from app.ingest.connections import load_document
 from app.db.models import IngestionCursor
 from app.ingest.common import is_safe_url, store_event_with_artifact
 
@@ -184,7 +184,7 @@ def _project(db, client, base, selection, project, config):
     pid = _id(project['id'])
     # Physical project identity survives changing from wildcard to a specific project.
     digest = hashlib.sha256(f'{base}:{pid}'.encode()).hexdigest()
-    name = 'redmine:' + digest
+    name = namespace('redmine:' + digest)
     cursor = db.query(IngestionCursor).filter_by(name=name).one_or_none()
     started = datetime.now(timezone.utc).replace(tzinfo=None)
     since = cursor.last_ts if cursor and cursor.last_ts else None
@@ -246,6 +246,7 @@ def _run_lock(db, base):
 
 
 @pausable('redmine')
+@connection_runs('redmine')
 def ingest_redmine_all(db):
     if settings.demo_mode or not settings.redmine_enabled:
         return [{'skipped': True, 'reason': 'Redmine disabled (or demo mode)'}]

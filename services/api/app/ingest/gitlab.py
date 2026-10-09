@@ -6,8 +6,8 @@ import hashlib
 import json
 from urllib.parse import quote
 import httpx
-from app.core.config import settings
-from app.core.managed_configuration import load_document
+from app.ingest.connections import settings, connection_runs, namespace, identity
+from app.ingest.connections import load_document
 from app.db.models import IngestionCursor
 from app.ingest.common import is_safe_url, store_event_with_artifact
 from app.ingest.forgejo import _parse_iso_ts
@@ -38,7 +38,7 @@ def _project_events(db, client, base, section, key, project, label):
     project_id = int(project['id'])
     identity = json.dumps([base, section, key, project_id], separators=(',', ':'))
     digest = hashlib.sha256(identity.encode()).hexdigest()
-    cursor_name = 'gitlab:' + digest
+    cursor_name = namespace('gitlab:' + digest)
     cur = db.query(IngestionCursor).filter_by(name=cursor_name).one_or_none()
     since = cur.last_ts if cur and cur.last_ts else utc_now_naive() - timedelta(days=14)
     # Date-based API filter overlaps the cursor day; stable IDs deduplicate retries.
@@ -72,6 +72,7 @@ def _project_events(db, client, base, section, key, project, label):
 
 
 @pausable('gitlab')
+@connection_runs('gitlab')
 def ingest_gitlab_all(db):
     if not settings.gitlab_enabled:
         return [{'skipped': True, 'reason': 'KEEN_GITLAB_ENABLED=false'}]

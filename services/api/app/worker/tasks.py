@@ -538,3 +538,15 @@ def security_notifications_task():
 def ingest_riskledger_all_task():
     with SessionLocal() as db:
         return ingest_riskledger_all(db)
+
+
+@celery_app.task(name='keen.ingest_source_connection')
+def ingest_source_connection_task(source: str, connection_id: str):
+    """Use the same entry point and global gates as scheduled polling."""
+    from importlib import import_module
+    from app.services.ingestion_pause import POLLING_SOURCES
+    if source not in POLLING_SOURCES:
+        raise ValueError('Unknown polling source')
+    ingest = getattr(import_module('app.ingest.' + source), 'ingest_' + source + '_all')
+    with SessionLocal() as db:
+        return ingest(db, connection_id=connection_id)

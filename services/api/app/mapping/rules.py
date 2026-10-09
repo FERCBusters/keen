@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class Condition:
     fields: list[dict] | None = None
+    connection_id: str | None = None
     collector: str | None = None
     source: str | None = None
     source_regex: str | None = None
@@ -175,6 +176,7 @@ _KNOWN_WHEN_KEYS = {
     "bookstack_book_id", "bookstack_book_slug", "bookstack_page_id",
     "bookstack_page_slug", "bookstack_page_slug_regex",
     "bookstack_page_title", "bookstack_page_title_regex",
+    "connection_id",
     "collector",
     "source",
     "source_regex",
@@ -458,6 +460,7 @@ def parse_rules(raw: Any) -> list[Rule]:
 
         cond = Condition(
             fields=validate_fields(w["fields"]) if "fields" in w else None,
+            connection_id=_clean_optional_str(w.get("connection_id")),
             collector=_clean_optional_str(w.get("collector")),
             source=_clean_optional_str(w.get("source")),
             source_regex=_clean_optional_str(w.get("source_regex")),
@@ -551,6 +554,8 @@ def evaluate_by_framework(
     for r in rules:
         c = r.when
         if not all(field_matches(event.get("normalized_payload") or {}, item) for item in (c.fields or [])):
+            continue
+        if c.connection_id and c.connection_id != event.get("connection_id"):
             continue
         if c.collector and not matches_collector(c.collector, event):
             continue

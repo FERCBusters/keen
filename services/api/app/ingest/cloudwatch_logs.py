@@ -13,8 +13,8 @@ import boto3
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.core.managed_configuration import load_document
-from app.core.config import settings
+from app.ingest.connections import load_document
+from app.ingest.connections import settings, connection_runs, namespace, artifact_key, identity
 from app.db.models import Artifact, ControlItem, Event, IngestionCursor, Mapping
 from app.mapping.rules import evaluate_by_framework, load_rules
 from app.security.redaction import redact_bytes, redact_obj
@@ -42,6 +42,8 @@ def _cloudwatch_client(region: str | None = None):
     kwargs: dict[str, Any] = {}
     if region:
         kwargs["region_name"] = region
+    from app.ingest.connections import aws_credentials
+    kwargs.update(aws_credentials())
     return boto3.client("logs", **kwargs)
 
 
@@ -200,6 +202,7 @@ def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
     rules = load_rules(settings.rules_path, db=db)
     event_dict = {
         "source": ev.source,
+        "connection_id": ev.connection_id,
         "system": ev.system,
         "actor": ev.actor,
         "action": ev.action,
@@ -280,7 +283,7 @@ def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
 def ingest_cloudwatch_logs_once(
     db: Session, name: str, q: dict[str, Any], defaults: dict[str, Any]
 ) -> dict[str, Any]:
-    cursor_name = f"cloudwatch_logs:{name}"
+    cursor_name = namespace(f"cloudwatch_logs:{name}")
     cur = (
         db.query(IngestionCursor)
         .filter(IngestionCursor.name == cursor_name)
@@ -464,7 +467,8 @@ def ingest_cloudwatch_logs_once(
                     summary=summary,
                     raw_pointer=raw_pointer_r,
                     normalized_payload=normalized_r,
-                    external_id=ext_id,
+                    external_id=namespace(ext_id),
+                    **identity(),
                 )
                 .on_conflict_do_nothing(index_elements=["source", "external_id"])
                 .returning(Event.id)
@@ -486,7 +490,7 @@ def ingest_cloudwatch_logs_once(
                 msg_bytes, redaction_status = redact_bytes(
                     msg.encode("utf-8", errors="replace"), ctype
                 )
-                stored = put_bytes(key=key, data=msg_bytes, content_type=ctype)
+                stored = put_bytes(key=artifact_key(key), data=msg_bytes, content_type=ctype)
                 art = Artifact(
                     event_id=inserted_id,
                     kind="log_event",
@@ -514,7 +518,8 @@ def ingest_cloudwatch_logs_once(
                     summary=summary,
                     raw_pointer=raw_pointer_r,
                     normalized_payload=normalized_r,
-                    external_id=ext_id,
+                    external_id=namespace(ext_id),
+                    **identity(),
                 )
                 created_mappings += _apply_rules_and_store_mappings(db, ev_for_rules)
 
@@ -554,6 +559,7 @@ def ingest_cloudwatch_logs_once(
 
 
 @pausable('cloudwatch_logs')
+@connection_runs('cloudwatch_logs')
 def ingest_cloudwatch_logs_all(db: Session) -> list[dict[str, Any]]:
     if not settings.cloudwatch_logs_enabled:
         return [{"skipped": True, "reason": "KEEN_CLOUDWATCH_LOGS_ENABLED=false"}]

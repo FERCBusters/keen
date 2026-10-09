@@ -41,6 +41,9 @@ def is_paused(db, source):
 
 
 def require_receiving(db, source):
+    from app.core.config import settings
+    if source == 'webhooks' and not settings.webhooks_enabled:
+        raise HTTPException(503, 'Webhook ingestion is disabled')
     if is_paused(db, source):
         raise HTTPException(503, 'Source ingestion is paused by an administrator; retry later.',
                             headers={'Retry-After': '60'})

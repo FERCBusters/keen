@@ -10,8 +10,8 @@ import httpx
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 
-from app.core.managed_configuration import load_document
-from app.core.config import settings
+from app.ingest.connections import load_document
+from app.ingest.connections import settings, connection_runs, namespace
 from app.db.models import IngestionCursor
 from app.db.models import utcnow
 from app.ingest.common import fingerprint, store_event_with_artifact, is_safe_url
@@ -35,6 +35,7 @@ def _get_or_create_cursor(db: Session, name: str) -> IngestionCursor:
     Multiple ingestion runs can overlap (manual trigger + scheduler, multiple
     API workers, etc.). Use an upsert so we never crash on unique violations.
     """
+    name = namespace(name)
     cur = db.query(IngestionCursor).filter(IngestionCursor.name == name).one_or_none()
     if cur is not None:
         return cur
@@ -175,6 +176,7 @@ def ingest_jenkins_job(
 
 
 @pausable('jenkins')
+@connection_runs('jenkins')
 def ingest_jenkins_all(db: Session) -> list[dict[str, Any]]:
     if not settings.jenkins_enabled:
         return [{"skipped": True, "reason": "KEEN_JENKINS_ENABLED=false"}]

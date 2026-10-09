@@ -146,7 +146,7 @@ def test_bookstack_capture_preserves_scope_and_respects_content_mode(contract_db
     listing=next(req for req in fetched if req.url.path=='/api/pages')
     assert listing.url.params['filter[book_id]']=='7'
     assert listing.url.params['filter[draft]']=='false'
-    assert contract_db.query(IngestionCursor).filter_by(name='bookstack:pages').one().last_ts is not None
+    assert contract_db.query(IngestionCursor).filter(IngestionCursor.name.like('env:bookstack:%')).one().last_ts is not None
 
 
 @pytest.mark.parametrize('match,page,expected', [

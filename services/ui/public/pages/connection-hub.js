@@ -1,41 +1,50 @@
+import {editSourceConnection} from './source-connection-editor.js';
 import {confirmEvidenceRemoval} from './evidence-removal.js';
-import {apiGet, apiPut} from '/app.js';
+import {apiGet, apiPut, apiPost, apiDelete} from '/app.js';
 const root='/api/v1/admin', byId=id=>document.getElementById('hub-'+id);
+let connectionTypes=[], namedConnections=[];
 let entries=[], mode='source', surface='mapping';
 function button(text, action, danger=false){const b=document.createElement('button');b.type='button';b.className='btn btn-sm '+(danger?'btn-outline-danger':'btn-outline-primary');b.textContent=text;b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){showError(e);}finally{b.disabled=false;}};return b;}
 function showError(e){const el=byId('status');el.hidden=false;el.className='alert alert-danger';let text=e.message||String(e);try{text=JSON.parse(text).detail||text;}catch{}el.textContent=text;}
 function go(source, create=false){showSurface('mapping');location.hash='evidence-config';window.dispatchEvent(new CustomEvent(create?'keen-collection-create':'keen-filter-source',{detail:{source}}));}
 async function load(){
- const [definitions, integrations, config]=await Promise.all([apiGet(root+'/evidence-definitions'),apiGet(root+'/integrations'),apiGet(root+'/managed-configurations')]);
- entries=config.items.map(c=>({key:'builtin:'+c.name,name:c.name,source:c.name,type:'Server environment',collectors:definitions.collectors.filter(x=>x.adapter===c.name),rules:definitions.rules.filter(x=>x.when?.source===c.name || (c.name==='webhooks' && x.when?.source?.startsWith('webhook:'))),demo:integrations.demo_mode}));
+ const [definitions, integrations, config, named]=await Promise.all([apiGet(root+'/evidence-definitions'),apiGet(root+'/integrations'),apiGet(root+'/managed-configurations'),apiGet(root+'/source-connections')]);
+ connectionTypes=named.types;namedConnections=named.connections;
+ entries=config.items.map(c=>({key:'builtin:'+c.name,name:c.name,source:c.name,type:'Environment default',collectors:definitions.collectors.filter(x=>x.adapter===c.name&&!x.connection_id),rules:definitions.rules.filter(x=>x.when?.source===c.name || (c.name==='webhooks' && x.when?.source?.startsWith('webhook:'))),demo:integrations.demo_mode}));
+ for(const c of named.connections)entries.push({key:'named:'+c.id,name:c.name,source:c.source,type:(c.enabled?'Enabled':'Paused')+' · '+(c.configuration.base_url||'Account connection'),collectors:definitions.collectors.filter(x=>x.connection_id===c.id),rules:definitions.rules.filter(x=>x.when?.connection_id===c.id),connection:c,demo:integrations.demo_mode});
  for(const c of integrations.connections){const collectors=integrations.collectors.filter(x=>x.connection_id===c.id);const sources=collectors.map(x=>'integration:'+x.id);entries.push({key:'api:'+c.id,name:c.name,source:'API integrations',type:c.base_url,collectors,rules:definitions.rules.filter(x=>sources.includes(x.when?.source)),sources,demo:integrations.demo_mode});}
  render();
 }
 function render(){
  for(const view of ['source','connection']){const selected=surface===view;byId(view).classList.toggle('active',selected);}
- byId('view-description').textContent=mode==='source'?'Grouped by source type, such as Forgejo or API integrations. Expand a source to manage its connections, collections and mapping rules.':'Grouped by individual connection. This view is useful when custom API ingesters use several named connections. Built-in sources each have one server-environment connection, so their items and actions appear in both views.';
+ byId('view-description').textContent=mode==='source'?'Grouped by source type, such as Forgejo or API integrations. Expand a source to manage its connections, inputs and mapping rules.':'Each connection identifies one endpoint or account, with its own credentials and inputs.';
  const container=byId('list');container.replaceChildren();const query=byId('search').value.toLowerCase();
  const visible=entries.filter(e=>`${e.name} ${e.source} ${e.type}`.toLowerCase().includes(query));
  const groups=new Map();for(const e of visible){const key=mode==='source'?e.source:e.key;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(e);}
- for(const [key,items] of groups){const section=document.createElement(mode==='source'?'details':'section');section.className='card mb-3';if(mode==='source')section.open=items.some(e=>e.collectors.length||e.rules.length);const head=document.createElement(mode==='source'?'summary':'h3');head.className='card-header h6 mb-0';head.textContent=mode==='source'?`${key} · ${items.length} connection${items.length===1?'':'s'}`:(items[0].key.startsWith('builtin:')?`${items[0].source} — Server environment`:items[0].name);section.append(head);const body=document.createElement('div');body.className='card-body';
- for(const item of items){const row=document.createElement('div');row.className='border-bottom pb-3 mb-3';const title=document.createElement('h4');title.className='h6';title.textContent=item.key.startsWith('builtin:')?'Server environment':item.name;const meta=document.createElement('p');meta.className='small text-break';meta.textContent=`${item.type} · ${item.collectors.length} collections · ${item.rules.length} definitions`;if(mode==='source')row.append(title);row.append(meta);
- if(item.source==='forgejo'&&!item.collectors.length){const hint=document.createElement('p');hint.className='alert alert-info';hint.textContent='Forgejo needs a collection before it can fetch events. Choose Add collection, then User for a personal account, Organisation for an organisation, or Feed for one repository RSS URL. Your server credentials are reused. After collecting, use an “all collected events” rule to map evidence from these collections.';row.append(hint);}
- if(item.key.startsWith('builtin:')) for(const c of item.collectors){
+ for(const [key,items] of groups){const section=document.createElement(mode==='source'?'details':'section');section.className='card mb-3';if(mode==='source')section.open=items.some(e=>e.collectors.length||e.rules.length);const head=document.createElement(mode==='source'?'summary':'h3');head.className='card-header h6 mb-0';head.textContent=mode==='source'?`${key} · ${items.length} connection${items.length===1?'':'s'}`:(items[0].key.startsWith('builtin:')?`${items[0].source} — Environment default`:items[0].name);section.append(head);const body=document.createElement('div');body.className='card-body';
+ for(const item of items){const row=document.createElement('div');row.className='border-bottom pb-3 mb-3';const title=document.createElement('h4');title.className='h6';title.textContent=item.key.startsWith('builtin:')?'Environment default':item.name;const meta=document.createElement('p');meta.className='small text-break';meta.textContent=`${item.type} · ${item.collectors.length} inputs · ${item.rules.length} definitions`;if(mode==='source')row.append(title);row.append(meta);if(item.connection?.source==='webhooks'){const url=document.createElement('p');url.className='text-break';url.textContent=location.origin+'/api/v1/webhooks/connections/'+item.connection.id+'/'+(item.connection.configuration.provider||'provider')+'/EVENT_TYPE';row.append(url);}
+ if(item.source==='forgejo'&&!item.collectors.length){const hint=document.createElement('p');hint.className='alert alert-info';hint.textContent='Forgejo needs an input before it can fetch events. Choose Add input, then User for a personal account, Organisation for an organisation, or Feed for one repository RSS URL. Your server credentials are reused. After collecting, use an “all collected events” rule to map evidence from these inputs.';row.append(hint);}
+ if((item.key.startsWith('builtin:')||item.connection?.managed_by==='database')&&item.source!=='webhooks') for(const c of item.collectors){
   const line=document.createElement('div');line.className='d-flex flex-wrap align-items-center gap-2 my-2';
   const label=document.createElement('span');label.textContent=c.section+': '+c.key;label.className='text-break';
-  line.append(label,button('Edit collection',()=>editCollection(item.source,c)),button('Map events',()=>go(item.source)));row.append(line);
+  line.append(label,button('Edit input',()=>editCollection(item.source,c,item.connection)),button('Map events',()=>go(item.source)));if(item.connection)line.append(button('Remove input',()=>removeInput(item.connection,c),true));row.append(line);
  }
  const actions=document.createElement('div');actions.className='d-flex flex-wrap gap-2';
- if(item.key.startsWith('builtin:')){actions.append(button('View definitions',()=>go(item.source)),button('Add collection',()=>editCollection(item.source)));}
+ if(item.connection && item.connection.managed_by==='database'){
+  actions.append(button('Edit connection',()=>editConnection(item.connection)),button('View definitions',()=>go(item.source)));
+  if(item.source!=='webhooks')actions.append(button('Add input',()=>editCollection(item.source,null,item.connection)),button('Run connection',async()=>{await apiPost(root+'/source-connections/'+item.connection.id+'/run',{});byId('status').hidden=false;byId('status').className='alert alert-success';byId('status').textContent='Connection run queued.';}));
+ } else if(item.connection){actions.append(button('View definitions',()=>go(item.source)));}
+ else if(item.key.startsWith('builtin:')){actions.append(button('View definitions',()=>go(item.source)),button('Add input',()=>editCollection(item.source)));}
  else{for(const c of item.collectors)actions.append(button('Definitions: '+c.name,()=>go('integration:'+c.id)));}
- const remove=button(item.key.startsWith('builtin:')?'Clear connection':'Delete connection',()=>removeConnection(item),true);remove.disabled=!!item.demo;actions.append(remove);row.append(actions);body.append(row);}
+ const remove=button(item.key.startsWith('builtin:')?'Clear connection':'Delete connection',()=>removeConnection(item),true);remove.disabled=!!item.demo||!!(item.connection&&item.connection.managed_by!=='database');actions.append(remove);row.append(actions);body.append(row);}
  section.append(body);container.append(section);}
  if(!visible.length){const p=document.createElement('p');p.textContent='No matching sources or connections.';container.append(p);}
 }
 async function removeConnection(item){
+ if(item.connection){if(confirm('Delete '+item.name+'? Collected evidence and its connection identity will be retained.')){await apiDelete(root+'/source-connections/'+item.connection.id+'?version='+item.connection.version);await load();}return;}
  await confirmEvidenceRemoval(item, {onRemoved: load, onError: showError});
 }
-byId('start-setup').onclick=()=>byId('source').click();
+byId('start-setup').onclick=()=>editConnection().catch(showError);
 byId('source').onclick=()=>{showSurface('source');mode='source';render();};
 byId('connection').onclick=()=>{showSurface('connection');mode='connection';render();};
 byId('search').oninput=render;byId('refresh').onclick=()=>load().catch(showError);byId('cancel').onclick=()=>byId('confirm').close();
@@ -54,9 +63,9 @@ const layouts={
  cloudwatch_logs:{queries:['name','region','log_group','filter_pattern']},taiga:{projects:['id','label']},
  google_workspace:{streams:['name','application','user_key']},bookstack:{selected_pages:['id','name']}
 };
-async function editCollection(adapter, existing=null){
+async function editCollection(adapter, existing=null, connection=null){
  if(!layouts[adapter])throw new Error('Use the evidence editor for this specialised collection type.');
- const config=await apiGet(root+'/managed-configurations/'+encodeURIComponent(adapter));
+ const config=connection?{document:connection.inputs,version:connection.version}:await apiGet(root+'/managed-configurations/'+encodeURIComponent(adapter));
  const dialog=byId('collection');const type=byId('collection-type');
  type.replaceChildren();for(const key of Object.keys(layouts[adapter]))type.add(new Option(({users:'User',organizations:'Organisation',feeds:'Feed'})[key]||key,key));
  type.value=existing?.section||Object.keys(layouts[adapter])[0];type.disabled=!!existing;
@@ -64,14 +73,14 @@ async function editCollection(adapter, existing=null){
   const label=document.createElement('label');label.className='form-label d-block';label.textContent=adapter==='riskledger'&&name==='org'?'Organisation UUID (or * for the API key’s organisation)':adapter==='redmine'&&name==='project'?'Project ID / identifier (or * for all accessible projects)':name;
   const input=document.createElement('input');input.className='form-control';input.dataset.field=name;input.value=existing?.entry?.[name]??'';label.append(input);byId('collection-fields').append(label);
  }byId('collection-extra').value=JSON.stringify(existing?.entry||{},null,2);};
- type.onchange=paint;paint();byId('collection-title').textContent=(existing?'Edit ':'Add ')+adapter+' collection';byId('collection-error').textContent='';
+ type.onchange=paint;paint();byId('collection-title').textContent=(existing?'Edit ':'Add ')+adapter+' input · '+(connection?.name||'Environment default');byId('collection-error').textContent='';
  byId('collection-save').onclick=async()=>{const save=byId('collection-save');save.disabled=true;try{
   const entry=JSON.parse(byId('collection-extra').value||'{}');
   if(!entry||Array.isArray(entry)||typeof entry!=='object')throw new Error('Additional settings must be a JSON object.');
   for(const input of byId('collection-fields').querySelectorAll('input')){const key=input.dataset.field;const value=input.value.trim();if(value)entry[key]=key==='id'?Number(value):value;else delete entry[key];}
   const document=structuredClone(config.document);const rows=document[type.value]||[];
   if(existing){const index=rows.findIndex(row=>JSON.stringify(row)===JSON.stringify(existing.entry));if(index<0)throw new Error('Collection changed. Close and reopen the editor.');rows[index]=entry;}else rows.push(entry);
-  document[type.value]=rows;await apiPut(root+'/managed-configurations/'+encodeURIComponent(adapter),{version:config.version,document});
+  document[type.value]=rows;if(connection)await apiPut(root+'/source-connections/'+connection.id,connectionPayload(connection,{inputs:document}));else await apiPut(root+'/managed-configurations/'+encodeURIComponent(adapter),{version:config.version,document});
   dialog.close();await load();window.dispatchEvent(new Event('keen-connections-changed'));
  }catch(e){byId('collection-error').textContent=e.message||String(e);}finally{save.disabled=false;}};
  dialog.showModal();
@@ -102,3 +111,21 @@ window.addEventListener('keen-manage-source', event => {
   for (const section of byId('list').querySelectorAll('details')) section.open = true;
   byId('search').focus();
 });
+
+
+function connectionPayload(c,changes={}){return {source:c.source,name:c.name,enabled:c.enabled,configuration:c.configuration,inputs:c.inputs,version:c.version,...changes};}
+async function editConnection(connection=null){
+ editSourceConnection({types:connectionTypes,connection,onSaved:async result=>{
+  try {await load();window.dispatchEvent(new Event('keen-connections-changed'));showSurface('connection');mode='connection';render();
+   if(!connection&&result.source!=='webhooks')await editCollection(result.source,null,result);
+  }catch(error){showError(error);}
+ }});
+}
+
+async function removeInput(connection,input){
+ if(!confirm('Remove this input? Existing evidence and mapping rules are retained.'))return;
+ const inputs=structuredClone(connection.inputs);
+ inputs[input.section]=(inputs[input.section]||[]).filter(row=>JSON.stringify(row)!==JSON.stringify(input.entry));
+ await apiPut(root+'/source-connections/'+connection.id,connectionPayload(connection,{inputs}));
+ await load();window.dispatchEvent(new Event('keen-connections-changed'));
+}

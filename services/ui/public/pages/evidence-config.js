@@ -42,11 +42,12 @@ const apiRoot = '/api/v1/admin';
 let settingsVersion = 0;
 let draftEventFields = [];
 let rules = [], ruleVersion = 0, selectedRule = null, targets = [], frameworks = [], samples = [], previewedRule = null, previewCount = 0;
+let sourceConnections = [];
 let collectors = [], definitionDocument = {}, definitionVersion = 0, definitionEntryKey = null;
 const definitionAdapters = ['jenkins', 'loki', 'rss', 'github', 'forgejo', 'gitea', 'gitlab', 'redmine', 'riskledger', 'cloudwatch_logs', 'taiga', 'google_workspace', 'webhooks', 'bookstack'];
 let catalogBooks = [], catalogPages = [], catalogChapters = [], nextBookOffset = null, nextPageOffset = null;
 async function catalogRequest(kind, offset = 0, bookId = null) {
-  return apiGet(`${apiRoot}/bookstack/catalog?kind=${kind}&offset=${offset}${bookId ? `&book_id=${bookId}` : ''}`);
+  return apiGet(`${apiRoot}/bookstack/catalog?kind=${kind}&offset=${offset}${selectedConnection() ? `&connection_id=${encodeURIComponent(selectedConnection())}` : ''}${bookId ? `&book_id=${bookId}` : ''}`);
 }
 async function loadBookstackBooks(more = false) {
   const data = await catalogRequest('books', more ? nextBookOffset : 0);
@@ -130,14 +131,15 @@ function paintDefinitionEntry() {
   if (section === 'source') {
     definitionEntryKey = null;
     $('definition-fields').replaceChildren(); $('definition-extra').value = '{}';
-    $('when-source').value = adapter;
+    const connection=sourceConnections.find(c=>c.id===selectedConnection());
+    $('when-source').value = adapter==='webhooks'&&connection?.configuration.provider ? 'webhook:'+connection.configuration.provider : adapter;
     $('bookstack-picker').hidden = true;
     $('bookstack-conditions-panel').hidden = adapter !== 'bookstack';
     loadSamples().catch(error => status(error.message));
     return;
   }
   const selected = $('definition-entry').value;
-  const found = collectors.find(item => item.adapter === adapter && item.section === section && item.collector === selected);
+  const found = collectors.find(item => item.adapter === adapter && item.section === section && inConnection(item) && item.collector === selected);
   definitionEntryKey = found?.key ?? null;
   const entry = found?.entry || {};
   const fields = $('definition-fields'); fields.replaceChildren();
@@ -172,19 +174,32 @@ function paintDefinitionChoices() {
   const choice = $('definition-entry');
   if (section === 'source') { choice.replaceChildren(new Option(`Collected events from ${adapter}`, '__all__')); paintDefinitionEntry(); return; }
   choice.replaceChildren(new Option('Create a new collection item', '__new'));
-  for (const item of collectors.filter(item => item.adapter === adapter && item.section === section))
+  for (const item of collectors.filter(item => item.adapter === adapter && item.section === section && inConnection(item)))
     choice.add(new Option(item.key, item.collector));
   paintDefinitionEntry();
 }
-async function selectDefinitionAdapter() {
+function selectedConnection(){return $('definition-connection')?.value || '';}
+function inConnection(item){return (item.connection_id || 'env:'+item.adapter) === selectedConnection();}
+function paintConnectionChoices(){
+ let select=$('definition-connection');
+ if(!select){const label=document.createElement('label');label.className='form-label d-block';label.textContent='Connection';select=document.createElement('select');select.id='ec-definition-connection';select.className='form-select';label.append(select);$('definition-adapter').parentElement.after(label);select.onchange=()=>selectDefinitionAdapter(true).catch(error=>status(error.message));}
+ const previous=select.value,adapter=$('definition-adapter').value;
+ select.replaceChildren(new Option('All connections',''),new Option('Environment default','env:'+adapter));
+ for(const c of sourceConnections.filter(c=>c.source===adapter))select.add(new Option(c.name,c.id));
+ if([...select.options].some(option=>option.value===previous))select.value=previous;
+}
+async function selectDefinitionAdapter(keepConnection=false) {
+  if(!keepConnection)paintConnectionChoices();
   const adapter = $('definition-adapter').value;
-  if (layouts[adapter]) {
+  const connection=sourceConnections.find(c=>c.id===selectedConnection());
+  if(connection){definitionDocument=connection.inputs;definitionVersion=connection.version;}
+  else if (layouts[adapter]) {
     const data = await apiGet(`${apiRoot}/managed-configurations/${adapter}`);
     definitionDocument = data.document; definitionVersion = data.version;
   } else { definitionDocument = {}; definitionVersion = 0; }
   $('definition-section').replaceChildren();
   $('definition-section').add(new Option('All collected events (any collection)', 'source'));
-  for (const section of Object.keys(layouts[adapter] || {}))
+  for (const section of Object.keys(selectedConnection() ? layouts[adapter] || {} : {}))
     if (section !== 'page_mappings') $('definition-section').add(new Option(label(section), section));
   paintDefinitionChoices();
   if (adapter === 'bookstack') {
@@ -196,11 +211,11 @@ function definitionFromForm() {
   const adapter = $('definition-adapter').value, section = $('definition-section').value;
   if (!adapter) throw new Error('Enable an ingester before creating a mapping.');
   if (section === 'source') return {adapter, section, entry: {}, key: '__all__', collector: null,
-    entry_key: null, connector_version: 0};
+    entry_key: null, connector_version: 0, connection_id: selectedConnection() || null};
   const entry = definitionEntry(), key = definitionKey(adapter, section, entry);
   if (!key || key === '/') throw new Error('Give the collection item a name, URL or ID.');
   return {adapter, section, entry, key, collector: definitionId(adapter, section, key),
-    entry_key: definitionEntryKey, connector_version: definitionVersion};
+    entry_key: definitionEntryKey, connector_version: definitionVersion, connection_id: selectedConnection() || null};
 }
 let step = 1, rulePage = 0;
 let enabledSources = [];
@@ -303,7 +318,7 @@ async function loadSamples() {
   const source = $('when-source').value.trim();
   const identity = $('definition-entry').value;
   const isCollection = collectors.some(item => item.adapter === $('definition-adapter').value && item.collector === identity);
-  const filter = isCollection ? `&collector=${encodeURIComponent(identity)}` : '';
+  const filter = (isCollection ? `&collector=${encodeURIComponent(identity)}` : '') + (selectedConnection() ? `&connection_id=${encodeURIComponent(selectedConnection())}` : '');
   const result = source && source !== 'webhook:' ?
     await apiGet(`${apiRoot}/evidence-event-samples?source=${encodeURIComponent(source)}${filter}`) : {items: []};
   samples = result.items || [];
@@ -360,8 +375,9 @@ function readRule() {
     const value = $(`when-${field}`).value.trim();
     if (value) when[field] = ['severity', 'bookstack_book_id', 'bookstack_page_id'].includes(field) ? Number(value) : value;
   }
-  when.source = definition.section === 'source' && selectedRule && $('when-source').value.startsWith('webhook:') ?
+  when.source = definition.section === 'source' && $('when-source').value.startsWith('webhook:') ?
     $('when-source').value : definition.adapter === 'webhooks' && definition.section !== 'source' ? `webhook:${definition.key}` : definition.adapter;
+  if (definition.connection_id) when.connection_id = definition.connection_id;
   if (definition.collector) when.collector = definition.collector;
   if (!$('rule-id').value.trim()) {
     const basis = definition.section === 'source' ?
@@ -394,10 +410,11 @@ async function newRule() {
 }
 function showSelectedInput() {
   const adapter = $('definition-adapter').value, section = $('definition-section').value;
-  const collector = collectors.find(item => item.collector === $('definition-entry').value && item.adapter === adapter);
+  const collector = collectors.find(item => item.collector === $('definition-entry').value && item.adapter === adapter && inConnection(item));
+  const connectionLabel=sourceConnections.find(c=>c.id===selectedConnection())?.name || (selectedConnection() ? 'Environment default' : 'all connections');
   $('selected-input').textContent = section === 'source' ?
-    `Selected input: All ${$('when-source').value || adapter} events. Choose another definition from the library to change inputs.` :
-    `Selected input: ${adapter} ${inputType(section)} “${collector?.key || $('definition-entry').selectedOptions[0]?.textContent || ''}”. Choose another definition from the library to change inputs.`;
+    `Selected input: All ${$('when-source').value || adapter} events from ${connectionLabel}. Choose another definition from the library to change inputs.` :
+    `Selected input: ${adapter} ${inputType(section)} “${collector?.key || $('definition-entry').selectedOptions[0]?.textContent || ''}” from ${connectionLabel}. Choose another definition from the library to change inputs.`;
   $('input-picker').hidden = true; $('selected-input').hidden = false;
 }
 async function editRule(rule) {
@@ -408,10 +425,10 @@ async function editRule(rule) {
   $('enabled').checked = rule.enabled !== false;
   for (const field of [...conditions, ...regexConditions, ...bookstackConditions]) $(`when-${field}`).value = rule.when?.[field] ?? '';
   targets = structuredClone(rule.map_to || []); renderTargets();
-  const linked = collectors.find(item => item.collector === rule.when?.collector);
+  const linked = collectors.find(item => item.collector === rule.when?.collector && (item.connection_id || "env:"+item.adapter) === (rule.when?.connection_id || "env:"+item.adapter));
   if (linked) {
     sourceChoices(linked.adapter); $('definition-adapter').value = linked.adapter;
-    await selectDefinitionAdapter();
+    await selectDefinitionAdapter();$('definition-connection').value=rule.when?.connection_id||'';await selectDefinitionAdapter(true);
     $('definition-section').value = linked.section;
     paintDefinitionChoices(); $('definition-entry').value = linked.collector; paintDefinitionEntry();
   } else {
@@ -420,7 +437,7 @@ async function editRule(rule) {
     if (!$('definition-adapter').querySelector(`option[value="${CSS.escape(adapter)}"]`))
       $('definition-adapter').add(new Option(adapter.replaceAll('_', ' '), adapter));
     $('definition-adapter').value = adapter;
-    await selectDefinitionAdapter(); $('definition-section').value = 'source'; paintDefinitionChoices();
+    await selectDefinitionAdapter();$('definition-connection').value=rule.when?.connection_id||'';await selectDefinitionAdapter(true); $('definition-section').value = 'source'; paintDefinitionChoices();
     $('when-source').value = source;
   }
   showSelectedInput();
@@ -433,7 +450,7 @@ function renderRules() {
   const query = $('rule-filter').value.trim().toLowerCase();
 
   const entries = [
-    ...rules.map(rule => ({rule, origin: collectors.find(item => item.collector === rule.when?.collector)})),
+    ...rules.map(rule => ({rule, origin: collectors.find(item => item.collector === rule.when?.collector && (item.connection_id || "env:"+item.adapter) === (rule.when?.connection_id || "env:"+item.adapter))})),
 
   ];
   const chosenSource = $('source-filter').value;
@@ -454,6 +471,7 @@ function renderRules() {
       `${origin.adapter} ${inputType(origin.section)}: ${origin.key}` :
       `All ${rule.when?.source || 'source'} events`} · ${rule.map_to?.length || 0} framework targets` :
       `${origin.adapter} ${inputType(origin.section)}: ${origin.key} · add framework targets`;
+    if(rule?.when?.connection_id)meta.textContent += " · "+(sourceConnections.find(c=>c.id===rule.when.connection_id)?.name || rule.when.connection_id);
     btn.append(title, meta);
     btn.addEventListener('click', async () => {
       if (rule) { editRule(rule).catch(error => status(error.message)); return; }
@@ -474,7 +492,7 @@ function renderRules() {
         catch(error) { status(error.message); }
       }); row.append(remove);
     }
-    if (origin) {
+    if (origin && !origin.connection_id) {
       const remove = document.createElement('button'); remove.type='button'; remove.className='btn btn-outline-danger btn-sm'; remove.textContent='Remove collection';
       remove.addEventListener('click', () => removeCollection(origin)); row.append(remove);
     }
@@ -516,6 +534,7 @@ function renderTargets() {
 }
 async function loadRules() {
   const data = await apiGet(`${apiRoot}/evidence-definitions`);
+  sourceConnections=(await apiGet(`${apiRoot}/source-connections`)).connections;
   rules = data.rules; collectors = data.collectors; ruleVersion = data.rules_version;
   const selectedSource = $('source-filter').value;
   $('source-filter').replaceChildren(new Option('All sources', ''));
@@ -703,7 +722,7 @@ $('save-rule').addEventListener('click', async () => {
     const definition = definitionFromForm();
     const saved = await apiPut(`${apiRoot}/evidence-definitions/${encodeURIComponent(rule.id)}`, {
       adapter: definition.adapter, section: definition.section, entry_key: definition.entry_key,
-      entry: definition.entry, rule, connector_version: definition.connector_version,
+      entry: definition.entry, connection_id: definition.connection_id, rule, connector_version: definition.connector_version,
       rules_version: ruleVersion, apply_existing: $('apply-existing').checked});
     await loadRules(); await editRule(rules.find(item => item.id === rule.id));
     showStep(3);

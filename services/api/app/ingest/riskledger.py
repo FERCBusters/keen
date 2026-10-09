@@ -15,8 +15,8 @@ from urllib.parse import urlsplit
 import httpx
 from sqlalchemy import text
 
-from app.core.config import settings
-from app.core.managed_configuration import load_document
+from app.ingest.connections import settings, connection_runs, namespace
+from app.ingest.connections import load_document
 from app.db.models import (ControlItem, Framework, FrameworkClause, IngestionCursor,
                            IsmsVendor, Risk, RiskAsset, RiskAssetSubcategory,
                            RiskCategory, RiskControlLink)
@@ -339,7 +339,7 @@ def _collect(db, client, cfg):
             # Do not invent a vendor or fetch resources beyond the configured scope.
             _risk(db,org,row,vendors.get(sid),ci)
             created+=_snapshot(db,org,selector,label,'risk',row,{'supplier.id':sid,'control.id':row.get('associatedID') if row.get('associatedType')=='control' else None})
-    name='riskledger:'+org
+    name=namespace('riskledger:'+org)
     cursor=db.query(IngestionCursor).filter_by(name=name).one_or_none()
     if cursor is None:cursor=IngestionCursor(name=name,meta={});db.add(cursor)
     cursor.last_ts=datetime.now(timezone.utc).replace(tzinfo=None)
@@ -352,6 +352,7 @@ def _collect(db, client, cfg):
 
 
 @pausable('riskledger')
+@connection_runs('riskledger')
 def ingest_riskledger_all(db):
     if settings.demo_mode or not settings.riskledger_enabled:
         return [{'skipped':True,'reason':'Risk Ledger disabled (or demo mode)'}]

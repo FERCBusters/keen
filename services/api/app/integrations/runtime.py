@@ -16,6 +16,7 @@ from app.mapping.rules import load_rules, evaluate_by_framework
 from app.core.config import settings
 from app.security.redaction import redact_obj
 from app.ingest.common import store_event_with_artifact
+from app.ingest.connections import Connection as SourceOrigin, connection_scope
 from .errors import IntegrationError
 from .engine import collect, external_id, timestamp
 from .schema import Definition
@@ -101,15 +102,17 @@ def run_job(run_id):
             event = {k:f.get(k) for k in ('system','actor','action','outcome','severity','summary')}
             event.update(source=source,raw_pointer=pointer,normalized_payload=redact_obj(item['record']))
             if run.preview:
-                samples.append({'evidence':redact_obj({**event,'timestamp':f['timestamp']}),
-                    'matches':evaluate_by_framework(event,rules,details=True),
+                samples.append({'evidence':redact_obj({**event,'timestamp':f['timestamp'],'connection_id':'api:'+str(conn.id),'connection_name':conn.name}),
+                    'matches':evaluate_by_framework({**event,'connection_id':'api:'+str(conn.id)},rules,details=True),
                     'measurement':{k:f.get(k) for k in ('value','period_start','period_end')} if measure else None})
                 continue
             eid = external_id(c.id,f['id'])
-            result = store_event_with_artifact(db, timestamp=timestamp(f['timestamp']).replace(tzinfo=None),
-                **event,external_id=eid,artifact_kind='integration_json',
-                artifact_bytes=json.dumps(item['record']).encode(),artifact_content_type='application/json',
-                artifact_key=f'integrations/{c.id}/{eid}.json',captured_by='integration:'+run.id)
+            origin = SourceOrigin('api:' + str(conn.id), source, conn.name, {}, {}, {})
+            with connection_scope(origin):
+                result = store_event_with_artifact(db, timestamp=timestamp(f['timestamp']).replace(tzinfo=None),
+                    **event,external_id=eid,artifact_kind='integration_json',
+                    artifact_bytes=json.dumps(item['record']).encode(),artifact_content_type='application/json',
+                    artifact_key=f'integrations/{c.id}/{eid}.json',captured_by='integration:'+run.id)
             if measure:
                 ref = f'integration:{c.id}:{eid}'
                 # A retried evidence commit can still complete its measurement without duplicating it.

@@ -1274,6 +1274,8 @@ def _evidence_dict(
                 "id": str(ev.id),
                 "timestamp": _iso_dt(ev.timestamp),
                 "source": ev.source,
+        "connection_id": ev.connection_id,
+        "connection_name": ev.connection_name,
                 "system": ev.system,
                 "actor": ev.actor,
                 "action": ev.action,

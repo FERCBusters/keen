@@ -24,8 +24,8 @@ import httpx
 from dateutil import parser as dtparser
 from sqlalchemy.orm import Session
 
-from app.core.managed_configuration import load_document
-from app.core.config import settings
+from app.ingest.connections import load_document
+from app.ingest.connections import settings, connection_runs, namespace
 from app.db.models import IngestionCursor
 from app.ingest.common import store_event_with_artifact, is_safe_url
 from app.security.redaction import redact_url
@@ -291,7 +291,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
         feed_cfg.get("overlap_minutes") or 60 * 24 * 2
     )  # 2 days default
 
-    cursor_name = _feed_cursor_name(url, name_hint=label or system)
+    cursor_name = namespace(_feed_cursor_name(url, name_hint=label or system))
     cur = (
         db.query(IngestionCursor)
         .filter(IngestionCursor.name == cursor_name)
@@ -327,6 +327,19 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
         if u and p:
             auth = (u, p)
 
+    from app.ingest.connections import current_connection
+    connection = current_connection()
+    if connection and connection.managed_by != 'environment' and connection.credentials:
+        from urllib.parse import urlsplit
+        def origin(value):
+            parsed = urlsplit(value)
+            return parsed.scheme, parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)
+        if origin(url) != origin(connection.configuration.get('base_url', '')):
+            raise ValueError('Authenticated RSS inputs must use the connection endpoint origin')
+        if connection.credentials.get('password'):
+            auth = (connection.configuration.get('username', ''), connection.credentials['password'])
+        if connection.configuration.get('header_name') and connection.credentials.get('header_value'):
+            headers[connection.configuration['header_name']] = connection.credentials['header_value']
     verify_tls = True
 
     # Fetch without following redirects - redirects are not allowed
@@ -478,6 +491,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
 
 
 @pausable('rss')
+@connection_runs('rss')
 def ingest_rss_all(db: Session) -> list[dict[str, Any]]:
     if not settings.rss_enabled:
         return [{"skipped": True, "reason": "rss_enabled=false"}]

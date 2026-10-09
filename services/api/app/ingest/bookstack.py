@@ -12,8 +12,8 @@ import httpx
 import yaml
 from sqlalchemy.orm import Session
 
-from app.core.managed_configuration import load_document
-from app.core.config import settings
+from app.ingest.connections import load_document
+from app.ingest.connections import settings, connection_runs, namespace
 from app.db.models import ControlItem, Event, IngestionCursor, Mapping
 from app.ingest.common import is_safe_url, store_event_with_artifact
 
@@ -405,7 +405,7 @@ def _parse_page_mappings(cfg: dict[str, Any]) -> list[PageMapping]:
 
 
 def _get_cursor(db: Session) -> IngestionCursor:
-    name = "bookstack:pages"
+    name = namespace("bookstack:pages")
     cur = db.query(IngestionCursor).filter(IngestionCursor.name == name).one_or_none()
     if cur:
         return cur
@@ -758,6 +758,7 @@ def apply_bookstack_config_mappings(db: Session, ev: Event) -> int:
 
 
 @pausable('bookstack')
+@connection_runs('bookstack')
 def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
     """Poll BookStack for page changes and store each page snapshot as an evidence event."""
     if not settings.bookstack_enabled:

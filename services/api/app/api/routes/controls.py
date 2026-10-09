@@ -219,6 +219,8 @@ def control_evidence(
                 "event_id": str(e.id),
                 "timestamp": e.timestamp.isoformat(),
                 "source": e.source,
+        "connection_id": e.connection_id,
+        "connection_name": e.connection_name,
                 "summary": e.summary,
                 "source_url": src_url,
                 "raw_pointer": _redact_obj(e.raw_pointer),

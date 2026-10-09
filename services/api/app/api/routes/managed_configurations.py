@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.core.managed_configuration import load_document
-from app.db.models import ControlItem, Event, ManagedConfiguration, ManagedConfigurationRevision
+from app.db.models import ControlItem, Event, ManagedConfiguration, ManagedConfigurationRevision, SourceConnection
 from app.db.session import get_db
 from app.mapping.rules import (
     _KNOWN_WHEN_KEYS, _as_rule_entries, evaluate_by_framework, parse_rules,
@@ -65,6 +65,7 @@ class RuleInput(BaseModel):
 
 
 class EvidenceDefinitionInput(BaseModel):
+    connection_id: str | None = None
     adapter: str
     section: str
     entry_key: str | None = None
@@ -436,6 +437,19 @@ def get_evidence_definitions(db: Session = Depends(get_db)):
                     items.append({"adapter": adapter, "section": section, "key": key,
                                   "collector": collector_id(adapter, section, key), "entry": entry,
                                   "version": _version(db, adapter)})
+    from app.ingest.connections import connections
+    for connection in connections(db):
+        if connection.managed_by == 'environment':
+            continue
+        for section in sections.get(connection.source, []):
+            entries = connection.inputs.get(section, {} if connection.source == "webhooks" else [])
+            for provider, entry in (entries.items() if isinstance(entries, dict) else ((None,e) for e in entries)):
+                key = _collector_key(connection.source, section, entry, provider)
+                if key:
+                    items.append({"adapter": connection.source, "section": section, "key": key,
+                        "collector": collector_id(connection.source, section, key), "entry": entry,
+                        "connection_id": connection.id, "connection_name": connection.name,
+                        "version": (db.get(SourceConnection, connection.id).version if connection.managed_by == "database" else 0)})
     rules = _normalized_rules(db)
     return {"collectors": items, "rules": rules, "rules_version": _version(db, "rules"),
             "warnings": warnings}
@@ -454,7 +468,7 @@ def source_catalogue(db: Session = Depends(get_db)):
     }
     items = []
     for name in CONNECTORS:
-        enabled = True if name == "webhooks" else bool(getattr(settings, f"{name}_enabled", False))
+        enabled = bool(getattr(settings, f"{name}_enabled", False))
         if name in ("redmine", "riskledger") and settings.demo_mode:
             enabled = False
         count = sum(1 for item in collectors if item["adapter"] == name)
@@ -467,7 +481,7 @@ def source_catalogue(db: Session = Depends(get_db)):
         items.append({"adapter": name, "enabled": enabled, "collection_items": count,
                       "definitions": matching_rules, "observed_events": events,
                       "last_seen": last_seen, "managed_version": _version(db, name),
-                      "description": ("Risk Ledger pulls supplier/risk snapshots and a discovered subset of framework controls. Assessment answers and evidence files are not exposed by its public API. See the Risk Ledger help chapter." if name == "riskledger" else "Use the evidence definition wizard to choose inputs and map matched events. Adapter credentials and enablement are configured in Docker.")})
+                      "description": ("Risk Ledger pulls supplier/risk snapshots and a discovered subset of framework controls. Assessment answers and evidence files are not exposed by its public API. See the Risk Ledger help chapter." if name == "riskledger" else "Use the evidence definition wizard to choose inputs and map matched events. Each connection holds its endpoint, credentials and inputs. Source type enablement is configured in Docker.")})
     from app.db.models import KeenAgent
     agents_count=db.query(KeenAgent).filter(KeenAgent.enabled.is_(True)).count()
     agent_events,agent_last=observed.get('keen-agent',(0,None))
@@ -494,7 +508,7 @@ def source_catalogue(db: Session = Depends(get_db)):
 
 @router.get("/v1/admin/bookstack/catalog")
 def bookstack_catalog(kind: str = "books", book_id: int | None = None,
-                      offset: int = 0):
+                      offset: int = 0, connection_id: str | None = None, db: Session = Depends(get_db)):
     """Small, metadata-only BookStack pages; credentials remain on the server."""
     if not settings.bookstack_enabled:
         raise HTTPException(409, "BookStack ingestion is disabled")
@@ -505,8 +519,16 @@ def bookstack_catalog(kind: str = "books", book_id: int | None = None,
     if offset < 0 or offset > 100_000:
         raise HTTPException(400, "Invalid catalogue offset")
     from app.ingest.bookstack import _client
+    from contextlib import nullcontext
+    from app.ingest.connections import connections, resolve, connection_scope
+    scope = nullcontext()
+    if connection_id:
+        connection = next((c for c in connections(db, 'bookstack') if c.id == connection_id), None)
+        if connection is None:
+            raise HTTPException(404, 'Connection not found')
+        scope = connection_scope(resolve(connection))
     try:
-        with _client() as client:
+        with scope, _client() as client:
             params = {"count": 100, "offset": offset}
             if book_id is not None and kind != "books":
                 params["filter[book_id]"] = book_id
@@ -539,6 +561,39 @@ def save_evidence_definition(rule_id: str, payload: EvidenceDefinitionInput,
                              user=Depends(require_admin), db: Session = Depends(get_db)):
     """Publish a collection item and mapping rule in one database transaction."""
     adapter, section = payload.adapter, payload.section
+    connection = None
+    if payload.connection_id and payload.connection_id.startswith('file:'):
+        from app.ingest.connections import connections
+        managed = next((c for c in connections(None, adapter) if c.id == payload.connection_id), None)
+        if not managed:
+            raise HTTPException(400, 'Unknown deployment-managed connection')
+        rule = deepcopy(payload.rule)
+        when = rule.setdefault('when', {})
+        when['source'] = adapter
+        when['connection_id'] = managed.id
+        if section != 'source':
+            key = _collector_key(adapter, section, payload.entry)
+            if payload.entry not in managed.inputs.get(section, []):
+                raise HTTPException(409, 'Edit this input in the deployment connections file')
+            when['collector'] = collector_id(adapter, section, key)
+        if rule.get('id') != rule_id:
+            raise HTTPException(400, 'Rule ID does not match the URL')
+        _validate_rule(rule, db)
+        rules = _normalized_rules(db)
+        rules = [r for r in rules if r['id'] != rule_id] + [rule]
+        saved = _save(db, 'rules', {'rules':rules}, payload.rules_version, user)
+        return {'rules_version':saved['version'], 'rule':rule,
+                'backfill':_queue_rule_backfill(db,rule,saved['version']) if payload.apply_existing else None}
+    if payload.connection_id and payload.connection_id.startswith('env:') and payload.connection_id != 'env:'+adapter:
+        raise HTTPException(400, 'Connection does not belong to this source')
+    if payload.connection_id and not payload.connection_id.startswith('env:'):
+        connection = db.query(SourceConnection).filter_by(id=payload.connection_id).with_for_update().one_or_none()
+        if not connection or connection.source != adapter:
+            raise HTTPException(400, 'Choose a connection belonging to this source')
+        if section != 'source' and connection.version != payload.connector_version:
+            raise HTTPException(409, 'Connection changed; reload before saving')
+    if payload.connection_id:
+        payload.rule.setdefault('when', {})['connection_id'] = payload.connection_id
     if section == "source":
         rule = deepcopy(payload.rule)
         if rule.get("id") != rule_id or not isinstance(rule.get("when"), dict):
@@ -580,7 +635,7 @@ def save_evidence_definition(rule_id: str, payload: EvidenceDefinitionInput,
     when["collector"] = collector_id(adapter, section, key)
     _validate_rule(rule, db)
 
-    document = deepcopy(_connector_document(adapter, db))
+    document = deepcopy(connection.inputs if connection else _connector_document(adapter, db))
     rules = _normalized_rules(db)
     if len({r["id"] for r in rules}) != len(rules):
         raise HTTPException(409, "Existing rules have duplicate IDs")
@@ -615,6 +670,10 @@ def save_evidence_definition(rule_id: str, payload: EvidenceDefinitionInput,
     # Readers never observe a partial definition.
     docs = {adapter: document, "rules": {"rules": rules}}
     expected = {adapter: payload.connector_version, "rules": payload.rules_version}
+    if connection:
+        connection.inputs = document
+        connection.version += 1
+        docs.pop(adapter)
     staged = {}
     for name in sorted(docs):
         row = db.query(ManagedConfiguration).filter_by(name=name).with_for_update().one_or_none()
@@ -848,6 +907,8 @@ def preview_rule(payload: RuleInput, db: Session = Depends(get_db)):
     rule = parse_rules({"rules": [payload.rule]})[0]
     source = payload.rule["when"]["source"]
     query = db.query(Event).filter(Event.source == source)
+    if payload.rule["when"].get("connection_id"):
+        query = query.filter(Event.connection_id == payload.rule["when"]["connection_id"])
     if payload.rule["when"].get("collector"):
         query = query.filter(Event.raw_pointer.contains(collector_pointer_filter(payload.rule["when"]["collector"])))
     events = query.order_by(Event.timestamp.desc()).limit(200).all()
@@ -855,7 +916,9 @@ def preview_rule(payload: RuleInput, db: Session = Depends(get_db)):
     nonmatches = []
     count = 0
     for event in events:
-        hits = evaluate_by_framework({"source": event.source, "system": event.system,
+        hits = evaluate_by_framework({"source": event.source,
+        "connection_id": event.connection_id,
+        "connection_name": event.connection_name, "system": event.system,
             "actor": event.actor, "action": event.action, "outcome": event.outcome,
             "severity": event.severity, "summary": event.summary,
             "normalized_payload": event.normalized_payload, "raw_pointer": event.raw_pointer}, [rule])
@@ -872,7 +935,7 @@ def preview_rule(payload: RuleInput, db: Session = Depends(get_db)):
             "note": "Recent sample only. Saving affects new evidence; remap existing evidence separately."}
 
 @router.get("/v1/admin/evidence-event-samples")
-def evidence_event_samples(source: str | None = None, collector: str | None = None,
+def evidence_event_samples(source: str | None = None, collector: str | None = None, connection_id: str | None = None,
                            db: Session = Depends(get_db)):
     """Expose the event fields used by exact-match rule conditions."""
     if not source:
@@ -880,6 +943,8 @@ def evidence_event_samples(source: str | None = None, collector: str | None = No
         return {"sources": sources, "items": []}
     source = source.strip()[:128]
     query = db.query(Event).filter(Event.source == source)
+    if connection_id:
+        query = query.filter(Event.connection_id == connection_id)
     if collector:
         try:
             adapter, _, _ = json.loads(collector)
@@ -889,7 +954,7 @@ def evidence_event_samples(source: str | None = None, collector: str | None = No
         except (ValueError, TypeError, KeyError, IndexError) as exc:
             raise HTTPException(400, "Invalid collection item") from exc
     rows = query.order_by(Event.timestamp.desc()).limit(20).all()
-    return {"items": [{"id": str(row.id), "source": row.source,
+    return {"items": [{"id": str(row.id), "source": row.source, "connection_id": row.connection_id, "connection_name": row.connection_name,
                        "system": row.system, "actor": row.actor,
                        "action": row.action, "outcome": row.outcome,
                        "severity": row.severity, "summary": row.summary[:180],
@@ -989,7 +1054,9 @@ class PruneInput(BaseModel):
 
 
 def _event_for_rules(event: Event) -> dict[str, Any]:
-    return {"source": event.source, "system": event.system, "actor": event.actor,
+    return {"source": event.source,
+        "connection_id": event.connection_id,
+        "connection_name": event.connection_name, "system": event.system, "actor": event.actor,
             "action": event.action, "outcome": event.outcome, "severity": event.severity,
             "summary": event.summary, "raw_pointer": event.raw_pointer,
             "normalized_payload": event.normalized_payload}

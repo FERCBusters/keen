@@ -39,6 +39,8 @@ def test_release_schema_and_final_seed_data(monkeypatch):
                 canonical = lambda items: sorted(json.dumps(row, sort_keys=True) for row in items)
                 assert canonical(actual) == canonical(rows), table
             command.upgrade(config, 'head')
+            assert conn.scalar(text('SELECT count(*) FROM source_connections')) == 0
+            conn.execute(text('SELECT connection_id, connection_name FROM events LIMIT 1'))
             assert conn.scalar(text('SELECT count(*) FROM frameworks')) == 94
             for slug, count in (('iso_9001_2015', 37), ('iso_9001_2026', 39)):
                 assert conn.scalar(text('SELECT count(*) FROM framework_clauses WHERE framework_slug=:slug'), {'slug':slug}) == count

@@ -25,8 +25,8 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 import httpx
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.core.managed_configuration import load_document
+from app.ingest.connections import settings, connection_runs, namespace
+from app.ingest.connections import load_document
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, is_safe_url, store_event_with_artifact
 from app.ingest.git_activity import (
@@ -292,7 +292,7 @@ def ingest_forgejo_repo_feed(
     """
 
     u = urlparse(feed_url)
-    cursor_name = f"forgejo:feed:{u.netloc}{u.path}"
+    cursor_name = namespace(f"forgejo:feed:{u.netloc}{u.path}")
     cur = (
         db.query(IngestionCursor)
         .filter(IngestionCursor.name == cursor_name)
@@ -497,6 +497,7 @@ def _discover_repositories(base_url: str, section: str, name: str) -> list[dict]
 
 
 @pausable('forgejo')
+@connection_runs('forgejo')
 def ingest_forgejo_all(db: Session) -> list[dict[str, Any]]:
     if not settings.forgejo_enabled:
         return [{"skipped": True, "reason": "KEEN_FORGEJO_ENABLED=false"}]

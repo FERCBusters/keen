@@ -10,8 +10,8 @@ import re
 import httpx
 from sqlalchemy.orm import Session
 
-from app.core.managed_configuration import load_document
-from app.core.config import settings
+from app.ingest.connections import load_document
+from app.ingest.connections import settings, connection_runs, namespace
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact, is_safe_url
 
@@ -231,7 +231,7 @@ def _build_summary(
 def ingest_taiga_project_timeline(
     db: Session, project_id: int, label: str | None
 ) -> dict[str, Any]:
-    cursor_name = f"taiga:project:{project_id}"
+    cursor_name = namespace(f"taiga:project:{project_id}")
     cur = (
         db.query(IngestionCursor)
         .filter(IngestionCursor.name == cursor_name)
@@ -351,6 +351,7 @@ def ingest_taiga_project_timeline(
 
 
 @pausable('taiga')
+@connection_runs('taiga')
 def ingest_taiga_all(db: Session) -> list[dict[str, Any]]:
     if not settings.taiga_enabled:
         return [{"skipped": True, "reason": "KEEN_TAIGA_ENABLED=false"}]

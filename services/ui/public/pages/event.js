@@ -1717,6 +1717,7 @@ async function load() {
     if (e.source) {
       const sourceHref = withFramework(`/source.html?source=${encodeURIComponent(e.source)}`, pageFramework);
       document.getElementById('srcBadge').innerHTML = sourceBadgeHtml(e.source, sourceMeta, sourceHref);
+      if(e.connection_id){const origin=document.createElement('span');origin.className='badge text-bg-secondary ms-2';origin.textContent=e.connection_name||e.connection_id;origin.title='Connection: '+e.connection_id;document.getElementById('srcBadge').append(origin);}
       document.getElementById('bySource').href = sourceHref;
     } else {
       document.getElementById('srcBadge').textContent = '—';
