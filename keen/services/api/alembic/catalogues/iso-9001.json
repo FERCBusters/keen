@@ -1,0 +1,1332 @@
+{
+  "iso_9001_2015": {
+    "name": "ISO 9001:2015 — Quality management",
+    "version": "2015 + Amd 1:2024",
+    "description": "Quality management framework for ISO 9001:2015. Includes the 2024 climate amendment. KEEN summaries cover clauses 4–10 and their immediate subclauses, with separate corrective-action records and edition-specific risk/opportunity nodes. Detailed requirements and definitions are available in the upstream standard.",
+    "upstream_url": "https://www.iso.org/standard/62085.html",
+    "verified_on": "2026-10-10",
+    "sources": [
+      "https://www.iso.org/standard/62085.html",
+      "https://www.iso.org/standard/88431.html",
+      "https://www.iso.org/standard/9001",
+      "https://www.iso.org/quality-management/iso-9001-2026",
+      "https://www.iso.org/obp/ui/#iso:std:iso:9001:ed-6:v1:en",
+      "https://www.dnv.com/assurance/Management-Systems/new-iso/transition/iso-9001-revision/",
+      "https://knowledge.quality.org/article/iso-90012026-revision-guidance"
+    ],
+    "clauses": [
+      {
+        "type": "clause",
+        "ref": "4",
+        "title": "Context of the organisation",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Understand the organisation’s circumstances, direction and stakeholders so the QMS reflects the environment in which it operates.",
+          "parent_ref": null,
+          "sort_order": 0,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "4.1",
+        "title": "Understanding the organisation and its context",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Identify and review internal and external matters that influence the purpose, direction and intended results of the QMS. Under Amendment 1:2024, determine whether climate change is relevant.",
+          "parent_ref": "4",
+          "sort_order": 1,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "4.2",
+        "title": "Understanding the needs and expectations of interested parties",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Identify stakeholders relevant to the QMS and review their applicable needs. Amendment 1:2024 notes that relevant stakeholders can have climate-related requirements.",
+          "parent_ref": "4",
+          "sort_order": 2,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "4.3",
+        "title": "Determining the scope of the quality management system",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Document the QMS boundaries and applicability using organisational context, stakeholder requirements and the products and services covered. Explain justified exclusions.",
+          "parent_ref": "4",
+          "sort_order": 3,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "4.4",
+        "title": "Quality management system and its processes",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Establish, operate and improve the QMS. Define the processes, their interactions, responsibilities and controls, and maintain the information needed to support their operation.",
+          "parent_ref": "4",
+          "sort_order": 4,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "5",
+        "title": "Leadership",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Leadership takes accountability for the QMS, sets quality direction and enables people to contribute to effective results.",
+          "parent_ref": null,
+          "sort_order": 5,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "5.1",
+        "title": "Leadership and commitment",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Demonstrate commitment through business decisions, resources and support for people. Align quality with strategy, integrate the QMS into operations, promote risk-based thinking and sustain customer focus.",
+          "parent_ref": "5",
+          "sort_order": 6,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "5.2",
+        "title": "Quality policy",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Establish and maintain a policy suited to the organisation’s context. Use it to guide quality objectives, communicate it throughout the organisation and make it available as appropriate.",
+          "parent_ref": "5",
+          "sort_order": 7,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "5.3",
+        "title": "Organisational roles, responsibilities and authorities",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Assign and communicate responsibilities and authority for effective QMS operation, performance reporting, customer focus and the integrity of the system during change.",
+          "parent_ref": "5",
+          "sort_order": 8,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "6",
+        "title": "Planning",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Plan how the QMS will achieve its intended outcomes, address uncertainty and support the organisation’s direction.",
+          "parent_ref": null,
+          "sort_order": 9,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "6.1",
+        "title": "Actions to address risks and opportunities",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Identify risks and opportunities affecting QMS results. Plan proportionate responses, integrate them into processes and evaluate whether they work.",
+          "parent_ref": "6",
+          "sort_order": 10,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "6.2",
+        "title": "Quality objectives and planning to achieve them",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Set measurable objectives consistent with the quality policy and relevant requirements. Plan actions, resources, responsibilities, completion dates and evaluation; monitor, communicate and update the objectives.",
+          "parent_ref": "6",
+          "sort_order": 11,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "6.3",
+        "title": "Planning of changes",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Plan QMS changes systematically, considering their purpose, consequences, system integrity, resources and the allocation of responsibilities and authority.",
+          "parent_ref": "6",
+          "sort_order": 12,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7",
+        "title": "Support",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Provide the people, infrastructure, working conditions and supporting information needed to operate the QMS effectively.",
+          "parent_ref": null,
+          "sort_order": 13,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7.1",
+        "title": "Resources",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Determine and provide resources for the QMS, including people, infrastructure, working conditions, measurement capability and organisational knowledge.",
+          "parent_ref": "7",
+          "sort_order": 14,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7.2",
+        "title": "Competence",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Establish competence needs, address gaps and retain evidence that people can perform work affecting quality.",
+          "parent_ref": "7",
+          "sort_order": 15,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7.3",
+        "title": "Awareness",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Ensure people understand the quality policy, relevant objectives, their contribution and the consequences of unmet QMS requirements.",
+          "parent_ref": "7",
+          "sort_order": 16,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7.4",
+        "title": "Communication",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Plan the content, timing, audience, methods and responsibility for QMS communications.",
+          "parent_ref": "7",
+          "sort_order": 17,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7.5",
+        "title": "Documented information",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Create, review and control the information needed by the QMS, including access, protection, changes and retention.",
+          "parent_ref": "7",
+          "sort_order": 18,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8",
+        "title": "Operation",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Translate QMS plans into controlled delivery, covering customer requirements, design, suppliers, production, services, release and nonconforming outputs.",
+          "parent_ref": null,
+          "sort_order": 19,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.1",
+        "title": "Operational planning and control",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Plan and control the processes needed to deliver products and services. Define requirements, acceptance criteria and resources, retain supporting information and manage changes and outsourced processes.",
+          "parent_ref": "8",
+          "sort_order": 20,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.2",
+        "title": "Requirements for products and services",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Communicate with customers, establish applicable requirements, review the ability to meet them before commitment and manage changes to those requirements.",
+          "parent_ref": "8",
+          "sort_order": 21,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.3",
+        "title": "Design and development of products and services",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Manage design through planned stages, suitable inputs, reviews, verification, validation and controlled outputs and changes.",
+          "parent_ref": "8",
+          "sort_order": 22,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.4",
+        "title": "Control of externally provided processes, products and services",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Evaluate providers, define purchasing requirements and apply controls proportionate to the effect of external provision on quality.",
+          "parent_ref": "8",
+          "sort_order": 23,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.5",
+        "title": "Production and service provision",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Control delivery activities, identification, traceability, entrusted property, preservation, post-delivery obligations and operational changes.",
+          "parent_ref": "8",
+          "sort_order": 24,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.6",
+        "title": "Release of products and services",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Verify acceptance criteria before release and retain evidence of conformity and release authorisation.",
+          "parent_ref": "8",
+          "sort_order": 25,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.7",
+        "title": "Control of nonconforming outputs",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Identify and control outputs that fail requirements, decide their disposition and record the handling and authority involved.",
+          "parent_ref": "8",
+          "sort_order": 26,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "9",
+        "title": "Performance evaluation",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Assess QMS effectiveness using customer feedback, process results, internal audits and management review to guide decisions and improvement.",
+          "parent_ref": null,
+          "sort_order": 27,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "9.1",
+        "title": "Monitoring, measurement, analysis and evaluation",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Define how and when performance is measured and evaluated, including customer satisfaction, and use the results to assess effectiveness.",
+          "parent_ref": "9",
+          "sort_order": 28,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "9.2",
+        "title": "Internal audit",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Plan impartial audits, report findings, follow up corrections and corrective actions, and retain audit evidence.",
+          "parent_ref": "9",
+          "sort_order": 29,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "9.3",
+        "title": "Management review",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Leadership periodically reviews QMS suitability, adequacy, effectiveness and strategic alignment, recording decisions and actions.",
+          "parent_ref": "9",
+          "sort_order": 30,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "10",
+        "title": "Improvement",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Use performance information, problems and opportunities to improve the QMS and the products and services it supports.",
+          "parent_ref": null,
+          "sort_order": 31,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "10.1",
+        "title": "General",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Identify and implement improvements that support customer requirements and satisfaction, prevent unwanted outcomes and strengthen QMS performance.",
+          "parent_ref": "10",
+          "sort_order": 32,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "10.2",
+        "title": "Nonconformity and corrective action",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Respond to nonconformities, address their consequences, investigate causes and take proportionate corrective action. Check effectiveness and update the QMS where needed.",
+          "parent_ref": "10",
+          "sort_order": 33,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "10.2.1",
+        "title": "Response and corrective action",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Control and correct a nonconformity, assess why it occurred and whether similar problems exist or could arise, take action and evaluate the results.",
+          "parent_ref": "10.2",
+          "sort_order": 34,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "10.2.2",
+        "title": "Evidence of corrective action",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Retain records describing the nonconformity, the actions taken and the results of corrective action.",
+          "parent_ref": "10.2",
+          "sort_order": 35,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "10.3",
+        "title": "Continual improvement",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Continually improve the suitability, adequacy and effectiveness of the QMS, drawing on evaluation and management review to identify the next actions.",
+          "parent_ref": "10",
+          "sort_order": 36,
+          "upstream_url": "https://www.iso.org/standard/62085.html",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2015",
+          "includes_amendment": "Amd 1:2024"
+        }
+      }
+    ],
+    "controls": []
+  },
+  "iso_9001_2026": {
+    "name": "ISO 9001:2026 — Quality management",
+    "version": "2026",
+    "description": "Quality management framework for ISO 9001:2026. KEEN summaries cover clauses 4–10 and their immediate subclauses, with separate corrective-action records and edition-specific risk/opportunity nodes. Detailed requirements and definitions are available in the upstream standard.",
+    "upstream_url": "https://www.iso.org/standard/9001",
+    "verified_on": "2026-10-10",
+    "sources": [
+      "https://www.iso.org/standard/62085.html",
+      "https://www.iso.org/standard/88431.html",
+      "https://www.iso.org/standard/9001",
+      "https://www.iso.org/quality-management/iso-9001-2026",
+      "https://www.iso.org/obp/ui/#iso:std:iso:9001:ed-6:v1:en",
+      "https://www.dnv.com/assurance/Management-Systems/new-iso/transition/iso-9001-revision/",
+      "https://knowledge.quality.org/article/iso-90012026-revision-guidance"
+    ],
+    "clauses": [
+      {
+        "type": "clause",
+        "ref": "4",
+        "title": "Context of the organisation",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Understand the organisation’s circumstances, direction and stakeholders so the QMS reflects the environment in which it operates.",
+          "parent_ref": null,
+          "sort_order": 0,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "4.1",
+        "title": "Understanding the organisation and its context",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Identify and review internal and external matters relevant to QMS outcomes, including whether climate change is relevant.",
+          "parent_ref": "4",
+          "sort_order": 1,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "4.2",
+        "title": "Understanding the needs and expectations of interested parties",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Identify relevant stakeholders and their requirements, and determine which the QMS will address. Consider relevant climate-related requirements.",
+          "parent_ref": "4",
+          "sort_order": 2,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "4.3",
+        "title": "Determining the scope of the quality management system",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Document the QMS boundaries and applicability using organisational context, stakeholder requirements and the products and services covered. Explain justified exclusions.",
+          "parent_ref": "4",
+          "sort_order": 3,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "4.4",
+        "title": "Quality management system",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Establish, operate and improve the QMS and its interacting processes to achieve the intended quality results.",
+          "parent_ref": "4",
+          "sort_order": 4,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "5",
+        "title": "Leadership",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Leadership takes accountability for the QMS, sets quality direction and enables people to contribute to effective results.",
+          "parent_ref": null,
+          "sort_order": 5,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "5.1",
+        "title": "Leadership and commitment",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Leadership integrates quality into business decisions, supports customer focus and promotes quality culture and ethical behaviour.",
+          "parent_ref": "5",
+          "sort_order": 6,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "5.2",
+        "title": "Quality policy",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Maintain and communicate quality policy aligned with the organisation’s context and strategic direction, providing a basis for quality objectives and improvement.",
+          "parent_ref": "5",
+          "sort_order": 7,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "5.3",
+        "title": "Roles, responsibilities and authorities",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Assign and communicate QMS roles, responsibilities and authority, supporting effective processes, performance reporting and managed change.",
+          "parent_ref": "5",
+          "sort_order": 8,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "6",
+        "title": "Planning",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Plan how the QMS will achieve its intended outcomes, address uncertainty and support the organisation’s direction.",
+          "parent_ref": null,
+          "sort_order": 9,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "6.1",
+        "title": "Actions to address risks and opportunities",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Determine risks and opportunities and plan actions for each, integrating the responses into QMS processes and assessing their effectiveness.",
+          "parent_ref": "6",
+          "sort_order": 10,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "6.1.1",
+        "title": "Determining risks and opportunities",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Determine the risks and opportunities relevant to intended QMS results.",
+          "parent_ref": "6.1",
+          "sort_order": 11,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "6.1.2",
+        "title": "Actions to address risks",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Assess risks, integrate appropriate responses into the QMS and evaluate those responses.",
+          "parent_ref": "6.1",
+          "sort_order": 12,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "6.1.3",
+        "title": "Actions to address opportunities",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Assess opportunities, plan how to pursue them and evaluate the effectiveness of the actions.",
+          "parent_ref": "6.1",
+          "sort_order": 13,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "6.2",
+        "title": "Quality objectives and planning to achieve them",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Set measurable objectives consistent with the quality policy and relevant requirements. Plan actions, resources, responsibilities, completion dates and evaluation; monitor, communicate and update the objectives.",
+          "parent_ref": "6",
+          "sort_order": 14,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "6.3",
+        "title": "Planning of changes",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Plan QMS changes with resources and responsibilities, communicate them, monitor implementation, evaluate effectiveness and review results.",
+          "parent_ref": "6",
+          "sort_order": 15,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7",
+        "title": "Support",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Provide the people, infrastructure, working conditions and supporting information needed to operate the QMS effectively.",
+          "parent_ref": null,
+          "sort_order": 16,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7.1",
+        "title": "Resources",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Provide QMS resources, including capable people, infrastructure, appropriate working conditions, reliable measurement and the knowledge needed for intended results. Consider quality culture and ethical behaviour in the process environment.",
+          "parent_ref": "7",
+          "sort_order": 17,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7.2",
+        "title": "Competence",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Establish competence needs, address gaps and retain evidence that people can perform work affecting quality.",
+          "parent_ref": "7",
+          "sort_order": 18,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7.3",
+        "title": "Awareness",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Build awareness of quality responsibilities, objectives and contributions, including quality culture and ethical behaviour.",
+          "parent_ref": "7",
+          "sort_order": 19,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7.4",
+        "title": "Communication",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Plan the content, timing, audience, methods and responsibility for QMS communications.",
+          "parent_ref": "7",
+          "sort_order": 20,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "7.5",
+        "title": "Documented information",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Create, review and control the information needed by the QMS, including access, protection, changes and retention.",
+          "parent_ref": "7",
+          "sort_order": 21,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8",
+        "title": "Operation",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Translate QMS plans into controlled delivery, covering customer requirements, design, suppliers, production, services, release and nonconforming outputs.",
+          "parent_ref": null,
+          "sort_order": 22,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.1",
+        "title": "Operational planning and control",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Plan and control the processes needed to deliver products and services. Define requirements, acceptance criteria and resources, retain supporting information and manage changes and outsourced processes.",
+          "parent_ref": "8",
+          "sort_order": 23,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.2",
+        "title": "Requirements for products and services",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Communicate with customers, establish applicable requirements, review the ability to meet them before commitment and manage changes to those requirements.",
+          "parent_ref": "8",
+          "sort_order": 24,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.3",
+        "title": "Design and development of products and services",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Manage design through planned stages, suitable inputs, reviews, verification, validation and controlled outputs and changes.",
+          "parent_ref": "8",
+          "sort_order": 25,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.4",
+        "title": "Control of externally provided processes, products and services",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Evaluate providers, define purchasing requirements and apply controls proportionate to the effect of external provision on quality.",
+          "parent_ref": "8",
+          "sort_order": 26,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.5",
+        "title": "Production and service provision",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Control delivery activities, identification, traceability, entrusted property, preservation, post-delivery obligations and operational changes.",
+          "parent_ref": "8",
+          "sort_order": 27,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.6",
+        "title": "Release of products and services",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Verify acceptance criteria before release and retain evidence of conformity and release authorisation.",
+          "parent_ref": "8",
+          "sort_order": 28,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "8.7",
+        "title": "Control of nonconforming outputs",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Identify and control outputs that fail requirements, decide their disposition and record the handling and authority involved.",
+          "parent_ref": "8",
+          "sort_order": 29,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "9",
+        "title": "Performance evaluation",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Assess QMS effectiveness using customer feedback, process results, internal audits and management review to guide decisions and improvement.",
+          "parent_ref": null,
+          "sort_order": 30,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "9.1",
+        "title": "Monitoring, measurement, analysis and evaluation",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Define how and when performance is measured and evaluated, including customer satisfaction, and use the results to assess effectiveness.",
+          "parent_ref": "9",
+          "sort_order": 31,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "9.2",
+        "title": "Internal audit",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Plan impartial audits, report findings, follow up corrections and corrective actions, and retain audit evidence.",
+          "parent_ref": "9",
+          "sort_order": 32,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "9.3",
+        "title": "Management review",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Leadership periodically reviews QMS suitability, adequacy, effectiveness and strategic alignment, recording decisions and actions.",
+          "parent_ref": "9",
+          "sort_order": 33,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "10",
+        "title": "Improvement",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Use performance information, problems and opportunities to improve the QMS and the products and services it supports.",
+          "parent_ref": null,
+          "sort_order": 34,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "10.1",
+        "title": "Continual improvement",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Select and implement improvements to strengthen products, services and the QMS. Use evaluation and review to improve suitability, adequacy and effectiveness and to address unwanted outcomes.",
+          "parent_ref": "10",
+          "sort_order": 35,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "10.2",
+        "title": "Nonconformity and corrective action",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Respond to nonconformities, address their consequences, investigate causes and take proportionate corrective action. Check effectiveness and update the QMS where needed.",
+          "parent_ref": "10",
+          "sort_order": 36,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "10.2.1",
+        "title": "Response and corrective action",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Control and correct a nonconformity, assess why it occurred and whether similar problems exist or could arise, take action and evaluate the results.",
+          "parent_ref": "10.2",
+          "sort_order": 37,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      },
+      {
+        "type": "clause",
+        "ref": "10.2.2",
+        "title": "Evidence of corrective action",
+        "in_scope": true,
+        "tags": {},
+        "metadata": {
+          "description": "Retain records describing the nonconformity, the actions taken and the results of corrective action.",
+          "parent_ref": "10.2",
+          "sort_order": 38,
+          "upstream_url": "https://www.iso.org/standard/9001",
+          "catalogue_source": "KEEN editorial summaries",
+          "summary_scope": "Overview; consult the referenced standard for the full requirements.",
+          "source_edition": "2026",
+          "includes_amendment": null
+        }
+      }
+    ],
+    "controls": []
+  }
+}
