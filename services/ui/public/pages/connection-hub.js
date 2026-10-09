@@ -13,7 +13,7 @@ async function load(){
 }
 function render(){
  for(const view of ['source','connection']){const selected=surface===view;byId(view).classList.toggle('active',selected);}
- byId('view-description').textContent=mode==='source'?'Browse sources. Expand a source to manage its collections and definitions.':'All connections are expanded below. Each built-in source currently has one server-environment connection; custom API ingesters can have multiple named connections.';
+ byId('view-description').textContent=mode==='source'?'Grouped by source type, such as Forgejo or API integrations. Expand a source to manage its connections, collections and mapping rules.':'Grouped by individual connection. This view is useful when custom API ingesters use several named connections. Built-in sources each have one server-environment connection, so their items and actions appear in both views.';
  const container=byId('list');container.replaceChildren();const query=byId('search').value.toLowerCase();
  const visible=entries.filter(e=>`${e.name} ${e.source} ${e.type}`.toLowerCase().includes(query));
  const groups=new Map();for(const e of visible){const key=mode==='source'?e.source:e.key;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(e);}

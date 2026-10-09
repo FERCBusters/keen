@@ -385,7 +385,10 @@
       </div>
 
       <div class="tab-pane fade" id="pane-evidence-config" role="tabpanel" aria-labelledby="tab-evidence-config" tabindex="0">
-<p class="small-muted">Getting started: configure access to a source, choose its collections, run an ingestion, then map the collected events to controls. <button id="hub-start-setup" type="button" class="btn btn-link btn-sm p-0 align-baseline">Set up a source</button></p>
+<div class="card mb-3"><div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+  <div><h2 class="h5 mb-1">Bring evidence into KEEN</h2><p class="small-muted mb-0">Choose a source and its collections, run an ingestion, then map the collected events to controls.</p></div>
+  <button id="hub-start-setup" type="button" class="btn btn-primary flex-shrink-0"><i class="bi bi-plus-circle me-2" aria-hidden="true"></i>Set up a source</button>
+</div></div>
 <div class="nav nav-tabs mb-3" role="tablist" aria-label="Evidence workspace views">
 <button id="hub-mapping" class="nav-link active" type="button" role="tab" aria-selected="true" aria-controls="evidence-mapping-view">Evidence Mapping</button>
 <button id="hub-source" class="nav-link" type="button" role="tab" aria-selected="false" aria-controls="evidence-management-view" tabindex="-1">By source</button>
