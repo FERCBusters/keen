@@ -5,3 +5,8 @@ node_modules
 .venv/
 .pytest_cache/
 test-results/
+
+# Test coverage and local DOM test dependencies
+.coverage
+.coverage.*
+htmlcov/

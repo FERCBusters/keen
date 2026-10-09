@@ -1711,7 +1711,7 @@ async function load() {
     setText('actor', e.actor || '—');
     setText('action', e.action || '—');
     setText('outcome', e.outcome || '—');
-    setText('severity', e.severity || '—');
+    setText('severity', e.severity ?? '—');
 
     // Source badge + sideways navigation
     if (e.source) {

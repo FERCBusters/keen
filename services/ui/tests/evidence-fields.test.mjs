@@ -53,3 +53,29 @@ test('groups distinguish observed, predefined and saved fields without duplicate
  assert.equal(groups[0].items[0].label,'fields["ossec.rule.id"] — Ossec Rule Id');
  assert.ok(!fieldChoiceGroups([],[]).some(g=>g.label==='Fields in this event'));
 });
+
+for(const [name,payload,expected] of [
+ ['nested scalar',{a:{b:{c:5}}},[{path:['a','b','c'],value:'5'}]],
+ ['empty string',{a:''},[{path:['a'],value:''}]],
+ ['literal dotted name',{'a.b':'x'},[{path:['a.b'],value:'x'}]],
+ ['array ignored',{a:['x']},[]],['null ignored',{a:null},[]],
+ ['oversized key',{['x'.repeat(257)]:'x'},[]],
+])test('field discovery boundary '+name,()=>assert.deepEqual(observedPayloadFields(payload),expected));
+
+test('draft conditions omit transient identifiers while retaining stable scope',async()=>{
+ const {draftFields}=await import('../public/pages/evidence-fields.js');
+ const payload={source:'ossec',fields:{'service.name':'session-123.scope','process.name':'sshd','host.name':'server','process.pid':'123','user.id':'5','ossec.alert.id':'id','ossec.rule.id':'31101','parser':'ossec'}};
+ const paths=draftFields(payload).map(f=>JSON.stringify(f.path));
+ assert.ok(paths.includes('["fields","process.name"]'));
+ assert.ok(paths.includes('["fields","parser"]'));
+ assert.ok(!paths.includes('["fields","process.pid"]'));
+ assert.ok(!paths.includes('["fields","service.name"]'));
+ assert.ok(!paths.includes('["fields","ossec.alert.id"]'));
+ assert.ok(!paths.includes('["fields","ossec.rule.id"]'));
+});
+
+test('saved unknown path remains selectable and is never labelled as observed',()=>{
+ const groups=fieldChoiceGroups([],[],['fields','legacy.id']);
+ assert.equal(groups.at(-1).label,'Selected field (not observed)');
+ assert.deepEqual(groups.at(-1).items[0].path,['fields','legacy.id']);
+});

@@ -265,7 +265,7 @@ def _unmapped_event_condition(framework: str, db=None):
     )
 
 
-def _clause_event_condition(framework: str, clause: str):
+def _clause_event_condition(framework: str, clause: str, db=None):
     """Return an EXISTS predicate for events mapped to controls linked to a clause.
 
     `clause` may be a FrameworkClause UUID or a clause ref such as ``5.1``.
@@ -277,7 +277,7 @@ def _clause_event_condition(framework: str, clause: str):
         exists()
         .where(Mapping.event_id == Event.id)
         .where(or_(Mapping.control_item_id == ControlItem.id,
-                   Mapping.control_item_id.in_(source_ids_for_control(ControlItem.id).correlate(ControlItem))))
+                   Mapping.control_item_id.in_(source_ids_for_control(ControlItem.id, db))))
         .where(ControlClauseLink.control_item_id == ControlItem.id)
         .where(ControlClauseLink.clause_id == FrameworkClause.id)
         .where(ControlItem.framework_slug == framework)
@@ -346,7 +346,7 @@ def _build_event_id_query(
                 qry = qry.filter(event_has_control(c.id, Event.id, db))
 
     if clause:
-        qry = qry.filter(_clause_event_condition(framework, clause))
+        qry = qry.filter(_clause_event_condition(framework, clause, db))
 
     if unmapped:
         qry = qry.filter(_unmapped_event_condition(framework, db))
@@ -413,7 +413,7 @@ def list_events(
             qry = qry.filter(event_has_control(c.id, Event.id, db))
 
     if clause:
-        qry = qry.filter(_clause_event_condition(framework, clause))
+        qry = qry.filter(_clause_event_condition(framework, clause, db))
 
     if unmapped:
         qry = qry.filter(_unmapped_event_condition(framework, db))
@@ -723,7 +723,7 @@ def export_events(
             qry = qry.filter(event_has_control(c.id, Event.id, db))
 
     if clause:
-        qry = qry.filter(_clause_event_condition(framework, clause))
+        qry = qry.filter(_clause_event_condition(framework, clause, db))
 
     if unmapped:
         qry = qry.filter(_unmapped_event_condition(framework, db))

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the complete KEEN API suite against a disposable test database.
+# Run KEEN backend and frontend contracts against a disposable test database.
 set -euo pipefail
 keen_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 : "${KEEN_TEST_DATABASE_URL:?Set KEEN_TEST_DATABASE_URL to a disposable PostgreSQL database (never production)}"
@@ -9,6 +9,7 @@ export KEEN_DATABASE_URL="$KEEN_TEST_DATABASE_URL"
 export KEEN_RETENTION_TEST_DATABASE_URL="$KEEN_TEST_DATABASE_URL"
 export KEEN_MFA_TEST_DATABASE_URL="$KEEN_TEST_DATABASE_URL"
 export KEEN_HOME_TEST_DATABASE_URL="$KEEN_TEST_DATABASE_URL"
+export KEEN_CONTRACT_TEST_DATABASE_URL="$KEEN_TEST_DATABASE_URL"
 export KEEN_BOOTSTRAP_ADMIN_USERNAME=ci-admin
 export KEEN_BOOTSTRAP_ADMIN_PASSWORD=ci-only-not-a-real-password
 export AWS_EC2_METADATA_DISABLED=true
@@ -43,7 +44,11 @@ PY
 
 result=0
 poetry run python -m pytest tests -ra --tb=short \
-  --junitxml="$report_dir/pytest.xml" || result=1
+  --junitxml="$report_dir/pytest.xml" \
+  --cov=app --cov-branch --cov-report=term:skip-covered \
+  --cov-report="xml:$report_dir/backend-coverage.xml" \
+  --cov-report="json:$report_dir/backend-coverage.json" \
+  --cov-report="html:$report_dir/backend-coverage" || result=1
 
 # A missing test-DB setting must never turn the full CI job green via skips.
 poetry run python - "$report_dir/pytest.xml" <<'PY' || result=1
@@ -58,7 +63,10 @@ if skipped:
     raise SystemExit('Full suite unexpectedly skipped tests: ' + ', '.join(skipped))
 PY
 
-# The UI currently has no npm test command. Check all first-party JS syntax.
+# Exercise DOM workflows and record frontend coverage; still run after backend failures.
+bash "$keen_root/tests-ui.sh" || result=1
+
+# Also check syntax in first-party pages not yet exercised by behavioural tests.
 while IFS= read -r -d '' file; do
   node --check "$file" || result=1
 done < <(find "$keen_root/services/ui/public" -path '*/vendor' -prune -o -type f -name '*.js' -print0)

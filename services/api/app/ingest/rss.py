@@ -365,7 +365,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
         meta["etag"] = response.headers.get("etag")
     if response.headers.get("last-modified"):
         meta["last_modified"] = response.headers.get("last-modified")
-        cur.meta = meta
+    cur.meta = meta
 
     feed_meta, entries = _parse_feed(xml_bytes)
 

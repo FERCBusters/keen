@@ -90,7 +90,8 @@ def _check_replay_protection(
     existing = r.set(
         replay_key, "1", nx=True, ex=_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS + 60
     )
-    return existing is False
+    # redis-py returns None when SET NX loses to an existing key.
+    return not bool(existing)
 
 
 def ingest_webhook(

@@ -1519,7 +1519,10 @@ def create_risk(
             template_refs = [ref for ref in template_refs if ref in available]
     now = _utcnow()
     risk = Risk(created_at=now, updated_at=now, created_by_user_id=user.id)
-    _apply_payload(db, risk, payload, is_create=True)
+    # Related assets may already be persistent; finish initializing the new
+    # risk before relationship lookups can trigger an autoflush.
+    with db.no_autoflush:
+        _apply_payload(db, risk, payload, is_create=True)
     db.add(risk)
     db.flush()
     fw = _clean_framework(payload.framework)

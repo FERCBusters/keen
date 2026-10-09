@@ -178,17 +178,13 @@ def _summarize_event(e: dict[str, Any], *, fallback_repo: str | None = None) -> 
         return " ".join(bits)
 
     if etype == "DeleteEvent":
-        action = payload.get("ref_type") or ""
-        ref = payload.get("ref") or ""
-        name = (rel.get("name") or "").strip()
-        ref_type = payload.get("ref_type") or ""
+        ref = str(payload.get("ref") or "").strip()
+        ref_type = str(payload.get("ref_type") or "reference").strip()
         bits = [f"GitHub {ref_type} deletion"]
         if repo:
             bits.append(repo)
-        if tag:
-            bits.append(tag)
-        if name and name != tag:
-            bits.append(f'"{name}"')
+        if ref:
+            bits.append(ref)
         if actor:
             bits.append(f"by {actor}")
         return " ".join(bits)

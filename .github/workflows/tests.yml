@@ -52,7 +52,7 @@ jobs:
           set -eu
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates curl git tar gzip findutils bash nodejs \
+            ca-certificates curl git tar gzip findutils bash nodejs npm \
             python3 python3-venv python3-pip build-essential poppler-utils
 
       - name: Checkout
@@ -61,11 +61,11 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
 
-      - name: Run frontend regression tests
+      - name: Install locked frontend test dependencies
         run: |
           set -eu
           if [ -f keen/services/ui/package.json ]; then cd keen; fi
-          node --test services/ui/tests/*.test.mjs
+          npm ci --prefix services/ui/tests --ignore-scripts --no-audit --no-fund
 
       - name: Install Poetry
         run: |
