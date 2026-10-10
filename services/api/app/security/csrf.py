@@ -77,21 +77,39 @@ def request_origin_allowed(request, *, require_origin=False) -> bool:
     Non-browser HTTP clients may omit Origin and still need their CSRF token.
     """
     from urllib.parse import urlsplit
+
     supplied = request.headers.get("origin")
     if not supplied:
-        return not require_origin and request.headers.get("sec-fetch-site") != "cross-site"
+        return (
+            not require_origin and request.headers.get("sec-fetch-site") != "cross-site"
+        )
     expected = (settings.public_base_url or "").rstrip("/")
     if not expected:
-        scheme = {"ws": "http", "wss": "https"}.get(request.url.scheme, request.url.scheme)
+        scheme = {"ws": "http", "wss": "https"}.get(
+            request.url.scheme, request.url.scheme
+        )
         expected = f"{scheme}://{request.url.netloc}"
+
     def origin(value):
         parsed = urlsplit(value)
-        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
-                or parsed.username or parsed.password or parsed.path or parsed.query
-                or parsed.fragment or "\\" in value
-                or any(ord(c) < 32 or ord(c) == 127 for c in value)):
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or "\\" in value
+            or any(ord(c) < 32 or ord(c) == 127 for c in value)
+        ):
             raise ValueError("Invalid origin")
-        return parsed.scheme, parsed.hostname.lower(), parsed.port or (443 if parsed.scheme == "https" else 80)
+        return (
+            parsed.scheme,
+            parsed.hostname.lower(),
+            parsed.port or (443 if parsed.scheme == "https" else 80),
+        )
+
     try:
         return origin(supplied) == origin(expected)
     except ValueError:

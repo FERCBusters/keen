@@ -1,15 +1,15 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
-from datetime import datetime
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from starlette.responses import RedirectResponse
 from sqlalchemy.orm import Session
+from starlette.responses import RedirectResponse
 
+from app.api.payloads import LoginPayload
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.core.valkey import get_valkey
 from app.db.models import User
 from app.db.session import get_db
@@ -19,26 +19,24 @@ from app.security.auth import (
     clear_session_cookie,
     set_session_cookie,
 )
-from app.security.permissions import get_effective_permission_codes, has_permission
-from app.security.roles import attach_effective_role
 from app.security.csrf import clear_csrf_cookie, generate_csrf_token, set_csrf_cookie
+from app.security.oidc import (
+    build_authorize_redirect,
+    configured_sso_providers,
+    get_sso_provider,
+    handle_callback,
+    set_sso_binding,
+    sso_binding_cookie,
+)
+from app.security.permissions import get_effective_permission_codes, has_permission
+from app.security.rate_limit import client_ip as _client_ip
+from app.security.rate_limit import fixed_window_allow
+from app.security.roles import attach_effective_role
 from app.security.sessions import (
     create_session,
     delete_session,
     get_session,
 )
-from app.security.rate_limit import client_ip as _client_ip, fixed_window_allow
-from app.security.oidc import (
-    any_sso_enabled,
-    build_authorize_redirect,
-    set_sso_binding,
-    sso_binding_cookie,
-    configured_sso_providers,
-    get_sso_provider,
-    handle_callback,
-)
-
-from app.api.payloads import LoginPayload
 
 router = APIRouter()
 
@@ -50,6 +48,7 @@ def _oidc_configured() -> bool:
 @router.get("/v1/auth/methods")
 def auth_methods() -> dict:
     from app.security.demo import demo_metadata
+
     providers = configured_sso_providers()
     oidc_enabled = _oidc_configured()
     oidc_provider = get_sso_provider("oidc")
@@ -64,9 +63,7 @@ def auth_methods() -> dict:
         "oidc_enabled": oidc_enabled,
         "oidc": (
             {
-                "label": (
-                    oidc_provider.label if oidc_provider else "Single sign-on"
-                ),
+                "label": (oidc_provider.label if oidc_provider else "Single sign-on"),
                 "start_url": "/api/v1/auth/oidc/start",
             }
             if oidc_enabled
@@ -82,9 +79,14 @@ def login(
     payload: LoginPayload, request: Request, db: Session = Depends(get_db)
 ) -> Response:
     from app.security.csrf import request_origin_allowed
+
     if not request_origin_allowed(request, require_origin=settings.hosted_mode):
         raise HTTPException(403, "Authentication request origin is not allowed")
-    if not (settings.ldap_enabled if payload.method == "ldap" else settings.local_auth_enabled):
+    if not (
+        settings.ldap_enabled
+        if payload.method == "ldap"
+        else settings.local_auth_enabled
+    ):
         raise HTTPException(status_code=404, detail="Login method is disabled")
 
     # Defense-in-depth: rate limit login attempts (also enforce at reverse proxy).
@@ -131,6 +133,7 @@ def login(
 
     if payload.method == "ldap":
         from app.security.ldap import authenticate_ldap
+
         user = authenticate_ldap(db, payload.username, payload.password)
     else:
         user = authenticate_user(db, payload.username, payload.password)
@@ -138,12 +141,15 @@ def login(
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     from app.security import mfa
+
     if user.mfa_enabled or mfa.required(db, user):
         return mfa.start(db, user, request)
     return complete_local_login(db, user, request)
 
 
-def complete_local_login(db, user, request, *, mfa_verified=False, verified_version=None):
+def complete_local_login(
+    db, user, request, *, mfa_verified=False, verified_version=None
+):
     # Freeze the version proven by this ceremony before any commit expires ORM state.
     session_version = user.mfa_version if verified_version is None else verified_version
     # Delete any existing session for this user to prevent session fixation.
@@ -187,6 +193,7 @@ def complete_local_login(db, user, request, *, mfa_verified=False, verified_vers
         pass
 
     from app.services.security_notifications import record_login
+
     record_login(db, user, request)
     db.commit()
 
@@ -251,7 +258,9 @@ def complete_local_login(db, user, request, *, mfa_verified=False, verified_vers
 @router.get("/v1/auth/oidc/start")
 async def oidc_start(request: Request, db: Session = Depends(get_db)) -> Response:
     next_url = request.query_params.get("next")
-    url = await build_authorize_redirect(request, db, next_url=next_url, provider_key="oidc")
+    url = await build_authorize_redirect(
+        request, db, next_url=next_url, provider_key="oidc"
+    )
     return set_sso_binding(RedirectResponse(url, status_code=302), request)
 
 
@@ -261,20 +270,30 @@ async def oidc_callback(request: Request, db: Session = Depends(get_db)) -> Resp
 
 
 @router.get("/v1/auth/sso/{provider_key}/start")
-async def sso_start(provider_key: str, request: Request, db: Session = Depends(get_db)) -> Response:
+async def sso_start(
+    provider_key: str, request: Request, db: Session = Depends(get_db)
+) -> Response:
     next_url = request.query_params.get("next")
-    url = await build_authorize_redirect(request, db, next_url=next_url, provider_key=provider_key)
+    url = await build_authorize_redirect(
+        request, db, next_url=next_url, provider_key=provider_key
+    )
     return set_sso_binding(RedirectResponse(url, status_code=302), request)
 
 
 @router.get("/v1/auth/sso/{provider_key}/callback")
-async def sso_callback(provider_key: str, request: Request, db: Session = Depends(get_db)) -> Response:
+async def sso_callback(
+    provider_key: str, request: Request, db: Session = Depends(get_db)
+) -> Response:
     return await _complete_sso_callback(request, db, provider_key=provider_key)
 
 
-async def _complete_sso_callback(request: Request, db: Session, *, provider_key: str) -> Response:
+async def _complete_sso_callback(
+    request: Request, db: Session, *, provider_key: str
+) -> Response:
 
-    user, next_url, id_token, provider = await handle_callback(request, db, provider_key=provider_key)
+    user, next_url, id_token, provider = await handle_callback(
+        request, db, provider_key=provider_key
+    )
     eff = attach_effective_role(db, user)
     permission_codes = get_effective_permission_codes(db, user, use_cache=False)
     authz_version = int(getattr(user, "authz_version", 0) or 0)
@@ -293,6 +312,7 @@ async def _complete_sso_callback(request: Request, db: Session, *, provider_key:
     )
 
     from app.services.security_notifications import record_login
+
     record_login(db, user, request)
     db.commit()
 
@@ -300,7 +320,13 @@ async def _complete_sso_callback(request: Request, db: Session, *, provider_key:
     resp = RedirectResponse(dest, status_code=302)
     set_session_cookie(resp, sid)
     set_csrf_cookie(resp, generate_csrf_token())
-    resp.delete_cookie(sso_binding_cookie(), path="/", secure=settings.cookie_secure, httponly=True, samesite="lax")
+    resp.delete_cookie(
+        sso_binding_cookie(),
+        path="/",
+        secure=settings.cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
@@ -312,6 +338,7 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
         delete_session(get_valkey(), sid)
     resp = Response(status_code=204)
     from app.security import mfa
+
     mfa.cancel(db, request, resp)
     clear_session_cookie(resp)
     clear_csrf_cookie(resp)
@@ -343,6 +370,7 @@ def _browser_logout_response(request: Request, db: Session) -> Response:
         resp = RedirectResponse(post_logout or "/login.html", status_code=302)
 
     from app.security import mfa
+
     mfa.cancel(db, request, resp)
     clear_session_cookie(resp)
     clear_csrf_cookie(resp)

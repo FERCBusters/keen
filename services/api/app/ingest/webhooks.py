@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import hmac
-import time
+import json
 from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.ingest.connections import load_document, current_connection, namespace
 from app.core.config import settings
 from app.core.valkey import get_valkey
 from app.ingest.common import store_event_with_artifact
+from app.ingest.connections import current_connection, load_document, namespace
 
 _MAX_WEBHOOK_PAYLOAD_BYTES = 10 * 1024 * 1024  # 10MB
 # Replay protection: reject webhooks older than 15 minutes
@@ -25,12 +24,14 @@ def load_webhook_policies(path: str) -> dict[str, Any]:
 
 def verify_secret(provider: str, headers: dict[str, str]) -> bool:
     connection = current_connection()
-    if connection and connection.managed_by != 'environment':
-        if provider != connection.configuration.get('provider'):
+    if connection and connection.managed_by != "environment":
+        if provider != connection.configuration.get("provider"):
             return False
-        expected = connection.credentials.get('secret')
-        header = connection.configuration.get('secret_header', 'X-Webhook-Secret').lower()
-        got = {k.lower():v for k,v in headers.items()}.get(header)
+        expected = connection.credentials.get("secret")
+        header = connection.configuration.get(
+            "secret_header", "X-Webhook-Secret"
+        ).lower()
+        got = {k.lower(): v for k, v in headers.items()}.get(header)
         return bool(expected and got and hmac.compare_digest(got, expected))
     pol = (
         load_webhook_policies(settings.webhooks_path)
@@ -125,9 +126,11 @@ def ingest_webhook(
         .get(provider, {})
     )
     connection = current_connection()
-    secret_header = (connection.configuration.get('secret_header', 'X-Webhook-Secret')
-                     if connection and connection.managed_by != 'environment'
-                     else pol.get('secret_header', ''))
+    secret_header = (
+        connection.configuration.get("secret_header", "X-Webhook-Secret")
+        if connection and connection.managed_by != "environment"
+        else pol.get("secret_header", "")
+    )
     for k in pol.get("summary_hints", []) or []:
         if isinstance(parsed, dict) and k in parsed:
             hint_val = str(parsed.get(k) or "")
@@ -152,8 +155,13 @@ def ingest_webhook(
             "webhook": {
                 "provider": provider,
                 "event_type": event_type,
-                "headers": {k: v for k, v in headers.items() if k.lower() in {"content-type", "user-agent", "x-webhook-timestamp"}
-                    and k.lower() != str(secret_header or "").lower()},
+                "headers": {
+                    k: v
+                    for k, v in headers.items()
+                    if k.lower()
+                    in {"content-type", "user-agent", "x-webhook-timestamp"}
+                    and k.lower() != str(secret_header or "").lower()
+                },
             }
         },
         normalized_payload=parsed if isinstance(parsed, dict) else {"payload": parsed},

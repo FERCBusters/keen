@@ -1,9 +1,12 @@
 """Restore collection provenance for existing Forgejo API events."""
+
 from alembic import op
+
 revision = "0082_forgejo_feed_identity"
 down_revision = "0081_keen_agent"
 branch_labels = None
 depends_on = None
+
 
 def upgrade():
     # Use the actual recorded feed URL; do not guess from host/repository names.
@@ -16,6 +19,7 @@ def upgrade():
           AND jsonb_typeof(normalized_payload->'feed_url') = 'string'
           AND normalized_payload->>'feed_url' <> ''
     """)
+
 
 def downgrade():
     # Provenance is useful evidence metadata and is intentionally retained.

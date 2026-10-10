@@ -1,7 +1,7 @@
 from __future__ import annotations
-from app.security.errors import collection_error
 
 from app.core.datetime_utils import utc_now_naive
+from app.security.errors import collection_error
 from app.services.ingestion_pause import pausable
 
 """Forgejo (Gitea-compatible) ingestion.
@@ -23,25 +23,39 @@ from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-import httpx
-from app.ingest.http import client as ingestion_client
 from sqlalchemy.orm import Session
 
-from app.ingest.connections import settings, connection_runs, namespace
-from app.ingest.connections import load_document
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, is_safe_url, store_event_with_artifact
+from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.git_activity import (
     _classify_from_title as _classify_from_title,
+)
+from app.ingest.git_activity import (
     _infer_owner_repo_from_feed_url as _infer_owner_repo_from_feed_url,
+)
+from app.ingest.git_activity import (
     _is_probably_rss as _is_probably_rss,
+)
+from app.ingest.git_activity import (
     _parse_iso_ts as _parse_iso_ts,
+)
+from app.ingest.git_activity import (
     _parse_rfc822_ts as _parse_rfc822_ts,
+)
+from app.ingest.git_activity import (
     _parse_rss_items as _parse_rss_items,
+)
+from app.ingest.git_activity import (
     _redacted_url as _redacted_url,
+)
+from app.ingest.git_activity import (
     _response_status_error as _response_status_error,
+)
+from app.ingest.git_activity import (
     _to_utc_naive as _to_utc_naive,
 )
+from app.ingest.http import client as ingestion_client
 from app.security.redaction import redact_url
 
 
@@ -93,6 +107,7 @@ def _with_query_token(url: str) -> str:
 
 def _fetch_rss(feed_url: str) -> str:
     from app.ingest.http import require_origin
+
     if _auth_headers() or _basic_auth() or settings.forgejo_token:
         require_origin(feed_url, settings.forgejo_base_url)
     if not is_safe_url(feed_url):
@@ -172,7 +187,9 @@ def _fetch_api_activities(
                 break
             page += 1
         else:
-            raise ValueError("Activity pagination limit reached; cursor retained for retry")
+            raise ValueError(
+                "Activity pagination limit reached; cursor retained for retry"
+            )
 
     return all_items
 
@@ -252,7 +269,13 @@ def _store_api_activity_items(
             severity=3,
             summary=summary,
             raw_pointer={
-                "forgejo": {"api": True, "owner": owner, "repo": repo, "host": host, "feed": feed_url}
+                "forgejo": {
+                    "api": True,
+                    "owner": owner,
+                    "repo": repo,
+                    "host": host,
+                    "feed": feed_url,
+                }
             },
             normalized_payload={"activity": a, "feed_url": feed_url},
             external_id=ext_id,
@@ -297,6 +320,7 @@ def ingest_forgejo_repo_feed(
     """
 
     from app.ingest.http import require_origin
+
     if _auth_headers() or _basic_auth() or settings.forgejo_token:
         require_origin(feed_url, settings.forgejo_base_url)
     u = urlparse(feed_url)
@@ -418,7 +442,16 @@ def ingest_forgejo_repo_feed(
                 outcome=outcome,
                 severity=severity,
                 summary=summary,
-                raw_pointer={"forgejo": {"feed": feed_url, "link": link, "guid": guid, "owner": owner, "repo": repo, "host": host}},
+                raw_pointer={
+                    "forgejo": {
+                        "feed": feed_url,
+                        "link": link,
+                        "guid": guid,
+                        "owner": owner,
+                        "repo": repo,
+                        "host": host,
+                    }
+                },
                 normalized_payload={"rss": norm},
                 external_id=ext_id,
                 artifact_kind="forgejo_rss",
@@ -465,7 +498,12 @@ def _discover_repositories(base_url: str, section: str, name: str) -> list[dict]
     """Enumerate accessible repositories owned by one account, without following URLs from responses."""
     import re
     from urllib.parse import quote
-    if section not in ("organizations", "users") or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", name) or name in (".", ".."):
+
+    if (
+        section not in ("organizations", "users")
+        or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", name)
+        or name in (".", "..")
+    ):
         raise ValueError("Invalid Forgejo account")
     if not is_safe_url(base_url):
         raise ValueError("Set KEEN_FORGEJO_BASE_URL to a safe HTTPS instance URL")
@@ -474,7 +512,9 @@ def _discover_repositories(base_url: str, section: str, name: str) -> list[dict]
     headers = {"Accept": "application/json", **_auth_headers()}
     auth = _basic_auth() if settings.forgejo_auth_mode == "basic" else None
     repos, seen = [], set()
-    with ingestion_client(timeout=30.0, follow_redirects=False, verify=True, headers=headers, auth=auth) as client:
+    with ingestion_client(
+        timeout=30.0, follow_redirects=False, verify=True, headers=headers, auth=auth
+    ) as client:
         for page in range(1, 1001):
             response = client.get(url, params={"page": page, "limit": 50})
             error = _response_status_error(response)
@@ -492,20 +532,30 @@ def _discover_repositories(base_url: str, section: str, name: str) -> list[dict]
                 owner = (repo.get("owner") or {}).get("login")
                 repo_name = repo.get("name")
                 if not isinstance(owner, str) or owner.lower() != name.lower():
-                    raise ValueError("Forgejo returned a repository outside the requested owner")
-                if not isinstance(repo_name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", repo_name) or repo_name in (".", ".."):
+                    raise ValueError(
+                        "Forgejo returned a repository outside the requested owner"
+                    )
+                if (
+                    not isinstance(repo_name, str)
+                    or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", repo_name)
+                    or repo_name in (".", "..")
+                ):
                     raise ValueError("Invalid Forgejo repository name")
                 key = (owner, repo_name)
                 if key not in seen:
-                    seen.add(key); repos.append(repo); added += 1
+                    seen.add(key)
+                    repos.append(repo)
+                    added += 1
             if not added:
-                raise ValueError("Forgejo repeated a repository page; discovery stopped")
+                raise ValueError(
+                    "Forgejo repeated a repository page; discovery stopped"
+                )
             # Continue to an empty page even if the server caps page size below 50.
     raise ValueError("Forgejo repository discovery exceeded 1000 pages")
 
 
-@pausable('forgejo')
-@connection_runs('forgejo')
+@pausable("forgejo")
+@connection_runs("forgejo")
 def ingest_forgejo_all(db: Session) -> list[dict[str, Any]]:
     if not settings.forgejo_enabled:
         return [{"skipped": True, "reason": "KEEN_FORGEJO_ENABLED=false"}]
@@ -518,13 +568,25 @@ def ingest_forgejo_all(db: Session) -> list[dict[str, Any]]:
             name = str(entry.get(field) or "").strip()
             try:
                 repos = _discover_repositories(base, section, name)
-                out.append({"scope": section, "account": name, "discovered_repositories": len(repos)})
+                out.append(
+                    {
+                        "scope": section,
+                        "account": name,
+                        "discovered_repositories": len(repos),
+                    }
+                )
                 for repo in repos:
                     owner = repo["owner"]["login"]
-                    feeds.append({"url": f"{base}/{owner}/{repo['name']}.rss",
-                                  "label": entry.get("label") or None})
+                    feeds.append(
+                        {
+                            "url": f"{base}/{owner}/{repo['name']}.rss",
+                            "label": entry.get("label") or None,
+                        }
+                    )
             except Exception as exc:
-                out.append({"scope": section, "account": name, "error": collection_error(exc)})
+                out.append(
+                    {"scope": section, "account": name, "error": collection_error(exc)}
+                )
     seen_feeds = set()
     for f in feeds:
         url = f.get("url") or f.get("feed")
@@ -536,4 +598,9 @@ def ingest_forgejo_all(db: Session) -> list[dict[str, Any]]:
         except Exception as e:
             db.rollback()
             out.append({"feed": url, "error": collection_error(e)})
-    return out or [{"skipped": True, "reason": "No Forgejo inputs configured. Open Sources & evidence mapping, select this source and choose Add input. Choose User, Organisation or Feed, enter the account name or repository feed URL, and save."}]
+    return out or [
+        {
+            "skipped": True,
+            "reason": "No Forgejo inputs configured. Open Sources & evidence mapping, select this source and choose Add input. Choose User, Organisation or Feed, enter the account name or repository feed URL, and save.",
+        }
+    ]

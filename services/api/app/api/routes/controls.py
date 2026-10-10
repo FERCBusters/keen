@@ -8,27 +8,35 @@ from sqlalchemy.orm import Session, load_only
 
 from app.api.utils import (
     control_justification as _control_justification,
+)
+from app.api.utils import (
     control_upstream_url as _control_upstream_url,
+)
+from app.api.utils import (
     extract_source_url as _extract_source_url,
+)
+from app.api.utils import (
     ref_sort_key as _ref_sort_key,
+)
+from app.api.utils import (
     try_uuid as _try_uuid,
 )
 from app.core.config import settings
 from app.db.models import (
     ControlClauseLink,
     ControlItem,
-    EffectiveCrossFrameworkControlLink,
     Event,
     FrameworkClause,
     Mapping,
     User,
 )
 from app.db.session import get_db
-from app.services.control_inheritance import effective_control_ids
 from app.security.diary_visibility import diary_filter_condition
 from app.security.permissions import has_permission
+from app.security.redaction import redact_obj as _redact_obj
+from app.security.redaction import redact_str as _redact_str
 from app.security.roles import is_effective_admin
-from app.security.redaction import redact_obj as _redact_obj, redact_str as _redact_str
+from app.services.control_inheritance import effective_control_ids
 from app.services.entity_changelog import list_entity_changelogs
 
 router = APIRouter()
@@ -173,22 +181,37 @@ def control_evidence(
 
     # Prefer a direct mapping when the same event also arrives via another
     # framework. Rank before pagination to avoid duplicates and empty pages.
-    ranked = db.query(
-        Mapping.id.label("mapping_id"),
-        func.row_number().over(
-            partition_by=Mapping.event_id,
-            order_by=(case((Mapping.control_item_id == cid, 0), else_=1), Mapping.mapped_at.desc()),
-        ).label("rank"),
-    ).filter(Mapping.control_item_id.in_(effective_control_ids(cid, db))).subquery()
-    base_q = db.query(Mapping).join(ranked, ranked.c.mapping_id == Mapping.id).join(
-        Event, Event.id == Mapping.event_id
-    ).filter(ranked.c.rank == 1, diary_filter_condition(db, user))
+    ranked = (
+        db.query(
+            Mapping.id.label("mapping_id"),
+            func.row_number()
+            .over(
+                partition_by=Mapping.event_id,
+                order_by=(
+                    case((Mapping.control_item_id == cid, 0), else_=1),
+                    Mapping.mapped_at.desc(),
+                ),
+            )
+            .label("rank"),
+        )
+        .filter(Mapping.control_item_id.in_(effective_control_ids(cid, db)))
+        .subquery()
+    )
+    base_q = (
+        db.query(Mapping)
+        .join(ranked, ranked.c.mapping_id == Mapping.id)
+        .join(Event, Event.id == Mapping.event_id)
+        .filter(ranked.c.rank == 1, diary_filter_condition(db, user))
+    )
     total = int(base_q.order_by(None).count() or 0)
     q = base_q.order_by(desc(Mapping.mapped_at)).offset(offset).limit(limit).all()
     event_ids = [m.event_id for m in q]
 
     source_ids = {m.control_item_id for m in q if m.control_item_id != cid}
-    sources = {c.id: c for c in db.query(ControlItem).filter(ControlItem.id.in_(source_ids)).all()}
+    sources = {
+        c.id: c
+        for c in db.query(ControlItem).filter(ControlItem.id.in_(source_ids)).all()
+    }
 
     events = {
         e.id: e
@@ -219,8 +242,8 @@ def control_evidence(
                 "event_id": str(e.id),
                 "timestamp": e.timestamp.isoformat(),
                 "source": e.source,
-        "connection_id": e.connection_id,
-        "connection_name": e.connection_name,
+                "connection_id": e.connection_id,
+                "connection_name": e.connection_name,
                 "summary": e.summary,
                 "source_url": src_url,
                 "raw_pointer": _redact_obj(e.raw_pointer),
@@ -229,10 +252,13 @@ def control_evidence(
                 "rationale": m.rationale,
                 "inherited": m.control_item_id != cid,
                 "inherited_from": (
-                    {"control_id": str(sources[m.control_item_id].id),
-                     "framework": sources[m.control_item_id].framework_slug,
-                     "ref": sources[m.control_item_id].ref}
-                    if m.control_item_id in sources else None
+                    {
+                        "control_id": str(sources[m.control_item_id].id),
+                        "framework": sources[m.control_item_id].framework_slug,
+                        "ref": sources[m.control_item_id].ref,
+                    }
+                    if m.control_item_id in sources
+                    else None
                 ),
             }
         )

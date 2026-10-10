@@ -5,12 +5,9 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-import yaml
-
 from app.core.config import settings
-from app.mapping.collector import event_collector, matches_collector
-
-from app.mapping.fields import validate_fields, field_matches
+from app.mapping.collector import matches_collector
+from app.mapping.fields import field_matches, validate_fields
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +59,7 @@ def _match_regex(pat: str | None, val: str | None) -> bool:
     if not pat:
         return True
     from app.security.regex import compile_pattern
+
     return bool(compile_pattern(pat).search(val or ""))
 
 
@@ -164,9 +162,13 @@ def _clean_optional_int(v: Any) -> int | None:
 
 _KNOWN_WHEN_KEYS = {
     "fields",
-    "bookstack_book_id", "bookstack_book_slug", "bookstack_page_id",
-    "bookstack_page_slug", "bookstack_page_slug_regex",
-    "bookstack_page_title", "bookstack_page_title_regex",
+    "bookstack_book_id",
+    "bookstack_book_slug",
+    "bookstack_page_id",
+    "bookstack_page_slug",
+    "bookstack_page_slug_regex",
+    "bookstack_page_title",
+    "bookstack_page_title_regex",
     "connection_id",
     "collector",
     "source",
@@ -471,9 +473,13 @@ def parse_rules(raw: Any) -> list[Rule]:
             bookstack_book_slug=_clean_optional_str(w.get("bookstack_book_slug")),
             bookstack_page_id=_clean_optional_int(w.get("bookstack_page_id")),
             bookstack_page_slug=_clean_optional_str(w.get("bookstack_page_slug")),
-            bookstack_page_slug_regex=_clean_optional_str(w.get("bookstack_page_slug_regex")),
+            bookstack_page_slug_regex=_clean_optional_str(
+                w.get("bookstack_page_slug_regex")
+            ),
             bookstack_page_title=_clean_optional_str(w.get("bookstack_page_title")),
-            bookstack_page_title_regex=_clean_optional_str(w.get("bookstack_page_title_regex")),
+            bookstack_page_title_regex=_clean_optional_str(
+                w.get("bookstack_page_title_regex")
+            ),
         )
 
         conf_raw = it.get("confidence", 0.8)
@@ -544,39 +550,71 @@ def evaluate_by_framework(
 
     for r in rules:
         c = r.when
-        if not all(field_matches(event.get("normalized_payload") or {}, item) for item in (c.fields or [])):
+        if not all(
+            field_matches(event.get("normalized_payload") or {}, item)
+            for item in (c.fields or [])
+        ):
             continue
         if c.connection_id and c.connection_id != event.get("connection_id"):
             continue
         if c.collector and not matches_collector(c.collector, event):
             continue
-        if any((c.bookstack_book_id is not None, c.bookstack_book_slug,
-                c.bookstack_page_id is not None, c.bookstack_page_slug,
-                c.bookstack_page_slug_regex, c.bookstack_page_title,
-                c.bookstack_page_title_regex)):
+        if any(
+            (
+                c.bookstack_book_id is not None,
+                c.bookstack_book_slug,
+                c.bookstack_page_id is not None,
+                c.bookstack_page_slug,
+                c.bookstack_page_slug_regex,
+                c.bookstack_page_title,
+                c.bookstack_page_title_regex,
+            )
+        ):
             page = (event.get("raw_pointer") or {}).get("bookstack") or {}
             normal = (event.get("normalized_payload") or {}).get("bookstack") or {}
             if not isinstance(page, dict) or not isinstance(normal, dict):
                 continue
+
             def val(name):
-                return page.get(name) if page.get(name) is not None else normal.get(name)
+                return (
+                    page.get(name) if page.get(name) is not None else normal.get(name)
+                )
+
             slug = str(val("page_slug") or "")
             book_slug = str(val("book_slug") or "")
-            candidates = (slug, f"{book_slug}-{slug}") if book_slug and slug else (slug,)
+            candidates = (
+                (slug, f"{book_slug}-{slug}") if book_slug and slug else (slug,)
+            )
             title = str(normal.get("page_title") or "")
-            if c.bookstack_book_id is not None and str(val("book_id")) != str(c.bookstack_book_id):
+            if c.bookstack_book_id is not None and str(val("book_id")) != str(
+                c.bookstack_book_id
+            ):
                 continue
-            if c.bookstack_book_slug and c.bookstack_book_slug.casefold() != book_slug.casefold():
+            if (
+                c.bookstack_book_slug
+                and c.bookstack_book_slug.casefold() != book_slug.casefold()
+            ):
                 continue
-            if c.bookstack_page_id is not None and str(val("page_id")) != str(c.bookstack_page_id):
+            if c.bookstack_page_id is not None and str(val("page_id")) != str(
+                c.bookstack_page_id
+            ):
                 continue
-            if c.bookstack_page_slug and not any(c.bookstack_page_slug.casefold() == s.casefold() for s in candidates):
+            if c.bookstack_page_slug and not any(
+                c.bookstack_page_slug.casefold() == s.casefold() for s in candidates
+            ):
                 continue
-            if c.bookstack_page_slug_regex and not any(_match_regex(c.bookstack_page_slug_regex, s) for s in candidates):
+            if c.bookstack_page_slug_regex and not any(
+                _match_regex(c.bookstack_page_slug_regex, s) for s in candidates
+            ):
                 continue
-            if c.bookstack_page_title and c.bookstack_page_title.casefold() != title.casefold():
+            if (
+                c.bookstack_page_title
+                and c.bookstack_page_title.casefold() != title.casefold()
+            ):
                 continue
-            if c.bookstack_page_title_regex and not _match_regex(c.bookstack_page_title_regex, title):
+            if c.bookstack_page_title_regex and not _match_regex(
+                c.bookstack_page_title_regex, title
+            ):
                 continue
         if c.source and str(c.source) != str(source):
             continue
@@ -615,8 +653,15 @@ def evaluate_by_framework(
             if t.roles_any is not None and not roles:
                 continue
             bucket = hits.setdefault(t.framework_slug, [])
-            bucket.append({"ref": t.ref, "confidence": r.confidence,
-                           "rationale": f"auto by rule {r.id} ({t.framework_slug})"} if details else t.ref)
+            bucket.append(
+                {
+                    "ref": t.ref,
+                    "confidence": r.confidence,
+                    "rationale": f"auto by rule {r.id} ({t.framework_slug})",
+                }
+                if details
+                else t.ref
+            )
 
     # De-duplicate refs while preserving order; with details, keep the most
     # confident matching rule for each framework/ref pair.
@@ -625,7 +670,9 @@ def evaluate_by_framework(
         by_ref: dict[str, Any] = {}
         for entry in entries:
             ref = entry["ref"] if details else entry
-            if ref not in by_ref or (details and entry["confidence"] > by_ref[ref]["confidence"]):
+            if ref not in by_ref or (
+                details and entry["confidence"] > by_ref[ref]["confidence"]
+            ):
                 by_ref[ref] = entry
         out[fw] = list(by_ref.values())
     return out

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import re
+import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
-import uuid
 
 import yaml
 from sqlalchemy import text
@@ -14,7 +14,6 @@ from app.api.utils import control_justification as _control_justification
 from app.api.utils import control_upstream_url as _control_upstream_url
 from app.api.utils import ref_sort_key as _ref_sort_key
 from app.core.config import settings
-from app.services.mitigator_catalogue import rank_library, catalogue_tokens
 from app.db.models import (
     ControlItem,
     FrameworkClause,
@@ -28,6 +27,7 @@ from app.db.models import (
     RiskCategory,
     RiskLibraryEntry,
 )
+from app.services.mitigator_catalogue import catalogue_tokens, rank_library
 
 _TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9+._/-]*", re.I)
 _RISK_TYPES = {"Confidentiality", "Integrity", "Availability"}
@@ -276,7 +276,9 @@ def _fts_scores(db: Session, *, framework: str, terms: list[str]) -> dict[str, f
     try:
         # A failed optional search must not poison the surrounding transaction.
         with db.begin_nested():
-            rows = db.execute(sql, {"framework": framework, "q": query}).mappings().all()
+            rows = (
+                db.execute(sql, {"framework": framework, "q": query}).mappings().all()
+            )
     except Exception:
         # Keep the wizard usable on non-Postgres dev/test databases. The Python
         # scorer still works; the migration provides the production FTS index.
@@ -970,15 +972,25 @@ def analyse_risk_mitigation(
     library_by_ref: dict[str, list[dict[str, Any]]] = {}
     if framework == "KEEN-AF:1.0":
         entries = db.query(RiskLibraryEntry).all()
-        library_suggestions = rank_library(entries, issue=issue, asset_name=asset_name, rules=rules)
+        library_suggestions = rank_library(
+            entries, issue=issue, asset_name=asset_name, rules=rules
+        )
         valid_refs = {c.ref for c in controls}
         for item in library_suggestions:
-            item["control_refs"] = [ref for ref in item["control_refs"] if ref in valid_refs]
+            item["control_refs"] = [
+                ref for ref in item["control_refs"] if ref in valid_refs
+            ]
             for ref in item["control_refs"]:
                 library_by_ref.setdefault(ref, []).append(item)
         for item in library_suggestions[:3]:
-            signals.append({"kind": "risk_library", "label": item["name"],
-                            "matched_terms": item["matched_terms"], "reason": item["reason"]})
+            signals.append(
+                {
+                    "kind": "risk_library",
+                    "label": item["name"],
+                    "matched_terms": item["matched_terms"],
+                    "reason": item["reason"],
+                }
+            )
 
     suggestions: list[dict[str, Any]] = []
     lower_terms = [
@@ -1050,11 +1062,15 @@ def analyse_risk_mitigation(
             for hit in library_hits[:2]:
                 reasons.append(f"Linked by reusable risk scenario: {hit['name']}.")
                 matched_terms.extend(hit["matched_terms"])
-        direct_terms = sorted(catalogue_tokens(issue) & catalogue_tokens(_control_doc(control)))
+        direct_terms = sorted(
+            catalogue_tokens(issue) & catalogue_tokens(_control_doc(control))
+        )
         if direct_terms:
             score += min(40.0, 8.0 * len(direct_terms))
             matched_terms.extend(direct_terms)
-            reasons.append("Matched words in your scenario against the current control catalogue.")
+            reasons.append(
+                "Matched words in your scenario against the current control catalogue."
+            )
 
         # Scope alone is not evidence of relevance.
         if score <= 0:
@@ -1102,7 +1118,7 @@ def analyse_risk_mitigation(
         threat_summary = threat_summary[:12000]
     note_lines = [
         "Created from Keen Mitigator questionnaire.",
-        f"Dominant risk weighting: "
+        "Dominant risk weighting: "
         + ", ".join(
             f"{rt}={weights.get(rt, 0)}"
             for rt in ["Confidentiality", "Integrity", "Availability"]

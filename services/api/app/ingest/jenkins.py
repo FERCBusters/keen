@@ -1,22 +1,20 @@
 from __future__ import annotations
-from app.security.errors import collection_error
-from app.core.datetime_utils import utc_from_timestamp_naive
-from app.services.ingestion_pause import pausable
 
+import json
 from datetime import datetime
 from typing import Any
-import json
 
 import httpx
-from app.ingest.http import client as ingestion_client
-from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
 
-from app.ingest.connections import load_document
-from app.ingest.connections import settings, connection_runs, namespace
-from app.db.models import IngestionCursor
-from app.db.models import utcnow
-from app.ingest.common import fingerprint, store_event_with_artifact, is_safe_url
+from app.core.datetime_utils import utc_from_timestamp_naive
+from app.db.models import IngestionCursor, utcnow
+from app.ingest.common import fingerprint, is_safe_url, store_event_with_artifact
+from app.ingest.connections import connection_runs, load_document, namespace, settings
+from app.ingest.http import client as ingestion_client
+from app.security.errors import collection_error
+from app.services.ingestion_pause import pausable
 
 
 def _to_utc_naive(dt: datetime | None) -> datetime | None:
@@ -177,8 +175,8 @@ def ingest_jenkins_job(
     }
 
 
-@pausable('jenkins')
-@connection_runs('jenkins')
+@pausable("jenkins")
+@connection_runs("jenkins")
 def ingest_jenkins_all(db: Session) -> list[dict[str, Any]]:
     if not settings.jenkins_enabled:
         return [{"skipped": True, "reason": "KEEN_JENKINS_ENABLED=false"}]

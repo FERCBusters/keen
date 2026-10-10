@@ -1,8 +1,10 @@
 """Bounded, literal JSON-key paths for evidence conditions (no expressions)."""
-import json
+
 import ipaddress
+import json
 
 OPS = {"equals", "starts_with", "contains", "exists", "in_cidr"}
+
 
 def validate_fields(items):
     if not isinstance(items, list) or len(items) > 20:
@@ -11,11 +13,17 @@ def validate_fields(items):
         if not isinstance(item, dict) or set(item) - {"path", "operator", "value"}:
             raise ValueError("Invalid structured field condition")
         path = item.get("path")
-        if not isinstance(path, list) or not 1 <= len(path) <= 8 or any(not isinstance(k, str) or not k or len(k) > 256 for k in path):
+        if (
+            not isinstance(path, list)
+            or not 1 <= len(path) <= 8
+            or any(not isinstance(k, str) or not k or len(k) > 256 for k in path)
+        ):
             raise ValueError("Field path must contain 1–8 literal JSON keys")
         if item.get("operator") not in OPS:
             raise ValueError("Unsupported structured field operator")
-        if item["operator"] != "exists" and (not isinstance(item.get("value"), str) or len(item["value"]) > 4096):
+        if item["operator"] != "exists" and (
+            not isinstance(item.get("value"), str) or len(item["value"]) > 4096
+        ):
             raise ValueError("Field match value must be text up to 4096 characters")
         if item["operator"] == "in_cidr":
             try:
@@ -23,6 +31,7 @@ def validate_fields(items):
             except ValueError as exc:
                 raise ValueError("Enter a valid IPv4 or IPv6 CIDR") from exc
     return items
+
 
 def field_matches(payload, condition):
     value = payload
@@ -38,16 +47,23 @@ def field_matches(payload, condition):
     expected = condition["value"]
     if condition["operator"] == "in_cidr":
         try:
-            if "%" in text: return False
-            return ipaddress.ip_address(text) in ipaddress.ip_network(expected, strict=False)
+            if "%" in text:
+                return False
+            return ipaddress.ip_address(text) in ipaddress.ip_network(
+                expected, strict=False
+            )
         except ValueError:
             return False
-    return {"equals": lambda: text == expected,
-            "starts_with": lambda: text.startswith(expected),
-            "contains": lambda: expected in text}[condition["operator"]]()
+    return {
+        "equals": lambda: text == expected,
+        "starts_with": lambda: text.startswith(expected),
+        "contains": lambda: expected in text,
+    }[condition["operator"]]()
+
 
 def observed_fields(payload):
     result = []
+
     def visit(value, path):
         if len(result) >= 100 or len(path) > 8:
             return
@@ -59,5 +75,6 @@ def observed_fields(payload):
             text = value if isinstance(value, str) else json.dumps(value)
             if len(text) <= 4096:
                 result.append({"path": path, "value": text})
+
     visit(payload, [])
     return result

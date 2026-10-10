@@ -1,21 +1,26 @@
 from __future__ import annotations
-from app.security.errors import collection_error
-from app.core.datetime_utils import utc_now_naive
-from app.services.ingestion_pause import pausable
 
-from datetime import datetime, timezone
-from typing import Any, Optional
 import json
 import re
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 import httpx
-from app.ingest.http import client as ingestion_client
 from sqlalchemy.orm import Session
 
-from app.ingest.connections import load_document
-from app.ingest.connections import settings, connection_runs, namespace, connection_cache
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import fingerprint, store_event_with_artifact, is_safe_url
+from app.ingest.common import fingerprint, is_safe_url, store_event_with_artifact
+from app.ingest.connections import (
+    connection_cache,
+    connection_runs,
+    load_document,
+    namespace,
+    settings,
+)
+from app.ingest.http import client as ingestion_client
+from app.security.errors import collection_error
+from app.services.ingestion_pause import pausable
 
 
 def load_taiga_config(path: str) -> dict[str, Any]:
@@ -53,8 +58,8 @@ def _login_and_get_token() -> str:
     if settings.taiga_token:
         return settings.taiga_token
 
-    if cache.get('taiga_auth_token'):
-        return cache['taiga_auth_token']
+    if cache.get("taiga_auth_token"):
+        return cache["taiga_auth_token"]
 
     if not settings.taiga_username or not settings.taiga_password:
         raise RuntimeError(
@@ -79,7 +84,7 @@ def _login_and_get_token() -> str:
             raise RuntimeError(
                 f"Taiga /api/v1/auth response missing auth_token field: keys={list(data.keys())}"
             )
-        cache['taiga_auth_token'] = str(token)
+        cache["taiga_auth_token"] = str(token)
         return str(token)
     finally:
         client.close()
@@ -246,7 +251,7 @@ def ingest_taiga_project_timeline(
         r = client.get(f"/api/v1/timeline/project/{project_id}")
         # If token expired / permission changed, refresh token once and retry.
         if r.status_code in (401, 403) and not settings.taiga_token:
-            connection_cache().pop('taiga_auth_token', None)
+            connection_cache().pop("taiga_auth_token", None)
             client.close()
             client = _taiga_client()
             r = client.get(f"/api/v1/timeline/project/{project_id}")
@@ -348,8 +353,8 @@ def ingest_taiga_project_timeline(
     }
 
 
-@pausable('taiga')
-@connection_runs('taiga')
+@pausable("taiga")
+@connection_runs("taiga")
 def ingest_taiga_all(db: Session) -> list[dict[str, Any]]:
     if not settings.taiga_enabled:
         return [{"skipped": True, "reason": "KEEN_TAIGA_ENABLED=false"}]

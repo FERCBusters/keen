@@ -11,12 +11,12 @@ from app.api.utils import control_upstream_url as _control_upstream_url
 from app.api.utils import try_uuid as _try_uuid
 from app.core.cache import cached_json, user_cache_scope
 from app.core.config import settings
+from app.core.source_meta import apply_user_source_overrides, get_source_meta
 from app.db.models import (
     ControlClauseLink,
     ControlItem,
     Event,
     FrameworkClause,
-    Mapping,
     Risk,
     RiskAsset,
     RiskAssetSubcategory,
@@ -25,10 +25,9 @@ from app.db.models import (
     User,
 )
 from app.db.session import get_db
-from app.services.control_inheritance import evidence_pairs
 from app.security.diary_visibility import diary_filter_condition
 from app.security.permissions import has_permission
-from app.core.source_meta import get_source_meta, apply_user_source_overrides
+from app.services.control_inheritance import evidence_pairs
 
 router = APIRouter()
 

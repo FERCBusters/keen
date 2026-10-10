@@ -1,7 +1,8 @@
-from datetime import datetime, timezone, timedelta
 import hashlib
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -57,7 +58,9 @@ class Health(Strict):
 
     delivered_since_start: int = Field(default=0, ge=0)
     delivery_batches_since_start: int = Field(default=0, ge=0)
-    delivery_events_per_second_since_start: float = Field(default=0, ge=0, allow_inf_nan=False)
+    delivery_events_per_second_since_start: float = Field(
+        default=0, ge=0, allow_inf_nan=False
+    )
     last_delivery_at: datetime | None = None
     delivery_blocked: bool = False
     updated_at: datetime | None = None

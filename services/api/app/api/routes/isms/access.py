@@ -1,4 +1,5 @@
 """ISMS access; see docs/maintainability-review.md for module boundaries."""
+
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request

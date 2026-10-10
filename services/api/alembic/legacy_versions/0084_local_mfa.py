@@ -1,9 +1,11 @@
 """Local MFA credentials and short-lived, unprivileged authentication challenges."""
+
 from alembic import op
-revision='0084_local_mfa'
-down_revision='0083_evidence_retention'
-branch_labels=None
-depends_on=None
+
+revision = "0084_local_mfa"
+down_revision = "0083_evidence_retention"
+branch_labels = None
+depends_on = None
 
 
 def upgrade():

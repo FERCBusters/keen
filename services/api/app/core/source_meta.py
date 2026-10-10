@@ -4,13 +4,11 @@ import hashlib
 import os
 import re
 import time
-from functools import lru_cache
 from dataclasses import dataclass
-from typing import Any
-
-from app.core.managed_configuration import load_document
+from functools import lru_cache
 
 from app.core.config import settings
+from app.core.managed_configuration import load_document
 
 
 @dataclass(frozen=True)
@@ -123,7 +121,9 @@ def _merge(
 def _configured_source_meta(refresh_bucket: int) -> dict[str, dict[str, str]]:
     """Load configured source meta from YAML configs + env overrides."""
 
-    meta: dict[str, dict[str, str]] = {"keen-agent": {"label": "KEEN Agent", "color": "#6935BE"}}
+    meta: dict[str, dict[str, str]] = {
+        "keen-agent": {"label": "KEEN Agent", "color": "#6935BE"}
+    }
 
     # Plugin configs (poll + other ingestion providers)
     plugin_cfgs: dict[str, str] = {
@@ -166,11 +166,17 @@ def _configured_source_meta(refresh_bucket: int) -> dict[str, dict[str, str]]:
 
     # Generic collectors retain stable source IDs while showing their editable names.
     try:
-        from app.db.session import SessionLocal
         from app.db.models import IntegrationCollector
+        from app.db.session import SessionLocal
+
         with SessionLocal() as db:
             for collector in db.query(IntegrationCollector).all():
-                _merge(meta, 'integration:' + collector.id, label=collector.name, color='#6935BE')
+                _merge(
+                    meta,
+                    "integration:" + collector.id,
+                    label=collector.name,
+                    color="#6935BE",
+                )
     except Exception:
         # Metadata must remain available during a rolling database upgrade.
         pass

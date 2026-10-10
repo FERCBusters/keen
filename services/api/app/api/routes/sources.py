@@ -4,26 +4,25 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.api.routes.isms import (
+    _clean_framework,
+    _effectiveness_measure_out,
+    require_isms_read,
+)
 from app.core.cache import cached_json, user_cache_scope
+from app.core.config import settings
+from app.core.source_meta import apply_user_source_overrides, get_source_meta
 from app.db.models import (
     Event,
-    ControlItem,
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry,
     Mapping,
     User,
 )
 from app.db.session import get_db
-from app.core.source_meta import get_source_meta, apply_user_source_overrides
 from app.security.diary_visibility import diary_filter_condition
 from app.security.permissions import has_permission
 from app.security.roles import is_effective_admin
-from app.api.routes.isms import (
-    _clean_framework,
-    _effectiveness_measure_out,
-    require_isms_read,
-)
-from app.core.config import settings
 from app.services.control_inheritance import effective_framework_ids
 
 router = APIRouter()

@@ -6,13 +6,12 @@ Create Date: 2026-05-27
 """
 
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import uuid
-from datetime import datetime
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
+from app.core.datetime_utils import utc_now_naive
 from sqlalchemy.dialects import postgresql
 
 revision = "0047_isms_licenses"
@@ -95,12 +94,18 @@ def upgrade() -> None:
         )
 
     # Backfill existing free-text license values into managed license entities.
-    rows = bind.execute(sa.text("""
+    rows = (
+        bind.execute(
+            sa.text("""
             select distinct trim(license) as name
             from risk_assets
             where license is not null and trim(license) <> ''
             order by trim(license)
-            """)).mappings().all()
+            """)
+        )
+        .mappings()
+        .all()
+    )
     now = utc_now_naive()
     for row in rows:
         name = row["name"]

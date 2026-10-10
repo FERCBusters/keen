@@ -7,13 +7,12 @@ Create Date: 2026-01-20
 """
 
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import uuid
-from datetime import datetime
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
+from app.core.datetime_utils import utc_now_naive
 from sqlalchemy.dialects import postgresql
 
 revision = "0011_groups_perms_diary_acl"

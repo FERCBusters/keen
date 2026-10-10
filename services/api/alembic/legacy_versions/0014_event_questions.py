@@ -8,8 +8,8 @@ Create Date: 2026-01-21
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0014_event_questions"

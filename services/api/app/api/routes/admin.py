@@ -1,14 +1,9 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
-from app.ingest.gitea import ingest_gitea_all
-from app.ingest.redmine import ingest_redmine_all
-from app.ingest.riskledger import ingest_riskledger_all
-from app.ingest.gitlab import ingest_gitlab_all
 
 import json
 import os
 import uuid
-from datetime import datetime, timezone, date, time
+from datetime import date, datetime, time, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -16,9 +11,9 @@ from sqlalchemy import desc, distinct, func
 from sqlalchemy.orm import Session
 
 from app.api.payloads import (
-    ControlClauseLinksPayload,
     ClauseControlLinksPayload,
     ClauseEvidenceUrlsPayload,
+    ControlClauseLinksPayload,
     ControlImportPayload,
     ControlJustificationPayload,
     GroupCreatePayload,
@@ -32,14 +27,23 @@ from app.api.payloads import (
     UpstreamUrlPayload,
 )
 from app.api.utils import (
-    validate_control_justification as _validate_control_justification,
     normalize_diary_details as _normalize_diary_details,
+)
+from app.api.utils import (
     normalize_diary_links as _normalize_diary_links,
+)
+from app.api.utils import (
     parse_iso_dt as _parse_iso_dt,
+)
+from app.api.utils import (
     try_uuid as _try_uuid,
+)
+from app.api.utils import (
+    validate_control_justification as _validate_control_justification,
 )
 from app.core.cache import cache_delete_prefix
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     Artifact,
     AuditLog,
@@ -49,8 +53,8 @@ from app.db.models import (
     Framework,
     FrameworkClause,
     Group,
-    Mapping,
     IngestionCursor,
+    Mapping,
     Permission,
     User,
     group_permissions,
@@ -62,16 +66,16 @@ from app.ingest.cloudwatch_logs import ingest_cloudwatch_logs_all
 from app.ingest.common import apply_rules
 from app.ingest.diary import add_diary_entry
 from app.ingest.forgejo import ingest_forgejo_all
+from app.ingest.gitea import ingest_gitea_all
 from app.ingest.github import ingest_github_all
+from app.ingest.gitlab import ingest_gitlab_all
 from app.ingest.google_workspace import ingest_google_workspace_all
 from app.ingest.jenkins import ingest_jenkins_all
 from app.ingest.loki import ingest_loki_all, load_loki_queries
+from app.ingest.redmine import ingest_redmine_all
+from app.ingest.riskledger import ingest_riskledger_all
 from app.ingest.rss import ingest_rss_all
 from app.ingest.taiga import ingest_taiga_all
-from app.services.control_evidence_stats import (
-    clear_stats_caches,
-    rebuild_framework_event_stats,
-)
 from app.security.auth import (
     ROLE_ADMIN,
     ROLE_NORMAL,
@@ -85,7 +89,10 @@ from app.security.permissions import (
     normalize_permission_codes,
 )
 from app.security.roles import count_effective_admins, normalize_role
-from app.storage.s3 import put_bytes
+from app.services.control_evidence_stats import (
+    clear_stats_caches,
+    rebuild_framework_event_stats,
+)
 from app.services.entity_changelog import (
     affected_clause_ids_for_control,
     affected_control_ids_for_clause,
@@ -94,6 +101,7 @@ from app.services.entity_changelog import (
     list_entity_changelogs,
     record_entity_changelog,
 )
+from app.storage.s3 import put_bytes
 
 router = APIRouter()
 
@@ -797,20 +805,41 @@ def admin_reset_loki_cursors(
     now = datetime.now(timezone.utc)
     raw_query_name = (query_name or "").strip()
 
-    from app.ingest.connections import connections, connection_scope, namespace
-    selected = [c for c in connections(db, 'loki') if not connection_id or c.id == connection_id]
+    from app.ingest.connections import connection_scope, connections, namespace
+
+    selected = [
+        c for c in connections(db, "loki") if not connection_id or c.id == connection_id
+    ]
     if connection_id and not selected:
-        raise HTTPException(404, 'Connection not found')
+        raise HTTPException(404, "Connection not found")
     cursor_names = []
     for connection in selected:
         with connection_scope(connection):
             if raw_query_name:
-                cursor_names.append(namespace(raw_query_name if raw_query_name.startswith('loki:') else 'loki:'+raw_query_name))
+                cursor_names.append(
+                    namespace(
+                        raw_query_name
+                        if raw_query_name.startswith("loki:")
+                        else "loki:" + raw_query_name
+                    )
+                )
             else:
                 cfg = load_loki_queries(settings.loki_queries_path)
-                cursor_names.extend(namespace('loki:'+q['name']) for q in cfg.get('queries',[]) if q.get('name'))
-                cursor_names.extend(c.name for c in db.query(IngestionCursor).filter(
-                    IngestionCursor.name.startswith(connection.id+':', autoescape=True)).all())
+                cursor_names.extend(
+                    namespace("loki:" + q["name"])
+                    for q in cfg.get("queries", [])
+                    if q.get("name")
+                )
+                cursor_names.extend(
+                    c.name
+                    for c in db.query(IngestionCursor)
+                    .filter(
+                        IngestionCursor.name.startswith(
+                            connection.id + ":", autoescape=True
+                        )
+                    )
+                    .all()
+                )
 
     cursor_names = sorted(set(cursor_names))
     reset_cursors: list[str] = []
@@ -1477,7 +1506,7 @@ async def admin_diary(
                 ext = ext[:12]
             if not ext:
                 ext = ".bin"
-            key = f"diary/{date_part}/{eid}/attachment-{i+1}{ext}"
+            key = f"diary/{date_part}/{eid}/attachment-{i + 1}{ext}"
             stored = put_bytes(key=key, data=data, content_type=ctype_up)
             art = Artifact(
                 event_id=eid,
@@ -1914,9 +1943,11 @@ def admin_entity_changelog(
         offset=offset,
     )
 
+
 @router.post("/v1/admin/ingest/gitea/run")
 def admin_run_gitea_ingest(user=Depends(require_admin), db: Session = Depends(get_db)):
     return {"runs": ingest_gitea_all(db)}
+
 
 @router.post("/v1/admin/ingest/gitlab/run")
 def admin_run_gitlab_ingest(user=Depends(require_admin), db: Session = Depends(get_db)):
@@ -1924,10 +1955,14 @@ def admin_run_gitlab_ingest(user=Depends(require_admin), db: Session = Depends(g
 
 
 @router.post("/v1/admin/ingest/redmine/run")
-def admin_run_redmine_ingest(user=Depends(require_admin), db: Session = Depends(get_db)):
+def admin_run_redmine_ingest(
+    user=Depends(require_admin), db: Session = Depends(get_db)
+):
     return {"runs": ingest_redmine_all(db)}
 
 
 @router.post("/v1/admin/ingest/riskledger/run")
-def admin_run_riskledger_ingest(user=Depends(require_admin), db: Session = Depends(get_db)):
+def admin_run_riskledger_ingest(
+    user=Depends(require_admin), db: Session = Depends(get_db)
+):
     return {"runs": ingest_riskledger_all(db)}

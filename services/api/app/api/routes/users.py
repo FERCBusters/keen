@@ -7,20 +7,20 @@ from sqlalchemy.orm import Session
 
 from app.api.payloads import (
     AdminSetPasswordPayload,
-    UserCreatePayload,
     UserAccessOut,
     UserAccessUpdatePayload,
+    UserCreatePayload,
     UserOut,
     UserUpdatePayload,
 )
 from app.db.models import Group, Permission, User, user_groups, user_permissions
 from app.db.session import get_db
 from app.security.auth import ROLE_ADMIN, ROLE_INHERIT, ROLE_NORMAL, create_user
+from app.security.passwords import hash_password
 from app.security.permissions import (
     get_effective_permission_codes,
     normalize_permission_codes,
 )
-from app.security.passwords import hash_password
 from app.security.roles import (
     compute_effective_role,
     count_effective_admins,
@@ -277,7 +277,13 @@ def set_user_password_admin(
     if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
         raise HTTPException(status_code=403, detail="Admin role required")
 
-    target = db.query(User).filter(User.id == user_id).populate_existing().with_for_update().one_or_none()
+    target = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -290,7 +296,8 @@ def set_user_password_admin(
         raise HTTPException(status_code=400, detail=str(e))
 
     from app.services.security_notifications import enqueue
-    enqueue(db, target, 'password-reset', request)
+
+    enqueue(db, target, "password-reset", request)
     db.add(target)
     _bump_user_authz(db, [target.id])
     db.commit()

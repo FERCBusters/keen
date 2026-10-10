@@ -7,12 +7,10 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
 from alembic import context
-
-from app.db.session import Base
 from app.db import models  # noqa: F401 (import models for metadata)
+from app.db.session import Base
+from sqlalchemy import engine_from_config, pool
 
 config = context.config
 

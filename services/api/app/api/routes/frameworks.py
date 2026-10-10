@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+import uuid
+from urllib.parse import urlsplit
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from urllib.parse import urlsplit
-import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.payloads import FrameworkListItem, FrameworkUpsert
 from app.core.config import settings
-from app.db.models import ControlItem, Framework, FrameworkClause, ControlClauseLink, Mapping, ManagedConfiguration
+from app.db.models import (
+    ControlClauseLink,
+    ControlItem,
+    Framework,
+    FrameworkClause,
+    ManagedConfiguration,
+    Mapping,
+)
 from app.db.session import get_db
 from app.security.auth import require_admin
 
@@ -34,7 +42,9 @@ def _framework_catalog(db: Session):
         )
     }
 
-    clause_slugs = {slug for (slug,) in db.query(FrameworkClause.framework_slug).distinct().all()}
+    clause_slugs = {
+        slug for (slug,) in db.query(FrameworkClause.framework_slug).distinct().all()
+    }
 
     rows = db.query(Framework).order_by(Framework.slug.asc()).all()
     by_slug = {f.slug: f for f in rows}
@@ -76,37 +86,62 @@ def _framework_catalog(db: Session):
 
 def _framework_selection(db):
     catalog = _framework_catalog(db)
-    known = {item['slug'] for item in catalog['items']}
-    permitted = {slug.strip() for slug in settings.enabled_frameworks.split(',') if slug.strip()}
+    known = {item["slug"] for item in catalog["items"]}
+    permitted = {
+        slug.strip() for slug in settings.enabled_frameworks.split(",") if slug.strip()
+    }
     eligible = known & permitted if permitted else known
-    row = db.get(ManagedConfiguration, 'organisation-frameworks')
-    configured = row.document.get('enabled') if row else None
+    row = db.get(ManagedConfiguration, "organisation-frameworks")
+    configured = row.document.get("enabled") if row else None
     enabled = eligible & set(configured) if configured is not None else eligible
     if not enabled:
         # Keep one usable framework if an operator changes the environment restriction.
         # Never reintroduce a framework excluded by the environment.
         enabled = eligible
-    preferred = row.document.get('default') if row else None
-    default = next((slug for slug in [preferred, settings.default_framework_slug] if slug in enabled),
-                   min(enabled) if enabled else '')
+    preferred = row.document.get("default") if row else None
+    default = next(
+        (
+            slug
+            for slug in [preferred, settings.default_framework_slug]
+            if slug in enabled
+        ),
+        min(enabled) if enabled else "",
+    )
     return catalog, row, permitted, enabled, default
 
 
 @router.get("/v1/frameworks")
 def list_frameworks(db: Session = Depends(get_db)):
     catalog, _, _, enabled, default = _framework_selection(db)
-    return {'items': [{**item, 'is_default': item['slug'] == default}
-                      for item in catalog['items'] if item['slug'] in enabled], 'default': default}
+    return {
+        "items": [
+            {**item, "is_default": item["slug"] == default}
+            for item in catalog["items"]
+            if item["slug"] in enabled
+        ],
+        "default": default,
+    }
 
 
 @router.get("/v1/admin/framework-selection", dependencies=[Depends(require_admin)])
 def framework_selection(db: Session = Depends(get_db)):
     catalog, row, permitted, enabled, default = _framework_selection(db)
-    return {'items': [{**item, 'enabled': item['slug'] in enabled,
-                       'allowed': not permitted or item['slug'] in permitted} for item in catalog['items']],
-            'default': default, 'version': row.version if row else 0,
-            'environment_restricted': bool(permitted),
-            'unknown_environment_slugs': sorted(permitted - {item['slug'] for item in catalog['items']})}
+    return {
+        "items": [
+            {
+                **item,
+                "enabled": item["slug"] in enabled,
+                "allowed": not permitted or item["slug"] in permitted,
+            }
+            for item in catalog["items"]
+        ],
+        "default": default,
+        "version": row.version if row else 0,
+        "environment_restricted": bool(permitted),
+        "unknown_environment_slugs": sorted(
+            permitted - {item["slug"] for item in catalog["items"]}
+        ),
+    }
 
 
 class FrameworkSelectionInput(BaseModel):
@@ -116,18 +151,31 @@ class FrameworkSelectionInput(BaseModel):
 
 
 @router.put("/v1/admin/framework-selection")
-def save_framework_selection(payload: FrameworkSelectionInput, user=Depends(require_admin), db: Session = Depends(get_db)):
+def save_framework_selection(
+    payload: FrameworkSelectionInput,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     catalog, _, permitted, _, _ = _framework_selection(db)
-    known = {item['slug'] for item in catalog['items']}
+    known = {item["slug"] for item in catalog["items"]}
     selected = set(payload.enabled)
     if len(selected) != len(payload.enabled) or not selected <= known:
-        raise HTTPException(400, 'Choose distinct frameworks from the catalogue')
+        raise HTTPException(400, "Choose distinct frameworks from the catalogue")
     if permitted and not selected <= permitted:
-        raise HTTPException(400, 'A selected framework is excluded by KEEN_ENABLED_FRAMEWORKS')
+        raise HTTPException(
+            400, "A selected framework is excluded by KEEN_ENABLED_FRAMEWORKS"
+        )
     if payload.default not in selected:
-        raise HTTPException(400, 'The default framework must be selected')
+        raise HTTPException(400, "The default framework must be selected")
     from .managed_configurations import _save
-    _save(db, 'organisation-frameworks', {'enabled': sorted(selected), 'default': payload.default}, payload.version, user)
+
+    _save(
+        db,
+        "organisation-frameworks",
+        {"enabled": sorted(selected), "default": payload.default},
+        payload.version,
+        user,
+    )
     return framework_selection(db)
 
 
@@ -193,52 +241,109 @@ class FrameworkNodeInput(BaseModel):
 
 def _url(value: str | None) -> str | None:
     value = (value or "").strip() or None
-    if value and (urlsplit(value).scheme not in ("http", "https") or not urlsplit(value).netloc):
+    if value and (
+        urlsplit(value).scheme not in ("http", "https") or not urlsplit(value).netloc
+    ):
         raise HTTPException(400, "Upstream URL must be an absolute HTTP(S) URL")
     return value
 
 
-def _node(row: ControlItem, clauses: dict[str, FrameworkClause], links: dict[uuid.UUID, list[str]]) -> dict:
+def _node(
+    row: ControlItem,
+    clauses: dict[str, FrameworkClause],
+    links: dict[uuid.UUID, list[str]],
+) -> dict:
     meta = row.meta or {}
     return {
-        "id": str(row.id), "kind": row.type, "ref": row.ref,
-        "title": row.title or "", "description": meta.get("description") or "",
+        "id": str(row.id),
+        "kind": row.type,
+        "ref": row.ref,
+        "title": row.title or "",
+        "description": meta.get("description") or "",
         "upstream_url": meta.get("upstream_url") or "",
-        "parent_ref": (clauses[row.ref].parent.ref if row.type == "clause" and row.ref in clauses and clauses[row.ref].parent else meta.get("parent_ref") or ""),
-        "clause_refs": links.get(row.id, []), "in_scope": row.in_scope,
-        "sort_order": clauses[row.ref].sort_order if row.type == "clause" and row.ref in clauses else meta.get("sort_order", 0),
+        "parent_ref": (
+            clauses[row.ref].parent.ref
+            if row.type == "clause" and row.ref in clauses and clauses[row.ref].parent
+            else meta.get("parent_ref") or ""
+        ),
+        "clause_refs": links.get(row.id, []),
+        "in_scope": row.in_scope,
+        "sort_order": clauses[row.ref].sort_order
+        if row.type == "clause" and row.ref in clauses
+        else meta.get("sort_order", 0),
     }
 
 
 @router.get("/v1/admin/frameworks/{slug}/nodes", dependencies=[Depends(require_admin)])
 def framework_nodes(slug: str, db: Session = Depends(get_db)):
     rows = db.query(ControlItem).filter(ControlItem.framework_slug == slug).all()
-    clauses = {c.ref: c for c in db.query(FrameworkClause).filter(FrameworkClause.framework_slug == slug).all()}
+    clauses = {
+        c.ref: c
+        for c in db.query(FrameworkClause)
+        .filter(FrameworkClause.framework_slug == slug)
+        .all()
+    }
     links = {}
-    for link in db.query(ControlClauseLink).join(ControlItem).filter(ControlItem.framework_slug == slug).all():
+    for link in (
+        db.query(ControlClauseLink)
+        .join(ControlItem)
+        .filter(ControlItem.framework_slug == slug)
+        .all()
+    ):
         if link.clause:
             links.setdefault(link.control_item_id, []).append(link.clause.ref)
     return {"items": [_node(row, clauses, links) for row in rows]}
 
 
-@router.put("/v1/admin/frameworks/{slug}/nodes/{kind}/{ref:path}", dependencies=[Depends(require_admin)])
-def save_framework_node(slug: str, kind: str, ref: str, payload: FrameworkNodeInput, db: Session = Depends(get_db)):
+@router.put(
+    "/v1/admin/frameworks/{slug}/nodes/{kind}/{ref:path}",
+    dependencies=[Depends(require_admin)],
+)
+def save_framework_node(
+    slug: str,
+    kind: str,
+    ref: str,
+    payload: FrameworkNodeInput,
+    db: Session = Depends(get_db),
+):
     kind, ref = kind.strip(), ref.strip()
-    if kind != payload.kind.strip() or ref != payload.ref.strip() or not kind or not ref:
+    if (
+        kind != payload.kind.strip()
+        or ref != payload.ref.strip()
+        or not kind
+        or not ref
+    ):
         raise HTTPException(400, "Node kind and reference must match the URL")
-    if len(kind) > 32 or len(ref) > 64 or not payload.title.strip() or len(payload.title) > 256:
+    if (
+        len(kind) > 32
+        or len(ref) > 64
+        or not payload.title.strip()
+        or len(payload.title) > 256
+    ):
         raise HTTPException(400, "Invalid kind, reference or title")
-    framework_exists = bool(db.query(Framework.id).filter(Framework.slug == slug).first())
-    if not framework_exists and slug != settings.default_framework_slug and not db.query(ControlItem.id).filter_by(framework_slug=slug).first():
+    framework_exists = bool(
+        db.query(Framework.id).filter(Framework.slug == slug).first()
+    )
+    if (
+        not framework_exists
+        and slug != settings.default_framework_slug
+        and not db.query(ControlItem.id).filter_by(framework_slug=slug).first()
+    ):
         raise HTTPException(404, "Create the framework first")
     parent_ref = (payload.parent_ref or "").strip()
     if parent_ref == ref:
         raise HTTPException(400, "A node cannot be its own parent")
     parent = None
     if parent_ref:
-        parent = db.query(ControlItem).filter_by(framework_slug=slug, type=kind, ref=parent_ref).one_or_none()
+        parent = (
+            db.query(ControlItem)
+            .filter_by(framework_slug=slug, type=kind, ref=parent_ref)
+            .one_or_none()
+        )
         if not parent:
-            raise HTTPException(400, "Parent must exist in the same framework and category")
+            raise HTTPException(
+                400, "Parent must exist in the same framework and category"
+            )
         seen = {ref}
         cursor = parent
         while cursor:
@@ -246,11 +351,21 @@ def save_framework_node(slug: str, kind: str, ref: str, payload: FrameworkNodeIn
                 raise HTTPException(400, "Parent relationship would form a cycle")
             seen.add(cursor.ref)
             next_ref = (cursor.meta or {}).get("parent_ref")
-            cursor = db.query(ControlItem).filter_by(framework_slug=slug, type=kind, ref=next_ref).one_or_none() if next_ref else None
+            cursor = (
+                db.query(ControlItem)
+                .filter_by(framework_slug=slug, type=kind, ref=next_ref)
+                .one_or_none()
+                if next_ref
+                else None
+            )
     clause_rows = []
     if kind != "clause":
         for clause_ref in dict.fromkeys(payload.clause_refs):
-            clause = db.query(FrameworkClause).filter_by(framework_slug=slug, ref=clause_ref).one_or_none()
+            clause = (
+                db.query(FrameworkClause)
+                .filter_by(framework_slug=slug, ref=clause_ref)
+                .one_or_none()
+            )
             if not clause:
                 raise HTTPException(400, f"Unknown clause: {clause_ref}")
             clause_rows.append(clause)
@@ -261,42 +376,83 @@ def save_framework_node(slug: str, kind: str, ref: str, payload: FrameworkNodeIn
     # when the first edited node is saved, in the same transaction.
     if not framework_exists:
         db.add(Framework(slug=slug, name=slug))
-    row = db.query(ControlItem).filter_by(framework_slug=slug, type=kind, ref=ref).one_or_none()
+    row = (
+        db.query(ControlItem)
+        .filter_by(framework_slug=slug, type=kind, ref=ref)
+        .one_or_none()
+    )
     created = row is None
     if created:
         row = ControlItem(framework_slug=slug, type=kind, ref=ref)
         db.add(row)
     row.title = payload.title.strip()
     row.in_scope = payload.in_scope
-    row.meta = {**(row.meta or {}), "description": payload.description or "", "upstream_url": url,
-                "parent_ref": parent_ref or None, "sort_order": payload.sort_order}
+    row.meta = {
+        **(row.meta or {}),
+        "description": payload.description or "",
+        "upstream_url": url,
+        "parent_ref": parent_ref or None,
+        "sort_order": payload.sort_order,
+    }
     db.flush()
     if kind == "clause":
-        clause = db.query(FrameworkClause).filter_by(framework_slug=slug, ref=ref).one_or_none()
+        clause = (
+            db.query(FrameworkClause)
+            .filter_by(framework_slug=slug, ref=ref)
+            .one_or_none()
+        )
         if clause is None:
             clause = FrameworkClause(framework_slug=slug, ref=ref)
             db.add(clause)
         clause.title = row.title
-        clause.parent_clause_id = db.query(FrameworkClause.id).filter_by(framework_slug=slug, ref=parent_ref).scalar() if parent_ref else None
+        clause.parent_clause_id = (
+            db.query(FrameworkClause.id)
+            .filter_by(framework_slug=slug, ref=parent_ref)
+            .scalar()
+            if parent_ref
+            else None
+        )
         clause.sort_order = payload.sort_order
         clause.meta = {**(clause.meta or {}), **row.meta}
     else:
         db.query(ControlClauseLink).filter_by(control_item_id=row.id).delete()
         for clause in clause_rows:
-            db.add(ControlClauseLink(control_item_id=row.id, clause_id=clause.id, applicability="applicable"))
+            db.add(
+                ControlClauseLink(
+                    control_item_id=row.id,
+                    clause_id=clause.id,
+                    applicability="applicable",
+                )
+            )
     db.commit()
     return {"ok": True, "created": created, "id": str(row.id)}
 
 
-@router.delete("/v1/admin/frameworks/{slug}/nodes/{kind}/{ref:path}", dependencies=[Depends(require_admin)])
-def delete_framework_node(slug: str, kind: str, ref: str, db: Session = Depends(get_db)):
-    row = db.query(ControlItem).filter_by(framework_slug=slug, type=kind, ref=ref).one_or_none()
+@router.delete(
+    "/v1/admin/frameworks/{slug}/nodes/{kind}/{ref:path}",
+    dependencies=[Depends(require_admin)],
+)
+def delete_framework_node(
+    slug: str, kind: str, ref: str, db: Session = Depends(get_db)
+):
+    row = (
+        db.query(ControlItem)
+        .filter_by(framework_slug=slug, type=kind, ref=ref)
+        .one_or_none()
+    )
     if not row:
         raise HTTPException(404, "Node not found")
     children = db.query(ControlItem).filter_by(framework_slug=slug, type=kind).all()
-    if any((child.meta or {}).get("parent_ref") == ref and child.id != row.id for child in children):
+    if any(
+        (child.meta or {}).get("parent_ref") == ref and child.id != row.id
+        for child in children
+    ):
         raise HTTPException(409, "Move or delete child nodes first")
-    clause = db.query(FrameworkClause).filter_by(framework_slug=slug, ref=ref).one_or_none() if kind == "clause" else None
+    clause = (
+        db.query(FrameworkClause).filter_by(framework_slug=slug, ref=ref).one_or_none()
+        if kind == "clause"
+        else None
+    )
     if clause:
         if db.query(FrameworkClause.id).filter_by(parent_clause_id=clause.id).first():
             raise HTTPException(409, "Move or delete child clauses first")
@@ -305,7 +461,11 @@ def delete_framework_node(slug: str, kind: str, ref: str, db: Session = Depends(
         db.delete(clause)
     # Keep related audit/mapping data intact unless the administrator has
     # explicitly removed the relationships first.
-    if db.query(ControlClauseLink.control_item_id).filter_by(control_item_id=row.id).first():
+    if (
+        db.query(ControlClauseLink.control_item_id)
+        .filter_by(control_item_id=row.id)
+        .first()
+    ):
         raise HTTPException(409, "Remove clause links first")
     if db.query(Mapping.id).filter_by(control_item_id=row.id).first():
         raise HTTPException(409, "Remove event mappings before deleting this node")

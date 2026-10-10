@@ -83,6 +83,13 @@ jobs:
           poetry env use "${PYTHON_BIN}"
           poetry install --with dev --no-root --no-interaction --no-ansi
 
+      - name: Check Python lint and formatting
+        run: |
+          if [ -f keen/services/api/pyproject.toml ]; then cd keen; fi
+          cd services/api
+          poetry run ruff check --output-format=github ../..
+          poetry run ruff format --check ../..
+
       - name: Run tests
         run: |
           set -eu

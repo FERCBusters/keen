@@ -1,4 +1,5 @@
 """ISMS metric values; see docs/maintainability-review.md for module boundaries."""
+
 from __future__ import annotations
 
 import re

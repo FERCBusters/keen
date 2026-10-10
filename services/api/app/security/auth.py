@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-
 from collections.abc import Mapping
 
 from fastapi import HTTPException, Request, Response
@@ -10,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.valkey import get_valkey
 from app.db.models import User
-from app.security.passwords import verify_password, hash_password
+from app.security.passwords import hash_password, verify_password
 from app.security.sessions import delete_session, get_session
 
 ROLE_ADMIN = "admin"
@@ -74,7 +73,11 @@ def _session_id_from_request(request: Request) -> str | None:
 
 
 def get_current_user_from_headers_cookies(
-    headers: Mapping[str, str], cookies: Mapping[str, str], db: Session, *, refresh_session: bool = True
+    headers: Mapping[str, str],
+    cookies: Mapping[str, str],
+    db: Session,
+    *,
+    refresh_session: bool = True,
 ) -> User | None:
     """Return the current user, or None if not authenticated.
 
@@ -96,7 +99,11 @@ def get_current_user_from_headers_cookies(
         return None
 
     r = get_valkey()
-    sess = get_session(r, sid, refresh_ttl_seconds=settings.session_ttl_seconds if refresh_session else None)
+    sess = get_session(
+        r,
+        sid,
+        refresh_ttl_seconds=settings.session_ttl_seconds if refresh_session else None,
+    )
     if not sess or not sess.get("user_id"):
         return None
 
@@ -112,11 +119,13 @@ def get_current_user_from_headers_cookies(
         return None
 
     from app.security.mfa import local_session_allowed
+
     if not local_session_allowed(db, user, sess):
         delete_session(r, sid)
         return None
 
     from app.security.hosted import hosted_session_allowed
+
     if not hosted_session_allowed(db, user, sess):
         delete_session(r, sid)
         return None

@@ -8,8 +8,8 @@ Create Date: 2026-01-20
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0013_group_roles"
 down_revision = "0012_default_diary_audit_perms"

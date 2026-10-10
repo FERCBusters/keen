@@ -1,5 +1,4 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import csv
 import io
@@ -11,32 +10,38 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, exists, false, func, or_, select, text
-from sqlalchemy.orm import Session, load_only, aliased, joinedload
+from sqlalchemy.orm import Session, aliased, joinedload, load_only
 
-from app.core.config import settings
 from app.api.payloads import IncidentCreatePayload
-from app.core.cache import cached_json, user_cache_scope
 from app.api.utils import (
     control_upstream_url as _control_upstream_url,
+)
+from app.api.utils import (
     event_identifier as _event_identifier,
+)
+from app.api.utils import (
     extract_source_url as _extract_source_url,
+)
+from app.api.utils import (
     try_uuid as _try_uuid,
 )
+from app.core.cache import cached_json, user_cache_scope
+from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     Artifact,
     AuditLog,
     ControlClauseLink,
     ControlItem,
     EffectiveCrossFrameworkControlLink,
-    effective_cross_framework_links,
     Event,
     EventIncident,
     FrameworkClause,
     Mapping,
     User,
+    effective_cross_framework_links,
 )
 from app.db.session import get_db
-from app.services.control_inheritance import page_controls, evidence_pairs, effective_framework_ids, event_has_control, source_ids_for_control
 from app.outbound.incidents import (
     IncidentWebhookConfig,
     build_event_url,
@@ -47,12 +52,25 @@ from app.outbound.incidents import (
 )
 from app.security.diary_visibility import diary_filter_condition, is_diary_event_visible
 from app.security.permissions import has_permission
-from app.security.roles import is_effective_admin
 from app.security.redaction import (
     mask_event_data_obj as _mask_event_data_obj,
+)
+from app.security.redaction import (
     mask_event_data_str as _mask_event_data_str,
+)
+from app.security.redaction import (
     redact_obj as _redact_obj,
+)
+from app.security.redaction import (
     redact_str as _redact_str,
+)
+from app.security.roles import is_effective_admin
+from app.services.control_inheritance import (
+    effective_framework_ids,
+    event_has_control,
+    evidence_pairs,
+    page_controls,
+    source_ids_for_control,
 )
 
 router = APIRouter()
@@ -258,10 +276,8 @@ def _unmapped_event_condition(framework: str, db=None):
     """
 
     framework_control_ids = effective_framework_ids(framework, db)
-    return (
-        ~exists()
-        .where(Mapping.event_id == Event.id)
-        .where(Mapping.control_item_id.in_(framework_control_ids))
+    return ~exists().where(Mapping.event_id == Event.id).where(
+        Mapping.control_item_id.in_(framework_control_ids)
     )
 
 
@@ -276,8 +292,12 @@ def _clause_event_condition(framework: str, clause: str, db=None):
     cond = (
         exists()
         .where(Mapping.event_id == Event.id)
-        .where(or_(Mapping.control_item_id == ControlItem.id,
-                   Mapping.control_item_id.in_(source_ids_for_control(ControlItem.id, db))))
+        .where(
+            or_(
+                Mapping.control_item_id == ControlItem.id,
+                Mapping.control_item_id.in_(source_ids_for_control(ControlItem.id, db)),
+            )
+        )
         .where(ControlClauseLink.control_item_id == ControlItem.id)
         .where(ControlClauseLink.clause_id == FrameworkClause.id)
         .where(ControlItem.framework_slug == framework)
@@ -330,7 +350,11 @@ def _build_event_id_query(
     if control:
         cid = _try_uuid(control)
         if cid:
-            valid = db.query(ControlItem.id).filter(ControlItem.id == cid, ControlItem.framework_slug == framework).first()
+            valid = (
+                db.query(ControlItem.id)
+                .filter(ControlItem.id == cid, ControlItem.framework_slug == framework)
+                .first()
+            )
             qry = qry.filter(event_has_control(cid, Event.id, db) if valid else false())
         else:
             c = (
@@ -398,7 +422,11 @@ def list_events(
     if control:
         cid = _try_uuid(control)
         if cid:
-            valid = db.query(ControlItem.id).filter(ControlItem.id == cid, ControlItem.framework_slug == framework).first()
+            valid = (
+                db.query(ControlItem.id)
+                .filter(ControlItem.id == cid, ControlItem.framework_slug == framework)
+                .first()
+            )
             qry = qry.filter(event_has_control(cid, Event.id, db) if valid else false())
         else:
             c = (
@@ -471,7 +499,9 @@ def list_events(
 
         event_ids = [e.id for e in events]
 
-        controls_by_event = page_controls(db, framework, event_ids) if not unmapped else {}
+        controls_by_event = (
+            page_controls(db, framework, event_ids) if not unmapped else {}
+        )
 
         # Preload artifact counts
         artifact_counts: dict[uuid.UUID, int] = {}
@@ -491,8 +521,8 @@ def list_events(
                     "id": str(e.id),
                     "timestamp": e.timestamp.isoformat(),
                     "source": e.source,
-        "connection_id": e.connection_id,
-        "connection_name": e.connection_name,
+                    "connection_id": e.connection_id,
+                    "connection_name": e.connection_name,
                     "system": e.system,
                     "identifier": _event_identifier(e),
                     "actor": e.actor,
@@ -706,7 +736,11 @@ def export_events(
     if control:
         cid = _try_uuid(control)
         if cid:
-            valid = db.query(ControlItem.id).filter(ControlItem.id == cid, ControlItem.framework_slug == framework).first()
+            valid = (
+                db.query(ControlItem.id)
+                .filter(ControlItem.id == cid, ControlItem.framework_slug == framework)
+                .first()
+            )
             qry = qry.filter(event_has_control(cid, Event.id, db) if valid else false())
         else:
             c = (
@@ -787,9 +821,9 @@ def export_events(
             buf.truncate(0)
 
         if fmt == "json":
-            yield '{"total":' + str(total) + ',"returned":' + str(
-                returned
-            ) + ',"items":['
+            yield (
+                '{"total":' + str(total) + ',"returned":' + str(returned) + ',"items":['
+            )
             first = True
 
         offset = 0
@@ -831,8 +865,8 @@ def export_events(
                     "id": str(e.id),
                     "timestamp": e.timestamp.isoformat(),
                     "source": e.source,
-        "connection_id": e.connection_id,
-        "connection_name": e.connection_name,
+                    "connection_id": e.connection_id,
+                    "connection_name": e.connection_name,
                     "system": e.system,
                     "actor": e.actor,
                     "action": e.action,
@@ -1021,8 +1055,8 @@ def unmapped_events(
                 "id": str(e.id),
                 "timestamp": e.timestamp.isoformat(),
                 "source": e.source,
-        "connection_id": e.connection_id,
-        "connection_name": e.connection_name,
+                "connection_id": e.connection_id,
+                "connection_name": e.connection_name,
                 "summary": e.summary,
                 "action": e.action,
                 "outcome": e.outcome,
@@ -1093,11 +1127,14 @@ def create_event_incident(
     config = IncidentWebhookConfig.from_settings()
     try:
         status_code, response_headers = post_incident_webhook(config, webhook_payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=503, detail="Incident webhook configuration is invalid") from None
-    except Exception as exc:
+    except ValueError:
         raise HTTPException(
-            status_code=502, detail="Incident webhook request failed; check connectivity and configuration"
+            status_code=503, detail="Incident webhook configuration is invalid"
+        ) from None
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Incident webhook request failed; check connectivity and configuration",
         ) from None
 
     if not 200 <= int(status_code) < 300:
@@ -1230,11 +1267,15 @@ def get_event(
         for mp, ci in mapped
     ]
     from app.api.routes.frameworks import _framework_selection
+
     enabled = _framework_selection(db)[3]
     source_ids = select(Mapping.control_item_id).where(Mapping.event_id == eid)
-    scoped_links = effective_cross_framework_links(source_ids=source_ids,
-        target_framework=framework, enabled=enabled)
-    link_model = aliased(EffectiveCrossFrameworkControlLink, scoped_links, adapt_on_names=True)
+    scoped_links = effective_cross_framework_links(
+        source_ids=source_ids, target_framework=framework, enabled=enabled
+    )
+    link_model = aliased(
+        EffectiveCrossFrameworkControlLink, scoped_links, adapt_on_names=True
+    )
     inherited = (
         db.query(Mapping, ControlItem, link_model)
         .join(link_model, link_model.source_control_id == Mapping.control_item_id)
@@ -1249,15 +1290,27 @@ def get_event(
         if str(target.id) in direct_ids:
             continue
         source = link.source
-        controls.append({
-            "id": str(target.id), "ref": target.ref, "title": target.title,
-            "type": target.type, "in_scope": target.in_scope,
-            "upstream_url": _control_upstream_url(target),
-            "confidence": mapping.confidence, "method": "cross_framework",
-            "rationale": link.rationale, "mapped_at": mapping.mapped_at.isoformat() if mapping.mapped_at else None,
-            "inherited_from": {"framework": source.framework_slug, "ref": source.ref,
-                               "control_id": str(source.id)},
-        })
+        controls.append(
+            {
+                "id": str(target.id),
+                "ref": target.ref,
+                "title": target.title,
+                "type": target.type,
+                "in_scope": target.in_scope,
+                "upstream_url": _control_upstream_url(target),
+                "confidence": mapping.confidence,
+                "method": "cross_framework",
+                "rationale": link.rationale,
+                "mapped_at": mapping.mapped_at.isoformat()
+                if mapping.mapped_at
+                else None,
+                "inherited_from": {
+                    "framework": source.framework_slug,
+                    "ref": source.ref,
+                    "control_id": str(source.id),
+                },
+            }
+        )
         direct_ids.add(str(target.id))
 
     arts = (

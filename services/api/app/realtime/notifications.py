@@ -26,8 +26,10 @@ class NotificationHub:
 
     async def connect(self, ws: WebSocket, *, user_id: str, is_admin: bool) -> bool:
         async with self._lock:
-            if (len(self._user_sockets.get(user_id, ())) >= 5
-                    or sum(map(len, self._user_sockets.values())) >= 256):
+            if (
+                len(self._user_sockets.get(user_id, ())) >= 5
+                or sum(map(len, self._user_sockets.values())) >= 256
+            ):
                 return False
             if is_admin:
                 self._admin_sockets.add(ws)

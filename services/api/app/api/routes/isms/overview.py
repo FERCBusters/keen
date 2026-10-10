@@ -1,4 +1,5 @@
 """ISMS overview; see docs/maintainability-review.md for module boundaries."""
+
 from __future__ import annotations
 
 from typing import Any

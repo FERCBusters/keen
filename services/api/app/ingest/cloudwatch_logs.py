@@ -1,8 +1,4 @@
 from __future__ import annotations
-from app.security.errors import collection_error
-from app.security.redaction import prepare_event_fields, prepare_artifact_bytes
-from app.core.datetime_utils import utc_now_naive
-from app.services.ingestion_pause import pausable
 
 import hashlib
 import json
@@ -15,11 +11,24 @@ import boto3
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.ingest.connections import load_document
-from app.ingest.connections import settings, connection_runs, namespace, artifact_key, identity
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import Artifact, ControlItem, Event, IngestionCursor, Mapping
+from app.ingest.connections import (
+    artifact_key,
+    connection_runs,
+    identity,
+    load_document,
+    namespace,
+    settings,
+)
 from app.mapping.rules import evaluate_by_framework, load_rules
-from app.security.redaction import redact_bytes, redact_obj
+from app.security.errors import collection_error
+from app.security.redaction import (
+    prepare_artifact_bytes,
+    prepare_event_fields,
+    redact_obj,
+)
+from app.services.ingestion_pause import pausable
 from app.storage.s3 import put_bytes
 
 
@@ -45,6 +54,7 @@ def _cloudwatch_client(region: str | None = None):
     if region:
         kwargs["region_name"] = region
     from app.ingest.connections import aws_credentials
+
     kwargs.update(aws_credentials())
     return boto3.client("logs", **kwargs)
 
@@ -455,16 +465,19 @@ def ingest_cloudwatch_logs_once(
                 else None
             )
 
-            protected_fields = prepare_event_fields(dict(
-                system=event_defaults.get("system") or name,
-                actor=actor,
-                action=event_defaults.get("action") or "log_event",
-                outcome=event_defaults.get("outcome"),
-                severity=sev,
-                summary=summary,
-                raw_pointer=raw_pointer_r,
-                normalized_payload=normalized_r,
-            ), mask=settings.event_data_masking == "true")
+            protected_fields = prepare_event_fields(
+                dict(
+                    system=event_defaults.get("system") or name,
+                    actor=actor,
+                    action=event_defaults.get("action") or "log_event",
+                    outcome=event_defaults.get("outcome"),
+                    severity=sev,
+                    summary=summary,
+                    raw_pointer=raw_pointer_r,
+                    normalized_payload=normalized_r,
+                ),
+                mask=settings.event_data_masking == "true",
+            )
             stmt = (
                 pg_insert(Event)
                 .values(
@@ -493,9 +506,13 @@ def ingest_cloudwatch_logs_once(
                 safe_eid = re.sub(r"[^a-zA-Z0-9._-]+", "-", (event_id or ext_id))[:80]
                 key = f"cloudwatch_logs/{name}/{ts.date().isoformat()}/{inserted_id}-{safe_eid}.{ext}"
                 msg_bytes, redaction_status = prepare_artifact_bytes(
-                    msg.encode("utf-8", errors="replace"), ctype, mask=settings.event_data_masking == "true"
+                    msg.encode("utf-8", errors="replace"),
+                    ctype,
+                    mask=settings.event_data_masking == "true",
                 )
-                stored = put_bytes(key=artifact_key(key), data=msg_bytes, content_type=ctype)
+                stored = put_bytes(
+                    key=artifact_key(key), data=msg_bytes, content_type=ctype
+                )
                 art = Artifact(
                     event_id=inserted_id,
                     kind="log_event",
@@ -556,8 +573,8 @@ def ingest_cloudwatch_logs_once(
     }
 
 
-@pausable('cloudwatch_logs')
-@connection_runs('cloudwatch_logs')
+@pausable("cloudwatch_logs")
+@connection_runs("cloudwatch_logs")
 def ingest_cloudwatch_logs_all(db: Session) -> list[dict[str, Any]]:
     if not settings.cloudwatch_logs_enabled:
         return [{"skipped": True, "reason": "KEEN_CLOUDWATCH_LOGS_ENABLED=false"}]

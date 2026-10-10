@@ -1,5 +1,4 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import logging
 from calendar import monthrange
@@ -11,6 +10,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import IsmsEffectivenessMeasure, IsmsEffectivenessMetricEntry
 from app.services.entity_changelog import record_entity_changelog
 

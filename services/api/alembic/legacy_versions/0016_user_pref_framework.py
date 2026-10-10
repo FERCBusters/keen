@@ -6,8 +6,8 @@ Create Date: 2026-02-16
 
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0016_user_pref_framework"
 down_revision = "0015_event_question_notif"

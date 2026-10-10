@@ -1,23 +1,22 @@
 from __future__ import annotations
-from app.security.errors import collection_error
-from app.core.datetime_utils import utc_now_naive
-from app.services.ingestion_pause import pausable
 
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
-import json
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
 import httpx
-from app.ingest.http import client as ingestion_client
 from sqlalchemy.orm import Session
 
-from app.ingest.connections import load_document
-from app.ingest.connections import settings, connection_runs, namespace
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact
+from app.ingest.connections import connection_runs, load_document, namespace, settings
+from app.ingest.http import client as ingestion_client
+from app.security.errors import collection_error
 from app.security.redaction import redact_url
+from app.services.ingestion_pause import pausable
 
 
 def load_github_config(path: str) -> dict[str, Any]:
@@ -201,7 +200,10 @@ def _summarize_event(e: dict[str, Any], *, fallback_repo: str | None = None) -> 
 
 
 def ingest_github_repo(
-    db: Session, owner: str, repo: str, label: str | None = None,
+    db: Session,
+    owner: str,
+    repo: str,
+    label: str | None = None,
     collecting_org: str | None = None,
 ) -> dict[str, Any]:
     cursor_name = namespace(f"github:{owner}/{repo}")
@@ -658,12 +660,13 @@ def ingest_github_atom_feed(
     """
 
     from app.ingest.http import require_origin
+
     if _basic_auth():
         # Public GitHub feeds live on github.com; Enterprise feeds share their
         # configured API server's origin (possibly with an /api/v3 path).
         endpoint = settings.github_base_url
-        if endpoint.rstrip('/') == 'https://api.github.com':
-            endpoint = 'https://github.com'
+        if endpoint.rstrip("/") == "https://api.github.com":
+            endpoint = "https://github.com"
         require_origin(feed_url, endpoint)
     # Normalize the cursor name based on the URL path.
     u = urlparse(feed_url)
@@ -833,8 +836,8 @@ def ingest_github_atom_feed(
     }
 
 
-@pausable('github')
-@connection_runs('github')
+@pausable("github")
+@connection_runs("github")
 def ingest_github_all(db: Session) -> list[dict[str, Any]]:
     if not settings.github_enabled:
         return [{"skipped": True, "reason": "KEEN_GITHUB_ENABLED=false"}]
@@ -875,7 +878,9 @@ def ingest_github_all(db: Session) -> list[dict[str, Any]]:
                 )
             except Exception as e:
                 db.rollback()
-                out.append({"org": org, "error": collection_error(e), "stage": "org_events"})
+                out.append(
+                    {"org": org, "error": collection_error(e), "stage": "org_events"}
+                )
 
         # 2) Per-repo events (enumerate repos in org)
         if include_parts & {"repo_events", "repos", "repo-events", "repo"}:
@@ -892,7 +897,9 @@ def ingest_github_all(db: Session) -> list[dict[str, Any]]:
                 )
             except Exception as e:
                 db.rollback()
-                out.append({"org": org, "error": collection_error(e), "stage": "repo_events"})
+                out.append(
+                    {"org": org, "error": collection_error(e), "stage": "repo_events"}
+                )
 
         # 3) Optional: audit log (Enterprise / org owner token with read:audit_log)
         if include_parts & {"audit", "audit_log", "audit-log"}:
@@ -900,7 +907,9 @@ def ingest_github_all(db: Session) -> list[dict[str, Any]]:
                 out.append(ingest_github_org_auditlog(db, org=org, label=label))
             except Exception as e:
                 db.rollback()
-                out.append({"org": org, "error": collection_error(e), "stage": "audit_log"})
+                out.append(
+                    {"org": org, "error": collection_error(e), "stage": "audit_log"}
+                )
 
     # --- Optional: Atom feeds ---
     for f in cfg.get("feeds", []) or []:
@@ -919,5 +928,10 @@ def ingest_github_all(db: Session) -> list[dict[str, Any]]:
             out.append(ingest_github_repo(db, r["owner"], r["repo"], r.get("label")))
         except Exception as e:
             db.rollback()
-            out.append({"repo": f"{r.get('owner')}/{r.get('repo')}", "error": collection_error(e)})
+            out.append(
+                {
+                    "repo": f"{r.get('owner')}/{r.get('repo')}",
+                    "error": collection_error(e),
+                }
+            )
     return out

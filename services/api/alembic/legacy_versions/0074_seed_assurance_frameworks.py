@@ -7,6 +7,7 @@ The bundled JSON is a build-time snapshot: migrations never fetch live URLs.
 The auditor-donated controls are tagged with their original source. This seed
 does not claim that those controls are ISO or IASME's licensed normative text.
 """
+
 import json
 import uuid
 from pathlib import Path
@@ -60,33 +61,61 @@ def upgrade():
     for slug, framework in seed.items():
         if slug not in {"KEEN-AF:1.0", "UK-DVSTF:1.0", "CYBER-ESSENTIALS:2026"}:
             continue  # Replaced by the canonical offline OSA snapshot in 0090.
-        bind.execute(framework_insert, dict(
-            id=str(uuid.uuid4()), slug=slug, name=framework['name'],
-            version=framework.get('version'), description=framework.get('description'),
-            url=framework.get('upstream_url'),
-        ))
-        for order, item in enumerate(framework.get('clauses', []), start=1):
-            meta=item.get('metadata') or {}
-            bind.execute(clause_insert, dict(
-                id=str(uuid.uuid4()), slug=slug, ref=item['ref'], title=item['title'],
-                parent_ref=meta.get('parent_ref'), order=order,
-                meta=json.dumps(meta, ensure_ascii=False),
-            ))
+        bind.execute(
+            framework_insert,
+            dict(
+                id=str(uuid.uuid4()),
+                slug=slug,
+                name=framework["name"],
+                version=framework.get("version"),
+                description=framework.get("description"),
+                url=framework.get("upstream_url"),
+            ),
+        )
+        for order, item in enumerate(framework.get("clauses", []), start=1):
+            meta = item.get("metadata") or {}
+            bind.execute(
+                clause_insert,
+                dict(
+                    id=str(uuid.uuid4()),
+                    slug=slug,
+                    ref=item["ref"],
+                    title=item["title"],
+                    parent_ref=meta.get("parent_ref"),
+                    order=order,
+                    meta=json.dumps(meta, ensure_ascii=False),
+                ),
+            )
             # The framework editor also represents clauses as control items.
-            bind.execute(control_insert, dict(
-                id=str(uuid.uuid4()), slug=slug, kind='clause', ref=item['ref'],
-                title=item['title'], tags='{}', meta=json.dumps(meta, ensure_ascii=False),
-            ))
-        for item in framework['controls']:
-            bind.execute(control_insert, dict(
-                id=str(uuid.uuid4()), slug=slug, kind=item['type'], ref=item['ref'],
-                title=item.get('title') or item['ref'],
-                tags=json.dumps(item.get('tags') or {}, ensure_ascii=False),
-                meta=json.dumps(item.get('metadata') or {}, ensure_ascii=False),
-            ))
+            bind.execute(
+                control_insert,
+                dict(
+                    id=str(uuid.uuid4()),
+                    slug=slug,
+                    kind="clause",
+                    ref=item["ref"],
+                    title=item["title"],
+                    tags="{}",
+                    meta=json.dumps(meta, ensure_ascii=False),
+                ),
+            )
+        for item in framework["controls"]:
+            bind.execute(
+                control_insert,
+                dict(
+                    id=str(uuid.uuid4()),
+                    slug=slug,
+                    kind=item["type"],
+                    ref=item["ref"],
+                    title=item.get("title") or item["ref"],
+                    tags=json.dumps(item.get("tags") or {}, ensure_ascii=False),
+                    meta=json.dumps(item.get("metadata") or {}, ensure_ascii=False),
+                ),
+            )
     # Correct the earlier ISO seed's missing 6.1 parent. Only default 6-parent
     # links are moved; existing custom hierarchy stays as the admin set it.
-    bind.execute(sa.text("""
+    bind.execute(
+        sa.text("""
         UPDATE framework_clauses AS child SET parent_clause_id = parent.id
         FROM framework_clauses AS parent
         WHERE child.framework_slug = 'ISO27001:2022'
@@ -97,13 +126,16 @@ def upgrade():
               SELECT old.id FROM framework_clauses AS old
               WHERE old.framework_slug = child.framework_slug AND old.ref = '6'
           )
-    """))
-    bind.execute(sa.text("""
+    """)
+    )
+    bind.execute(
+        sa.text("""
         UPDATE control_items SET metadata = jsonb_set(metadata, '{parent_ref}', '"6.1"')
         WHERE framework_slug = 'ISO27001:2022' AND type = 'clause'
           AND ref IN ('6.1.1', '6.1.2', '6.1.3')
           AND metadata->>'parent_ref' = '6'
-    """))
+    """)
+    )
 
 
 def downgrade():

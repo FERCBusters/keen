@@ -2,6 +2,7 @@
 
 Authentication, fetching, cursors and event provenance belong to each collector.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

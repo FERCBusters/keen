@@ -1,7 +1,9 @@
 """One bounded execution boundary for administrator-supplied match patterns."""
+
+import re
 from dataclasses import dataclass
 from functools import lru_cache
-import re
+
 import regex
 
 MATCH_TIMEOUT_SECONDS = 0.025
@@ -19,7 +21,11 @@ def validate_pattern(pattern):
     def check(items, repeated=False):
         unbounded = 0
         for op, value in items:
-            if op in (re._parser.MAX_REPEAT, re._parser.MIN_REPEAT, re._parser.POSSESSIVE_REPEAT):
+            if op in (
+                re._parser.MAX_REPEAT,
+                re._parser.MIN_REPEAT,
+                re._parser.POSSESSIVE_REPEAT,
+            ):
                 if value[1] != re._parser.MAXREPEAT and value[1] > 1000:
                     raise ValueError("Bounded repetition must be at most 1000")
                 if repeated:
@@ -42,8 +48,8 @@ def validate_pattern(pattern):
                 check(value[1], repeated)
         if unbounded > 1:
             raise ValueError("Use one unbounded repetition at most")
-    check(parsed)
 
+    check(parsed)
 
 
 @dataclass(frozen=True)
@@ -57,7 +63,9 @@ class BoundedPattern:
             return self.compiled.search(value, timeout=MATCH_TIMEOUT_SECONDS)
         except TimeoutError:
             # Stop the run rather than silently dropping a required mapping.
-            raise ValueError("Regex match exceeded its time budget; simplify the rule") from None
+            raise ValueError(
+                "Regex match exceeded its time budget; simplify the rule"
+            ) from None
 
 
 @lru_cache(maxsize=256)

@@ -1,4 +1,5 @@
 """ISMS schemas; see docs/maintainability-review.md for module boundaries."""
+
 from __future__ import annotations
 
 import uuid
@@ -8,6 +9,7 @@ from datetime import time as time_type
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
+
 from app.security.urls import external_url as validate_external_url
 
 

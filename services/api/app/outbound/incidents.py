@@ -166,8 +166,12 @@ def post_incident_webhook(
     if config.signing_secret:
         headers[config.signature_header] = _hmac_sha256(config.signing_secret, body)
 
-    with httpx.Client(timeout=timeout, follow_redirects=False, verify=True, trust_env=False) as client:
-        with client.stream("POST", config.url, content=body, headers=headers) as response:
+    with httpx.Client(
+        timeout=timeout, follow_redirects=False, verify=True, trust_env=False
+    ) as client:
+        with client.stream(
+            "POST", config.url, content=body, headers=headers
+        ) as response:
             if not 200 <= int(response.status_code) < 300:
                 log.warning("incident webhook returned HTTP %s", response.status_code)
             safe_headers = {

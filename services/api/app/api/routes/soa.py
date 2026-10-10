@@ -1,5 +1,4 @@
 from __future__ import annotations
-from app.api.routes.risks import risk_owner_out
 
 from typing import Any
 
@@ -8,20 +7,26 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.clauses import _clause_evidence_mappings
 from app.api.routes.isms import (
-    _can_read_isms,
-    _app_config_out,
     _asset_out,
     _business_process_out,
+    _can_read_isms,
     _document_out,
     _effectiveness_measure_out,
     _entity_out,
     _meeting_out,
     _objective_out,
 )
+from app.api.routes.risks import risk_owner_out
 from app.api.utils import (
     CONTROL_JUSTIFICATIONS,
+)
+from app.api.utils import (
     control_justification as _control_justification,
+)
+from app.api.utils import (
     control_upstream_url as _control_upstream_url,
+)
+from app.api.utils import (
     ref_sort_key as _ref_sort_key,
 )
 from app.core.config import settings
@@ -34,23 +39,20 @@ from app.db.models import (
     InterestedPartyControlLink,
     InterestedPartyName,
     InterestedPartyNature,
-    IsmsApplicationConfigurationEntry,
     IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
     IsmsMeeting,
     IsmsObjective,
     IsmsOrgNode,
+    PestleBusinessProcess,
+    PestleItem,
+    PestleRelevanceLevel,
     Risk,
     RiskAsset,
     RiskAssetSubcategory,
     RiskCategory,
     RiskControlLink,
-    PestleBusinessProcess,
-    PestleBusinessProcessRelevance,
-    PestleClauseRelevance,
-    PestleItem,
-    PestleRelevanceLevel,
     User,
 )
 from app.db.session import get_db

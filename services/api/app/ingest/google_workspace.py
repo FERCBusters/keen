@@ -1,6 +1,7 @@
 from __future__ import annotations
-from app.security.errors import collection_error
+
 from app.core.datetime_utils import utc_now_naive
+from app.security.errors import collection_error
 from app.services.ingestion_pause import pausable
 
 """Google Workspace audit ingester.
@@ -29,16 +30,14 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
-from sqlalchemy.orm import Session
-
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from sqlalchemy.orm import Session
 
-from app.ingest.connections import load_document
-from app.ingest.connections import settings, connection_runs, namespace
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact
+from app.ingest.connections import connection_runs, load_document, namespace, settings
 
 SCOPES = ["https://www.googleapis.com/auth/admin.reports.audit.readonly"]
 
@@ -496,8 +495,8 @@ def ingest_google_workspace_stream(
     }
 
 
-@pausable('google_workspace')
-@connection_runs('google_workspace')
+@pausable("google_workspace")
+@connection_runs("google_workspace")
 def ingest_google_workspace_all(db: Session) -> list[dict[str, Any]]:
     if not settings.google_workspace_enabled:
         return [{"skipped": True, "reason": "google_workspace_enabled=false"}]
@@ -542,6 +541,8 @@ def ingest_google_workspace_all(db: Session) -> list[dict[str, Any]]:
             out.append(ingest_google_workspace_stream(db, service, s, defaults))
         except Exception as e:
             db.rollback()
-            out.append({"ok": False, "name": s.get("name"), "error": collection_error(e)})
+            out.append(
+                {"ok": False, "name": s.get("name"), "error": collection_error(e)}
+            )
 
     return out

@@ -1,5 +1,4 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import re
 import uuid
@@ -8,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.api.utils import control_justification as _control_justification
@@ -16,6 +15,7 @@ from app.api.utils import control_upstream_url as _control_upstream_url
 from app.api.utils import ref_sort_key as _ref_sort_key
 from app.api.utils import try_uuid as _try_uuid
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlClauseLink,
     ControlItem,

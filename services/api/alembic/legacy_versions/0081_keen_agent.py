@@ -1,7 +1,7 @@
 """Scoped KEEN Agent identities; credentials stored as hashes."""
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0081_keen_agent"

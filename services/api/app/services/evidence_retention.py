@@ -3,9 +3,10 @@
 Database deletion and the storage outbox commit together. Storage is removed only
 when no retained record references it. Object Lock is never bypassed.
 """
-from datetime import datetime, timedelta, timezone
-import uuid
+
 import time
+import uuid
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 
@@ -38,60 +39,85 @@ def now():
 
 def lock(db):
     # Shared by requests and worker batches; prevents duplicate jobs/settings races.
-    db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': LOCK_ID})
+    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": LOCK_ID})
 
 
 def policy(db):
-    return dict(db.execute(text('SELECT * FROM evidence_retention_policy WHERE id=1')).mappings().one())
+    return dict(
+        db.execute(text("SELECT * FROM evidence_retention_policy WHERE id=1"))
+        .mappings()
+        .one()
+    )
 
 
 def candidates(mode, value, cutoff):
-    params = {'cutoff': cutoff}
-    predicate = f'e.created_at <= :cutoff AND {UNPROTECTED}'
-    if mode == 'age':
-        params['oldest'] = cutoff - timedelta(days=value)
-        predicate += ' AND e.timestamp < :oldest'
-    if mode == 'count':
-        params['keep'] = value
+    params = {"cutoff": cutoff}
+    predicate = f"e.created_at <= :cutoff AND {UNPROTECTED}"
+    if mode == "age":
+        params["oldest"] = cutoff - timedelta(days=value)
+        predicate += " AND e.timestamp < :oldest"
+    if mode == "count":
+        params["keep"] = value
         # Count all unsampled events, even those additionally held by lineage.
         # Audit-held events are additional to the count allowance.
-        predicate += ''' AND e.id NOT IN (
+        predicate += """ AND e.id NOT IN (
             SELECT newest.id FROM events newest
             WHERE newest.created_at <= :cutoff AND NOT EXISTS (
                 SELECT 1 FROM audit_event_retention_holds h WHERE h.event_id=newest.id)
-            ORDER BY newest.timestamp DESC, newest.id DESC LIMIT :keep)'''
+            ORDER BY newest.timestamp DESC, newest.id DESC LIMIT :keep)"""
     return predicate, params
 
 
 def preview(db, mode, value, cutoff=None):
     cutoff = cutoff or now()
-    total = db.execute(text('SELECT count(*) FROM events')).scalar_one()
-    held = db.execute(text('SELECT count(DISTINCT event_id) FROM audit_event_retention_holds')).scalar_one()
+    total = db.execute(text("SELECT count(*) FROM events")).scalar_one()
+    held = db.execute(
+        text("SELECT count(DISTINCT event_id) FROM audit_event_retention_holds")
+    ).scalar_one()
     count = 0
-    if mode != 'disabled':
+    if mode != "disabled":
         where, params = candidates(mode, value, cutoff)
-        count = db.execute(text(f'SELECT count(*) FROM events e WHERE {where}'), params).scalar_one()
-    return {'total_events': total, 'audit_protected_events': held,
-            'eligible_events': count, 'cutoff': cutoff}
+        count = db.execute(
+            text(f"SELECT count(*) FROM events e WHERE {where}"), params
+        ).scalar_one()
+    return {
+        "total_events": total,
+        "audit_protected_events": held,
+        "eligible_events": count,
+        "cutoff": cutoff,
+    }
 
 
 def enqueue(db, mode, value, automatic, username):
     lock(db)
-    active = db.execute(text("SELECT id FROM evidence_purge_jobs WHERE status IN ('queued','running')")).scalar()
+    active = db.execute(
+        text("SELECT id FROM evidence_purge_jobs WHERE status IN ('queued','running')")
+    ).scalar()
     if active:
         return str(active), False
     job_id = uuid.uuid4()
-    db.execute(text('''INSERT INTO evidence_purge_jobs
-        (id,mode,value,automatic,cutoff,requested_by) VALUES (:id,:mode,:value,:automatic,:cutoff,:user)'''),
-        {'id': job_id, 'mode': mode, 'value': value, 'automatic': automatic,
-         'cutoff': now(), 'user': username})
+    db.execute(
+        text("""INSERT INTO evidence_purge_jobs
+        (id,mode,value,automatic,cutoff,requested_by) VALUES (:id,:mode,:value,:automatic,:cutoff,:user)"""),
+        {
+            "id": job_id,
+            "mode": mode,
+            "value": value,
+            "automatic": automatic,
+            "cutoff": now(),
+            "user": username,
+        },
+    )
     return str(job_id), True
 
 
 def queue_object(db, uri):
     if uri:
-        db.execute(text('''INSERT INTO evidence_object_cleanup (storage_uri) VALUES (:uri)
-            ON CONFLICT (storage_uri) DO NOTHING'''), {'uri': uri})
+        db.execute(
+            text("""INSERT INTO evidence_object_cleanup (storage_uri) VALUES (:uri)
+            ON CONFLICT (storage_uri) DO NOTHING"""),
+            {"uri": uri},
+        )
 
 
 def database_batch():
@@ -99,39 +125,80 @@ def database_batch():
     with SessionLocal() as db:
         db.info["evidence_purge_batch"] = True
         lock(db)
-        job = db.execute(text("SELECT * FROM evidence_purge_jobs WHERE status IN ('queued','running')")).mappings().first()
+        job = (
+            db.execute(
+                text(
+                    "SELECT * FROM evidence_purge_jobs WHERE status IN ('queued','running')"
+                )
+            )
+            .mappings()
+            .first()
+        )
         if not job:
             p = policy(db)
-            if p['mode'] == 'disabled':
+            if p["mode"] == "disabled":
                 return False
-            enqueue(db, p['mode'], p['value'], True, 'automatic retention')
-            job = db.execute(text("SELECT * FROM evidence_purge_jobs WHERE status='queued'")).mappings().one()
+            enqueue(db, p["mode"], p["value"], True, "automatic retention")
+            job = (
+                db.execute(
+                    text("SELECT * FROM evidence_purge_jobs WHERE status='queued'")
+                )
+                .mappings()
+                .one()
+            )
         job = dict(job)
-        where, params = candidates(job['mode'], job['value'], job['cutoff'])
+        where, params = candidates(job["mode"], job["value"], job["cutoff"])
         # Lock rows before collecting storage URIs. FK insertion by audit holds
         # conflicts with this lock; a second protection check uses a fresh snapshot.
-        ids = list(db.execute(text(f'''SELECT e.id FROM events e WHERE {where}
-            ORDER BY e.timestamp,e.id LIMIT :batch FOR UPDATE OF e'''),
-            {**params, 'batch': BATCH_SIZE}).scalars())
+        ids = list(
+            db.execute(
+                text(f"""SELECT e.id FROM events e WHERE {where}
+            ORDER BY e.timestamp,e.id LIMIT :batch FOR UPDATE OF e"""),
+                {**params, "batch": BATCH_SIZE},
+            ).scalars()
+        )
         deleted = 0
         for event_id in ids:
-            if not db.execute(text(f'SELECT 1 FROM events e WHERE e.id=:id AND {UNPROTECTED}'), {'id': event_id}).scalar():
+            if not db.execute(
+                text(f"SELECT 1 FROM events e WHERE e.id=:id AND {UNPROTECTED}"),
+                {"id": event_id},
+            ).scalar():
                 continue
             # Queue every artifact (raw, rendered, question attachments). The
             # transaction rolls back both these intents and deletion on failure.
-            for uri in db.execute(text('SELECT storage_uri FROM artifacts WHERE event_id=:id'), {'id': event_id}).scalars():
+            for uri in db.execute(
+                text("SELECT storage_uri FROM artifacts WHERE event_id=:id"),
+                {"id": event_id},
+            ).scalars():
                 queue_object(db, uri)
-            db.execute(text('DELETE FROM mappings WHERE event_id=:id'), {'id': event_id})
-            db.execute(text('UPDATE artifacts SET parent_artifact_id=NULL WHERE event_id=:id'), {'id': event_id})
-            db.execute(text('DELETE FROM artifacts WHERE event_id=:id'), {'id': event_id})
-            db.execute(text('DELETE FROM events WHERE id=:id'), {'id': event_id})
+            db.execute(
+                text("DELETE FROM mappings WHERE event_id=:id"), {"id": event_id}
+            )
+            db.execute(
+                text("UPDATE artifacts SET parent_artifact_id=NULL WHERE event_id=:id"),
+                {"id": event_id},
+            )
+            db.execute(
+                text("DELETE FROM artifacts WHERE event_id=:id"), {"id": event_id}
+            )
+            db.execute(text("DELETE FROM events WHERE id=:id"), {"id": event_id})
             deleted += 1
-        db.execute(text('''UPDATE evidence_purge_jobs SET deleted=deleted+:deleted,
-            status=:status, updated_at=:now,last_error=NULL WHERE id=:id'''),
-            {'deleted': deleted, 'status': 'running' if ids else 'complete', 'now': now(), 'id': job['id']})
+        db.execute(
+            text("""UPDATE evidence_purge_jobs SET deleted=deleted+:deleted,
+            status=:status, updated_at=:now,last_error=NULL WHERE id=:id"""),
+            {
+                "deleted": deleted,
+                "status": "running" if ids else "complete",
+                "now": now(),
+                "id": job["id"],
+            },
+        )
         # Keep bounded history for automatic jobs; manual purge history is retained.
-        db.execute(text("""DELETE FROM evidence_purge_jobs WHERE automatic AND status IN ('complete','cancelled')
-            AND updated_at < :before"""), {'before': now()-timedelta(days=30)})
+        db.execute(
+            text("""DELETE FROM evidence_purge_jobs WHERE automatic AND status IN ('complete','cancelled')
+            AND updated_at < :before"""),
+            {"before": now() - timedelta(days=30)},
+        )
         db.commit()
     if deleted:
         clear_stats_caches()  # DB aggregate counters are maintained by existing triggers.
@@ -140,12 +207,17 @@ def database_batch():
 
 def object_referenced(db, uri):
     # Preserve shared objects, including ISMS documents and exported audit reports.
-    return bool(db.execute(text('''SELECT EXISTS (
+    return bool(
+        db.execute(
+            text("""SELECT EXISTS (
         SELECT 1 FROM artifacts WHERE storage_uri=:uri
         UNION ALL SELECT 1 FROM isms_documents WHERE storage_uri=:uri
         UNION ALL SELECT 1 FROM bookstack_section_evidence WHERE storage_uri=:uri
         UNION ALL SELECT 1 FROM audits WHERE final_report_storage_uri=:uri
-    )'''), {'uri': uri}).scalar())
+    )"""),
+            {"uri": uri},
+        ).scalar()
+    )
 
 
 def storage_batch():
@@ -155,31 +227,54 @@ def storage_batch():
         if time.monotonic() - started > 10:
             return True
         with SessionLocal() as db:
-            row = db.execute(text('''SELECT * FROM evidence_object_cleanup
+            row = (
+                db.execute(
+                    text("""SELECT * FROM evidence_object_cleanup
                 WHERE next_attempt_at<=:now ORDER BY next_attempt_at,id
-                LIMIT 1 FOR UPDATE SKIP LOCKED'''), {'now': now()}).mappings().first()
+                LIMIT 1 FOR UPDATE SKIP LOCKED"""),
+                    {"now": now()},
+                )
+                .mappings()
+                .first()
+            )
             if not row:
                 break
-            if object_referenced(db, row['storage_uri']):
-                db.execute(text('''UPDATE evidence_object_cleanup SET next_attempt_at=:later,
-                    last_error='Object still referenced by retained evidence or a document' WHERE id=:id'''),
-                    {'later': now()+timedelta(hours=1), 'id': row['id']})
+            if object_referenced(db, row["storage_uri"]):
+                db.execute(
+                    text("""UPDATE evidence_object_cleanup SET next_attempt_at=:later,
+                    last_error='Object still referenced by retained evidence or a document' WHERE id=:id"""),
+                    {"later": now() + timedelta(hours=1), "id": row["id"]},
+                )
             else:
                 try:
-                    delete_stored_object(row['storage_uri'])
+                    delete_stored_object(row["storage_uri"])
                 except Exception as exc:
                     # Do not persist provider responses, credentials or signed URLs.
-                    code = getattr(exc, 'response', {}).get('Error', {}).get('Code')
-                    error = ('Legacy versioned S3 URI has no version ID; operator must resolve the exact object version'
-                             if type(exc).__name__ == 'UnpinnedVersionedObject' else
-                             f'Storage deletion failed ({code or type(exc).__name__}); check permissions, Object Lock and connectivity')
-                    attempts = row['attempts'] + 1
-                    db.execute(text('''UPDATE evidence_object_cleanup SET attempts=:n,
-                        next_attempt_at=:later,last_error=:error WHERE id=:id'''),
-                        {'n': attempts, 'later': now()+timedelta(seconds=min(86400, 60*2**min(attempts,11))),
-                         'error': error[:300], 'id': row['id']})
+                    code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+                    error = (
+                        "Legacy versioned S3 URI has no version ID; operator must resolve the exact object version"
+                        if type(exc).__name__ == "UnpinnedVersionedObject"
+                        else f"Storage deletion failed ({code or type(exc).__name__}); check permissions, Object Lock and connectivity"
+                    )
+                    attempts = row["attempts"] + 1
+                    db.execute(
+                        text("""UPDATE evidence_object_cleanup SET attempts=:n,
+                        next_attempt_at=:later,last_error=:error WHERE id=:id"""),
+                        {
+                            "n": attempts,
+                            "later": now()
+                            + timedelta(
+                                seconds=min(86400, 60 * 2 ** min(attempts, 11))
+                            ),
+                            "error": error[:300],
+                            "id": row["id"],
+                        },
+                    )
                 else:
-                    db.execute(text('DELETE FROM evidence_object_cleanup WHERE id=:id'), {'id': row['id']})
+                    db.execute(
+                        text("DELETE FROM evidence_object_cleanup WHERE id=:id"),
+                        {"id": row["id"]},
+                    )
             db.commit()
             processed += 1
     return processed == BATCH_SIZE
@@ -191,9 +286,14 @@ def run_retention():
         more = database_batch()
     except Exception as exc:
         with SessionLocal() as db:
-            db.execute(text('''UPDATE evidence_purge_jobs SET last_error=:error,updated_at=:now
-                WHERE status IN ('queued','running')'''),
-                {'error': f'Database cleanup failed ({type(exc).__name__}); worker will retry', 'now': now()})
+            db.execute(
+                text("""UPDATE evidence_purge_jobs SET last_error=:error,updated_at=:now
+                WHERE status IN ('queued','running')"""),
+                {
+                    "error": f"Database cleanup failed ({type(exc).__name__}); worker will retry",
+                    "now": now(),
+                },
+            )
             db.commit()
         # Continue storage cleanup even if the current DB batch needs attention.
     more_storage = storage_batch()

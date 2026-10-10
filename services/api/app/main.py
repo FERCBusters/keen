@@ -1,9 +1,7 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
 
 from fastapi import FastAPI, Request
 from fastapi.openapi.docs import (
@@ -11,31 +9,33 @@ from fastapi.openapi.docs import (
     get_swagger_ui_html,
     get_swagger_ui_oauth2_redirect_html,
 )
-from fastapi.responses import JSONResponse, Response
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse
 
-
-from app.api.routes import OPENAPI_TAGS, router as api_router
+from app.api.routes import OPENAPI_TAGS
+from app.api.routes import router as api_router
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import AuditLog, User
 from app.db.session import SessionLocal
-from app.security.auth import ROLE_ADMIN, create_user, get_current_user_from_request
-from app.security.permissions import (
-    ensure_session_authorization_current,
-    has_permission,
+from app.realtime.notifications import (
+    start_notification_listener,
+    stop_notification_listener,
 )
-from app.security.roles import attach_effective_role
+from app.security.auth import ROLE_ADMIN, create_user, get_current_user_from_request
 from app.security.csrf import (
     csrf_valid,
     generate_csrf_token,
     get_csrf_token_from_request,
     set_csrf_cookie,
 )
-from app.security.redaction import redact_query_string
-from app.realtime.notifications import (
-    start_notification_listener,
-    stop_notification_listener,
+from app.security.permissions import (
+    ensure_session_authorization_current,
+    has_permission,
 )
+from app.security.redaction import redact_query_string
+from app.security.roles import attach_effective_role
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -120,8 +120,10 @@ def bootstrap_initial_admin():
             return
         create_user(db, username=uname, password=pwd, role=ROLE_ADMIN)
         print(f"[keen] Bootstrapped initial admin user: {uname}")
-    except Exception as e:  # pragma: no cover
-        print("[keen] Failed to bootstrap admin user; check database and bootstrap configuration")
+    except Exception:  # pragma: no cover
+        print(
+            "[keen] Failed to bootstrap admin user; check database and bootstrap configuration"
+        )
     finally:
         db.close()
 
@@ -232,11 +234,21 @@ async def auth_middleware(request: Request, call_next):
         # Default rule: only admin can mutate backend state, except for
         # explicitly user/permission-owned workflows checked below.
         if request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
-            if path in {
-                "/v1/me/password",
-                "/v1/me/preferences",
-                "/v1/auth/logout",
-            } or path.startswith("/v1/me/saved-searches") or path in {"/v1/me/sso-emails/request", "/v1/me/sso-emails/confirm", "/v1/me/sso-emails/remove"}:
+            if (
+                path
+                in {
+                    "/v1/me/password",
+                    "/v1/me/preferences",
+                    "/v1/auth/logout",
+                }
+                or path.startswith("/v1/me/saved-searches")
+                or path
+                in {
+                    "/v1/me/sso-emails/request",
+                    "/v1/me/sso-emails/confirm",
+                    "/v1/me/sso-emails/remove",
+                }
+            ):
                 pass  # self-service
             elif (
                 request.method.upper() == "POST"
@@ -358,6 +370,7 @@ async def audit_trail_middleware(request: Request, call_next):
 
             ua = (request.headers.get("user-agent") or "").strip() or None
             from app.security.redaction import redact_str
+
             ref = redact_str((request.headers.get("referer") or "").strip()) or None
 
             # Truncate potentially long strings for safety.
@@ -451,13 +464,16 @@ app.include_router(api_router, prefix="")
 
 # Outermost guard also covers auth-exempt integrations and WebSockets.
 from app.security.demo import DemoExpiryMiddleware
+
 app.add_middleware(DemoExpiryMiddleware)
 
 
 # Enforce byte limits before JSON/form parsing, including chunked requests.
 from app.security.request_limits import RequestBodyLimitMiddleware
+
 app.add_middleware(RequestBodyLimitMiddleware)
 
 # Response policy also covers rejections from every inner middleware.
 from app.security.headers import SecurityHeadersMiddleware
+
 app.add_middleware(SecurityHeadersMiddleware)

@@ -1,12 +1,16 @@
 """Public diagnostics must not include provider bodies, URLs or database values."""
-import ssl
+
 import socket
+import ssl
+
 import httpx
 
 
 def collection_error(exc):
     if isinstance(exc, httpx.HTTPStatusError):
-        return f"Collection failed: upstream returned HTTP {int(exc.response.status_code)}"
+        return (
+            f"Collection failed: upstream returned HTTP {int(exc.response.status_code)}"
+        )
     if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
         return "Collection timed out; narrow the input or check upstream availability"
     if isinstance(exc, ssl.SSLError):

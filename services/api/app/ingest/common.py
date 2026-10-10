@@ -4,13 +4,12 @@ import hashlib
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
-from app.db.models import Event, Artifact, ControlItem, Mapping
-from app.mapping.rules import load_rules, evaluate_by_framework
 from app.core.config import settings
-from app.storage.s3 import put_bytes
+from app.db.models import Artifact, ControlItem, Event, Mapping
+from app.mapping.rules import evaluate_by_framework, load_rules
 from app.security.redaction import (
     combine_redaction_status,
     mask_event_data_bytes,
@@ -20,10 +19,12 @@ from app.security.redaction import (
     redact_obj,
     redact_str,
 )
+from app.storage.s3 import put_bytes
 
 
 def is_safe_url(url: str) -> bool:
     from app.ingest.http import destination
+
     try:
         destination(url)
         return True
@@ -46,6 +47,7 @@ def ensure_controls(
     if not refs:
         return {}
     from app.db.models import Framework
+
     if not db.query(Framework.id).filter_by(slug=framework_slug).first():
         return {}  # A stale rule must not resurrect a removed catalogue.
     found = (
@@ -67,9 +69,10 @@ def ensure_controls(
 
 def apply_rules(db: Session, ev: Event) -> int:
     # Coordinate rule evaluation with connection removal, until this transaction commits.
-    if db.get_bind().dialect.name == 'postgresql':
+    if db.get_bind().dialect.name == "postgresql":
         from sqlalchemy import text
-        db.execute(text('SELECT pg_advisory_xact_lock_shared(1262830926)'))
+
+        db.execute(text("SELECT pg_advisory_xact_lock_shared(1262830926)"))
     rules = load_rules(settings.rules_path, db=db)
     event_dict = {
         "source": ev.source,
@@ -99,7 +102,9 @@ def apply_rules(db: Session, ev: Event) -> int:
 
     created = 0
     for framework_slug, entries in matched.items():
-        controls = ensure_controls(db, framework_slug=framework_slug, refs=[item["ref"] for item in entries])
+        controls = ensure_controls(
+            db, framework_slug=framework_slug, refs=[item["ref"] for item in entries]
+        )
 
         for item in entries:
             ci = controls.get(item["ref"])
@@ -146,8 +151,11 @@ def store_event_with_artifact(
     commit: bool = True,
 ) -> dict[str, Any]:
     from app.services.ingestion_pause import require_purge_receiving
+
     require_purge_receiving(db)
-    from app.ingest.connections import namespace, identity, artifact_key as scoped_artifact_key
+    from app.ingest.connections import artifact_key as scoped_artifact_key
+    from app.ingest.connections import identity, namespace
+
     external_id = namespace(external_id)
     artifact_key = scoped_artifact_key(artifact_key)
     # --- hardening: redact secrets BEFORE persisting anything ---

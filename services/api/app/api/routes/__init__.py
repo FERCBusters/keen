@@ -4,26 +4,26 @@ from fastapi import APIRouter
 
 from .admin import router as admin_router
 from .artifacts import router as artifacts_router
-from .auth import router as auth_router
+from .assurance import router as assurance_router
 from .audits import router as audits_router
+from .auth import router as auth_router
+from .bookstack_sections import router as bookstack_sections_router
 from .clauses import router as clauses_router
-from .controls import router as controls_router
 from .control_links import router as control_links_router
+from .controls import router as controls_router
 from .events import router as events_router
 from .frameworks import router as frameworks_router
-from .managed_configurations import router as managed_configurations_router
 from .graph import router as graph_router
 from .interested_parties import router as interested_parties_router
 from .isms import router as isms_router
-from .assurance import router as assurance_router
-from .bookstack_sections import router as bookstack_sections_router
+from .managed_configurations import router as managed_configurations_router
 from .me import router as me_router
-from .questions import router as questions_router
 from .pestle import router as pestle_router
-from .risks import router as risks_router
+from .questions import router as questions_router
 from .risk_register import router as risk_register_router
-from .sources import router as sources_router
+from .risks import router as risks_router
 from .soa import router as soa_router
+from .sources import router as sources_router
 from .stats import router as stats_router
 from .users import router as users_router
 from .webhooks import router as webhooks_router
@@ -69,7 +69,10 @@ OPENAPI_TAGS = [
         "name": "ISMS",
         "description": "ISMS objectives, documents, organisation chart, assets, application configuration matrix, meetings and Statement of Applicability.",
     },
-    {"name": "Assurance", "description": "People, vendor and personnel assurance records."},
+    {
+        "name": "Assurance",
+        "description": "People, vendor and personnel assurance records.",
+    },
     {
         "name": "Statement of Applicability",
         "description": "Read-only SoA summary across controls, clauses, CIA risks, PESTLE(E), Interested Parties and ISMS.",
@@ -108,22 +111,29 @@ router.include_router(stats_router, tags=["Stats"])
 router.include_router(graph_router, tags=["Graph"])
 
 from .integrations import router as integrations_router
+
 router.include_router(integrations_router, tags=["Admin"])
 
 from .agents import router as agents_router
-router.include_router(agents_router, tags=['KEEN Agent'])
+
+router.include_router(agents_router, tags=["KEEN Agent"])
 
 from .evidence_retention import router as evidence_retention_router
-router.include_router(evidence_retention_router, tags=['Admin'])
+
+router.include_router(evidence_retention_router, tags=["Admin"])
 
 from .mfa import router as mfa_router
-router.include_router(mfa_router, tags=['Auth'])
+
+router.include_router(mfa_router, tags=["Auth"])
 
 from .home import router as home_router
-router.include_router(home_router, tags=['Home'])
+
+router.include_router(home_router, tags=["Home"])
 
 from .sso_emails import router as sso_emails_router
+
 router.include_router(sso_emails_router, tags=["Me"])
 
 from .source_connections import router as source_connections_router
-router.include_router(source_connections_router, tags=['Admin'])
+
+router.include_router(source_connections_router, tags=["Admin"])

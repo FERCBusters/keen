@@ -16,7 +16,6 @@ instead of creating a fresh copy, provided the same --prefix is used.
 """
 
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import argparse
 import re
@@ -26,6 +25,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Iterable
+
+from app.core.datetime_utils import utc_now_naive
 
 # Make the script tolerant of being copied into services/api/scripts/ and run
 # as `python scripts/seed_demo_data.py` from services/api. It also supports
@@ -102,9 +103,20 @@ class DemoSeeder:
         self.stats: Counter[str] = Counter()
         self.warnings: dict[str, set[str]] = defaultdict(set)
         self.user = self._select_user(config.username)
-        anchor = self.db.query(Event).filter_by(source='demo-seed', external_id=self.account_code('SEED-ANCHOR')).first()
+        anchor = (
+            self.db.query(Event)
+            .filter_by(source="demo-seed", external_id=self.account_code("SEED-ANCHOR"))
+            .first()
+        )
         if anchor is None:
-            anchor = Event(source='demo-seed', external_id=self.account_code('SEED-ANCHOR'), timestamp=utc_now_naive(), summary=self.label('Fictional demo dataset'), raw_pointer={'seed':'demo'}, normalized_payload={'demo':True})
+            anchor = Event(
+                source="demo-seed",
+                external_id=self.account_code("SEED-ANCHOR"),
+                timestamp=utc_now_naive(),
+                summary=self.label("Fictional demo dataset"),
+                raw_pointer={"seed": "demo"},
+                normalized_payload={"demo": True},
+            )
             self.db.add(anchor)
             self.db.flush()
         self.seed_date = anchor.timestamp.date()
@@ -1703,7 +1715,8 @@ class DemoSeeder:
                     "audit_type": spec["audit_type"],
                     "start_date": self.seed_date
                     + timedelta(days=int(spec["start_offset"])),
-                    "end_date": self.seed_date + timedelta(days=int(spec["end_offset"])),
+                    "end_date": self.seed_date
+                    + timedelta(days=int(spec["end_offset"])),
                     "notes": "Seeded demonstration audit. Scope and sampled evidence can be adjusted from the UI.",
                     "executive_summary": spec["summary"],
                     "meta": {"seed": "demo", "prefix": self.prefix, "key": spec["key"]},
@@ -2009,10 +2022,12 @@ class DemoSeeder:
             f"for framework {self.framework!r} with prefix {self.prefix!r}."
         )
         from demo_catalogue import CATALOGUE, seed_catalogue
-        if not self.config.all_frameworks and self.framework != 'iso_27001_2022':
+
+        if not self.config.all_frameworks and self.framework != "iso_27001_2022":
             seed_catalogue(self, [self.framework])
             return
         from app.ingest.demo_rss import seed_preset
+
         seed_preset(self.db)
         self.ensure_relevance_levels()
         org_nodes = self.seed_org_nodes()
@@ -2031,7 +2046,9 @@ class DemoSeeder:
         self.seed_effectiveness_measures()
         self.seed_objectives()
         self.seed_meetings(docs)
-        seed_catalogue(self, list(CATALOGUE) if self.config.all_frameworks else [self.framework])
+        seed_catalogue(
+            self, list(CATALOGUE) if self.config.all_frameworks else [self.framework]
+        )
 
     def print_summary(self) -> None:
         print("\nSummary:")
@@ -2068,11 +2085,21 @@ def parse_args() -> DemoConfig:
         action="store_true",
         help="Run all inserts/updates and then roll back instead of committing.",
     )
-    parser.add_argument('--all-frameworks', action='store_true', help='Seed reviewed examples across ISO 27001, KEEN Assurance and Cyber Essentials (base ISMS uses ISO 27001).')
-    parser.add_argument('--allow-non-demo', action='store_true', help='Explicitly permit writing fictional records into a non-demo installation.')
+    parser.add_argument(
+        "--all-frameworks",
+        action="store_true",
+        help="Seed reviewed examples across ISO 27001, KEEN Assurance and Cyber Essentials (base ISMS uses ISO 27001).",
+    )
+    parser.add_argument(
+        "--allow-non-demo",
+        action="store_true",
+        help="Explicitly permit writing fictional records into a non-demo installation.",
+    )
     args = parser.parse_args()
     if not settings.demo_mode and not args.allow_non_demo:
-        parser.error('Use demo mode, or explicitly pass --allow-non-demo to seed this installation')
+        parser.error(
+            "Use demo mode, or explicitly pass --allow-non-demo to seed this installation"
+        )
     return DemoConfig(
         framework="iso_27001_2022" if args.all_frameworks else args.framework,
         prefix=args.prefix,

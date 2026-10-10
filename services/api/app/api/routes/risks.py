@@ -1,5 +1,4 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import re
 import uuid
@@ -16,6 +15,7 @@ from app.api.utils import control_upstream_url as _control_upstream_url
 from app.api.utils import ref_sort_key as _ref_sort_key
 from app.api.utils import try_uuid as _try_uuid
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlItem,
     IsmsLicense,
@@ -32,12 +32,12 @@ from app.db.models import (
 from app.db.session import get_db
 from app.security.auth import require_authenticated
 from app.security.permissions import has_permission
-from app.services.risk_mitigator import analyse_risk_mitigation
 from app.services.entity_changelog import (
     list_entity_changelogs,
     record_entity_changelog,
     risk_changelog_state,
 )
+from app.services.risk_mitigator import analyse_risk_mitigation
 
 router = APIRouter()
 
@@ -169,11 +169,18 @@ def require_risk_manage(request: Request, db: Session = Depends(get_db)) -> User
 
 def risk_owner_out(risk):
     if risk.owner_role:
-        return {"id": str(risk.owner_role.id), "type": "role", "name": risk.owner_role.name,
-                "username": risk.owner_role.name + " (role)"}
-    return {"id": str(risk.owner.id) if risk.owner else None, "type": "user",
-            "name": risk.owner.username if risk.owner else None,
-            "username": risk.owner.username if risk.owner else None}
+        return {
+            "id": str(risk.owner_role.id),
+            "type": "role",
+            "name": risk.owner_role.name,
+            "username": risk.owner_role.name + " (role)",
+        }
+    return {
+        "id": str(risk.owner.id) if risk.owner else None,
+        "type": "user",
+        "name": risk.owner.username if risk.owner else None,
+        "username": risk.owner.username if risk.owner else None,
+    }
 
 
 def _is_risk_owner(user: User | None, risk: Risk | None) -> bool:
@@ -182,7 +189,9 @@ def _is_risk_owner(user: User | None, risk: Risk | None) -> bool:
     if risk is None:
         return False
     return risk.risk_owner_user_id == user.id or bool(
-        risk.owner_role and any(link.user_id == user.id for link in risk.owner_role.users))
+        risk.owner_role
+        and any(link.user_id == user.id for link in risk.owner_role.users)
+    )
 
 
 def _can_read_specific_risk(db: Session, user: User | None, risk: Risk | None) -> bool:
@@ -812,11 +821,24 @@ def _apply_payload(
     if is_create or "risk_types" in fields:
         risk.risk_types = _clean_risk_types(payload.risk_types)
 
-    if is_create or fields & {"risk_owner_user_id", "risk_owner_username", "risk_owner_role_id"}:
+    if is_create or fields & {
+        "risk_owner_user_id",
+        "risk_owner_username",
+        "risk_owner_role_id",
+    }:
         if payload.risk_owner_role_id:
-            if payload.risk_owner_user_id or (payload.risk_owner_username or "").strip():
-                raise HTTPException(400, "Choose one owner: a user or an organisational role")
-            role = db.query(IsmsOrgNode).filter_by(id=payload.risk_owner_role_id, node_type="role").one_or_none()
+            if (
+                payload.risk_owner_user_id
+                or (payload.risk_owner_username or "").strip()
+            ):
+                raise HTTPException(
+                    400, "Choose one owner: a user or an organisational role"
+                )
+            role = (
+                db.query(IsmsOrgNode)
+                .filter_by(id=payload.risk_owner_role_id, node_type="role")
+                .one_or_none()
+            )
             if role is None:
                 raise HTTPException(400, "Unknown organisational role")
             risk.owner = None
@@ -873,11 +895,31 @@ def _apply_payload(
 
     # The register's four ratings are the single source of truth. Keep the
     # historical score columns in sync for existing graph and SoA consumers.
-    rating_fields = ("register_likelihood", "register_impact", "register_residual_likelihood", "register_residual_impact")
-    if is_create or fields.intersection(rating_fields) or fields.intersection({"threat_score", "vulnerability_score", "impact_score", "residual_vulnerability_score", "residual_impact_score"}):
-        for name, legacy in (("register_likelihood", "vulnerability_score"), ("register_impact", "impact_score"),
-                             ("register_residual_likelihood", "residual_vulnerability_score"),
-                             ("register_residual_impact", "residual_impact_score")):
+    rating_fields = (
+        "register_likelihood",
+        "register_impact",
+        "register_residual_likelihood",
+        "register_residual_impact",
+    )
+    if (
+        is_create
+        or fields.intersection(rating_fields)
+        or fields.intersection(
+            {
+                "threat_score",
+                "vulnerability_score",
+                "impact_score",
+                "residual_vulnerability_score",
+                "residual_impact_score",
+            }
+        )
+    ):
+        for name, legacy in (
+            ("register_likelihood", "vulnerability_score"),
+            ("register_impact", "impact_score"),
+            ("register_residual_likelihood", "residual_vulnerability_score"),
+            ("register_residual_impact", "residual_impact_score"),
+        ):
             if name in fields:
                 setattr(risk, name, getattr(payload, name))
             elif is_create or (legacy in fields and name not in fields):
@@ -888,7 +930,9 @@ def _apply_payload(
         risk.residual_vulnerability_score = risk.register_residual_likelihood or 1
         risk.residual_impact_score = risk.register_residual_impact or 1
     risk.risk_score = (risk.register_likelihood or 0) * (risk.register_impact or 0)
-    risk.residual_risk_score = (risk.register_residual_likelihood or 0) * (risk.register_residual_impact or 0)
+    risk.residual_risk_score = (risk.register_residual_likelihood or 0) * (
+        risk.register_residual_impact or 0
+    )
     risk.updated_at = _utcnow()
 
 
@@ -1262,9 +1306,16 @@ def list_risk_owner_users(
         .order_by(User.username.asc())
         .all()
     )
-    roles = db.query(IsmsOrgNode).filter_by(node_type="role").order_by(IsmsOrgNode.name, IsmsOrgNode.id).all()
-    return {"items": [{"id": str(u.id), "username": u.username} for u in rows],
-            "roles": [{"id": str(r.id), "name": r.name} for r in roles]}
+    roles = (
+        db.query(IsmsOrgNode)
+        .filter_by(node_type="role")
+        .order_by(IsmsOrgNode.name, IsmsOrgNode.id)
+        .all()
+    )
+    return {
+        "items": [{"id": str(u.id), "username": u.username} for u in rows],
+        "roles": [{"id": str(r.id), "name": r.name} for r in roles],
+    }
 
 
 @router.get("/v1/me/risks")
@@ -1284,8 +1335,16 @@ def list_my_owned_risks(
     qry = (
         db.query(Risk)
         .join(RiskAsset, RiskAsset.id == Risk.asset_id)
-        .filter(or_(Risk.risk_owner_user_id == user.id, Risk.risk_owner_role_id.in_(
-            db.query(IsmsOrgNodeUser.org_node_id).filter(IsmsOrgNodeUser.user_id == user.id))))
+        .filter(
+            or_(
+                Risk.risk_owner_user_id == user.id,
+                Risk.risk_owner_role_id.in_(
+                    db.query(IsmsOrgNodeUser.org_node_id).filter(
+                        IsmsOrgNodeUser.user_id == user.id
+                    )
+                ),
+            )
+        )
     )
 
     total = int(qry.count() or 0)
@@ -1364,7 +1423,8 @@ def list_risks(
         )
     if owner_role_id:
         role_id = _try_uuid(owner_role_id)
-        if role_id is None: raise HTTPException(400, "owner_role_id must be a UUID")
+        if role_id is None:
+            raise HTTPException(400, "owner_role_id must be a UUID")
         qry = qry.filter(Risk.risk_owner_role_id == role_id)
     oid = _try_uuid(owner_user_id) if owner_user_id else None
     if owner_user_id and not oid:
@@ -1509,13 +1569,23 @@ def create_risk(
             raise HTTPException(status_code=400, detail="Unknown risk library template")
         refs = (template.suggested_assessment or {}).get("keen_af_control_refs", [])
         from app.api.routes.frameworks import list_frameworks
+
         enabled = {item["slug"] for item in list_frameworks(db)["items"]}
         if "KEEN-AF:1.0" in enabled and isinstance(refs, list):
-            template_refs = _dedupe_controls([ref for ref in refs if isinstance(ref, str)])
+            template_refs = _dedupe_controls(
+                [ref for ref in refs if isinstance(ref, str)]
+            )
             # Administrators can remove framework controls later. An old
             # template should still create a risk using its remaining links.
-            available = {ref for (ref,) in db.query(ControlItem.ref).filter(
-                ControlItem.framework_slug == "KEEN-AF:1.0", ControlItem.ref.in_(template_refs)).all()}
+            available = {
+                ref
+                for (ref,) in db.query(ControlItem.ref)
+                .filter(
+                    ControlItem.framework_slug == "KEEN-AF:1.0",
+                    ControlItem.ref.in_(template_refs),
+                )
+                .all()
+            }
             template_refs = [ref for ref in template_refs if ref in available]
     now = _utcnow()
     risk = Risk(created_at=now, updated_at=now, created_by_user_id=user.id)
@@ -1527,12 +1597,18 @@ def create_risk(
     db.flush()
     fw = _clean_framework(payload.framework)
     if payload.controls is not None:
-        controls = payload.controls + template_refs if fw == "KEEN-AF:1.0" else payload.controls
+        controls = (
+            payload.controls + template_refs
+            if fw == "KEEN-AF:1.0"
+            else payload.controls
+        )
         _replace_control_links(db, risk, framework=fw, control_values=controls)
     elif fw == "KEEN-AF:1.0" and template_refs:
         _replace_control_links(db, risk, framework=fw, control_values=template_refs)
     if template_refs and fw != "KEEN-AF:1.0":
-        _replace_control_links(db, risk, framework="KEEN-AF:1.0", control_values=template_refs)
+        _replace_control_links(
+            db, risk, framework="KEEN-AF:1.0", control_values=template_refs
+        )
     db.flush()
     record_entity_changelog(
         db,

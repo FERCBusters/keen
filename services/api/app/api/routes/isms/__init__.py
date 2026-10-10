@@ -3,6 +3,7 @@
 Shared names are retained for existing imports; new code should import the
 responsible submodule directly.
 """
+
 from fastapi import APIRouter
 
 from . import (
@@ -20,7 +21,11 @@ from . import (
 )
 from .access import (
     _can_read_isms as _can_read_isms,
+)
+from .access import (
     require_isms_manage as require_isms_manage,
+)
+from .access import (
     require_isms_read as require_isms_read,
 )
 from .common import (
@@ -28,12 +33,26 @@ from .common import (
 )
 from .serializers import (
     _app_config_out as _app_config_out,
+)
+from .serializers import (
     _asset_out as _asset_out,
+)
+from .serializers import (
     _business_process_out as _business_process_out,
+)
+from .serializers import (
     _document_out as _document_out,
+)
+from .serializers import (
     _effectiveness_measure_out as _effectiveness_measure_out,
+)
+from .serializers import (
     _entity_out as _entity_out,
+)
+from .serializers import (
     _meeting_out as _meeting_out,
+)
+from .serializers import (
     _objective_out as _objective_out,
 )
 

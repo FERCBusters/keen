@@ -3,8 +3,9 @@
 Revision ID: 0067_managed_configurations
 Revises: 0066_framework_editor
 """
-from alembic import op
+
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 revision = "0067_managed_configurations"
@@ -19,7 +20,11 @@ def upgrade():
         sa.Column("name", sa.String(64), primary_key=True),
         sa.Column("document", JSONB, nullable=False),
         sa.Column("version", sa.Integer, nullable=False),
-        sa.Column("updated_by", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL")),
+        sa.Column(
+            "updated_by",
+            UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+        ),
         sa.Column("updated_at", sa.DateTime, nullable=False),
     )
     op.create_table(
@@ -28,7 +33,11 @@ def upgrade():
         sa.Column("name", sa.String(64), nullable=False, index=True),
         sa.Column("version", sa.Integer, nullable=False),
         sa.Column("document", JSONB, nullable=False),
-        sa.Column("updated_by", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL")),
+        sa.Column(
+            "updated_by",
+            UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+        ),
         sa.Column("updated_at", sa.DateTime, nullable=False),
     )
 
@@ -53,7 +62,11 @@ def upgrade():
     )
     op.create_index("ix_rule_backfill_jobs_rule_id", "rule_backfill_jobs", ["rule_id"])
     op.create_index("ix_rule_backfill_jobs_source", "rule_backfill_jobs", ["source"])
-    op.create_index("ix_events_source_timestamp_id_backfill", "events", ["source", "timestamp", "id"])
+    op.create_index(
+        "ix_events_source_timestamp_id_backfill",
+        "events",
+        ["source", "timestamp", "id"],
+    )
 
 
 def downgrade():

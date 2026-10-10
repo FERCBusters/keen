@@ -1,8 +1,4 @@
 from __future__ import annotations
-from app.security.errors import collection_error
-from app.security.redaction import prepare_event_fields, prepare_artifact_bytes
-from app.core.datetime_utils import utc_now_naive
-from app.services.ingestion_pause import pausable
 
 import hashlib
 import json
@@ -12,17 +8,30 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
-from app.ingest.http import client as ingestion_client
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.ingest.connections import load_document
-from app.ingest.connections import settings, connection_runs, namespace, identity, artifact_key
-from app.db.models import Event, Artifact, IngestionCursor, ControlItem, Mapping
+from app.core.datetime_utils import utc_now_naive
+from app.db.models import Artifact, ControlItem, Event, IngestionCursor, Mapping
 from app.ingest.common import is_safe_url
+from app.ingest.connections import (
+    artifact_key,
+    connection_runs,
+    identity,
+    load_document,
+    namespace,
+    settings,
+)
+from app.ingest.http import client as ingestion_client
+from app.mapping.rules import evaluate_by_framework, load_rules
+from app.security.errors import collection_error
+from app.security.redaction import (
+    prepare_artifact_bytes,
+    prepare_event_fields,
+    redact_obj,
+)
+from app.services.ingestion_pause import pausable
 from app.storage.s3 import put_bytes
-from app.mapping.rules import load_rules, evaluate_by_framework
-from app.security.redaction import redact_obj, redact_bytes
 
 
 def _ensure_utc(dt: datetime | None) -> datetime | None:
@@ -552,16 +561,19 @@ def ingest_loki_once(
                         if event_defaults.get("severity") is not None
                         else None
                     )
-                    protected_fields = prepare_event_fields(dict(
-                        system=event_defaults.get("system"),
-                        actor=actor,
-                        action=event_defaults.get("action"),
-                        outcome=event_defaults.get("outcome"),
-                        severity=sev,
-                        summary=summary,
-                        raw_pointer=raw_pointer_r,
-                        normalized_payload=normalized_r,
-                    ), mask=settings.event_data_masking == "true")
+                    protected_fields = prepare_event_fields(
+                        dict(
+                            system=event_defaults.get("system"),
+                            actor=actor,
+                            action=event_defaults.get("action"),
+                            outcome=event_defaults.get("outcome"),
+                            severity=sev,
+                            summary=summary,
+                            raw_pointer=raw_pointer_r,
+                            normalized_payload=normalized_r,
+                        ),
+                        mask=settings.event_data_masking == "true",
+                    )
                     stmt = (
                         pg_insert(Event)
                         .values(
@@ -598,9 +610,13 @@ def ingest_loki_once(
                         f"loki/{query_name}/{ts.date().isoformat()}/{inserted_id}.{ext}"
                     )
                     line_bytes, redaction_status = prepare_artifact_bytes(
-                        line.encode("utf-8", errors="replace"), ctype, mask=settings.event_data_masking == "true"
+                        line.encode("utf-8", errors="replace"),
+                        ctype,
+                        mask=settings.event_data_masking == "true",
                     )
-                    stored = put_bytes(key=artifact_key(key), data=line_bytes, content_type=ctype)
+                    stored = put_bytes(
+                        key=artifact_key(key), data=line_bytes, content_type=ctype
+                    )
                     art = Artifact(
                         event_id=inserted_id,
                         kind="log_line",
@@ -688,8 +704,8 @@ def ingest_loki_once(
     }
 
 
-@pausable('loki')
-@connection_runs('loki')
+@pausable("loki")
+@connection_runs("loki")
 def ingest_loki_all(db: Session) -> list[dict[str, Any]]:
     if not settings.loki_enabled:
         return [{"skipped": True, "reason": "KEEN_LOKI_ENABLED=false"}]

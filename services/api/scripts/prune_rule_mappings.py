@@ -22,9 +22,6 @@ import argparse
 from datetime import date, datetime, time, timezone
 from typing import Any
 
-from sqlalchemy import desc, text
-from sqlalchemy.orm import Session
-
 from app.api.utils import parse_iso_dt
 from app.core.config import settings
 from app.db.models import ControlItem, Event, Mapping
@@ -34,6 +31,8 @@ from app.services.control_evidence_stats import (
     clear_stats_caches,
     rebuild_framework_event_stats,
 )
+from sqlalchemy import desc, text
+from sqlalchemy.orm import Session
 
 
 def _clean(value: str | None) -> str | None:

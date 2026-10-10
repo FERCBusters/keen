@@ -3,14 +3,16 @@
 Each read opens its own short session so Celery workers, API workers and beat
 see changes on their next run without touching the read-only config mount.
 """
+
 from __future__ import annotations
 
 from typing import Any
+
 import yaml
 from sqlalchemy.orm import Session
 
-from app.db.session import SessionLocal
 from app.db.models import ManagedConfiguration
+from app.db.session import SessionLocal
 
 
 def load_document(name: str, path: str, *, db: Session | None = None) -> dict[str, Any]:

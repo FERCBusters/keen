@@ -1,25 +1,28 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import uuid
-from datetime import date, datetime, time as dtime
+from datetime import date, datetime
+from datetime import time as dtime
+
 from sqlalchemy import (
-    Table,
-    Column,
-    String,
-    DateTime,
-    Date,
-    Time,
-    Integer,
-    Float,
     Boolean,
-    ForeignKey,
-    UniqueConstraint,
     CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
     Text,
+    Time,
+    UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.core.datetime_utils import utc_now_naive
 from app.db.session import Base
 
 
@@ -70,12 +73,16 @@ class ManagedConfigurationRevision(Base):
     updated_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
 
 
 class RuleBackfillJob(Base):
     __tablename__ = "rule_backfill_jobs"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     rule_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
     source: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     rule_document: Mapped[dict] = mapped_column(JSONB, nullable=False)
@@ -84,13 +91,19 @@ class RuleBackfillJob(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
     cutoff: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     cursor_timestamp: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    cursor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    cursor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     examined: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     matched: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_mappings: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
 
 
 class ControlItem(Base):
@@ -126,44 +139,67 @@ class CrossFrameworkControlLink(Base):
     """One-way, one-hop evidence inheritance between framework controls."""
 
     __tablename__ = "cross_framework_control_links"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     source_control_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("control_items.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("control_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     target_control_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("control_items.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("control_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
     source = relationship("ControlItem", foreign_keys=[source_control_id])
     target = relationship("ControlItem", foreign_keys=[target_control_id])
     __table_args__ = (
-        UniqueConstraint("source_control_id", "target_control_id", name="uq_cross_framework_link"),
-        CheckConstraint("source_control_id <> target_control_id", name="ck_cross_framework_distinct"),
+        UniqueConstraint(
+            "source_control_id", "target_control_id", name="uq_cross_framework_link"
+        ),
+        CheckConstraint(
+            "source_control_id <> target_control_id", name="ck_cross_framework_distinct"
+        ),
     )
 
 
 class OsaControlMapping(Base):
     """Frozen OSA clause-to-NIST memberships; administrator nodes remain ordinary controls."""
+
     __tablename__ = "osa_control_mappings"
     control_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("control_items.id", ondelete="CASCADE"), primary_key=True)
+        UUID(as_uuid=True),
+        ForeignKey("control_items.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
     nist_ref: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
 
 
 # Keep the original table writable. All evidence readers use this compact,
 # one-hop relation, so an inherited event never propagates transitively.
-from sqlalchemy import select, literal, cast, exists, and_
+from sqlalchemy import cast, exists, literal, select
 from sqlalchemy.orm import foreign
+
 _osa_source = OsaControlMapping.__table__.alias("osa_source")
 _osa_target = OsaControlMapping.__table__.alias("osa_target")
 _source_control = ControlItem.__table__.alias("osa_source_control")
 _target_control = ControlItem.__table__.alias("osa_target_control")
 _explicit = CrossFrameworkControlLink.__table__
-def effective_cross_framework_links(*, source_ids=None, target_framework=None, enabled=None):
+
+
+def effective_cross_framework_links(
+    *, source_ids=None, target_framework=None, enabled=None
+):
     """Resolve indexed NIST memberships, never compare every pair of controls.
 
     Optional restrictions belong INSIDE both UNION arms, before deduplication.
@@ -171,43 +207,69 @@ def effective_cross_framework_links(*, source_ids=None, target_framework=None, e
     The unrestricted form remains available for catalogue readers.
     """
     explicit = select(
-        cast(_explicit.c.id, String).label("id"), _explicit.c.source_control_id,
-        _explicit.c.target_control_id, _explicit.c.rationale, _explicit.c.created_at,
+        cast(_explicit.c.id, String).label("id"),
+        _explicit.c.source_control_id,
+        _explicit.c.target_control_id,
+        _explicit.c.rationale,
+        _explicit.c.created_at,
         literal(False).label("derived"),
     )
-    pairs = select(
-        _osa_source.c.control_id.label("source_control_id"),
-        _osa_target.c.control_id.label("target_control_id"),
-    ).select_from(
-        _osa_source.join(_osa_target, _osa_source.c.nist_ref == _osa_target.c.nist_ref)
-        .join(_source_control, _source_control.c.id == _osa_source.c.control_id)
-        .join(_target_control, _target_control.c.id == _osa_target.c.control_id)
-    ).where(_source_control.c.framework_slug != _target_control.c.framework_slug)
+    pairs = (
+        select(
+            _osa_source.c.control_id.label("source_control_id"),
+            _osa_target.c.control_id.label("target_control_id"),
+        )
+        .select_from(
+            _osa_source.join(
+                _osa_target, _osa_source.c.nist_ref == _osa_target.c.nist_ref
+            )
+            .join(_source_control, _source_control.c.id == _osa_source.c.control_id)
+            .join(_target_control, _target_control.c.id == _osa_target.c.control_id)
+        )
+        .where(_source_control.c.framework_slug != _target_control.c.framework_slug)
+    )
     if source_ids is not None:
         explicit = explicit.where(_explicit.c.source_control_id.in_(source_ids))
         pairs = pairs.where(_osa_source.c.control_id.in_(source_ids))
     if target_framework is not None:
-        targets = select(ControlItem.id).where(ControlItem.framework_slug == target_framework)
+        targets = select(ControlItem.id).where(
+            ControlItem.framework_slug == target_framework
+        )
         explicit = explicit.where(_explicit.c.target_control_id.in_(targets))
         pairs = pairs.where(_target_control.c.framework_slug == target_framework)
     if enabled is not None:
         allowed = select(ControlItem.id).where(ControlItem.framework_slug.in_(enabled))
-        explicit = explicit.where(_explicit.c.source_control_id.in_(allowed),
-                                  _explicit.c.target_control_id.in_(allowed))
-        pairs = pairs.where(_source_control.c.framework_slug.in_(enabled),
-                            _target_control.c.framework_slug.in_(enabled))
+        explicit = explicit.where(
+            _explicit.c.source_control_id.in_(allowed),
+            _explicit.c.target_control_id.in_(allowed),
+        )
+        pairs = pairs.where(
+            _source_control.c.framework_slug.in_(enabled),
+            _target_control.c.framework_slug.in_(enabled),
+        )
     pairs = pairs.distinct().subquery()
     derived = select(
-        (cast(pairs.c.source_control_id, String) + literal(":") +
-         cast(pairs.c.target_control_id, String)).label("id"),
-        pairs.c.source_control_id, pairs.c.target_control_id,
-        literal("Related evidence via shared NIST controls in Open Security Architecture (CC BY-SA 4.0). "
-                "KEEN-derived crosswalk; review relevance and coverage gaps. This is not full equivalence."),
-        literal(None, type_=DateTime), literal(True),
-    ).where(~exists(select(_explicit.c.id).where(
-        _explicit.c.source_control_id == pairs.c.source_control_id,
-        _explicit.c.target_control_id == pairs.c.target_control_id,
-    )))
+        (
+            cast(pairs.c.source_control_id, String)
+            + literal(":")
+            + cast(pairs.c.target_control_id, String)
+        ).label("id"),
+        pairs.c.source_control_id,
+        pairs.c.target_control_id,
+        literal(
+            "Related evidence via shared NIST controls in Open Security Architecture (CC BY-SA 4.0). "
+            "KEEN-derived crosswalk; review relevance and coverage gaps. This is not full equivalence."
+        ),
+        literal(None, type_=DateTime),
+        literal(True),
+    ).where(
+        ~exists(
+            select(_explicit.c.id).where(
+                _explicit.c.source_control_id == pairs.c.source_control_id,
+                _explicit.c.target_control_id == pairs.c.target_control_id,
+            )
+        )
+    )
     return explicit.union_all(derived).subquery("effective_cross_framework_links")
 
 
@@ -217,10 +279,16 @@ _effective_links = effective_cross_framework_links()
 class EffectiveCrossFrameworkControlLink(Base):
     __table__ = _effective_links
     __mapper_args__ = {"primary_key": [_effective_links.c.id]}
-    source = relationship(ControlItem,
-        primaryjoin=foreign(_effective_links.c.source_control_id) == ControlItem.id, viewonly=True)
-    target = relationship(ControlItem,
-        primaryjoin=foreign(_effective_links.c.target_control_id) == ControlItem.id, viewonly=True)
+    source = relationship(
+        ControlItem,
+        primaryjoin=foreign(_effective_links.c.source_control_id) == ControlItem.id,
+        viewonly=True,
+    )
+    target = relationship(
+        ControlItem,
+        primaryjoin=foreign(_effective_links.c.target_control_id) == ControlItem.id,
+        viewonly=True,
+    )
 
 
 class FrameworkClause(Base):
@@ -305,7 +373,9 @@ class Event(Base):
 
     timestamp: Mapped[datetime] = mapped_column(DateTime, index=True, nullable=False)
     # Snapshots survive connection deletion and identify the origin of historical evidence.
-    connection_id: Mapped[str | None] = mapped_column(String(96), nullable=True, index=True)
+    connection_id: Mapped[str | None] = mapped_column(
+        String(96), nullable=True, index=True
+    )
     connection_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     source: Mapped[str] = mapped_column(
         String(64), index=True, nullable=False
@@ -713,11 +783,19 @@ class User(Base):
         String(128), unique=True, nullable=False, index=True
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    auth_backend: Mapped[str] = mapped_column(String(16), nullable=False, default="local", server_default="local")
-    mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
-    mfa_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    auth_backend: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="local", server_default="local"
+    )
+    mfa_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    mfa_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     mfa_totp_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
-    mfa_totp_last_step: Mapped[int] = mapped_column(Integer, nullable=False, default=-1, server_default="-1")
+    mfa_totp_last_step: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=-1, server_default="-1"
+    )
     email: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     # One of: admin | normal
@@ -973,7 +1051,10 @@ class RiskAsset(Base):
         index=True,
     )
     vendor_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("isms_vendors.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("isms_vendors.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     owner_org_node_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -1051,10 +1132,16 @@ class Risk(Base):
     # three-factor scenario scores; older risks remain unrated until reviewed.
     register_likelihood: Mapped[int | None] = mapped_column(Integer, nullable=True)
     register_impact: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    register_residual_likelihood: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    register_residual_likelihood: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
     register_residual_impact: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    treatment_strategy: Mapped[str] = mapped_column(String(32), nullable=False, default="")
-    treatment_status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    treatment_strategy: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=""
+    )
+    treatment_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="open"
+    )
     treatment_plan: Mapped[str] = mapped_column(Text, nullable=False, default="")
     treatment_due_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     note: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -1071,7 +1158,11 @@ class Risk(Base):
 
     asset = relationship("RiskAsset", back_populates="risks")
     risk_owner_role_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("isms_org_nodes.id", ondelete="SET NULL"), nullable=True, index=True)
+        UUID(as_uuid=True),
+        ForeignKey("isms_org_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     owner_role = relationship("IsmsOrgNode", foreign_keys=[risk_owner_role_id])
     owner = relationship("User", foreign_keys=[risk_owner_user_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
@@ -1080,7 +1171,10 @@ class Risk(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("risk_owner_user_id IS NULL OR risk_owner_role_id IS NULL", name="ck_risks_one_owner"),
+        CheckConstraint(
+            "risk_owner_user_id IS NULL OR risk_owner_role_id IS NULL",
+            name="ck_risks_one_owner",
+        ),
         CheckConstraint("threat_score between 0 and 5", name="ck_risks_threat_score"),
         CheckConstraint(
             "vulnerability_score between 0 and 5",
@@ -1095,10 +1189,20 @@ class Risk(Base):
             "residual_impact_score between 0 and 5",
             name="ck_risks_residual_impact_score",
         ),
-        CheckConstraint("register_likelihood between 1 and 5", name="ck_risks_register_likelihood"),
-        CheckConstraint("register_impact between 1 and 5", name="ck_risks_register_impact"),
-        CheckConstraint("register_residual_likelihood between 1 and 5", name="ck_risks_register_residual_likelihood"),
-        CheckConstraint("register_residual_impact between 1 and 5", name="ck_risks_register_residual_impact"),
+        CheckConstraint(
+            "register_likelihood between 1 and 5", name="ck_risks_register_likelihood"
+        ),
+        CheckConstraint(
+            "register_impact between 1 and 5", name="ck_risks_register_impact"
+        ),
+        CheckConstraint(
+            "register_residual_likelihood between 1 and 5",
+            name="ck_risks_register_residual_likelihood",
+        ),
+        CheckConstraint(
+            "register_residual_impact between 1 and 5",
+            name="ck_risks_register_residual_impact",
+        ),
     )
 
 
@@ -1112,13 +1216,19 @@ class RiskRegisterSettings(Base):
 
 class RiskLibraryEntry(Base):
     __tablename__ = "risk_library_entries"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     name: Mapped[str] = mapped_column(String(256), nullable=False, unique=True)
     threat_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     risk_types: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     treatment_guidance: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    suggested_assessment: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    suggested_assessment: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
 
 
 class RiskControlLink(Base):
@@ -1583,7 +1693,10 @@ class IsmsDocument(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     external_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     folder_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("isms_document_folders.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("isms_document_folders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     content_html: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -1610,25 +1723,36 @@ class IsmsDocument(Base):
     uploaded_by = relationship("User", foreign_keys=[uploaded_by_user_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     folder = relationship("IsmsDocumentFolder")
-    content_revisions = relationship("IsmsDocumentRevision", cascade="all, delete-orphan")
+    content_revisions = relationship(
+        "IsmsDocumentRevision", cascade="all, delete-orphan"
+    )
     comments = relationship("IsmsDocumentComment", cascade="all, delete-orphan")
 
 
 class IsmsDocumentFolder(Base):
     __tablename__ = "isms_document_folders"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("isms_document_folders.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("isms_document_folders.id", ondelete="SET NULL"),
+        nullable=True,
     )
     parent = relationship("IsmsDocumentFolder", remote_side=[id])
 
 
 class IsmsDocumentRevision(Base):
     __tablename__ = "isms_document_revisions"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("isms_documents.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("isms_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     content_html: Mapped[str] = mapped_column(Text, nullable=False)
@@ -1636,21 +1760,32 @@ class IsmsDocumentRevision(Base):
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
-    __table_args__ = (UniqueConstraint("document_id", "version", name="uq_isms_document_revision"),)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    __table_args__ = (
+        UniqueConstraint("document_id", "version", name="uq_isms_document_revision"),
+    )
 
 
 class IsmsDocumentComment(Base):
     __tablename__ = "isms_document_comments"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("isms_documents.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("isms_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     body: Mapped[str] = mapped_column(Text, nullable=False)
     author_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
     author = relationship("User")
 
 
@@ -1658,26 +1793,39 @@ class BookStackSectionEvidence(Base):
     """Immutable snapshot of a page version linked to a policy requirement."""
 
     __tablename__ = "bookstack_section_evidence"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("isms_documents.id", ondelete="RESTRICT"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("isms_documents.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     target_control_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("control_items.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("control_items.id", ondelete="SET NULL"),
+        nullable=True,
     )
     target_clause_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("framework_clauses.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("framework_clauses.id", ondelete="SET NULL"),
+        nullable=True,
     )
     page_id: Mapped[int] = mapped_column(Integer, nullable=False)
     anchor: Mapped[str] = mapped_column(String(256), nullable=False, default="")
     permalink: Mapped[str] = mapped_column(String(2048), nullable=False)
     page_title: Mapped[str] = mapped_column(String(256), nullable=False)
     revision_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    page_updated_at: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    page_updated_at: Mapped[str] = mapped_column(
+        String(128), nullable=False, default=""
+    )
     storage_uri: Mapped[str] = mapped_column(String(512), nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     captured_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -1686,7 +1834,10 @@ class BookStackSectionEvidence(Base):
     target_clause = relationship("FrameworkClause")
 
     __table_args__ = (
-        CheckConstraint("target_control_id IS NOT NULL OR target_clause_id IS NOT NULL", name="ck_bookstack_section_target"),
+        CheckConstraint(
+            "target_control_id IS NOT NULL OR target_clause_id IS NOT NULL",
+            name="ck_bookstack_section_target",
+        ),
     )
 
 
@@ -1756,55 +1907,87 @@ class IsmsPerson(Base):
     """A person in the assurance register, regardless of KEEN login access."""
 
     __tablename__ = "isms_people"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     name: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
     email: Mapped[str] = mapped_column(String(256), nullable=False, default="")
     position: Mapped[str] = mapped_column(String(256), nullable=False, default="")
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), unique=True, nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        unique=True,
+        nullable=True,
     )
     org_node_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("isms_org_nodes.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("isms_org_nodes.id", ondelete="SET NULL"),
+        nullable=True,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
     user = relationship("User")
     org_node = relationship("IsmsOrgNode")
-    assurances = relationship("IsmsPersonAssurance", back_populates="person", cascade="all, delete-orphan")
-    assets = relationship("IsmsPersonAsset", back_populates="person", cascade="all, delete-orphan")
+    assurances = relationship(
+        "IsmsPersonAssurance", back_populates="person", cascade="all, delete-orphan"
+    )
+    assets = relationship(
+        "IsmsPersonAsset", back_populates="person", cascade="all, delete-orphan"
+    )
 
 
 class IsmsVendor(Base):
     __tablename__ = "isms_vendors"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     name: Mapped[str] = mapped_column(String(256), nullable=False, unique=True)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     website: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
     contact: Mapped[str] = mapped_column(String(256), nullable=False, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
     assets = relationship("RiskAsset", back_populates="vendor")
 
 
 class IsmsPersonAsset(Base):
     __tablename__ = "isms_person_assets"
     person_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("isms_people.id", ondelete="CASCADE"), primary_key=True
+        UUID(as_uuid=True),
+        ForeignKey("isms_people.id", ondelete="CASCADE"),
+        primary_key=True,
     )
     asset_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("risk_assets.id", ondelete="CASCADE"), primary_key=True
+        UUID(as_uuid=True),
+        ForeignKey("risk_assets.id", ondelete="CASCADE"),
+        primary_key=True,
     )
-    relationship_type: Mapped[str] = mapped_column(String(32), nullable=False, default="uses")
+    relationship_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="uses"
+    )
     person = relationship("IsmsPerson", back_populates="assets")
     asset = relationship("RiskAsset")
 
 
 class IsmsPersonAssurance(Base):
     __tablename__ = "isms_person_assurances"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     person_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("isms_people.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("isms_people.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     category: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
@@ -1814,8 +1997,12 @@ class IsmsPersonAssurance(Base):
     completed_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     expires_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
     person = relationship("IsmsPerson", back_populates="assurances")
 
 
@@ -2211,13 +2398,27 @@ class IsmsMeetingAttendee(Base):
 
 class IsmsMeetingPerson(Base):
     __tablename__ = "isms_meeting_people"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    meeting_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("isms_meetings.id", ondelete="CASCADE"), nullable=False, index=True)
-    person_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("isms_people.id", ondelete="SET NULL"), nullable=True, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    meeting_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_meetings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    person_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_people.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     attendance_type: Mapped[str] = mapped_column(String(16), nullable=False)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     email: Mapped[str] = mapped_column(String(256), nullable=False, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     person = relationship("IsmsPerson")
 
 
@@ -2559,7 +2760,10 @@ class AuditAttendee(Base):
         index=True,
     )
     person_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("isms_people.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("isms_people.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     # For custom attendees this is the free-text name. For Keen users it is a
     # display snapshot, so exports keep a readable name even if the account is
@@ -2722,23 +2926,25 @@ class EventQuestionPostAttachment(Base):
 
 
 class IntegrationConnection(Base):
-    __tablename__ = 'integration_connections'
+    __tablename__ = "integration_connections"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     base_url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    auth_kind: Mapped[str] = mapped_column(String(16), nullable=False, default='none')
-    auth_name: Mapped[str] = mapped_column(String(128), nullable=False, default='')
-    username: Mapped[str] = mapped_column(String(256), nullable=False, default='')
+    auth_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
+    auth_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    username: Mapped[str] = mapped_column(String(256), nullable=False, default="")
     auth_options: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    encrypted_secret: Mapped[str] = mapped_column(Text, nullable=False, default='')
+    encrypted_secret: Mapped[str] = mapped_column(Text, nullable=False, default="")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
 class IntegrationCollector(Base):
-    __tablename__ = 'integration_collectors'
+    __tablename__ = "integration_collectors"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
-    connection_id: Mapped[str] = mapped_column(ForeignKey('integration_connections.id'), nullable=False)
+    connection_id: Mapped[str] = mapped_column(
+        ForeignKey("integration_connections.id"), nullable=False
+    )
     draft: Mapped[dict] = mapped_column(JSONB, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     live_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -2750,149 +2956,239 @@ class IntegrationCollector(Base):
 
 
 class IntegrationRevision(Base):
-    __tablename__ = 'integration_revisions'
-    collector_id: Mapped[str] = mapped_column(ForeignKey('integration_collectors.id'), primary_key=True)
+    __tablename__ = "integration_revisions"
+    collector_id: Mapped[str] = mapped_column(
+        ForeignKey("integration_collectors.id"), primary_key=True
+    )
     revision: Mapped[int] = mapped_column(Integer, primary_key=True)
     definition: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    connection_id: Mapped[str] = mapped_column(ForeignKey('integration_connections.id'), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    connection_id: Mapped[str] = mapped_column(
+        ForeignKey("integration_connections.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class IntegrationRun(Base):
-    __tablename__ = 'integration_runs'
+    __tablename__ = "integration_runs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    collector_id: Mapped[str] = mapped_column(ForeignKey('integration_collectors.id'), nullable=False, index=True)
+    collector_id: Mapped[str] = mapped_column(
+        ForeignKey("integration_collectors.id"), nullable=False, index=True
+    )
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[str] = mapped_column(String(24), nullable=False, default='queued')
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     new_records: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     duplicates: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    message: Mapped[str] = mapped_column(Text, nullable=False, default='')
+    message: Mapped[str] = mapped_column(Text, nullable=False, default="")
     preview: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     definition: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    connection_id: Mapped[str] = mapped_column(ForeignKey('integration_connections.id'), nullable=False)
+    connection_id: Mapped[str] = mapped_column(
+        ForeignKey("integration_connections.id"), nullable=False
+    )
     result: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 
 class AgentEnrollmentProfile(Base):
-    __tablename__ = 'agent_enrollment_profiles'
+    __tablename__ = "agent_enrollment_profiles"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    state: Mapped[str] = mapped_column(String(16), nullable=False, default='active')
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     token_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime)
     max_enrollments: Mapped[int | None] = mapped_column(Integer)
     enrollment_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     allowed_cidrs: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     labels: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class KeenAgent(Base):
-    __tablename__ = 'keen_agents'
+    __tablename__ = "keen_agents"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    enrollment_profile_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('agent_enrollment_profiles.id'), index=True)
+    enrollment_profile_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_enrollment_profiles.id"), index=True
+    )
     enrollment_nonce_hash: Mapped[str | None] = mapped_column(String(64))
     enrollment_ip: Mapped[str | None] = mapped_column(String(64))
     enrollment_labels: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     previous_token_hash: Mapped[str | None] = mapped_column(String(64))
     renewal_nonce_hash: Mapped[str | None] = mapped_column(String(64))
     renewal_retry_until: Mapped[datetime | None] = mapped_column(DateTime)
-    __table_args__ = (UniqueConstraint('enrollment_profile_id', 'enrollment_nonce_hash', name='uq_agent_enrollment_attempt'),)
+    __table_args__ = (
+        UniqueConstraint(
+            "enrollment_profile_id",
+            "enrollment_nonce_hash",
+            name="uq_agent_enrollment_attempt",
+        ),
+    )
 
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime)
     health: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
+
 # Retention is managed with explicit SQL so database row locks, the storage
 # outbox and deletion are one transaction. Register its tables for metadata and
 # migration tooling as well (there are deliberately no ORM cascade relationships).
-from sqlalchemy import BigInteger, Index, text as sql_text
+from sqlalchemy import BigInteger, Index
+from sqlalchemy import text as sql_text
 
 _evidence_retention_policy = Table(
-    'evidence_retention_policy', Base.metadata,
-    Column('id', Integer, primary_key=True),
-    Column('mode', Text, nullable=False, server_default='disabled'),
-    Column('value', BigInteger),
-    Column('updated_at', DateTime, nullable=False, server_default=sql_text("now() AT TIME ZONE 'UTC'")),
-    Column('updated_by', Text),
-    CheckConstraint('id = 1'),
+    "evidence_retention_policy",
+    Base.metadata,
+    Column("id", Integer, primary_key=True),
+    Column("mode", Text, nullable=False, server_default="disabled"),
+    Column("value", BigInteger),
+    Column(
+        "updated_at",
+        DateTime,
+        nullable=False,
+        server_default=sql_text("now() AT TIME ZONE 'UTC'"),
+    ),
+    Column("updated_by", Text),
+    CheckConstraint("id = 1"),
     CheckConstraint("mode IN ('disabled','age','count')"),
-    CheckConstraint('value > 0'),
-    CheckConstraint("(mode = 'disabled' AND value IS NULL) OR (mode <> 'disabled' AND value IS NOT NULL)"),
+    CheckConstraint("value > 0"),
+    CheckConstraint(
+        "(mode = 'disabled' AND value IS NULL) OR (mode <> 'disabled' AND value IS NOT NULL)"
+    ),
 )
 _evidence_purge_jobs = Table(
-    'evidence_purge_jobs', Base.metadata,
-    Column('id', UUID(as_uuid=True), primary_key=True),
-    Column('mode', Text, nullable=False),
-    Column('value', BigInteger),
-    Column('automatic', Boolean, nullable=False),
-    Column('cutoff', DateTime, nullable=False),
-    Column('status', Text, nullable=False, server_default='queued'),
-    Column('deleted', BigInteger, nullable=False, server_default='0'),
-    Column('requested_by', Text),
-    Column('created_at', DateTime, nullable=False, server_default=sql_text("now() AT TIME ZONE 'UTC'")),
-    Column('updated_at', DateTime, nullable=False, server_default=sql_text("now() AT TIME ZONE 'UTC'")),
-    Column('last_error', Text),
+    "evidence_purge_jobs",
+    Base.metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("mode", Text, nullable=False),
+    Column("value", BigInteger),
+    Column("automatic", Boolean, nullable=False),
+    Column("cutoff", DateTime, nullable=False),
+    Column("status", Text, nullable=False, server_default="queued"),
+    Column("deleted", BigInteger, nullable=False, server_default="0"),
+    Column("requested_by", Text),
+    Column(
+        "created_at",
+        DateTime,
+        nullable=False,
+        server_default=sql_text("now() AT TIME ZONE 'UTC'"),
+    ),
+    Column(
+        "updated_at",
+        DateTime,
+        nullable=False,
+        server_default=sql_text("now() AT TIME ZONE 'UTC'"),
+    ),
+    Column("last_error", Text),
     CheckConstraint("mode IN ('age','count','all')"),
 )
-Index('evidence_purge_one_active', sql_text('(true)'),
-      unique=True, postgresql_where=sql_text("status IN ('queued','running')"),
-      _table=_evidence_purge_jobs)
+Index(
+    "evidence_purge_one_active",
+    sql_text("(true)"),
+    unique=True,
+    postgresql_where=sql_text("status IN ('queued','running')"),
+    _table=_evidence_purge_jobs,
+)
 _evidence_object_cleanup = Table(
-    'evidence_object_cleanup', Base.metadata,
-    Column('id', BigInteger, primary_key=True),
-    Column('storage_uri', Text, nullable=False, unique=True),
-    Column('attempts', Integer, nullable=False, server_default='0'),
-    Column('next_attempt_at', DateTime, nullable=False, server_default=sql_text("now() AT TIME ZONE 'UTC'")),
-    Column('last_error', Text),
-    Column('created_at', DateTime, nullable=False, server_default=sql_text("now() AT TIME ZONE 'UTC'")),
-    Index('evidence_object_cleanup_due', 'next_attempt_at', 'id'),
+    "evidence_object_cleanup",
+    Base.metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("storage_uri", Text, nullable=False, unique=True),
+    Column("attempts", Integer, nullable=False, server_default="0"),
+    Column(
+        "next_attempt_at",
+        DateTime,
+        nullable=False,
+        server_default=sql_text("now() AT TIME ZONE 'UTC'"),
+    ),
+    Column("last_error", Text),
+    Column(
+        "created_at",
+        DateTime,
+        nullable=False,
+        server_default=sql_text("now() AT TIME ZONE 'UTC'"),
+    ),
+    Index("evidence_object_cleanup_due", "next_attempt_at", "id"),
 )
 _audit_event_retention_holds = Table(
-    'audit_event_retention_holds', Base.metadata,
-    Column('audit_id', UUID(as_uuid=True), ForeignKey('audits.id', ondelete='CASCADE'), primary_key=True),
-    Column('event_id', UUID(as_uuid=True), ForeignKey('events.id', ondelete='RESTRICT'), primary_key=True),
-    Index('audit_event_retention_holds_event', 'event_id'),
+    "audit_event_retention_holds",
+    Base.metadata,
+    Column(
+        "audit_id",
+        UUID(as_uuid=True),
+        ForeignKey("audits.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "event_id",
+        UUID(as_uuid=True),
+        ForeignKey("events.id", ondelete="RESTRICT"),
+        primary_key=True,
+    ),
+    Index("audit_event_retention_holds_event", "event_id"),
 )
 
-Index('ix_artifacts_storage_uri', Artifact.storage_uri)
-Index('ix_isms_documents_storage_uri', IsmsDocument.storage_uri)
-Index('ix_bookstack_section_storage_uri', Base.metadata.tables['bookstack_section_evidence'].c.storage_uri)
-Index('ix_audits_report_storage_uri', Audit.final_report_storage_uri)
-Index('ix_question_attachments_artifact', EventQuestionPostAttachment.artifact_id)
+Index("ix_artifacts_storage_uri", Artifact.storage_uri)
+Index("ix_isms_documents_storage_uri", IsmsDocument.storage_uri)
+Index(
+    "ix_bookstack_section_storage_uri",
+    Base.metadata.tables["bookstack_section_evidence"].c.storage_uri,
+)
+Index("ix_audits_report_storage_uri", Audit.final_report_storage_uri)
+Index("ix_question_attachments_artifact", EventQuestionPostAttachment.artifact_id)
 
 
 class MfaCredential(Base):
-    __tablename__ = 'mfa_credentials'
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    __tablename__ = "mfa_credentials"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     credential_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     public_key: Mapped[str] = mapped_column(Text, nullable=False)
     sign_count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class MfaRecoveryCode(Base):
-    __tablename__ = 'mfa_recovery_codes'
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    __tablename__ = "mfa_recovery_codes"
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
     code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
 
 
 class MfaChallenge(Base):
-    __tablename__ = 'mfa_challenges'
+    __tablename__ = "mfa_challenges"
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     purpose: Mapped[str] = mapped_column(String(16), nullable=False)
     stage: Mapped[str] = mapped_column(String(16), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -2902,48 +3198,77 @@ class MfaChallenge(Base):
 
 
 class UserLoginIP(Base):
-    __tablename__ = 'user_login_ips'
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    __tablename__ = "user_login_ips"
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
     address: Mapped[str] = mapped_column(String(45), primary_key=True)
-    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
 
 
 class SecurityNotification(Base):
-    __tablename__ = 'security_notifications'
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    __tablename__ = "security_notifications"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     recipient: Mapped[str] = mapped_column(Text, nullable=False)
     subject: Mapped[str] = mapped_column(Text, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(16), default='pending', nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
-    next_attempt_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
     sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    __table_args__ = (Index('ix_security_notifications_pending', 'status', 'next_attempt_at'),)
+    __table_args__ = (
+        Index("ix_security_notifications_pending", "status", "next_attempt_at"),
+    )
 
 
 class SourceIngestionState(Base):
-    __tablename__ = 'source_ingestion_states'
+    __tablename__ = "source_ingestion_states"
     source: Mapped[str] = mapped_column(String(64), primary_key=True)
     paused: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
     updated_by: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
 
 class UserSsoEmail(Base):
     """Addresses whose ownership KEEN has verified for future SSO linking."""
-    __tablename__ = 'user_sso_emails'
+
+    __tablename__ = "user_sso_emails"
     email: Mapped[str] = mapped_column(String(256), primary_key=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
-    verified_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    verified_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
 
 
 class SsoEmailChallenge(Base):
-    __tablename__ = 'sso_email_challenges'
+    __tablename__ = "sso_email_challenges"
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     email: Mapped[str] = mapped_column(String(256), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     mfa_version: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -2952,6 +3277,7 @@ class SsoEmailChallenge(Base):
 
 class SourceConnection(Base):
     """A named endpoint and encrypted credentials for a built-in source adapter."""
+
     __tablename__ = "source_connections"
     id: Mapped[str] = mapped_column(String(96), primary_key=True)
     source: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -2961,4 +3287,6 @@ class SourceConnection(Base):
     encrypted_credentials: Mapped[str | None] = mapped_column(Text, nullable=True)
     inputs: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )

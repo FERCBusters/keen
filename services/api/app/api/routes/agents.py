@@ -1,30 +1,32 @@
 """Agent administration is session-admin only; ingest uses its own scoped token."""
-from app.core.datetime_utils import utc_now_naive
 
 import asyncio
 import gzip
-import io
 import hashlib
+import io
 import json
+import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
-import logging
+from fastapi.routing import APIRoute
 from pydantic import Field, ValidationError
 from sqlalchemy.orm import Session
-from app.agents.schema import Strict, Health, fingerprint
+
 from app.agents.credentials import authenticate, live_only, view
 from app.agents.otlp import decode
+from app.agents.schema import Health, Strict, fingerprint
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.core.valkey import get_valkey
-from app.security.rate_limit import fixed_window_allow
-from app.security.auth import require_admin
+from app.db.models import Event, KeenAgent
 from app.db.session import get_db
-from app.db.models import KeenAgent, Event
 from app.ingest.common import store_event_with_artifact
+from app.security.auth import require_admin
+from app.security.rate_limit import fixed_window_allow
 from app.security.redaction import redact_obj
 
 
@@ -155,7 +157,8 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
         raise HTTPException(429, "Rate limited", headers={"Retry-After": str(retry)})
     a = authenticate(request, db, lock=False)
     from app.services.ingestion_pause import require_receiving
-    require_receiving(db, 'keen-agent')
+
+    require_receiving(db, "keen-agent")
     agent_id = a.id
     db.rollback()
     ok, retry = fixed_window_allow(
@@ -304,4 +307,5 @@ async def heartbeat(
 router.include_router(admin)
 
 from .agent_enrollment import router as enrollment_router
+
 router.include_router(enrollment_router)

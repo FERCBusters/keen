@@ -2,9 +2,9 @@
 
 import hashlib
 import json
-import re
 import uuid
 from datetime import datetime, timezone
+
 from app.agents.schema import AgentEvent
 
 NAMESPACE = uuid.UUID("bb62b969-9e11-4f40-aefe-784f8c2577e3")

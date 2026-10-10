@@ -1,7 +1,5 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
-import asyncio
 import os
 import re
 import uuid
@@ -17,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.utils import try_uuid as _try_uuid
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     Audit,
     AuditAttendee,
@@ -25,8 +24,8 @@ from app.db.models import (
     AuditScopedClause,
     AuditScopedControl,
     AuditScopedIsmsDocument,
-    ControlClauseLink,
     BookStackSectionEvidence,
+    ControlClauseLink,
     ControlItem,
     Event,
     FrameworkClause,
@@ -40,9 +39,9 @@ from app.db.models import (
     IsmsEntityClauseLink,
     IsmsEntityControlLink,
     IsmsMeeting,
-    IsmsPerson,
     IsmsObjective,
     IsmsOrgNode,
+    IsmsPerson,
     Mapping,
     PestleClauseRelevance,
     PestleItem,
@@ -53,6 +52,11 @@ from app.db.models import (
     User,
 )
 from app.db.session import get_db
+from app.security.auth import require_authenticated
+from app.security.diary_visibility import is_diary_event_visible
+from app.security.permissions import has_permission
+from app.security.rich_text import sanitize_rich_text_html
+from app.security.roles import is_effective_admin
 from app.services.audit_schedules import (
     FUZZY_MONTH_DATE_RULES,
     SCHEDULE_DATE_RULES,
@@ -60,11 +64,6 @@ from app.services.audit_schedules import (
     first_scheduled_rule_date,
     occurrences_between,
 )
-from app.security.auth import require_authenticated
-from app.security.diary_visibility import is_diary_event_visible
-from app.security.permissions import has_permission
-from app.security.rich_text import sanitize_rich_text_html
-from app.security.roles import is_effective_admin
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri, put_bytes
 
 router = APIRouter()
@@ -724,20 +723,40 @@ def _audit_sample_entity_reference(
             subtitle = row.document_type or ""
             controls = _isms_sample_controls(db, entity_type, row.id, framework)
     elif entity_type == "bookstack_section":
-        row = db.query(BookStackSectionEvidence).filter(BookStackSectionEvidence.id == entity_id).one_or_none()
-        if row and row.target_control and row.target_control.framework_slug == framework:
+        row = (
+            db.query(BookStackSectionEvidence)
+            .filter(BookStackSectionEvidence.id == entity_id)
+            .one_or_none()
+        )
+        if (
+            row
+            and row.target_control
+            and row.target_control.framework_slug == framework
+        ):
             controls = [_control_out(row.target_control)]
-        elif row and row.target_clause and row.target_clause.framework_slug == framework:
-            linked = db.query(ControlItem).join(ControlClauseLink, ControlClauseLink.control_item_id == ControlItem.id).filter(
-                ControlClauseLink.clause_id == row.target_clause_id,
-                ControlItem.framework_slug == framework,
-            ).all()
+        elif (
+            row and row.target_clause and row.target_clause.framework_slug == framework
+        ):
+            linked = (
+                db.query(ControlItem)
+                .join(
+                    ControlClauseLink,
+                    ControlClauseLink.control_item_id == ControlItem.id,
+                )
+                .filter(
+                    ControlClauseLink.clause_id == row.target_clause_id,
+                    ControlItem.framework_slug == framework,
+                )
+                .all()
+            )
             controls = [_control_out(c) for c in linked]
         else:
             row = None  # A snapshot may only be sampled under its target framework.
         if row:
             title = f"BookStack policy: {row.page_title}"
-            subtitle = f"Revision {row.revision_count or 'unknown'} · SHA-256 {row.sha256}"
+            subtitle = (
+                f"Revision {row.revision_count or 'unknown'} · SHA-256 {row.sha256}"
+            )
     elif entity_type == "isms_org_node":
         row = db.query(IsmsOrgNode).filter(IsmsOrgNode.id == entity_id).one_or_none()
         if row:
@@ -1274,8 +1293,8 @@ def _evidence_dict(
                 "id": str(ev.id),
                 "timestamp": _iso_dt(ev.timestamp),
                 "source": ev.source,
-        "connection_id": ev.connection_id,
-        "connection_name": ev.connection_name,
+                "connection_id": ev.connection_id,
+                "connection_name": ev.connection_name,
                 "system": ev.system,
                 "actor": ev.actor,
                 "action": ev.action,
@@ -1801,8 +1820,7 @@ def get_audit_scope_coverage(
             .filter(
                 ControlItem.framework_slug == fw,
                 ControlItem.type != "clause",
-                ControlItem.in_scope
-                == True,  # noqa: E712 - SQLAlchemy boolean expression
+                ControlItem.in_scope == True,  # noqa: E712 - SQLAlchemy boolean expression
             )
             .all()
         ):
@@ -2310,6 +2328,7 @@ def delete_scheduled_audit(
     if a.status != "template":
         raise HTTPException(status_code=400, detail="Audit is not a scheduled template")
     from app.services.evidence_retention import queue_object
+
     queue_object(db, a.final_report_storage_uri)
     db.delete(a)
     db.commit()
@@ -2334,6 +2353,7 @@ def delete_audit(
         {Audit.schedule_last_created_audit_id: None}, synchronize_session=False
     )
     from app.services.evidence_retention import queue_object
+
     queue_object(db, a.final_report_storage_uri)
     db.delete(a)
     db.commit()
@@ -2793,7 +2813,9 @@ def add_attendee(
         if linked_person is None:
             raise HTTPException(status_code=400, detail="Unknown Person")
     if payload.person_id is not None and payload.user_id is not None:
-        raise HTTPException(status_code=400, detail="Select a Person or KEEN user, not both")
+        raise HTTPException(
+            status_code=400, detail="Select a Person or KEEN user, not both"
+        )
     if payload.user_id is not None:
         linked_user = (
             db.query(User)
@@ -2822,7 +2844,9 @@ def add_attendee(
         user_id=linked_user.id if linked_user is not None else None,
         person_id=linked_person.id if linked_person is not None else None,
         name=display_name,
-        email=explicit_email or (linked_person.email if linked_person else None) or _user_email_snapshot(linked_user),
+        email=explicit_email
+        or (linked_person.email if linked_person else None)
+        or _user_email_snapshot(linked_user),
         role=_clean_text(payload.role, max_len=128, label="role") or None,
         created_at=_utcnow(),
     )

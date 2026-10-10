@@ -1,5 +1,4 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import json
 import uuid
@@ -11,12 +10,13 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.core.valkey import get_valkey
 from app.db.models import Event, IsmsEffectivenessMeasure, IsmsEffectivenessMetricEntry
 from app.db.session import get_db
-from app.services.entity_changelog import record_entity_changelog
 from app.ingest.webhooks import ingest_webhook, verify_secret
 from app.security.rate_limit import fixed_window_allow
+from app.services.entity_changelog import record_entity_changelog
 
 router = APIRouter()
 
@@ -146,6 +146,7 @@ async def isms_effectiveness_metric_webhook(
     if not verify_secret("isms_metrics", headers):
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
     from app.services.ingestion_pause import require_receiving
+
     require_receiving(db, "webhooks")
     body = await request.body()
     try:
@@ -191,6 +192,7 @@ async def isms_effectiveness_metric_webhook(
     ):
         raise HTTPException(status_code=400, detail="Unknown source_event_id")
     from app.security.urls import external_url
+
     try:
         source_url = external_url(payload.get("source_url") or payload.get("url"))
     except (ValueError, TypeError, AttributeError):
@@ -261,17 +263,30 @@ async def isms_effectiveness_metric_webhook(
 @router.post("/v1/webhooks/connections/{connection_id}/{provider}/{event_type}")
 @router.post("/v1/webhooks/{provider}/{event_type}")
 async def webhook_ingest(
-    provider: str, event_type: str, request: Request, db: Session = Depends(get_db), connection_id: str | None = None
+    provider: str,
+    event_type: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    connection_id: str | None = None,
 ):
-    from app.ingest.connections import connections, connection_scope, deployment_settings, resolve
+    from app.ingest.connections import (
+        connection_scope,
+        connections,
+        deployment_settings,
+        resolve,
+    )
+
     if not deployment_settings.webhooks_enabled:
-        raise HTTPException(503, 'Webhook ingestion is disabled')
+        raise HTTPException(503, "Webhook ingestion is disabled")
     from app.services.ingestion_pause import require_receiving
-    require_receiving(db, 'webhooks')
-    key = connection_id or 'env:webhooks'
-    connection = next((c for c in connections(db, 'webhooks') if c.id == key and c.enabled), None)
+
+    require_receiving(db, "webhooks")
+    key = connection_id or "env:webhooks"
+    connection = next(
+        (c for c in connections(db, "webhooks") if c.id == key and c.enabled), None
+    )
     if connection is None:
-        raise HTTPException(404, 'Connection not found')
+        raise HTTPException(404, "Connection not found")
     with connection_scope(resolve(connection)):
         # Rate limiting: 100 requests per minute per IP
         # Fail closed to prevent DoS during Redis outages
@@ -291,6 +306,7 @@ async def webhook_ingest(
         if not verify_secret(provider, headers):
             raise HTTPException(status_code=403, detail="Invalid webhook secret")
         from app.services.ingestion_pause import require_receiving
+
         require_receiving(db, "webhooks")
         body = await request.body()
         try:

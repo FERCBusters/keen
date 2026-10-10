@@ -8,8 +8,8 @@ Create Date: 2026-05-26
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0041_interested_party_notes"
 down_revision = "0040_user_email"

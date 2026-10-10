@@ -1,33 +1,33 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import uuid
 from datetime import datetime
 from typing import Any, Iterable
 
-from fastapi import HTTPException
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
 from app.api.utils import (
     control_justification as _control_justification,
+)
+from app.api.utils import (
     control_upstream_url as _control_upstream_url,
+)
+from app.api.utils import (
     ref_sort_key as _ref_sort_key,
 )
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlClauseLink,
     ControlItem,
     EntityChangelog,
     FrameworkClause,
-    Risk,
-    RiskAsset,
-    RiskAssetSubcategory,
-    RiskCategory,
-    RiskControlLink,
     PestleBusinessProcess,
     PestleBusinessProcessRelevance,
     PestleClauseRelevance,
     PestleItem,
+    Risk,
+    RiskControlLink,
     User,
 )
 
@@ -530,7 +530,9 @@ def risk_changelog_state(
         "risk_types": list(risk.risk_types or []),
         "owner": owner.username if owner else None,
         "owner_role": risk.owner_role.name if risk.owner_role else None,
-        "owner_role_id": str(risk.risk_owner_role_id) if risk.risk_owner_role_id else None,
+        "owner_role_id": str(risk.risk_owner_role_id)
+        if risk.risk_owner_role_id
+        else None,
         "threat_summary": risk.threat_summary,
         "threat_score": risk.threat_score,
         "vulnerability_score": risk.vulnerability_score,

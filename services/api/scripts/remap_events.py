@@ -17,18 +17,17 @@ import argparse
 from datetime import date, datetime, time, timezone
 from typing import Any
 
-from sqlalchemy import desc, text
-from sqlalchemy.orm import Session
-
 from app.api.utils import parse_iso_dt
 from app.db.models import Event, Mapping
 from app.db.session import SessionLocal
-from app.ingest.common import apply_rules
 from app.ingest.bookstack import apply_bookstack_config_mappings
+from app.ingest.common import apply_rules
 from app.services.control_evidence_stats import (
     clear_stats_caches,
     rebuild_framework_event_stats,
 )
+from sqlalchemy import desc, text
+from sqlalchemy.orm import Session
 
 
 def _coerce_range_dt(value: str | None, *, end: bool) -> datetime | None:

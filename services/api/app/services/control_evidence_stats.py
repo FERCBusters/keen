@@ -284,7 +284,8 @@ def rebuild_control_evidence_stats(db: Session, *, clear_cache: bool = True) -> 
     """
 
     db.execute(text("TRUNCATE control_evidence_stats"))
-    result = db.execute(text("""
+    result = db.execute(
+        text("""
             INSERT INTO control_evidence_stats (
                 control_item_id,
                 evidence_count,
@@ -299,7 +300,8 @@ def rebuild_control_evidence_stats(db: Session, *, clear_cache: bool = True) -> 
             FROM mappings m
             JOIN events e ON e.id = m.event_id
             GROUP BY m.control_item_id
-            """))
+            """)
+    )
     if clear_cache:
         clear_stats_caches()
     return int(result.rowcount or 0)

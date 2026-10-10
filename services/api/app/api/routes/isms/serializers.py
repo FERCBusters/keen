@@ -1,4 +1,5 @@
 """ISMS serializers; see docs/maintainability-review.md for module boundaries."""
+
 from __future__ import annotations
 
 import uuid
@@ -594,14 +595,22 @@ def _meeting_out(
         target.append(_user_summary(link.user))
     attendee_person_ids = []
     apology_person_ids = []
-    for link in db.query(IsmsMeetingPerson).filter(IsmsMeetingPerson.meeting_id == row.id).all():
-        item = {"id": str(link.person_id) if link.person_id else None,
-                "person_id": str(link.person_id) if link.person_id else None,
-                "name": link.person.name if link.person else link.name,
-                "email": link.person.email if link.person else link.email}
+    for link in (
+        db.query(IsmsMeetingPerson).filter(IsmsMeetingPerson.meeting_id == row.id).all()
+    ):
+        item = {
+            "id": str(link.person_id) if link.person_id else None,
+            "person_id": str(link.person_id) if link.person_id else None,
+            "name": link.person.name if link.person else link.name,
+            "email": link.person.email if link.person else link.email,
+        }
         (attendees if link.attendance_type == "attendee" else apologies).append(item)
         if link.person_id:
-            (attendee_person_ids if link.attendance_type == "attendee" else apology_person_ids).append(str(link.person_id))
+            (
+                attendee_person_ids
+                if link.attendance_type == "attendee"
+                else apology_person_ids
+            ).append(str(link.person_id))
     support_links = []
     for link in list(row.links or []):
         support_links.append(
@@ -626,8 +635,12 @@ def _meeting_out(
         "end_time": row.end_time.isoformat() if row.end_time else None,
         "attendees": attendees,
         "apologies": apologies,
-        "attendee_user_ids": [str(x.user_id) for x in row.attendees if x.attendance_type == "attendee"],
-        "apology_user_ids": [str(x.user_id) for x in row.attendees if x.attendance_type == "apology"],
+        "attendee_user_ids": [
+            str(x.user_id) for x in row.attendees if x.attendance_type == "attendee"
+        ],
+        "apology_user_ids": [
+            str(x.user_id) for x in row.attendees if x.attendance_type == "apology"
+        ],
         "attendee_person_ids": attendee_person_ids,
         "apology_person_ids": apology_person_ids,
         "links": support_links,

@@ -7,8 +7,8 @@ Create Date: 2026-05-28
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0049_question_delete"
 down_revision = "0048_user_delete"
@@ -17,13 +17,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(sa.text("""
+    op.execute(
+        sa.text("""
             INSERT INTO permissions (id, code, description, created_at)
             SELECT gen_random_uuid(), 'question.delete', 'Delete question threads', NOW()
             WHERE NOT EXISTS (
                 SELECT 1 FROM permissions WHERE code = 'question.delete'
             )
-            """))
+            """)
+    )
 
 
 def downgrade() -> None:

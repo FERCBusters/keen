@@ -1,24 +1,28 @@
 from __future__ import annotations
-from app.security.errors import collection_error
-from app.services.ingestion_pause import pausable
 
+import html as _html
 import json
 import re
-from app.security.regex import BoundedPattern, compile_pattern
-import html as _html
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import httpx
-from app.ingest.http import client as ingestion_client
-import yaml
 from sqlalchemy.orm import Session
 
-from app.ingest.connections import load_document, connection_cache
-from app.ingest.connections import settings, connection_runs, namespace
 from app.db.models import ControlItem, Event, IngestionCursor, Mapping
 from app.ingest.common import is_safe_url, store_event_with_artifact
+from app.ingest.connections import (
+    connection_cache,
+    connection_runs,
+    load_document,
+    namespace,
+    settings,
+)
+from app.ingest.http import client as ingestion_client
+from app.security.errors import collection_error
+from app.security.regex import BoundedPattern, compile_pattern
+from app.services.ingestion_pause import pausable
 
 
 def _utcnow() -> datetime:
@@ -235,7 +239,7 @@ def _resolve_book_id(client: httpx.Client, book_slug: Optional[str]) -> Optional
     slug = str(book_slug or "").strip()
     if not slug:
         return None
-    cache = connection_cache().setdefault('bookstack_book_ids', {})
+    cache = connection_cache().setdefault("bookstack_book_ids", {})
     cache_key = slug.lower()
     if cache_key in cache:
         return cache[cache_key]
@@ -382,7 +386,7 @@ def _parse_page_mappings(cfg: dict[str, Any]) -> list[PageMapping]:
             confidence = float(item.get("confidence") or 0.95)
         except Exception:
             confidence = 0.95
-        rationale = str(item.get("rationale") or f"bookstack page mapping #{i+1}")
+        rationale = str(item.get("rationale") or f"bookstack page mapping #{i + 1}")
 
         out.append(
             PageMapping(
@@ -758,8 +762,8 @@ def apply_bookstack_config_mappings(db: Session, ev: Event) -> int:
     return created
 
 
-@pausable('bookstack')
-@connection_runs('bookstack')
+@pausable("bookstack")
+@connection_runs("bookstack")
 def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
     """Poll BookStack for page changes and store each page snapshot as an evidence event."""
     if not settings.bookstack_enabled:
@@ -827,11 +831,15 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
     ) or capture_mode in ("full", "all")
 
     page_mappings = _parse_page_mappings(cfg)
-    capture_pages = _parse_page_mappings({"page_mappings": [
-        {"match": selector, "map_to": ["__capture_only__"]}
-        for selector in (cfg.get("capture_pages") or [])
-        if isinstance(selector, dict)
-    ]})
+    capture_pages = _parse_page_mappings(
+        {
+            "page_mappings": [
+                {"match": selector, "map_to": ["__capture_only__"]}
+                for selector in (cfg.get("capture_pages") or [])
+                if isinstance(selector, dict)
+            ]
+        }
+    )
     seed_mapped_pages = bool(
         cfg.get("seed_mapped_pages") if "seed_mapped_pages" in cfg else True
     )
@@ -914,10 +922,14 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
         for selected in cfg.get("selected_pages", []) or []:
             pid = selected.get("id") if isinstance(selected, dict) else None
             if isinstance(pid, int) and pid > 0:
-                pages_by_id.setdefault(pid, {
-                    "id": pid, "book_id": selected.get("book_id"),
-                    "book_slug": selected.get("book_slug"),
-                })
+                pages_by_id.setdefault(
+                    pid,
+                    {
+                        "id": pid,
+                        "book_id": selected.get("book_id"),
+                        "book_slug": selected.get("book_slug"),
+                    },
+                )
 
         # 2) Ensure configured pages are captured at least once (as snapshots).
         if seed_mapped_pages and (page_mappings or capture_pages):
@@ -1185,7 +1197,9 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
                         "bookstack": {
                             "instance": (instance_base_url or "").rstrip("/"),
                             "page_id": pid,
-                            "book_id": page_full.get("book_id") or page_list.get("book_id") or book_id,
+                            "book_id": page_full.get("book_id")
+                            or page_list.get("book_id")
+                            or book_id,
                             "page_slug": page_slug,
                             "book_slug": book_slug_eff,
                             "url": primary_url,

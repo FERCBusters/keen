@@ -1,6 +1,7 @@
 from __future__ import annotations
-from app.security.errors import collection_error
+
 from app.core.datetime_utils import utc_now_naive
+from app.security.errors import collection_error
 from app.services.ingestion_pause import pausable
 
 """Generic RSS/Atom feed ingester.
@@ -22,14 +23,13 @@ from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
 import httpx
-from app.ingest.http import client as ingestion_client
 from dateutil import parser as dtparser
 from sqlalchemy.orm import Session
 
-from app.ingest.connections import load_document
-from app.ingest.connections import settings, connection_runs, namespace
 from app.db.models import IngestionCursor
-from app.ingest.common import store_event_with_artifact, is_safe_url
+from app.ingest.common import is_safe_url, store_event_with_artifact
+from app.ingest.connections import connection_runs, load_document, namespace, settings
+from app.ingest.http import client as ingestion_client
 from app.security.redaction import redact_url
 
 
@@ -177,7 +177,9 @@ def _parse_feed(xml_bytes: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]]
                 continue
             title = _child_text(item, "title")
             link = _first_link_rss(item)
-            guid = _child_text(item, "guid") or item.get("{http://www.w3.org/1999/02/22-rdf-syntax-ns#}about", "")
+            guid = _child_text(item, "guid") or item.get(
+                "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}about", ""
+            )
             pub = _child_text(item, "pubDate") or _child_text(item, "date")
             updated = _child_text(item, "updated")
             desc = _child_text(item, "description")
@@ -274,9 +276,15 @@ def _safe_label_from_url(url: str) -> str:
 def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
     if settings.demo_mode:
         from app.ingest.demo_rss import FEED
+
         if feed_cfg.get("url") != FEED["url"]:
-            return {"ok": False, "error": "Demo RSS is restricted to the preset public feed"}
-        feed_cfg = dict(FEED)  # Never accept credentials, headers or edited limits in demos.
+            return {
+                "ok": False,
+                "error": "Demo RSS is restricted to the preset public feed",
+            }
+        feed_cfg = dict(
+            FEED
+        )  # Never accept credentials, headers or edited limits in demos.
     url = (feed_cfg.get("url") or "").strip()
     if not url:
         return {"ok": False, "error": "missing url"}
@@ -332,14 +340,23 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
             auth = (u, p)
 
     from app.ingest.connections import current_connection
+
     connection = current_connection()
-    if connection and connection.managed_by != 'environment' and connection.credentials:
+    if connection and connection.managed_by != "environment" and connection.credentials:
         from app.ingest.http import require_origin
-        require_origin(url, connection.configuration.get('base_url', ''))
-        if connection.credentials.get('password'):
-            auth = (connection.configuration.get('username', ''), connection.credentials['password'])
-        if connection.configuration.get('header_name') and connection.credentials.get('header_value'):
-            headers[connection.configuration['header_name']] = connection.credentials['header_value']
+
+        require_origin(url, connection.configuration.get("base_url", ""))
+        if connection.credentials.get("password"):
+            auth = (
+                connection.configuration.get("username", ""),
+                connection.credentials["password"],
+            )
+        if connection.configuration.get("header_name") and connection.credentials.get(
+            "header_value"
+        ):
+            headers[connection.configuration["header_name"]] = connection.credentials[
+                "header_value"
+            ]
     verify_tls = True
 
     # Fetch without following redirects - redirects are not allowed
@@ -357,8 +374,12 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
                     body.extend(chunk)
                     if len(body) > 2 * 1024 * 1024:
                         raise ValueError("Demo RSS response exceeds 2 MiB")
-                response = httpx.Response(upstream.status_code, headers=upstream.headers,
-                                          content=bytes(body), request=upstream.request)
+                response = httpx.Response(
+                    upstream.status_code,
+                    headers=upstream.headers,
+                    content=bytes(body),
+                    request=upstream.request,
+                )
         else:
             response = c.get(url)
 
@@ -489,14 +510,15 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-@pausable('rss')
-@connection_runs('rss')
+@pausable("rss")
+@connection_runs("rss")
 def ingest_rss_all(db: Session) -> list[dict[str, Any]]:
     if not settings.rss_enabled:
         return [{"skipped": True, "reason": "rss_enabled=false"}]
 
     if settings.demo_mode:
         from app.ingest.demo_rss import FEED
+
         feeds = [dict(FEED)]
     else:
         cfg = load_rss_config(settings.rss_config_path)

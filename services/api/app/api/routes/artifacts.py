@@ -10,12 +10,16 @@ from pathlib import Path
 from threading import BoundedSemaphore
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.utils import (
     content_disposition_attachment as _content_disposition_attachment,
+)
+from app.api.utils import (
     download_filename_for_artifact as _download_filename_for_artifact,
+)
+from app.api.utils import (
     try_uuid as _try_uuid,
 )
 from app.core.config import settings
@@ -23,8 +27,8 @@ from app.db.models import Artifact, Event, User
 from app.db.session import get_db
 from app.security.diary_visibility import is_diary_event_visible
 from app.security.permissions import has_permission
-from app.security.roles import is_effective_admin
 from app.security.redaction import is_textual_content_type, mask_event_data_bytes
+from app.security.roles import is_effective_admin
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri
 
 router = APIRouter()
@@ -39,10 +43,17 @@ _PREVIEW_SLOTS = BoundedSemaphore(2)
 
 def _run_preview(cmd):
     if not _PREVIEW_SLOTS.acquire(blocking=False):
-        raise HTTPException(429, "Preview renderer busy; retry shortly", headers={"Retry-After": "5"})
+        raise HTTPException(
+            429, "Preview renderer busy; retry shortly", headers={"Retry-After": "5"}
+        )
     try:
-        subprocess.run(cmd, check=True, timeout=15,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            cmd,
+            check=True,
+            timeout=15,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     finally:
         _PREVIEW_SLOTS.release()
 
@@ -96,7 +107,7 @@ def download_artifact(
         bucket, key = parse_s3_uri(art.storage_uri)
         obj = get_object_stream(bucket, key)
         body = obj["Body"]
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=502, detail="Failed to fetch artifact from storage"
         )
@@ -170,7 +181,7 @@ def preview_pdf_first_page(
         bucket, key = parse_s3_uri(art.storage_uri)
         obj = get_object_stream(bucket, key)
         body = obj["Body"]
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=502, detail="Failed to fetch artifact from storage"
         )
@@ -188,14 +199,23 @@ def preview_pdf_first_page(
                     for chunk in stream:
                         size += len(chunk)
                         if size > 20 * 1024 * 1024:
-                            raise HTTPException(413, "PDF preview exceeds 20 MiB; download the original instead")
+                            raise HTTPException(
+                                413,
+                                "PDF preview exceeds 20 MiB; download the original instead",
+                            )
                         f.write(chunk)
                 finally:
                     stream.close()
 
             # Render page 1 as PNG.
             # -singlefile produces <out_prefix>.png
-            cmd = [sys.executable, "-m", "app.render.pdf_preview", str(in_path), str(out_prefix)]
+            cmd = [
+                sys.executable,
+                "-m",
+                "app.render.pdf_preview",
+                str(in_path),
+                str(out_prefix),
+            ]
             try:
                 _run_preview(cmd)
             except FileNotFoundError:
@@ -203,7 +223,10 @@ def preview_pdf_first_page(
                     status_code=500, detail="pdftoppm is not installed in the API image"
                 )
             except subprocess.TimeoutExpired:
-                raise HTTPException(status_code=422, detail="PDF preview exceeded the rendering time limit")
+                raise HTTPException(
+                    status_code=422,
+                    detail="PDF preview exceeded the rendering time limit",
+                )
             except subprocess.CalledProcessError:
                 raise HTTPException(
                     status_code=500, detail="Failed to render PDF preview"
@@ -224,5 +247,5 @@ def preview_pdf_first_page(
                 return Response(out_path.read_bytes(), media_type="image/png")
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to build preview")

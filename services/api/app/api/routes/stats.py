@@ -1,5 +1,4 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
@@ -10,20 +9,34 @@ from sqlalchemy.orm import Session
 
 from app.api.utils import (
     control_justification as _control_justification,
+)
+from app.api.utils import (
     control_upstream_url as _control_upstream_url,
+)
+from app.api.utils import (
     ref_sort_key as _ref_sort_key,
 )
-from app.core.config import settings
 from app.core.cache import cached_json
-from app.db.models import ControlItem, EffectiveCrossFrameworkControlLink, Event, Mapping, User
+from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
+from app.core.source_meta import apply_user_source_overrides, get_source_meta
+from app.db.models import (
+    ControlItem,
+    Event,
+    Mapping,
+    User,
+)
 from app.db.session import get_db
 from app.security.diary_visibility import diary_filter_condition
 from app.services.control_evidence_stats import (
     get_control_evidence_stats_by_id,
     get_framework_event_counts,
 )
-from app.services.control_inheritance import evidence_pairs, effective_framework_ids, has_inherited_evidence
-from app.core.source_meta import get_source_meta, apply_user_source_overrides
+from app.services.control_inheritance import (
+    effective_framework_ids,
+    evidence_pairs,
+    has_inherited_evidence,
+)
 
 router = APIRouter()
 
@@ -101,7 +114,11 @@ def stats_summary(
         # framework event-count cache instead of legacy trigger-maintained
         # Postgres counter tables.
         has_inheritance = has_inherited_evidence(db, framework)
-        if not has_inheritance and isinstance(user, User) and getattr(user, "is_active", False):
+        if (
+            not has_inheritance
+            and isinstance(user, User)
+            and getattr(user, "is_active", False)
+        ):
             controls = (
                 db.query(ControlItem.id, ControlItem.in_scope)
                 .filter(ControlItem.framework_slug == framework)
@@ -219,6 +236,7 @@ def stats_controls(
 
     def _load() -> dict:
         has_inheritance = has_inherited_evidence(db, framework)
+
         def _item(c: ControlItem, evidence_count: int, last_evidence) -> dict:
             if isinstance(last_evidence, datetime):
                 last_evidence_value = last_evidence.isoformat()
@@ -285,12 +303,15 @@ def stats_controls(
         if has_inheritance:
             pairs = evidence_pairs(framework, db)
             evidence_sq = (
-                db.query(pairs.c.control_id.label("control_item_id"),
-                         func.count(pairs.c.event_id).label("evidence_count"),
-                         func.max(Event.timestamp).label("last_evidence"))
+                db.query(
+                    pairs.c.control_id.label("control_item_id"),
+                    func.count(pairs.c.event_id).label("evidence_count"),
+                    func.max(Event.timestamp).label("last_evidence"),
+                )
                 .join(Event, Event.id == pairs.c.event_id)
                 .filter(diary_filter_condition(db, user), *event_filters)
-                .group_by(pairs.c.control_id).subquery()
+                .group_by(pairs.c.control_id)
+                .subquery()
             )
         else:
             evidence_sq = (

@@ -6,13 +6,12 @@ Create Date: 2026-05-27
 """
 
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import uuid
-from datetime import datetime
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
+from app.core.datetime_utils import utc_now_naive
 from sqlalchemy.dialects import postgresql
 
 revision = "0046_unify_isms_assets"
@@ -269,7 +268,8 @@ def downgrade() -> None:
     )
     op.create_index("ix_isms_assets_created_at", "isms_assets", ["created_at"])
 
-    bind.execute(sa.text("""
+    bind.execute(
+        sa.text("""
             insert into isms_assets (
                 id, asset, license, owner_org_node_id,
                 register_held_by_org_node_id, description,
@@ -284,7 +284,8 @@ def downgrade() -> None:
                or license <> ''
                or description <> ''
             on conflict (id) do nothing
-            """))
+            """)
+    )
 
     if _constraint_exists(
         bind,

@@ -59,6 +59,7 @@ class Settings(BaseSettings):
             if not self.demo_expires_at or not self.demo_expires_at.tzinfo:
                 raise ValueError("Demo mode requires a timezone-aware expiry")
             from urllib.parse import urlsplit
+
             u = urlsplit(self.demo_consultation_url)
             if u.scheme != "https" or not u.hostname or u.username:
                 raise ValueError("Demo consultation link must be HTTPS")
@@ -70,24 +71,59 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_hosted_security(self):
         if self.hosted_mode:
-            if not self.hosted_owner_subject or not self.oidc_issuer.startswith("https://"):
-                raise ValueError("Hosted KEEN requires an exact OIDC issuer and owner subject")
-            if (not self.oidc_enabled or self.local_auth_enabled or self.ldap_enabled or self.trust_remote_user
-                    or self.google_sso_enabled or self.github_sso_enabled
-                    or self.oidc_auto_link_existing or self.oidc_auto_provision):
-                raise ValueError("Hosted KEEN requires OIDC only, with automatic account linking disabled")
-            if (not self.cookie_secure or self.cookie_domain or self.oidc_allow_insecure_http
-                    or not self.session_cookie_name.startswith("__Host-")):
-                raise ValueError("Hosted KEEN requires secure __Host- cookies and HTTPS OIDC")
+            if not self.hosted_owner_subject or not self.oidc_issuer.startswith(
+                "https://"
+            ):
+                raise ValueError(
+                    "Hosted KEEN requires an exact OIDC issuer and owner subject"
+                )
+            if (
+                not self.oidc_enabled
+                or self.local_auth_enabled
+                or self.ldap_enabled
+                or self.trust_remote_user
+                or self.google_sso_enabled
+                or self.github_sso_enabled
+                or self.oidc_auto_link_existing
+                or self.oidc_auto_provision
+            ):
+                raise ValueError(
+                    "Hosted KEEN requires OIDC only, with automatic account linking disabled"
+                )
+            if (
+                not self.cookie_secure
+                or self.cookie_domain
+                or self.oidc_allow_insecure_http
+                or not self.session_cookie_name.startswith("__Host-")
+            ):
+                raise ValueError(
+                    "Hosted KEEN requires secure __Host- cookies and HTTPS OIDC"
+                )
             from urllib.parse import urlsplit
+
             public = urlsplit(self.public_base_url)
-            if (public.scheme != "https" or not public.hostname or public.username
-                    or public.path not in ("", "/") or public.query or public.fragment):
+            if (
+                public.scheme != "https"
+                or not public.hostname
+                or public.username
+                or public.path not in ("", "/")
+                or public.query
+                or public.fragment
+            ):
                 raise ValueError("Hosted KEEN requires an exact public HTTPS origin")
-            if not self.s3_bucket or self.s3_access_key or self.s3_secret_key or self.s3_endpoint_url:
-                raise ValueError("Hosted KEEN requires its own AWS bucket and no static S3 credentials")
+            if (
+                not self.s3_bucket
+                or self.s3_access_key
+                or self.s3_secret_key
+                or self.s3_endpoint_url
+            ):
+                raise ValueError(
+                    "Hosted KEEN requires its own AWS bucket and no static S3 credentials"
+                )
             if self.artifact_storage_backend != "s3" or not self.s3_use_instance_role:
-                raise ValueError("Hosted KEEN requires S3 with instance-role credentials")
+                raise ValueError(
+                    "Hosted KEEN requires S3 with instance-role credentials"
+                )
         return self
 
     # Cookie-backed sessions stored in Valkey/Redis
@@ -127,7 +163,6 @@ class Settings(BaseSettings):
         if value not in {"optional", "admins", "all"}:
             raise ValueError("MFA policy must be optional, admins or all")
         return value
-
 
     # Trusted proxy auth (REMOTE_USER)
     # When enabled, an upstream reverse proxy can authenticate a user and pass
@@ -175,11 +210,17 @@ class Settings(BaseSettings):
     # Google OpenID Connect
     google_sso_enabled: bool = Field(default=False)
     google_provider_label: str = Field(default="Google")
-    google_authorization_endpoint: str = Field(default="https://accounts.google.com/o/oauth2/v2/auth")
+    google_authorization_endpoint: str = Field(
+        default="https://accounts.google.com/o/oauth2/v2/auth"
+    )
     google_token_endpoint: str = Field(default="https://oauth2.googleapis.com/token")
     google_jwks_uri: str = Field(default="https://www.googleapis.com/oauth2/v3/certs")
-    google_issuer: str = Field(default="https://accounts.google.com,accounts.google.com")
-    google_userinfo_endpoint: str = Field(default="https://openidconnect.googleapis.com/v1/userinfo")
+    google_issuer: str = Field(
+        default="https://accounts.google.com,accounts.google.com"
+    )
+    google_userinfo_endpoint: str = Field(
+        default="https://openidconnect.googleapis.com/v1/userinfo"
+    )
     google_client_id: str = Field(default="")
     google_client_secret: str = Field(default="")
     google_scopes: str = Field(default="openid email profile")
@@ -194,8 +235,12 @@ class Settings(BaseSettings):
     # GitHub OAuth
     github_sso_enabled: bool = Field(default=False)
     github_provider_label: str = Field(default="GitHub")
-    github_authorization_endpoint: str = Field(default="https://github.com/login/oauth/authorize")
-    github_token_endpoint: str = Field(default="https://github.com/login/oauth/access_token")
+    github_authorization_endpoint: str = Field(
+        default="https://github.com/login/oauth/authorize"
+    )
+    github_token_endpoint: str = Field(
+        default="https://github.com/login/oauth/access_token"
+    )
     github_user_endpoint: str = Field(default="https://api.github.com/user")
     github_emails_endpoint: str = Field(default="https://api.github.com/user/emails")
     github_issuer: str = Field(default="https://github.com/login/oauth")
@@ -261,7 +306,8 @@ class Settings(BaseSettings):
     @classmethod
     def validate_security_proxies(cls, value):
         import ipaddress
-        for entry in value.split(','):
+
+        for entry in value.split(","):
             if entry.strip():
                 ipaddress.ip_network(entry.strip())
         return value
@@ -321,7 +367,7 @@ class Settings(BaseSettings):
         if value not in allowed:
             allowed_values = ", ".join(sorted(allowed))
             raise ValueError(
-                "KEEN_S3_COMPATIBILITY_MODE must be one of: " f"{allowed_values}"
+                f"KEEN_S3_COMPATIBILITY_MODE must be one of: {allowed_values}"
             )
         return value
 
@@ -458,7 +504,9 @@ class Settings(BaseSettings):
     )
 
     # Config paths inside container
-    enabled_frameworks: str = ""  # Comma-separated organisation catalogue restriction; empty means all.
+    enabled_frameworks: str = (
+        ""  # Comma-separated organisation catalogue restriction; empty means all.
+    )
     rules_path: str = Field(default="/app/config/rules.yml")
     control_links_path: str = Field(default="/app/config/control_links.yml")
     risk_mitigator_rules_path: str = Field(default="/app/config/risk_mitigator.yml")

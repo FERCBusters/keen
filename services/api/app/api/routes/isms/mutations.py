@@ -1,4 +1,5 @@
 """ISMS mutations; see docs/maintainability-review.md for module boundaries."""
+
 from __future__ import annotations
 
 import uuid
@@ -512,22 +513,38 @@ def _replace_meeting_people(
         pass
 
 
-def _replace_meeting_person_links(db: Session, meeting: IsmsMeeting,
-                                  attendees: list[uuid.UUID] | None,
-                                  apologies: list[uuid.UUID] | None) -> None:
+def _replace_meeting_person_links(
+    db: Session,
+    meeting: IsmsMeeting,
+    attendees: list[uuid.UUID] | None,
+    apologies: list[uuid.UUID] | None,
+) -> None:
     if attendees is None and apologies is None:
         return
     ids = set(attendees or []) | set(apologies or [])
-    people = {p.id: p for p in db.query(IsmsPerson).filter(IsmsPerson.id.in_(ids)).all()} if ids else {}
+    people = (
+        {p.id: p for p in db.query(IsmsPerson).filter(IsmsPerson.id.in_(ids)).all()}
+        if ids
+        else {}
+    )
     if len(people) != len(ids):
         raise HTTPException(400, "Unknown Person selected for meeting")
-    db.query(IsmsMeetingPerson).filter(IsmsMeetingPerson.meeting_id == meeting.id).delete(synchronize_session=False)
+    db.query(IsmsMeetingPerson).filter(
+        IsmsMeetingPerson.meeting_id == meeting.id
+    ).delete(synchronize_session=False)
     for kind, selected in (("attendee", attendees or []), ("apology", apologies or [])):
         for pid in dict.fromkeys(selected):
             person = people[pid]
-            db.add(IsmsMeetingPerson(meeting_id=meeting.id, person_id=pid,
-                                     attendance_type=kind, name=person.name,
-                                     email=person.email or "", created_at=_utcnow()))
+            db.add(
+                IsmsMeetingPerson(
+                    meeting_id=meeting.id,
+                    person_id=pid,
+                    attendance_type=kind,
+                    name=person.name,
+                    email=person.email or "",
+                    created_at=_utcnow(),
+                )
+            )
     db.flush()
 
 

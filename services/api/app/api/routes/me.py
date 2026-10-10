@@ -1,8 +1,6 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import re
-from datetime import datetime
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -18,21 +16,31 @@ from app.api.payloads import (
 )
 from app.api.utils import (
     ALLOWED_THEMES,
+)
+from app.api.utils import (
     normalize_saved_search_url as _normalize_saved_search_url,
+)
+from app.api.utils import (
     try_uuid as _try_uuid,
+)
+from app.api.utils import (
     validate_theme_id as _validate_theme_id,
+)
+from app.api.utils import (
     validate_timezone_name as _validate_timezone_name,
 )
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.core.source_meta import normalize_hex_color
+from app.core.valkey import get_valkey
 from app.db.models import EventQuestionThread, SavedSearch, User
 from app.db.session import get_db
 from app.security.auth import ROLE_ADMIN
-from app.security.permissions import has_permission
-from app.security.roles import compute_effective_role
 from app.security.passwords import hash_password, verify_password
-from app.security.rate_limit import client_ip as _client_ip, fixed_window_allow
-from app.core.valkey import get_valkey
+from app.security.permissions import has_permission
+from app.security.rate_limit import client_ip as _client_ip
+from app.security.rate_limit import fixed_window_allow
+from app.security.roles import compute_effective_role
 
 router = APIRouter()
 
@@ -402,7 +410,10 @@ def me(request: Request, db: Session = Depends(get_db)) -> dict:
         "can_delete_incidents": can_delete_incidents,
         "unread_question_replies_count": unread_question_replies_count,
         "password_change_enabled": bool(
-            local_auth_enabled and user.auth_backend != "ldap" and not trust_remote and not oidc_enabled
+            local_auth_enabled
+            and user.auth_backend != "ldap"
+            and not trust_remote
+            and not oidc_enabled
         ),
         # In native OIDC mode, logout_url clears KEEN's session and then starts
         # RP-initiated logout when the provider end-session endpoint is configured.
@@ -707,7 +718,13 @@ def change_my_password(
             detail="Password changes are disabled when KEEN_TRUST_REMOTE_USER is enabled",
         )
 
-    user = db.query(User).filter(User.id == user.id).populate_existing().with_for_update().one()
+    user = (
+        db.query(User)
+        .filter(User.id == user.id)
+        .populate_existing()
+        .with_for_update()
+        .one()
+    )
     if not verify_password(payload.current_password or "", user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
@@ -718,7 +735,8 @@ def change_my_password(
         raise HTTPException(status_code=400, detail=str(e))
 
     from app.services.security_notifications import enqueue
-    enqueue(db, user, 'password-changed', request)
+
+    enqueue(db, user, "password-changed", request)
     db.add(user)
     db.commit()
     return {"ok": True}

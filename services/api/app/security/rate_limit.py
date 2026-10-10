@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Tuple
 
-from fastapi import Request
 from redis import Redis
-
-
-from app.security.client_ip import request_ip as client_ip
 
 
 def fixed_window_allow(

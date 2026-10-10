@@ -1,4 +1,5 @@
 """ISMS access control; see docs/maintainability-review.md for module boundaries."""
+
 from __future__ import annotations
 
 import uuid

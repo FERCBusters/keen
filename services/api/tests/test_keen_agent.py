@@ -1,6 +1,4 @@
 """OTLP contract, scoped credentials, atomic acceptance and redaction regressions."""
-from app.core.datetime_utils import utc_now_naive
-from tests.db_helpers import create_sqlite_schema
 
 import copy
 import gzip
@@ -8,19 +6,24 @@ import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event as sql_event
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
-from app.api.routes import agents as api
 from app.agents.otlp import decode
 from app.agents.schema import fingerprint
-from app.db.models import Base, KeenAgent, Event, Artifact
+from app.api.routes import agents as api
+from app.core.datetime_utils import utc_now_naive
+from app.db.models import Artifact, Event, KeenAgent
 from app.ingest import common
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy import event as sql_event
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from tests.db_helpers import create_sqlite_schema
 
 
 @compiles(JSONB, "sqlite")

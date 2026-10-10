@@ -1,5 +1,7 @@
 """Bounded, TLS-verified transport for operator-configured identity providers."""
+
 import asyncio
+
 import httpx2 as httpx
 
 MAX_RESPONSE_BYTES = 1024 * 1024
@@ -32,10 +34,10 @@ class SsoTransport(httpx.AsyncBaseTransport):
 
     async def handle_async_request(self, request):
         deadline = asyncio.get_running_loop().time() + REQUEST_SECONDS
-        request.headers['Accept-Encoding'] = 'identity'
+        request.headers["Accept-Encoding"] = "identity"
         async with asyncio.timeout_at(deadline):
             response = await self.transport.handle_async_request(request)
-        if response.headers.get('content-encoding', 'identity').lower() != 'identity':
+        if response.headers.get("content-encoding", "identity").lower() != "identity":
             await response.aclose()
             raise ValueError("Identity provider must honour Accept-Encoding: identity")
         response.stream = LimitedStream(response.stream, deadline)
@@ -46,5 +48,10 @@ class SsoTransport(httpx.AsyncBaseTransport):
 
 
 def client_options():
-    return dict(timeout=10.0, verify=True, trust_env=False, follow_redirects=False,
-                transport=SsoTransport())
+    return dict(
+        timeout=10.0,
+        verify=True,
+        trust_env=False,
+        follow_redirects=False,
+        transport=SsoTransport(),
+    )

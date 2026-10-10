@@ -38,11 +38,12 @@ def _safe_url_hint(url: str) -> str:
     """Return a log-safe hint for a URL (no query/token leakage)."""
     try:
         from urllib.parse import urlsplit
+
         parsed = urlsplit(url)
-        if parsed.scheme not in {'http', 'https'} or not parsed.hostname:
-            return '(url)'
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return "(url)"
         # hostname excludes userinfo, paths, query strings and fragments.
-        return f'{parsed.scheme}://{parsed.hostname}'
+        return f"{parsed.scheme}://{parsed.hostname}"
     except Exception:
         return "(url)"
 
@@ -360,10 +361,12 @@ def _send_many(
             )
         except _TemporarySendError:
             raise
-        except Exception as e:
+        except Exception:
             failed += 1
             # Network/DNS/etc. -> retry.
-            raise _TemporarySendError(f"{log_prefix} delivery failed; check connectivity and configuration") from None
+            raise _TemporarySendError(
+                f"{log_prefix} delivery failed; check connectivity and configuration"
+            ) from None
 
     return sent, failed
 
@@ -389,7 +392,9 @@ def send_question_created_webhooks(
 
     out: dict[str, Any] = {"enabled": True}
 
-    with httpx.Client(timeout=timeout, follow_redirects=False, verify=True, trust_env=False) as client:
+    with httpx.Client(
+        timeout=timeout, follow_redirects=False, verify=True, trust_env=False
+    ) as client:
         # Slack
         try:
             s, f = _send_many(
@@ -437,8 +442,9 @@ def send_question_created_webhooks(
         except _TemporarySendError:
             raise
         except Exception:
-            out["google_chat_sent"], out["google_chat_failed"] = 0, len(
-                config.google_chat_urls
+            out["google_chat_sent"], out["google_chat_failed"] = (
+                0,
+                len(config.google_chat_urls),
             )
 
         # Generic (send canonical JSON so optional signature can be verified)
@@ -475,9 +481,11 @@ def send_question_created_webhooks(
                     )
             except _TemporarySendError:
                 raise
-            except Exception as e:
+            except Exception:
                 g_failed += 1
-                raise _TemporarySendError("Generic webhook delivery failed; check connectivity and configuration") from None
+                raise _TemporarySendError(
+                    "Generic webhook delivery failed; check connectivity and configuration"
+                ) from None
 
         out["generic_sent"], out["generic_failed"] = g_sent, g_failed
 

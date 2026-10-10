@@ -6,8 +6,8 @@ Create Date: 2026-01-16
 
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0009_user_pref_landing_len"
 down_revision = "0008_user_pref_viz_and_landing"

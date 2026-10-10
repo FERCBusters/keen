@@ -6,8 +6,8 @@ Create Date: 2026-01-16
 
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0006_user_pref_auto_apply"
 down_revision = "0005_saved_searches"

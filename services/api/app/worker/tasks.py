@@ -1,28 +1,35 @@
 from __future__ import annotations
-from app.ingest.gitea import ingest_gitea_all
-from app.ingest.redmine import ingest_redmine_all
-from app.ingest.riskledger import ingest_riskledger_all
-from app.ingest.gitlab import ingest_gitlab_all
+
+import logging
+import uuid
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db.models import (
+    Artifact,
+    ControlItem,
+    Event,
+    EventQuestionPost,
+    EventQuestionPostAttachment,
+    EventQuestionThread,
+    Mapping,
+    User,
+)
 from app.db.session import SessionLocal
-from app.worker.celery_app import celery_app
-
-from app.ingest.loki import ingest_loki_all
-from app.ingest.cloudwatch_logs import ingest_cloudwatch_logs_all
-from app.ingest.github import ingest_github_all
-from app.ingest.forgejo import ingest_forgejo_all
-from app.ingest.jenkins import ingest_jenkins_all
-from app.ingest.taiga import ingest_taiga_all
 from app.ingest.bookstack import ingest_bookstack_all
-from app.ingest.rss import ingest_rss_all
+from app.ingest.cloudwatch_logs import ingest_cloudwatch_logs_all
+from app.ingest.forgejo import ingest_forgejo_all
+from app.ingest.gitea import ingest_gitea_all
+from app.ingest.github import ingest_github_all
+from app.ingest.gitlab import ingest_gitlab_all
 from app.ingest.google_workspace import ingest_google_workspace_all
-from app.services.audit_schedules import materialize_due_scheduled_audits
-from app.services.control_evidence_stats import refresh_framework_event_counts_cache
-from app.services.effectiveness_metrics import materialize_missing_monthly_zero_metrics
-
+from app.ingest.jenkins import ingest_jenkins_all
+from app.ingest.loki import ingest_loki_all
+from app.ingest.redmine import ingest_redmine_all
+from app.ingest.riskledger import ingest_riskledger_all
+from app.ingest.rss import ingest_rss_all
+from app.ingest.taiga import ingest_taiga_all
 from app.outbound.question_webhooks import (
     OutboundWebhookConfig,
     build_generic_payload,
@@ -30,20 +37,10 @@ from app.outbound.question_webhooks import (
     send_question_created_webhooks,
     send_question_reply_webhooks,
 )
-
-from app.db.models import (
-    Event,
-    User,
-    Mapping,
-    ControlItem,
-    EventQuestionThread,
-    EventQuestionPost,
-    EventQuestionPostAttachment,
-    Artifact,
-)
-
-import uuid
-import logging
+from app.services.audit_schedules import materialize_due_scheduled_audits
+from app.services.control_evidence_stats import refresh_framework_event_counts_cache
+from app.services.effectiveness_metrics import materialize_missing_monthly_zero_metrics
+from app.worker.celery_app import celery_app
 
 log = logging.getLogger(__name__)
 
@@ -292,9 +289,12 @@ def send_question_webhooks_task(thread_id: str, post_id: str) -> dict:
         try:
             res = send_question_created_webhooks(cfg, generic)
             return res
-        except Exception as e:
+        except Exception:
             log.warning("question webhook fanout failed")
-            return {"enabled": True, "error": "Webhook delivery failed; check connectivity and configuration"}
+            return {
+                "enabled": True,
+                "error": "Webhook delivery failed; check connectivity and configuration",
+            }
     finally:
         db.close()
 
@@ -461,16 +461,21 @@ def send_question_reply_webhooks_task(thread_id: str, post_id: str) -> dict:
         try:
             res = send_question_reply_webhooks(cfg, generic)
             return res
-        except Exception as e:
+        except Exception:
             log.warning("question reply webhook fanout failed")
-            return {"enabled": True, "error": "Webhook delivery failed; check connectivity and configuration"}
+            return {
+                "enabled": True,
+                "error": "Webhook delivery failed; check connectivity and configuration",
+            }
     finally:
         db.close()
+
 
 @celery_app.task(name="app.worker.tasks.backfill_rule_task")
 def backfill_rule_task(job_id: str) -> None:
     from app.db.models import RuleBackfillJob
     from app.worker.rule_backfill import process_batch
+
     try:
         for _ in range(20):
             if not process_batch(uuid.UUID(job_id)):
@@ -489,25 +494,35 @@ def backfill_rule_task(job_id: str) -> None:
 @celery_app.task(name="app.worker.tasks.recover_rule_backfills_task")
 def recover_rule_backfills_task() -> None:
     from app.worker.rule_backfill import recover_jobs
+
     for job_id in recover_jobs():
         backfill_rule_task.delay(str(job_id))
 
 
-@celery_app.task(name='app.worker.tasks.integration_run_task', soft_time_limit=140, time_limit=160, max_retries=0)
+@celery_app.task(
+    name="app.worker.tasks.integration_run_task",
+    soft_time_limit=140,
+    time_limit=160,
+    max_retries=0,
+)
 def integration_run_task(run_id):
     from app.integrations.runtime import run_job
+
     run_job(run_id)
 
 
-@celery_app.task(name='app.worker.tasks.integration_tick_task')
+@celery_app.task(name="app.worker.tasks.integration_tick_task")
 def integration_tick_task():
     from app.integrations.runtime import tick
+
     tick()
+
 
 @celery_app.task(name="app.worker.tasks.ingest_gitea_all_task")
 def ingest_gitea_all_task():
     with SessionLocal() as db:
         return ingest_gitea_all(db)
+
 
 @celery_app.task(name="app.worker.tasks.ingest_gitlab_all_task")
 def ingest_gitlab_all_task():
@@ -521,9 +536,10 @@ def ingest_redmine_all_task():
         return ingest_redmine_all(db)
 
 
-@celery_app.task(name='app.worker.tasks.evidence_retention_task')
+@celery_app.task(name="app.worker.tasks.evidence_retention_task")
 def evidence_retention_task():
     from app.services.evidence_retention import run_retention
+
     if run_retention():
         evidence_retention_task.apply_async(countdown=1)
 
@@ -531,6 +547,7 @@ def evidence_retention_task():
 @celery_app.task
 def security_notifications_task():
     from app.services.security_notifications import deliver_pending
+
     return deliver_pending()
 
 
@@ -540,13 +557,15 @@ def ingest_riskledger_all_task():
         return ingest_riskledger_all(db)
 
 
-@celery_app.task(name='keen.ingest_source_connection')
+@celery_app.task(name="keen.ingest_source_connection")
 def ingest_source_connection_task(source: str, connection_id: str):
     """Use the same entry point and global gates as scheduled polling."""
     from importlib import import_module
+
     from app.services.ingestion_pause import POLLING_SOURCES
+
     if source not in POLLING_SOURCES:
-        raise ValueError('Unknown polling source')
-    ingest = getattr(import_module('app.ingest.' + source), 'ingest_' + source + '_all')
+        raise ValueError("Unknown polling source")
+    ingest = getattr(import_module("app.ingest." + source), "ingest_" + source + "_all")
     with SessionLocal() as db:
         return ingest(db, connection_id=connection_id)

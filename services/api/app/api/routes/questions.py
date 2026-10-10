@@ -1,12 +1,10 @@
 from __future__ import annotations
-from app.core.datetime_utils import utc_now_naive
 
 import asyncio
 import os
-import re
 import uuid
-from urllib.parse import urlencode, urlparse
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 from fastapi import (
     APIRouter,
@@ -14,14 +12,15 @@ from fastapi import (
     HTTPException,
     Request,
     WebSocket,
-    WebSocketDisconnect,
 )
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.api.utils import try_uuid as _try_uuid
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     Artifact,
+    AuditLog,
     Event,
     EventQuestionPost,
     EventQuestionPostAttachment,
@@ -29,21 +28,20 @@ from app.db.models import (
     PestleItem,
     Risk,
     User,
-    AuditLog,
 )
 from app.db.session import get_db
-from app.security.auth import require_admin, get_current_user_from_headers_cookies
+from app.realtime.notifications import notification_bus, notification_hub
+from app.security.auth import get_current_user_from_headers_cookies, require_admin
+from app.security.diary_visibility import is_diary_event_visible
 from app.security.permissions import has_permission
 from app.security.roles import is_effective_admin
-from app.security.diary_visibility import is_diary_event_visible
 from app.storage.s3 import put_bytes
-from app.realtime.notifications import notification_bus, notification_hub
-from app.core.config import settings
 
 router = APIRouter()
 
 QUESTION_CREATE_PERMISSION = "question.create"
 _NOTIFICATION_RECHECK_SECONDS = 30
+
 
 def _count_open_questions(db: Session) -> int:
     return int(
@@ -173,6 +171,7 @@ def _risk_question_target(
     if not row:
         raise HTTPException(status_code=404, detail="CIA Triad risk not found")
     from app.api.routes.risks import _is_risk_owner
+
     is_owner = _is_risk_owner(user, row)
     if not (
         is_effective_admin(db, user)
@@ -1310,22 +1309,36 @@ async def admin_set_question_status(
 def _notification_snapshot(headers, cookies, *, counts=False):
     # Never hold a dependency-scoped DB transaction for a WebSocket lifetime.
     from app.db.session import SessionLocal
+
     with SessionLocal() as db:
-        user = get_current_user_from_headers_cookies(headers, cookies, db, refresh_session=False)
+        user = get_current_user_from_headers_cookies(
+            headers, cookies, db, refresh_session=False
+        )
         if not user:
             return None
         from app.security.permissions import ensure_session_authorization_current
+
         ensure_session_authorization_current(db, user)
         admin = is_effective_admin(db, user)
         snapshot = (str(user.id), admin, user.authz_version, user.mfa_version)
         payloads = []
         if counts:
             if admin:
-                payloads.append({"scope": "admin", "type": "questions.open_count",
-                                 "open_count": _count_open_questions(db)})
-            payloads.append({"scope": "user", "type": "questions.unread_replies_count",
-                             "user_id": str(user.id),
-                             "unread_count": _count_unread_replies_for_user(db, user.id)})
+                payloads.append(
+                    {
+                        "scope": "admin",
+                        "type": "questions.open_count",
+                        "open_count": _count_open_questions(db),
+                    }
+                )
+            payloads.append(
+                {
+                    "scope": "user",
+                    "type": "questions.unread_replies_count",
+                    "user_id": str(user.id),
+                    "unread_count": _count_unread_replies_for_user(db, user.id),
+                }
+            )
         return snapshot, payloads
 
 
@@ -1333,17 +1346,22 @@ def _notification_snapshot(headers, cookies, *, counts=False):
 async def ws_notifications(websocket: WebSocket):
     """Bounded notification connections with periodic session revalidation."""
     from starlette.concurrency import run_in_threadpool
+
     from app.security.csrf import request_origin_allowed
+
     if not request_origin_allowed(websocket, require_origin=True):
         await websocket.close(code=1008, reason="Origin not allowed")
         return
-    initial = await run_in_threadpool(_notification_snapshot, websocket.headers,
-                                     websocket.cookies, counts=True)
+    initial = await run_in_threadpool(
+        _notification_snapshot, websocket.headers, websocket.cookies, counts=True
+    )
     if initial is None:
         await websocket.close(code=1008)
         return
     identity, payloads = initial
-    if not await notification_hub.connect(websocket, user_id=identity[0], is_admin=identity[1]):
+    if not await notification_hub.connect(
+        websocket, user_id=identity[0], is_admin=identity[1]
+    ):
         await websocket.close(code=1008, reason="Too many notification connections")
         return
     try:
@@ -1354,13 +1372,15 @@ async def ws_notifications(websocket: WebSocket):
         next_check = loop.time() + _NOTIFICATION_RECHECK_SECONDS
         while True:
             try:
-                message = await asyncio.wait_for(websocket.receive_text(),
-                                                 timeout=max(0, next_check-loop.time()))
+                message = await asyncio.wait_for(
+                    websocket.receive_text(), timeout=max(0, next_check - loop.time())
+                )
                 if len(message) > 1024:
                     break
             except asyncio.TimeoutError:
-                current = await run_in_threadpool(_notification_snapshot, websocket.headers,
-                                                 websocket.cookies)
+                current = await run_in_threadpool(
+                    _notification_snapshot, websocket.headers, websocket.cookies
+                )
                 if current is None or current[0] != identity:
                     break
                 await asyncio.wait_for(websocket.send_json({"type": "ping"}), timeout=5)

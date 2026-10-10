@@ -10,12 +10,11 @@ from urllib.parse import urlsplit
 
 import httpx2 as httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
-from authlib.oidc.core import CodeIDToken
-from joserfc.errors import InvalidClaimError, JoseError
 from authlib.oauth2.rfc6749.errors import OAuth2Error
-from app.security.sso_http import client_options
+from authlib.oidc.core import CodeIDToken
 from fastapi import HTTPException, Request
 from joserfc import jwt
+from joserfc.errors import InvalidClaimError, JoseError
 from joserfc.jwk import KeySet
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -23,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import OidcLoginState, User, UserIdentity, UserSsoEmail
+from app.security.sso_http import client_options
 
 
 @dataclass(frozen=True)
@@ -86,7 +86,9 @@ def _first_nonempty(*values: Any) -> str:
 def _oidc_provider() -> SsoProvider:
     return SsoProvider(
         key="oidc",
-        allowed_algs=tuple(str(_setting("oidc_allowed_algs", "RS256")).replace(",", " ").split()),
+        allowed_algs=tuple(
+            str(_setting("oidc_allowed_algs", "RS256")).replace(",", " ").split()
+        ),
         kind="oidc",
         label=_first_nonempty(_setting("oidc_provider_label", ""), "OpenID Connect"),
         enabled=bool(_setting("oidc_enabled", False)),
@@ -98,16 +100,10 @@ def _oidc_provider() -> SsoProvider:
         token_endpoint=_first_nonempty(_setting("oidc_token_endpoint", "")),
         jwks_uri=_first_nonempty(_setting("oidc_jwks_uri", "")),
         issuer=_first_nonempty(_setting("oidc_issuer", "")),
-        userinfo_endpoint=_first_nonempty(
-            _setting("oidc_userinfo_endpoint", "")
-        ),
-        scopes=_first_nonempty(
-            _setting("oidc_scopes", ""), "openid email profile"
-        ),
+        userinfo_endpoint=_first_nonempty(_setting("oidc_userinfo_endpoint", "")),
+        scopes=_first_nonempty(_setting("oidc_scopes", ""), "openid email profile"),
         redirect_uri=_first_nonempty(_setting("oidc_redirect_uri", "")),
-        end_session_endpoint=_first_nonempty(
-            _setting("oidc_end_session_endpoint", "")
-        ),
+        end_session_endpoint=_first_nonempty(_setting("oidc_end_session_endpoint", "")),
         post_logout_redirect_uri=_first_nonempty(
             _setting("oidc_post_logout_redirect_uri", "")
         ),
@@ -123,9 +119,7 @@ def _oidc_provider() -> SsoProvider:
         auto_link_existing=bool(_setting("oidc_auto_link_existing", True)),
         token_endpoint_auth_method="client_secret_basic",
         supports_id_token=True,
-        id_token_leeway_seconds=int(
-            _setting("oidc_id_token_leeway_seconds", 60) or 0
-        ),
+        id_token_leeway_seconds=int(_setting("oidc_id_token_leeway_seconds", 60) or 0),
     )
 
 
@@ -387,8 +381,12 @@ def _redirect_uri_from_request(request: Request, provider: SsoProvider) -> str:
     return f"{base}/api/v1/auth/sso/{provider.key}/callback"
 
 
-def create_login_state(db: Session, *, next_url: str | None, state: str | None = None) -> OidcLoginState:
-    db.query(OidcLoginState).filter(OidcLoginState.expires_at <= _now()).delete(synchronize_session=False)
+def create_login_state(
+    db: Session, *, next_url: str | None, state: str | None = None
+) -> OidcLoginState:
+    db.query(OidcLoginState).filter(OidcLoginState.expires_at <= _now()).delete(
+        synchronize_session=False
+    )
     state = state or secrets.token_urlsafe(24)
     nonce = secrets.token_urlsafe(24)
     code_verifier = secrets.token_urlsafe(48)
@@ -425,9 +423,11 @@ def pop_login_state(db: Session, *, state: str) -> OidcLoginState | None:
 
     db.expunge(row)  # Retain loaded nonce/verifier after the database deletion.
     # Atomic consumption: concurrent callbacks cannot both redeem one transaction.
-    consumed = db.query(OidcLoginState).filter(
-        OidcLoginState.state == key, OidcLoginState.expires_at > _now()
-    ).delete(synchronize_session=False)
+    consumed = (
+        db.query(OidcLoginState)
+        .filter(OidcLoginState.state == key, OidcLoginState.expires_at > _now())
+        .delete(synchronize_session=False)
+    )
     db.commit()
     return row if consumed == 1 else None
 
@@ -441,9 +441,15 @@ def _browser_state(provider_key: str, secret: str) -> str:
 
 
 def set_sso_binding(response, request):
-    response.set_cookie(sso_binding_cookie(), request.state.sso_browser_secret,
-                        max_age=600, httponly=True, secure=settings.cookie_secure,
-                        samesite="lax", path="/")
+    response.set_cookie(
+        sso_binding_cookie(),
+        request.state.sso_browser_secret,
+        max_age=600,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        path="/",
+    )
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -452,7 +458,13 @@ def _normalize_next(next_url: str | None) -> str | None:
     raw = (next_url or "").strip()
     if not raw:
         return None
-    if raw.startswith("/") and not raw.startswith("//") and "://" not in raw and "\\" not in raw and not any(ord(c) < 32 for c in raw):
+    if (
+        raw.startswith("/")
+        and not raw.startswith("//")
+        and "://" not in raw
+        and "\\" not in raw
+        and not any(ord(c) < 32 for c in raw)
+    ):
         return raw
     return None
 
@@ -482,7 +494,9 @@ def _email_is_verified(provider: SsoProvider, claims: dict[str, Any]) -> bool:
 def _update_identity_metadata(identity: UserIdentity, claims: dict[str, Any]) -> None:
     identity.email = _claim_email(claims) or identity.email
     identity.preferred_username = (
-        str(claims.get("preferred_username") or identity.preferred_username or "").strip()
+        str(
+            claims.get("preferred_username") or identity.preferred_username or ""
+        ).strip()
         or None
     )
     identity.display_name = (
@@ -496,6 +510,7 @@ def _get_or_create_user_for_identity(
 ) -> User:
     issuer = _canonical_issuer(provider)
     from app.security.hosted import enforce_hosted_identity
+
     enforce_hosted_identity(provider.key, issuer, subject)
     identity = (
         db.query(UserIdentity)
@@ -519,7 +534,9 @@ def _get_or_create_user_for_identity(
     if not _allowed_by_domain(provider, email):
         raise HTTPException(status_code=403, detail="Email domain is not allowed")
     if not provider.auto_link_existing:
-        raise HTTPException(status_code=403, detail="No local account linked to this identity")
+        raise HTTPException(
+            status_code=403, detail="No local account linked to this identity"
+        )
 
     candidates: dict[str, User] = {}
     # Both KEEN mailbox verification and provider verification are required.
@@ -560,7 +577,9 @@ def _get_or_create_user_for_identity(
         db.refresh(user)
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=403, detail="SSO identity link conflict") from exc
+        raise HTTPException(
+            status_code=403, detail="SSO identity link conflict"
+        ) from exc
     return user
 
 
@@ -568,17 +587,28 @@ async def build_authorize_redirect(
     request: Request, db: Session, next_url: str | None, provider_key: str | None = None
 ) -> str:
     provider = _require_provider_config(provider_key)
-    from app.security.rate_limit import fixed_window_allow, client_ip
     from app.core.valkey import get_valkey
-    allowed, retry = fixed_window_allow(get_valkey(),
-        f"keen:rl:sso-start:{client_ip(request) or 'unknown'}", 30, 300, fail_closed=True)
+    from app.security.rate_limit import client_ip, fixed_window_allow
+
+    allowed, retry = fixed_window_allow(
+        get_valkey(),
+        f"keen:rl:sso-start:{client_ip(request) or 'unknown'}",
+        30,
+        300,
+        fail_closed=True,
+    )
     if not allowed:
-        raise HTTPException(429, "Too many sign-in attempts", headers={"Retry-After": str(retry)})
+        raise HTTPException(
+            429, "Too many sign-in attempts", headers={"Retry-After": str(retry)}
+        )
     redirect_uri = _redirect_uri_from_request(request, provider)
     secret = secrets.token_urlsafe(32)
     request.state.sso_browser_secret = secret
-    state_row = create_login_state(db, next_url=_normalize_next(next_url),
-                                   state=_browser_state(provider.key, secret))
+    state_row = create_login_state(
+        db,
+        next_url=_normalize_next(next_url),
+        state=_browser_state(provider.key, secret),
+    )
 
     client = _new_client(provider, redirect_uri=redirect_uri)
     try:
@@ -731,12 +761,27 @@ async def _handle_oidc_callback(
 
     # The deployment's algorithm policy is authoritative; the token header
     # cannot widen it. Public JWKS are suitable only for asymmetric verification.
-    supported = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512",
-                 "ES256K", "PS256", "PS384", "PS512", "EdDSA"}
+    supported = {
+        "RS256",
+        "RS384",
+        "RS512",
+        "ES256",
+        "ES384",
+        "ES512",
+        "ES256K",
+        "PS256",
+        "PS384",
+        "PS512",
+        "EdDSA",
+    }
     if not provider.allowed_algs or not set(provider.allowed_algs) <= supported:
-        raise HTTPException(503, "Configure supported asymmetric OIDC signing algorithms")
+        raise HTTPException(
+            503, "Configure supported asymmetric OIDC signing algorithms"
+        )
     decoded = jwt.decode(
-        id_token, KeySet.import_key_set(jwks), algorithms=list(provider.allowed_algs),
+        id_token,
+        KeySet.import_key_set(jwks),
+        algorithms=list(provider.allowed_algs),
     )
     # KEEN configures one trusted audience: its own client ID. A matching azp
     # does not establish trust in additional audiences or make non-string IDs safe.
@@ -754,8 +799,9 @@ async def _handle_oidc_callback(
                 raise InvalidClaimError(name)
     if "azp" in raw_claims and raw_claims["azp"] != provider.client_id:
         raise InvalidClaimError("azp")
-    claims = CodeIDToken(decoded.claims, decoded.header,
-                         options=claims_options, params=claims_params)
+    claims = CodeIDToken(
+        decoded.claims, decoded.header, options=claims_options, params=claims_params
+    )
     claims.validate(leeway=int(provider.id_token_leeway_seconds or 0))
 
     claims_dict: dict[str, Any] = dict(claims)
@@ -780,10 +826,17 @@ async def handle_callback(
     provider = _require_provider_config(provider_key)
     state = (request.query_params.get("state") or "").strip()
     secret = request.cookies.get(sso_binding_cookie(), "")
-    if len(state) != 64 or not state.isascii() or not secret or len(secret) > 128 or not secrets.compare_digest(
-        state, _browser_state(provider.key, secret)
+    if (
+        len(state) != 64
+        or not state.isascii()
+        or not secret
+        or len(secret) > 128
+        or not secrets.compare_digest(state, _browser_state(provider.key, secret))
     ):
-        raise HTTPException(status_code=400, detail="SSO browser verification failed; start sign-in again")
+        raise HTTPException(
+            status_code=400,
+            detail="SSO browser verification failed; start sign-in again",
+        )
     row = pop_login_state(db, state=state)
     if not row:
         raise HTTPException(status_code=400, detail="SSO state missing or expired")
@@ -797,8 +850,18 @@ async def handle_callback(
             user, next_url, id_token = await _handle_oidc_callback(
                 request, db, provider, row
             )
-    except (JoseError, OAuth2Error, httpx.HTTPError, TimeoutError, ValueError, TypeError):
+    except (
+        JoseError,
+        OAuth2Error,
+        httpx.HTTPError,
+        TimeoutError,
+        ValueError,
+        TypeError,
+    ):
         # Provider diagnostics can include tokens and echoed client credentials.
         # Do not expose them in an HTTP response or an unhandled traceback.
-        raise HTTPException(400, "SSO verification failed; start sign-in again or contact an administrator") from None
+        raise HTTPException(
+            400,
+            "SSO verification failed; start sign-in again or contact an administrator",
+        ) from None
     return user, next_url, id_token, provider

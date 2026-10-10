@@ -1,4 +1,5 @@
 """ISMS meetings; see docs/maintainability-review.md for module boundaries."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -65,7 +66,9 @@ def create_meeting(
     _replace_meeting_people(
         db, row, payload.attendee_user_ids or [], payload.apology_user_ids or []
     )
-    _replace_meeting_person_links(db, row, payload.attendee_person_ids or [], payload.apology_person_ids or [])
+    _replace_meeting_person_links(
+        db, row, payload.attendee_person_ids or [], payload.apology_person_ids or []
+    )
     _replace_meeting_links(db, row, payload.links or [])
     _apply_links(db, "meeting", row.id, fw, payload, user)
     after = _meeting_out(db, row, fw)
@@ -135,7 +138,9 @@ def update_meeting(
             db, row, payload.attendee_user_ids or [], payload.apology_user_ids or []
         )
     if "attendee_person_ids" in fields or "apology_person_ids" in fields:
-        _replace_meeting_person_links(db, row, payload.attendee_person_ids or [], payload.apology_person_ids or [])
+        _replace_meeting_person_links(
+            db, row, payload.attendee_person_ids or [], payload.apology_person_ids or []
+        )
     if "links" in fields:
         _replace_meeting_links(db, row, payload.links or [])
     _apply_links(db, "meeting", row.id, fw, payload, user)
