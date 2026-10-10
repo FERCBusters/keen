@@ -173,7 +173,7 @@ function paintDefinitionChoices() {
   const adapter = $('definition-adapter').value, section = $('definition-section').value;
   const choice = $('definition-entry');
   if (section === 'source') { choice.replaceChildren(new Option(`Collected events from ${adapter}`, '__all__')); paintDefinitionEntry(); return; }
-  choice.replaceChildren(new Option('Create a new collection item', '__new'));
+  choice.replaceChildren();
   for (const item of collectors.filter(item => item.adapter === adapter && item.section === section && inConnection(item)))
     choice.add(new Option(item.key, item.collector));
   paintDefinitionEntry();
@@ -210,8 +210,10 @@ async function selectDefinitionAdapter(keepConnection=false) {
 function definitionFromForm() {
   const adapter = $('definition-adapter').value, section = $('definition-section').value;
   if (!adapter) throw new Error('Enable an ingester before creating a mapping.');
+  if (layouts[adapter] && adapter !== 'webhooks' && !collectors.some(item => item.adapter === adapter && (!selectedConnection() || inConnection(item)))) throw new Error('Add an input under Sources before creating a mapping rule.');
   if (section === 'source') return {adapter, section, entry: {}, key: '__all__', collector: null,
     entry_key: null, connector_version: 0, connection_id: selectedConnection() || null};
+  if (!$('definition-entry').value) throw new Error('Add an input under Sources before creating its mapping rule.');
   const entry = definitionEntry(), key = definitionKey(adapter, section, entry);
   if (!key || key === '/') throw new Error('Give the collection item a name, URL or ID.');
   return {adapter, section, entry, key, collector: definitionId(adapter, section, key),
@@ -786,7 +788,11 @@ window.addEventListener('keen-filter-source', async event => {
 });
 window.addEventListener('keen-collection-create', async event => {
   await loadRules();await newRule();$('definition-adapter').value=event.detail.source;
-  await selectDefinitionAdapter();$('input-options').open=true;
+  await selectDefinitionAdapter();
+  if(event.detail.connection_id){$('definition-connection').value=event.detail.connection_id;await selectDefinitionAdapter(true);}
+  const input=event.detail.input;
+  if(input?.section){$('definition-section').value=input.section;paintDefinitionChoices();$('definition-entry').value=input.collector;paintDefinitionEntry();}
+  $('input-options').open=true;
 });
 window.addEventListener('keen-connections-changed', () => loadRules().catch(e=>status(e.message)));
 

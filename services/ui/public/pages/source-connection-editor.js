@@ -8,7 +8,7 @@ export function editSourceConnection({types, connection = null, onSaved}) {
   const form = document.createElement('form');
   const heading = document.createElement('h2');
   heading.className = 'h4';
-  heading.textContent = connection ? 'Edit connection' : 'Set up a source';
+  heading.textContent = connection ? 'Edit source' : 'Define a source';
   const hint = document.createElement('p');
   hint.textContent = 'Name the endpoint or account and enter its credentials, then add the inputs to collect. Credentials are encrypted on the server.';
   form.append(heading, hint);
@@ -32,7 +32,7 @@ export function editSourceConnection({types, connection = null, onSaved}) {
   }
   if (connection) source.value = connection.source;
   source.disabled = !!connection;
-  const name = field(form, 'Connection name', 'text', connection?.name || '');
+  const name = field(form, 'Source name', 'text', connection?.name || '');
   name.required = true;
   const enabled = field(form, 'Enable ingestion', 'checkbox');
   enabled.checked = connection?.enabled ?? true;
@@ -67,7 +67,7 @@ export function editSourceConnection({types, connection = null, onSaved}) {
   const save = document.createElement('button');
   save.type = 'submit';
   save.className = 'btn btn-primary';
-  save.textContent = connection ? 'Save connection' : 'Create connection and add inputs';
+  save.textContent = connection ? 'Save source' : 'Create source';
   save.disabled = !source.options.length;
   if (!source.options.length) error.textContent = 'Enable a source type in the deployment configuration to set up a connection.';
   const cancel = document.createElement('button');

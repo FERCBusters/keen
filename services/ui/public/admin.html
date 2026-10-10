@@ -104,7 +104,7 @@
   <div id="ig-home">
     <label for="ig-search" class="visually-hidden">Search integrations</label><input id="ig-search" class="form-control mb-3" placeholder="Search integrations…">
     <div id="ig-list" class="d-grid gap-3"></div>
-    <details class="card mt-4"><summary class="card-header">Custom API connections &amp; credentials</summary><div class="card-body"><p class="small-muted">These connections belong to custom API ingesters. Built-in adapters such as Forgejo, GitHub and Loki use server environment credentials and appear under Sources &amp; evidence mapping. API credentials are encrypted and never included in exported definitions.</p><div id="ig-connections" class="mb-3"></div><button id="ig-add-connection" class="btn btn-outline-primary">Add connection</button><form id="ig-connection-form" class="mt-3" hidden>
+    <details class="card mt-4"><summary class="card-header">Custom API connections &amp; credentials</summary><div class="card-body"><p class="small-muted">These connections belong to custom API ingesters. Define built-in sources such as Forgejo, GitHub and Loki, including their credentials, under Sources &amp; evidence mapping. API credentials are encrypted and never included in exported definitions.</p><div id="ig-connections" class="mb-3"></div><button id="ig-add-connection" class="btn btn-outline-primary">Add connection</button><form id="ig-connection-form" class="mt-3" hidden>
       <input id="ig-connection-id" type="hidden"><div class="row g-3">
       <div class="col-md-6"><label for="ig-cn" class="form-label">Connection name</label><input id="ig-cn" class="form-control" required maxlength="128"></div>
       <div class="col-md-6"><label for="ig-cu" class="form-label">Base URL</label><input id="ig-cu" class="form-control" type="url" placeholder="https://api.example.org" required></div>
@@ -386,15 +386,14 @@
 
       <div class="tab-pane fade" id="pane-evidence-config" role="tabpanel" aria-labelledby="tab-evidence-config" tabindex="0">
 <div class="card mb-3"><div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
-  <div><h2 class="h5 mb-1">Bring evidence into KEEN</h2><p class="small-muted mb-0">Choose a source and its collections, run an ingestion, then map the collected events to controls.</p></div>
-  <button id="hub-start-setup" type="button" class="btn btn-primary flex-shrink-0"><i class="bi bi-plus-circle me-2" aria-hidden="true"></i>Set up a source</button>
+  <div><h2 class="h5 mb-1">Bring evidence into KEEN</h2><p class="small-muted mb-0">Define a source with its address and credentials, add inputs, then map their evidence to controls.</p></div>
+  <button id="hub-start-setup" type="button" class="btn btn-primary flex-shrink-0"><i class="bi bi-plus-circle me-2" aria-hidden="true"></i>Define a source</button>
 </div></div>
 <div class="nav nav-tabs mb-3" role="tablist" aria-label="Evidence workspace views">
-<button id="hub-mapping" class="nav-link active" type="button" role="tab" aria-selected="true" aria-controls="evidence-mapping-view">Evidence Mapping</button>
-<button id="hub-source" class="nav-link" type="button" role="tab" aria-selected="false" aria-controls="evidence-management-view" tabindex="-1">By source</button>
-<button id="hub-connection" class="nav-link" type="button" role="tab" aria-selected="false" aria-controls="evidence-management-view" tabindex="-1">By connection</button>
+<button id="hub-source" class="nav-link active" type="button" role="tab" aria-selected="true" aria-controls="evidence-management-view">Sources</button>
+<button id="hub-mapping" class="nav-link" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="evidence-mapping-view">Evidence Mapping</button>
 </div>
-<section id="evidence-mapping-view" role="tabpanel" aria-labelledby="hub-mapping">        <details id="evidence-source-health" class="card mb-3"><summary class="card-header fw-bold">Source catalogue and collection health</summary><div class="card-body">
+<section id="evidence-mapping-view" hidden role="tabpanel" aria-labelledby="hub-mapping">        <details id="evidence-source-health" class="card mb-3"><summary class="card-header fw-bold">Source catalogue and collection health</summary><div class="card-body">
           <p class="small-muted">Review the available sources and their collected events. Built-in adapters use their configured credentials; Custom API connections are managed in API ingester builder. Agent identities and credentials are managed in KEEN Agents.</p>
           <p class="small text-secondary">Pause or resume collection across all connections of a source type. Evidence, mappings and cursors are retained. Runs already in progress may finish; resume uses the next scheduled run.</p>
           <div id="source-catalogue" class="row g-2"><div class="col-12 small-muted">Loading source catalogue…</div></div>
@@ -418,7 +417,7 @@
             </div>
             <div id="ec-bookstack-picker" class="border rounded p-3 mt-3" hidden><p class="small-muted">Browse BookStack using the API credentials configured on the KEEN server. Only names and IDs are shown here.</p><div class="row g-2"><div class="col-md-5"><label for="ec-bookstack-book" class="form-label">Book</label><select id="ec-bookstack-book" class="form-select"></select></div><div class="col-md-7"><label for="ec-bookstack-page" class="form-label">Page (grouped by chapter)</label><select id="ec-bookstack-page" class="form-select"></select></div></div><div class="d-flex gap-2 mt-2"><button id="ec-bookstack-more-books" type="button" class="btn btn-sm btn-outline-secondary" hidden>More books</button><button id="ec-bookstack-more-pages" type="button" class="btn btn-sm btn-outline-secondary" hidden>More pages</button></div><div id="ec-bookstack-status" class="small mt-2" role="status"></div></div>
             <div id="ec-definition-fields" class="row g-2 mt-2"></div>
-            <details id="ec-collection-settings" class="mt-2"><summary>Additional collection settings (advanced)</summary><p class="small-muted">Connector-specific JSON options. Credentials remain in the Docker environment.</p><textarea id="ec-definition-extra" class="form-control font-monospace" rows="5">{}</textarea></details>
+            <details id="ec-collection-settings" class="mt-2"><summary>Additional input settings (advanced)</summary><p class="small-muted">Connector-specific JSON options. Credentials remain in the Docker environment.</p><textarea id="ec-definition-extra" class="form-control font-monospace" rows="5">{}</textarea></details>
             <input id="ec-when-source" type="hidden"><datalist id="ec-source-options"></datalist>
             <div class="row g-2 mt-1 mb-2"><div class="col-md-9"><label class="form-label">Start with a real event</label><select id="ec-sample" class="form-select"></select></div><div class="col-md-3 d-flex align-items-end"><button id="ec-use-sample" class="btn btn-outline-primary w-100">Copy its match values</button></div></div>
             <div id="ec-sample-details" class="small bg-body-tertiary rounded p-2 mb-2" role="status">Choose a recent event to inspect its fields. You can also define a rule before evidence arrives.</div>
@@ -464,9 +463,9 @@
           </div>
         </div></div>
 </section>
-<section id="evidence-management-view" role="tabpanel" aria-labelledby="hub-source" hidden>  <details id="hub-panel" class="mb-4" open><summary class="h4">Sources &amp; collections</summary>
-<p class="small-muted">Choose a source or connection to manage collection and its evidence definitions. Built-in adapters use server environment credentials; API connections store encrypted credentials.</p>
-    <div class="d-flex flex-wrap gap-2 mb-3"><button id="hub-refresh" class="btn btn-outline-secondary">Refresh</button><input id="hub-search" class="form-control w-auto flex-grow-1" placeholder="Find a source or connection" aria-label="Find a source or connection"></div>
+<section id="evidence-management-view" role="tabpanel" aria-labelledby="hub-source">  <details id="hub-panel" class="mb-4" open><summary class="h4">Your sources</summary>
+<p class="small-muted">Each source is a named server or account. Add inputs to choose what it collects, then add mapping rules for that evidence.</p>
+    <div class="d-flex flex-wrap gap-2 mb-3"><button id="hub-refresh" class="btn btn-outline-secondary">Refresh</button><input id="hub-search" class="form-control w-auto flex-grow-1" placeholder="Find a source" aria-label="Find a source"></div>
     <p><a href="#integrations">Build a custom API ingester</a> · <a href="#ingest">Run built-in adapters</a></p>
 
     <p id="hub-view-description" class="small-muted" aria-live="polite"></p>
@@ -479,7 +478,7 @@
           <button id="ec-save-settings" class="btn btn-outline-primary mt-2">Save adapter settings</button>
         </details></section>
     <dialog id="hub-collection" aria-labelledby="hub-collection-title" style="max-width:640px;width:calc(100% - 2rem);max-height:85vh;overflow:auto;background:var(--bs-body-bg);color:var(--bs-body-color);border:1px solid var(--bs-border-color);border-radius:1rem;padding:1.5rem">
-      <h2 id="hub-collection-title" class="h4">Add collection</h2><p>Choose the remote input to fetch. You can map its events to controls separately.</p><label for="hub-collection-type">Input type</label><select id="hub-collection-type" class="form-select mb-3"></select><div id="hub-collection-fields"></div><details><summary>Additional collection settings</summary><textarea id="hub-collection-extra" class="form-control font-monospace" rows="5" aria-label="Additional collection settings JSON">{}</textarea></details><p id="hub-collection-error" class="text-danger" role="alert"></p><button id="hub-collection-cancel" class="btn btn-outline-secondary">Cancel</button> <button id="hub-collection-save" class="btn btn-primary">Save collection</button>
+      <h2 id="hub-collection-title" class="h4">Add input</h2><p>Choose the remote input to fetch. You can map its events to controls separately.</p><label for="hub-collection-type">Input type</label><select id="hub-collection-type" class="form-select mb-3"></select><div id="hub-collection-fields"></div><details><summary>Additional input settings</summary><textarea id="hub-collection-extra" class="form-control font-monospace" rows="5" aria-label="Additional input settings JSON">{}</textarea></details><p id="hub-collection-error" class="text-danger" role="alert"></p><button id="hub-collection-cancel" class="btn btn-outline-secondary">Cancel</button> <button id="hub-collection-save" class="btn btn-primary">Save input</button>
     </dialog>
     <dialog id="hub-confirm" aria-labelledby="hub-confirm-heading" style="max-width:640px;width:calc(100% - 2rem);max-height:85vh;overflow:auto;background:var(--bs-body-bg);color:var(--bs-body-color);border:1px solid var(--bs-border-color);border-radius:1rem;padding:1.5rem">
       <h2 id="hub-confirm-heading" class="h4">Remove connection and mappings</h2><div id="hub-impact"></div><p id="hub-retained"></p>
