@@ -154,11 +154,12 @@ function showSavedInput(connection,source){
  showSurface('source');
  const status=byId('status');status.hidden=false;status.className='alert alert-success';
  const message=document.createElement('p');message.textContent=`Input saved for ${connection?.name || source}. Collect evidence now, or add a mapping rule.`;
- status.replaceChildren(message);
- if(connection)status.append(button('Collect now',async()=>{
+ const actions=document.createElement('div');actions.className='d-flex flex-wrap gap-2';
+ status.replaceChildren(message,actions);
+ if(connection)actions.append(button('Collect now',async()=>{
   await apiPost(root+'/source-connections/'+connection.id+'/run',{});
   message.textContent=`Collection queued for ${connection.name}. Check the Events view for collected evidence.`;
  }));
- status.append(button('Add mapping rule',()=>go(source,true,connection)));
+ actions.append(button('Add mapping rule',()=>go(source,true,connection))); 
  status.tabIndex=-1;status.focus();status.scrollIntoView?.({block:'nearest',behavior:'smooth'});
 }

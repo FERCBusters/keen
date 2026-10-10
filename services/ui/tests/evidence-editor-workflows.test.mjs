@@ -110,3 +110,15 @@ test('Next never adds the dropdown control or restores a removed target', async 
  document.getElementById('ec-next-step').click();
  assert.equal(targets.children.length,1);
 });
+
+test('background source refresh does not navigate to mappings or erase an open draft',async t=>{
+ const {document,window,calls}=await fixture(t);
+ const description=document.getElementById('ec-description');description.value='Keep my draft';
+ let navigations=0;window.addEventListener('keen-show-evidence-mapping',()=>navigations++);
+ const before=calls.filter(url=>url==='/api/v1/admin/source-connections').length;
+ window.dispatchEvent(new window.Event('keen-connections-changed'));
+ await until(()=>calls.filter(url=>url==='/api/v1/admin/source-connections').length>before);
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(navigations,0);
+ assert.equal(description.value,'Keep my draft');
+});

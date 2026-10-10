@@ -534,7 +534,7 @@ function renderTargets() {
     row.append(text, remove); list.append(row);
   }
 }
-async function loadRules() {
+async function loadRules({resetEditor = true} = {}) {
   const data = await apiGet(`${apiRoot}/evidence-definitions`);
   sourceConnections=(await apiGet(`${apiRoot}/source-connections`)).connections;
   rules = data.rules; collectors = data.collectors; ruleVersion = data.rules_version;
@@ -542,7 +542,8 @@ async function loadRules() {
   $('source-filter').replaceChildren(new Option('All sources', ''));
   for (const source of [...new Set([...rules.map(r=>r.when?.source), ...collectors.map(c=>c.adapter)])].filter(Boolean).sort()) $('source-filter').add(new Option(source,source));
   $('source-filter').value = selectedSource;
-  renderRules(); await newRule(); showLibrary();
+  renderRules();
+  if (resetEditor) { await newRule(); showLibrary(); }
   if (data.warnings?.length) status(data.warnings.join(' · '), 'warning');
 
 }
@@ -794,7 +795,8 @@ window.addEventListener('keen-collection-create', async event => {
   if(input?.section){$('definition-section').value=input.section;paintDefinitionChoices();$('definition-entry').value=input.collector;paintDefinitionEntry();}
   $('input-options').open=true;
 });
-window.addEventListener('keen-connections-changed', () => loadRules().catch(e=>status(e.message)));
+// A background source refresh must preserve the active tab and mapping draft.
+window.addEventListener('keen-connections-changed', () => loadRules({resetEditor:false}).catch(e=>status(e.message)));
 
 function currentEventFields(){
  const index=$('sample').value;
