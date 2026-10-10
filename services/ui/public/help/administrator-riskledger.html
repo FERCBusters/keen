@@ -15,7 +15,7 @@
 KEEN_RISKLEDGER_API_KEY=your-api-key
 KEEN_RISKLEDGER_POLL_SECONDS=3600
 KEEN_RISKLEDGER_CONFIG_PATH=/app/config/riskledger.yml</code></pre>
-<p>The API key stays in the server environment and is sent as a Bearer credential. The adapter uses the fixed HTTPS origin <code>https://api.riskledger.com/alpha</code>, verifies TLS, rejects redirects and ignores ambient HTTP proxy settings. No credentials belong in collection JSON or YAML. Ingestion is disabled in demo mode.</p>
+<p>The API key stays in the server environment and is sent as a Bearer credential. The adapter uses the fixed HTTPS origin <code>https://api.riskledger.com/alpha</code>, verifies TLS, rejects redirects and ignores ambient HTTP proxy settings. No credentials belong in collection JSON or YAML.</p>
 <h3 id="riskledger-collections">Create the collection</h3>
 <ol><li>Open Sources &amp; Evidence Mapping and its source/connection view. Select Risk Ledger and Add collection.</li><li>Choose <code>organizations</code>. Enter <code>*</code> in <code>org</code> to use the authenticated organisation, or enter its UUID to pin the expected account. An optional label becomes the event system.</li><li>Review the shared adapter settings below. Defaults import all connected suppliers and organisation risks, and discover referenced framework entries.</li><li>Use Ingest runners → Run Risk Ledger. Inspect counts and errors, then review imported vendors, risks and the framework.</li></ol>
 <p>Each Risk Ledger connection holds one API key and its organisation input. Create a separate connection for each key. /organisations/me verifies the key’s organisation before imports begin. Select the imported framework in Admin → Frameworks if organisation framework restrictions are configured.</p>
