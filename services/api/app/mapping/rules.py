@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -59,19 +58,11 @@ class Rule:
     confidence: float = 0.8
 
 
-_RE_CACHE: dict[str, re.Pattern] = {}
-
-
 def _match_regex(pat: str | None, val: str | None) -> bool:
     if not pat:
         return True
-    val = val or ""
-    key = f"{pat}"
-    rx = _RE_CACHE.get(key)
-    if not rx:
-        rx = re.compile(pat)
-        _RE_CACHE[key] = rx
-    return bool(rx.search(val))
+    from app.security.regex import compile_pattern
+    return bool(compile_pattern(pat).search(val or ""))
 
 
 def _match_any_regex(pat: str | None, values: list[str]) -> bool:

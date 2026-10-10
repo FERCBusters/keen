@@ -64,29 +64,6 @@ app = FastAPI(
 )
 
 
-@app.middleware("http")
-async def security_headers_middleware(request: Request, call_next):
-    """Add security headers to all responses."""
-    response = await call_next(request)
-
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
-    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
-    response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
-    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-
-    if settings.cookie_secure:
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains; preload"
-        )
-
-    return response
-
-
-
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -154,53 +131,7 @@ def bootstrap_initial_admin():
 # -----------------------------------------------------------------------------
 
 
-_AUTH_EXEMPT_PATHS = {
-    "/v1/otlp/logs",
-    "/v1/agents/heartbeat",
-    "/v1/agents/enroll",
-    "/v1/agents/renew",
-    "/health",
-    "/v1/auth/methods",
-    "/v1/auth/login",
-    "/v1/auth/logout",
-    "/v1/auth/oidc/start",
-    "/v1/auth/oidc/callback",
-    "/v1/auth/oidc/logout",
-    "/openapi.json",
-    "/docs",
-    "/docs/oauth2-redirect",
-    "/redoc",
-    "/v1/openapi.json",
-    "/v1/docs",
-    "/v1/redoc",
-    "/v1/docs/oauth2-redirect",
-}
-_AUTH_EXEMPT_PREFIXES = ("/v1/webhooks", "/v1/auth/sso/", "/v1/auth/mfa/", "/docs", "/redoc")
-
-
-# CSRF: enforce for browser-session authenticated writes.
-_CSRF_EXEMPT_PATHS = {
-    "/v1/otlp/logs",
-    "/v1/agents/heartbeat",
-    "/v1/agents/enroll",
-    "/v1/agents/renew",
-    "/health",
-    "/v1/auth/methods",
-    "/v1/auth/login",
-    "/v1/auth/logout",
-    "/v1/auth/oidc/start",
-    "/v1/auth/oidc/callback",
-    "/v1/auth/oidc/logout",
-    "/openapi.json",
-    "/docs",
-    "/docs/oauth2-redirect",
-    "/redoc",
-    "/v1/openapi.json",
-    "/v1/docs",
-    "/v1/redoc",
-    "/v1/docs/oauth2-redirect",
-}
-_CSRF_EXEMPT_PREFIXES = ("/v1/webhooks", "/v1/auth/sso/", "/v1/auth/mfa/", "/docs", "/redoc")
+from app.security.route_policy import is_public_request
 
 
 @app.middleware("http")
@@ -210,11 +141,7 @@ async def csrf_middleware(request: Request, call_next):
     The UI uses a cookie-backed session (HttpOnly) and echoes a CSRF token from
     a non-HttpOnly cookie into a request header for all unsafe methods.
     """
-    path = request.url.path or ""
-
-    if path in _CSRF_EXEMPT_PATHS or any(
-        path.startswith(p) for p in _CSRF_EXEMPT_PREFIXES
-    ):
+    if is_public_request(request):
         return await call_next(request)
 
     # Only enforce CSRF for authenticated browser sessions.
@@ -252,9 +179,7 @@ async def auth_middleware(request: Request, call_next):
     """
     path = request.url.path or ""
 
-    if path in _AUTH_EXEMPT_PATHS or any(
-        path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES
-    ):
+    if is_public_request(request):
         return await call_next(request)
 
     # IMPORTANT: do not keep a SQLAlchemy session open for the duration of the
@@ -291,9 +216,7 @@ async def auth_middleware(request: Request, call_next):
 
         if path.startswith("/v1/admin"):
             # Special-case audit trail: allow users with audittrail.read.
-            if path.startswith("/v1/admin/audit") or path.startswith(
-                "/v1/admin/entity-changelog"
-            ):
+            if path in {"/v1/admin/audit", "/v1/admin/entity-changelog"}:
                 if (effective_role or "") != ROLE_ADMIN and not has_permission(
                     db, user, "audittrail.read"
                 ):
@@ -405,7 +328,7 @@ async def audit_trail_middleware(request: Request, call_next):
     """
     path = request.url.path or ""
     # Keep noise down by skipping obvious non-UI endpoints.
-    if path in {
+    if not path.startswith("/v1") or path in {
         "/health",
         "/v1/admin/questions/summary",  # admin bell badge poll,
         "/v1/evidence/latest",  # homepage ambient evidence ticker,
@@ -423,9 +346,6 @@ async def audit_trail_middleware(request: Request, call_next):
     finally:
         try:
             # Only log API calls used by the UI (UI itself is served by nginx in a separate container)
-            if not path.startswith("/v1"):
-                return
-
             status_code = getattr(response, "status_code", 500)
             dur_ms = int((time.perf_counter() - start) * 1000)
 
@@ -533,15 +453,10 @@ from app.security.demo import DemoExpiryMiddleware
 app.add_middleware(DemoExpiryMiddleware)
 
 
-@app.middleware("http")
-async def mfa_no_store(request: Request, call_next):
-    response = await call_next(request)
-    if request.url.path.startswith('/v1/auth/mfa/') or request.url.path == '/v1/me/mfa' or request.url.path.startswith('/v1/me/sso-emails'):
-        response.headers['Cache-Control'] = 'no-store'
-        response.headers['Pragma'] = 'no-cache'
-    return response
-
-
 # Enforce byte limits before JSON/form parsing, including chunked requests.
 from app.security.request_limits import RequestBodyLimitMiddleware
 app.add_middleware(RequestBodyLimitMiddleware)
+
+# Response policy also covers rejections from every inner middleware.
+from app.security.headers import SecurityHeadersMiddleware
+app.add_middleware(SecurityHeadersMiddleware)

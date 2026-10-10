@@ -37,6 +37,7 @@ FIELDS = {
     'cloudwatch_logs': ('region', 'aws_access_key_id aws_secret_access_key aws_session_token'),
 }
 _current = ContextVar('ingestion_connection', default=None)
+_run_cache = ContextVar('ingestion_run_cache', default=None)
 
 @dataclass(frozen=True)
 class Connection:
@@ -54,10 +55,21 @@ class Connection:
 @contextmanager
 def connection_scope(connection):
     token = _current.set(connection)
+    cache_token = _run_cache.set({})
     try:
         yield connection
     finally:
+        _run_cache.reset(cache_token)
         _current.reset(token)
+
+def connection_cache():
+    """Transient cache owned by this run; never share credentials across origins.
+
+    Unscoped callers get an uncached dictionary rather than process-global state.
+    """
+    cache = _run_cache.get()
+    return cache if cache is not None else {}
+
 
 def current_connection():
     return _current.get()

@@ -339,6 +339,7 @@ def _new_client(provider: SsoProvider, *, redirect_uri: str) -> AsyncOAuth2Clien
         # safely for OAuth apps that do not require PKCE.
         code_challenge_method="S256",
         timeout=httpx.Timeout(10.0),
+        verify=True, trust_env=False, follow_redirects=False,
     )
 
 
@@ -350,7 +351,7 @@ async def _get_jwks(jwks_uri: str) -> dict[str, Any]:
         if now < expires_at:
             return data
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, verify=True, trust_env=False, follow_redirects=False) as client:
         resp = await client.get(jwks_uri)
         resp.raise_for_status()
         data = resp.json()
@@ -384,6 +385,7 @@ def _redirect_uri_from_request(request: Request, provider: SsoProvider) -> str:
 
 
 def create_login_state(db: Session, *, next_url: str | None, state: str | None = None) -> OidcLoginState:
+    db.query(OidcLoginState).filter(OidcLoginState.expires_at <= _now()).delete(synchronize_session=False)
     state = state or secrets.token_urlsafe(24)
     nonce = secrets.token_urlsafe(24)
     code_verifier = secrets.token_urlsafe(48)
@@ -563,6 +565,12 @@ async def build_authorize_redirect(
     request: Request, db: Session, next_url: str | None, provider_key: str | None = None
 ) -> str:
     provider = _require_provider_config(provider_key)
+    from app.security.rate_limit import fixed_window_allow, client_ip
+    from app.core.valkey import get_valkey
+    allowed, retry = fixed_window_allow(get_valkey(),
+        f"keen:rl:sso-start:{client_ip(request) or 'unknown'}", 30, 300, fail_closed=True)
+    if not allowed:
+        raise HTTPException(429, "Too many sign-in attempts", headers={"Retry-After": str(retry)})
     redirect_uri = _redirect_uri_from_request(request, provider)
     secret = secrets.token_urlsafe(32)
     request.state.sso_browser_secret = secret
@@ -570,13 +578,16 @@ async def build_authorize_redirect(
                                    state=_browser_state(provider.key, secret))
 
     client = _new_client(provider, redirect_uri=redirect_uri)
-    url, _ = client.create_authorization_url(
-        provider.authorization_endpoint,
-        state=state_row.state,
-        nonce=state_row.nonce if provider.supports_id_token else None,
-        code_verifier=state_row.code_verifier,
-        redirect_uri=redirect_uri,
-    )
+    try:
+        url, _ = client.create_authorization_url(
+            provider.authorization_endpoint,
+            state=state_row.state,
+            nonce=state_row.nonce if provider.supports_id_token else None,
+            code_verifier=state_row.code_verifier,
+            redirect_uri=redirect_uri,
+        )
+    finally:
+        await client.aclose()
     url = str(url or "").strip()
     if not url:
         raise HTTPException(status_code=500, detail="Failed to build SSO authorize URL")
@@ -597,7 +608,7 @@ async def _fetch_github_claims(
         "Authorization": f"Bearer {access_token}",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, verify=True, trust_env=False, follow_redirects=False) as client:
         user_resp = await client.get(provider.userinfo_endpoint, headers=headers)
         user_resp.raise_for_status()
         user_info = user_resp.json()
@@ -660,12 +671,15 @@ async def _handle_github_callback(
 ) -> tuple[User, str | None, str | None]:
     redirect_uri = _redirect_uri_from_request(request, provider)
     client = _new_client(provider, redirect_uri=redirect_uri)
-    token = await client.fetch_token(
-        provider.token_endpoint,
-        authorization_response=str(request.url),
-        redirect_uri=redirect_uri,
-        code_verifier=row.code_verifier,
-    )
+    try:
+        token = await client.fetch_token(
+            provider.token_endpoint,
+            authorization_response=str(request.url),
+            redirect_uri=redirect_uri,
+            code_verifier=row.code_verifier,
+        )
+    finally:
+        await client.aclose()
     subject, claims = await _fetch_github_claims(provider, token)
     user = _get_or_create_user_for_identity(
         db, provider=provider, subject=subject, claims=claims
@@ -680,12 +694,15 @@ async def _handle_oidc_callback(
     redirect_uri = _redirect_uri_from_request(request, provider)
     client = _new_client(provider, redirect_uri=redirect_uri)
 
-    token = await client.fetch_token(
-        provider.token_endpoint,
-        authorization_response=str(request.url),
-        redirect_uri=redirect_uri,
-        code_verifier=row.code_verifier,
-    )
+    try:
+        token = await client.fetch_token(
+            provider.token_endpoint,
+            authorization_response=str(request.url),
+            redirect_uri=redirect_uri,
+            code_verifier=row.code_verifier,
+        )
+    finally:
+        await client.aclose()
 
     id_token = (token or {}).get("id_token")
     if not id_token:

@@ -38,7 +38,7 @@ def callback(monkeypatch, signing_key):
     jwks=AsyncMock(return_value={'keys':[signing_key.as_dict(private=False)]})
     monkeypatch.setattr(oidc,'_get_jwks',jwks)
     fetch=AsyncMock()
-    monkeypatch.setattr(oidc,'_new_client',lambda *a,**kw:SimpleNamespace(fetch_token=fetch))
+    monkeypatch.setattr(oidc,'_new_client',lambda *a,**kw:SimpleNamespace(fetch_token=fetch, aclose=AsyncMock()))
     def run(overrides=None, *, drop=(), raw=None, key=signing_key, alg='RS256', selected_provider=None):
         digest=hashlib.new('sha'+alg[-3:],b'access-token').digest()
         at_hash=base64.urlsafe_b64encode(digest[:len(digest)//2]).rstrip(b'=').decode()
@@ -117,7 +117,7 @@ def test_oauth_httpx2_transport(monkeypatch):
         return httpx2.Response(200,json={'access_token':'access','token_type':'Bearer'})
     client_class=oidc.AsyncOAuth2Client
     monkeypatch.setattr(oidc,'AsyncOAuth2Client',lambda **kwargs:client_class(
-        **kwargs,transport=httpx2.MockTransport(token_endpoint),trust_env=False))
+        **kwargs,transport=httpx2.MockTransport(token_endpoint)))
     async def exercise():
         client=oidc._new_client(provider,redirect_uri='https://keen.example/callback')
         assert isinstance(client,httpx2.AsyncClient)

@@ -24,11 +24,15 @@ class NotificationHub:
         self._admin_sockets: set[WebSocket] = set()
         self._user_sockets: dict[str, set[WebSocket]] = {}
 
-    async def connect(self, ws: WebSocket, *, user_id: str, is_admin: bool) -> None:
+    async def connect(self, ws: WebSocket, *, user_id: str, is_admin: bool) -> bool:
         async with self._lock:
+            if (len(self._user_sockets.get(user_id, ())) >= 5
+                    or sum(map(len, self._user_sockets.values())) >= 256):
+                return False
             if is_admin:
                 self._admin_sockets.add(ws)
             self._user_sockets.setdefault(user_id, set()).add(ws)
+            return True
 
     async def disconnect(self, ws: WebSocket) -> None:
         async with self._lock:
@@ -50,7 +54,7 @@ class NotificationHub:
 
         async def _send_one(sock: WebSocket) -> None:
             try:
-                await sock.send_json(payload)
+                await asyncio.wait_for(sock.send_json(payload), timeout=5)
             except Exception:
                 # Drop dead sockets.
                 await self.disconnect(sock)

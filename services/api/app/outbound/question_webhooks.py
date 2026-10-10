@@ -316,8 +316,8 @@ def _post_json(
     payload: dict[str, Any],
     headers: dict[str, str] | None = None,
 ) -> int:
-    r = client.post(url, json=payload, headers=headers or {})
-    return int(r.status_code)
+    with client.stream("POST", url, json=payload, headers=headers or {}) as response:
+        return int(response.status_code)
 
 
 def _send_many(
@@ -386,7 +386,7 @@ def send_question_created_webhooks(
 
     out: dict[str, Any] = {"enabled": True}
 
-    with httpx.Client(timeout=timeout, follow_redirects=False) as client:
+    with httpx.Client(timeout=timeout, follow_redirects=False, verify=True, trust_env=False) as client:
         # Slack
         try:
             s, f = _send_many(

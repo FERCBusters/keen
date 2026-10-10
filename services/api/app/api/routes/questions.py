@@ -43,13 +43,7 @@ from app.core.config import settings
 router = APIRouter()
 
 QUESTION_CREATE_PERMISSION = "question.create"
-
-_ALLOWED_WS_ORIGINS = (
-    frozenset((getattr(settings, "public_base_url") or "").split(","))
-    if getattr(settings, "public_base_url", "")
-    else frozenset()
-)
-
+_NOTIFICATION_RECHECK_SECONDS = 30
 
 def _count_open_questions(db: Session) -> int:
     return int(
@@ -1313,102 +1307,69 @@ async def admin_set_question_status(
     return {"thread_id": str(t.id), "status": t.status}
 
 
+def _notification_snapshot(headers, cookies, *, counts=False):
+    # Never hold a dependency-scoped DB transaction for a WebSocket lifetime.
+    from app.db.session import SessionLocal
+    with SessionLocal() as db:
+        user = get_current_user_from_headers_cookies(headers, cookies, db, refresh_session=False)
+        if not user:
+            return None
+        from app.security.permissions import ensure_session_authorization_current
+        ensure_session_authorization_current(db, user)
+        admin = is_effective_admin(db, user)
+        snapshot = (str(user.id), admin, user.authz_version, user.mfa_version)
+        payloads = []
+        if counts:
+            if admin:
+                payloads.append({"scope": "admin", "type": "questions.open_count",
+                                 "open_count": _count_open_questions(db)})
+            payloads.append({"scope": "user", "type": "questions.unread_replies_count",
+                             "user_id": str(user.id),
+                             "unread_count": _count_unread_replies_for_user(db, user.id)})
+        return snapshot, payloads
+
+
 @router.websocket("/ws/notifications")
-async def ws_notifications(websocket: WebSocket, db: Session = Depends(get_db)):
-    """Push notifications to connected clients.
-
-    Emits:
-      - Admins: {type: "questions.open_count", open_count: <int>}
-      - Any user: {type: "questions.unread_replies_count", unread_count: <int>}
-
-    Auth uses the same cookie session / trusted REMOTE_USER header as HTTP.
-    """
-
-    origin = websocket.headers.get("origin", "")
-    if settings.hosted_mode and origin != settings.public_base_url.rstrip("/"):
+async def ws_notifications(websocket: WebSocket):
+    """Bounded notification connections with periodic session revalidation."""
+    from starlette.concurrency import run_in_threadpool
+    from app.security.csrf import request_origin_allowed
+    if not request_origin_allowed(websocket, require_origin=True):
         await websocket.close(code=1008, reason="Origin not allowed")
         return
-    if origin:
-        parsed = urlparse(origin)
-        if parsed.scheme not in ("http", "https") or not parsed.netloc:
-            try:
-                await websocket.accept()
-            except Exception:
-                pass
-            await websocket.close(code=1008, reason="Invalid origin")
-            return
-        # Whitelist specific allowed origins from settings (enforced if configured)
-        if _ALLOWED_WS_ORIGINS and origin not in _ALLOWED_WS_ORIGINS:
-            try:
-                await websocket.accept()
-            except Exception:
-                pass
-            await websocket.close(code=1008, reason="Origin not allowed")
-            return
-
-    user = get_current_user_from_headers_cookies(
-        websocket.headers, websocket.cookies, db
-    )
-    if not user:
-        try:
-            await websocket.close(code=1008)
-        except Exception:
-            try:
-                await websocket.accept()
-            except Exception:
-                return
-            await websocket.close(code=1008)
+    initial = await run_in_threadpool(_notification_snapshot, websocket.headers,
+                                     websocket.cookies, counts=True)
+    if initial is None:
+        await websocket.close(code=1008)
         return
-
-    is_admin = is_effective_admin(db, user)
-
-    await websocket.accept()
-    await notification_hub.connect(websocket, user_id=str(user.id), is_admin=is_admin)
-
-    # Initial payloads
-    try:
-        if is_admin:
-            await websocket.send_json(
-                {
-                    "scope": "admin",
-                    "type": "questions.open_count",
-                    "open_count": _count_open_questions(db),
-                }
-            )
-        await websocket.send_json(
-            {
-                "scope": "user",
-                "type": "questions.unread_replies_count",
-                "user_id": str(user.id),
-                "unread_count": _count_unread_replies_for_user(db, user.id),
-            }
-        )
-    except Exception:
-        await notification_hub.disconnect(websocket)
-        try:
-            await websocket.close(code=1011)
-        except Exception:
-            pass
+    identity, payloads = initial
+    if not await notification_hub.connect(websocket, user_id=identity[0], is_admin=identity[1]):
+        await websocket.close(code=1008, reason="Too many notification connections")
         return
-
     try:
+        await websocket.accept()
+        for payload in payloads:
+            await asyncio.wait_for(websocket.send_json(payload), timeout=5)
+        loop = asyncio.get_running_loop()
+        next_check = loop.time() + _NOTIFICATION_RECHECK_SECONDS
         while True:
             try:
-                await asyncio.wait_for(websocket.receive_text(), timeout=120)
-            except asyncio.TimeoutError:
-                # Keepalive tick.
-                try:
-                    await websocket.send_json({"type": "ping"})
-                except Exception:
+                message = await asyncio.wait_for(websocket.receive_text(),
+                                                 timeout=max(0, next_check-loop.time()))
+                if len(message) > 1024:
                     break
-            except Exception:
-                # Handle any other receive errors gracefully
-                break
-    except WebSocketDisconnect:
+            except asyncio.TimeoutError:
+                current = await run_in_threadpool(_notification_snapshot, websocket.headers,
+                                                 websocket.cookies)
+                if current is None or current[0] != identity:
+                    break
+                await asyncio.wait_for(websocket.send_json({"type": "ping"}), timeout=5)
+                next_check = loop.time() + _NOTIFICATION_RECHECK_SECONDS
+    except Exception:
         pass
     finally:
         await notification_hub.disconnect(websocket)
         try:
-            await websocket.close()
+            await websocket.close(code=1008)
         except Exception:
             pass

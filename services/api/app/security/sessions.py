@@ -134,19 +134,29 @@ def update_session_authz(
     if not session_id:
         return
     key = session_key(session_id)
-    raw = redis_client.get(key)
-    if not raw:
-        return
+    # WATCH prevents a concurrent logout from being undone by this refresh.
+    # A conflict needs no retry: the next request can recompute its permissions.
+    from redis.exceptions import WatchError
     try:
-        payload = json.loads(raw)
-    except Exception:
+        with redis_client.pipeline() as pipe:
+            pipe.watch(key)
+            raw = pipe.get(key)
+            if not raw:
+                return
+            try:
+                payload = json.loads(raw)
+            except (TypeError, ValueError):
+                return
+            if not isinstance(payload, dict):
+                return
+            payload["effective_role"] = str(effective_role or "")
+            payload["permission_codes"] = sorted({str(c) for c in permission_codes if c})
+            payload["authz_version"] = int(authz_version)
+            pipe.multi()
+            pipe.set(key, json.dumps(payload), ex=int(ttl_seconds), xx=True)
+            pipe.execute()
+    except WatchError:
         return
-    if not isinstance(payload, dict):
-        return
-    payload["effective_role"] = str(effective_role or "")
-    payload["permission_codes"] = sorted({str(c) for c in permission_codes if c})
-    payload["authz_version"] = int(authz_version)
-    redis_client.set(key, json.dumps(payload), ex=int(ttl_seconds))
 
 
 def delete_session(redis_client, session_id: str) -> None:

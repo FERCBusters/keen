@@ -704,41 +704,11 @@ def save_evidence_definition(rule_id: str, payload: EvidenceDefinitionInput,
 
 
 def _validate_regex(pattern: str, key: str):
-    """Reject common catastrophic patterns before admins can publish them.
-
-    This deliberately excludes nested repetitions, repeated alternations and
-    backreferences. Existing YAML is unchanged until a rule is edited.
-    """
-    if len(pattern) > 512:
-        raise HTTPException(400, f"{key} must be under 512 characters")
+    from app.security.regex import validate_pattern
     try:
-        parsed = re._parser.parse(pattern, 0)
-    except re.error as exc:
-        raise HTTPException(400, f"Invalid {key}: {exc}") from exc
-
-    def check(items, repeated=False):
-        unbounded = 0
-        for op, value in items:
-            if op in (re._parser.MAX_REPEAT, re._parser.MIN_REPEAT):
-                if repeated:
-                    raise HTTPException(400, f"{key}: nested repetition can stall ingestion")
-                if value[1] == re._parser.MAXREPEAT:
-                    unbounded += 1
-                check(value[2], repeated=True)
-            elif op == re._parser.SUBPATTERN:
-                check(value[-1], repeated)
-            elif op == re._parser.BRANCH:
-                if repeated:
-                    raise HTTPException(400, f"{key}: repeated alternatives can stall ingestion")
-                for branch in value[1]:
-                    check(branch, repeated)
-            elif op in (re._parser.GROUPREF, re._parser.GROUPREF_EXISTS):
-                raise HTTPException(400, f"{key}: backreferences are unsupported")
-            elif op in (re._parser.ASSERT, re._parser.ASSERT_NOT):
-                check(value[1], repeated)
-        if unbounded > 1:
-            raise HTTPException(400, f"{key}: use one unbounded repetition at most")
-    check(parsed)
+        validate_pattern(pattern)
+    except ValueError as exc:
+        raise HTTPException(400, f"{key}: {exc}") from exc
 
 
 def _validate_rule(rule: dict, db: Session):

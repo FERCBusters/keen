@@ -1,3 +1,4 @@
+import {safeExternalHref} from '/app.js';
 import {
   initNavbar,
   apiGet,
@@ -107,7 +108,7 @@ function ismsControlBadges(items) { return badgeList(items, 'ref', (c) => withFr
 function ismsClauseBadges(items) { return badgeList(items, 'ref', (c) => withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework)); }
 function personBadges(items) { return userPillsHtml(items); }
 function documentLink(item) {
-  if (item?.external_url) return `<a href="${esc(item.external_url)}" target="_blank" rel="noopener noreferrer">External URL</a>`;
+  if (item?.external_url) return `<a href="${esc(safeExternalHref(item.external_url) || '#')}" target="_blank" rel="noopener noreferrer">External URL</a>`;
   if (item?.has_file) return `<a href="/api/v1/isms/documents/${encodeURIComponent(item.id)}/file" target="_blank" rel="noopener noreferrer">${esc(item.filename || 'Uploaded file')}</a>`;
   return '<span class="small-muted">—</span>';
 }

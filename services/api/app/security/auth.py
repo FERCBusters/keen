@@ -74,7 +74,7 @@ def _session_id_from_request(request: Request) -> str | None:
 
 
 def get_current_user_from_headers_cookies(
-    headers: Mapping[str, str], cookies: Mapping[str, str], db: Session
+    headers: Mapping[str, str], cookies: Mapping[str, str], db: Session, *, refresh_session: bool = True
 ) -> User | None:
     """Return the current user, or None if not authenticated.
 
@@ -96,7 +96,7 @@ def get_current_user_from_headers_cookies(
         return None
 
     r = get_valkey()
-    sess = get_session(r, sid, refresh_ttl_seconds=settings.session_ttl_seconds)
+    sess = get_session(r, sid, refresh_ttl_seconds=settings.session_ttl_seconds if refresh_session else None)
     if not sess or not sess.get("user_id"):
         return None
 

@@ -1,3 +1,4 @@
+import {safeNext} from './navigation-security.js';
 import {qs, toast} from '/app.js';
 
 const status = document.getElementById('status');
@@ -12,18 +13,6 @@ const localLoginHint = document.getElementById('localLoginHint');
 
 const explicitNext = qs('next', null);
 const hadExplicitNext = !!explicitNext;
-
-function safeNext(raw) {
-  const s = String(raw || '').trim();
-  if (!s) return '/';
-  // Only allow same-origin absolute paths.
-  if (!s.startsWith('/')) return '/';
-  if (s.startsWith('//')) return '/';
-  if (s.includes('://')) return '/';
-  // Avoid looping back to login
-  if (s === '/login.html' || s.startsWith('/login.html?')) return '/';
-  return s;
-}
 
 function computeNext() {
   // If login is served as nginx error_page, the browser URL will be the protected page.

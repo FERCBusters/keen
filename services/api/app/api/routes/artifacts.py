@@ -7,9 +7,10 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from threading import BoundedSemaphore
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
 
 from app.api.utils import (
@@ -30,6 +31,21 @@ router = APIRouter()
 
 
 _PREVIEW_CACHE_DIR = Path(os.getenv("KEEN_PREVIEW_CACHE_DIR", "/var/lib/keen/previews"))
+
+# A reader must not be able to multiply the renderer's per-process memory cap
+# by opening many uncached previews concurrently.
+_PREVIEW_SLOTS = BoundedSemaphore(2)
+
+
+def _run_preview(cmd):
+    if not _PREVIEW_SLOTS.acquire(blocking=False):
+        raise HTTPException(429, "Preview renderer busy; retry shortly", headers={"Retry-After": "5"})
+    try:
+        subprocess.run(cmd, check=True, timeout=15,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    finally:
+        _PREVIEW_SLOTS.release()
+
 
 EVENTS_READ_PERMISSION = "events.read"
 
@@ -181,13 +197,7 @@ def preview_pdf_first_page(
             # -singlefile produces <out_prefix>.png
             cmd = [sys.executable, "-m", "app.render.pdf_preview", str(in_path), str(out_prefix)]
             try:
-                subprocess.run(
-                    cmd,
-                    check=True,
-                    timeout=15,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+                _run_preview(cmd)
             except FileNotFoundError:
                 raise HTTPException(
                     status_code=500, detail="pdftoppm is not installed in the API image"
@@ -211,7 +221,7 @@ def preview_pdf_first_page(
                 shutil.move(str(out_path), str(cache_path))
                 return FileResponse(str(cache_path), media_type="image/png")
             except Exception:
-                return FileResponse(str(out_path), media_type="image/png")
+                return Response(out_path.read_bytes(), media_type="image/png")
     except HTTPException:
         raise
     except Exception as e:

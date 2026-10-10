@@ -68,7 +68,7 @@ def _safe_href(value: str | None) -> str:
     raw = (value or "").strip()
     if not raw:
         return ""
-    if len(raw) > 2048:
+    if len(raw) > 2048 or "\\" in raw or any(ord(c) < 32 or ord(c) == 127 for c in raw):
         return ""
     # Same-origin relative paths and fragment links are allowed.
     if raw.startswith("/"):

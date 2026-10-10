@@ -1,3 +1,4 @@
+import {safeExternalHref} from '/app.js';
 import {initNavbar, apiGet, apiPost, apiPatch, apiDelete, esc, toast} from '/app.js';
 
 const me = await initNavbar();
@@ -61,7 +62,7 @@ function renderAssurances() {
   $('assuranceRows').innerHTML = selectedPerson.assurances.length ? selectedPerson.assurances.map(a => `
     <tr><td>${esc(a.category)}</td><td>${esc(a.name)}</td><td>${esc(a.status.replaceAll('_', ' '))}</td>
     <td>${esc(a.source_system || '—')}</td><td>${esc(a.completed_at || '—')}</td><td>${esc(a.expires_at || '—')}</td>
-    <td>${a.evidence_url ? `<a href="${esc(a.evidence_url)}" target="_blank" rel="noopener noreferrer">View</a>` : '—'}</td>
+    <td>${a.evidence_url ? `<a href="${esc(safeExternalHref(a.evidence_url) || '#')}" target="_blank" rel="noopener noreferrer">View</a>` : '—'}</td>
     <td>${manage ? `<button type="button" class="btn btn-sm btn-outline-primary" data-edit-assurance="${esc(a.id)}">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" data-delete-assurance="${esc(a.id)}">Delete</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="8" class="small-muted">No assurance records for this person.</td></tr>';
 }
 

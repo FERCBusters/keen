@@ -101,6 +101,10 @@ Use KEEN's retention controls to manage evidence lifetimes. Configure source sch
 
 The CI workflow in `.github/workflows/tests.yml` installs locked dependencies and runs `bash tests.sh` against disposable PostgreSQL and Valkey services. Set `KEEN_TEST_DATABASE_URL` to a dedicated test database and `KEEN_REDIS_URL` to the test broker before running it. The suite changes database contents. See [TESTING.md](TESTING.md) for the development test environment.
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for the threat model, deployment responsibilities and vulnerability reporting policy. Contributor and coding-agent guidance is in [AGENTS.md](AGENTS.md).
+
 ## Licence and catalogue attribution
 
 KEEN software is licensed under [Apache License 2.0](LICENSE).

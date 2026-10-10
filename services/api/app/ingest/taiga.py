@@ -12,12 +12,9 @@ from app.ingest.http import client as ingestion_client
 from sqlalchemy.orm import Session
 
 from app.ingest.connections import load_document
-from app.ingest.connections import settings, connection_runs, namespace
+from app.ingest.connections import settings, connection_runs, namespace, connection_cache
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact, is_safe_url
-
-# Simple in-process auth token cache (per worker/api process)
-_AUTH_TOKEN: Optional[str] = None
 
 
 def load_taiga_config(path: str) -> dict[str, Any]:
@@ -50,13 +47,13 @@ def _login_and_get_token() -> str:
     Taiga auth endpoint expects: {type: "normal", username, password}
     and returns an "auth_token" field.
     """
-    global _AUTH_TOKEN
+    cache = connection_cache()
 
     if settings.taiga_token:
         return settings.taiga_token
 
-    if _AUTH_TOKEN:
-        return _AUTH_TOKEN
+    if cache.get('taiga_auth_token'):
+        return cache['taiga_auth_token']
 
     if not settings.taiga_username or not settings.taiga_password:
         raise RuntimeError(
@@ -81,8 +78,8 @@ def _login_and_get_token() -> str:
             raise RuntimeError(
                 f"Taiga /api/v1/auth response missing auth_token field: keys={list(data.keys())}"
             )
-        _AUTH_TOKEN = str(token)
-        return _AUTH_TOKEN
+        cache['taiga_auth_token'] = str(token)
+        return str(token)
     finally:
         client.close()
 
@@ -248,8 +245,7 @@ def ingest_taiga_project_timeline(
         r = client.get(f"/api/v1/timeline/project/{project_id}")
         # If token expired / permission changed, refresh token once and retry.
         if r.status_code in (401, 403) and not settings.taiga_token:
-            global _AUTH_TOKEN
-            _AUTH_TOKEN = None
+            connection_cache().pop('taiga_auth_token', None)
             client.close()
             client = _taiga_client()
             r = client.get(f"/api/v1/timeline/project/{project_id}")

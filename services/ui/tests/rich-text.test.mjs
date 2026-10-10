@@ -32,3 +32,7 @@ test('plain text summaries decode entities and remove formatting',()=>{
  assert.equal(a.plainTextFromRichText('<p>Hello &amp; <strong>world</strong></p><p>Next&nbsp;line</p>'),'Hello & world Next line');
 });
 test('empty content uses caller fallback',()=>assert.equal(a.renderRichTextContent(' ','Empty'),'Empty'));
+for (const href of ['//evil.example', '/\\evil.example', '/\t/evil.example']) test('rich text rejects ambiguous links '+JSON.stringify(href),()=>{
+ ui.document.body.innerHTML=a.sanitizeRichTextHtml(`<a href="${href}">link</a>`);
+ assert.equal(ui.document.querySelector('a').hasAttribute('href'),false);
+});

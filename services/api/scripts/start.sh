@@ -32,4 +32,4 @@ echo "[keen] running migrations..."
 alembic upgrade head
 
 echo "[keen] starting api..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8080
+exec uvicorn app.main:app --host 0.0.0.0 --port 8080 --ws-max-size 1024 --ws-max-queue 4

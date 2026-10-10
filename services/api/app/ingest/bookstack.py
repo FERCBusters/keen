@@ -3,6 +3,7 @@ from app.services.ingestion_pause import pausable
 
 import json
 import re
+from app.security.regex import BoundedPattern, compile_pattern
 import html as _html
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -13,7 +14,7 @@ from app.ingest.http import client as ingestion_client
 import yaml
 from sqlalchemy.orm import Session
 
-from app.ingest.connections import load_document
+from app.ingest.connections import load_document, connection_cache
 from app.ingest.connections import settings, connection_runs, namespace
 from app.db.models import ControlItem, Event, IngestionCursor, Mapping
 from app.ingest.common import is_safe_url, store_event_with_artifact
@@ -221,9 +222,6 @@ def _book_lookup_candidates(data: Any) -> list[dict[str, Any]]:
     return []
 
 
-_BOOK_ID_CACHE: dict[str, Optional[int]] = {}
-
-
 def _resolve_book_id(client: httpx.Client, book_slug: Optional[str]) -> Optional[int]:
     """Resolve a configured BookStack book slug to its numeric ID.
 
@@ -236,9 +234,10 @@ def _resolve_book_id(client: httpx.Client, book_slug: Optional[str]) -> Optional
     slug = str(book_slug or "").strip()
     if not slug:
         return None
+    cache = connection_cache().setdefault('bookstack_book_ids', {})
     cache_key = slug.lower()
-    if cache_key in _BOOK_ID_CACHE:
-        return _BOOK_ID_CACHE[cache_key]
+    if cache_key in cache:
+        return cache[cache_key]
 
     # Prefer a filtered lookup when supported, then fall back to a bounded scan.
     requests = [
@@ -255,14 +254,14 @@ def _resolve_book_id(client: httpx.Client, book_slug: Optional[str]) -> Optional
                     continue
                 try:
                     book_id = int(item.get("id"))
-                    _BOOK_ID_CACHE[cache_key] = book_id
+                    cache[cache_key] = book_id
                     return book_id
                 except Exception:
-                    _BOOK_ID_CACHE[cache_key] = None
+                    cache[cache_key] = None
                     return None
         except Exception:
             continue
-    _BOOK_ID_CACHE[cache_key] = None
+    cache[cache_key] = None
     return None
 
 
@@ -272,9 +271,9 @@ class PageMapping:
     match_book_slug: Optional[str]
     match_id: Optional[int]
     match_slug: Optional[str]
-    match_slug_regex: Optional[re.Pattern]
+    match_slug_regex: Optional[BoundedPattern]
     match_title: Optional[str]
-    match_title_regex: Optional[re.Pattern]
+    match_title_regex: Optional[BoundedPattern]
     map_to: list[str]
     confidence: float
     rationale: str
@@ -359,8 +358,8 @@ def _parse_page_mappings(cfg: dict[str, Any]) -> list[PageMapping]:
         mslug_re = None
         if mslug_re_raw:
             try:
-                mslug_re = re.compile(mslug_re_raw)
-            except re.error:
+                mslug_re = compile_pattern(mslug_re_raw)
+            except ValueError:
                 # Skip invalid regex mappings rather than accidentally applying
                 # them broadly.
                 continue
@@ -372,8 +371,8 @@ def _parse_page_mappings(cfg: dict[str, Any]) -> list[PageMapping]:
         mtitle_re = None
         if mtitle_re_raw:
             try:
-                mtitle_re = re.compile(mtitle_re_raw)
-            except re.error:
+                mtitle_re = compile_pattern(mtitle_re_raw)
+            except ValueError:
                 # Skip invalid regex mappings rather than accidentally applying
                 # them broadly.
                 continue
@@ -517,7 +516,7 @@ def _find_page_by_slug(
 
 def _find_pages_by_slug_regex(
     client: httpx.Client,
-    slug_regex: re.Pattern,
+    slug_regex: BoundedPattern,
     *,
     book_id: Optional[int],
     book_slug: Optional[str],

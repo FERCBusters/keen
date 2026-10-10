@@ -81,6 +81,9 @@ def auth_methods() -> dict:
 def login(
     payload: LoginPayload, request: Request, db: Session = Depends(get_db)
 ) -> Response:
+    from app.security.csrf import request_origin_allowed
+    if not request_origin_allowed(request, require_origin=settings.hosted_mode):
+        raise HTTPException(403, "Authentication request origin is not allowed")
     if not (settings.ldap_enabled if payload.method == "ldap" else settings.local_auth_enabled):
         raise HTTPException(status_code=404, detail="Login method is disabled")
 
@@ -275,6 +278,9 @@ async def _complete_sso_callback(request: Request, db: Session, *, provider_key:
     eff = attach_effective_role(db, user)
     permission_codes = get_effective_permission_codes(db, user, use_cache=False)
     authz_version = int(getattr(user, "authz_version", 0) or 0)
+    existing_sid = request.cookies.get(settings.session_cookie_name)
+    if existing_sid:
+        delete_session(get_valkey(), existing_sid)
     sid = create_session(
         get_valkey(),
         user_id=str(user.id),

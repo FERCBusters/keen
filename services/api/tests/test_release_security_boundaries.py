@@ -234,5 +234,24 @@ def test_pinned_transport_verifies_original_tls_hostname(monkeypatch,tmp_path):
             assert client.get(f'https://feed.example:{server.server_port}/rss').content==b'local fixture'
             with pytest.raises(httpx.ConnectError):
                 client.get(f'https://wrong.example:{server.server_port}/rss')
+        # A matching hostname alone is insufficient: an untrusted chain fails.
+        monkeypatch.setattr(http.httpx, 'HTTPTransport', original)
+        with httpx.Client(transport=http.IngestionTransport(), trust_env=False) as client:
+            with pytest.raises(httpx.ConnectError):
+                client.get(f'https://feed.example:{server.server_port}/rss')
+        # The custom API transport uses a separate TLS implementation.
+        from app.integrations import transport as custom
+        monkeypatch.setattr(custom.ssl, 'create_default_context', lambda: trusted)
+        for host, valid in [('feed.example', True), ('wrong.example', False)]:
+            conn = custom.PinnedHTTPS(host, server.server_port, '127.0.0.1', 2)
+            try:
+                if valid:
+                    conn.request('GET', '/rss')
+                    assert conn.getresponse().read() == b'local fixture'
+                else:
+                    with pytest.raises(ssl.SSLCertVerificationError):
+                        conn.request('GET', '/rss')
+            finally:
+                conn.close()
     finally:
         server.shutdown();server.server_close();thread.join(timeout=2)

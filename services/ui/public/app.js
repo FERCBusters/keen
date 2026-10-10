@@ -229,7 +229,7 @@ export function isRichTextHtmlLike(value) {
 
 function _safeRichTextHref(href) {
   const raw = String(href || '').trim();
-  if (!raw) return '';
+  if (!raw || /[\\\u0000-\u001f\u007f]/.test(raw) || raw.startsWith('//')) return '';
   if (raw.startsWith('/') || raw.startsWith('#')) return raw;
   try {
     const parsed = new URL(raw, window.location.origin);

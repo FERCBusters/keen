@@ -1,3 +1,4 @@
+import {safeNext} from './navigation-security.js';
 const $ = id => document.getElementById(id);
 let state, codesPending = false, method = null, busy = false;
 function message(text, error = false) { $('message').textContent = text; $('message').className = 'alert ' + (error ? 'alert-danger' : 'alert-success'); }
@@ -85,9 +86,7 @@ async function finishLogin() {
   if (codesPending && !$('savedCodes').checked) return;
   await post('finish');
   const raw = new URLSearchParams(location.search).get('next') || (state.purpose === 'manage' ? '/account.html#security' : '/');
-  let next;
-  try { next = new URL(raw, location.origin); } catch { next = new URL('/', location.origin); }
-  location.replace(next.origin === location.origin && !['/login.html','/mfa.html'].includes(next.pathname) ? next.pathname + next.search + next.hash : '/');
+  location.replace(safeNext(raw));
 }
 async function afterVerification() {
   // Remember the successful normal factor on this browser; recovery is never a preference.
