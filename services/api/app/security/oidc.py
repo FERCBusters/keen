@@ -48,6 +48,7 @@ class SsoProvider:
     supports_id_token: bool = True
     id_token_leeway_seconds: int = 60
     legacy_oidc_routes: bool = False
+    allowed_algs: tuple[str, ...] = ("RS256",)
 
     def public_dict(self) -> dict[str, str]:
         return {
@@ -81,6 +82,7 @@ def _first_nonempty(*values: Any) -> str:
 def _oidc_provider() -> SsoProvider:
     return SsoProvider(
         key="oidc",
+        allowed_algs=tuple(str(_setting("oidc_allowed_algs", "RS256")).replace(",", " ").split()),
         kind="oidc",
         label=_first_nonempty(_setting("oidc_provider_label", ""), "OpenID Connect"),
         enabled=bool(_setting("oidc_enabled", False)),
@@ -707,15 +709,14 @@ async def _handle_oidc_callback(
         "access_token": (token or {}).get("access_token"),
     }
 
-    # Signature verification and claim validation are distinct in joserfc.
-    # Keep the existing signed JWT algorithms explicit; never accept "none"
-    # or let a token header determine the verification policy.
+    # The deployment's algorithm policy is authoritative; the token header
+    # cannot widen it. Public JWKS are suitable only for asymmetric verification.
+    supported = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512",
+                 "ES256K", "PS256", "PS384", "PS512", "EdDSA"}
+    if not provider.allowed_algs or not set(provider.allowed_algs) <= supported:
+        raise HTTPException(503, "Configure supported asymmetric OIDC signing algorithms")
     decoded = jwt.decode(
-        id_token,
-        KeySet.import_key_set(jwks),
-        algorithms=["HS256", "HS384", "HS512", "RS256", "RS384", "RS512",
-                    "ES256", "ES384", "ES512", "ES256K", "PS256", "PS384",
-                    "PS512", "EdDSA"],
+        id_token, KeySet.import_key_set(jwks), algorithms=list(provider.allowed_algs),
     )
     claims = CodeIDToken(decoded.claims, decoded.header,
                          options=claims_options, params=claims_params)

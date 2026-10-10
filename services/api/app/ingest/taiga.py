@@ -8,6 +8,7 @@ import json
 import re
 
 import httpx
+from app.ingest.http import client as ingestion_client
 from sqlalchemy.orm import Session
 
 from app.ingest.connections import load_document
@@ -31,7 +32,7 @@ def _base_client(headers: Optional[dict[str, str]] = None) -> httpx.Client:
     base_url = settings.taiga_base_url.rstrip("/")
     if not is_safe_url(base_url):
         raise ValueError("Invalid or unsafe Taiga base URL")
-    return httpx.Client(
+    return ingestion_client(
         base_url=base_url,
         headers=h,
         timeout=30.0,

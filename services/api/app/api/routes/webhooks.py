@@ -190,6 +190,11 @@ async def isms_effectiveness_metric_webhook(
         and not db.query(Event.id).filter(Event.id == source_event_id).first()
     ):
         raise HTTPException(status_code=400, detail="Unknown source_event_id")
+    from app.security.urls import external_url
+    try:
+        source_url = external_url(payload.get("source_url") or payload.get("url"))
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(400, "Use an HTTP or HTTPS source URL") from None
     row = IsmsEffectivenessMetricEntry(
         measure_id=measure.id,
         recorded_at=_webhook_parse_datetime(payload.get("recorded_at"))
@@ -208,10 +213,7 @@ async def isms_effectiveness_metric_webhook(
         source_title=_webhook_clean_text(
             payload.get("source_title") or payload.get("title") or "", 256
         ),
-        source_url=_webhook_clean_text(
-            payload.get("source_url") or payload.get("url"), 2048
-        )
-        or None,
+        source_url=source_url,
         source_reference=_webhook_clean_text(
             payload.get("source_reference") or payload.get("reference") or "", 256
         ),

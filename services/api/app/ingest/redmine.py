@@ -10,6 +10,7 @@ import re
 from urllib.parse import quote, urlsplit
 
 import httpx
+from app.ingest.http import client as ingestion_client
 from sqlalchemy import text
 
 from app.ingest.connections import settings, connection_runs, namespace, identity
@@ -269,7 +270,7 @@ def ingest_redmine_all(db):
     with _run_lock(db, base) as acquired:
         if not acquired:
             return [{'skipped': True, 'reason': 'Another Redmine run is in progress'}]
-        with httpx.Client(timeout=httpx.Timeout(30, connect=10), verify=True, follow_redirects=False,
+        with ingestion_client(timeout=httpx.Timeout(30, connect=10), verify=True, follow_redirects=False,
                           headers={'X-Redmine-API-Key': settings.redmine_api_key.strip(), 'Accept': 'application/json'}) as client:
             for selection in config['projects']:
                 try:

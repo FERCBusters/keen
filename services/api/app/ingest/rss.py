@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
 import httpx
+from app.ingest.http import client as ingestion_client
 from dateutil import parser as dtparser
 from sqlalchemy.orm import Session
 
@@ -332,12 +333,8 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
     from app.ingest.connections import current_connection
     connection = current_connection()
     if connection and connection.managed_by != 'environment' and connection.credentials:
-        from urllib.parse import urlsplit
-        def origin(value):
-            parsed = urlsplit(value)
-            return parsed.scheme, parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)
-        if origin(url) != origin(connection.configuration.get('base_url', '')):
-            raise ValueError('Authenticated RSS inputs must use the connection endpoint origin')
+        from app.ingest.http import require_origin
+        require_origin(url, connection.configuration.get('base_url', ''))
         if connection.credentials.get('password'):
             auth = (connection.configuration.get('username', ''), connection.credentials['password'])
         if connection.configuration.get('header_name') and connection.credentials.get('header_value'):
@@ -345,7 +342,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
     verify_tls = True
 
     # Fetch without following redirects - redirects are not allowed
-    with httpx.Client(
+    with ingestion_client(
         timeout=30.0,
         follow_redirects=False,
         verify=verify_tls,

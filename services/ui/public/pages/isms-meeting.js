@@ -1,3 +1,4 @@
+import {safeExternalHref} from '/app.js';
 import {
   initNavbar,
   apiGet,
@@ -51,7 +52,7 @@ function linkHtml(link) {
     return `<li><a href="${esc(href)}">${esc(doc.title || link.title || 'ISMS document')}</a><span class="small-muted ms-2">ISMS document</span></li>`;
   }
   if (link?.url) {
-    return `<li><a href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">${esc(link.title || link.url)}</a></li>`;
+    return `<li><a href="${esc(safeExternalHref(link.url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(link.title || link.url)}</a></li>`;
   }
   return '';
 }

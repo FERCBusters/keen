@@ -23,6 +23,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
+from app.ingest.http import client as ingestion_client
 from sqlalchemy.orm import Session
 
 from app.ingest.connections import settings, connection_runs, namespace
@@ -90,6 +91,9 @@ def _with_query_token(url: str) -> str:
 
 
 def _fetch_rss(feed_url: str) -> str:
+    from app.ingest.http import require_origin
+    if _auth_headers() or _basic_auth() or settings.gitea_token:
+        require_origin(feed_url, settings.gitea_base_url)
     if not is_safe_url(feed_url):
         raise ValueError("Invalid or unsafe Gitea feed URL")
 
@@ -105,7 +109,7 @@ def _fetch_rss(feed_url: str) -> str:
         else feed_url
     )
 
-    with httpx.Client(
+    with ingestion_client(
         timeout=30.0,
         follow_redirects=False,
         verify=True,
@@ -143,7 +147,7 @@ def _fetch_api_activities(
     )
 
     all_items: list[dict[str, Any]] = []
-    with httpx.Client(
+    with ingestion_client(
         timeout=30.0,
         follow_redirects=False,
         verify=True,
@@ -291,6 +295,9 @@ def ingest_gitea_repo_feed(
     the login page. Fall back to RSS when the API cannot be used.
     """
 
+    from app.ingest.http import require_origin
+    if _auth_headers() or _basic_auth() or settings.gitea_token:
+        require_origin(feed_url, settings.gitea_base_url)
     u = urlparse(feed_url)
     cursor_name = namespace(f"gitea:feed:{u.netloc}{u.path}")
     cur = (
@@ -466,7 +473,7 @@ def _discover_repositories(base_url: str, section: str, name: str) -> list[dict]
     headers = {"Accept": "application/json", **_auth_headers()}
     auth = _basic_auth() if settings.gitea_auth_mode == "basic" else None
     repos, seen = [], set()
-    with httpx.Client(timeout=30.0, follow_redirects=False, verify=True, headers=headers, auth=auth) as client:
+    with ingestion_client(timeout=30.0, follow_redirects=False, verify=True, headers=headers, auth=auth) as client:
         for page in range(1, 1001):
             response = client.get(url, params={"page": page, "limit": 50})
             error = _response_status_error(response)

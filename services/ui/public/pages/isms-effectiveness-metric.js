@@ -1,3 +1,4 @@
+import {safeExternalHref} from '/app.js';
 import {
   initNavbar,
   apiGet,
@@ -40,7 +41,7 @@ function controlBadges(items) {
 
 function linkOrDash(url, label) {
   if (!url) return '—';
-  return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label || url)}</a>`;
+  return `<a href="${esc(safeExternalHref(url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(label || url)}</a>`;
 }
 
 async function loadSourceMeta() {

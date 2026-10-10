@@ -181,7 +181,7 @@ def test_loki_direct_insert_and_http_credentials_are_connection_scoped(contract_
         requests.append(request)
         return httpx.Response(200,json={'status':'success','data':{'resultType':'streams','result':[{'stream':{'app':'auth'},'values':[[stamp,'same line']]}]}})
     client_class=httpx.Client
-    monkeypatch.setattr(loki.httpx,'Client',lambda **kw:client_class(**kw,transport=httpx.MockTransport(handle)))
+    monkeypatch.setattr(loki.httpx,'Client',lambda **kw:client_class(**{k:v for k,v in kw.items() if k != "transport"},transport=httpx.MockTransport(handle)))
     monkeypatch.setattr(loki,'is_safe_url',lambda url:True)
     monkeypatch.setattr(loki,'_apply_rules_and_store_mappings',lambda *a:0)
     monkeypatch.setattr(loki,'put_bytes',lambda **kw:SimpleNamespace(uri='test://'+kw['key'],sha256='0'*64,size_bytes=9))

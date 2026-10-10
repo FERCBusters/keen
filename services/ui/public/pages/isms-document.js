@@ -1,3 +1,4 @@
+import {safeExternalHref} from '/app.js';
 import {
   initNavbar,
   apiGet,
@@ -51,7 +52,7 @@ function renderDocument(row) {
 
   const external = documentRow.external_url || '';
   const file = fileHref(documentRow);
-  $('documentUrl').innerHTML = external ? `<a href="${esc(external)}" target="_blank" rel="noopener noreferrer">${esc(external)}</a>` : '<span class="small-muted">—</span>';
+  $('documentUrl').innerHTML = external ? `<a href="${esc(safeExternalHref(external) || '#')}" target="_blank" rel="noopener noreferrer">${esc(external)}</a>` : '<span class="small-muted">—</span>';
   $('documentFile').innerHTML = file ? `<a href="${esc(file)}" target="_blank" rel="noopener noreferrer">${esc(documentRow.filename || 'Uploaded file')}</a>` : '<span class="small-muted">—</span>';
 
   const open = $('openDocumentLink');

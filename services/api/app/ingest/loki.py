@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
+from app.ingest.http import client as ingestion_client
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -57,7 +58,7 @@ def _loki_client() -> httpx.Client:
     if not is_safe_url(base_url):
         raise ValueError("Invalid or unsafe Loki base URL")
 
-    return httpx.Client(
+    return ingestion_client(
         base_url=base_url,
         headers=headers,
         auth=auth,

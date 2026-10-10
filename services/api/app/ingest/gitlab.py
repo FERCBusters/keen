@@ -6,6 +6,7 @@ import hashlib
 import json
 from urllib.parse import quote
 import httpx
+from app.ingest.http import client as ingestion_client
 from app.ingest.connections import settings, connection_runs, namespace, identity
 from app.ingest.connections import load_document
 from app.db.models import IngestionCursor
@@ -81,7 +82,7 @@ def ingest_gitlab_all(db):
         return [{'error': 'Configure a safe HTTPS KEEN_GITLAB_BASE_URL'}]
     cfg = load_document('gitlab', settings.gitlab_config_path)
     results = []
-    with httpx.Client(timeout=30, verify=True, follow_redirects=False,
+    with ingestion_client(timeout=30, verify=True, follow_redirects=False,
                       headers={'PRIVATE-TOKEN': settings.gitlab_token, 'Accept': 'application/json'}) as client:
         for section, field in [('groups', 'group'), ('users', 'user')]:
             for entry in cfg.get(section, []):

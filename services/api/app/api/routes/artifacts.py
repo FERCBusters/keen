@@ -4,6 +4,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -165,26 +166,25 @@ def preview_pdf_first_page(
             out_prefix = td_path / "preview"
 
             with open(in_path, "wb") as f:
-                for chunk in iter_stream(body):
-                    f.write(chunk)
+                size = 0
+                stream = iter_stream(body)
+                try:
+                    for chunk in stream:
+                        size += len(chunk)
+                        if size > 20 * 1024 * 1024:
+                            raise HTTPException(413, "PDF preview exceeds 20 MiB; download the original instead")
+                        f.write(chunk)
+                finally:
+                    stream.close()
 
             # Render page 1 as PNG.
             # -singlefile produces <out_prefix>.png
-            cmd = [
-                "pdftoppm",
-                "-f",
-                "1",
-                "-l",
-                "1",
-                "-singlefile",
-                "-png",
-                str(in_path),
-                str(out_prefix),
-            ]
+            cmd = [sys.executable, "-m", "app.render.pdf_preview", str(in_path), str(out_prefix)]
             try:
                 subprocess.run(
                     cmd,
                     check=True,
+                    timeout=15,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
@@ -192,6 +192,8 @@ def preview_pdf_first_page(
                 raise HTTPException(
                     status_code=500, detail="pdftoppm is not installed in the API image"
                 )
+            except subprocess.TimeoutExpired:
+                raise HTTPException(status_code=422, detail="PDF preview exceeded the rendering time limit")
             except subprocess.CalledProcessError:
                 raise HTTPException(
                     status_code=500, detail="Failed to render PDF preview"

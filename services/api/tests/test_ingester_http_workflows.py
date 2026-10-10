@@ -75,7 +75,7 @@ def test_rss_atom_parse_and_store_in_chronological_order(contract_db,monkeypatch
     monkeypatch.setattr(settings,'demo_mode',False)
     monkeypatch.setattr(rss,'is_safe_url',lambda url:True)
     client_cls=httpx.Client
-    monkeypatch.setattr(rss.httpx,'Client',lambda **kw:client_cls(**kw,transport=httpx.MockTransport(lambda req:httpx.Response(200,content=body))))
+    monkeypatch.setattr(rss.httpx,'Client',lambda **kw:client_cls(**{k:v for k,v in kw.items() if k != "transport"},transport=httpx.MockTransport(lambda req:httpx.Response(200,content=body))))
     store=Mock(return_value={'deduped':False});monkeypatch.setattr(rss,'store_event_with_artifact',store)
     result=rss.ingest_rss_feed(contract_db,{'url':'https://example.org/feed','label':'Security'})
     assert result['created_events']==count
@@ -94,7 +94,7 @@ def test_rss_conditional_headers_survive_to_next_fetch(contract_db,monkeypatch,h
         requests.append(req)
         return httpx.Response(200 if len(requests)==1 else 304,content=RSS if len(requests)==1 else b'',headers=headers)
     client_cls=httpx.Client
-    monkeypatch.setattr(rss.httpx,'Client',lambda **kw:client_cls(**kw,transport=httpx.MockTransport(handle)))
+    monkeypatch.setattr(rss.httpx,'Client',lambda **kw:client_cls(**{k:v for k,v in kw.items() if k != "transport"},transport=httpx.MockTransport(handle)))
     store=Mock(return_value={'deduped':False});monkeypatch.setattr(rss,'store_event_with_artifact',store)
     cfg={'url':'https://example.org/feed','max_items':1}
     assert rss.ingest_rss_feed(contract_db,cfg)['created_events']==1
@@ -204,7 +204,7 @@ def test_rdf_feed_recovers_an_empty_cursor_with_cached_headers(contract_db, monk
         return httpx.Response(200, content=RDF_RSS, headers={'etag':'"new"'})
     client = httpx.Client
     monkeypatch.setattr(rss, 'is_safe_url', lambda url: True)
-    monkeypatch.setattr(rss.httpx, 'Client', lambda **kwargs: client(**kwargs, transport=httpx.MockTransport(handle)))
+    monkeypatch.setattr(rss.httpx, 'Client', lambda **kwargs: client(**{k:v for k,v in kwargs.items() if k != "transport"}, transport=httpx.MockTransport(handle)))
     store = Mock(return_value={'deduped':False})
     monkeypatch.setattr(rss, 'store_event_with_artifact', store)
     result = rss.ingest_rss_feed(contract_db, {'url':url,'label':'Advisories'})
@@ -223,6 +223,6 @@ def test_unsupported_or_malformed_feed_does_not_update_cache(contract_db, monkey
     contract_db.add(cursor);contract_db.commit()
     client=httpx.Client
     monkeypatch.setattr(rss,'is_safe_url',lambda url:True)
-    monkeypatch.setattr(rss.httpx,'Client',lambda **kwargs:client(**kwargs,transport=httpx.MockTransport(lambda request:httpx.Response(200,content=body,headers={'etag':'"bad"'}))))
+    monkeypatch.setattr(rss.httpx,'Client',lambda **kwargs:client(**{k:v for k,v in kwargs.items() if k != "transport"},transport=httpx.MockTransport(lambda request:httpx.Response(200,content=body,headers={'etag':'"bad"'}))))
     with pytest.raises(ValueError):rss.ingest_rss_feed(contract_db,{'url':url,'label':'Security'})
     assert cursor.meta == {} and cursor.last_ts is None

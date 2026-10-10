@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import {page,settle} from './support/page-fixture.mjs';
 const records={
  objectives:[{id:'o1',goal:'Protect records',requirement:'<img src=x>',metric:'100%',resource_users:[],controls:[],clauses:[]}],
- documents:[{id:'d1',title:'Security policy',tags:['Security'],document_type:'policy',content_html:'<p>Policy</p>',controls:[],clauses:[]},{id:'d2',title:'Operations guide',tags:['Operations'],controls:[],clauses:[]}],
+ documents:[{id:'d1',title:'Security policy',tags:['Security'],document_type:'policy',content_html:'<p>Policy</p>',controls:[],clauses:[]},{id:'d2',title:'Operations guide',external_url:'javascript:alert(1)',tags:['Operations'],controls:[],clauses:[]}],
  org_nodes:[{id:'n1',name:'Security team',node_type:'role',people:[],controls:[],clauses:[]}],
  assets:[{id:'a1',asset:'Database',name:'Database',controls:[],clauses:[]}],
  licenses:[{id:'l1',name:'License'}],aws_accounts:[{id:'aws1',name:'Production'}],access_control_matrix:[],
  effectiveness_measures:[{id:'e1',summary:'Agent coverage',metric:'Percent',controls:[],clauses:[],metric_entries:[]}],
- meetings:[{id:'m1',title:'Annual review',date:'2026-01-01',attendees:[],apologies:[],links:[],controls:[],clauses:[]}],
+ meetings:[{id:'m1',title:'Annual review',date:'2026-01-01',attendees:[],apologies:[],links:[{url:'javascript:alert(1)',title:'Unsafe legacy link'}],controls:[],clauses:[]}],
 };
 async function fixture(t,options={}){
  const ui=await page(t,'isms',{...options,get:async u=>{
@@ -54,3 +54,11 @@ test('ISMS read-only users cannot see management forms',async t=>{
 test('ISMS request failures remain visible',async t=>{
  const ui=await fixture(t,{fail:true});assert.match(ui.el('status').textContent,/Failed to load ISMS.*Offline/);
 });
+
+for (const [tab,id] of [['documents','documentsRows'],['meetings','meetingsRows']]) {
+ test('ISMS '+tab+' neutralises unsafe links already stored in the database',async t=>{
+  const ui=await fixture(t,{query:'&tab='+tab});
+  await settle(()=>ui.el(id).querySelector('a[href="#"]'));
+  for(const link of ui.el(id).querySelectorAll('a[href]'))assert.doesNotMatch(link.href,/^(javascript|data|vbscript):/i);
+ });
+}

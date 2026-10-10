@@ -7,7 +7,8 @@ from datetime import datetime
 from datetime import time as time_type
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from app.security.urls import external_url as validate_external_url
 
 
 class IsmsLinksPayload(BaseModel):
@@ -37,6 +38,8 @@ class DocumentPayload(IsmsLinksPayload):
     tags: list[str] | None = None
     content_html: str | None = Field(default=None, max_length=200000)
     expected_content_version: int | None = None
+
+    _validate_url = field_validator("external_url")(validate_external_url)
 
 
 class OrgNodePayload(IsmsLinksPayload):
@@ -137,12 +140,16 @@ class EffectivenessMetricEntryPayload(BaseModel):
     notes: str | None = Field(default=None, max_length=12000)
     raw_payload: dict[str, Any] | None = None
 
+    _validate_url = field_validator("source_url")(validate_external_url)
+
 
 class MeetingLinkPayload(BaseModel):
     link_type: str = Field(default="external_url", max_length=32)
     document_id: uuid.UUID | None = None
     title: str | None = Field(default=None, max_length=256)
     url: str | None = Field(default=None, max_length=2048)
+
+    _validate_url = field_validator("url")(validate_external_url)
 
 
 class MeetingPayload(IsmsLinksPayload):

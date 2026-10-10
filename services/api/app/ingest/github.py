@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
 import httpx
+from app.ingest.http import client as ingestion_client
 from sqlalchemy.orm import Session
 
 from app.ingest.connections import load_document
@@ -30,7 +31,7 @@ def _client() -> httpx.Client:
     }
     if settings.github_token:
         headers["Authorization"] = f"Bearer {settings.github_token}"
-    return httpx.Client(
+    return ingestion_client(
         base_url=settings.github_base_url.rstrip("/"),
         headers=headers,
         timeout=30.0,
@@ -655,6 +656,14 @@ def ingest_github_atom_feed(
     Note: private GitHub feeds require Basic Auth.
     """
 
+    from app.ingest.http import require_origin
+    if _basic_auth():
+        # Public GitHub feeds live on github.com; Enterprise feeds share their
+        # configured API server's origin (possibly with an /api/v3 path).
+        endpoint = settings.github_base_url
+        if endpoint.rstrip('/') == 'https://api.github.com':
+            endpoint = 'https://github.com'
+        require_origin(feed_url, endpoint)
     # Normalize the cursor name based on the URL path.
     u = urlparse(feed_url)
     cursor_name = namespace(f"github:feed:{u.netloc}{u.path}")
@@ -679,7 +688,7 @@ def ingest_github_atom_feed(
     )
 
     auth = _basic_auth()
-    with httpx.Client(
+    with ingestion_client(
         timeout=30.0, follow_redirects=False, verify=True, auth=auth
     ) as c:
         r = c.get(feed_url, headers={"Accept": "application/atom+xml"})

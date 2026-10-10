@@ -13,6 +13,7 @@ import uuid
 from urllib.parse import urlsplit
 
 import httpx
+from app.ingest.http import client as ingestion_client
 from sqlalchemy import text
 
 from app.ingest.connections import settings, connection_runs, namespace
@@ -364,7 +365,7 @@ def ingest_riskledger_all(db):
             return [{'skipped':True,'reason':'Add a Risk Ledger organization collection; org * selects the authenticated organisation'}]
         with _run_lock(db) as acquired:
             if not acquired:return [{'skipped':True,'reason':'Another Risk Ledger import is in progress'}]
-            with httpx.Client(timeout=httpx.Timeout(30,connect=10),verify=True,follow_redirects=False,trust_env=False,
+            with ingestion_client(timeout=httpx.Timeout(30,connect=10),verify=True,follow_redirects=False,trust_env=False,
                 headers={'Authorization':'Bearer '+settings.riskledger_api_key.strip(),'Accept':'application/json'}) as http:
                 return [_collect(db,Client(http,cfg.get('max_run_seconds',300)),cfg)]
     except Exception as exc:

@@ -86,22 +86,6 @@ async def security_headers_middleware(request: Request, call_next):
     return response
 
 
-@app.middleware("http")
-async def request_size_limit_middleware(request: Request, call_next):
-    """Limit request body size to prevent DoS attacks."""
-    if request.method in ("POST", "PUT", "PATCH"):
-        content_length = request.headers.get("content-length")
-        if content_length:
-            try:
-                if int(content_length) > 41943040:  # 40MB
-                    return JSONResponse(
-                        {"detail": "Request body too large"}, status_code=413
-                    )
-            except ValueError:
-                pass
-
-    return await call_next(request)
-
 
 def custom_openapi():
     if app.openapi_schema:
@@ -556,3 +540,8 @@ async def mfa_no_store(request: Request, call_next):
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Pragma'] = 'no-cache'
     return response
+
+
+# Enforce byte limits before JSON/form parsing, including chunked requests.
+from app.security.request_limits import RequestBodyLimitMiddleware
+app.add_middleware(RequestBodyLimitMiddleware)

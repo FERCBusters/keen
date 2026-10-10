@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import httpx
+from app.ingest.http import client as ingestion_client
 import yaml
 from sqlalchemy.orm import Session
 
@@ -63,7 +64,7 @@ def _client() -> httpx.Client:
         "Authorization": f"Token {tid}:{tsec}",
         "Accept": "application/json",
     }
-    return httpx.Client(base_url=base, headers=headers, timeout=30.0, verify=True)
+    return ingestion_client(base_url=base, headers=headers, timeout=30.0, verify=True)
 
 
 def load_bookstack_config(path: str) -> dict[str, Any]:

@@ -1,3 +1,4 @@
+import {safeExternalHref} from '/app.js';
 import {mountMeasurementExamples} from '/pages/measurement-examples.js';
 import {
   initNavbar,
@@ -51,7 +52,7 @@ function sourceHtml(entry) {
   const source = entry?.source_type || 'other';
   const badge = sourceBadgeHtml(source, sourceMeta, source ? withFramework(`/source.html?source=${encodeURIComponent(source)}`, framework) : '');
   const title = entry?.source_url
-    ? `<a href="${esc(entry.source_url)}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || 'Open source')}</a>`
+    ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || 'Open source')}</a>`
     : esc(entry?.source_title || '');
   const event = entry?.source_event_id ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>` : '';
   const ref = entry?.source_reference ? ` · <span class="small-muted">${esc(entry.source_reference)}</span>` : '';

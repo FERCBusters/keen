@@ -55,7 +55,7 @@ def callback(monkeypatch, signing_key):
 
 @pytest.mark.parametrize('alg',['RS256','RS384','RS512','PS256'])
 def test_valid_signatures_and_claims(callback,alg):
-    callback.run(alg=alg)
+    callback.run(alg=alg, selected_provider=replace(callback.provider, allowed_algs=(alg,)))
     callback.provision.assert_called_once()
     assert callback.provision.call_args.kwargs['subject']=='subject'
 
@@ -63,7 +63,7 @@ def test_valid_signatures_and_claims(callback,alg):
 def test_ec_signature(callback):
     key=ECKey.generate_key('P-256',{'kid':'ec-key'})
     callback.jwks.return_value={'keys':[key.as_dict(private=False)]}
-    callback.run(key=key,alg='ES256')
+    callback.run(key=key,alg='ES256',selected_provider=replace(callback.provider,allowed_algs=('ES256',)))
 
 
 @pytest.mark.parametrize('change',[
@@ -143,3 +143,25 @@ def test_unknown_signing_key_cannot_provision(callback):
     key=RSAKey.generate_key(2048,{'kid':'unknown-key'})
     with pytest.raises(JoseError):callback.run(key=key)
     callback.provision.assert_not_called()
+
+
+@pytest.mark.parametrize('alg',['RS384','RS512','PS256'])
+def test_unconfigured_algorithm_rejected_even_with_valid_signature(callback,alg):
+    with pytest.raises(JoseError):callback.run(alg=alg)
+    callback.provision.assert_not_called()
+
+
+@pytest.mark.parametrize('algs',[(),('none',),('HS256',),('RS256','unknown')])
+def test_invalid_algorithm_configuration_fails_closed(callback,algs):
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc:
+        callback.run(selected_provider=replace(callback.provider,allowed_algs=algs))
+    assert exc.value.status_code==503
+    callback.provision.assert_not_called()
+
+
+def test_generic_oidc_reads_operator_algorithm_policy(monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings,'oidc_allowed_algs','RS256, ES256')
+    assert oidc._oidc_provider().allowed_algs==('RS256','ES256')
+    assert oidc._google_provider().allowed_algs==('RS256',)

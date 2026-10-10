@@ -124,6 +124,10 @@ def ingest_webhook(
         .get("providers", {})
         .get(provider, {})
     )
+    connection = current_connection()
+    secret_header = (connection.configuration.get('secret_header', 'X-Webhook-Secret')
+                     if connection and connection.managed_by != 'environment'
+                     else pol.get('secret_header', ''))
     for k in pol.get("summary_hints", []) or []:
         if isinstance(parsed, dict) and k in parsed:
             hint_val = str(parsed.get(k) or "")
@@ -149,7 +153,7 @@ def ingest_webhook(
                 "provider": provider,
                 "event_type": event_type,
                 "headers": {k: v for k, v in headers.items() if k.lower() in {"content-type", "user-agent", "x-webhook-timestamp"}
-                    and k.lower() != str(pol.get("secret_header") or "").lower()},
+                    and k.lower() != str(secret_header or "").lower()},
             }
         },
         normalized_payload=parsed if isinstance(parsed, dict) else {"payload": parsed},

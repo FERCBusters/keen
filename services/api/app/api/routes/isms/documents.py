@@ -11,6 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.api.utils import content_disposition_attachment
 from app.db.models import (
     BookStackSectionEvidence,
     IsmsDocument,
@@ -351,7 +352,7 @@ def download_document_file(
     return StreamingResponse(
         iter_stream(obj["Body"]),
         media_type=media,
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        headers={"Content-Disposition": content_disposition_attachment(fname)},
     )
 
 

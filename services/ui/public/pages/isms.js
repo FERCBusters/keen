@@ -1,3 +1,4 @@
+import {safeExternalHref} from '/app.js';
 import {mountMeasurementExamples} from '/pages/measurement-examples.js';
 import {
   initNavbar,
@@ -176,7 +177,7 @@ function badgeList(items, labelKey = 'ref', urlFn = null) {
 function controlBadges(items) { return badgeList(items, 'ref', (c) => withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework)); }
 function clauseBadges(items) { return badgeList(items, 'ref', (c) => withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework)); }
 function docLink(d) {
-  if (d.external_url) return `<a href="${esc(d.external_url)}" target="_blank" rel="noopener noreferrer">External URL</a>`;
+  if (d.external_url) return `<a href="${esc(safeExternalHref(d.external_url) || '#')}" target="_blank" rel="noopener noreferrer">External URL</a>`;
   if (d.has_file) return `<a href="/api/v1/isms/documents/${encodeURIComponent(d.id)}/file" target="_blank" rel="noopener noreferrer">${esc(d.filename || 'Uploaded file')}</a>`;
   return '<span class="small-muted">—</span>';
 }
@@ -1191,7 +1192,7 @@ function effectivenessMetricHref(entry) {
 function metricValueHtml(entry, measure) {
   if (!entry) return '<span class="small-muted">No metric entries yet.</span>';
   const period = entry.period || [entry.period_start || '', entry.period_end || ''].filter(Boolean).join(' → ');
-  const source = entry.source_url ? `<a href="${esc(entry.source_url)}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type || 'source')}</a>` : esc(entry.source_title || entry.source_type || 'other');
+  const source = entry.source_url ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type || 'source')}</a>` : esc(entry.source_title || entry.source_type || 'other');
   const eventLink = entry.source_event_id ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>` : '';
   const valueHtml = effectivenessMetricValueHtml(entry, measure, {href: entry.id ? effectivenessMetricHref(entry) : '', fallback: 'Metric entry'});
   const thresholdHtml = effectivenessMetricThresholdBadgeHtml(measure, entry);
@@ -1310,7 +1311,7 @@ function renderMeetings() {
   const items = data.meetings || [];
   setCount('meetingsCount', items.length);
   rows.meetings.innerHTML = items.map((m) => {
-    const links = (m.links || []).map((l) => l.link_type === 'isms_document' && l.document ? `<a class="badge badge-soft text-decoration-none me-1" href="${esc(documentHref(l.document))}">${esc(l.document.title || 'ISMS document')}</a>` : (l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.title || l.url)}</a>` : '')).filter(Boolean).join('<br>') || '<span class="small-muted">—</span>';
+    const links = (m.links || []).map((l) => l.link_type === 'isms_document' && l.document ? `<a class="badge badge-soft text-decoration-none me-1" href="${esc(documentHref(l.document))}">${esc(l.document.title || 'ISMS document')}</a>` : (l.url ? `<a href="${esc(safeExternalHref(l.url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(l.title || l.url)}</a>` : '')).filter(Boolean).join('<br>') || '<span class="small-muted">—</span>';
     const href = meetingHref(m);
     return `<tr data-isms-row="meeting"><td>${esc(m.date || '—')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('–') || '—')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls)}</td><td>${clauseBadges(m.clauses)}</td>${actionsHtml('meeting', m.id)}</tr>`;
   }).join('') || emptyRow(9, 'No meeting minutes yet.');

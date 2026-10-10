@@ -7,6 +7,7 @@ from typing import Any
 import json
 
 import httpx
+from app.ingest.http import client as ingestion_client
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 
@@ -66,7 +67,7 @@ def _client() -> httpx.Client:
     if settings.jenkins_username and settings.jenkins_api_token:
         auth = (settings.jenkins_username, settings.jenkins_api_token)
 
-    return httpx.Client(
+    return ingestion_client(
         base_url=base_url,
         auth=auth,
         timeout=30.0,
