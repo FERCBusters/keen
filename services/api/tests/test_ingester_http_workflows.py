@@ -182,3 +182,47 @@ def test_bookstack_recovers_legacy_page_identity_from_stored_events():
     full,listing=bookstack._event_bookstack_page_payloads(event)
     assert full==listing
     assert full['id']==7 and full['slug']=='security' and full['book_slug']=='isms' and full['name']=='Security'
+
+
+RDF_RSS = b'''<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+ xmlns="http://purl.org/rss/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+ <channel rdf:about="https://example.org/dsa"><title>Security advisories</title></channel>
+ <item rdf:about="urn:advisory:1"><title>Package security update</title>
+ <link>https://example.org/advisory/1</link><dc:date>2026-01-02T12:00:00Z</dc:date>
+ <dc:creator>Security team</dc:creator><description>Security fixes</description></item>
+ </rdf:RDF>'''
+
+
+def test_rdf_feed_recovers_an_empty_cursor_with_cached_headers(contract_db, monkeypatch):
+    url = 'https://example.org/dsa'
+    cursor = IngestionCursor(name=rss._feed_cursor_name(url, name_hint='Advisories'),
+                             last_ts=None, meta={'etag':'"old"','last_modified':'old'})
+    contract_db.add(cursor);contract_db.commit()
+    requests=[]
+    def handle(request):
+        requests.append(request)
+        return httpx.Response(200, content=RDF_RSS, headers={'etag':'"new"'})
+    client = httpx.Client
+    monkeypatch.setattr(rss, 'is_safe_url', lambda url: True)
+    monkeypatch.setattr(rss.httpx, 'Client', lambda **kwargs: client(**kwargs, transport=httpx.MockTransport(handle)))
+    store = Mock(return_value={'deduped':False})
+    monkeypatch.setattr(rss, 'store_event_with_artifact', store)
+    result = rss.ingest_rss_feed(contract_db, {'url':url,'label':'Advisories'})
+    assert result['created_events'] == 1 and result['feed_type'] == 'rss1'
+    assert 'if-none-match' not in requests[0].headers
+    assert 'if-modified-since' not in requests[0].headers
+    assert cursor.last_ts == datetime(2026,1,2,12)
+    assert store.call_args.kwargs['actor'] == 'Security team'
+    assert store.call_args.kwargs['external_id'] == rss._external_id(url, 'urn:advisory:1')
+
+
+@pytest.mark.parametrize('body', [b'<html><body>Not a feed</body></html>', b'<rss/>'])
+def test_unsupported_or_malformed_feed_does_not_update_cache(contract_db, monkeypatch, body):
+    url='https://example.org/feed'
+    cursor=IngestionCursor(name=rss._feed_cursor_name(url,name_hint='Security'),last_ts=None,meta={})
+    contract_db.add(cursor);contract_db.commit()
+    client=httpx.Client
+    monkeypatch.setattr(rss,'is_safe_url',lambda url:True)
+    monkeypatch.setattr(rss.httpx,'Client',lambda **kwargs:client(**kwargs,transport=httpx.MockTransport(lambda request:httpx.Response(200,content=body,headers={'etag':'"bad"'}))))
+    with pytest.raises(ValueError):rss.ingest_rss_feed(contract_db,{'url':url,'label':'Security'})
+    assert cursor.meta == {} and cursor.last_ts is None

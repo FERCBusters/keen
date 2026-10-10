@@ -148,34 +148,35 @@ def _parse_feed(xml_bytes: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]]
     root = ET.fromstring(xml_bytes)
     root_name = _local(root.tag).lower()
 
-    # RSS 2.0
-    if root_name == "rss":
+    # RSS 2.0 nests items in channel; RSS 1.0/RDF keeps them beside channel.
+    rdf = root.tag == "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}RDF"
+    if root_name == "rss" or rdf:
         channel = None
         for ch in list(root):
             if _local(ch.tag).lower() == "channel":
                 channel = ch
                 break
         if channel is None:
-            return ({"type": "rss"}, [])
+            raise ValueError("Invalid RSS feed: missing channel")
 
         feed_title = _child_text(channel, "title")
         feed_link = _child_text(channel, "link")
         feed_desc = _child_text(channel, "description")
         meta = {
-            "type": "rss",
+            "type": "rss1" if rdf else "rss",
             "title": feed_title,
             "link": feed_link,
             "description": feed_desc,
         }
 
         entries: list[dict[str, Any]] = []
-        for item in list(channel):
+        for item in list(root if rdf else channel):
             if _local(item.tag).lower() != "item":
                 continue
             title = _child_text(item, "title")
             link = _first_link_rss(item)
-            guid = _child_text(item, "guid")
-            pub = _child_text(item, "pubDate")
+            guid = _child_text(item, "guid") or item.get("{http://www.w3.org/1999/02/22-rdf-syntax-ns#}about", "")
+            pub = _child_text(item, "pubDate") or _child_text(item, "date")
             updated = _child_text(item, "updated")
             desc = _child_text(item, "description")
             author = _author_rss(item)
@@ -252,8 +253,7 @@ def _parse_feed(xml_bytes: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]]
 
         return meta, entries
 
-    # Unknown
-    return ({"type": root_name or "unknown"}, [])
+    raise ValueError("Unsupported feed format: expected RSS 1.0, RSS 2.0 or Atom")
 
 
 def _safe_label_from_url(url: str) -> str:
@@ -314,9 +314,11 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
 
     etag = (cur.meta or {}).get("etag")
     last_mod = (cur.meta or {}).get("last_modified")
-    if isinstance(etag, str) and etag:
+    # A feed with no imported timestamp must be fetched again, including feeds
+    # previously mistaken for empty by an unsupported-format parser.
+    if cur.last_ts is not None and isinstance(etag, str) and etag:
         headers["If-None-Match"] = etag
-    if isinstance(last_mod, str) and last_mod:
+    if cur.last_ts is not None and isinstance(last_mod, str) and last_mod:
         headers["If-Modified-Since"] = last_mod
 
     auth: tuple[str, str] | None = None
@@ -371,6 +373,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
         }
     response.raise_for_status()
     xml_bytes = response.content
+    feed_meta, entries = _parse_feed(xml_bytes)
 
     # Update conditional cache headers for next run.
     meta = dict(cur.meta or {})
@@ -379,8 +382,6 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
     if response.headers.get("last-modified"):
         meta["last_modified"] = response.headers.get("last-modified")
     cur.meta = meta
-
-    feed_meta, entries = _parse_feed(xml_bytes)
 
     # Process oldest-first for cursor stability
     def _entry_ts(e: dict[str, Any]) -> datetime:
