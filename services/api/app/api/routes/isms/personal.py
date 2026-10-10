@@ -87,7 +87,11 @@ def my_isms_role(user=Depends(require_authenticated), db: Session = Depends(get_
 def _org_path(node: IsmsOrgNode | None) -> list[dict[str, Any]]:
     out = []
     cur = node
+    seen = set()
     while cur:
+        if cur.id in seen:
+            break
+        seen.add(cur.id)
         out.append({"id": str(cur.id), "name": cur.name, "node_type": cur.node_type})
         cur = getattr(cur, "parent", None)
     return list(reversed(out))

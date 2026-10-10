@@ -1,3 +1,4 @@
+import {csvEscape} from '../csv.js';
 import {ensureEmbeddedVisualisationMarkup} from './visualisation/embedded-markup.js';
 import {MS_PER_DAY, histStepMs, histNextFinerInterval, histBucketToUtcMs, isIsoDate, utcMsFromIsoDate, isoDateFromUtcMs, isoTodayUtc, isoAddDays, diffDaysInclusive} from './visualisation/dates.js';
 import {truncateMiddleText, renderWrappedNodeLabel} from './visualisation/labels.js';
@@ -1019,12 +1020,6 @@ function downloadBlob(filename, blob) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function csvEscape(v) {
-  if (v == null) return '';
-  const s = String(v);
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
 
 function toCsv(rows) {
   const r = rows || [];

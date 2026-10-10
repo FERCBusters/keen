@@ -302,3 +302,30 @@ def test_clause_filter_works_in_facets_and_export(api):
     )
     assert export.status_code == 200, export.text
     assert export.json()["total"] == 2
+
+
+@pytest.mark.parametrize(
+    "payload", ["=1+1", "+1+1", "-1+1", "@SUM(1)", "\t=1", "\r=1", "\n=1", "  =1"]
+)
+def test_csv_export_neutralises_source_formulas_without_changing_json(api, payload):
+    import csv
+    import io
+
+    row = api.rows[0]
+    row.summary = payload
+    row.actor = payload
+    api.db.commit()
+    response = api.client.get(
+        "/api/v1/events/export", params={"framework": "A", "format": "csv"}
+    )
+    assert response.status_code == 200
+    item = next(
+        r for r in csv.DictReader(io.StringIO(response.text)) if r["id"] == str(row.id)
+    )
+    assert item["summary"] == "'" + payload
+    assert item["actor"] == "'" + payload
+    response = api.client.get(
+        "/api/v1/events/export", params={"framework": "A", "format": "json"}
+    )
+    item = next(r for r in response.json()["items"] if r["id"] == str(row.id))
+    assert item["summary"] == payload

@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
+from app.security.csv import spreadsheet_cell
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -248,7 +249,7 @@ _CSV_COLUMNS = [
 
 def _csv_safe(value: Any) -> Any:
     value = "" if value is None else str(value)
-    return "'" + value if value.startswith(("=", "+", "-", "@", "\t", "\r")) else value
+    return spreadsheet_cell(value)
 
 
 @router.get("/v1/risks/register/export.csv")

@@ -3,6 +3,9 @@
 import secrets
 from datetime import timedelta
 
+# Imported fixtures are discovered by pytest by name.
+from tests.test_keen_agent import setup as setup
+
 import pytest
 from app.agents.credentials import digest
 from app.api.routes import agent_enrollment as api

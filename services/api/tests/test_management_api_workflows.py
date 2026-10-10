@@ -547,3 +547,39 @@ def test_scheduled_audit_template_roundtrip(api, recurrence):
 )
 def test_detail_identifiers_do_not_produce_server_errors(api, path, identifier, status):
     request(api, "GET", f"{path}/{identifier}", status=status)
+
+
+def test_org_parent_updates_reject_cycles_and_unknown_parents(api):
+    url = "/api/v1/isms/org-nodes"
+    a = api.client.post(url, json={"name": "A"}).json()
+    b = api.client.post(url, json={"name": "B", "parent_id": a["id"]}).json()
+    for parent in [a["id"], b["id"], str(uuid.uuid4())]:
+        response = api.client.patch(url + "/" + a["id"], json={"parent_id": parent})
+        assert response.status_code == 400, response.text
+    response = api.client.patch(url + "/" + b["id"], json={"parent_id": None})
+    assert response.status_code == 200, response.text
+
+
+def test_audit_report_download_sanitises_stored_filename(api, monkeypatch):
+    import io
+    from app.db.models import Audit
+
+    row = Audit(
+        title="Report",
+        framework_slug="A",
+        final_report_storage_uri="local://local/report",
+        final_report_filename="品質\r\nX-Evil: yes.pdf",
+        final_report_content_type="application/pdf",
+    )
+    api.db.add(row)
+    api.db.commit()
+    monkeypatch.setattr(
+        audits, "get_object_stream", lambda *args: {"Body": io.BytesIO(b"%PDF-1.4")}
+    )
+    response = api.client.get(f"/api/v1/audits/{row.id}/report")
+    assert response.status_code == 200
+    assert "x-evil" not in response.headers
+    assert "\r" not in response.headers["content-disposition"]
+    assert "%E5%93%81%E8%B3%AA" in response.headers["content-disposition"]
+    api.identity["user"] = api.reader
+    assert api.client.get(f"/api/v1/audits/{row.id}/report").status_code == 403

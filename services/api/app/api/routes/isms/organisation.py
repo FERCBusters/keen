@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import IsmsOrgNode
 from app.db.session import get_db
+from app.services.hierarchy import validate_parent
 
 from .access import (
     require_isms_manage,
@@ -44,13 +45,7 @@ def create_org_node(
     db: Session = Depends(get_db),
 ):
     fw = _clean_framework(framework)
-    if (
-        payload.parent_id
-        and not db.query(IsmsOrgNode.id)
-        .filter(IsmsOrgNode.id == payload.parent_id)
-        .first()
-    ):
-        raise HTTPException(status_code=400, detail="Unknown parent org node")
+    validate_parent(db, IsmsOrgNode, payload.parent_id)
     row = IsmsOrgNode(
         parent_id=payload.parent_id,
         name=_clean_text(payload.name, max_len=256, required=True, label="name"),
@@ -106,6 +101,7 @@ def update_org_node(
     before = _entity_out(db, "org_node", row, fw)
     fields = set(payload.model_fields_set or set())
     if "parent_id" in fields:
+        validate_parent(db, IsmsOrgNode, payload.parent_id, row.id)
         row.parent_id = payload.parent_id
     if "name" in fields:
         row.name = _clean_text(payload.name, max_len=256, required=True, label="name")

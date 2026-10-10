@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
+from app.api.utils import content_disposition_attachment
 from app.api.utils import try_uuid as _try_uuid
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
@@ -3062,5 +3063,5 @@ def download_final_report(
     body = obj["Body"]
     fname = a.final_report_filename or "audit-report"
     media = a.final_report_content_type or "application/octet-stream"
-    headers = {"Content-Disposition": f'attachment; filename="{fname}"'}
+    headers = {"Content-Disposition": content_disposition_attachment(fname)}
     return StreamingResponse(iter_stream(body), media_type=media, headers=headers)

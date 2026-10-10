@@ -22,6 +22,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import get_db
+from app.services.hierarchy import validate_parent
 from app.security.rich_text import sanitize_rich_text_html
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri, put_bytes
 
@@ -107,6 +108,7 @@ def create_document_folder(
     user=Depends(require_isms_manage),
     db: Session = Depends(get_db),
 ):
+    validate_parent(db, IsmsDocumentFolder, payload.parent_id)
     parent = _document_folder(db, payload.parent_id)
     row = IsmsDocumentFolder(name=payload.name.strip(), parent_id=parent)
     if not row.name:
@@ -131,13 +133,7 @@ def update_document_folder(
     if row is None:
         raise HTTPException(status_code=404, detail="Folder not found")
     parent = _document_folder(db, payload.parent_id)
-    current = parent
-    while current is not None:
-        if current == row.id:
-            raise HTTPException(
-                status_code=400, detail="A folder cannot contain itself"
-            )
-        current = db.get(IsmsDocumentFolder, current).parent_id
+    validate_parent(db, IsmsDocumentFolder, parent, row.id)
     row.name = payload.name.strip()
     if not row.name:
         raise HTTPException(status_code=400, detail="Folder name is required")

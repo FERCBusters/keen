@@ -26,6 +26,7 @@ from app.api.utils import (
     try_uuid as _try_uuid,
 )
 from app.core.cache import cached_json, user_cache_scope
+from app.security.csv import spreadsheet_cell
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
@@ -894,7 +895,8 @@ def export_events(
                     buf = io.StringIO()
                     w = csv.writer(buf)
                     w.writerow(
-                        [
+                        spreadsheet_cell(value)
+                        for value in [
                             item["id"],
                             item["timestamp"],
                             item["source"] or "",

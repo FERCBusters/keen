@@ -1,5 +1,8 @@
 from types import SimpleNamespace
 
+# Imported fixtures are discovered by pytest by name.
+from tests.test_integration_builder import database as database
+
 import pytest
 from app.api.routes import managed_configurations as api
 from app.core.datetime_utils import utc_now_naive

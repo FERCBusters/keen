@@ -21,7 +21,7 @@ class GitDiscoveryTests(unittest.TestCase):
             with (
                 self.subTest(module=module.__name__),
                 patch.object(module, "is_safe_url", return_value=True),
-                patch.object(module.httpx, "Client") as factory,
+                patch.object(module, "ingestion_client") as factory,
             ):
                 client = factory.return_value.__enter__.return_value
                 client.get.side_effect = [
@@ -51,7 +51,7 @@ class GitDiscoveryTests(unittest.TestCase):
     def test_repeated_page_fails(self):
         with (
             patch.object(forgejo, "is_safe_url", return_value=True),
-            patch.object(forgejo.httpx, "Client") as factory,
+            patch.object(forgejo, "ingestion_client") as factory,
         ):
             factory.return_value.__enter__.return_value.get.return_value = Mock(
                 status_code=200,
@@ -65,7 +65,7 @@ class GitDiscoveryTests(unittest.TestCase):
     def test_discovery_does_not_follow_repository_url(self):
         with (
             patch.object(forgejo, "is_safe_url", return_value=True),
-            patch.object(forgejo.httpx, "Client") as factory,
+            patch.object(forgejo, "ingestion_client") as factory,
         ):
             client = factory.return_value.__enter__.return_value
             client.get.side_effect = [
@@ -171,7 +171,7 @@ class GitDiscoveryTests(unittest.TestCase):
                 "load_document",
                 return_value={"groups": [{"group": "team/sub"}]},
             ),
-            patch.object(gitlab.httpx, "Client"),
+            patch.object(gitlab, "ingestion_client"),
             patch.object(
                 gitlab,
                 "_pages",

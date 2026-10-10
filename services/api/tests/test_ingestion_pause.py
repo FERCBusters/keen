@@ -3,6 +3,10 @@
 import importlib
 from unittest.mock import Mock
 
+# Imported fixtures are discovered by pytest by name.
+from tests.test_integration_builder import database as database
+from tests.test_keen_agent import setup as agent_setup  # noqa: F401 - pytest fixture
+
 import pytest
 from app.api.routes import managed_configurations as routes
 from app.api.routes import webhooks

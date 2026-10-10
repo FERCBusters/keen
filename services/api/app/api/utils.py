@@ -882,5 +882,11 @@ def download_filename_for_artifact(artifact: Any, storage_key: str | None) -> st
 
 def content_disposition_attachment(filename: str) -> str:
     """RFC 5987-friendly Content-Disposition for downloads."""
-    safe = filename.replace('"', "").replace("\\", "_")
-    return f"attachment; filename=\"{safe}\"; filename*=UTF-8''{quote(safe)}"
+    safe = "".join(ch for ch in filename if ord(ch) >= 32 and ord(ch) != 127)
+    safe = (
+        safe.replace('"', "").replace("\\", "_").replace("/", "_")[:255] or "download"
+    )
+    fallback = safe.encode("ascii", "replace").decode("ascii")
+    return (
+        f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(safe, safe='')}"
+    )

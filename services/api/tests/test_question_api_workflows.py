@@ -4,6 +4,9 @@ import uuid
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock
 
+# Imported fixtures are discovered by pytest by name.
+from tests.test_management_api_workflows import api as api
+
 import pytest
 from app.api.routes import questions
 from app.db.models import Event, EventQuestionPost, EventQuestionThread, User

@@ -4,6 +4,10 @@ from typing import Tuple
 
 from redis import Redis
 
+from app.security.client_ip import request_ip as client_ip
+
+__all__ = ["client_ip", "fixed_window_allow"]
+
 
 def fixed_window_allow(
     r: Redis, key: str, limit: int, window_seconds: int, fail_closed: bool = False
