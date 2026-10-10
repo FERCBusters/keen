@@ -531,22 +531,6 @@ class LocalMfaTests(unittest.TestCase):
                 "sent",
             )
 
-    def test_security_ip_trust_and_ipv6_normalisation(self):
-        from app.services import security_notifications as mail
-
-        request = Request(
-            {
-                "type": "http",
-                "headers": [(b"x-forwarded-for", b"192.0.2.99, 203.0.113.8, 10.0.0.2")],
-                "client": ("10.0.0.3", 1),
-            }
-        )
-        with patch.object(settings, "security_trusted_proxy_cidrs", ""):
-            self.assertEqual(mail.request_ip(request), "10.0.0.3")
-        with patch.object(settings, "security_trusted_proxy_cidrs", "10.0.0.0/24"):
-            self.assertEqual(mail.request_ip(request), "203.0.113.8")
-        self.assertEqual(mail.normalise_ip("::ffff:203.0.113.8"), "203.0.113.8")
-
     def test_password_routes_enqueue_security_alerts(self):
         from app.api.payloads import AdminSetPasswordPayload, ChangePasswordPayload
         from app.api.routes import me, users
@@ -707,6 +691,27 @@ class LocalMfaTests(unittest.TestCase):
                 self.post("webauthn/verify", {"credential": assertion}).status_code, 400
             )
             self.assertEqual(self.post("finish").status_code, 403)
+
+
+class SecurityIpTests(unittest.TestCase):
+    """Proxy trust and IP normalisation do not require a database."""
+
+    def test_security_ip_trust_and_ipv6_normalisation(self):
+        from app.security.client_ip import normalise_ip
+        from app.services import security_notifications as mail
+
+        request = Request(
+            {
+                "type": "http",
+                "headers": [(b"x-forwarded-for", b"192.0.2.99, 203.0.113.8, 10.0.0.2")],
+                "client": ("10.0.0.3", 1),
+            }
+        )
+        with patch.object(settings, "security_trusted_proxy_cidrs", ""):
+            self.assertEqual(mail.request_ip(request), "10.0.0.3")
+        with patch.object(settings, "security_trusted_proxy_cidrs", "10.0.0.0/24"):
+            self.assertEqual(mail.request_ip(request), "203.0.113.8")
+        self.assertEqual(normalise_ip("::ffff:203.0.113.8"), "203.0.113.8")
 
 
 if __name__ == "__main__":
