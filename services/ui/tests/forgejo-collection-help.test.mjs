@@ -40,6 +40,9 @@ test('Defined Forgejo source saves its first user input', async t => {
   // The connection-change notification starts a final asynchronous refresh.
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(saved.url, '/api/v1/admin/source-connections/forge');
+  assert.match(ui.document.getElementById('hub-status').textContent,/Input saved for My Forgejo/);
+  assert.ok([...ui.document.querySelectorAll('#hub-status button')].some(b=>b.textContent==='Collect now'));
+  assert.ok([...ui.document.querySelectorAll('#hub-status button')].some(b=>b.textContent==='Add mapping rule'));
   assert.equal(saved.body.version,1);
   assert.deepEqual(JSON.parse(JSON.stringify(saved.body.inputs)), {users:[{user:'alice'}], organizations:[], feeds:[]});
 });

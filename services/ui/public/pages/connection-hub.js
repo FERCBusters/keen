@@ -1,3 +1,4 @@
+import {sourceSetupProfile} from './source-setup-profile.js';
 import {editSourceConnection} from './source-connection-editor.js';
 import {confirmEvidenceRemoval} from './evidence-removal.js';
 import {apiGet, apiPut, apiPost, apiDelete} from '/app.js';
@@ -31,20 +32,22 @@ function render(){
   body.append(meta);
   const editable=item.key.startsWith('builtin:')||item.connection?.managed_by==='database';
   const push=item.source==='webhooks';
+  const inline=!!item.connection && !!sourceSetupProfile(item.source,item.connection);
+  const ready=item.collectors.length||push||(inline&&item.connection.inputs?.feeds?.length);
   if(push&&item.connection){const url=document.createElement('p');url.className='text-break';url.textContent=location.origin+'/api/v1/webhooks/connections/'+item.connection.id+'/'+(item.connection.configuration.provider||'provider')+'/EVENT_TYPE';body.append(url);}
-  if(!item.collectors.length&&!push){const hint=document.createElement('p');hint.textContent='Add an input to choose what this source collects. Then add a mapping rule to link its evidence to controls.';body.append(hint);}
+  if(!ready){const hint=document.createElement('p');hint.textContent='Add an input to choose what this source collects. Then add a mapping rule to link its evidence to controls.';body.append(hint);}
   for(const input of item.collectors){
    const line=document.createElement('div');line.className='d-flex flex-wrap align-items-center gap-2 my-2';
    const label=document.createElement('span');label.className='text-break';label.textContent=input.name||`${input.section}: ${input.key}`;line.append(label);
-   if(editable&&!push)line.append(button('Edit input',()=>editCollection(item.source,input,item.connection)));
+   if(editable&&!push&&!inline)line.append(button('Edit input',()=>editCollection(item.source,input,item.connection)));
    line.append(button('Add mapping rule',()=>go(item.sources?'integration:'+input.id:item.source,true,item.connection,input)));
-   if(item.connection?.managed_by==='database'&&!push)line.append(button('Remove input',()=>removeInput(item.connection,input),true));
+   if(item.connection?.managed_by==='database'&&!push&&!inline)line.append(button('Remove input',()=>removeInput(item.connection,input),true));
    body.append(line);
   }
   const actions=document.createElement('div');actions.className='d-flex flex-wrap gap-2 mt-3';
   if(item.connection?.managed_by==='database')actions.append(button('Edit source',()=>editConnection(item.connection)));
-  if(editable&&!push)actions.append(button('Add input',()=>editCollection(item.source,null,item.connection)));
-  if(item.collectors.length||push){
+  if(editable&&!push&&!inline)actions.append(button('Add input',()=>editCollection(item.source,null,item.connection)));
+  if(ready){
    if(!item.sources)actions.append(button('Add mapping rule',()=>go(item.source,true,item.connection)));
    actions.append(button('View mapping rules',()=>go(item.source)));
    if(item.connection&&!push)actions.append(button('Collect now',async()=>{await apiPost(root+'/source-connections/'+item.connection.id+'/run',{});byId('status').hidden=false;byId('status').className='alert alert-success';byId('status').textContent='Collection queued.';}));
@@ -96,6 +99,7 @@ async function editCollection(adapter, existing=null, connection=null){
   if(existing){const index=rows.findIndex(row=>JSON.stringify(row)===JSON.stringify(existing.entry));if(index<0)throw new Error('Collection changed. Close and reopen the editor.');rows[index]=entry;}else rows.push(entry);
   document[type.value]=rows;if(connection)await apiPut(root+'/source-connections/'+connection.id,connectionPayload(connection,{inputs:document}));else await apiPut(root+'/managed-configurations/'+encodeURIComponent(adapter),{version:config.version,document});
   dialog.close();await load();window.dispatchEvent(new Event('keen-connections-changed'));
+  showSavedInput(connection,adapter);
  }catch(e){byId('collection-error').textContent=e.message||String(e);}finally{save.disabled=false;}};
  dialog.showModal();
 }
@@ -130,7 +134,8 @@ function connectionPayload(c,changes={}){return {source:c.source,name:c.name,ena
 async function editConnection(connection=null){
  editSourceConnection({types:connectionTypes,connection,onSaved:async result=>{
   try {await load();window.dispatchEvent(new Event('keen-connections-changed'));showSurface('source');render();
-   if(!connection&&result.source!=='webhooks')await editCollection(result.source,null,result);
+   if(!connection&&result.source!=='webhooks'&&!sourceSetupProfile(result.source,result))await editCollection(result.source,null,result);
+   else if(sourceSetupProfile(result.source,result))showSavedInput(result,result.source);
   }catch(error){showError(error);}
  }});
 }
@@ -144,3 +149,16 @@ async function removeInput(connection,input){
 }
 
 showSurface('source');
+
+function showSavedInput(connection,source){
+ showSurface('source');
+ const status=byId('status');status.hidden=false;status.className='alert alert-success';
+ const message=document.createElement('p');message.textContent=`Input saved for ${connection?.name || source}. Collect evidence now, or add a mapping rule.`;
+ status.replaceChildren(message);
+ if(connection)status.append(button('Collect now',async()=>{
+  await apiPost(root+'/source-connections/'+connection.id+'/run',{});
+  message.textContent=`Collection queued for ${connection.name}. Check the Events view for collected evidence.`;
+ }));
+ status.append(button('Add mapping rule',()=>go(source,true,connection)));
+ status.tabIndex=-1;status.focus();status.scrollIntoView?.({block:'nearest',behavior:'smooth'});
+}
