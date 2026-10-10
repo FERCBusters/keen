@@ -528,4 +528,4 @@ def ingest_forgejo_all(db: Session) -> list[dict[str, Any]]:
         except Exception as e:
             db.rollback()
             out.append({"feed": url, "error": str(e)})
-    return out or [{"skipped": True, "reason": "No Forgejo collections configured. In Admin → Sources & evidence mapping → By source, expand forgejo and choose Add collection. Select users, organizations or feeds, enter the account name or repository RSS URL, and save. Environment credentials connect to Forgejo; mapping rules do not choose repositories to collect."}]
+    return out or [{"skipped": True, "reason": "No Forgejo inputs configured. Open Sources & evidence mapping, select this source and choose Add input. Choose User, Organisation or Feed, enter the account name or repository feed URL, and save."}]

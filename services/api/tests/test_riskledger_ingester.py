@@ -122,6 +122,7 @@ def test_repeated_page_and_page_limit_fail_visibly():
         with pytest.raises(rl.RiskLedgerError,match='page limit'):list(rl.Client(http).pages('risks',{'page_size':1,'max_pages':1}))
 
 def test_pause_demo_and_missing_secret(db,monkeypatch):
+    monkeypatch.setattr('app.ingest.connections.deployment_document',lambda *args, **kwargs:{'organizations':[{'org':'*'}]})
     monkeypatch.setattr(settings,'riskledger_enabled',True);monkeypatch.setattr(settings,'riskledger_api_key','')
     assert 'API_KEY' in rl.ingest_riskledger_all(db)[0]['error']
     monkeypatch.setattr(settings,'demo_mode',True)

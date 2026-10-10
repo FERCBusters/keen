@@ -171,6 +171,33 @@ def run_lock(db, key):
                     handle.invalidate()
                     raise
 
+# Credentials and tuning options alone do not select evidence to collect.
+INPUT_SECTIONS = {
+    'forgejo': ('organizations', 'users', 'feeds'),
+    'gitea': ('organizations', 'users', 'feeds'),
+    'github': ('organizations', 'orgs', 'repos', 'feeds'),
+    'gitlab': ('groups', 'users'),
+    'loki': ('queries',), 'jenkins': ('jobs',), 'rss': ('feeds',),
+    'redmine': ('projects',), 'riskledger': ('organizations',),
+    'taiga': ('projects',), 'cloudwatch_logs': ('queries', 'streams', 'log_groups', 'logGroups'),
+    'google_workspace': ('streams',),
+    'bookstack': ('selected_pages', 'page_mappings', 'pages', 'capture_pages', 'book', 'books', 'book_id', 'book_slug'),
+}
+
+
+def environment_has_inputs(source, db):
+    # BookStack also supports polling the whole account without page selectors.
+    if source == 'bookstack' and all(getattr(deployment_settings, 'bookstack_' + key, '')
+                                    for key in ('base_url', 'token_id', 'token_secret')):
+        return True
+    sections = INPUT_SECTIONS.get(source)
+    if sections is None:
+        return True
+    path_field = 'loki_queries_path' if source == 'loki' else source + '_config_path'
+    document = deployment_document(source, getattr(deployment_settings, path_field), db=db)
+    return any(document.get(section) for section in sections)
+
+
 def connection_runs(source):
     """Fan out a scheduled/manual run; one failed connection cannot starve others."""
     def decorate(function):
@@ -186,6 +213,8 @@ def connection_runs(source):
                     continue
                 with connection_scope(connection):
                     try:
+                        if connection.managed_by == 'environment' and not deployment_settings.demo_mode and not environment_has_inputs(source, db):
+                            continue
                         with run_lock(db, connection.id) as acquired:
                             if not acquired:
                                 results.append({**identity(), 'skipped':True, 'reason':'Connection is already running'})

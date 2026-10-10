@@ -54,8 +54,8 @@ class GitDiscoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'403'):gitlab._pages(client,'https://gitlab.example.org','groups/team/projects')
 
     def test_empty_configuration_is_explicit(self):
-        with patch.object(forgejo.settings,'forgejo_enabled',True),patch.object(forgejo,'load_forgejo_config',return_value={}):
-            self.assertIn('No Forgejo collections',forgejo.ingest_forgejo_all(None)[0]['reason'])
+        with patch.object(forgejo.settings,'forgejo_enabled',True),patch('app.ingest.connections.deployment_document',return_value={}):
+            self.assertEqual(forgejo.ingest_forgejo_all(None), [])
 
     def test_gitlab_group_discovery_and_storage(self):
         from types import SimpleNamespace

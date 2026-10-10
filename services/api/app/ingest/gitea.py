@@ -528,4 +528,4 @@ def ingest_gitea_all(db: Session) -> list[dict[str, Any]]:
         except Exception as e:
             db.rollback()
             out.append({"feed": url, "error": str(e)})
-    return out or [{"skipped": True, "reason": "No Gitea collections configured. Add a user, organization or feed in Evidence definitions."}]
+    return out or [{"skipped": True, "reason": "No Gitea inputs configured. Open Sources & evidence mapping, select this source and choose Add input. Choose User, Organisation or Feed, enter the account name or repository feed URL, and save."}]

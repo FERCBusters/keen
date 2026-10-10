@@ -121,6 +121,7 @@ def test_bookstack_capture_preserves_scope_and_respects_content_mode(contract_db
     config={'label':'Policies','book':{'id':7,'slug':'isms'},'capture':{'mode':mode,'preview_chars':8},
             'selected_pages':[{'id':3,'book_id':7,'book_slug':'isms'}]}
     monkeypatch.setattr(bookstack,'load_bookstack_config',lambda path:config)
+    monkeypatch.setattr('app.ingest.connections.deployment_document',lambda *args, **kwargs:config)
     fetched=[]
     def handle(req):
         fetched.append(req)

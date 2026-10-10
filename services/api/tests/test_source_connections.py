@@ -204,3 +204,42 @@ def test_global_webhook_gate_includes_measurement_receipts(monkeypatch):
     monkeypatch.setattr(sc.deployment_settings,'webhooks_enabled',False)
     with pytest.raises(HTTPException) as blocked:require_receiving(None,'webhooks')
     assert blocked.value.status_code==503
+
+
+@pytest.mark.parametrize('source,sections', sc.INPUT_SECTIONS.items())
+def test_empty_environment_defaults_are_omitted(monkeypatch, source, sections):
+    monkeypatch.setattr(sc.deployment_settings, source + '_enabled', True)
+    default = sc.Connection('env:'+source, source, 'Environment default', {}, {}, None, managed_by='environment')
+    monkeypatch.setattr(sc, 'connections', lambda *args: [default, connection('named', source)])
+    document = {section: [] for section in sections} | {'page_size': 100, 'ui_name': 'Label'}
+    monkeypatch.setattr(sc, 'deployment_document', lambda *args, **kwargs: document)
+    seen = []
+    @sc.connection_runs(source)
+    def run(db):
+        seen.append(sc.identity()['connection_id'])
+        return [{'created_events': 1}]
+    assert [row['connection_id'] for row in run(None)] == ['named']
+    assert seen == ['named']
+    for section in sections:
+        document[section] = [{'name': 'configured'}]
+        assert [row['connection_id'] for row in run(None)] == ['env:'+source, 'named']
+        document[section] = []
+
+
+def test_broken_environment_config_does_not_block_named_source(monkeypatch):
+    monkeypatch.setattr(sc.deployment_settings, 'forgejo_enabled', True)
+    default = sc.Connection('env:forgejo', 'forgejo', 'Environment default', {}, {}, None, managed_by='environment')
+    monkeypatch.setattr(sc, 'connections', lambda *args: [default, connection('named', 'forgejo')])
+    def broken(*args, **kwargs):
+        raise ValueError('private configuration details')
+    monkeypatch.setattr(sc, 'deployment_document', broken)
+    result = sc.connection_runs('forgejo')(lambda db: [{'created_events': 1}])(None)
+    assert result[0]['error'] == 'Connection ingestion failed'
+    assert 'private' not in str(result)
+    assert result[1]['connection_id'] == 'named'
+
+
+def test_bookstack_account_wide_environment_polling_is_preserved(monkeypatch):
+    for field in ('base_url', 'token_id', 'token_secret'):
+        monkeypatch.setattr(sc.deployment_settings, 'bookstack_' + field, 'configured')
+    assert sc.environment_has_inputs('bookstack', None)
