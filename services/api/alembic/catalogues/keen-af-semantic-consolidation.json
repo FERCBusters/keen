@@ -1,0 +1,44 @@
+[
+  {
+    "keep": "IAC-7",
+    "remove": "IAC-84",
+    "keep_id": "38441ae6-09d4-4f81-926c-b83ec3e18b4e",
+    "remove_id": "d48d735e-9cdf-45fb-a36e-eca5e5a816cb",
+    "description": "The company conducts access reviews at least quarterly for the in-scope system components to help ensure that access is restricted appropriately. Required changes are tracked to completion."
+  },
+  {
+    "keep": "RSK-36",
+    "remove": "RSK-38",
+    "keep_id": "1c7dd1a0-6bb3-4d31-838d-833c88a10290",
+    "remove_id": "68b6634b-ac61-4a61-a818-90d312b3383e",
+    "description": "The organization shall define and apply an information security risk assessment process that: \na) establishes and maintains information security risk criteria that include: \n  1) the risk acceptance criteria; and \n  2) criteria for performing information security risk assessments; \nb) ensures that repeated information security risk assessments produce consistent, valid and comparable results; \nc) identifies the information security risks: \n  1) apply the information security risk assessment process to identify risks associated with the loss of confidentiality, integrity and availability for information within the scope of the information security management system; and \n  2) identify the risk owners; \nd) analyses the information security risks: \n  1) assess the potential consequences that would result if the risks identified in 6.1.2 c) 1) were to materialize; \n  2) assess the realistic likelihood of the occurrence of the risks identified in 6.1.2 c) 1); and \n  3) determine the levels of risk; \ne) evaluates the information security risks: \n  1) compare the results of risk analysis with the risk criteria established in 6.1.2 a); and \n  2) prioritize the analysed risks for risk treatment. \n\nThe organization shall retain documented information about the information security risk assessment process.\n\nThe organisation performs information security risk assessments at planned intervals and when significant changes are proposed or occur, using its established risk criteria. It retains documented results of these assessments."
+  },
+  {
+    "keep": "RSK-37",
+    "remove": "RSK-39",
+    "keep_id": "a7c8ee0e-95e9-4507-8900-76edb4c07d14",
+    "remove_id": "4e2614c7-e98d-4170-9e36-a13e7cfc89fe",
+    "description": "The organization shall define and apply an information security risk treatment process to: \na) select appropriate information security risk treatment options, taking account of the risk assessment results; \nb) determine all controls that are necessary to implement the information security risk treatment option(s) chosen; \nc) compare the controls determined in 6.1.3 b) above with those in Annex A and verify that no necessary controls have been omitted; \nd) produce a Statement of Applicability that contains: \n- the necessary controls (see 6.1.3 b) and c)); \n- justification for their inclusion; \n- whether the necessary controls are implemented or not; and \n- the justification for excluding any of the Annex A controls. \ne) formulate an information security risk treatment plan; and \nf) obtain risk owners‚ approval of the information security risk treatment plan and acceptance of the residual information security risks. \n\nThe organization shall retain documented information about the information security risk treatment process.\n\nThe organisation retains documented results of information security risk treatment."
+  },
+  {
+    "keep": "BCD-2",
+    "remove": "BCD-23",
+    "keep_id": "cce64b8e-c358-4717-98cc-6d5c961c7148",
+    "remove_id": "c300a20c-505f-4099-9d31-155e344e5e28",
+    "description": "The company has a documented Business Continuity/Disaster Recovery (BC/DR) plan and tests it at least annually."
+  },
+  {
+    "keep": "CFG-1",
+    "remove": "CFG-44",
+    "keep_id": "2b40d9f2-6afc-4fdd-adb6-ca8819a8ec39",
+    "remove_id": "12d1099d-dbe5-484f-8c1e-f74302b7c039",
+    "description": "The company has a configuration management procedure in place to ensure that system configurations are deployed consistently throughout the environment.\n\nConfigurations of hardware, software, services and networks, including security configurations, are established, documented, implemented, monitored and reviewed."
+  },
+  {
+    "keep": "CHG-1",
+    "remove": "CHG-39",
+    "keep_id": "058ef6f7-935b-4525-8f3d-a8940ad46886",
+    "remove_id": "5dbb7e78-d498-42a3-8ef2-847df0e4de90",
+    "description": "The company requires changes to software and infrastructure components of the service to be authorized, formally documented, tested, reviewed, and approved prior to being implemented in the production environment.\n\nThese change management procedures also cover changes to information processing facilities and information systems."
+  }
+]

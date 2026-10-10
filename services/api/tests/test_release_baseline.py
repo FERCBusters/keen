@@ -39,7 +39,7 @@ def test_release_schema_and_final_seed_data(monkeypatch):
                 canonical = lambda items: sorted(json.dumps(row, sort_keys=True) for row in items)
                 assert canonical(actual) == canonical(rows), table
             assert conn.scalar(text('SELECT count(*) FROM frameworks')) == 94
-            assert conn.scalar(text("SELECT count(*) FROM control_items WHERE framework_slug='KEEN-AF:1.0'")) == 253
+            assert conn.scalar(text("SELECT count(*) FROM control_items WHERE framework_slug='KEEN-AF:1.0'")) == 247
             conn.execute(text("INSERT INTO keen_agents (id,name,token_hash,enabled,created_at,expires_at,health) VALUES ('baseline-pet','static-pet',:hash,true,now(),now()+interval '90 days','{}'::jsonb)"), {'hash':'a'*64})
             conn.commit()
             command.upgrade(config, 'head')
@@ -47,7 +47,7 @@ def test_release_schema_and_final_seed_data(monkeypatch):
             pet = conn.execute(text("SELECT enrollment_profile_id,enrollment_labels,token_hash FROM keen_agents WHERE id='baseline-pet'")).one()
             assert tuple(pet) == (None, {}, 'a'*64)
             assert conn.scalar(text('SELECT count(*) FROM source_connections')) == 0
-            assert conn.scalar(text("SELECT count(*) FROM control_items WHERE framework_slug='KEEN-AF:1.0'")) == 253
+            assert conn.scalar(text("SELECT count(*) FROM control_items WHERE framework_slug='KEEN-AF:1.0'")) == 247
             assert 'Apache' in conn.scalar(text("SELECT description FROM frameworks WHERE slug='KEEN-AF:1.0'"))
             conn.execute(text('SELECT connection_id, connection_name FROM events LIMIT 1'))
             assert conn.scalar(text('SELECT count(*) FROM frameworks')) == 94
