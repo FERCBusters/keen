@@ -37,9 +37,12 @@ def _split_urls(raw: str | None) -> list[str]:
 def _safe_url_hint(url: str) -> str:
     """Return a log-safe hint for a URL (no query/token leakage)."""
     try:
-        # Keep scheme + host only.
-        m = re.match(r"^(https?://[^/]+)", url.strip())
-        return m.group(1) if m else "(url)"
+        from urllib.parse import urlsplit
+        parsed = urlsplit(url)
+        if parsed.scheme not in {'http', 'https'} or not parsed.hostname:
+            return '(url)'
+        # hostname excludes userinfo, paths, query strings and fragments.
+        return f'{parsed.scheme}://{parsed.hostname}'
     except Exception:
         return "(url)"
 
@@ -360,7 +363,7 @@ def _send_many(
         except Exception as e:
             failed += 1
             # Network/DNS/etc. -> retry.
-            raise _TemporarySendError(f"{log_prefix} send error: {e}")
+            raise _TemporarySendError(f"{log_prefix} delivery failed; check connectivity and configuration") from None
 
     return sent, failed
 
@@ -474,7 +477,7 @@ def send_question_created_webhooks(
                 raise
             except Exception as e:
                 g_failed += 1
-                raise _TemporarySendError(f"generic send error: {e}")
+                raise _TemporarySendError("Generic webhook delivery failed; check connectivity and configuration") from None
 
         out["generic_sent"], out["generic_failed"] = g_sent, g_failed
 

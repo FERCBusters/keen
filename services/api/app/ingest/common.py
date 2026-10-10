@@ -18,6 +18,7 @@ from app.security.redaction import (
     mask_event_data_str,
     redact_bytes,
     redact_obj,
+    redact_str,
 )
 
 
@@ -150,6 +151,10 @@ def store_event_with_artifact(
     external_id = namespace(external_id)
     artifact_key = scoped_artifact_key(artifact_key)
     # --- hardening: redact secrets BEFORE persisting anything ---
+    system, actor, action, outcome, summary = (
+        redact_str(value) for value in (system, actor, action, outcome, summary)
+    )
+    summary = summary or ""
     raw_pointer = redact_obj(raw_pointer) or {}
     normalized_payload = redact_obj(normalized_payload) or {}
 

@@ -153,17 +153,28 @@ def test_cloudwatch_direct_insert_scopes_events_cursors_and_artifacts(contract_d
     from app.ingest import cloudwatch_logs as cw
     from app.db.models import IngestionCursor
     from datetime import timezone
+    monkeypatch.setattr(sc.deployment_settings,'event_data_masking','true')
     stamp=int(datetime.now(timezone.utc).timestamp()*1000)
-    client=SimpleNamespace(filter_log_events=lambda **kw:{'events':[{'eventId':'same-id','timestamp':stamp,'message':'same line','logStreamName':'stream'}]})
+    client=SimpleNamespace(filter_log_events=lambda **kw:{'events':[{'eventId':'same-id','timestamp':stamp,'message':'user=person@example.test from 192.0.2.1 api-key=SECRET_VALUE','logStreamName':'stream'}]})
     monkeypatch.setattr(cw,'_cloudwatch_client',lambda region:client)
     monkeypatch.setattr(cw,'_apply_rules_and_store_mappings',lambda *a:0)
     keys=[]
-    def store(**kw):keys.append(kw['key']);return SimpleNamespace(uri='test://'+kw['key'],sha256='0'*64,size_bytes=9)
+    def store(**kw):
+        assert b'SECRET_VALUE' not in kw['data']
+        assert b'person@example.test' not in kw['data']
+        assert b'192.0.2.1' not in kw['data']
+        keys.append(kw['key'])
+        return SimpleNamespace(uri='test://'+kw['key'],sha256='0'*64,size_bytes=9)
     monkeypatch.setattr(cw,'put_bytes',store)
     for key in ('one','two'):
         with sc.connection_scope(connection(key,'cloudwatch_logs')):
             assert cw.ingest_cloudwatch_logs_once(contract_db,'query',{'log_group':'logs'}, {})['created_events']==1
             assert cw.ingest_cloudwatch_logs_once(contract_db,'query',{'log_group':'logs'}, {})['created_events']==0
+    for event in contract_db.query(Event):
+        for value in (event.summary, str(event.normalized_payload), str(event.raw_pointer)):
+            assert 'SECRET_VALUE' not in value
+            assert 'person@example.test' not in value
+            assert '192.0.2.1' not in value
     assert {e.connection_id for e in contract_db.query(Event)}=={'one','two'}
     assert contract_db.query(IngestionCursor).count()==2
     assert keys[0].startswith('connections/one/') and keys[1].startswith('connections/two/')
@@ -175,11 +186,12 @@ def test_loki_direct_insert_and_http_credentials_are_connection_scoped(contract_
     from datetime import timezone
     from app.ingest import loki
     from app.db.models import IngestionCursor
+    monkeypatch.setattr(sc.deployment_settings,'event_data_masking','true')
     stamp=str(int(datetime.now(timezone.utc).timestamp()*1_000_000_000))
     requests=[]
     def handle(request):
         requests.append(request)
-        return httpx.Response(200,json={'status':'success','data':{'resultType':'streams','result':[{'stream':{'app':'auth'},'values':[[stamp,'same line']]}]}})
+        return httpx.Response(200,json={'status':'success','data':{'resultType':'streams','result':[{'stream':{'app':'auth'},'values':[[stamp,'user=person@example.test from 192.0.2.1 api-key=SECRET_VALUE']]}]}})
     client_class=httpx.Client
     monkeypatch.setattr(loki.httpx,'Client',lambda **kw:client_class(**{k:v for k,v in kw.items() if k != "transport"},transport=httpx.MockTransport(handle)))
     monkeypatch.setattr(loki,'is_safe_url',lambda url:True)
@@ -189,6 +201,11 @@ def test_loki_direct_insert_and_http_credentials_are_connection_scoped(contract_
         with sc.connection_scope(connection(key,configuration={'base_url':'https://'+key+'.example','username':key},credentials={'password':'password-'+key})):
             loki.ingest_loki_once(contract_db,'auth','{app="auth"}',{})
             loki.ingest_loki_once(contract_db,'auth','{app="auth"}',{})
+    for event in contract_db.query(Event):
+        for value in (event.summary, str(event.normalized_payload), str(event.raw_pointer)):
+            assert 'SECRET_VALUE' not in value
+            assert 'person@example.test' not in value
+            assert '192.0.2.1' not in value
     assert {e.connection_id for e in contract_db.query(Event)}=={'one','two'}
     assert contract_db.query(Event).count()==2
     assert contract_db.query(IngestionCursor).count()==2

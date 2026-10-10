@@ -98,7 +98,7 @@ def download_artifact(
         body = obj["Body"]
     except Exception as e:
         raise HTTPException(
-            status_code=502, detail=f"Failed to fetch artifact from storage: {e}"
+            status_code=502, detail="Failed to fetch artifact from storage"
         )
 
     filename = _download_filename_for_artifact(art, key)
@@ -172,7 +172,7 @@ def preview_pdf_first_page(
         body = obj["Body"]
     except Exception as e:
         raise HTTPException(
-            status_code=502, detail=f"Failed to fetch artifact from storage: {e}"
+            status_code=502, detail="Failed to fetch artifact from storage"
         )
 
     try:
@@ -225,4 +225,4 @@ def preview_pdf_first_page(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to build preview: {e}")
+        raise HTTPException(status_code=500, detail="Failed to build preview")

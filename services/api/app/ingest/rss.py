@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.security.errors import collection_error
 from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
@@ -524,7 +525,7 @@ def ingest_rss_all(db: Session) -> list[dict[str, Any]]:
                 {
                     "ok": False,
                     "url": redact_url(str(f.get("url") or "")),
-                    "error": str(e),
+                    "error": collection_error(e),
                 }
             )
     return out

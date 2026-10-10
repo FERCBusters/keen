@@ -1,3 +1,4 @@
+from app.security.errors import collection_error
 from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 """GitLab project activity collection for user-owned projects and groups/subgroups."""
@@ -99,7 +100,7 @@ def ingest_gitlab_all(db):
                         try:
                             results.append(_project_events(db, client, base, section, key, project, entry.get('label')))
                         except Exception as exc:
-                            db.rollback(); results.append({'project_id': project['id'], 'error': str(exc)})
+                            db.rollback(); results.append({'project_id': project['id'], 'error': collection_error(exc)})
                 except Exception as exc:
-                    db.rollback(); results.append({'scope': section, 'account': key, 'error': str(exc)})
+                    db.rollback(); results.append({'scope': section, 'account': key, 'error': collection_error(exc)})
     return results or [{'skipped': True, 'reason': 'No GitLab groups or users configured'}]

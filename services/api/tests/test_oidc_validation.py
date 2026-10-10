@@ -83,8 +83,15 @@ def test_required_claims_cannot_be_omitted(callback,claim):
     callback.provision.assert_not_called()
 
 
-def test_multi_audience_authorized_party_and_optional_at_hash(callback):
-    callback.run({'aud':['keen-client','other-client'],'azp':'keen-client'},drop=['at_hash'])
+def test_single_trusted_audience_and_optional_at_hash(callback):
+    callback.run({'aud':['keen-client'],'azp':'keen-client'},drop=['at_hash'])
+
+
+def test_authorized_party_does_not_trust_additional_audiences(callback):
+    with pytest.raises(Exception) as error:
+        callback.run({'aud':['keen-client','other-client'],'azp':'keen-client'})
+    assert error.value.__class__.__name__ == 'InvalidClaimError'
+    callback.provision.assert_not_called()
 
 
 def test_configured_issuer_alias_and_leeway(callback):
@@ -117,7 +124,7 @@ def test_oauth_httpx2_transport(monkeypatch):
         return httpx2.Response(200,json={'access_token':'access','token_type':'Bearer'})
     client_class=oidc.AsyncOAuth2Client
     monkeypatch.setattr(oidc,'AsyncOAuth2Client',lambda **kwargs:client_class(
-        **kwargs,transport=httpx2.MockTransport(token_endpoint)))
+        **{k:v for k,v in kwargs.items() if k != 'transport'},transport=httpx2.MockTransport(token_endpoint)))
     async def exercise():
         client=oidc._new_client(provider,redirect_uri='https://keen.example/callback')
         assert isinstance(client,httpx2.AsyncClient)
@@ -165,3 +172,13 @@ def test_generic_oidc_reads_operator_algorithm_policy(monkeypatch):
     monkeypatch.setattr(settings,'oidc_allowed_algs','RS256, ES256')
     assert oidc._oidc_provider().allowed_algs==('RS256','ES256')
     assert oidc._google_provider().allowed_algs==('RS256',)
+
+
+@pytest.mark.parametrize('change', [
+    {'sub':123}, {'sub':['subject']}, {'sub':True},
+    {'exp':True}, {'iat':False}, {'azp':''}, {'azp':False},
+])
+def test_claim_types_are_not_coerced_into_identities(callback,change):
+    with pytest.raises(JoseError):
+        callback.run(change)
+    callback.provision.assert_not_called()

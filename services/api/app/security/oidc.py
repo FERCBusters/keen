@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -10,6 +11,9 @@ from urllib.parse import urlsplit
 import httpx2 as httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oidc.core import CodeIDToken
+from joserfc.errors import InvalidClaimError, JoseError
+from authlib.oauth2.rfc6749.errors import OAuth2Error
+from app.security.sso_http import client_options
 from fastapi import HTTPException, Request
 from joserfc import jwt
 from joserfc.jwk import KeySet
@@ -338,8 +342,7 @@ def _new_client(provider: SsoProvider, *, redirect_uri: str) -> AsyncOAuth2Clien
         # Enable PKCE (S256) for providers that support it. GitHub ignores this
         # safely for OAuth apps that do not require PKCE.
         code_challenge_method="S256",
-        timeout=httpx.Timeout(10.0),
-        verify=True, trust_env=False, follow_redirects=False,
+        **client_options(),
     )
 
 
@@ -351,7 +354,7 @@ async def _get_jwks(jwks_uri: str) -> dict[str, Any]:
         if now < expires_at:
             return data
 
-    async with httpx.AsyncClient(timeout=10.0, verify=True, trust_env=False, follow_redirects=False) as client:
+    async with httpx.AsyncClient(**client_options()) as client:
         resp = await client.get(jwks_uri)
         resp.raise_for_status()
         data = resp.json()
@@ -608,7 +611,7 @@ async def _fetch_github_claims(
         "Authorization": f"Bearer {access_token}",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    async with httpx.AsyncClient(timeout=10.0, verify=True, trust_env=False, follow_redirects=False) as client:
+    async with httpx.AsyncClient(**client_options()) as client:
         user_resp = await client.get(provider.userinfo_endpoint, headers=headers)
         user_resp.raise_for_status()
         user_info = user_resp.json()
@@ -735,6 +738,22 @@ async def _handle_oidc_callback(
     decoded = jwt.decode(
         id_token, KeySet.import_key_set(jwks), algorithms=list(provider.allowed_algs),
     )
+    # KEEN configures one trusted audience: its own client ID. A matching azp
+    # does not establish trust in additional audiences or make non-string IDs safe.
+    raw_claims = decoded.claims
+    aud = raw_claims.get("aud")
+    if aud != provider.client_id and aud != [provider.client_id]:
+        raise InvalidClaimError("aud")
+    for name in ("iss", "sub", "nonce"):
+        if not isinstance(raw_claims.get(name), str) or not raw_claims[name]:
+            raise InvalidClaimError(name)
+    for name in ("exp", "iat", "nbf", "auth_time"):
+        if name in raw_claims:
+            value = raw_claims[name]
+            if type(value) not in (int, float) or not math.isfinite(value):
+                raise InvalidClaimError(name)
+    if "azp" in raw_claims and raw_claims["azp"] != provider.client_id:
+        raise InvalidClaimError("azp")
     claims = CodeIDToken(decoded.claims, decoded.header,
                          options=claims_options, params=claims_params)
     claims.validate(leeway=int(provider.id_token_leeway_seconds or 0))
@@ -769,12 +788,17 @@ async def handle_callback(
     if not row:
         raise HTTPException(status_code=400, detail="SSO state missing or expired")
 
-    if provider.kind == "github":
-        user, next_url, id_token = await _handle_github_callback(
-            request, db, provider, row
-        )
-    else:
-        user, next_url, id_token = await _handle_oidc_callback(
-            request, db, provider, row
-        )
+    try:
+        if provider.kind == "github":
+            user, next_url, id_token = await _handle_github_callback(
+                request, db, provider, row
+            )
+        else:
+            user, next_url, id_token = await _handle_oidc_callback(
+                request, db, provider, row
+            )
+    except (JoseError, OAuth2Error, httpx.HTTPError, TimeoutError, ValueError, TypeError):
+        # Provider diagnostics can include tokens and echoed client credentials.
+        # Do not expose them in an HTTP response or an unhandled traceback.
+        raise HTTPException(400, "SSO verification failed; start sign-in again or contact an administrator") from None
     return user, next_url, id_token, provider

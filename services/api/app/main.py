@@ -121,7 +121,7 @@ def bootstrap_initial_admin():
         create_user(db, username=uname, password=pwd, role=ROLE_ADMIN)
         print(f"[keen] Bootstrapped initial admin user: {uname}")
     except Exception as e:  # pragma: no cover
-        print(f"[keen] Failed to bootstrap admin user: {e}")
+        print("[keen] Failed to bootstrap admin user; check database and bootstrap configuration")
     finally:
         db.close()
 
@@ -357,7 +357,8 @@ async def audit_trail_middleware(request: Request, call_next):
                 qs = qs[:4096]
 
             ua = (request.headers.get("user-agent") or "").strip() or None
-            ref = (request.headers.get("referer") or "").strip() or None
+            from app.security.redaction import redact_str
+            ref = redact_str((request.headers.get("referer") or "").strip()) or None
 
             # Truncate potentially long strings for safety.
             if ua and len(ua) > 256:

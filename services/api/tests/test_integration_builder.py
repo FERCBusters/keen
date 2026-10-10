@@ -270,7 +270,7 @@ def test_http_redirects_are_not_followed(monkeypatch):
 
 def test_response_size_limit(monkeypatch):
     monkeypatch.setattr(transport,'destination',lambda u:(__import__('urllib.parse',fromlist=['urlsplit']).urlsplit(u),['8.8.8.8']))
-    response=Mock(status=200);response.getheader.return_value='identity';response.read.return_value=b'x'*(transport.MAX_BYTES+1)
+    response=Mock(status=200);response.getheader.return_value='identity';response.read1.side_effect=[b'x'*65536]*(transport.MAX_BYTES//65536)+[b'x']
     conn=Mock();conn.getresponse.return_value=response;monkeypatch.setattr(transport,'PinnedHTTPS',lambda *a:conn)
     with pytest.raises(IntegrationError,match='4 MiB'):transport.request('https://example.org')
     conn.close.assert_called_once()

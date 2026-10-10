@@ -233,7 +233,8 @@ def connection_runs(source):
                                 continue
                             with connection_scope(resolve(connection)):
                                 rows = function(db, *args, **kwargs)
-                        results.extend({**row, **identity()} for row in rows)
+                        from app.security.redaction import redact_obj
+                        results.extend(redact_obj({**row, **identity()}) for row in rows)
                     except Exception:
                         if db is not None:
                             db.rollback()

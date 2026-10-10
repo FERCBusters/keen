@@ -1,4 +1,6 @@
 from __future__ import annotations
+from app.security.errors import collection_error
+from app.security.redaction import prepare_event_fields, prepare_artifact_bytes
 from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
@@ -453,20 +455,23 @@ def ingest_cloudwatch_logs_once(
                 else None
             )
 
+            protected_fields = prepare_event_fields(dict(
+                system=event_defaults.get("system") or name,
+                actor=actor,
+                action=event_defaults.get("action") or "log_event",
+                outcome=event_defaults.get("outcome"),
+                severity=sev,
+                summary=summary,
+                raw_pointer=raw_pointer_r,
+                normalized_payload=normalized_r,
+            ), mask=settings.event_data_masking == "true")
             stmt = (
                 pg_insert(Event)
                 .values(
                     id=ev_id,
                     timestamp=ts,
                     source="cloudwatch_logs",
-                    system=event_defaults.get("system") or name,
-                    actor=actor,
-                    action=event_defaults.get("action") or "log_event",
-                    outcome=event_defaults.get("outcome"),
-                    severity=sev,
-                    summary=summary,
-                    raw_pointer=raw_pointer_r,
-                    normalized_payload=normalized_r,
+                    **protected_fields,
                     external_id=namespace(ext_id),
                     **identity(),
                 )
@@ -487,8 +492,8 @@ def ingest_cloudwatch_logs_once(
                 # Keep key safe and predictable.
                 safe_eid = re.sub(r"[^a-zA-Z0-9._-]+", "-", (event_id or ext_id))[:80]
                 key = f"cloudwatch_logs/{name}/{ts.date().isoformat()}/{inserted_id}-{safe_eid}.{ext}"
-                msg_bytes, redaction_status = redact_bytes(
-                    msg.encode("utf-8", errors="replace"), ctype
+                msg_bytes, redaction_status = prepare_artifact_bytes(
+                    msg.encode("utf-8", errors="replace"), ctype, mask=settings.event_data_masking == "true"
                 )
                 stored = put_bytes(key=artifact_key(key), data=msg_bytes, content_type=ctype)
                 art = Artifact(
@@ -510,14 +515,7 @@ def ingest_cloudwatch_logs_once(
                     id=inserted_id,
                     timestamp=ts,
                     source="cloudwatch_logs",
-                    system=event_defaults.get("system") or name,
-                    actor=actor,
-                    action=event_defaults.get("action") or "log_event",
-                    outcome=event_defaults.get("outcome"),
-                    severity=sev,
-                    summary=summary,
-                    raw_pointer=raw_pointer_r,
-                    normalized_payload=normalized_r,
+                    **protected_fields,
                     external_id=namespace(ext_id),
                     **identity(),
                 )
@@ -593,5 +591,5 @@ def ingest_cloudwatch_logs_all(db: Session) -> list[dict[str, Any]]:
             out.append(ingest_cloudwatch_logs_once(db, name, q, defaults))
         except Exception as e:
             db.rollback()
-            out.append({"name": name, "error": str(e)})
+            out.append({"name": name, "error": collection_error(e)})
     return out

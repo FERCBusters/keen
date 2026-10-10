@@ -293,8 +293,8 @@ def send_question_webhooks_task(thread_id: str, post_id: str) -> dict:
             res = send_question_created_webhooks(cfg, generic)
             return res
         except Exception as e:
-            log.warning("question webhook fanout failed: %s", e)
-            return {"enabled": True, "error": str(e)}
+            log.warning("question webhook fanout failed")
+            return {"enabled": True, "error": "Webhook delivery failed; check connectivity and configuration"}
     finally:
         db.close()
 
@@ -462,8 +462,8 @@ def send_question_reply_webhooks_task(thread_id: str, post_id: str) -> dict:
             res = send_question_reply_webhooks(cfg, generic)
             return res
         except Exception as e:
-            log.warning("question reply webhook fanout failed: %s", e)
-            return {"enabled": True, "error": str(e)}
+            log.warning("question reply webhook fanout failed")
+            return {"enabled": True, "error": "Webhook delivery failed; check connectivity and configuration"}
     finally:
         db.close()
 
@@ -477,12 +477,12 @@ def backfill_rule_task(job_id: str) -> None:
                 return
         backfill_rule_task.delay(job_id)
     except Exception as exc:
-        log.exception("Rule backfill %s failed", job_id)
+        log.error("Rule backfill %s failed (%s)", job_id, type(exc).__name__)
         with SessionLocal() as db:
             job = db.get(RuleBackfillJob, uuid.UUID(job_id))
             if job and job.status not in ("completed", "cancelled"):
                 job.status = "failed"
-                job.error = str(exc)[:1000]
+                job.error = "Rule backfill failed; check the saved rule, database and worker configuration"
                 db.commit()
 
 

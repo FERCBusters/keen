@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.security.errors import collection_error
 from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
@@ -359,5 +360,5 @@ def ingest_taiga_all(db: Session) -> list[dict[str, Any]]:
             out.append(ingest_taiga_project_timeline(db, int(p["id"]), p.get("label")))
         except Exception as e:
             db.rollback()
-            out.append({"project_id": p.get("id"), "error": str(e)})
+            out.append({"project_id": p.get("id"), "error": collection_error(e)})
     return out

@@ -5,6 +5,7 @@ and retain the original hostname for TLS verification and the Host header.
 """
 import ipaddress
 import socket
+import time
 from threading import Lock
 from urllib.parse import urlsplit
 
@@ -13,6 +14,7 @@ import httpx
 from app.core.config import settings
 
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_RESPONSE_SECONDS = 120
 
 
 def destination(url):
@@ -50,13 +52,16 @@ def require_origin(url, endpoint):
 
 
 class LimitedStream(httpx.SyncByteStream):
-    def __init__(self, stream):
+    def __init__(self, stream, deadline=None):
         self.stream = stream
+        self.deadline = deadline if deadline is not None else time.monotonic() + MAX_RESPONSE_SECONDS
 
     def __iter__(self):
         count = 0
         try:
             for chunk in self.stream:
+                if time.monotonic() > self.deadline:
+                    raise TimeoutError("Ingestion response exceeded its time budget")
                 count += len(chunk)
                 if count > MAX_RESPONSE_BYTES:
                     raise ValueError('Ingestion response exceeds 16 MiB; narrow the input')
@@ -74,6 +79,7 @@ class IngestionTransport(httpx.BaseTransport):
         self.lock = Lock()
 
     def handle_request(self, request):
+        deadline = time.monotonic() + MAX_RESPONSE_SECONDS
         addresses = destination(str(request.url))
         headers = request.headers.copy()
         headers['Host'] = request.url.netloc.decode('ascii')
@@ -93,7 +99,7 @@ class IngestionTransport(httpx.BaseTransport):
         if response.headers.get('content-encoding', 'identity').lower() != 'identity':
             response.close()
             raise ValueError('Ingestion server must honour Accept-Encoding: identity')
-        response.stream = LimitedStream(response.stream)
+        response.stream = LimitedStream(response.stream, deadline)
         return response
 
     def close(self):

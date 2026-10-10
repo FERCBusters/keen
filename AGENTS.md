@@ -38,11 +38,9 @@
 
 ## Security re-review whenever completing a round of work
 
-Whenever completing a round of work, re-review the SECURITY.md and consider whether the changes
-you have implemented weaken in any way the security of KEEN. Examples of security issues include
-but are not limited to:
+Whenever completing a round of work, re-review the SECURITY.md and consider whether the changes you have implemented weaken in any way the security of KEEN. Examples of security issues include but are not limited to:
 
-- account takeover (session fixation/replay/confusion/race condition)
+- account takeover (session fixation/replay/confusion/race condition/concurrent revocation)
 - privilege escalation or auth bypass
 - SQL injection or other injection attacks
 - XSS
@@ -56,7 +54,7 @@ but are not limited to:
 - middleware being overlooked or bypassable due to insufficient route restriction/accidental hierarchy 'inclusion'
 - lack of validation of HTTPS certs
 - undesired following of redirects
-- insufficient validation of OIDC parameters as mandated per the OIDC spec
+- insufficient validation of OIDC parameters (e.g issuer, claims, state/nonce and others) as mandated per the OIDC spec
 - one-time link/token replay attacks
 - lack of credential isolation between common source ingester types where separate inputs are used (e.g when caching them)
 - insufficient expiry of stale records
@@ -65,9 +63,11 @@ but are not limited to:
 - insufficient redaction of sensitive values where redaction features are expected in KEEN
 - other cryptographic failures
 - data integrity risks and/or other race conditions
+- lack of appropriate rate-limiting
 
-Be as comprehensive in any security review of your completed work as you possibly can, whilst also being
-realistic about viability of attack vectors.
+Exercise confirmed issues with reproducible negative tests. Recheck the fixes themselves, explain remaining limitations, and distinguish exploitable findings from defense-in-depth improvements. SECURITY.md describes current behavior and realistic risks; keep findings and fix history out of it.
+
+Be as comprehensive in any security review of your completed work as you possibly can, whilst also being realistic about viability of attack vectors.
 
 ## Documentation and delivery
 

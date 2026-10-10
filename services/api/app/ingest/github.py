@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.security.errors import collection_error
 from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
@@ -507,7 +508,7 @@ def ingest_github_org_repo_events(
             per_repo.append(res)
         except Exception as e:
             db.rollback()
-            per_repo.append({"repo": full, "error": str(e)})
+            per_repo.append({"repo": full, "error": collection_error(e)})
 
     return {
         "org": org,
@@ -874,7 +875,7 @@ def ingest_github_all(db: Session) -> list[dict[str, Any]]:
                 )
             except Exception as e:
                 db.rollback()
-                out.append({"org": org, "error": str(e), "stage": "org_events"})
+                out.append({"org": org, "error": collection_error(e), "stage": "org_events"})
 
         # 2) Per-repo events (enumerate repos in org)
         if include_parts & {"repo_events", "repos", "repo-events", "repo"}:
@@ -891,7 +892,7 @@ def ingest_github_all(db: Session) -> list[dict[str, Any]]:
                 )
             except Exception as e:
                 db.rollback()
-                out.append({"org": org, "error": str(e), "stage": "repo_events"})
+                out.append({"org": org, "error": collection_error(e), "stage": "repo_events"})
 
         # 3) Optional: audit log (Enterprise / org owner token with read:audit_log)
         if include_parts & {"audit", "audit_log", "audit-log"}:
@@ -899,7 +900,7 @@ def ingest_github_all(db: Session) -> list[dict[str, Any]]:
                 out.append(ingest_github_org_auditlog(db, org=org, label=label))
             except Exception as e:
                 db.rollback()
-                out.append({"org": org, "error": str(e), "stage": "audit_log"})
+                out.append({"org": org, "error": collection_error(e), "stage": "audit_log"})
 
     # --- Optional: Atom feeds ---
     for f in cfg.get("feeds", []) or []:
@@ -910,7 +911,7 @@ def ingest_github_all(db: Session) -> list[dict[str, Any]]:
             out.append(ingest_github_atom_feed(db, feed_url=url, label=f.get("label")))
         except Exception as e:
             db.rollback()
-            out.append({"feed": url, "error": str(e)})
+            out.append({"feed": url, "error": collection_error(e)})
 
     # --- Repo-level ingestion (legacy / small orgs) ---
     for r in cfg.get("repos", []) or []:
@@ -918,5 +919,5 @@ def ingest_github_all(db: Session) -> list[dict[str, Any]]:
             out.append(ingest_github_repo(db, r["owner"], r["repo"], r.get("label")))
         except Exception as e:
             db.rollback()
-            out.append({"repo": f"{r.get('owner')}/{r.get('repo')}", "error": str(e)})
+            out.append({"repo": f"{r.get('owner')}/{r.get('repo')}", "error": collection_error(e)})
     return out

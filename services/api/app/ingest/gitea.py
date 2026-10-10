@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.security.errors import collection_error
 
 from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
@@ -357,7 +358,7 @@ def ingest_gitea_repo_feed(
             )
         except Exception as e:
             db.rollback()
-            api_error = str(e)
+            api_error = collection_error(e)
     else:
         api_error = (
             "Could not infer base_url/owner/repo for API ingest. Provide "
@@ -447,7 +448,7 @@ def ingest_gitea_repo_feed(
         return result
     except Exception as e:
         db.rollback()
-        rss_error = str(e)
+        rss_error = collection_error(e)
 
     return {
         "feed": feed_url,
@@ -523,7 +524,7 @@ def ingest_gitea_all(db: Session) -> list[dict[str, Any]]:
                     feeds.append({"url": f"{base}/{owner}/{repo['name']}.rss",
                                   "label": entry.get("label") or None})
             except Exception as exc:
-                out.append({"scope": section, "account": name, "error": str(exc)})
+                out.append({"scope": section, "account": name, "error": collection_error(exc)})
     seen_feeds = set()
     for f in feeds:
         url = f.get("url") or f.get("feed")
@@ -534,5 +535,5 @@ def ingest_gitea_all(db: Session) -> list[dict[str, Any]]:
             out.append(ingest_gitea_repo_feed(db, feed_url=url, label=f.get("label")))
         except Exception as e:
             db.rollback()
-            out.append({"feed": url, "error": str(e)})
+            out.append({"feed": url, "error": collection_error(e)})
     return out or [{"skipped": True, "reason": "No Gitea inputs configured. Open Sources & evidence mapping, select this source and choose Add input. Choose User, Organisation or Feed, enter the account name or repository feed URL, and save."}]

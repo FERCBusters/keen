@@ -1,4 +1,6 @@
 from __future__ import annotations
+from app.security.errors import collection_error
+from app.security.redaction import prepare_event_fields, prepare_artifact_bytes
 from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
@@ -550,20 +552,23 @@ def ingest_loki_once(
                         if event_defaults.get("severity") is not None
                         else None
                     )
+                    protected_fields = prepare_event_fields(dict(
+                        system=event_defaults.get("system"),
+                        actor=actor,
+                        action=event_defaults.get("action"),
+                        outcome=event_defaults.get("outcome"),
+                        severity=sev,
+                        summary=summary,
+                        raw_pointer=raw_pointer_r,
+                        normalized_payload=normalized_r,
+                    ), mask=settings.event_data_masking == "true")
                     stmt = (
                         pg_insert(Event)
                         .values(
                             id=ev_id,
                             timestamp=ts,
                             source="loki",
-                            system=event_defaults.get("system"),
-                            actor=actor,
-                            action=event_defaults.get("action"),
-                            outcome=event_defaults.get("outcome"),
-                            severity=sev,
-                            summary=summary,
-                            raw_pointer=raw_pointer_r,
-                            normalized_payload=normalized_r,
+                            **protected_fields,
                             external_id=namespace(external_id),
                             **identity(),
                         )
@@ -592,8 +597,8 @@ def ingest_loki_once(
                     key = (
                         f"loki/{query_name}/{ts.date().isoformat()}/{inserted_id}.{ext}"
                     )
-                    line_bytes, redaction_status = redact_bytes(
-                        line.encode("utf-8", errors="replace"), ctype
+                    line_bytes, redaction_status = prepare_artifact_bytes(
+                        line.encode("utf-8", errors="replace"), ctype, mask=settings.event_data_masking == "true"
                     )
                     stored = put_bytes(key=artifact_key(key), data=line_bytes, content_type=ctype)
                     art = Artifact(
@@ -616,14 +621,7 @@ def ingest_loki_once(
                         id=inserted_id,
                         timestamp=ts,
                         source="loki",
-                        system=event_defaults.get("system"),
-                        actor=actor,
-                        action=event_defaults.get("action"),
-                        outcome=event_defaults.get("outcome"),
-                        severity=sev,
-                        summary=summary,
-                        raw_pointer=raw_pointer_r,
-                        normalized_payload=normalized_r,
+                        **protected_fields,
                         external_id=namespace(external_id),
                         **identity(),
                     )
@@ -705,5 +703,5 @@ def ingest_loki_all(db: Session) -> list[dict[str, Any]]:
             out.append(ingest_loki_once(db, name, logql, event_defaults, q))
         except Exception as e:
             db.rollback()
-            out.append({"query_name": name, "error": str(e)})
+            out.append({"query_name": name, "error": collection_error(e)})
     return out

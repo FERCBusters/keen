@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.security.errors import collection_error
 from app.core.datetime_utils import utc_from_timestamp_naive
 from app.services.ingestion_pause import pausable
 
@@ -188,5 +189,5 @@ def ingest_jenkins_all(db: Session) -> list[dict[str, Any]]:
             out.append(ingest_jenkins_job(db, j["name"], j.get("label"), j.get("kind")))
         except Exception as e:
             db.rollback()
-            out.append({"job": j.get("name"), "error": str(e)})
+            out.append({"job": j.get("name"), "error": collection_error(e)})
     return out

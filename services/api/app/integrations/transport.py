@@ -7,6 +7,7 @@ import json
 import os
 import socket
 import ssl
+import time
 from urllib.parse import urlsplit, urlencode, parse_qsl
 from cryptography.fernet import Fernet
 
@@ -77,6 +78,7 @@ def request(url, *, method='GET', query=None, body=None, headers=None, auth=None
         payload = urlencode(form).encode()
     if payload is not None:
         hdr['Content-Type'] = 'application/x-www-form-urlencoded' if form is not None else 'application/json'
+    deadline = time.monotonic() + timeout
     conn = PinnedHTTPS(u.hostname, u.port or 443, addresses[0], timeout)
     try:
         conn.request(method, (u.path or '/') + ('?' + urlencode(pairs) if pairs else ''), payload, hdr)
@@ -86,9 +88,19 @@ def request(url, *, method='GET', query=None, body=None, headers=None, auth=None
             raise IntegrationError(f'HTTP {response.status}: check credentials, endpoint and service availability')
         if response.getheader('Content-Encoding','identity') != 'identity':
             raise IntegrationError('Compressed responses are not supported')
-        data = response.read(MAX_BYTES + 1)
-        if len(data) > MAX_BYTES:
-            raise IntegrationError('Response exceeds 4 MiB; reduce page size')
+        data = bytearray()
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('API response exceeded its time budget')
+            if conn.sock is not None:
+                conn.sock.settimeout(remaining)
+            chunk = response.read1(min(65536, MAX_BYTES + 1 - len(data)))
+            if not chunk:
+                break
+            data.extend(chunk)
+            if len(data) > MAX_BYTES:
+                raise IntegrationError('Response exceeds 4 MiB; reduce page size')
         return json.loads(data), dict(response.getheaders())
     finally:
         conn.close()

@@ -58,6 +58,9 @@ DEFAULT_SENSITIVE_KEYS: set[str] = {
     "nonce",
     "renewal_nonce",
     "access_token",
+    "refresh_token",
+    "id_token",
+    "set_cookie",
     "api_key",
     "apikey",
     "key",
@@ -87,7 +90,7 @@ def _parse_env_list(raw: str) -> set[str]:
 
 def _key_to_regex_fragment(k: str) -> str:
     # allow - and _ interchangeably: api_key matches api-key too
-    return re.escape(k).replace("\\_", "[-_]")
+    return re.escape(k).replace("_", "[-_]")
 
 
 @lru_cache(maxsize=1)
@@ -124,7 +127,10 @@ def _sensitive_cfg() -> tuple[set[str], tuple[str, ...], re.Pattern, re.Pattern]
     else:
         line_re = re.compile(r"(?!x)x")
 
-    kv_re = re.compile(rf"(?i)\b({alts})\b\s*[:=]\s*([^&\s]+)")
+    # Quoted values may contain whitespace; consume the whole quoted value.
+    kv_re = re.compile(
+        rf"""(?i)\b({alts})\b["']?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^&\s]+)"""
+    )
     return keys, substring_needles, line_re, kv_re
 
 
@@ -155,36 +161,27 @@ def redact_query_string(qs: str | None) -> str | None:
 
 
 def redact_url(url: str) -> str:
-    """Redact sensitive query param values in a URL."""
+    """Remove userinfo and sensitive query/fragment values from displayed URLs."""
     try:
         parts = urlsplit(url)
-    except Exception:
-        return url
-
-    if not parts.query:
-        return url
-
-    changed = False
-    q = []
-    for k, v in parse_qsl(parts.query, keep_blank_values=True):
-        if isinstance(k, str) and is_sensitive_key(k) and v:
-            q.append((k, REDACTED))
-            changed = True
-        else:
-            q.append((k, v))
-    if not changed:
-        return url
-
-    new_query = urlencode(q, doseq=True)
-    return urlunsplit(
-        (parts.scheme, parts.netloc, parts.path, new_query, parts.fragment)
-    )
+        netloc = parts.netloc
+        if "@" in netloc:
+            netloc = REDACTED + "@" + netloc.rsplit("@", 1)[1]
+        query = redact_query_string(parts.query) or ""
+        # OAuth implicit responses and copied links can carry tokens in fragments.
+        fragment = parts.fragment
+        if "=" in fragment:
+            fragment = redact_query_string(fragment) or ""
+        return urlunsplit((parts.scheme, netloc, parts.path, query, fragment))
+    except (ValueError, TypeError):
+        # A malformed credential-bearing URL must not escape redaction.
+        return REDACTED
 
 
 def redact_str(s: str | None) -> str | None:
     if s is None:
         return None
-    txt = str(s)
+    txt = _URL_RE.sub(lambda m: redact_url(m.group(0)), str(s))
 
     # Free-text key=value redaction
     _, _, line_re, kv_re = _sensitive_cfg()
@@ -368,3 +365,17 @@ def redact_bytes(data: bytes, content_type: str | None) -> tuple[bytes, str]:
     if new_txt == txt:
         return data, "clean"
     return new_txt.encode("utf-8"), "redacted"
+
+
+def prepare_event_fields(fields: dict, *, mask: bool = False) -> dict:
+    """Protect event columns and payloads equally in ORM and bulk insert paths."""
+    result = redact_obj(fields)
+    return mask_event_data_obj(result) if mask else result
+
+
+def prepare_artifact_bytes(data: bytes, content_type: str | None, *, mask: bool = False):
+    data, status = redact_bytes(data, content_type)
+    if mask:
+        data, masked = mask_event_data_bytes(data, content_type)
+        status = combine_redaction_status(status, masked)
+    return data, status

@@ -1094,11 +1094,11 @@ def create_event_incident(
     try:
         status_code, response_headers = post_incident_webhook(config, webhook_payload)
     except ValueError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail="Incident webhook configuration is invalid") from None
     except Exception as exc:
         raise HTTPException(
-            status_code=502, detail=f"Incident webhook request failed: {exc}"
-        ) from exc
+            status_code=502, detail="Incident webhook request failed; check connectivity and configuration"
+        ) from None
 
     if not 200 <= int(status_code) < 300:
         raise HTTPException(

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.security.errors import collection_error
 from app.core.datetime_utils import utc_now_naive
 from app.services.ingestion_pause import pausable
 
@@ -346,7 +347,7 @@ def ingest_google_workspace_stream(
             "ok": False,
             "name": name,
             "application": application,
-            "error": f"Google API error: {getattr(e, 'status_code', '')} {str(e)}",
+            "error": collection_error(e),
         }
 
     def _ts(a: dict[str, Any]) -> datetime:
@@ -541,6 +542,6 @@ def ingest_google_workspace_all(db: Session) -> list[dict[str, Any]]:
             out.append(ingest_google_workspace_stream(db, service, s, defaults))
         except Exception as e:
             db.rollback()
-            out.append({"ok": False, "name": s.get("name"), "error": str(e)})
+            out.append({"ok": False, "name": s.get("name"), "error": collection_error(e)})
 
     return out

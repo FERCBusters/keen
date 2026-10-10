@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.security.errors import collection_error
 from app.services.ingestion_pause import pausable
 
 import json
@@ -1247,7 +1248,7 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
 
                 runs.append(res)
             except Exception as e:
-                errors.append(f"page_id={pid}: {type(e).__name__}: {e}")
+                errors.append(f"page_id={pid}: {collection_error(e)}")
 
         # Cursor: Move the window forward to the start of this run.
         cur.last_ts = run_started.replace(tzinfo=None)
