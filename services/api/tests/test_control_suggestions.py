@@ -9,6 +9,7 @@ from app.api.routes import managed_configurations as routes
 from app.core.config import settings
 from app.db.models import ControlItem, Framework, ManagedConfiguration
 from app.services.control_suggestions import rank_controls
+from app.services.errors import DomainError
 from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import create_engine
@@ -178,7 +179,7 @@ def test_endpoint_scope_live_edits_and_disabled_framework(db):
         )
     )
     db.commit()
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises((HTTPException, DomainError)) as error:
         routes.suggest_controls(payload, db)
     assert error.value.status_code == 400
 

@@ -6,17 +6,9 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.db.models import (
-    Audit,
-    AuditAttendee,
-    User,
-)
-from app.services.audit_schedules import (
-    FUZZY_MONTH_DATE_RULES,
-    occurrences_between,
-)
+from app.db.models import Audit, AuditAttendee, User
+from app.services.audit_schedules import FUZZY_MONTH_DATE_RULES, occurrences_between
 from app.services.audits.access import audit_or_404
-from app.services.audits.errors import AuditError
 from app.services.audits.schemas import (
     ScheduledAuditAttendeePayload,
     ScheduledAuditPayload,
@@ -39,6 +31,7 @@ from app.services.audits.validation import (
     utcnow,
     validate_dates,
 )
+from app.services.errors import DomainError
 
 
 def schedule_summary(
@@ -70,7 +63,7 @@ def replace_template_attendees(
                 .one_or_none()
             )
             if not linked_user:
-                raise AuditError(
+                raise DomainError(
                     status_code=400, detail="Unknown or inactive attendee user"
                 )
         display_name = clean_text(
@@ -106,12 +99,12 @@ def apply_schedule_fields(
     anchor_month: int | None = None,
 ) -> None:
     if until_date and next_run_date and until_date < next_run_date:
-        raise AuditError(
+        raise DomainError(
             status_code=400,
             detail="schedule_until_date cannot be before the next run date",
         )
     if date_rule in FUZZY_MONTH_DATE_RULES and recurrence == "weekly":
-        raise AuditError(
+        raise DomainError(
             status_code=400,
             detail="First weekday schedules can recur monthly, quarterly or yearly",
         )
@@ -159,7 +152,7 @@ def list_scheduled_audits(
         # The UI normally supplies explicit dates; this fallback keeps the API useful by defaulting to the current month.
         window_end = window_end.replace(day=1) - timedelta(days=1)
     if window_end < window_start:
-        raise AuditError(status_code=400, detail="end cannot be before start")
+        raise DomainError(status_code=400, detail="end cannot be before start")
 
     items = [schedule_summary(db, x, authors) for x in rows]
     occurrences: list[dict[str, Any]] = []
@@ -187,7 +180,7 @@ def create_scheduled_audit(*, payload: ScheduledAuditPayload, db: Session, user:
     recurrence = clean_schedule_recurrence(payload.schedule_recurrence)
     interval = clean_schedule_interval(payload.schedule_interval)
     if payload.schedule_until_date and payload.schedule_until_date < start_date:
-        raise AuditError(
+        raise DomainError(
             status_code=400, detail="schedule_until_date cannot be before start_date"
         )
     now = utcnow()
@@ -237,7 +230,7 @@ def update_scheduled_audit(
 ):
     a = audit_or_404(db, audit_id)
     if a.status != "template":
-        raise AuditError(status_code=400, detail="Audit is not a scheduled template")
+        raise DomainError(status_code=400, detail="Audit is not a scheduled template")
     fields = set(payload.model_fields_set or set())
     if "title" in fields:
         a.title = clean_text(payload.title, max_len=256, required=True, label="title")
@@ -249,7 +242,7 @@ def update_scheduled_audit(
         )
     if "start_date" in fields:
         if payload.start_date is None:
-            raise AuditError(status_code=400, detail="start_date is required")
+            raise DomainError(status_code=400, detail="start_date is required")
         a.start_date = payload.start_date
     if "end_date" in fields:
         a.end_date = payload.end_date
@@ -278,7 +271,7 @@ def update_scheduled_audit(
         required=(date_rule in FUZZY_MONTH_DATE_RULES),
     )
     if a.start_date is None:
-        raise AuditError(status_code=400, detail="start_date is required")
+        raise DomainError(status_code=400, detail="start_date is required")
     a.start_date = schedule_start_for_rule(
         a.start_date, date_rule=date_rule, anchor_month=anchor_month
     )
@@ -353,7 +346,7 @@ def update_scheduled_audit(
 def delete_scheduled_audit(*, audit_id: str, db: Session, user: User):
     a = audit_or_404(db, audit_id)
     if a.status != "template":
-        raise AuditError(status_code=400, detail="Audit is not a scheduled template")
+        raise DomainError(status_code=400, detail="Audit is not a scheduled template")
     from app.services.evidence_retention import queue_object
 
     queue_object(db, a.final_report_storage_uri)

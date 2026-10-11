@@ -1,4 +1,4 @@
-"""ISMS constants; see docs/maintainability-review.md for module boundaries."""
+"""ISMS constants domain operations."""
 
 from __future__ import annotations
 

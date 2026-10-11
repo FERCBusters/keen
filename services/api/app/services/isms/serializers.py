@@ -1,15 +1,14 @@
-"""ISMS serializers; see docs/maintainability-review.md for module boundaries."""
+"""ISMS serializers domain operations."""
 
 from __future__ import annotations
 
 import uuid
 from typing import Any
 
-from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.utils import ref_sort_key as _ref_sort_key
+from app.core.references import ref_sort_key as _ref_sort_key
 from app.db.models import (
     ControlItem,
     FrameworkClause,
@@ -32,10 +31,9 @@ from app.db.models import (
     RiskCategory,
     User,
 )
+from app.services.errors import DomainError
 
-from .constants import (
-    EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE,
-)
+from .constants import EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
 
 
 def _user_summary(u: User | None) -> dict[str, Any] | None:
@@ -693,4 +691,4 @@ def _entity_out(
         return out
     if entity_type == "meeting":
         return _meeting_out(db, row, framework, include_links=include_links)
-    raise HTTPException(status_code=400, detail="Unknown ISMS entity type")
+    raise DomainError(status_code=400, detail="Unknown ISMS entity type")

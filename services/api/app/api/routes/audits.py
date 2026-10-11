@@ -2,15 +2,12 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
-from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 
-from app.api.utils import content_disposition_attachment
-from app.db.models import (
-    User,
-)
+from app.api.routing import Router
+from app.db.models import User
 from app.db.session import get_db
 from app.security.auth import require_authenticated
 from app.security.roles import is_effective_admin
@@ -21,7 +18,6 @@ from app.services.audits.access import (
     can_read_audits,
     require_audit_access,
 )
-from app.services.audits.errors import AuditError
 from app.services.audits.schemas import (
     AuditAttendeePayload,
     AuditControlsPayload,
@@ -36,25 +32,10 @@ from app.services.audits.schemas import (
     ScheduledAuditUpdatePayload,
 )
 from app.services.audits.validation import require_mutable_audit
+from app.storage.filenames import content_disposition_attachment
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri
 
-
-class AuditRoute(APIRoute):
-    """Translate domain failures without changing route permission dependencies."""
-
-    def get_route_handler(self):
-        handler = super().get_route_handler()
-
-        async def handle(request):
-            try:
-                return await handler(request)
-            except AuditError as error:
-                raise HTTPException(error.status_code, error.detail) from None
-
-        return handle
-
-
-router = APIRouter(route_class=AuditRoute)
+router = Router()
 
 
 def require_audit_read(request: Request, db: Session = Depends(get_db)) -> User:

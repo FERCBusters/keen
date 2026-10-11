@@ -1,14 +1,13 @@
-"""ISMS mutations; see docs/maintainability-review.md for module boundaries."""
+"""ISMS mutations domain operations."""
 
 from __future__ import annotations
 
 import uuid
 
-from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.utils import try_uuid as _try_uuid
+from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     IsmsAccessControlMatrixAwsAccount,
     IsmsAccessControlMatrixEntry,
@@ -32,22 +31,11 @@ from app.db.models import (
     RiskCategory,
     User,
 )
+from app.services.errors import DomainError
 
-from .common import (
-    _clause_by_ref_or_id,
-    _clean_text,
-    _control_by_ref_or_id,
-    _utcnow,
-)
-from .constants import (
-    MEETING_LINK_TYPES,
-)
-from .schemas import (
-    AssetPayload,
-    IsmsLinksPayload,
-    LicensePayload,
-    MeetingLinkPayload,
-)
+from .common import _clause_by_ref_or_id, _clean_text, _control_by_ref_or_id, _utcnow
+from .constants import MEETING_LINK_TYPES
+from .schemas import AssetPayload, IsmsLinksPayload, LicensePayload, MeetingLinkPayload
 
 
 def _asset_name_from_payload(payload: AssetPayload) -> str:
@@ -62,7 +50,7 @@ def _asset_name_from_payload(payload: AssetPayload) -> str:
 def _asset_category_by_id(db: Session, category_id: uuid.UUID) -> RiskCategory:
     row = db.query(RiskCategory).filter(RiskCategory.id == category_id).one_or_none()
     if not row:
-        raise HTTPException(status_code=400, detail="Unknown asset category")
+        raise DomainError(status_code=400, detail="Unknown asset category")
     return row
 
 
@@ -95,7 +83,7 @@ def _asset_subcategory_by_id(
         qry = qry.filter(RiskAssetSubcategory.category_id == category.id)
     row = qry.one_or_none()
     if not row:
-        raise HTTPException(status_code=400, detail="Unknown asset subcategory")
+        raise DomainError(status_code=400, detail="Unknown asset subcategory")
     return row
 
 
@@ -137,10 +125,10 @@ def _license_or_404(db: Session, license_id: str | uuid.UUID) -> IsmsLicense:
         license_id if isinstance(license_id, uuid.UUID) else _try_uuid(str(license_id))
     )
     if not lid:
-        raise HTTPException(status_code=400, detail="license_id must be a UUID")
+        raise DomainError(status_code=400, detail="license_id must be a UUID")
     row = db.query(IsmsLicense).filter(IsmsLicense.id == lid).one_or_none()
     if not row:
-        raise HTTPException(status_code=404, detail="License not found")
+        raise DomainError(status_code=404, detail="License not found")
     return row
 
 
@@ -199,10 +187,10 @@ def _apply_license_payload(row: IsmsLicense, payload: LicensePayload) -> None:
 def _asset_or_404(db: Session, asset_id: str | uuid.UUID) -> RiskAsset:
     aid = asset_id if isinstance(asset_id, uuid.UUID) else _try_uuid(str(asset_id))
     if not aid:
-        raise HTTPException(status_code=400, detail="asset_id must be a UUID")
+        raise DomainError(status_code=400, detail="asset_id must be a UUID")
     row = db.query(RiskAsset).filter(RiskAsset.id == aid).one_or_none()
     if not row:
-        raise HTTPException(status_code=404, detail="Asset not found")
+        raise DomainError(status_code=404, detail="Asset not found")
     return row
 
 
@@ -345,7 +333,7 @@ def _replace_objective_resources(
             .filter(User.id == uid, User.is_active.is_(True))
             .first()
         ):
-            raise HTTPException(status_code=400, detail=f"Unknown user: {uid}")
+            raise DomainError(status_code=400, detail=f"Unknown user: {uid}")
         seen.add(uid)
         db.add(
             IsmsObjectiveResourceUser(
@@ -379,7 +367,7 @@ def _replace_access_control_accounts(
             .filter(IsmsAwsAccount.id == account_id)
             .first()
         ):
-            raise HTTPException(
+            raise DomainError(
                 status_code=400, detail=f"Unknown hosting account: {account_id}"
             )
         seen.add(account_id)
@@ -413,7 +401,7 @@ def _replace_access_control_roles(
         if org_node_id in seen:
             continue
         if not db.query(IsmsOrgNode.id).filter(IsmsOrgNode.id == org_node_id).first():
-            raise HTTPException(
+            raise DomainError(
                 status_code=400,
                 detail=f"Unknown organisation chart role: {org_node_id}",
             )
@@ -459,7 +447,7 @@ def _replace_org_node_users(
             .filter(User.id == uid, User.is_active.is_(True))
             .first()
         ):
-            raise HTTPException(status_code=400, detail=f"Unknown user: {uid}")
+            raise DomainError(status_code=400, detail=f"Unknown user: {uid}")
         seen.add(uid)
         db.add(
             IsmsOrgNodeUser(
@@ -496,7 +484,7 @@ def _replace_meeting_people(
                 .filter(User.id == uid, User.is_active.is_(True))
                 .first()
             ):
-                raise HTTPException(status_code=400, detail=f"Unknown user: {uid}")
+                raise DomainError(status_code=400, detail=f"Unknown user: {uid}")
             seen.add(key)
             db.add(
                 IsmsMeetingAttendee(
@@ -528,7 +516,7 @@ def _replace_meeting_person_links(
         else {}
     )
     if len(people) != len(ids):
-        raise HTTPException(400, "Unknown Person selected for meeting")
+        raise DomainError(400, "Unknown Person selected for meeting")
     db.query(IsmsMeetingPerson).filter(
         IsmsMeetingPerson.meeting_id == meeting.id
     ).delete(synchronize_session=False)
@@ -565,7 +553,7 @@ def _replace_meeting_links(
             label="link_type",
         )
         if link_type not in MEETING_LINK_TYPES:
-            raise HTTPException(status_code=400, detail="Invalid meeting link_type")
+            raise DomainError(status_code=400, detail="Invalid meeting link_type")
         document_id = payload.document_id
         url = (
             _clean_text(payload.url, max_len=2048, required=False, label="url") or None
@@ -578,10 +566,10 @@ def _replace_meeting_links(
                 .filter(IsmsDocument.id == document_id)
                 .first()
             ):
-                raise HTTPException(status_code=400, detail="Unknown ISMS document")
+                raise DomainError(status_code=400, detail="Unknown ISMS document")
             url = None
         elif not url:
-            raise HTTPException(
+            raise DomainError(
                 status_code=400, detail="url is required for external links"
             )
         db.add(

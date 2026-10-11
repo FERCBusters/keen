@@ -2,10 +2,10 @@
 
 from functools import wraps
 
-from fastapi import HTTPException
 from sqlalchemy import select, text
 
 from app.db.models import SourceIngestionState
+from app.services.errors import DomainError
 
 POLLING_SOURCES = frozenset(
     (
@@ -59,7 +59,7 @@ def purge_pause_status(db):
 
 def require_purge_receiving(db):
     if purge_pause_status(db)["paused"]:
-        raise HTTPException(
+        raise DomainError(
             503,
             "Ingestion is paused for evidence purge and its five-minute cooldown; retry later.",
             headers={"Retry-After": "60"},
@@ -83,9 +83,9 @@ def require_receiving(db, source):
     from app.core.config import settings
 
     if source == "webhooks" and not settings.webhooks_enabled:
-        raise HTTPException(503, "Webhook ingestion is disabled")
+        raise DomainError(503, "Webhook ingestion is disabled")
     if is_paused(db, source):
-        raise HTTPException(
+        raise DomainError(
             503,
             "Source ingestion is paused by an administrator; retry later.",
             headers={"Retry-After": "60"},

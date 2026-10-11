@@ -11,6 +11,7 @@ from app.db.models import Event, SourceConnection
 from app.ingest import connections as sc
 from app.ingest.common import store_event_with_artifact
 from app.mapping.rules import evaluate_by_framework, parse_rules
+from app.services.errors import DomainError
 from cryptography.fernet import Fernet
 
 
@@ -264,7 +265,7 @@ def test_connection_delete_keeps_evidence_identity(contract_db, monkeypatch):
     contract_db.commit()
     from fastapi import HTTPException
 
-    with pytest.raises(HTTPException) as conflict:
+    with pytest.raises((HTTPException, DomainError)) as conflict:
         api.delete(row["id"], row["version"] + 1, contract_db)
     assert conflict.value.status_code == 409
     api.delete(row["id"], row["version"], contract_db)
@@ -430,7 +431,7 @@ def test_global_webhook_gate_includes_measurement_receipts(monkeypatch):
     from fastapi import HTTPException
 
     monkeypatch.setattr(sc.deployment_settings, "webhooks_enabled", False)
-    with pytest.raises(HTTPException) as blocked:
+    with pytest.raises((HTTPException, DomainError)) as blocked:
         require_receiving(None, "webhooks")
     assert blocked.value.status_code == 503
 

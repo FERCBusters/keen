@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import app.services.agents as agents_operations
 import pytest
 from app.agents.otlp import decode
 from app.agents.schema import fingerprint
@@ -87,7 +88,7 @@ def setup(monkeypatch):
     app.include_router(api.router)
     app.dependency_overrides[api.get_db] = db
     app.dependency_overrides[api.require_admin] = lambda: True
-    monkeypatch.setattr(api.settings, "demo_mode", False)
+    monkeypatch.setattr(agents_operations.settings, "demo_mode", False)
     monkeypatch.setattr(api, "get_valkey", lambda: None)
     monkeypatch.setattr(api, "fixed_window_allow", lambda *a, **k: (True, 0))
     stored = []
@@ -206,7 +207,7 @@ def test_expiry_demo_admin_boundary_and_health(setup, monkeypatch):
         a.expires_at = utc_now_naive() - timedelta(seconds=1)
         db.commit()
     assert c.post("/v1/otlp/logs", json=record(), headers=h).status_code == 401
-    monkeypatch.setattr(api.settings, "demo_mode", True)
+    monkeypatch.setattr(agents_operations.settings, "demo_mode", True)
     assert c.post("/v1/otlp/logs", json=record(), headers=h).status_code == 403
     assert c.post("/v1/agents/heartbeat", json={}, headers=h).status_code == 403
 
@@ -274,7 +275,7 @@ def test_malformed_otlp_rejected(setup, body):
 
 
 def test_plain_mapping_reasons_explain_exact_values():
-    from app.api.routes.managed_configurations import _plain_mismatch_reasons
+    from app.services.managed_configurations import _plain_mismatch_reasons
 
     event = SimpleNamespace(
         system="prod", actor=None, action="build", outcome="failed", severity=4

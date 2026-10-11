@@ -160,15 +160,7 @@ class ClauseEvidenceUrlsPayload(BaseModel):
     evidence_urls: list[str] = Field(default_factory=list)
 
 
-class FrameworkListItem(BaseModel):
-    slug: str
-    name: str
-    version: str | None = None
-    description: str | None = None
-    upstream_url: str | None = None
-    has_clauses: bool = False
-    control_count: int = 0
-    is_default: bool = False
+from app.services.framework_catalogue import FrameworkListItem as FrameworkListItem
 
 
 class FrameworkUpsert(BaseModel):

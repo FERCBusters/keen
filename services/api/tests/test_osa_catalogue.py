@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
-from app.api.routes.frameworks import FrameworkNodeInput, save_framework_node
+from app.api.routes.frameworks import save_framework_node
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlItem,
@@ -17,6 +17,7 @@ from app.db.models import (
     OsaControlMapping,
 )
 from app.services.control_inheritance import effective_control_ids, evidence_pairs
+from app.services.frameworks import FrameworkNodeInput
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 

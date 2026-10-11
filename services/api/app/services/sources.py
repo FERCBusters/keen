@@ -1,0 +1,172 @@
+"""Sources application operations."""
+
+from __future__ import annotations
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.core.cache import cached_json, user_cache_scope
+from app.core.config import settings
+from app.core.source_meta import apply_user_source_overrides, get_source_meta
+from app.db.models import (
+    Event,
+    IsmsEffectivenessMeasure,
+    IsmsEffectivenessMetricEntry,
+    Mapping,
+    User,
+)
+from app.security.diary_visibility import diary_filter_condition
+from app.services.control_inheritance import effective_framework_ids
+from app.services.isms.common import _clean_framework
+from app.services.isms.serializers import _effectiveness_measure_out
+
+EVENTS_READ_PERMISSION = "events.read"
+
+
+def _source_overrides(user) -> dict | None:
+    return getattr(user, "pref_source_colors", None) if isinstance(user, User) else None
+
+
+def source_effectiveness_measures(
+    *,
+    source_name: str,
+    framework: str = settings.default_framework_slug,
+    user,
+    db: Session,
+):
+    """Return effectiveness measures with metric entries recorded against a KEEN source."""
+    fw = _clean_framework(framework)
+    src = str(source_name or "").strip()
+    if not src:
+        return {"framework": fw, "source": src, "items": []}
+    rows = (
+        db.query(IsmsEffectivenessMeasure)
+        .join(
+            IsmsEffectivenessMetricEntry,
+            IsmsEffectivenessMetricEntry.measure_id == IsmsEffectivenessMeasure.id,
+        )
+        .filter(
+            IsmsEffectivenessMeasure.framework_slug == fw,
+            IsmsEffectivenessMetricEntry.source_type == src,
+        )
+        .distinct()
+        .order_by(IsmsEffectivenessMeasure.updated_at.desc())
+        .all()
+    )
+    return {
+        "framework": fw,
+        "source": src,
+        "items": [_effectiveness_measure_out(db, row, fw) for row in rows],
+    }
+
+
+def list_sources(*, framework: str, limit: int, offset: int, db: Session, user):
+    limit = max(1, min(int(limit or 5000), 5000))
+    offset = max(0, int(offset or 0))
+    cache_parts = {
+        "user": user_cache_scope(user),
+        "framework": framework,
+        "counter_semantics": "framework-mapped-events-v1",
+        # Include source colour preferences so changing badge colours does not have
+        # to wait for the aggregate cache TTL.
+        "source_colors": _source_overrides(user) or {},
+        "limit": limit,
+        "offset": offset,
+    }
+
+    def _load() -> dict:
+        visibility = diary_filter_condition(db, user)
+
+        # Total events per source. This is used by sources.html and, historically,
+        # by some dropdowns, so keep the exact count semantics intact.
+        total_rows = (
+            db.query(Event.source, func.count(Event.id), func.max(Event.timestamp))
+            .filter(visibility)
+            .group_by(Event.source)
+            .order_by(Event.source.asc())
+            .all()
+        )
+
+        # Count each mapped event once per source and per selected framework, even
+        # if the event maps to more than one control in that framework. An event
+        # mapped only in another framework must still be reported as unmapped for
+        # this framework.
+        mapped_event_ids = (
+            db.query(Mapping.event_id.label("event_id"))
+            .filter(Mapping.control_item_id.in_(effective_framework_ids(framework, db)))
+            .distinct()
+            .subquery()
+        )
+        mapped_rows = (
+            db.query(Event.source, func.count(Event.id))
+            .join(mapped_event_ids, mapped_event_ids.c.event_id == Event.id)
+            .filter(visibility)
+            .group_by(Event.source)
+            .all()
+        )
+        mapped_by_source = {src: int(n) for src, n in mapped_rows}
+
+        items = []
+        overrides = _source_overrides(user)
+        for src, total, last_seen in total_rows:
+            default_meta = get_source_meta(src)
+            meta = apply_user_source_overrides(default_meta, overrides)
+            mapped = mapped_by_source.get(src, 0)
+            items.append(
+                {
+                    "source": src,
+                    "label": meta.label,
+                    "color": meta.color,
+                    "total_events": int(total),
+                    "mapped_events": mapped,
+                    "unmapped_events": int(total) - mapped,
+                    "last_seen": last_seen.isoformat() if last_seen else None,
+                }
+            )
+        total = len(items)
+        return {
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "items": items[offset : offset + limit],
+        }
+
+    return cached_json("sources:list", cache_parts, _load)
+
+
+def list_source_meta(*, db: Session, user):
+    """Return per-source UI display metadata.
+
+    This is intentionally lightweight for UI pages that only need labels/colors.
+    """
+
+    cache_parts = {
+        "user": user_cache_scope(user),
+        "source_colors": _source_overrides(user) or {},
+    }
+
+    def _load() -> dict:
+        rows = (
+            db.query(Event.source)
+            .filter(diary_filter_condition(db, user))
+            .group_by(Event.source)
+            .order_by(Event.source.asc())
+            .all()
+        )
+        items = []
+        overrides = _source_overrides(user)
+        for (src,) in rows:
+            default_meta = get_source_meta(src)
+            meta = apply_user_source_overrides(default_meta, overrides)
+            items.append(
+                {
+                    "source": src,
+                    "label": meta.label,
+                    "color": meta.color,
+                    "default_color": default_meta.color,
+                    "overridden": meta.color != default_meta.color,
+                }
+            )
+        return {"items": items}
+
+    return cached_json("sources:meta", cache_parts, _load)

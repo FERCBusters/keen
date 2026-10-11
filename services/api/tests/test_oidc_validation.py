@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from app.security import oidc
+from app.services.errors import DomainError
 from joserfc import jwt
 from joserfc.errors import JoseError
 from joserfc.jwk import ECKey, RSAKey
@@ -278,7 +279,7 @@ def test_unconfigured_algorithm_rejected_even_with_valid_signature(callback, alg
 def test_invalid_algorithm_configuration_fails_closed(callback, algs):
     from fastapi import HTTPException
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises((HTTPException, DomainError)) as exc:
         callback.run(selected_provider=replace(callback.provider, allowed_algs=algs))
     assert exc.value.status_code == 503
     callback.provision.assert_not_called()

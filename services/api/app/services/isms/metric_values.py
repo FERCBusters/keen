@@ -1,11 +1,10 @@
-"""ISMS metric values; see docs/maintainability-review.md for module boundaries."""
+"""ISMS metric values domain operations."""
 
 from __future__ import annotations
 
 import re
 import uuid
 
-from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -16,19 +15,14 @@ from app.db.models import (
     IsmsEffectivenessMetricEntry,
     User,
 )
+from app.services.errors import DomainError
 
-from .common import (
-    _clean_text,
-    _utcnow,
-)
+from .common import _clean_text, _utcnow
 from .constants import (
     EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE,
     EFFECTIVENESS_THRESHOLD_OPERATORS,
 )
-from .schemas import (
-    EffectivenessMeasurePayload,
-    EffectivenessMetricEntryPayload,
-)
+from .schemas import EffectivenessMeasurePayload, EffectivenessMetricEntryPayload
 
 
 def _metric_key_from_payload(raw: str | None) -> str | None:
@@ -36,7 +30,7 @@ def _metric_key_from_payload(raw: str | None) -> str | None:
     if not value:
         return None
     if len(value) > 128 or not re.match(r"^[A-Za-z0-9._:-]+$", value):
-        raise HTTPException(
+        raise DomainError(
             status_code=400,
             detail="metric_key may only contain letters, numbers, dot, underscore, colon and hyphen",
         )
@@ -56,11 +50,11 @@ def _validate_effectiveness_measure_payload(
             .filter(User.id == payload.owner_user_id, User.is_active.is_(True))
             .first()
         ):
-            raise HTTPException(status_code=400, detail="Unknown owner")
+            raise DomainError(status_code=400, detail="Unknown owner")
     if fields is None or "threshold_operator" in fields:
         op = (payload.threshold_operator or "").strip()
         if op not in EFFECTIVENESS_THRESHOLD_OPERATORS:
-            raise HTTPException(status_code=400, detail="Invalid threshold operator")
+            raise DomainError(status_code=400, detail="Invalid threshold operator")
     if fields is None or "metric_key" in fields:
         key = _metric_key_from_payload(payload.metric_key)
         if key:
@@ -70,9 +64,9 @@ def _validate_effectiveness_measure_payload(
             if row_id:
                 qry = qry.filter(IsmsEffectivenessMeasure.id != row_id)
             if qry.first():
-                raise HTTPException(status_code=400, detail="metric_key already exists")
+                raise DomainError(status_code=400, detail="metric_key already exists")
     if (fields is None or "clauses" in fields) and payload.clauses:
-        raise HTTPException(
+        raise DomainError(
             status_code=400,
             detail="Effectiveness measures link controls only; clauses are inferred from those controls",
         )
@@ -186,7 +180,7 @@ def _coerce_metric_source_type(db: Session, raw: str | None) -> str:
     for source in sources:
         if source.lower().replace("-", "_") == source_key:
             return source
-    raise HTTPException(
+    raise DomainError(
         status_code=400,
         detail="Invalid metric source type; choose an existing KEEN source or other",
     )
@@ -199,7 +193,7 @@ def _validate_metric_entry_payload(
     qualitative = _clean_text(payload.qualitative_value, max_len=20000)
     if not partial or "metric_value" in fields or "qualitative_value" in fields:
         if payload.metric_value is None and not qualitative:
-            raise HTTPException(
+            raise DomainError(
                 status_code=400, detail="metric_value or qualitative_value is required"
             )
     if (
@@ -207,14 +201,14 @@ def _validate_metric_entry_payload(
         and payload.period_end
         and payload.period_end < payload.period_start
     ):
-        raise HTTPException(
+        raise DomainError(
             status_code=400, detail="period_end must be after period_start"
         )
     if not partial or "source_type" in fields:
         _coerce_metric_source_type(db, payload.source_type)
     if payload.source_event_id:
         if not db.query(Event.id).filter(Event.id == payload.source_event_id).first():
-            raise HTTPException(status_code=400, detail="Unknown source event")
+            raise DomainError(status_code=400, detail="Unknown source event")
 
 
 def _apply_metric_entry_payload(

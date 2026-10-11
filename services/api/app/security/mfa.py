@@ -128,7 +128,7 @@ def limit(request, user_id=None):
         raise HTTPException(503, "Authentication rate limiter unavailable")
 
 
-def audit(db, user, action, request=None):
+def audit(db, user, action, request=None, *, ip=None):
     if action in {
         "factor-enrolled",
         "factor-removed",
@@ -137,7 +137,7 @@ def audit(db, user, action, request=None):
     }:
         from app.services.security_notifications import enqueue
 
-        enqueue(db, user, action, request)
+        enqueue(db, user, action, ip=ip or (client_ip(request) if request else None))
     db.add(
         AuditLog(
             username=user.username,
@@ -145,7 +145,7 @@ def audit(db, user, action, request=None):
             path="/v1/auth/mfa/" + action,
             status_code=200,
             duration_ms=0,
-            client_ip=client_ip(request) if request else None,
+            client_ip=ip or (client_ip(request) if request else None),
         )
     )
 
@@ -309,7 +309,7 @@ def registered(db, user):
     )
 
 
-def activate(db, row, user, request):
+def activate(db, row, user, request=None, *, ip=None):
     first = not user.mfa_enabled
     user.mfa_enabled = True
     bump(db, user, row)
@@ -317,7 +317,7 @@ def activate(db, row, user, request):
     if row.purpose == "login":
         row.stage = "ready"
     row.data = {}
-    audit(db, user, "factor-enrolled", request)
+    audit(db, user, "factor-enrolled", request, ip=ip)
     db.commit()
     return {"ok": True, "recovery_codes": codes}
 

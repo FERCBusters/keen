@@ -14,6 +14,7 @@ from app.mapping.collector import (
     matches_collector,
 )
 from app.security.redaction import redact_obj
+from app.services.errors import DomainError
 
 PROJECT = {"id": 2, "identifier": "infra", "name": "Infrastructure"}
 ISSUE = {
@@ -279,7 +280,7 @@ class RedmineTests(unittest.TestCase):
         self.assertEqual(connection.execute.call_count, 1)
 
     def test_managed_collection_registration(self):
-        from app.api.routes.managed_configurations import (
+        from app.services.managed_configurations import (
             _collector_key,
             _editable_collector,
             _validate_connector,
@@ -291,7 +292,7 @@ class RedmineTests(unittest.TestCase):
             _collector_key("redmine", "projects", {"project": "infra"}), "infra"
         )
         self.assertTrue(_editable_collector("redmine", "projects"))
-        with self.assertRaises(HTTPException):
+        with self.assertRaises((HTTPException, DomainError)):
             _validate_connector("redmine", {"projects": [{"project": "../escape"}]})
 
     def test_all_projects_discovery_isolation(self):

@@ -4,6 +4,8 @@ import ssl
 import uuid
 from types import SimpleNamespace
 
+import app.services.login as login_operations
+import app.services.risks as risks_operations
 import pytest
 import yaml
 from app.api.routes import managed_configurations as mappings
@@ -22,6 +24,7 @@ from app.db.models import (
 from app.mapping.rules import parse_rules
 from app.security import ldap, mfa
 from app.security.auth import authenticate_user
+from app.services.errors import DomainError
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -135,7 +138,7 @@ def test_ldaps_cert_validation(directory, monkeypatch):
 
 def test_failed_starttls_never_binds(directory):
     directory[0]["tls"] = False
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises((HTTPException, DomainError)) as error:
         ldap.directory_identity("alice", "secret")
     assert error.value.status_code == 503
     assert not any(isinstance(e, tuple) for e in directory[1])
@@ -239,28 +242,28 @@ def role_risk(db):
 
 def test_role_owner_assignment_access_and_clearing(db, role_risk):
     user, role, risk = role_risk
-    risks._apply_payload(
+    risks_operations._apply_payload(
         db, risk, risks.RiskUpsertPayload(risk_owner_role_id=role.id), is_create=False
     )
     db.commit()
     assert risk.risk_owner_user_id is None and risk.risk_owner_role_id == role.id
-    assert risks.risk_owner_out(risk)["type"] == "role"
-    assert not risks._is_risk_owner(user, risk)
+    assert risks_operations.risk_owner_out(risk)["type"] == "role"
+    assert not risks_operations._is_risk_owner(user, risk)
     db.add(IsmsOrgNodeUser(org_node_id=role.id, user_id=user.id))
     db.commit()
-    assert risks._is_risk_owner(user, risk)
+    assert risks_operations._is_risk_owner(user, risk)
     assert risks.list_my_owned_risks(user=user, db=db)["total"] == 1
-    risks._apply_payload(
+    risks_operations._apply_payload(
         db, risk, risks.RiskUpsertPayload(note="Keep owner"), is_create=False
     )
     db.commit()
     assert risk.risk_owner_role_id == role.id
-    risks._apply_payload(
+    risks_operations._apply_payload(
         db, risk, risks.RiskUpsertPayload(risk_owner_user_id=user.id), is_create=False
     )
     db.commit()
     assert risk.risk_owner_role_id is None and risk.risk_owner_user_id == user.id
-    risks._apply_payload(
+    risks_operations._apply_payload(
         db, risk, risks.RiskUpsertPayload(risk_owner_role_id=None), is_create=False
     )
     db.commit()
@@ -273,14 +276,14 @@ def test_owner_validation(db, role_risk):
         dict(risk_owner_role_id=role.id, risk_owner_user_id=user.id),
         dict(risk_owner_role_id=uuid.uuid4()),
     ]:
-        with pytest.raises(HTTPException):
-            risks._apply_payload(
+        with pytest.raises((HTTPException, DomainError)):
+            risks_operations._apply_payload(
                 db, risk, risks.RiskUpsertPayload(**fields), is_create=False
             )
     role.node_type = "department"
     db.commit()
-    with pytest.raises(HTTPException):
-        risks._apply_payload(
+    with pytest.raises((HTTPException, DomainError)):
+        risks_operations._apply_payload(
             db,
             risk,
             risks.RiskUpsertPayload(risk_owner_role_id=role.id),
@@ -337,13 +340,14 @@ def test_ldap_login_route_and_mfa_with_local_disabled(db, directory, monkeypatch
     import json
 
     import fakeredis
-    from app.api.payloads import LoginPayload
     from app.api.routes import auth
     from app.db.models import MfaChallenge
+    from app.schemas import LoginPayload
     from app.security.sessions import get_session
     from starlette.requests import Request
 
     redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(login_operations, "get_valkey", lambda: redis)
     monkeypatch.setattr(auth, "get_valkey", lambda: redis)
     monkeypatch.setattr(settings, "local_auth_enabled", False)
     monkeypatch.setattr(settings, "mfa_policy", "off")
@@ -384,7 +388,7 @@ def test_ldap_login_route_and_mfa_with_local_disabled(db, directory, monkeypatch
     assert (
         db.query(MfaChallenge).filter_by(user_id=user.id, stage="verify").count() == 1
     )
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises((HTTPException, DomainError)) as error:
         auth.login(LoginPayload(username="alice", password="password"), request, db)
     assert error.value.status_code == 404
 
@@ -410,7 +414,7 @@ def test_organisation_framework_selection(db, monkeypatch):
     assert [item["slug"] for item in frameworks.list_frameworks(db)["items"]] == ["TWO"]
     assert db.query(Framework).count() == 2
     assert len(selected["items"]) >= 2
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises((HTTPException, DomainError)) as error:
         frameworks.save_framework_selection(
             frameworks.FrameworkSelectionInput(
                 enabled=["ONE"], default="ONE", version=0
@@ -422,7 +426,7 @@ def test_organisation_framework_selection(db, monkeypatch):
     monkeypatch.setattr(settings, "enabled_frameworks", "ONE")
     # Environment change chooses a valid default without exposing excluded frameworks.
     assert frameworks.list_frameworks(db)["default"] == "ONE"
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         frameworks.save_framework_selection(
             frameworks.FrameworkSelectionInput(
                 enabled=["TWO"], default="TWO", version=1
@@ -430,7 +434,7 @@ def test_organisation_framework_selection(db, monkeypatch):
             user,
             db,
         )
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         frameworks.save_framework_selection(
             frameworks.FrameworkSelectionInput(
                 enabled=["ONE"], default="TWO", version=1

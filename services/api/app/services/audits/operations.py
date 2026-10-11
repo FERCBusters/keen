@@ -11,7 +11,6 @@ from app.db.models import (
     User,
 )
 from app.services.audits.access import audit_or_404, can_see_event
-from app.services.audits.errors import AuditError
 from app.services.audits.references import control_out
 from app.services.audits.samples import (
     audit_sample_entity_reference,
@@ -59,6 +58,7 @@ from app.services.audits.validation import (
     utcnow,
     validate_dates,
 )
+from app.services.errors import DomainError
 
 
 def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):
@@ -99,7 +99,7 @@ def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):
 def delete_audit(*, audit_id: str, db: Session, user: User):
     a = audit_or_404(db, audit_id)
     if a.status == "template":
-        raise AuditError(
+        raise DomainError(
             status_code=400,
             detail="Use the scheduled audit template delete endpoint for templates",
         )
@@ -127,7 +127,7 @@ def update_audit(
             payload.status, AUDIT_STATUSES, default=a.status or "open"
         )
         if new_status not in MUTABLE_AUDIT_STATUSES:
-            raise AuditError(
+            raise DomainError(
                 status_code=409,
                 detail="Completed or archived audits can only be reopened to Open or In progress.",
             )
@@ -233,7 +233,7 @@ def add_audit_evidence(
     )
 
     if not ev and not entity and not evidence_url:
-        raise AuditError(
+        raise DomainError(
             status_code=400,
             detail="event_id, entity_type/entity_id, or evidence_url is required",
         )
@@ -322,14 +322,14 @@ def update_audit_evidence(
     require_mutable_audit(a)
     evid = try_uuid(evidence_id)
     if not evid:
-        raise AuditError(status_code=400, detail="evidence_id must be a UUID")
+        raise DomainError(status_code=400, detail="evidence_id must be a UUID")
     row = (
         db.query(AuditEvidence)
         .filter(AuditEvidence.audit_id == a.id, AuditEvidence.id == evid)
         .one_or_none()
     )
     if not row:
-        raise AuditError(status_code=404, detail="Evidence not found")
+        raise DomainError(status_code=404, detail="Evidence not found")
     fields = set(payload.model_fields_set or set())
     if "evidence_url" in fields:
         row.evidence_url = clean_url(payload.evidence_url)
@@ -350,14 +350,14 @@ def delete_audit_evidence(*, audit_id: str, evidence_id: str, db: Session, user:
     require_mutable_audit(a)
     evid = try_uuid(evidence_id)
     if not evid:
-        raise AuditError(status_code=400, detail="evidence_id must be a UUID")
+        raise DomainError(status_code=400, detail="evidence_id must be a UUID")
     row = (
         db.query(AuditEvidence)
         .filter(AuditEvidence.audit_id == a.id, AuditEvidence.id == evid)
         .one_or_none()
     )
     if not row:
-        raise AuditError(status_code=404, detail="Evidence not found")
+        raise DomainError(status_code=404, detail="Evidence not found")
     db.delete(row)
     a.updated_at = utcnow()
     db.add(a)
@@ -375,9 +375,9 @@ def add_attendee(
     if payload.person_id is not None:
         linked_person = db.get(IsmsPerson, payload.person_id)
         if linked_person is None:
-            raise AuditError(status_code=400, detail="Unknown Person")
+            raise DomainError(status_code=400, detail="Unknown Person")
     if payload.person_id is not None and payload.user_id is not None:
-        raise AuditError(
+        raise DomainError(
             status_code=400, detail="Select a Person or KEEN user, not both"
         )
     if payload.user_id is not None:
@@ -387,7 +387,7 @@ def add_attendee(
             .one_or_none()
         )
         if not linked_user:
-            raise AuditError(
+            raise DomainError(
                 status_code=400, detail="Unknown or inactive attendee user"
             )
 
@@ -427,14 +427,14 @@ def delete_attendee(*, audit_id: str, attendee_id: str, db: Session, user: User)
     require_mutable_audit(a)
     tid = try_uuid(attendee_id)
     if not tid:
-        raise AuditError(status_code=400, detail="attendee_id must be a UUID")
+        raise DomainError(status_code=400, detail="attendee_id must be a UUID")
     row = (
         db.query(AuditAttendee)
         .filter(AuditAttendee.audit_id == a.id, AuditAttendee.id == tid)
         .one_or_none()
     )
     if not row:
-        raise AuditError(status_code=404, detail="Attendee not found")
+        raise DomainError(status_code=404, detail="Attendee not found")
     db.delete(row)
     a.updated_at = utcnow()
     db.add(a)
@@ -449,7 +449,7 @@ def add_finding(
     require_mutable_audit(a)
     kind = (payload.kind or "").strip().lower()
     if kind not in FINDING_KINDS:
-        raise AuditError(status_code=400, detail="Invalid finding kind")
+        raise DomainError(status_code=400, detail="Invalid finding kind")
     ctrl = (
         control_or_404(db, a.framework_slug, payload.control)
         if payload.control
@@ -488,19 +488,19 @@ def update_finding(
     require_mutable_audit(a)
     fid = try_uuid(finding_id)
     if not fid:
-        raise AuditError(status_code=400, detail="finding_id must be a UUID")
+        raise DomainError(status_code=400, detail="finding_id must be a UUID")
     row = (
         db.query(AuditFinding)
         .filter(AuditFinding.audit_id == a.id, AuditFinding.id == fid)
         .one_or_none()
     )
     if not row:
-        raise AuditError(status_code=404, detail="Finding not found")
+        raise DomainError(status_code=404, detail="Finding not found")
     fields = set(payload.model_fields_set or set())
     if "kind" in fields:
         kind = (payload.kind or "").strip().lower()
         if kind not in FINDING_KINDS:
-            raise AuditError(status_code=400, detail="Invalid finding kind")
+            raise DomainError(status_code=400, detail="Invalid finding kind")
         row.kind = kind
     if "title" in fields:
         row.title = clean_text(payload.title, max_len=256, required=True, label="title")
@@ -533,14 +533,14 @@ def delete_finding(*, audit_id: str, finding_id: str, db: Session, user: User):
     require_mutable_audit(a)
     fid = try_uuid(finding_id)
     if not fid:
-        raise AuditError(status_code=400, detail="finding_id must be a UUID")
+        raise DomainError(status_code=400, detail="finding_id must be a UUID")
     row = (
         db.query(AuditFinding)
         .filter(AuditFinding.audit_id == a.id, AuditFinding.id == fid)
         .one_or_none()
     )
     if not row:
-        raise AuditError(status_code=404, detail="Finding not found")
+        raise DomainError(status_code=404, detail="Finding not found")
     db.delete(row)
     a.updated_at = utcnow()
     db.add(a)

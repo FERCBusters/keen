@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from types import SimpleNamespace
 
+import app.services.control_links as control_links_operations
 import pytest
 from app.api.routes import control_links, events
 from app.core.config import settings
@@ -28,7 +29,7 @@ def api(contract_db, monkeypatch):
     db = contract_db
     monkeypatch.setattr(settings, "aggregate_cache_ttl_seconds", 0)
     monkeypatch.setattr(settings, "enabled_frameworks", "")
-    monkeypatch.setattr(control_links, "cache_delete_prefix", lambda: 0)
+    monkeypatch.setattr(control_links_operations, "cache_delete_prefix", lambda: 0)
     admin = User(username="admin", password_hash="unused", role="admin", is_active=True)
     a = ControlItem(framework_slug="A", ref="A1", type="control", title="A control")
     b = ControlItem(framework_slug="B", ref="B1", type="control", title="B control")

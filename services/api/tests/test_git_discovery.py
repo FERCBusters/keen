@@ -1,16 +1,17 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from app.api.routes.managed_configurations import (
-    _collector_key,
-    _editable_collector,
-    _validate_connector,
-)
 from app.ingest import forgejo, gitea, gitlab
 from app.mapping.collector import (
     collector_id,
     collector_pointer_filter,
     matches_collector,
+)
+from app.services.errors import DomainError
+from app.services.managed_configurations import (
+    _collector_key,
+    _editable_collector,
+    _validate_connector,
 )
 from fastapi import HTTPException
 
@@ -123,7 +124,7 @@ class GitDiscoveryTests(unittest.TestCase):
             )
             self.assertEqual(_collector_key(source, "users", {"user": "mig5"}), "mig5")
             self.assertTrue(_editable_collector(source, "users"))
-            with self.assertRaises(HTTPException):
+            with self.assertRaises((HTTPException, DomainError)):
                 _validate_connector(source, {"users": [{"user": "../bad"}]})
         _validate_connector(
             "gitlab", {"groups": [{"group": "team/sub"}], "users": [{"user": "mig5"}]}

@@ -29,13 +29,13 @@ from app.db.models import (
     RiskAsset,
     RiskControlLink,
 )
-from app.services.audits.errors import AuditError
 from app.services.audits.references import control_out
 from app.services.audits.validation import (
     AUDIT_SAMPLE_ENTITY_ALIASES,
     AUDIT_SAMPLE_ENTITY_LABELS,
     try_uuid,
 )
+from app.services.errors import DomainError
 
 
 def short_text(raw: str | None, limit: int = 160) -> str:
@@ -51,7 +51,7 @@ def normalise_audit_sample_entity_type(raw: str | None) -> str | None:
         return None
     entity_type = AUDIT_SAMPLE_ENTITY_ALIASES.get(value)
     if not entity_type:
-        raise AuditError(status_code=400, detail="Unsupported sampled entity type")
+        raise DomainError(status_code=400, detail="Unsupported sampled entity type")
     return entity_type
 
 
@@ -201,7 +201,7 @@ def audit_sample_entity_reference(
     if not entity_type and not entity_id:
         return None
     if not entity_type or not entity_id:
-        raise AuditError(
+        raise DomainError(
             status_code=400,
             detail="entity_type and entity_id must be provided together",
         )
@@ -396,7 +396,7 @@ def audit_sample_entity_reference(
 
     if row is None:
         if required:
-            raise AuditError(status_code=404, detail="Sampled entity not found")
+            raise DomainError(status_code=404, detail="Sampled entity not found")
         return {
             "type": entity_type,
             "id": str(entity_id),

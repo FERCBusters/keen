@@ -6,16 +6,19 @@ import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import app.services.source_connections as source_connections_operations
 import httpx
 import pytest
 from app.db.models import Artifact, Event, IngestionCursor
-from app.ingest import common, elasticsearch as es
+from app.ingest import common
+from app.ingest import elasticsearch as es
 from app.ingest.connections import Connection, connection_scope
 from app.mapping.collector import (
     collector_id,
     collector_pointer_filter,
     event_collector,
 )
+from app.services.errors import DomainError
 
 
 def input_config(**values):
@@ -225,8 +228,8 @@ def test_input_validation(values):
 
 
 def test_auth_transport_and_no_environment_secret_inheritance(monkeypatch):
-    from app.ingest.http import IngestionTransport
     from app.ingest.connections import deployment_settings
+    from app.ingest.http import IngestionTransport
 
     monkeypatch.setattr(deployment_settings, "elasticsearch_api_key", "environment-key")
     with (
@@ -261,7 +264,7 @@ def test_connection_api_validation_and_type_metadata(contract_db, monkeypatch):
         configuration={"base_url": "https://elastic.example"},
         inputs={"queries": [{"name": "Auth", "index_pattern": "logs-*"}]},
     )
-    source_connections.validate(payload)
+    source_connections_operations.validate(payload)
     from app.core import source_meta
 
     monkeypatch.setattr(source_meta, "_configured_source_meta", lambda bucket: {})
@@ -307,10 +310,10 @@ def test_document_validation_and_database_field_bounds(contract_db, storage, bad
 
 
 def test_connection_rejects_http_and_secret_field_in_inputs():
-    from app.api.routes.source_connections import ConnectionInput, validate
+    from app.services.source_connections import ConnectionInput, validate
     from fastapi import HTTPException
 
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises((HTTPException, DomainError)) as error:
         validate(
             ConnectionInput(
                 source="elasticsearch",
@@ -319,7 +322,7 @@ def test_connection_rejects_http_and_secret_field_in_inputs():
             )
         )
     assert error.value.status_code == 422
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         validate(
             ConnectionInput(
                 source="elasticsearch",

@@ -7,16 +7,10 @@ from typing import Any, Iterable
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
-from app.api.utils import (
-    control_justification as _control_justification,
-)
-from app.api.utils import (
-    control_upstream_url as _control_upstream_url,
-)
-from app.api.utils import (
-    ref_sort_key as _ref_sort_key,
-)
 from app.core.datetime_utils import utc_now_naive
+from app.core.references import control_justification as _control_justification
+from app.core.references import control_upstream_url as _control_upstream_url
+from app.core.references import ref_sort_key as _ref_sort_key
 from app.db.models import (
     ControlClauseLink,
     ControlItem,

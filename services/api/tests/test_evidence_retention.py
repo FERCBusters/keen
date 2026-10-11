@@ -475,7 +475,7 @@ class RetentionDatabaseTests(unittest.TestCase):
 
 class PolicyTests(unittest.TestCase):
     def test_policy_validation(self):
-        from app.api.routes.evidence_retention import PolicyPayload, PurgePayload
+        from app.services.retention_management import PolicyPayload, PurgePayload
         from pydantic import ValidationError
 
         for payload in [

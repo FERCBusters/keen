@@ -79,6 +79,18 @@ Be as comprehensive in any security review of your completed work as you possibl
 - Avoid contrastive-negation language.
 - Write in Australian or British English.
 
+## Backend architecture
+
+- The request path is middleware → HTTP adapter → domain operation → persistence or integration. Middleware handles cross-cutting request policy; it is not a separate controller layer. Preserve the central middleware in `main.py` and the exact public-route policy.
+- `app/api/routes/` owns HTTP adapters: route declarations, permission dependencies, request parsing, status codes, cookies, headers, redirects, streaming and WebSockets. Use `app.api.routing.Router` so expected domain failures have a consistent HTTP response. Protocol-specific route classes must extend `DomainRoute`. Shared HTTP dependencies belong in `app/api/dependencies/`.
+- `app/services/` owns use cases: domain validation, object-level access checks, queries, mutations, audit records and transaction boundaries. Services must not import `app.api`, FastAPI or Starlette, or accept HTTP request/response objects. Pass validated values, the database session and authenticated actor explicitly. `ChangeContext` carries trusted request metadata when needed; adapters supply only the metadata needed, using `app.api.context.change_context` when actor or client metadata is required. Never populate the actor, roles or trusted client address from request payloads.
+- Domain errors use `services.errors.DomainError` with a safe public message and optional response headers. Unexpected exceptions remain failures. Avoid catching broad exceptions merely to turn a failed write into success.
+- Keep a cohesive feature in one service module. Use a feature package, such as `services/isms/` or `services/audits/`, when operations have distinct responsibilities. Shared schemas belong in `app/schemas.py`; feature-specific schemas may live with their domain. Avoid importing private helpers from HTTP adapters. Extract shared helpers to their actual owner.
+- `app/security/` owns authentication, cryptography and reusable security policies; HTTP-aware authentication helpers are called at the adapter boundary. `app/db/` owns models and session setup, `app/storage/` owns artifact storage, and `app/ingest/` and `app/integrations/` own collection and upstream transport. Services may use SQLAlchemy directly; add another abstraction only when it serves a concrete responsibility.
+- The domain operation owns its transaction. Shared mutation helpers should not commit independently. Preserve intentional multi-stage security transactions, row-lock ordering and revalidation. Adapters may release a preliminary authentication transaction before reading a bounded body; the operation must reauthenticate under the required locks before writing.
+- Preserve synchronous/asynchronous execution, query counts, session lifetimes, pagination and lazy streaming when extracting code. A service call is an ordinary in-process call. Do not add threads, network hops or new sessions to implement a layer boundary. Use the narrow `Upload` adapter for lazy attachment reads and retain existing size limits.
+- Test domain behaviour and assembled HTTP/security behaviour. Update mocks to patch the owning module. `test_service_boundaries.py` enforces inward dependencies and keeps ORM queries and mutations out of HTTP adapters; do not add compatibility re-exports to satisfy old test imports.
+
 ## Frontend source and domain boundaries
 
 - Keep first-party JavaScript and CSS formatted with `bash format-ui.sh --write`;
@@ -88,8 +100,5 @@ Be as comprehensive in any security review of your completed work as you possibl
 - Evidence export code belongs in `pages/evidence-export/`; give page-specific
   preferences and state to its factory explicitly. Preserve masking, cleanup,
   filename handling and export cancellation when changing it.
-- Audit HTTP adapters retain permission dependencies and transport handling.
-  Domain operations belong in `services/audits/` and must not import API routes
-  or FastAPI. Preserve transaction boundaries and object access checks.
 - Keep Forgejo and Gitea collectors separate so their upstream APIs can evolve
   independently. Shared stateless utilities remain appropriate.

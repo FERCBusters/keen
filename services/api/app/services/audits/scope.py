@@ -16,8 +16,8 @@ from app.db.models import (
     IsmsEntityClauseLink,
     IsmsEntityControlLink,
 )
-from app.services.audits.errors import AuditError
 from app.services.audits.validation import try_uuid, utcnow
+from app.services.errors import DomainError
 
 
 def control_or_404(db: Session, framework: str, control_id_or_ref: str) -> ControlItem:
@@ -29,7 +29,7 @@ def control_or_404(db: Session, framework: str, control_id_or_ref: str) -> Contr
     else:
         row = q.filter(ControlItem.ref == val).one_or_none()
     if not row:
-        raise AuditError(status_code=404, detail=f"Control not found: {val}")
+        raise DomainError(status_code=404, detail=f"Control not found: {val}")
     return row
 
 
@@ -44,7 +44,7 @@ def clause_or_404(
     else:
         row = q.filter(FrameworkClause.ref == val).one_or_none()
     if not row:
-        raise AuditError(status_code=404, detail=f"Clause not found: {val}")
+        raise DomainError(status_code=404, detail=f"Clause not found: {val}")
     return row
 
 
@@ -58,7 +58,7 @@ def dedupe_scope_values(raw_values: list[str] | None, *, label: str) -> list[str
         seen.add(v)
         vals.append(v)
     if len(vals) > 1000:
-        raise AuditError(status_code=400, detail=f"Too many {label}")
+        raise DomainError(status_code=400, detail=f"Too many {label}")
     return vals
 
 
@@ -74,7 +74,7 @@ def document_or_404(
         else q.filter(IsmsDocument.title == val).one_or_none()
     )
     if not row:
-        raise AuditError(status_code=404, detail=f"ISMS document not found: {val}")
+        raise DomainError(status_code=404, detail=f"ISMS document not found: {val}")
     return row
 
 

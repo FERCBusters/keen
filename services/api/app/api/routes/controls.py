@@ -1,45 +1,17 @@
 from __future__ import annotations
 
-from typing import Any
+from fastapi import Depends, HTTPException, Request
+from sqlalchemy.orm import Session
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import case, desc, func
-from sqlalchemy.orm import Session, load_only
-
-from app.api.utils import (
-    control_justification as _control_justification,
-)
-from app.api.utils import (
-    control_upstream_url as _control_upstream_url,
-)
-from app.api.utils import (
-    extract_source_url as _extract_source_url,
-)
-from app.api.utils import (
-    ref_sort_key as _ref_sort_key,
-)
-from app.api.utils import (
-    try_uuid as _try_uuid,
-)
+from app.api.routing import Router
 from app.core.config import settings
-from app.db.models import (
-    ControlClauseLink,
-    ControlItem,
-    Event,
-    FrameworkClause,
-    Mapping,
-    User,
-)
+from app.db.models import User
 from app.db.session import get_db
-from app.security.diary_visibility import diary_filter_condition
 from app.security.permissions import has_permission
-from app.security.redaction import redact_obj as _redact_obj
-from app.security.redaction import redact_str as _redact_str
 from app.security.roles import is_effective_admin
-from app.services.control_inheritance import effective_control_ids
-from app.services.entity_changelog import list_entity_changelogs
+from app.services import controls as service
 
-router = APIRouter()
+router = Router()
 
 EVENTS_READ_PERMISSION = "events.read"
 
@@ -55,19 +27,6 @@ def _require_events_read(db: Session, request: Request) -> User:
     return user
 
 
-def _clause_link_out(link: ControlClauseLink) -> dict:
-    c = link.clause
-    return {
-        "clause_id": str(c.id),
-        "ref": c.ref,
-        "title": c.title,
-        "parent_id": str(c.parent_clause_id) if c.parent_clause_id else None,
-        "parent_ref": c.parent.ref if getattr(c, "parent", None) else None,
-        "applicability": link.applicability,
-        "upstream_url": _control_upstream_url(c),
-    }
-
-
 @router.get("/v1/controls")
 def list_controls(
     framework: str = settings.default_framework_slug,
@@ -75,71 +34,12 @@ def list_controls(
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
-    limit = max(1, min(int(limit or 500), 5000))
-    offset = max(0, int(offset or 0))
-    rows = db.query(ControlItem).filter(ControlItem.framework_slug == framework).all()
-    items = [
-        {
-            "id": str(c.id),
-            "framework": c.framework_slug,
-            "type": c.type,
-            "ref": c.ref,
-            "title": c.title,
-            "in_scope": c.in_scope,
-            "justification": _control_justification(c),
-            "upstream_url": _control_upstream_url(c),
-        }
-        for c in rows
-    ]
-    items.sort(key=lambda it: (it["type"], _ref_sort_key(it["ref"])))
-    total = len(items)
-    return {
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "items": items[offset : offset + limit],
-    }
+    return service.list_controls(framework=framework, limit=limit, offset=offset, db=db)
 
 
 @router.get("/v1/controls/{control_id}")
 def get_control(control_id: str, db: Session = Depends(get_db)):
-    cid = _try_uuid(control_id)
-    if not cid:
-        raise HTTPException(status_code=400, detail="control_id must be a UUID")
-    c = db.query(ControlItem).filter(ControlItem.id == cid).one_or_none()
-    if not c:
-        raise HTTPException(status_code=404, detail="Control not found")
-    clause_links = (
-        db.query(ControlClauseLink)
-        .join(FrameworkClause, FrameworkClause.id == ControlClauseLink.clause_id)
-        .filter(
-            ControlClauseLink.control_item_id == c.id,
-            FrameworkClause.framework_slug == c.framework_slug,
-        )
-        .all()
-    )
-    clauses = [_clause_link_out(x) for x in clause_links]
-    clauses.sort(
-        key=lambda it: (
-            _ref_sort_key(it.get("parent_ref") or it["ref"]),
-            _ref_sort_key(it["ref"]),
-        )
-    )
-
-    return {
-        "id": str(c.id),
-        "framework": c.framework_slug,
-        "type": c.type,
-        "ref": c.ref,
-        "title": c.title,
-        "in_scope": c.in_scope,
-        "justification": _control_justification(c),
-        "upstream_url": _control_upstream_url(c),
-        "tags": c.tags,
-        "metadata": c.meta,
-        "clauses": clauses,
-        "created_at": c.created_at.isoformat() if c.created_at else None,
-    }
+    return service.get_control(control_id=control_id, db=db)
 
 
 @router.get("/v1/controls/{control_id}/changelog")
@@ -149,14 +49,8 @@ def control_changelog(
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
-    cid = _try_uuid(control_id)
-    if not cid:
-        raise HTTPException(status_code=400, detail="control_id must be a UUID")
-    exists = db.query(ControlItem.id).filter(ControlItem.id == cid).first()
-    if not exists:
-        raise HTTPException(status_code=404, detail="Control not found")
-    return list_entity_changelogs(
-        db, entity_type="control", entity_id=cid, limit=limit, offset=offset
+    return service.control_changelog(
+        control_id=control_id, limit=limit, offset=offset, db=db
     )
 
 
@@ -168,98 +62,7 @@ def control_evidence(
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
-    cid = _try_uuid(control_id)
-    if not cid:
-        raise HTTPException(status_code=400, detail="control_id must be a UUID")
-
-    limit = max(1, min(int(limit or 200), 1000))
-    offset = max(0, int(offset or 0))
     user = _require_events_read(db, request)
-
-    if not db.get(ControlItem, cid):
-        raise HTTPException(status_code=404, detail="Control not found")
-
-    # Prefer a direct mapping when the same event also arrives via another
-    # framework. Rank before pagination to avoid duplicates and empty pages.
-    ranked = (
-        db.query(
-            Mapping.id.label("mapping_id"),
-            func.row_number()
-            .over(
-                partition_by=Mapping.event_id,
-                order_by=(
-                    case((Mapping.control_item_id == cid, 0), else_=1),
-                    Mapping.mapped_at.desc(),
-                ),
-            )
-            .label("rank"),
-        )
-        .filter(Mapping.control_item_id.in_(effective_control_ids(cid, db)))
-        .subquery()
+    return service.control_evidence(
+        user=user, control_id=control_id, limit=limit, offset=offset, db=db
     )
-    base_q = (
-        db.query(Mapping)
-        .join(ranked, ranked.c.mapping_id == Mapping.id)
-        .join(Event, Event.id == Mapping.event_id)
-        .filter(ranked.c.rank == 1, diary_filter_condition(db, user))
-    )
-    total = int(base_q.order_by(None).count() or 0)
-    q = base_q.order_by(desc(Mapping.mapped_at)).offset(offset).limit(limit).all()
-    event_ids = [m.event_id for m in q]
-
-    source_ids = {m.control_item_id for m in q if m.control_item_id != cid}
-    sources = {
-        c.id: c
-        for c in db.query(ControlItem).filter(ControlItem.id.in_(source_ids)).all()
-    }
-
-    events = {
-        e.id: e
-        for e in db.query(Event)
-        .options(
-            load_only(
-                Event.id,
-                Event.timestamp,
-                Event.source,
-                Event.summary,
-                Event.raw_pointer,
-                Event.normalized_payload,
-            )
-        )
-        .filter(Event.id.in_(event_ids))
-        .filter(diary_filter_condition(db, user))
-        .all()
-    }
-
-    items: list[dict[str, Any]] = []
-    for m in q:
-        e = events.get(m.event_id)
-        if not e:
-            continue
-        src_url = _redact_str(_extract_source_url(e.raw_pointer, e.normalized_payload))
-        items.append(
-            {
-                "event_id": str(e.id),
-                "timestamp": e.timestamp.isoformat(),
-                "source": e.source,
-                "connection_id": e.connection_id,
-                "connection_name": e.connection_name,
-                "summary": e.summary,
-                "source_url": src_url,
-                "raw_pointer": _redact_obj(e.raw_pointer),
-                "confidence": m.confidence,
-                "method": m.method,
-                "rationale": m.rationale,
-                "inherited": m.control_item_id != cid,
-                "inherited_from": (
-                    {
-                        "control_id": str(sources[m.control_item_id].id),
-                        "framework": sources[m.control_item_id].framework_slug,
-                        "ref": sources[m.control_item_id].ref,
-                    }
-                    if m.control_item_id in sources
-                    else None
-                ),
-            }
-        )
-    return {"total": total, "limit": limit, "offset": offset, "items": items}

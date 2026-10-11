@@ -5,12 +5,6 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.api.routes.managed_configurations import (
-    _safe_document,
-    _save,
-    _validate_connector,
-    _validate_regex,
-)
 from app.core.evidence_migration import unify
 from app.core.managed_configuration import load_document
 from app.mapping.collector import (
@@ -19,6 +13,13 @@ from app.mapping.collector import (
     event_collector,
 )
 from app.mapping.rules import evaluate_by_framework, parse_rules
+from app.services.errors import DomainError
+from app.services.managed_configurations import (
+    _safe_document,
+    _save,
+    _validate_connector,
+    _validate_regex,
+)
 from fastapi import HTTPException
 
 
@@ -230,12 +231,12 @@ class ManagedConfigurationTests(unittest.TestCase):
         )
 
     def test_credentials_cannot_be_saved(self):
-        with self.assertRaises(HTTPException):
+        with self.assertRaises((HTTPException, DomainError)):
             _safe_document({"feeds": [{"auth": {"password": "secret"}}]})
 
     def test_unsafe_regex_rejected(self):
         _validate_regex("failure.*sshd", "summary_regex")
-        with self.assertRaises(HTTPException):
+        with self.assertRaises((HTTPException, DomainError)):
             _validate_regex("(a+)+$", "summary_regex")
 
     def test_version_conflict_prevents_overwrite(self):
@@ -259,7 +260,7 @@ class ManagedConfigurationTests(unittest.TestCase):
             def commit(self):
                 raise AssertionError("A conflict must not commit")
 
-        with self.assertRaises(HTTPException) as error:
+        with self.assertRaises((HTTPException, DomainError)) as error:
             _save(DB(), "jenkins", {"jobs": []}, 1, SimpleNamespace(id="admin"))
         self.assertEqual(error.exception.status_code, 409)
 
@@ -268,7 +269,7 @@ class ManagedConfigurationTests(unittest.TestCase):
             {"url": "http://example.org/feed"},
             {"url": "https://example.org/feed", "verify_tls": False},
         ):
-            with self.assertRaises(HTTPException):
+            with self.assertRaises((HTTPException, DomainError)):
                 _validate_connector("rss", {"feeds": [feed]})
 
 

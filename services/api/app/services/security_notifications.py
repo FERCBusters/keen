@@ -17,16 +17,11 @@ def now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-from app.security.client_ip import request_ip
-
-
-def enqueue(db, user, event, request=None, *, ip=None):
+def enqueue(db, user, event, *, ip=None):
     recipient = (user.email or "").strip()
     if not smtp_configured() or not recipient or "\n" in recipient or "\r" in recipient:
         return
-    address = (
-        ip or request_ip(request) or "Unavailable (operator action or unknown address)"
-    )
+    address = ip or "Unavailable (operator action or unknown address)"
     titles = {
         "sso-email-added": "An SSO email address was verified for your KEEN account",
         "sso-email-removed": "An SSO email address was removed from your KEEN account",
@@ -54,8 +49,8 @@ def enqueue(db, user, event, request=None, *, ip=None):
     )
 
 
-def record_login(db, user, request):
-    address = request_ip(request)
+def record_login(db, user, *, ip):
+    address = ip
     if not address:
         return
     # Unique account/IP key makes parallel sign-ins enqueue only one alert.
@@ -66,7 +61,7 @@ def record_login(db, user, request):
         .returning(UserLoginIP.address)
     ).scalar_one_or_none()
     if created:
-        enqueue(db, user, "login-ip", request, ip=address)
+        enqueue(db, user, "login-ip", ip=address)
 
 
 def deliver_pending(limit=10):

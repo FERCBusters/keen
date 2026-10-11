@@ -96,7 +96,9 @@ def test_library_stays_available_but_implicit_links_require_enabled_framework(
     )
     saved = risks.create_risk(
         payload,
-        Request({"type": "http", "method": "POST", "path": "/api/v1/risks"}),
+        Request(
+            {"type": "http", "method": "POST", "path": "/api/v1/risks", "headers": []}
+        ),
         user,
         db,
     )

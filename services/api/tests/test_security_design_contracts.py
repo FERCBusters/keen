@@ -5,11 +5,15 @@ import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import app.services.artifacts as artifacts_operations
+import app.services.login as login_operations
+import app.services.questions as questions_operations
 import fakeredis
 import pytest
 from app.core.config import settings
 from app.security import csrf, oidc, regex, sessions
 from app.security.route_policy import PUBLIC_HTTP_ROUTES, is_public_request
+from app.services.errors import DomainError
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
@@ -263,8 +267,8 @@ def test_production_body_rejection_has_headers(production_client):
 
 def test_websocket_snapshot_releases_database(production_client, monkeypatch):
     from app import main
-    from app.api.routes.questions import _notification_snapshot
     from app.db import session as database
+    from app.services.questions import _notification_snapshot
 
     client, redis, admin, reader = production_client
     original = main.SessionLocal
@@ -408,7 +412,7 @@ def test_sso_start_rate_limit_rejects_before_creating_state(monkeypatch):
     db = Mock()
     from fastapi import HTTPException
 
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises((HTTPException, DomainError)) as error:
         asyncio.run(oidc.build_authorize_redirect(request(), db, None, "oidc"))
     assert error.value.status_code == 429
     db.add.assert_not_called()
@@ -434,28 +438,27 @@ def test_abandoned_sso_state_is_cleaned(contract_db):
 
 
 def test_pdf_preview_concurrency_is_bounded_and_slots_survive_failure(monkeypatch):
-    from app.api.routes import artifacts
     from fastapi import HTTPException
 
-    assert artifacts._PREVIEW_SLOTS.acquire(blocking=False)
-    assert artifacts._PREVIEW_SLOTS.acquire(blocking=False)
+    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False)
+    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False)
     run = Mock()
-    monkeypatch.setattr(artifacts.subprocess, "run", run)
+    monkeypatch.setattr(artifacts_operations.subprocess, "run", run)
     try:
-        with pytest.raises(HTTPException) as error:
-            artifacts._run_preview(["renderer"])
+        with pytest.raises((HTTPException, DomainError)) as error:
+            artifacts_operations._run_preview(["renderer"])
         assert error.value.status_code == 429
         run.assert_not_called()
     finally:
-        artifacts._PREVIEW_SLOTS.release()
-        artifacts._PREVIEW_SLOTS.release()
+        artifacts_operations._PREVIEW_SLOTS.release()
+        artifacts_operations._PREVIEW_SLOTS.release()
     run.side_effect = RuntimeError("renderer failure")
     with pytest.raises(RuntimeError):
-        artifacts._run_preview(["renderer"])
-    assert artifacts._PREVIEW_SLOTS.acquire(blocking=False)
-    assert artifacts._PREVIEW_SLOTS.acquire(blocking=False)
-    artifacts._PREVIEW_SLOTS.release()
-    artifacts._PREVIEW_SLOTS.release()
+        artifacts_operations._run_preview(["renderer"])
+    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False)
+    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False)
+    artifacts_operations._PREVIEW_SLOTS.release()
+    artifacts_operations._PREVIEW_SLOTS.release()
 
 
 def test_notification_webhook_does_not_buffer_hostile_response():
@@ -514,12 +517,11 @@ def test_ui_pages_compatible_with_external_scripts_only_policy():
 
 
 def test_websocket_rejects_cross_origin_before_database(production_client, monkeypatch):
-    from app.api.routes import questions
     from starlette.websockets import WebSocketDisconnect
 
     client, *_ = production_client
     snapshot = Mock()
-    monkeypatch.setattr(questions, "_notification_snapshot", snapshot)
+    monkeypatch.setattr(questions_operations, "_notification_snapshot", snapshot)
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect(
             "/ws/notifications", headers={"Origin": "https://evil.example"}
@@ -536,7 +538,7 @@ def test_live_websocket_closes_after_logout(production_client, monkeypatch):
 
     client, redis, admin, reader = production_client
     monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
-    monkeypatch.setattr(questions, "_NOTIFICATION_RECHECK_SECONDS", 0.01)
+    monkeypatch.setattr(questions_operations, "_NOTIFICATION_RECHECK_SECONDS", 0.01)
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
     client.cookies.set(settings.session_cookie_name, sid)
     with client.websocket_connect(
@@ -642,10 +644,10 @@ def test_metric_webhook_rate_limit_precedes_credentials(production_client, monke
     "value", ["NaN", "Infinity", "-Infinity", "1e309", float("nan"), float("inf")]
 )
 def test_webhook_metric_requires_finite_number(value):
-    from app.api.routes.webhooks import _webhook_metric_value
+    from app.services.webhooks import _webhook_metric_value
     from fastapi import HTTPException
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises((HTTPException, DomainError)) as exc:
         _webhook_metric_value(value)
     assert exc.value.status_code == 400
     assert _webhook_metric_value("12.5") == 12.5
@@ -734,8 +736,10 @@ def test_login_issuers_capture_account_session_version(
     _, redis, _, user = production_client
     user.session_version = 7
     contract_db.commit()
-    monkeypatch.setattr(routes, "get_valkey", lambda: redis)
-    monkeypatch.setattr(security_notifications, "record_login", lambda *args: None)
+    monkeypatch.setattr(login_operations, "get_valkey", lambda: redis)
+    monkeypatch.setattr(
+        security_notifications, "record_login", lambda *args, **kwargs: None
+    )
     req = request("/v1/auth/login", "POST")
     if method == "local":
         response = routes.complete_local_login(contract_db, user, req)
@@ -781,10 +785,11 @@ def test_admin_source_types_expose_display_labels(
 
 
 def test_audit_domain_adapter_preserves_access_and_csrf(production_client, contract_db):
+    import uuid
+
+    from app import main
     from app.db.models import AuditAttendee
     from app.db.session import get_db
-    from app import main
-    import uuid
 
     client, redis, admin, reader = production_client
 

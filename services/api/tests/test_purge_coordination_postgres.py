@@ -10,6 +10,7 @@ import pytest
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import Base, Event, SourceIngestionState
 from app.services import evidence_retention as retention
+from app.services.errors import DomainError
 from app.services.ingestion_pause import is_paused, require_receiving
 from fastapi import HTTPException
 from sqlalchemy import DefaultClause, MetaData, create_engine, text
@@ -78,7 +79,7 @@ def test_purge_drains_transactions_rejects_writes_and_preserves_manual_pause(dat
         db.commit()
     with factory() as db:
         assert is_paused(db, "keen-agent")
-        with pytest.raises(HTTPException):
+        with pytest.raises((HTTPException, DomainError)):
             require_receiving(db, "webhooks")
         db.add(
             Event(
@@ -88,7 +89,7 @@ def test_purge_drains_transactions_rejects_writes_and_preserves_manual_pause(dat
                 summary="Must not arrive",
             )
         )
-        with pytest.raises(HTTPException):
+        with pytest.raises((HTTPException, DomainError)):
             db.flush()
         db.rollback()
     held = factory()

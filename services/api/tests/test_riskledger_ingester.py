@@ -5,9 +5,9 @@ import hashlib
 import json
 from types import SimpleNamespace
 
+import app.services.managed_configurations as managed_configurations_operations
 import httpx
 import pytest
-from app.api.routes import managed_configurations as managed
 from app.core.config import settings
 from app.db.models import (
     ControlItem,
@@ -189,9 +189,18 @@ def test_same_vendor_name_does_not_merge_local_entities(db, records):
 
 
 def test_collector_identity_and_registration(db, records):
-    managed._validate_connector("riskledger", {"organizations": [{"org": "*"}]})
-    assert managed._editable_collector("riskledger", "organizations")
-    assert managed._collector_key("riskledger", "organizations", {"org": "*"}) == "*"
+    managed_configurations_operations._validate_connector(
+        "riskledger", {"organizations": [{"org": "*"}]}
+    )
+    assert managed_configurations_operations._editable_collector(
+        "riskledger", "organizations"
+    )
+    assert (
+        managed_configurations_operations._collector_key(
+            "riskledger", "organizations", {"org": "*"}
+        )
+        == "*"
+    )
     rl._collect(db, FakeAPI(records), {"organizations": [{"org": "*"}]})
     event = db.query(Event).filter_by(action="risk.snapshot").one()
     assert event_collector(

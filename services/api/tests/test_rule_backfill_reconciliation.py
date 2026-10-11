@@ -182,7 +182,7 @@ def test_batched_cleanup_resumes_without_skipping_previously_owned_events(
 
 
 def test_queue_accepts_cleanup_when_new_source_has_no_events(setup, monkeypatch):
-    from app.api.routes.managed_configurations import _queue_rule_backfill
+    from app.services.managed_configurations import _queue_rule_backfill
     from app.worker.tasks import backfill_rule_task
 
     db, controls, event, mapping, job, clear = setup

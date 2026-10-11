@@ -1,43 +1,39 @@
 """Agent administration is session-admin only; ingest uses its own scoped token."""
 
+from __future__ import annotations
+
 import asyncio
 import gzip
-import hashlib
 import io
-import json
 import logging
-import secrets
-import uuid
-from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
-from pydantic import Field, ValidationError
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.agents.credentials import authenticate, live_only, view
+from app.agents.credentials import authenticate, live_only
 from app.agents.otlp import decode
-from app.agents.schema import Health, Strict, fingerprint
-from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
+from app.agents.schema import Health
+from app.api.errors import DomainRoute
+from app.api.routing import Router
 from app.core.valkey import get_valkey
-from app.db.models import Event, KeenAgent
 from app.db.session import get_db
-from app.ingest.common import store_event_with_artifact
 from app.security.auth import require_admin
 from app.security.rate_limit import fixed_window_allow
-from app.security.redaction import redact_obj
+from app.services import agents as service
+from app.services.agents import Registration, Rotation
+from app.services.errors import DomainError
 
 
-class AgentRoute(APIRoute):
+class AgentRoute(DomainRoute):
     def get_route_handler(self):
         handler = super().get_route_handler()
 
         async def wrapped(request):
             try:
                 return await handler(request)
-            except HTTPException as exc:
+            except (HTTPException, DomainError) as exc:
                 if request.url.path != "/v1/otlp/logs":
                     raise
                 code = {
@@ -70,80 +66,37 @@ class AgentRoute(APIRoute):
         return wrapped
 
 
-router = APIRouter(route_class=AgentRoute)
-admin = APIRouter(prefix="/v1/admin/agents", dependencies=[Depends(require_admin)])
+router = Router(route_class=AgentRoute)
+admin = Router(
+    prefix="/v1/admin/agents",
+    dependencies=[Depends(require_admin)],
+)
 MAX_BODY = 1024 * 1024
-
-
-class Registration(Strict):
-    name: str = Field(
-        min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$"
-    )
-    expires_days: int = Field(default=90, ge=1, le=365)
-
-
-class Rotation(Strict):
-    expires_days: int = Field(default=90, ge=1, le=365)
-
-
-def issue(agent, days):
-    token = "ka_" + agent.id + "." + secrets.token_urlsafe(32)
-    agent.token_hash = hashlib.sha256(token.encode()).hexdigest()
-    agent.previous_token_hash = None
-    agent.renewal_nonce_hash = None
-    agent.renewal_retry_until = None
-    agent.expires_at = utc_now_naive() + timedelta(days=days)
-    return token
 
 
 @admin.get("")
 def listing(response: Response, db: Session = Depends(get_db)):
     response.headers["Cache-Control"] = "no-store"
-    return {
-        "demo_mode": settings.demo_mode,
-        "agents": [view(a) for a in db.query(KeenAgent).order_by(KeenAgent.name)],
-    }
+    return service.listing(db=db)
 
 
 @admin.post("", status_code=201)
 def register(body: Registration, response: Response, db: Session = Depends(get_db)):
-    live_only()
-    a = KeenAgent(id=str(uuid.uuid4()), name=body.name, enabled=True, health={})
-    token = issue(a, body.expires_days)
-    db.add(a)
-    db.commit()
     response.headers["Cache-Control"] = "no-store"
-    return {"agent": view(a), "token": token}
+    return service.register(body=body, db=db)
 
 
 @admin.post("/{agent_id}/rotate")
 def rotate(
     agent_id: str, body: Rotation, response: Response, db: Session = Depends(get_db)
 ):
-    live_only()
-    a = db.query(KeenAgent).filter_by(id=agent_id).with_for_update().one_or_none()
-    if not a:
-        raise HTTPException(404, "Agent not found")
-    if not a.enabled:
-        raise HTTPException(
-            409, "Revoked agents cannot be reactivated; register a new identity"
-        )
-    token = issue(a, body.expires_days)
-    db.commit()
     response.headers["Cache-Control"] = "no-store"
-    return {"agent": view(a), "token": token}
+    return service.rotate(agent_id=agent_id, body=body, db=db)
 
 
 @admin.post("/{agent_id}/revoke")
 def revoke(agent_id: str, db: Session = Depends(get_db)):
-    live_only()
-    a = db.query(KeenAgent).filter_by(id=agent_id).with_for_update().one_or_none()
-    if not a:
-        raise HTTPException(404, "Agent not found")
-    a.enabled = False
-    a.token_hash = ""
-    db.commit()
-    return {"ok": True}
+    return service.revoke(agent_id=agent_id, db=db)
 
 
 @router.post("/v1/otlp/logs")
@@ -197,62 +150,11 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
         raise HTTPException(
             400, "Invalid OTLP JSON logs; maximum 64 records and bounded attributes"
         )
-    # Per-agent row lock serializes ingestion and credential revocation. One transaction
-    # persists the whole batch; a lost acknowledgement is safely retried.
-    a = authenticate(request, db)
-    accepted = []
-    for event in events:
-        external = a.id + ":" + str(event.id)
-        digest = fingerprint(event)
-        old = (
-            db.query(Event)
-            .filter_by(source="keen-agent", external_id=external)
-            .one_or_none()
-        )
-        if old:
-            if old.raw_pointer.get("agent", {}).get("sha256") != digest:
-                raise HTTPException(409, "Event UUID reused with different content")
-        else:
-            payload = event.model_dump(mode="json")
-            store_event_with_artifact(
-                db,
-                timestamp=event.timestamp.astimezone(timezone.utc).replace(tzinfo=None),
-                source="keen-agent",
-                system=a.name,
-                actor=redact_obj(event.actor),
-                action=redact_obj(event.action),
-                outcome=redact_obj(event.outcome),
-                severity=event.severity,
-                summary=redact_obj(event.summary),
-                raw_pointer={
-                    "agent": {
-                        "id": a.id,
-                        "enrollment_profile_id": a.enrollment_profile_id,
-                        "enrollment_labels": a.enrollment_labels,
-                        "event_id": str(event.id),
-                        "sha256": digest,
-                        "received_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                },
-                normalized_payload=payload,
-                external_id=external,
-                artifact_kind="agent_record",
-                artifact_bytes=json.dumps(payload).encode(),
-                artifact_content_type="application/json",
-                artifact_key=f"agents/{a.id}/{event.id}/{uuid.uuid4()}.json",
-                captured_by="keen-agent:" + a.id,
-                commit=False,
-            )
-        accepted.append(str(event.id))
-    a.last_seen = utc_now_naive()
-    a.health = {
-        **a.health,
-        "last_batch_records": len(events),
-        "received_total": a.health.get("received_total", 0) + len(accepted),
-    }
-    db.commit()
+    result = service.persist_batch(
+        db=db, authorization=request.headers.get("authorization", ""), events=events
+    )
     response.headers["Cache-Control"] = "no-store"
-    return {}
+    return result
 
 
 async def bounded_body(request, limit):
@@ -292,16 +194,11 @@ async def heartbeat(
         health = Health.model_validate_json(body)
     except ValidationError:
         raise HTTPException(400, "Invalid health report")
-    a = authenticate(request, db)
-    a.last_seen = utc_now_naive()
-    a.health = {
-        **a.health,
-        **redact_obj(health.model_dump(mode="json")),
-        "health_received_at": utc_now_naive().isoformat(),
-    }
-    db.commit()
+    result = service.record_heartbeat(
+        db=db, authorization=request.headers.get("authorization", ""), health=health
+    )
     response.headers["Cache-Control"] = "no-store"
-    return {"ok": True}
+    return result
 
 
 router.include_router(admin)

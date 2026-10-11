@@ -9,10 +9,7 @@ from sqlalchemy import func
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import (
-    Audit,
-    User,
-)
+from app.db.models import Audit, User
 from app.security.rich_text import sanitize_rich_text_html
 from app.services.audit_schedules import (
     FUZZY_MONTH_DATE_RULES,
@@ -20,7 +17,7 @@ from app.services.audit_schedules import (
     SCHEDULE_RECURRENCES,
     first_scheduled_rule_date,
 )
-from app.services.audits.errors import AuditError
+from app.services.errors import DomainError
 
 AUDIT_SAMPLE_ENTITY_LABELS = {
     "risk": "CIA Triad risk",
@@ -103,9 +100,9 @@ def clean_text(
 ) -> str:
     v = (raw or "").strip()
     if required and not v:
-        raise AuditError(status_code=400, detail=f"{label} is required")
+        raise DomainError(status_code=400, detail=f"{label} is required")
     if len(v) > max_len:
-        raise AuditError(status_code=400, detail=f"{label} is too long")
+        raise DomainError(status_code=400, detail=f"{label} is too long")
     return v
 
 
@@ -120,37 +117,37 @@ def clean_rich_text(raw: str | None, *, max_len: int, label: str = "value") -> s
     v = clean_text(raw, max_len=max_len, label=label)
     cleaned = sanitize_rich_text_html(v)
     if len(cleaned) > max_len:
-        raise AuditError(status_code=400, detail=f"{label} is too long")
+        raise DomainError(status_code=400, detail=f"{label} is too long")
     return cleaned
 
 
 def clean_framework(raw: str | None) -> str:
     v = (raw or settings.default_framework_slug or "").strip()
     if not v:
-        raise AuditError(status_code=400, detail="framework_slug is required")
+        raise DomainError(status_code=400, detail="framework_slug is required")
     if len(v) > 64 or not re.match(r"^[A-Za-z0-9._:-]+$", v):
-        raise AuditError(status_code=400, detail="Invalid framework_slug")
+        raise DomainError(status_code=400, detail="Invalid framework_slug")
     return v
 
 
 def clean_status(raw: str | None, allowed: set[str], *, default: str) -> str:
     v = (raw or default).strip().lower()
     if v not in allowed:
-        raise AuditError(status_code=400, detail="Invalid status")
+        raise DomainError(status_code=400, detail="Invalid status")
     return v
 
 
 def clean_audit_type(raw: str | None, *, default: str = "internal") -> str:
     v = (raw or default).strip().lower()
     if v not in AUDIT_TYPES:
-        raise AuditError(status_code=400, detail="Invalid audit_type")
+        raise DomainError(status_code=400, detail="Invalid audit_type")
     return v
 
 
 def clean_schedule_recurrence(raw: str | None, *, default: str = "once") -> str:
     v = (raw or default).strip().lower()
     if v not in SCHEDULE_RECURRENCES:
-        raise AuditError(status_code=400, detail="Invalid schedule_recurrence")
+        raise DomainError(status_code=400, detail="Invalid schedule_recurrence")
     return v
 
 
@@ -158,9 +155,9 @@ def clean_schedule_interval(raw: int | None) -> int:
     try:
         value = int(raw or 1)
     except Exception:
-        raise AuditError(status_code=400, detail="Invalid schedule_interval")
+        raise DomainError(status_code=400, detail="Invalid schedule_interval")
     if value < 1 or value > 120:
-        raise AuditError(
+        raise DomainError(
             status_code=400, detail="schedule_interval must be between 1 and 120"
         )
     return value
@@ -169,14 +166,14 @@ def clean_schedule_interval(raw: int | None) -> int:
 def clean_schedule_date_rule(raw: str | None, *, default: str = "exact") -> str:
     v = (raw or default).strip().lower()
     if v not in SCHEDULE_DATE_RULES:
-        raise AuditError(status_code=400, detail="Invalid schedule_date_rule")
+        raise DomainError(status_code=400, detail="Invalid schedule_date_rule")
     return v
 
 
 def clean_schedule_anchor_month(raw: int | None, *, required: bool) -> int | None:
     if raw is None or str(raw).strip() == "":
         if required:
-            raise AuditError(
+            raise DomainError(
                 status_code=400,
                 detail="schedule_anchor_month is required for first weekday schedules",
             )
@@ -184,9 +181,9 @@ def clean_schedule_anchor_month(raw: int | None, *, required: bool) -> int | Non
     try:
         value = int(raw)
     except Exception:
-        raise AuditError(status_code=400, detail="Invalid schedule_anchor_month")
+        raise DomainError(status_code=400, detail="Invalid schedule_anchor_month")
     if value < 1 or value > 12:
-        raise AuditError(
+        raise DomainError(
             status_code=400, detail="schedule_anchor_month must be between 1 and 12"
         )
     return value
@@ -207,9 +204,9 @@ def clean_email(raw: str | None, *, label: str = "email") -> str | None:
     if not v:
         return None
     if len(v) > 256 or "@" not in v or v.startswith("@") or v.endswith("@"):
-        raise AuditError(status_code=400, detail=f"Invalid {label}")
+        raise DomainError(status_code=400, detail=f"Invalid {label}")
     if any(ord(c) < 32 or ord(c) == 127 for c in v):
-        raise AuditError(status_code=400, detail=f"Invalid {label}")
+        raise DomainError(status_code=400, detail=f"Invalid {label}")
     return v
 
 
@@ -250,7 +247,7 @@ def is_locked_audit(audit: Audit | None) -> bool:
 def require_mutable_audit(audit: Audit, *, action: str = "modify") -> None:
     if is_locked_audit(audit):
         status = audit_status_value(audit).replace("_", " ")
-        raise AuditError(
+        raise DomainError(
             status_code=409,
             detail=(
                 f"This audit is {status} and cannot be {action}. "
@@ -261,7 +258,9 @@ def require_mutable_audit(audit: Audit, *, action: str = "modify") -> None:
 
 def validate_dates(start: date | None, end: date | None) -> None:
     if start and end and end < start:
-        raise AuditError(status_code=400, detail="end_date cannot be before start_date")
+        raise DomainError(
+            status_code=400, detail="end_date cannot be before start_date"
+        )
 
 
 def clean_url(raw: str | None) -> str | None:
@@ -269,11 +268,11 @@ def clean_url(raw: str | None) -> str | None:
     if not v:
         return None
     if len(v) > 2048:
-        raise AuditError(status_code=400, detail="evidence_url is too long")
+        raise DomainError(status_code=400, detail="evidence_url is too long")
     if re.match(r"^(?:javascript|data|vbscript):", v, flags=re.I):
-        raise AuditError(status_code=400, detail="Unsupported evidence_url scheme")
+        raise DomainError(status_code=400, detail="Unsupported evidence_url scheme")
     if v.startswith("//"):
-        raise AuditError(
+        raise DomainError(
             status_code=400, detail="Protocol-relative evidence_url is not allowed"
         )
     if v.startswith("/"):
@@ -281,9 +280,9 @@ def clean_url(raw: str | None) -> str | None:
     try:
         u = urlsplit(v)
     except Exception:
-        raise AuditError(status_code=400, detail="Invalid evidence_url")
+        raise DomainError(status_code=400, detail="Invalid evidence_url")
     if u.scheme.lower() not in {"http", "https"} or not u.netloc:
-        raise AuditError(
+        raise DomainError(
             status_code=400, detail="evidence_url must be http(s) or a same-origin path"
         )
     return v

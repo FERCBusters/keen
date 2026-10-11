@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 from app.db.session import _coordinate_evidence_purge
+from app.services.errors import DomainError
 from app.services.ingestion_pause import (
     is_paused,
     purge_pause_status,
@@ -30,7 +31,7 @@ def test_active_job_and_cooldown_gate(active, offset, paused):
     if paused:
         assert is_paused(db, "rss")
         db.scalar.assert_not_called()
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, DomainError)) as exc:
             require_purge_receiving(db)
         assert exc.value.status_code == 503 and exc.value.headers["Retry-After"] == "60"
     else:

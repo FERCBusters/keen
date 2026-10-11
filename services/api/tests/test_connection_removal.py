@@ -1,8 +1,6 @@
 from types import SimpleNamespace
 
-# Imported fixtures are discovered by pytest by name.
-from tests.test_integration_builder import database as database
-
+import app.services.managed_configurations as managed_configurations_operations
 import pytest
 from app.api.routes import managed_configurations as api
 from app.core.datetime_utils import utc_now_naive
@@ -16,7 +14,11 @@ from app.db.models import (
     ManagedConfiguration,
     Mapping,
 )
+from app.services.errors import DomainError
 from fastapi import HTTPException
+
+# Imported fixtures are discovered by pytest by name.
+from tests.test_integration_builder import database as database
 
 
 def seed_rules(db):
@@ -84,7 +86,7 @@ def test_active_run_blocks_delete(database):
     db.commit()
     plan = api.preview_connection_removal("api:connection", db)
     assert plan["blocked"]
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises((HTTPException, DomainError)) as error:
         api.remove_evidence_connection(
             "api:connection",
             api.ConnectionRemovalInput(fingerprint=plan["fingerprint"]),
@@ -102,7 +104,7 @@ def test_stale_preview_blocks_delete(database):
     c = db.get(IntegrationConnection, "connection")
     c.version += 1
     db.commit()
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises((HTTPException, DomainError)) as error:
         api.remove_evidence_connection(
             "api:connection",
             api.ConnectionRemovalInput(fingerprint=plan["fingerprint"]),
@@ -284,7 +286,7 @@ def test_individual_removal_rechecks_preview(database, change):
             )
         )
     db.commit()
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises((HTTPException, DomainError)) as error:
         api.remove_evidence_connection(
             "collector:collector",
             api.ConnectionRemovalInput(fingerprint=plan["fingerprint"]),
@@ -299,8 +301,8 @@ def test_individual_removal_demo_guard(database, monkeypatch):
     db, _ = database
     seed_rules(db)
     plan = api.preview_connection_removal("collector:collector", db)
-    monkeypatch.setattr(api.settings, "demo_mode", True)
-    with pytest.raises(HTTPException) as error:
+    monkeypatch.setattr(managed_configurations_operations.settings, "demo_mode", True)
+    with pytest.raises((HTTPException, DomainError)) as error:
         api.remove_evidence_connection(
             "collector:collector",
             api.ConnectionRemovalInput(fingerprint=plan["fingerprint"]),

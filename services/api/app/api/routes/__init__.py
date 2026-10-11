@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from app.api.routing import Router
 
 from .admin import router as admin_router
 from .artifacts import router as artifacts_router
@@ -81,7 +81,7 @@ OPENAPI_TAGS = [
     {"name": "Graph", "description": "Graph/topology endpoints."},
 ]
 
-router = APIRouter()
+router = Router()
 
 # Keep URL paths stable by including subrouters with no prefix.
 router.include_router(auth_router, tags=["Auth"])

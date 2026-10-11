@@ -1,4 +1,4 @@
-"""ISMS schemas; see docs/maintainability-review.md for module boundaries."""
+"""ISMS schemas domain operations."""
 
 from __future__ import annotations
 

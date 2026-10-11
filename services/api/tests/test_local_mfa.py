@@ -1,4 +1,7 @@
-"""Local MFA security regression tests. Use an isolated PostgreSQL test database.
+"""Local MFA behaviour tests; PostgreSQL also exercises the shipped migrations.
+
+Without KEEN_MFA_TEST_DATABASE_URL, run behaviour checks on in-memory SQLite.
+SQLite does not validate database locks or concurrency.
 
 KEEN_MFA_TEST_DATABASE_URL=postgresql+psycopg2://... python -m unittest tests.test_local_mfa
 Creates and drops a random schema; never uses production tables.
@@ -15,6 +18,8 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import app.services.login as login_operations
+import app.services.me as me_operations
 import cbor2
 import fakeredis
 import pyotp
@@ -42,60 +47,71 @@ from tests.db_helpers import schema_engine
 URL = os.environ.get("KEEN_MFA_TEST_DATABASE_URL")
 
 
-@unittest.skipUnless(
-    URL, "Set KEEN_MFA_TEST_DATABASE_URL to an isolated PostgreSQL test database"
-)
 class LocalMfaTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.engine = create_engine(URL, connect_args={"options": "-c timezone=UTC"})
-        cls.schema = "test_mfa_" + uuid.uuid4().hex
-        with cls.engine.begin() as conn:
-            conn.execute(text(f"CREATE SCHEMA {cls.schema}"))
-        cls.engine.dispose()
-        cls.engine = schema_engine(URL, cls.schema)
-        cls.Session = sessionmaker(bind=cls.engine)
-        names = {
-            "users",
-            "groups",
-            "permissions",
-            "user_groups",
-            "user_permissions",
-            "group_permissions",
-            "audit_logs",
-        }
-        Base.metadata.create_all(
-            cls.engine,
-            tables=[t for t in Base.metadata.sorted_tables if t.name in names],
-        )
-        # Exercise the shipped migration against the pre-MFA user shape.
-        with cls.engine.begin() as conn:
-            conn.execute(
-                text(
-                    "ALTER TABLE users DROP COLUMN mfa_enabled,DROP COLUMN mfa_version,DROP COLUMN mfa_totp_secret,DROP COLUMN mfa_totp_last_step"
+        if not URL:
+            from sqlalchemy.pool import StaticPool
+
+            from tests.db_helpers import create_sqlite_schema
+
+            cls.engine = create_engine(
+                "sqlite://",
+                connect_args={"check_same_thread": False},
+                poolclass=StaticPool,
+            )
+            create_sqlite_schema(cls.engine)
+            cls.Session = sessionmaker(bind=cls.engine)
+        else:
+            cls.engine = create_engine(URL, connect_args={"options": "-c timezone=UTC"})
+            cls.schema = "test_mfa_" + uuid.uuid4().hex
+            with cls.engine.begin() as conn:
+                conn.execute(text(f"CREATE SCHEMA {cls.schema}"))
+            cls.engine.dispose()
+            cls.engine = schema_engine(URL, cls.schema)
+            cls.Session = sessionmaker(bind=cls.engine)
+            names = {
+                "users",
+                "groups",
+                "permissions",
+                "user_groups",
+                "user_permissions",
+                "group_permissions",
+                "audit_logs",
+            }
+            Base.metadata.create_all(
+                cls.engine,
+                tables=[t for t in Base.metadata.sorted_tables if t.name in names],
+            )
+            # Exercise the shipped migration against the pre-MFA user shape.
+            with cls.engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE users DROP COLUMN mfa_enabled,DROP COLUMN mfa_version,DROP COLUMN mfa_totp_secret,DROP COLUMN mfa_totp_last_step"
+                    )
                 )
-            )
-            spec = importlib.util.spec_from_file_location(
-                "mfa_migration",
-                Path(__file__).parents[1] / "alembic/legacy_versions/0084_local_mfa.py",
-            )
-            migration = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(migration)
-            with patch.object(
-                migration, "op", Operations(MigrationContext.configure(conn))
-            ):
-                migration.upgrade()
-            spec = importlib.util.spec_from_file_location(
-                "notification_migration",
-                Path(__file__).parents[1]
-                / "alembic/legacy_versions/0085_security_notifications.py",
-            )
-            migration = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(migration)
-            with patch.object(
-                migration, "op", Operations(MigrationContext.configure(conn))
-            ):
-                migration.upgrade()
+                spec = importlib.util.spec_from_file_location(
+                    "mfa_migration",
+                    Path(__file__).parents[1]
+                    / "alembic/legacy_versions/0084_local_mfa.py",
+                )
+                migration = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(migration)
+                with patch.object(
+                    migration, "op", Operations(MigrationContext.configure(conn))
+                ):
+                    migration.upgrade()
+                spec = importlib.util.spec_from_file_location(
+                    "notification_migration",
+                    Path(__file__).parents[1]
+                    / "alembic/legacy_versions/0085_security_notifications.py",
+                )
+                migration = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(migration)
+                with patch.object(
+                    migration, "op", Operations(MigrationContext.configure(conn))
+                ):
+                    migration.upgrade()
         cls.app = FastAPI()
         cls.app.include_router(login_routes.router)
         cls.app.include_router(routes.router)
@@ -113,8 +129,9 @@ class LocalMfaTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        with cls.engine.begin() as conn:
-            conn.execute(text(f"DROP SCHEMA {cls.schema} CASCADE"))
+        if URL:
+            with cls.engine.begin() as conn:
+                conn.execute(text(f"DROP SCHEMA {cls.schema} CASCADE"))
         cls.engine.dispose()
 
     def setUp(self):
@@ -122,6 +139,7 @@ class LocalMfaTests(unittest.TestCase):
         self.patches = [
             patch.object(mfa, "get_valkey", return_value=self.redis),
             patch.object(identity, "get_valkey", return_value=self.redis),
+            patch.object(login_operations, "get_valkey", return_value=self.redis),
             patch.object(login_routes, "get_valkey", return_value=self.redis),
             patch.object(settings, "mfa_policy", "optional"),
             patch.object(settings, "mfa_origin", "https://keen.example"),
@@ -427,7 +445,7 @@ class LocalMfaTests(unittest.TestCase):
             db.commit()
         with (
             patch.object(mail, "smtp_configured", return_value=True),
-            patch.object(mail, "request_ip", return_value="203.0.113.7"),
+            patch.object(login_routes, "_client_ip", return_value="203.0.113.7"),
         ):
             self.enrol()
             self.client.cookies.clear()
@@ -532,12 +550,20 @@ class LocalMfaTests(unittest.TestCase):
             )
 
     def test_password_routes_enqueue_security_alerts(self):
-        from app.api.payloads import AdminSetPasswordPayload, ChangePasswordPayload
         from app.api.routes import me, users
         from app.db.models import SecurityNotification
+        from app.schemas import AdminSetPasswordPayload, ChangePasswordPayload
         from app.services import security_notifications as mail
 
-        request = Request({"type": "http", "headers": [], "client": ("203.0.113.5", 1)})
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/v1/me/password",
+                "headers": [],
+                "client": ("203.0.113.5", 1),
+            }
+        )
         with self.Session() as db:
             user = db.get(User, self.uid)
             user.email = "alice@example.org"
@@ -546,7 +572,7 @@ class LocalMfaTests(unittest.TestCase):
             request.state.user = user
             with (
                 patch.object(mail, "smtp_configured", return_value=True),
-                patch.object(me, "get_valkey", return_value=self.redis),
+                patch.object(me_operations, "get_valkey", return_value=self.redis),
             ):
                 me.change_my_password(
                     ChangePasswordPayload(
@@ -697,8 +723,7 @@ class SecurityIpTests(unittest.TestCase):
     """Proxy trust and IP normalisation do not require a database."""
 
     def test_security_ip_trust_and_ipv6_normalisation(self):
-        from app.security.client_ip import normalise_ip
-        from app.services import security_notifications as mail
+        from app.security.client_ip import normalise_ip, request_ip
 
         request = Request(
             {
@@ -708,9 +733,9 @@ class SecurityIpTests(unittest.TestCase):
             }
         )
         with patch.object(settings, "security_trusted_proxy_cidrs", ""):
-            self.assertEqual(mail.request_ip(request), "10.0.0.3")
+            self.assertEqual(request_ip(request), "10.0.0.3")
         with patch.object(settings, "security_trusted_proxy_cidrs", "10.0.0.0/24"):
-            self.assertEqual(mail.request_ip(request), "203.0.113.8")
+            self.assertEqual(request_ip(request), "203.0.113.8")
         self.assertEqual(normalise_ip("::ffff:203.0.113.8"), "203.0.113.8")
 
 

@@ -4,68 +4,22 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session, joinedload
+from fastapi import Depends
+from sqlalchemy.orm import Session
 
-from app.core.cache import cache_delete_prefix
-from app.db.models import (
-    ControlItem,
-    CrossFrameworkControlLink,
-    EffectiveCrossFrameworkControlLink,
-    User,
-)
+from app.api.routing import Router
+from app.db.models import User
 from app.db.session import get_db
 from app.security.auth import require_admin
+from app.services import control_links as service
+from app.services.control_links import LinkInput
 
-router = APIRouter()
-
-
-class LinkInput(BaseModel):
-    source_control_id: uuid.UUID
-    rationale: str = Field(min_length=1, max_length=4000)
-
-
-def _control(db, cid):
-    row = db.get(ControlItem, cid)
-    if row is None:
-        raise HTTPException(404, "Control not found")
-    return row
-
-
-def _out(row):
-    source = row.source
-    rationale = row.rationale
-    if getattr(row, "derived", False):
-        shared = sorted(
-            set((source.meta or {}).get("osa_nist_controls", []))
-            & set((row.target.meta or {}).get("osa_nist_controls", []))
-        )
-        if shared:
-            rationale += " Shared NIST controls: " + ", ".join(shared) + "."
-    return {
-        "id": str(row.id),
-        "source_control_id": str(source.id),
-        "source_framework": source.framework_slug,
-        "source_ref": source.ref,
-        "source_title": source.title,
-        "target_control_id": str(row.target_control_id),
-        "rationale": rationale,
-        "derived": getattr(row, "derived", False),
-    }
+router = Router()
 
 
 @router.get("/v1/controls/{target_id}/cross-framework")
 def list_control_links(target_id: uuid.UUID, db: Session = Depends(get_db)):
-    _control(db, target_id)
-    rows = (
-        db.query(EffectiveCrossFrameworkControlLink)
-        .options(joinedload(EffectiveCrossFrameworkControlLink.source))
-        .filter(EffectiveCrossFrameworkControlLink.target_control_id == target_id)
-        .order_by(EffectiveCrossFrameworkControlLink.created_at)
-        .all()
-    )
-    return {"items": [_out(row) for row in rows]}
+    return service.list_control_links(target_id=target_id, db=db)
 
 
 @router.post("/v1/controls/{target_id}/cross-framework", status_code=201)
@@ -75,29 +29,9 @@ def create_control_link(
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    target = _control(db, target_id)
-    source = _control(db, payload.source_control_id)
-    if source.framework_slug == target.framework_slug:
-        raise HTTPException(400, "Cross-framework links require different frameworks")
-    if (
-        db.query(CrossFrameworkControlLink)
-        .filter_by(source_control_id=source.id, target_control_id=target.id)
-        .first()
-    ):
-        raise HTTPException(409, "This control link already exists")
-    row = CrossFrameworkControlLink(
-        source_control_id=source.id,
-        target_control_id=target.id,
-        rationale=payload.rationale.strip(),
-        created_by_user_id=user.id,
+    return service.create_control_link(
+        target_id=target_id, payload=payload, user=user, db=db
     )
-    if not row.rationale:
-        raise HTTPException(400, "Explain why the controls overlap")
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    cache_delete_prefix()
-    return _out(row)
 
 
 @router.delete("/v1/controls/{target_id}/cross-framework/{link_id}", status_code=204)
@@ -107,9 +41,6 @@ def remove_control_link(
     user=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    row = db.get(CrossFrameworkControlLink, link_id)
-    if row is None or row.target_control_id != target_id:
-        raise HTTPException(404, "Control link not found")
-    db.delete(row)
-    db.commit()
-    cache_delete_prefix()
+    return service.remove_control_link(
+        target_id=target_id, link_id=link_id, user=user, db=db
+    )

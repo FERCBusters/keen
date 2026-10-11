@@ -21,16 +21,13 @@ from app.db.models import (
     IsmsDocument,
     User,
 )
-from app.services.audit_schedules import (
-    occurrences_between,
-)
+from app.services.audit_schedules import occurrences_between
 from app.services.audits.access import (
     audit_or_404,
     can_read_audit,
     can_see_event,
     require_audit_access,
 )
-from app.services.audits.errors import AuditError
 from app.services.audits.references import clause_out, control_out, document_out
 from app.services.audits.samples import (
     clean_optional_entity_id,
@@ -55,6 +52,7 @@ from app.services.audits.validation import (
     try_uuid,
     user_email_snapshot,
 )
+from app.services.errors import DomainError
 
 
 def list_my_attendee_audits(*, limit: int, offset: int, db: Session, user: User):
@@ -186,14 +184,14 @@ def get_audit_scope_coverage(
     window_end = end or today
     window_start = start or (window_end - timedelta(days=365))
     if window_end < window_start:
-        raise AuditError(status_code=400, detail="end cannot be before start")
+        raise DomainError(status_code=400, detail="end cannot be before start")
     if (window_end - window_start).days > 3660:
-        raise AuditError(
+        raise DomainError(
             status_code=400, detail="Coverage window cannot exceed 10 years"
         )
     coverage_mode = str(mode or "both").strip().lower()
     if coverage_mode not in {"completed", "scheduled", "both"}:
-        raise AuditError(
+        raise DomainError(
             status_code=400, detail="mode must be completed, scheduled or both"
         )
 
@@ -358,7 +356,7 @@ def get_audit_scope_coverage(
 def list_audits_for_event(*, event_id: str, db: Session, user: User):
     eid = try_uuid(event_id)
     if not eid:
-        raise AuditError(status_code=400, detail="event_id must be a UUID")
+        raise DomainError(status_code=400, detail="event_id must be a UUID")
     can_see_event(db, user, eid)
 
     rows = (
@@ -409,7 +407,7 @@ def list_audits_for_entity(
     sampled_type = normalise_audit_sample_entity_type(entity_type)
     sampled_id = clean_optional_entity_id(entity_id)
     if not sampled_type or not sampled_id:
-        raise AuditError(status_code=400, detail="entity_id must be a UUID")
+        raise DomainError(status_code=400, detail="entity_id must be a UUID")
 
     rows = (
         db.query(AuditEvidence)

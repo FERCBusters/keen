@@ -8,16 +8,18 @@ import uuid
 from datetime import datetime
 from unittest.mock import Mock
 
+import app.services.artifacts as artifacts_operations
 import httpx
 import pytest
-from app.api.routes.isms.schemas import (
+from app.core.config import settings
+from app.ingest import forgejo, gitea, github, http
+from app.security.request_limits import RequestBodyLimitMiddleware
+from app.services.errors import DomainError
+from app.services.isms.schemas import (
     DocumentPayload,
     EffectivenessMetricEntryPayload,
     MeetingLinkPayload,
 )
-from app.core.config import settings
-from app.ingest import forgejo, gitea, github, http
-from app.security.request_limits import RequestBodyLimitMiddleware
 from fastapi import HTTPException
 from pydantic import ValidationError
 from starlette.requests import Request
@@ -264,9 +266,11 @@ def test_pdf_renderer_has_time_and_pixel_limits(contract_db, monkeypatch, tmp_pa
     contract_db.add(art)
     contract_db.commit()
     monkeypatch.setattr(artifacts, "_require_events_read", lambda *a: None)
-    monkeypatch.setattr(artifacts, "_PREVIEW_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(artifacts_operations, "_PREVIEW_CACHE_DIR", tmp_path)
     monkeypatch.setattr(
-        artifacts, "get_object_stream", lambda *a: {"Body": io.BytesIO(b"%PDF-1.7")}
+        artifacts_operations,
+        "get_object_stream",
+        lambda *a: {"Body": io.BytesIO(b"%PDF-1.7")},
     )
 
     def render(args, **kwargs):
@@ -274,8 +278,8 @@ def test_pdf_renderer_has_time_and_pixel_limits(contract_db, monkeypatch, tmp_pa
         assert kwargs["timeout"] == 15
         raise subprocess.TimeoutExpired(args, 15)
 
-    monkeypatch.setattr(artifacts.subprocess, "run", render)
-    with pytest.raises(HTTPException) as exc:
+    monkeypatch.setattr(artifacts_operations.subprocess, "run", render)
+    with pytest.raises((HTTPException, DomainError)) as exc:
         artifacts.preview_pdf_first_page(
             Request({"type": "http", "headers": []}), str(art.id), contract_db
         )

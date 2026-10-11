@@ -4,13 +4,13 @@ from types import SimpleNamespace
 from urllib.parse import unquote
 
 import pytest
-from fastapi import HTTPException
-
-from app.api.utils import content_disposition_attachment
-from app.api.routes.isms.personal import _org_path
-from app.db.models import IsmsOrgNode, IsmsDocumentFolder
+from app.db.models import IsmsDocumentFolder, IsmsOrgNode
 from app.security.csv import spreadsheet_cell
+from app.services.errors import DomainError
 from app.services.hierarchy import validate_parent
+from app.services.isms.personal import _org_path
+from app.storage.filenames import content_disposition_attachment
+from fastapi import HTTPException
 
 
 @pytest.mark.parametrize(
@@ -50,12 +50,12 @@ def test_hierarchy_rejects_self_descendant_and_existing_cycles(contract_db, mode
     db.flush()
     validate_parent(db, model, a.id, b.id)
     for parent in (a.id, b.id):
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, DomainError)) as exc:
             validate_parent(db, model, parent, a.id)
         assert exc.value.status_code == 400
     a.parent_id = b.id  # Simulate pre-existing or externally imported bad data.
     db.flush()
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         validate_parent(db, model, a.id)
 
 
@@ -70,8 +70,9 @@ def test_postgres_concurrent_reparenting_rechecks_after_lock(contract_postgres_e
     import uuid
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event
-    from sqlalchemy.orm import Session
+
     from sqlalchemy import text
+    from sqlalchemy.orm import Session
 
     engine = contract_postgres_engine
     if engine is None:
@@ -86,7 +87,7 @@ def test_postgres_concurrent_reparenting_rechecks_after_lock(contract_postgres_e
         with Session(engine) as db:
             db.execute(text("SET lock_timeout = '5s'"))
             started.set()
-            with pytest.raises(HTTPException) as exc:
+            with pytest.raises((HTTPException, DomainError)) as exc:
                 validate_parent(db, IsmsOrgNode, ids[0], ids[1])
             assert exc.value.status_code == 400
 

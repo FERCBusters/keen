@@ -4,16 +4,11 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.db.models import (
-    Audit,
-    AuditAttendee,
-    Event,
-    User,
-)
+from app.db.models import Audit, AuditAttendee, Event, User
 from app.security.diary_visibility import is_diary_event_visible
 from app.security.permissions import has_permission
-from app.services.audits.errors import AuditError
 from app.services.audits.validation import try_uuid
+from app.services.errors import DomainError
 
 AUDIT_MANAGE_PERMISSION = "audits.manage"
 
@@ -52,23 +47,23 @@ def can_read_audit(db: Session, user: User | None, audit: Audit) -> bool:
 
 def require_audit_access(db: Session, user: User | None, audit: Audit) -> None:
     if not can_read_audit(db, user, audit):
-        raise AuditError(status_code=403, detail="Audit access required")
+        raise DomainError(status_code=403, detail="Audit access required")
 
 
 def audit_or_404(db: Session, audit_id: str) -> Audit:
     aid = try_uuid(audit_id)
     if not aid:
-        raise AuditError(status_code=400, detail="audit_id must be a UUID")
+        raise DomainError(status_code=400, detail="audit_id must be a UUID")
     row = db.query(Audit).filter(Audit.id == aid).one_or_none()
     if not row:
-        raise AuditError(status_code=404, detail="Audit not found")
+        raise DomainError(status_code=404, detail="Audit not found")
     return row
 
 
 def can_see_event(db: Session, user: User, event_id: uuid.UUID) -> Event:
     row = db.query(Event).filter(Event.id == event_id).one_or_none()
     if not row:
-        raise AuditError(status_code=404, detail="Event not found")
+        raise DomainError(status_code=404, detail="Event not found")
     if row.source == "diary" and not is_diary_event_visible(db, user, event_id):
-        raise AuditError(status_code=404, detail="Event not found")
+        raise DomainError(status_code=404, detail="Event not found")
     return row

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import app.services.home as home_operations
 from app.api.routes import home
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
@@ -43,7 +44,7 @@ class HomeLogicTests(unittest.TestCase):
             ("gt", 6, 5, False),
         ]:
             self.assertEqual(
-                home.outside_threshold(value, target, op, "ms", "ms"), failed
+                home_operations.outside_threshold(value, target, op, "ms", "ms"), failed
             )
         for value, target, op, u, tu in [
             (None, 5, "lt", "ms", "ms"),
@@ -52,26 +53,28 @@ class HomeLogicTests(unittest.TestCase):
             (float("nan"), 5, "lt", "", ""),
             (5, float("inf"), "lt", "", ""),
         ]:
-            self.assertFalse(home.outside_threshold(value, target, op, u, tu))
+            self.assertFalse(
+                home_operations.outside_threshold(value, target, op, u, tu)
+            )
 
     def test_hierarchy_and_numeric_sort(self):
         rows = [
             SimpleNamespace(id=r, ref=r, title=r, in_scope=True)
             for r in ["A.10.1", "A.5.2", "A.5.1", "A.50.1", "flat"]
         ]
-        root = home.control_tree(rows)
+        root = home_operations.control_tree(rows)
         self.assertEqual(root["groups"], [{"id": "A", "title": "A", "count": 4}])
         self.assertEqual([r["ref"] for r in root["items"]], ["flat"])
         self.assertEqual(
-            [r["id"] for r in home.control_tree(rows, "A")["groups"]],
+            [r["id"] for r in home_operations.control_tree(rows, "A")["groups"]],
             ["A.5", "A.10", "A.50"],
         )
         self.assertEqual(
-            [r["ref"] for r in home.control_tree(rows, "A.5")["items"]],
+            [r["ref"] for r in home_operations.control_tree(rows, "A.5")["items"]],
             ["A.5.1", "A.5.2"],
         )
         self.assertEqual(
-            home.control_tree(rows, "missing"), {"groups": [], "items": []}
+            home_operations.control_tree(rows, "missing"), {"groups": [], "items": []}
         )
 
 
@@ -145,18 +148,18 @@ class HomeDatabaseTests(unittest.TestCase):
         self.request = Request({"type": "http", "headers": []})
         self.user = SimpleNamespace()
         self.stats = patch.object(
-            home,
+            home_operations,
             "stats_summary",
             return_value={"events": {"total": 3, "mapped": 1, "unmapped": 2}},
         ).start()
         self.coverage = patch.object(
-            home, "get_control_evidence_stats_by_id", return_value={}
+            home_operations, "get_control_evidence_stats_by_id", return_value={}
         ).start()
         self.role = patch.object(
-            home, "attach_effective_role", return_value="admin"
+            home_operations, "attach_effective_role", return_value="admin"
         ).start()
         self.permission = patch.object(
-            home, "has_permission", return_value=False
+            home_operations, "has_permission", return_value=False
         ).start()
 
     def overview(self):

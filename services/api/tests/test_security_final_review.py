@@ -10,6 +10,7 @@ import httpx2
 import pytest
 from app.security import redaction, sso_http
 from app.security.errors import collection_error
+from app.services.errors import DomainError
 
 
 @pytest.mark.parametrize(
@@ -279,7 +280,7 @@ def test_sso_provider_error_cannot_escape_as_traceback(monkeypatch):
         "_handle_oidc_callback",
         AsyncMock(side_effect=OAuth2Error(description="SECRET_VALUE")),
     )
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises((HTTPException, DomainError)) as error:
         asyncio.run(oidc.handle_callback(request, None, "oidc"))
     assert error.value.status_code == 400
     assert "SECRET_VALUE" not in error.value.detail

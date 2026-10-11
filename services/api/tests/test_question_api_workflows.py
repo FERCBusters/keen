@@ -4,22 +4,23 @@ import uuid
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock
 
-# Imported fixtures are discovered by pytest by name.
-from tests.test_management_api_workflows import api as api
-
+import app.services.questions as questions_operations
 import pytest
-from app.api.routes import questions
 from app.db.models import Event, EventQuestionPost, EventQuestionThread, User
 from app.worker import tasks
 
+# Imported fixtures are discovered by pytest by name.
+from tests.test_management_api_workflows import api as api
 from tests.test_management_api_workflows import request
 
 
 @pytest.fixture
 def question_api(api, monkeypatch):
     # Only outbound delivery is replaced; access checks and question writes run.
-    monkeypatch.setattr(questions, "_broadcast_open_count", AsyncMock())
-    monkeypatch.setattr(questions, "_broadcast_user_unread_count", AsyncMock())
+    monkeypatch.setattr(questions_operations, "_broadcast_open_count", AsyncMock())
+    monkeypatch.setattr(
+        questions_operations, "_broadcast_user_unread_count", AsyncMock()
+    )
     monkeypatch.setattr(tasks.send_question_webhooks_task, "delay", Mock())
     monkeypatch.setattr(tasks.send_question_reply_webhooks_task, "delay", Mock())
     event = Event(

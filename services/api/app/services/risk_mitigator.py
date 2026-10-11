@@ -10,10 +10,10 @@ import yaml
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.utils import control_justification as _control_justification
-from app.api.utils import control_upstream_url as _control_upstream_url
-from app.api.utils import ref_sort_key as _ref_sort_key
 from app.core.config import settings
+from app.core.references import control_justification as _control_justification
+from app.core.references import control_upstream_url as _control_upstream_url
+from app.core.references import ref_sort_key as _ref_sort_key
 from app.db.models import (
     ControlItem,
     FrameworkClause,

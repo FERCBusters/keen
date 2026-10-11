@@ -19,7 +19,7 @@ def osa_pairs():
 
 
 def enabled_control_ids(db):
-    from app.api.routes.frameworks import _framework_selection
+    from app.services.framework_catalogue import _framework_selection
 
     enabled = _framework_selection(db)[3]
     return select(ControlItem.id).where(ControlItem.framework_slug.in_(enabled))
@@ -110,8 +110,8 @@ def evidence_pairs(framework, db=None, event_ids=None):
     Optional event restrictions apply to both the source lookup and evidence
     branches, so exports and filtered facets cannot expand unrelated evidence.
     """
-    from app.api.routes.frameworks import _framework_selection
     from app.db.models import effective_cross_framework_links
+    from app.services.framework_catalogue import _framework_selection
 
     mapped = select(Mapping.event_id, Mapping.control_item_id)
     if event_ids is not None:
@@ -142,7 +142,7 @@ def has_inherited_evidence(db, framework):
     Start with actual mappings, never the global control-pair relation. Empty
     mapping tables and disabled crosswalks must not cause catalogue expansion.
     """
-    from app.api.routes.frameworks import _framework_selection
+    from app.services.framework_catalogue import _framework_selection
 
     enabled = _framework_selection(db)[3]
     if framework not in enabled:
@@ -195,8 +195,8 @@ def page_controls(db, framework, event_ids):
     Only compact control labels are loaded. Direct evidence wins, shared NIST
     references and multiple mapped sources cannot duplicate a target badge.
     """
-    from app.api.routes.frameworks import _framework_selection
     from app.db.models import effective_cross_framework_links
+    from app.services.framework_catalogue import _framework_selection
 
     if not event_ids:
         return {}

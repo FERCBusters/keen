@@ -3,23 +3,27 @@
 import secrets
 from datetime import timedelta
 
-# Imported fixtures are discovered by pytest by name.
-from tests.test_keen_agent import setup as setup
-
+import app.services.agent_enrollment as agent_enrollment_operations
 import pytest
 from app.agents.credentials import digest
 from app.api.routes import agent_enrollment as api
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import AgentEnrollmentProfile, AuditLog, KeenAgent
+from app.services.errors import DomainError
 
 from tests.test_keen_agent import record
+
+# Imported fixtures are discovered by pytest by name.
+from tests.test_keen_agent import setup as setup
 
 
 @pytest.fixture
 def fleet(setup, monkeypatch):
     client, factory, headers, info, stored, app = setup
-    monkeypatch.setattr(api, "get_valkey", lambda: None)
-    monkeypatch.setattr(api, "fixed_window_allow", lambda *a, **k: (True, 0))
+    monkeypatch.setattr(agent_enrollment_operations, "get_valkey", lambda: None)
+    monkeypatch.setattr(
+        agent_enrollment_operations, "fixed_window_allow", lambda *a, **k: (True, 0)
+    )
     r = client.post(
         "/v1/admin/agent-enrollment-profiles",
         json={
@@ -173,14 +177,18 @@ def test_expiry_network_limits_and_limiter_failure(fleet, monkeypatch):
         db.commit()
     # Forwarding headers cannot bypass an untrusted peer.
     assert enroll(c, p).status_code == 403
-    monkeypatch.setattr(api, "request_ip", lambda request: "192.0.2.5")
+    from app.api import context as api_context
+
+    monkeypatch.setattr(api_context, "request_ip", lambda request: "192.0.2.5")
     assert enroll(c, p).status_code == 201
     with f() as db:
         row = db.get(AgentEnrollmentProfile, p["profile"]["id"])
         row.expires_at = utc_now_naive() - timedelta(seconds=1)
         db.commit()
     assert enroll(c, p).status_code == 403
-    monkeypatch.setattr(api, "fixed_window_allow", lambda *a, **k: (False, 60))
+    monkeypatch.setattr(
+        agent_enrollment_operations, "fixed_window_allow", lambda *a, **k: (False, 60)
+    )
     assert enroll(c, p).status_code == 429
 
 
@@ -320,6 +328,6 @@ def test_profile_locks_serialize_revocation_on_postgres(
         api.manage(ident, "revoke", request, Response(), second)
         from fastapi import HTTPException
 
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises((HTTPException, DomainError)) as exc:
             authenticate(request, first)
         assert exc.value.status_code == 401

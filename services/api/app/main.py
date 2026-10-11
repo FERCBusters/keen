@@ -12,6 +12,7 @@ from fastapi.openapi.docs import (
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
+from app.api.errors import domain_error_response
 from app.api.routes import OPENAPI_TAGS
 from app.api.routes import router as api_router
 from app.core.config import settings
@@ -35,6 +36,7 @@ from app.security.permissions import (
 )
 from app.security.redaction import redact_query_string
 from app.security.roles import attach_effective_role
+from app.services.errors import DomainError
 
 
 @asynccontextmanager
@@ -62,6 +64,9 @@ app = FastAPI(
     root_path_in_servers=False,
     openapi_tags=OPENAPI_TAGS,
 )
+
+
+app.add_exception_handler(DomainError, domain_error_response)
 
 
 def custom_openapi():

@@ -1,10 +1,6 @@
-"""Compose ISMS feature routers in their original order.
+"""Compose ISMS HTTP adapters in routing order."""
 
-Shared names are retained for existing imports; new code should import the
-responsible submodule directly.
-"""
-
-from fastapi import APIRouter
+from app.api.routing import Router
 
 from . import (
     access_control,
@@ -19,44 +15,8 @@ from . import (
     personal,
     relationships,
 )
-from .access import (
-    _can_read_isms as _can_read_isms,
-)
-from .access import (
-    require_isms_manage as require_isms_manage,
-)
-from .access import (
-    require_isms_read as require_isms_read,
-)
-from .common import (
-    _clean_framework as _clean_framework,
-)
-from .serializers import (
-    _app_config_out as _app_config_out,
-)
-from .serializers import (
-    _asset_out as _asset_out,
-)
-from .serializers import (
-    _business_process_out as _business_process_out,
-)
-from .serializers import (
-    _document_out as _document_out,
-)
-from .serializers import (
-    _effectiveness_measure_out as _effectiveness_measure_out,
-)
-from .serializers import (
-    _entity_out as _entity_out,
-)
-from .serializers import (
-    _meeting_out as _meeting_out,
-)
-from .serializers import (
-    _objective_out as _objective_out,
-)
 
-router = APIRouter()
+router = Router()
 router.include_router(overview.router)
 router.include_router(objectives.router)
 router.include_router(documents.router)

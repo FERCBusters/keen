@@ -15,10 +15,10 @@ def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-def agent_credential(request):
+def parse_agent_credential(authorization):
     match = re.fullmatch(
         r"Bearer (ka_([0-9a-f-]{36})\.[A-Za-z0-9_-]{43})",
-        request.headers.get("authorization", ""),
+        authorization,
     )
     if not match:
         raise HTTPException(401, "Invalid agent credential")
@@ -46,8 +46,8 @@ def locked_agent(db, ident, *, lock=True):
     return agent, profile
 
 
-def authenticate(request, db, *, lock=True):
-    token, ident = agent_credential(request)
+def authenticate_credential(authorization, db, *, lock=True):
+    token, ident = parse_agent_credential(authorization)
     agent, _ = locked_agent(db, ident, lock=lock)
     if not hmac.compare_digest(agent.token_hash, digest(token)):
         raise HTTPException(401, "Invalid agent credential")
@@ -77,3 +77,13 @@ def view(agent):
             "enrollment_labels",
         )
     }
+
+
+def agent_credential(request):
+    return parse_agent_credential(request.headers.get("authorization", ""))
+
+
+def authenticate(request, db, *, lock=True):
+    return authenticate_credential(
+        request.headers.get("authorization", ""), db, lock=lock
+    )

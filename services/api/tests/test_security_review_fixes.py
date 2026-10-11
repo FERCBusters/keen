@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
+import app.services.sso_emails as sso_emails_operations
 import pytest
 from app.api.routes import questions, sso_emails
 from app.core.config import settings
@@ -20,6 +21,7 @@ from app.db.models import (
 )
 from app.security import oidc
 from app.security.client_ip import request_ip
+from app.services.errors import DomainError
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -95,7 +97,7 @@ def test_no_username_or_unverified_local_address(db, user, email):
     user.role = "admin"
     user.mfa_enabled = True
     db.commit()
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         link(db, email)
     assert db.query(UserIdentity).count() == 0
 
@@ -104,7 +106,7 @@ def test_no_username_or_unverified_local_address(db, user, email):
 def test_provider_verification_required(db, user, verified):
     db.add(UserSsoEmail(email=user.email, user_id=user.id))
     db.commit()
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         link(db, user.email, verified)
 
 
@@ -115,7 +117,7 @@ def test_verified_alias_existing_identity_and_configuration(db, user):
         replace(oidc._google_provider(), auto_link_existing=False),
         replace(oidc._google_provider(), allowed_email_domains="company.example"),
     ]:
-        with pytest.raises(HTTPException):
+        with pytest.raises((HTTPException, DomainError)):
             link(db, "other@example.org", provider=p)
     assert link(db, "Other@Example.org").id == user.id
     db.query(UserSsoEmail).delete()
@@ -145,7 +147,7 @@ def test_other_browser_or_provider_rejected_before_exchange(
     oidc.create_login_state(db, next_url="/", state=state)
     exchange = AsyncMock()
     monkeypatch.setattr(oidc, "_handle_oidc_callback", exchange)
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         asyncio.run(
             oidc.handle_callback(
                 req(
@@ -174,7 +176,7 @@ def test_correct_browser_single_use_and_expiry(db, user, monkeypatch):
     monkeypatch.setattr(oidc, "_handle_oidc_callback", exchange)
     r = req(cookie=f"{oidc.sso_binding_cookie()}=secret", query=f"state={state}")
     assert asyncio.run(oidc.handle_callback(r, db, "google"))[0].id == user.id
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         asyncio.run(oidc.handle_callback(r, db, "google"))
     row = oidc.create_login_state(db, next_url="/")
     state = row.state
@@ -210,7 +212,7 @@ def test_event_questions_and_owner_listing(db, user):
         EventQuestionPost(thread_id=thread.id, author_user_id=user.id, body="secret")
     )
     db.commit()
-    with pytest.raises(HTTPException) as e:
+    with pytest.raises((HTTPException, DomainError)) as e:
         questions.list_event_questions(str(ev.id), req(user), db)
     assert e.value.status_code == 403
     assert "private" not in str(questions.my_questions_list(req(user), db))
@@ -238,31 +240,28 @@ def test_event_questions_and_owner_listing(db, user):
 )
 def test_shared_proxy_interpretation(monkeypatch, peer, xff, expected):
     monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "10.0.0.0/24")
-    from app.api.routes.events import _client_ip as event_ip
+    from app.api.context import change_context
     from app.main import _client_ip
     from app.security.rate_limit import client_ip
-    from app.services.security_notifications import request_ip as notification_ip
 
     for fn in [
         request_ip,
         _client_ip,
-        event_ip,
-        questions._client_ip,
         client_ip,
-        notification_ip,
     ]:
         assert fn(req(peer=peer, xff=xff)) == expected
+    assert change_context(req(peer=peer, xff=xff)).client_ip == expected
 
 
 @pytest.fixture
 def mail(monkeypatch):
     monkeypatch.setattr(settings, "public_base_url", "https://keen.example")
-    monkeypatch.setattr(sso_emails.mailer, "smtp_configured", lambda: True)
-    monkeypatch.setattr(sso_emails, "recent_signin", lambda *a: None)
-    monkeypatch.setattr(sso_emails, "limit", lambda *a: None)
+    monkeypatch.setattr(sso_emails_operations.mailer, "smtp_configured", lambda: True)
+    monkeypatch.setattr(sso_emails_operations, "recent_signin", lambda *a: None)
+    monkeypatch.setattr(sso_emails_operations, "limit", lambda *a: None)
     messages = []
     monkeypatch.setattr(
-        sso_emails.mailer, "send_email", lambda **kw: messages.append(kw)
+        sso_emails_operations.mailer, "send_email", lambda **kw: messages.append(kw)
     )
     return messages
 
@@ -281,24 +280,24 @@ def confirm(db, user, token):
 def test_ownership_confirmation_replay_and_removal(db, user, mail):
     token = send(db, user, mail)
     assert (
-        db.get(SsoEmailChallenge, sso_emails.digest(token))
+        db.get(SsoEmailChallenge, sso_emails_operations.digest(token))
         and db.query(UserSsoEmail).count() == 0
     )
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         link(db, "alias@example.org")
     other = User(username="other", password_hash="synthetic", is_active=True)
     db.add(other)
     db.commit()
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         confirm(db, other, token)
     confirm(db, user, token)
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         confirm(db, user, token)
     assert link(db, "alias@example.org").id == user.id
     sso_emails.remove_address(
         sso_emails.Address(email="alias@example.org"), req(user), user, db
     )
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         link(db, "alias@example.org", subject="new")
     assert link(db, "alias@example.org").id == user.id
 
@@ -306,7 +305,7 @@ def test_ownership_confirmation_replay_and_removal(db, user, mail):
 @pytest.mark.parametrize("change", ["expire", "password", "mfa", "replace"])
 def test_invalidated_email_proofs(db, user, mail, change):
     token = send(db, user, mail)
-    row = db.get(SsoEmailChallenge, sso_emails.digest(token))
+    row = db.get(SsoEmailChallenge, sso_emails_operations.digest(token))
     if change == "expire":
         row.expires_at = utc_now_naive() - timedelta(seconds=1)
     if change == "password":
@@ -316,7 +315,7 @@ def test_invalidated_email_proofs(db, user, mail, change):
     if change == "replace":
         send(db, user, mail)
     db.commit()
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         confirm(db, user, token)
 
 
@@ -329,26 +328,26 @@ def test_conflict(db, user, mail):
     )
     db.add(other)
     db.commit()
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         send(db, user, mail, "taken@example.org")
     token = send(db, user, mail)
     db.add(UserSsoEmail(email="alias@example.org", user_id=other.id))
     db.commit()
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         confirm(db, user, token)
 
 
 def test_smtp_failure(db, user, mail, monkeypatch):
-    monkeypatch.setattr(sso_emails.mailer, "smtp_configured", lambda: False)
-    with pytest.raises(HTTPException):
+    monkeypatch.setattr(sso_emails_operations.mailer, "smtp_configured", lambda: False)
+    with pytest.raises((HTTPException, DomainError)):
         send(db, user, mail)
-    monkeypatch.setattr(sso_emails.mailer, "smtp_configured", lambda: True)
+    monkeypatch.setattr(sso_emails_operations.mailer, "smtp_configured", lambda: True)
 
     def fail(**kw):
         raise RuntimeError("sensitive SMTP detail")
 
-    monkeypatch.setattr(sso_emails.mailer, "send_email", fail)
-    with pytest.raises(HTTPException) as exc:
+    monkeypatch.setattr(sso_emails_operations.mailer, "send_email", fail)
+    with pytest.raises((HTTPException, DomainError)) as exc:
         send(db, user, mail)
     assert (
         "sensitive" not in str(exc.value) and db.query(SsoEmailChallenge).count() == 0
@@ -360,9 +359,9 @@ def test_smtp_failure(db, user, mail, monkeypatch):
     [(0, True, True), (301, True, False), (-10, True, False), (0, False, False)],
 )
 def test_recent_login(user, monkeypatch, age, identity, allowed):
-    monkeypatch.setattr(sso_emails, "get_valkey", lambda: None)
+    monkeypatch.setattr(sso_emails_operations, "get_valkey", lambda: None)
     monkeypatch.setattr(
-        sso_emails,
+        sso_emails_operations,
         "get_session",
         lambda *a: {
             "user_id": str(user.id) if identity else "other",
@@ -372,10 +371,10 @@ def test_recent_login(user, monkeypatch, age, identity, allowed):
         },
     )
     if allowed:
-        sso_emails.recent_signin(req(user), user)
+        sso_emails_operations.recent_signin(req(user), user)
     else:
-        with pytest.raises(HTTPException):
-            sso_emails.recent_signin(req(user), user)
+        with pytest.raises((HTTPException, DomainError)):
+            sso_emails_operations.recent_signin(req(user), user)
 
 
 def test_http_self_service_requires_authentication_and_csrf(db, user, monkeypatch):

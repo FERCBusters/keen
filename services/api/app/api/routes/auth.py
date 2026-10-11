@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
-from app.api.payloads import LoginPayload
+from app.api.routing import Router
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.core.valkey import get_valkey
 from app.db.models import User
 from app.db.session import get_db
+from app.schemas import LoginPayload
 from app.security.auth import (
     ROLE_ADMIN,
     authenticate_user,
@@ -28,17 +28,13 @@ from app.security.oidc import (
     set_sso_binding,
     sso_binding_cookie,
 )
-from app.security.permissions import get_effective_permission_codes, has_permission
+from app.security.permissions import has_permission
 from app.security.rate_limit import client_ip as _client_ip
 from app.security.rate_limit import fixed_window_allow
-from app.security.roles import attach_effective_role
-from app.security.sessions import (
-    create_session,
-    delete_session,
-    get_session,
-)
+from app.security.sessions import delete_session, get_session
+from app.services import login as login_service
 
-router = APIRouter()
+router = Router()
 
 
 def _oidc_configured() -> bool:
@@ -151,110 +147,18 @@ def complete_local_login(
     db, user, request, *, mfa_verified=False, verified_version=None
 ):
     # Freeze the version proven by this ceremony before any commit expires ORM state.
-    account_session_version = user.session_version
-    session_version = user.mfa_version if verified_version is None else verified_version
-    # Delete any existing session for this user to prevent session fixation.
-    existing_sid = request.cookies.get(settings.session_cookie_name)
-    if existing_sid:
-        try:
-            delete_session(get_valkey(), existing_sid)
-        except Exception:
-            pass
-
-    # Best-effort last-login timestamp
-    try:
-        user.last_login_at = utc_now_naive()
-        db.add(user)
-        db.commit()
-    except Exception:
-        db.rollback()
-
-    eff = attach_effective_role(db, user)
-    permission_codes = get_effective_permission_codes(db, user, use_cache=False)
-    authz_version = int(getattr(user, "authz_version", 0) or 0)
-
-    # Create new Valkey-backed session + set cookie.
-    # Always create a fresh session ID on login to prevent session fixation attacks.
-    sid = create_session(
-        get_valkey(),
-        user_id=str(user.id),
-        ttl_seconds=int(settings.session_ttl_seconds),
-        auth_method=user.auth_backend or "local",
-        mfa_version=session_version,
-        session_version=account_session_version,
+    sid, result = login_service.complete_local_login(
+        db,
+        user,
+        existing_sid=request.cookies.get(settings.session_cookie_name),
+        client_ip=_client_ip(request),
         mfa_verified=mfa_verified,
-        effective_role=eff,
-        permission_codes=permission_codes,
-        authz_version=authz_version,
+        verified_version=verified_version,
     )
-    try:
-        setattr(user, "session_id", sid)
-        setattr(user, "session_authz_version", authz_version)
-        setattr(user, "effective_permission_codes", set(permission_codes))
-    except Exception:
-        pass
-
-    from app.services.security_notifications import record_login
-
-    record_login(db, user, request)
-    db.commit()
-
-    can_manage_audits = has_permission(db, user, "audits.manage")
-    can_view_audits = can_manage_audits or has_permission(db, user, "audits.read")
-    can_manage_risks = has_permission(db, user, "risk.manage")
-    can_view_risks = can_manage_risks or has_permission(db, user, "risk.read")
-    can_manage_interested_parties = bool(
-        has_permission(db, user, "interested_parties.manage") or can_manage_risks
-    )
-    can_view_interested_parties = bool(
-        can_manage_interested_parties
-        or has_permission(db, user, "interested_parties.read")
-        or can_view_risks
-    )
-    can_manage_isms = bool(has_permission(db, user, "isms.manage") or can_manage_risks)
-    can_view_isms = bool(
-        can_manage_isms or has_permission(db, user, "isms.read") or can_view_risks
-    )
-    can_view_events = bool(has_permission(db, user, "events.read"))
-    can_create_questions = bool(has_permission(db, user, "question.create"))
-    can_delete_questions = bool(has_permission(db, user, "question.delete"))
-    incident_webhook_enabled = bool(
-        (getattr(settings, "incident_webhook_url", "") or "").strip()
-    )
-    can_create_incidents = bool(
-        incident_webhook_enabled and has_permission(db, user, "incident.create")
-    )
-    can_delete_incidents = bool(has_permission(db, user, "incident.delete"))
-
-    resp = JSONResponse(
-        {
-            "user": user.username,
-            "role": user.role,
-            "effective_role": eff,
-            "is_admin": (eff or "") == ROLE_ADMIN,
-            "can_view_audits": can_view_audits,
-            "can_manage_audits": can_manage_audits,
-            "can_view_risks": can_view_risks,
-            "can_manage_risks": can_manage_risks,
-            "can_view_interested_parties": can_view_interested_parties,
-            "can_manage_interested_parties": can_manage_interested_parties,
-            "can_view_isms": can_view_isms,
-            "can_manage_isms": can_manage_isms,
-            "can_view_events": can_view_events,
-            "can_create_questions": can_create_questions,
-            "can_question_events": can_create_questions,
-            "can_delete_questions": can_delete_questions,
-            "incident_webhook_enabled": incident_webhook_enabled,
-            "can_create_incidents": can_create_incidents,
-            "can_delete_incidents": can_delete_incidents,
-            "sample_pdf_footer": (settings.sample_pdf_footer or "").strip() or None,
-            "event_data_masking": settings.event_data_masking,
-        }
-    )
-    set_session_cookie(resp, sid)
-    # Provide a CSRF token for the UI to echo in a header on unsafe methods.
-    set_csrf_cookie(resp, generate_csrf_token())
-    return resp
+    response = JSONResponse(result)
+    set_session_cookie(response, sid)
+    set_csrf_cookie(response, generate_csrf_token())
+    return response
 
 
 @router.get("/v1/auth/oidc/start")
@@ -296,29 +200,14 @@ async def _complete_sso_callback(
     user, next_url, id_token, provider = await handle_callback(
         request, db, provider_key=provider_key
     )
-    account_session_version = user.session_version
-    eff = attach_effective_role(db, user)
-    permission_codes = get_effective_permission_codes(db, user, use_cache=False)
-    authz_version = int(getattr(user, "authz_version", 0) or 0)
-    existing_sid = request.cookies.get(settings.session_cookie_name)
-    if existing_sid:
-        delete_session(get_valkey(), existing_sid)
-    sid = create_session(
-        get_valkey(),
-        user_id=str(user.id),
-        ttl_seconds=int(settings.session_ttl_seconds),
-        auth_method=provider.key,
-        session_version=account_session_version,
-        oidc_id_token=id_token,
-        effective_role=eff,
-        permission_codes=permission_codes,
-        authz_version=authz_version,
+    sid = login_service.complete_sso_login(
+        db,
+        user,
+        provider=provider,
+        id_token=id_token,
+        existing_sid=request.cookies.get(settings.session_cookie_name),
+        client_ip=_client_ip(request),
     )
-
-    from app.services.security_notifications import record_login
-
-    record_login(db, user, request)
-    db.commit()
 
     dest = next_url or "/"
     resp = RedirectResponse(dest, status_code=302)

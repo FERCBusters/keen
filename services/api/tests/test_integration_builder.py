@@ -7,6 +7,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import app.services.integrations as integrations_operations
 import pytest
 from app.api.routes import integrations as api
 from app.core.datetime_utils import utc_now_naive
@@ -22,6 +23,7 @@ from app.integrations.engine import collect, external_id, normalize
 from app.integrations.errors import IntegrationError
 from app.integrations.schema import Definition, pointer
 from app.integrations.templates import templates
+from app.services.errors import DomainError
 from cryptography.fernet import Fernet
 from fastapi import HTTPException
 from sqlalchemy import create_engine, event
@@ -133,7 +135,7 @@ def test_related_details_are_encoded_and_mapped():
         )
 
     d = Definition(enrichments=[{"name": "job", "path": "/jobs/{/id}"}])
-    d.fields["outcome"] = api.Definition(
+    d.fields["outcome"] = integrations_operations.Definition(
         fields={
             **d.model_dump()["fields"],
             "outcome": {"path": "/_related/job/status", "transform": "lower"},
@@ -275,7 +277,7 @@ def test_draft_publish_rollback_and_conflict(database, monkeypatch):
         db,
     )
     assert db.get(Revision, ("collector", 1)).definition["path"] == "/"
-    with pytest.raises(HTTPException) as e:
+    with pytest.raises((HTTPException, DomainError)) as e:
         api.save_collector(
             "collector",
             api.CollectorInput(
@@ -336,7 +338,7 @@ def test_failure_budget_and_exclusive_runs(database, monkeypatch):
     db.expire_all()
     c = db.get(Collector, "collector")
     assert c.failures == 3 and not c.enabled and c.cursor is None
-    with pytest.raises(HTTPException):
+    with pytest.raises((HTTPException, DomainError)):
         api.action_collector("collector", "run", api.Action(version=1), db)
     api.action_collector("collector", "resume", api.Action(version=1), db)
     assert c.enabled and c.failures == 0
@@ -601,7 +603,7 @@ def test_pasted_sample_does_not_execute_framework_regex_rules(database, monkeypa
 @pytest.mark.parametrize("method", ["POST", "PUT", "DELETE"])
 def test_demo_blocks_integration_mutations(monkeypatch, method):
     monkeypatch.setattr(api.settings, "demo_mode", True)
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises((HTTPException, DomainError)) as exc:
         api.integration_demo_guard(SimpleNamespace(method=method))
     assert exc.value.status_code == 403
 
