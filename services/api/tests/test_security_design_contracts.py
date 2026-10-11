@@ -599,3 +599,69 @@ def test_production_code_never_opts_out_of_tls_verification():
                     and target.attr == "check_hostname"
                     for target in node.targets
                 ), (path, node.lineno)
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/v1/webhooks/isms/effectiveness-metrics/test", "/v1/webhooks/example/test"],
+)
+def test_disabled_webhooks_reject_before_credentials(
+    production_client, monkeypatch, path
+):
+    from app.api.routes import webhooks
+    from app.ingest.connections import deployment_settings
+
+    monkeypatch.setattr(deployment_settings, "webhooks_enabled", False)
+    verify = Mock(side_effect=AssertionError("Credentials must not be consulted"))
+    monkeypatch.setattr(webhooks, "verify_secret", verify)
+    response = production_client[0].post(path, json={"value": 1})
+    assert response.status_code == 503
+    verify.assert_not_called()
+
+
+def test_metric_webhook_rate_limit_precedes_credentials(production_client, monkeypatch):
+    from app.api.routes import webhooks
+    from app.ingest.connections import deployment_settings
+
+    monkeypatch.setattr(deployment_settings, "webhooks_enabled", True)
+    monkeypatch.setattr(webhooks, "get_valkey", lambda: production_client[1])
+    limiter = Mock(return_value=(False, 60))
+    monkeypatch.setattr(webhooks, "fixed_window_allow", limiter)
+    verify = Mock(side_effect=AssertionError("Must reject before credential check"))
+    monkeypatch.setattr(webhooks, "verify_secret", verify)
+    response = production_client[0].post(
+        "/v1/webhooks/isms/effectiveness-metrics/test", json={"value": 1}
+    )
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "60"
+    assert limiter.call_args.kwargs["fail_closed"] is True
+    verify.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "value", ["NaN", "Infinity", "-Infinity", "1e309", float("nan"), float("inf")]
+)
+def test_webhook_metric_requires_finite_number(value):
+    from app.api.routes.webhooks import _webhook_metric_value
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        _webhook_metric_value(value)
+    assert exc.value.status_code == 400
+    assert _webhook_metric_value("12.5") == 12.5
+
+
+def test_enabled_metric_webhook_checks_secret(production_client, monkeypatch):
+    from app.api.routes import webhooks
+    from app.ingest.connections import deployment_settings
+
+    monkeypatch.setattr(deployment_settings, "webhooks_enabled", True)
+    monkeypatch.setattr(webhooks, "get_valkey", lambda: production_client[1])
+    monkeypatch.setattr(webhooks, "fixed_window_allow", Mock(return_value=(True, 0)))
+    verify = Mock(return_value=False)
+    monkeypatch.setattr(webhooks, "verify_secret", verify)
+    response = production_client[0].post(
+        "/v1/webhooks/isms/effectiveness-metrics/test", json={"value": 1}
+    )
+    assert response.status_code == 403
+    assert verify.call_args.args[0] == "isms_metrics"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from datetime import date, datetime
 from typing import Any
@@ -19,6 +20,29 @@ from app.security.rate_limit import fixed_window_allow
 from app.services.entity_changelog import record_entity_changelog
 
 router = APIRouter()
+
+
+def _require_webhook_enabled():
+    from app.ingest.connections import deployment_settings
+
+    if not deployment_settings.webhooks_enabled:
+        raise HTTPException(503, "Webhook ingestion is disabled")
+
+
+def _limit_webhook(request: Request, provider: str):
+    from app.security.client_ip import request_ip
+
+    ok, retry = fixed_window_allow(
+        get_valkey(),
+        f"keen:rl:webhook:{provider}:ip:{request_ip(request)}",
+        100,
+        60,
+        fail_closed=True,
+    )
+    if not ok:
+        raise HTTPException(
+            429, "Webhook rate limit exceeded", headers={"Retry-After": str(retry)}
+        )
 
 
 def _webhook_parse_date(value: Any) -> date | None:
@@ -65,9 +89,14 @@ def _webhook_metric_value(value: Any) -> float | None:
     if value in (None, ""):
         return None
     try:
-        return float(value)
+        result = float(value)
+        if not math.isfinite(result):
+            raise ValueError()
+        return result
     except Exception:
-        raise HTTPException(status_code=400, detail="metric_value must be numeric")
+        raise HTTPException(
+            status_code=400, detail="metric_value must be a finite number"
+        )
 
 
 def _webhook_actual_source_names(db: Session) -> list[str]:
@@ -142,6 +171,8 @@ async def isms_effectiveness_metric_webhook(
       "source_url": "https://grafana.example/..."
     }
     """
+    _require_webhook_enabled()
+    _limit_webhook(request, "isms_metrics")
     headers = {k: v for k, v in request.headers.items()}
     if not verify_secret("isms_metrics", headers):
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
@@ -272,12 +303,10 @@ async def webhook_ingest(
     from app.ingest.connections import (
         connection_scope,
         connections,
-        deployment_settings,
         resolve,
     )
 
-    if not deployment_settings.webhooks_enabled:
-        raise HTTPException(503, "Webhook ingestion is disabled")
+    _require_webhook_enabled()
     from app.services.ingestion_pause import require_receiving
 
     require_receiving(db, "webhooks")
@@ -288,19 +317,7 @@ async def webhook_ingest(
     if connection is None:
         raise HTTPException(404, "Connection not found")
     with connection_scope(resolve(connection)):
-        # Rate limiting: 100 requests per minute per IP
-        # Fail closed to prevent DoS during Redis outages
-        ip = request.client.host if request.client else "unknown"
-        r = get_valkey()
-        ok, retry = fixed_window_allow(
-            r, f"keen:rl:webhook:{provider}:ip:{ip}", 100, 60, fail_closed=True
-        )
-        if not ok:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Rate limit exceeded. Retry after {retry} seconds.",
-                headers={"Retry-After": str(retry)},
-            )
+        _limit_webhook(request, provider)
 
         headers = {k: v for k, v in request.headers.items()}
         if not verify_secret(provider, headers):
