@@ -51,6 +51,8 @@ def directory_identity(username, password):
             raise ValueError("Invalid LDAP attribute")
         if bool(settings.ldap_bind_dn) != bool(settings.ldap_bind_password):
             raise ValueError("Supply both service bind DN and password")
+        # ldap3 performs its own hostname check with CERT_REQUIRED, before
+        # open()/start_tls() returns. Bind credentials only after those succeed.
         tls = Tls(
             validate=ssl.CERT_REQUIRED, ca_certs_file=settings.ldap_ca_cert_path or None
         )

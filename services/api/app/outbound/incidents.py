@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 import httpx
 
 from app.core.config import settings
+from app.ingest.http import client as secure_http_client
 
 log = logging.getLogger(__name__)
 
@@ -112,8 +113,8 @@ class IncidentWebhookConfig:
     def validate(self) -> None:
         if not self.url:
             raise ValueError("Incident webhook is not configured")
-        if not self.url.startswith(("https://", "http://")):
-            raise ValueError("Incident webhook URL must start with http:// or https://")
+        if not self.url.startswith("https://"):
+            raise ValueError("Incident webhook URL must start with https://")
 
 
 def build_incident_payload(
@@ -166,7 +167,7 @@ def post_incident_webhook(
     if config.signing_secret:
         headers[config.signature_header] = _hmac_sha256(config.signing_secret, body)
 
-    with httpx.Client(
+    with secure_http_client(
         timeout=timeout, follow_redirects=False, verify=True, trust_env=False
     ) as client:
         with client.stream(

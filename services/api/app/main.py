@@ -138,7 +138,7 @@ def bootstrap_initial_admin():
 # -----------------------------------------------------------------------------
 
 
-from app.security.route_policy import is_public_request
+from app.security.route_policy import is_permission_checked_write, is_public_request
 
 
 @app.middleware("http")
@@ -239,7 +239,9 @@ async def auth_middleware(request: Request, call_next):
         # Default rule: only admin can mutate backend state, except for
         # explicitly user/permission-owned workflows checked below.
         if request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
-            if (
+            if is_permission_checked_write(request):
+                pass  # authentication and CSRF still apply; adapters enforce permissions
+            elif (
                 path
                 in {
                     "/v1/me/password",

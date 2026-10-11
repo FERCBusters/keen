@@ -535,7 +535,6 @@ class Settings(BaseSettings):
     # If true (recommended), webhook providers MUST be configured with a secret
     # header + an environment variable containing the expected secret.
     # When false, providers without a secret configuration are accepted.
-    webhooks_require_secret: bool = Field(default=True)
 
     # -----------------------------------------------------------------------------
     # Ingestion SSRF protection

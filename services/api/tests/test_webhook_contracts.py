@@ -10,7 +10,6 @@ from app.ingest import webhooks
 
 @pytest.fixture
 def policy(monkeypatch):
-    monkeypatch.setattr(settings, "webhooks_require_secret", True)
     monkeypatch.setattr(
         webhooks,
         "load_webhook_policies",
@@ -47,8 +46,8 @@ def test_unconfigured_and_missing_secret_fail_closed(policy, monkeypatch):
     assert not webhooks.verify_secret(
         "monitor", {"X-Monitor-Secret": "synthetic-secret"}
     )
-    monkeypatch.setattr(settings, "webhooks_require_secret", False)
-    assert webhooks.verify_secret("unknown", {})
+    monkeypatch.setenv("KEEN_WEBHOOKS_REQUIRE_SECRET", "false")
+    assert not webhooks.verify_secret("unknown", {})
     assert not webhooks.verify_secret("monitor", {})
 
 

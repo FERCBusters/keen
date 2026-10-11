@@ -16,15 +16,22 @@ from app.core.config import settings
 _LOCAL_BUCKET = "local://local"
 
 
-def _local_path(key: str) -> Path:
-    root = Path(settings.artifact_local_dir).resolve()
+def _validate_key(key: str) -> None:
     if (
         not key
         or key.startswith("/")
         or "\\" in key
+        or any(ord(c) < 32 or ord(c) == 127 for c in key)
+        or "?" in key
+        or "#" in key
         or any(part in {"", ".", ".."} for part in key.split("/"))
     ):
-        raise ValueError("Invalid local artifact key")
+        raise ValueError("Invalid artifact key")
+
+
+def _local_path(key: str) -> Path:
+    _validate_key(key)
+    root = Path(settings.artifact_local_dir).resolve()
     path = (root / key).resolve()
     if not path.is_relative_to(root) or path == root:
         raise ValueError("Invalid local artifact path")
@@ -132,6 +139,7 @@ def _client(*, cleanup=False):
 
 def put_bytes(key: str, data: bytes, content_type: str) -> StoredObject:
     """Store an immutable blob and return its stable URI and checksum."""
+    _validate_key(key)
     sha = hashlib.sha256(data).hexdigest()
     size = len(data)
 

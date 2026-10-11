@@ -68,7 +68,7 @@ You can configure several named connections of the same type. KEEN records the c
 
 Built-in HTTP collectors require HTTPS, restrict authenticated Git feeds to their connection’s server, and limit individual responses to 16 MiB. They request uncompressed responses and ignore ambient proxy settings. Set `KEEN_INGESTION_ALLOWED_CIDRS` to restrict access to private networks; an empty value permits private networks except prohibited addresses such as loopback and link-local.
 
-Custom API destinations require `KEEN_INTEGRATION_ALLOWED_HOSTS`; approved private destinations also require `KEEN_INTEGRATION_PRIVATE_CIDRS`. Configure upstream credentials with the access needed for collection.
+Custom API destinations require `KEEN_INTEGRATION_ALLOWED_HOSTS` (`host` for HTTPS port 443 or `host:port` for an explicit port); approved private destinations also require `KEEN_INTEGRATION_PRIVATE_CIDRS`. Configure upstream credentials with the access needed for collection.
 
 ## KEEN-agent
 

@@ -266,7 +266,9 @@ def test_pdf_renderer_has_time_and_pixel_limits(contract_db, monkeypatch, tmp_pa
     contract_db.add(art)
     contract_db.commit()
     monkeypatch.setattr(artifacts, "_require_events_read", lambda *a: None)
-    monkeypatch.setattr(artifacts_operations, "_PREVIEW_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(
+        artifacts_operations, "_PREVIEW_CACHE", __import__("collections").OrderedDict()
+    )
     monkeypatch.setattr(
         artifacts_operations,
         "get_object_stream",

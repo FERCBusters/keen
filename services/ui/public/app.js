@@ -232,6 +232,28 @@ export async function initNavbar(...args) {
     nav: { ...cfg.nav, expandClass: 'navbar-expand-lg' },
     framework: { ...cfg.framework, selectMaxChars: 19, selectMinChars: 14 },
   });
+  // KEEN logout mutates authentication state and therefore uses a CSRF POST.
+  const logoutButton = document.getElementById('navLogout');
+  const logoutUrl = String(me?.logout_url || '').trim();
+  if (logoutButton && (!logoutUrl || logoutUrl === '/api/v1/auth/oidc/logout')) {
+    logoutButton.addEventListener(
+      'click',
+      async (event) => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        logoutButton.disabled = true;
+        try {
+          const result = await apiPost(logoutUrl || '/api/v1/auth/logout', {});
+          location.href = result?.logout_url || '/login.html';
+        } catch {
+          logoutButton.textContent = 'Retry logout';
+          logoutButton.title = 'Logout failed. Please try again.';
+          logoutButton.disabled = false;
+        }
+      },
+      { capture: true },
+    );
+  }
   const navRoot = document.getElementById('navbar');
   if (navRoot && !navRoot.querySelector('[data-keen-documentation]')) {
     const list = navRoot.querySelector('.navbar-nav');

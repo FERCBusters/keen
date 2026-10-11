@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -29,6 +31,7 @@ from app.services.activity_log import record_action as _audit_action
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.uploads import Upload
+from app.storage.filenames import safe_download_ext
 from app.storage.s3 import put_bytes
 
 QUESTION_CREATE_PERMISSION = "question.create"
@@ -401,13 +404,13 @@ def admin_list_questions(*, status: str | None = None, db: Session):
     return {"items": items}
 
 
-def _notification_snapshot(headers, cookies, *, counts=False):
+def _notification_snapshot(headers, cookies, *, counts=False, peer=None):
     # Never hold a dependency-scoped DB transaction for a WebSocket lifetime.
     from app.db.session import SessionLocal
 
     with SessionLocal() as db:
         user = get_current_user_from_headers_cookies(
-            headers, cookies, db, refresh_session=False
+            headers, cookies, db, refresh_session=False, peer=peer
         )
         if not user:
             return None
@@ -475,35 +478,33 @@ async def _store_attachments(
     now = _utcnow()
     day = now.strftime("%Y-%m-%d")
 
-    for f in (files or [])[:10]:
-        try:
+    if len(files or []) > 10:
+        raise DomainError(400, "At most 10 attachments are allowed")
+    # Validate the entire batch before any durable storage writes. Stage one
+    # file at a time on disk to avoid retaining all upload bytes in memory.
+    with tempfile.TemporaryDirectory(prefix="keen_question_") as temporary:
+        staged = []
+        for index, f in enumerate(files or []):
             filename = getattr(f, "filename", None) or "attachment"
             content_type = (
                 getattr(f, "content_type", None) or "application/octet-stream"
             )
-            ext = os.path.splitext(filename)[1] or ""
-
-            try:
-                data = await f.read()
-            except Exception:
-                data = None
-
+            ext = safe_download_ext(os.path.splitext(filename)[1])
+            data = await f.read()
             if not data:
                 continue
-
-            # Validate file content against declared content-type
             if not _validate_file_magic(data, content_type, filename):
-                import logging
-
-                logging.warning(
-                    f"File upload validation failed for {filename}: "
-                    f"content-type={content_type}, size={len(data)} bytes"
-                )
                 raise DomainError(
-                    status_code=400,
-                    detail="Invalid file type: file content does not match declared content-type",
+                    400,
+                    "Invalid file type: file content does not match declared content-type",
                 )
+            path = Path(temporary) / str(index)
+            path.write_bytes(data)
+            staged.append((path, filename, content_type, ext))
+            del data
 
+        for path, filename, content_type, ext in staged:
+            data = path.read_bytes()
             key = (
                 f"questions/{day}/{event_id}/{thread_id}/{post_id}/{uuid.uuid4()}{ext}"
             )
@@ -528,9 +529,6 @@ async def _store_attachments(
             db.flush()
 
             out_ids.append(a.id)
-        except Exception:
-            # If one attachment fails, continue the rest.
-            continue
 
     return out_ids
 
@@ -1042,7 +1040,12 @@ async def create_entity_question(
     if target_type in {"pestle", "pestle_risk"}:
         target_type = "pestle_item"
 
-    if files and target_type != "event":
+    if target_type == "event":
+        return await create_event_question(
+            event_id=str(eid), context=context, db=db, body_text=body_text, files=files
+        )
+
+    if files:
         raise DomainError(
             400, "Attachments are currently only supported for evidence questions"
         )

@@ -40,10 +40,10 @@ def verify_secret(provider: str, headers: dict[str, str]) -> bool:
     )
     secret_header = pol.get("secret_header")
     secret_env = pol.get("secret_env")
-    # Fail closed by default: if the provider is not configured with a secret
+    # Always fail closed: if the provider is not configured with a secret
     # policy, reject the request.
     if not secret_header or not secret_env:
-        return not bool(settings.webhooks_require_secret)
+        return False
 
     import os
 

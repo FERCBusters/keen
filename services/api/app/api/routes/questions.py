@@ -178,7 +178,11 @@ async def ws_notifications(websocket: WebSocket):
         await websocket.close(code=1008, reason="Origin not allowed")
         return
     initial = await run_in_threadpool(
-        _notification_snapshot, websocket.headers, websocket.cookies, counts=True
+        _notification_snapshot,
+        websocket.headers,
+        websocket.cookies,
+        counts=True,
+        peer=getattr(websocket.client, "host", None),
     )
     if initial is None:
         await websocket.close(code=1008)
@@ -204,7 +208,10 @@ async def ws_notifications(websocket: WebSocket):
                     break
             except asyncio.TimeoutError:
                 current = await run_in_threadpool(
-                    _notification_snapshot, websocket.headers, websocket.cookies
+                    _notification_snapshot,
+                    websocket.headers,
+                    websocket.cookies,
+                    peer=getattr(websocket.client, "host", None),
                 )
                 if current is None or current[0] != identity:
                     break

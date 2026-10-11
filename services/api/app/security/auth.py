@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import uuid
 from collections.abc import Mapping
 
@@ -16,8 +17,11 @@ ROLE_ADMIN = "admin"
 ROLE_NORMAL = "normal"
 ROLE_INHERIT = "inherit"
 
+# A fixed-cost miss path prevents local account discovery through password work.
+_DUMMY_PASSWORD_HASH = hash_password(uuid.uuid4().hex)
 
-def _remote_user_from_headers(headers: Mapping[str, str]) -> str | None:
+
+def _remote_user_from_headers(headers: Mapping[str, str], *, peer=None) -> str | None:
     """Extract a trusted remote user identity from headers.
 
     This is intended for deployments where an upstream reverse proxy sets an
@@ -43,6 +47,22 @@ def _remote_user_from_headers(headers: Mapping[str, str]) -> str | None:
     if not header_name:
         header_name = "REMOTE_USER"
 
+    from app.security.client_ip import normalise_ip
+
+    address = normalise_ip(peer)
+    try:
+        trusted = address and any(
+            ipaddress.ip_address(address) in ipaddress.ip_network(c.strip())
+            for c in settings.security_trusted_proxy_cidrs.split(",")
+            if c.strip()
+        )
+    except ValueError:
+        trusted = False
+    if not trusted:
+        return None
+    if hasattr(headers, "getlist") and len(headers.getlist(header_name)) != 1:
+        return None
+
     raw = headers.get(header_name)
     if raw is None:
         return None
@@ -60,7 +80,9 @@ def _remote_user_from_headers(headers: Mapping[str, str]) -> str | None:
 
 def _remote_user_from_request(request: Request) -> str | None:
     # Backwards-compatible wrapper.
-    return _remote_user_from_headers(request.headers)
+    return _remote_user_from_headers(
+        request.headers, peer=getattr(request.client, "host", None)
+    )
 
 
 def cookie_name() -> str:
@@ -78,6 +100,7 @@ def get_current_user_from_headers_cookies(
     db: Session,
     *,
     refresh_session: bool = True,
+    peer: str | None = None,
 ) -> User | None:
     """Return the current user, or None if not authenticated.
 
@@ -85,7 +108,7 @@ def get_current_user_from_headers_cookies(
     """
 
     # 1) Trusted upstream identity header (optional).
-    remote_username = _remote_user_from_headers(headers)
+    remote_username = _remote_user_from_headers(headers, peer=peer)
     if remote_username:
         user = db.query(User).filter(User.username == remote_username).one_or_none()
         if user and user.is_active:
@@ -153,7 +176,9 @@ def get_current_user_from_headers_cookies(
 
 
 def get_current_user_from_request(request: Request, db: Session) -> User | None:
-    return get_current_user_from_headers_cookies(request.headers, request.cookies, db)
+    return get_current_user_from_headers_cookies(
+        request.headers, request.cookies, db, peer=getattr(request.client, "host", None)
+    )
 
 
 def require_authenticated(request: Request) -> User:
@@ -198,14 +223,11 @@ def clear_session_cookie(response: Response) -> None:
 
 def authenticate_user(db: Session, username: str, password: str) -> User | None:
     u = (username or "").strip()
-    if not u:
-        return None
     user = db.query(User).filter(User.username == u).one_or_none()
-    if not user or not user.is_active or user.auth_backend == "ldap":
-        return None
-    if not verify_password(password or "", user.password_hash):
-        return None
-    return user
+    eligible = bool(user and user.is_active and user.auth_backend != "ldap")
+    password_hash = user.password_hash if eligible else _DUMMY_PASSWORD_HASH
+    valid = verify_password(password or "", password_hash)
+    return user if eligible and valid else None
 
 
 def create_user(

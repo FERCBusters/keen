@@ -1301,17 +1301,23 @@ if (prefsForm) {
 if (logoutBtn && me?.logout_enabled !== false) {
   const logoutUrl = (me && me.logout_url ? String(me.logout_url) : '').trim();
   logoutBtn.addEventListener('click', async () => {
-    // Native OIDC logout needs the stored ID token, so navigate directly to
-    // KEEN's logout URL; it clears local cookies before redirecting upstream.
-    if (logoutUrl) {
+    if (logoutUrl && logoutUrl !== '/api/v1/auth/oidc/logout') {
       location.href = logoutUrl;
       return;
     }
 
     try {
-      await apiPost('/api/v1/auth/logout', {});
+      const result = await apiPost(logoutUrl || '/api/v1/auth/logout', {});
+      if (logoutUrl && result?.logout_url) {
+        location.href = result.logout_url;
+        return;
+      }
     } catch (_e) {
-      // ignore
+      if (status) {
+        status.textContent = 'Logout failed. Please try again.';
+        status.style.display = '';
+      }
+      return;
     }
 
     location.href = '/login.html';

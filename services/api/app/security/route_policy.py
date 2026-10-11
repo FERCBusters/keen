@@ -28,6 +28,7 @@ PUBLIC_HTTP_ROUTES = {
         "/v1/auth/sso/{provider_key}/callback",
     ),
     "POST": (
+        "/v1/auth/oidc/logout",
         "/v1/auth/login",
         "/v1/auth/logout",
         "/v1/otlp/logs",
@@ -62,4 +63,37 @@ def is_public_request(request):
     return any(
         pattern.fullmatch(request.url.path)
         for pattern in _COMPILED.get(request.method.upper(), ())
+    )
+
+
+_PERMISSION_WRITES = {
+    "POST": (
+        "/v1/me/shortcuts",
+        "/v1/questions/entities/{entity_type}/{entity_id}",
+        "/v1/questions/entities/{entity_type}/{entity_id}/mark-seen",
+        "/v1/pestle/items",
+        "/v1/pestle/business-processes",
+    ),
+    "PATCH": (
+        "/v1/pestle/items/{item_id}",
+        "/v1/pestle/business-processes/{process_id}",
+        "/v1/pestle/items/{item_id}/business-processes",
+        "/v1/pestle/items/{item_id}/clauses",
+    ),
+    "DELETE": (
+        "/v1/me/shortcuts/{shortcut_id}",
+        "/v1/pestle/items/{item_id}",
+        "/v1/pestle/business-processes/{process_id}",
+    ),
+}
+_PERMISSION_WRITE_PATTERNS = {
+    method: tuple(compile_path(path)[0] for path in paths)
+    for method, paths in _PERMISSION_WRITES.items()
+}
+
+
+def is_permission_checked_write(request):
+    return any(
+        pattern.fullmatch(request.url.path)
+        for pattern in _PERMISSION_WRITE_PATTERNS.get(request.method.upper(), ())
     )

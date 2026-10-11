@@ -1079,14 +1079,12 @@ def admin_update_group(
                 )
             new_role = nr
 
-        # Prevent lockout: don't remove the last effective admin.
-        if (g.role or "") == ROLE_ADMIN and (new_role or "") != ROLE_ADMIN:
-            if count_effective_admins(db) <= 1:
-                raise DomainError(
-                    status_code=400, detail="Cannot remove the last effective admin"
-                )
-
+        was_admin = (g.role or "") == ROLE_ADMIN
         g.role = new_role
+        db.flush()
+        if was_admin and new_role != ROLE_ADMIN and count_effective_admins(db) == 0:
+            db.rollback()
+            raise DomainError(400, "Cannot remove the last effective admin")
 
     db.add(g)
     _bump_user_authz(db, affected_user_ids)
@@ -1106,16 +1104,12 @@ def admin_delete_group(*, group_id: str, user, db: Session) -> dict:
 
     affected_user_ids = _group_member_ids(db, gid)
 
-    # Prevent lockout: deleting an admin-role group might remove the last effective admin.
-    if (g.role or "") == ROLE_ADMIN:
-        # If there are no explicit admins, this group could be the only source of admin.
-        # We do a conservative check: if only one effective admin exists, block deletion.
-        if count_effective_admins(db) <= 1:
-            raise DomainError(
-                status_code=400, detail="Cannot remove the last effective admin"
-            )
-
+    was_admin = (g.role or "") == ROLE_ADMIN
     db.delete(g)
+    db.flush()
+    if was_admin and count_effective_admins(db) == 0:
+        db.rollback()
+        raise DomainError(400, "Cannot remove the last effective admin")
     _bump_user_authz(db, affected_user_ids)
     db.commit()
     return {"ok": True}
@@ -1141,19 +1135,15 @@ def admin_set_group_members(
 
     old_user_ids = _group_member_ids(db, gid)
 
-    # Prevent lockout: if this is an admin-role group, ensure at least one admin remains after member changes.
-    if (g.role or "") == ROLE_ADMIN:
-        # If there are no explicit admins and we're about to clear members, block.
-        # We apply the change in a transaction-like manner: compute result first.
-        if (not ids) and count_effective_admins(db) <= 1:
-            raise DomainError(
-                status_code=400, detail="Cannot remove the last effective admin"
-            )
-
     db.execute(user_groups.delete().where(user_groups.c.group_id == gid))
     if ids:
         rows = [{"user_id": uid, "group_id": gid} for uid in ids]
         db.execute(user_groups.insert(), rows)
+
+    db.flush()
+    if (g.role or "") == ROLE_ADMIN and count_effective_admins(db) == 0:
+        db.rollback()
+        raise DomainError(400, "Cannot remove the last effective admin")
 
     _bump_user_authz(db, set(old_user_ids) | set(ids))
     db.commit()

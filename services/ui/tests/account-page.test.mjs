@@ -48,3 +48,18 @@ test('password form rejects missing inputs and displays backend failures', async
   await settle(() => ui.el('status').textContent.includes('Incorrect current password'));
   assert.equal(ui.calls.find((c) => c.method === 'POST').body.current_password, 'wrong');
 });
+
+test('OIDC logout posts before navigating and displays failure without claiming logout', async (t) => {
+  const ui = await page(t, 'account', {
+    me: { logout_enabled: true, logout_url: '/api/v1/auth/oidc/logout' },
+    get: async () => ({ items: [] }),
+    post: async (u) => {
+      assert.equal(u.pathname, '/api/v1/auth/oidc/logout');
+      throw new Error('CSRF rejected');
+    },
+  });
+  ui.el('logoutBtn').click();
+  await settle(() => ui.el('status').textContent.includes('Logout failed'));
+  assert.equal(ui.calls.filter((c) => c.method === 'POST').length, 1);
+  assert.equal(ui.window.location.pathname, '/account.html');
+});

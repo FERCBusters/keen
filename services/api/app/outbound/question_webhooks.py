@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 import httpx
 
 from app.core.config import settings
+from app.ingest.http import client as secure_http_client
 
 log = logging.getLogger(__name__)
 
@@ -392,7 +393,7 @@ def send_question_created_webhooks(
 
     out: dict[str, Any] = {"enabled": True}
 
-    with httpx.Client(
+    with secure_http_client(
         timeout=timeout, follow_redirects=False, verify=True, trust_env=False
     ) as client:
         # Slack
@@ -464,8 +465,10 @@ def send_question_created_webhooks(
             if not url:
                 continue
             try:
-                r = client.post(url, content=body, headers=generic_headers)
-                code = int(r.status_code)
+                with client.stream(
+                    "POST", url, content=body, headers=generic_headers
+                ) as response:
+                    code = int(response.status_code)
                 if 200 <= code < 300:
                     g_sent += 1
                 else:

@@ -835,3 +835,245 @@ def test_audit_domain_adapter_preserves_access_and_csrf(production_client, contr
         assert invalid.headers["cache-control"] == "no-store"
     finally:
         main.app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.parametrize("path", ["/v1/auth/logout", "/v1/auth/oidc/logout"])
+def test_logout_requires_intent_and_get_never_revokes(
+    production_client, monkeypatch, contract_db, path
+):
+    from app import main
+    from app.api.routes import auth as routes
+    from app.db.session import get_db
+
+    client, redis, _, reader = production_client
+    monkeypatch.setattr(routes, "get_valkey", lambda: redis)
+    main.app.dependency_overrides[get_db] = lambda: contract_db
+    sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
+    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(csrf.csrf_cookie_name(), "synthetic-token")
+    try:
+        response = client.get(
+            path, headers={"Origin": "https://evil.example"}, follow_redirects=False
+        )
+        assert response.status_code == 303
+        assert sessions.get_session(redis, sid)
+        for headers in (
+            {},
+            {"Origin": "https://evil.example", "X-CSRF-Token": "synthetic-token"},
+            {"Origin": "https://keen.example", "X-CSRF-Token": "wrong"},
+        ):
+            assert client.post(path, headers=headers).status_code == 403
+            assert sessions.get_session(redis, sid)
+        response = client.post(
+            path,
+            headers={
+                "Origin": "https://keen.example",
+                "X-CSRF-Token": "synthetic-token",
+            },
+        )
+        assert response.status_code in {200, 204}
+        assert sessions.get_session(redis, sid) is None
+    finally:
+        main.app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.parametrize(
+    "path,method",
+    [
+        ("/v1/me/shortcuts", "POST"),
+        ("/v1/me/shortcuts/00000000-0000-0000-0000-000000000001", "DELETE"),
+        ("/v1/questions/entities/risk/00000000-0000-0000-0000-000000000001", "POST"),
+        ("/v1/pestle/items", "POST"),
+        ("/v1/pestle/items/00000000-0000-0000-0000-000000000001", "PATCH"),
+    ],
+)
+def test_permission_owned_mutations_keep_csrf_and_route_permissions(
+    production_client, contract_db, monkeypatch, path, method
+):
+    from app import main
+    from app.db.models import Permission, user_permissions
+    from app.db.session import get_db
+    from app.services import pestle
+
+    client, redis, _, reader = production_client
+    main.app.dependency_overrides[get_db] = lambda: contract_db
+    sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
+    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(csrf.csrf_cookie_name(), "synthetic-token")
+    headers = {"Origin": "https://keen.example", "X-CSRF-Token": "synthetic-token"}
+    try:
+        assert client.request(method, path, json={}).status_code == 403
+        if "/pestle/" in path:
+            assert (
+                client.request(
+                    method, path, json={"title": "fixture"}, headers=headers
+                ).status_code
+                == 403
+            )
+            permission = Permission(code="pestle.manage", description="fixture")
+            contract_db.add(permission)
+            contract_db.flush()
+            contract_db.execute(
+                user_permissions.insert().values(
+                    user_id=reader.id, permission_id=permission.id
+                )
+            )
+            reader.authz_version += 1
+            contract_db.commit()
+            monkeypatch.setattr(pestle, "create_pestle_item", lambda **kw: {"ok": True})
+            monkeypatch.setattr(pestle, "update_pestle_item", lambda **kw: {"ok": True})
+            # Valid adapter payload reaches a permitted domain operation.
+            response = client.request(
+                method,
+                path,
+                json={
+                    "item": "fixture",
+                    "type": "Political",
+                    "lens": "External",
+                    "framework": "A",
+                },
+                headers=headers,
+            )
+            assert response.status_code == 200, response.text
+        elif "/questions/" in path:
+            assert (
+                client.request(
+                    method, path, json={"body": "fixture"}, headers=headers
+                ).status_code
+                == 403
+            )
+        else:
+            # A self-service write reaches its adapter (validation or missing object
+            # is distinct from the middleware's blanket admin denial).
+            response = client.request(method, path, json={}, headers=headers)
+            assert response.status_code in {400, 404, 422}, response.text
+    finally:
+        main.app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.parametrize(
+    "path,method",
+    [
+        ("/v1/me/shortcuts/new-admin-action", "POST"),
+        ("/v1/pestle/items/new-admin-action/extra", "PATCH"),
+        ("/v1/questions/entities/risk/id/delete", "POST"),
+        ("/v1/me/shortcuts", "PUT"),
+    ],
+)
+def test_permission_write_inventory_does_not_exempt_neighbour_paths(path, method):
+    from app.security.route_policy import is_permission_checked_write
+
+    assert not is_permission_checked_write(request(path, method))
+    assert not is_public_request(request(path, method))
+
+
+def test_question_attachment_rejection_rolls_back_http_operation(
+    production_client, contract_db, monkeypatch, tmp_path
+):
+    from datetime import datetime
+
+    from app import main
+    from app.db.models import (
+        Event,
+        EventQuestionPost,
+        EventQuestionThread,
+        Permission,
+        user_permissions,
+    )
+    from app.db.session import get_db
+    from app.worker import tasks
+    from sqlalchemy.orm import Session
+
+    client, redis, _, reader = production_client
+    event = Event(
+        source="fixture",
+        external_id="attachment-fixture",
+        timestamp=datetime(2026, 1, 1),
+        summary="fixture",
+    )
+    contract_db.add(event)
+    for code in ("events.read", "question.create"):
+        permission = Permission(code=code, description="fixture")
+        contract_db.add(permission)
+        contract_db.flush()
+        contract_db.execute(
+            user_permissions.insert().values(
+                user_id=reader.id, permission_id=permission.id
+            )
+        )
+    contract_db.commit()
+
+    def db_session():
+        with Session(
+            bind=contract_db.get_bind(),
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        ) as db:
+            yield db
+
+    main.app.dependency_overrides[get_db] = db_session
+    monkeypatch.setattr(settings, "artifact_storage_backend", "local")
+    monkeypatch.setattr(settings, "artifact_local_dir", str(tmp_path))
+    monkeypatch.setattr(questions_operations, "_broadcast_open_count", AsyncMock())
+    monkeypatch.setattr(tasks.send_question_webhooks_task, "delay", Mock())
+    sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
+    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(csrf.csrf_cookie_name(), "synthetic-token")
+    headers = {"Origin": "https://keen.example", "X-CSRF-Token": "synthetic-token"}
+    path = f"/v1/questions/entities/event/{event.id}"
+    try:
+        response = client.post(
+            path,
+            data={"body": "Question"},
+            files={"attachments": ("bad.pdf", b"not a PDF", "application/pdf")},
+            headers=headers,
+        )
+        assert response.status_code == 400, response.text
+        assert contract_db.query(EventQuestionThread).count() == 0
+        assert contract_db.query(EventQuestionPost).count() == 0
+        assert not list(tmp_path.rglob("*.pdf"))
+        response = client.post(
+            path,
+            data={"body": "Question"},
+            files={
+                "attachments": ("good.pdf", b"%PDF-1.7\nfixture", "application/pdf")
+            },
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        assert contract_db.query(EventQuestionThread).count() == 1
+        assert contract_db.query(EventQuestionPost).count() == 1
+        assert len(list(tmp_path.rglob("*.pdf"))) == 1
+    finally:
+        main.app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.parametrize(
+    "peer,headers,expected",
+    [
+        ("127.0.0.1", [("REMOTE_USER", "security-reader")], 204),
+        (
+            "192.0.2.1",
+            [("REMOTE_USER", "security-reader"), ("X-Forwarded-For", "127.0.0.1")],
+            401,
+        ),
+        (
+            "127.0.0.1",
+            [("REMOTE_USER", "security-reader"), ("REMOTE_USER", "security-admin")],
+            401,
+        ),
+    ],
+)
+def test_assembled_remote_user_uses_direct_peer_and_rejects_duplicates(
+    production_client, monkeypatch, peer, headers, expected
+):
+    from app import main
+
+    monkeypatch.setattr(settings, "trust_remote_user", True)
+    monkeypatch.setattr(settings, "oidc_enabled", False)
+    monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "127.0.0.1/32")
+    client = TestClient(main.app, base_url="https://keen.example", client=(peer, 12345))
+    try:
+        assert client.get("/v1/auth/check", headers=headers).status_code == expected
+    finally:
+        client.close()

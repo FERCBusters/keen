@@ -867,9 +867,6 @@ def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session
             {
                 "id": str(a.id),
                 "kind": a.kind,
-                "storage_uri": _maybe_mask_event_sample_value(
-                    _redact_str(a.storage_uri), sample_export
-                ),
                 "sha256": a.sha256,
                 "content_type": a.content_type,
                 "size_bytes": a.size_bytes,

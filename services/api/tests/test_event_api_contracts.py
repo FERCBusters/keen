@@ -330,3 +330,26 @@ def test_csv_export_neutralises_source_formulas_without_changing_json(api, paylo
     )
     item = next(r for r in response.json()["items"] if r["id"] == str(row.id))
     assert item["summary"] == payload
+
+
+def test_event_artifact_presentation_omits_storage_location(api):
+    from app.db.models import Artifact
+
+    artifact = Artifact(
+        event_id=api.rows[0].id,
+        kind="fixture",
+        storage_uri="s3://private-bucket/private-key",
+        sha256="0" * 64,
+        content_type="text/plain",
+        size_bytes=1,
+    )
+    api.db.add(artifact)
+    api.db.commit()
+    response = api.client.get(
+        f"/api/v1/events/{api.rows[0].id}", params={"framework": "A"}
+    )
+    assert response.status_code == 200, response.text
+    shown = response.json()["artifacts"][0]
+    assert shown["id"] == str(artifact.id)
+    assert "storage_uri" not in shown
+    assert "private-bucket" not in response.text

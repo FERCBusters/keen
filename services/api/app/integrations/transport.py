@@ -39,9 +39,31 @@ def destination(url):
         raise IntegrationError(
             "Use an HTTPS URL without embedded credentials or fragment"
         )
-    allowed = os.environ.get("KEEN_INTEGRATION_ALLOWED_HOSTS", "").split(",")
-    if u.hostname.lower() not in {v.strip().lower() for v in allowed if v.strip()}:
-        raise IntegrationError("Destination is not in KEEN_INTEGRATION_ALLOWED_HOSTS")
+    allowed = set()
+    try:
+        for value in os.environ.get("KEEN_INTEGRATION_ALLOWED_HOSTS", "").split(","):
+            if not value.strip():
+                continue
+            entry = urlsplit("https://" + value.strip())
+            if (
+                not entry.hostname
+                or entry.username
+                or entry.password
+                or entry.path
+                or entry.query
+                or entry.fragment
+            ):
+                raise ValueError("Invalid allowed origin")
+            allowed.add((entry.hostname.lower(), entry.port or 443))
+        permitted = (u.hostname.lower(), u.port or 443) in allowed
+    except ValueError:
+        raise IntegrationError(
+            "Invalid integration destination or host allowlist"
+        ) from None
+    if not permitted:
+        raise IntegrationError(
+            "Destination host and port are not in KEEN_INTEGRATION_ALLOWED_HOSTS"
+        )
     networks = [
         ipaddress.ip_network(v.strip())
         for v in os.environ.get("KEEN_INTEGRATION_PRIVATE_CIDRS", "").split(",")

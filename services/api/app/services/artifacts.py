@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import os
-import shutil
 import subprocess
 import sys
 import tempfile
+from collections import OrderedDict
 from pathlib import Path
-from threading import BoundedSemaphore
+from threading import BoundedSemaphore, Lock
 
 from sqlalchemy.orm import Session
 
@@ -28,7 +27,10 @@ from app.storage.filenames import (
 )
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri
 
-_PREVIEW_CACHE_DIR = Path(os.getenv("KEEN_PREVIEW_CACHE_DIR", "/var/lib/keen/previews"))
+_PREVIEW_CACHE = OrderedDict()
+_PREVIEW_CACHE_LOCK = Lock()
+_PREVIEW_CACHE_BYTES = 32 * 1024 * 1024
+_PREVIEW_CACHE_ENTRIES = 128
 _PREVIEW_SLOTS = BoundedSemaphore(2)
 EVENTS_READ_PERMISSION = "events.read"
 
@@ -50,13 +52,17 @@ def _run_preview(cmd):
         _PREVIEW_SLOTS.release()
 
 
-def _ensure_preview_cache_dir() -> None:
-    try:
-        _PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        # If we can't create a cache dir, we will still try generating previews
-        # into a temp directory and return them directly.
-        pass
+def _cache_preview(key, data):
+    if len(data) > _PREVIEW_CACHE_BYTES:
+        return
+    with _PREVIEW_CACHE_LOCK:
+        _PREVIEW_CACHE.pop(key, None)
+        while _PREVIEW_CACHE and (
+            len(_PREVIEW_CACHE) >= _PREVIEW_CACHE_ENTRIES
+            or sum(map(len, _PREVIEW_CACHE.values())) + len(data) > _PREVIEW_CACHE_BYTES
+        ):
+            _PREVIEW_CACHE.popitem(last=False)
+        _PREVIEW_CACHE[key] = data
 
 
 def download_artifact(*, artifact_id: str, sample_export: bool, db: Session, user):
@@ -92,7 +98,18 @@ def download_artifact(*, artifact_id: str, sample_export: bool, db: Session, use
         settings.event_data_masking or "false"
     ) in {"samples", "true"}
     if should_mask_sample and is_textual_content_type(art.content_type):
-        data = b"".join(iter_stream(body))
+        # Structured masking needs a complete document. Bound actual bytes,
+        # including objects whose stored size metadata is stale or incorrect.
+        stream = iter_stream(body)
+        data = bytearray()
+        try:
+            for chunk in stream:
+                if len(data) + len(chunk) > 20 * 1024 * 1024:
+                    raise DomainError(413, "Artifact exceeds the 20 MiB masking limit")
+                data.extend(chunk)
+        finally:
+            stream.close()
+        data = bytes(data)
         masked, mask_status = mask_event_data_bytes(data, art.content_type)
         if mask_status == "redacted":
             headers["X-Artifact-Original-SHA256"] = art.sha256
@@ -131,13 +148,14 @@ def preview_pdf_first_page(*, artifact_id: str, db: Session, user):
         raise DomainError(status_code=404, detail="Artifact not found")
 
     ct = (art.content_type or "").lower()
-    if "application/pdf" not in ct:
+    if ct.split(";", 1)[0].strip() != "application/pdf":
         raise DomainError(status_code=415, detail="Preview is only supported for PDFs")
 
-    _ensure_preview_cache_dir()
-    cache_path = _PREVIEW_CACHE_DIR / f"{art.sha256}.png"
-    if cache_path.exists():
-        return cache_path
+    with _PREVIEW_CACHE_LOCK:
+        cached = _PREVIEW_CACHE.get(art.sha256)
+        if cached is not None:
+            _PREVIEW_CACHE.move_to_end(art.sha256)
+            return cached
 
     # Fetch the PDF to a temp file
     try:
@@ -201,13 +219,9 @@ def preview_pdf_first_page(*, artifact_id: str, db: Session, user):
                     status_code=500, detail="Preview renderer did not produce output"
                 )
 
-            # Cache if possible; otherwise return directly.
-            try:
-                cache_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(out_path), str(cache_path))
-                return cache_path
-            except Exception:
-                return out_path.read_bytes()
+            data = out_path.read_bytes()
+            _cache_preview(art.sha256, data)
+            return data
     except DomainError:
         raise
     except Exception:

@@ -19,7 +19,13 @@ from app.security.auth import (
     clear_session_cookie,
     set_session_cookie,
 )
-from app.security.csrf import clear_csrf_cookie, generate_csrf_token, set_csrf_cookie
+from app.security.csrf import (
+    clear_csrf_cookie,
+    csrf_valid,
+    generate_csrf_token,
+    request_origin_allowed,
+    set_csrf_cookie,
+)
 from app.security.oidc import (
     build_authorize_redirect,
     configured_sso_providers,
@@ -224,8 +230,19 @@ async def _complete_sso_callback(
     return resp
 
 
+def _require_logout_intent(request):
+    if request.cookies.get(settings.session_cookie_name):
+        allowed = csrf_valid(request)
+    else:
+        # Pending MFA has a separate credential and may not have a CSRF cookie.
+        allowed = request_origin_allowed(request, require_origin=True)
+    if not allowed:
+        raise HTTPException(403, "CSRF token missing or invalid")
+
+
 @router.post("/v1/auth/logout")
 def logout(request: Request, db: Session = Depends(get_db)) -> Response:
+    _require_logout_intent(request)
     sid = request.cookies.get(settings.session_cookie_name) or ""
     if sid:
         delete_session(get_valkey(), sid)
@@ -239,6 +256,7 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
 
 
 def _browser_logout_response(request: Request, db: Session) -> Response:
+    _require_logout_intent(request)
     sid = (request.cookies.get(settings.session_cookie_name) or "").strip()
     session_row = get_session(get_valkey(), sid) if sid else None
     id_token = str((session_row or {}).get("oidc_id_token") or "").strip()
@@ -258,9 +276,9 @@ def _browser_logout_response(request: Request, db: Session) -> Response:
             },
             safe=":/?&=",
         )
-        resp = RedirectResponse(f"{end_session}?{qs}", status_code=302)
+        resp = JSONResponse({"logout_url": f"{end_session}?{qs}"})
     else:
-        resp = RedirectResponse(post_logout or "/login.html", status_code=302)
+        resp = JSONResponse({"logout_url": post_logout or "/login.html"})
 
     from app.security import mfa
 
@@ -272,13 +290,17 @@ def _browser_logout_response(request: Request, db: Session) -> Response:
 
 @router.get("/v1/auth/logout")
 def browser_logout(request: Request, db: Session = Depends(get_db)) -> Response:
-    return _browser_logout_response(request, db)
+    return RedirectResponse("/account.html", status_code=303)
 
 
 @router.get("/v1/auth/oidc/logout")
 def oidc_logout(request: Request, db: Session = Depends(get_db)) -> Response:
-    """Clear KEEN's session and start RP-initiated logout when available."""
+    return RedirectResponse("/account.html", status_code=303)
 
+
+@router.post("/v1/auth/oidc/logout")
+def oidc_logout_post(request: Request, db: Session = Depends(get_db)) -> Response:
+    """Revoke the local session and return the provider logout destination."""
     return _browser_logout_response(request, db)
 
 

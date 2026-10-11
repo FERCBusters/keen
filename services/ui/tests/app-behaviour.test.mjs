@@ -151,3 +151,39 @@ test('changelog loader propagates API failure without rendering error markup', a
     u.close();
   }
 });
+
+test('navbar native logout uses POST and stops the vendor GET handler', async () => {
+  const calls = [];
+  let vendorClicked = false;
+  let u;
+  u = await loadUi('app.js', {
+    html: '<div id="navbar"><button id="navLogout">Logout</button></div>',
+    vendor: {
+      getUiConfig: () => ({ nav: {}, framework: {} }),
+      initCollapsibleFilterSections: () => {},
+      initNavbar: async () => {
+        u.document.getElementById('navLogout').addEventListener('click', () => {
+          vendorClicked = true;
+        });
+        return { logout_url: '/api/v1/auth/oidc/logout' };
+      },
+      apiGet: async () => ({ items: [] }),
+      apiPost: async (url) => {
+        calls.push(url);
+        throw new Error('CSRF rejected');
+      },
+    },
+  });
+  try {
+    await u.api.initNavbar();
+    const button = u.document.getElementById('navLogout');
+    button.click();
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(calls, ['/api/v1/auth/oidc/logout']);
+    assert.equal(vendorClicked, false);
+    assert.equal(button.textContent, 'Retry logout');
+    assert.equal(button.disabled, false);
+  } finally {
+    u.close();
+  }
+});

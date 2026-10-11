@@ -39,7 +39,7 @@
 
 ## Security re-review whenever completing a round of work
 
-Whenever completing a round of work, re-review the SECURITY.md and consider whether the changes you have implemented weaken in any way the security of KEEN. Examples of security issues include but are not limited to:
+Whenever completing a round of work, work through the required security review checklist in SECURITY.md, record evidence and untested limitations, and re-review the SECURITY.md and consider whether the changes you have implemented weaken in any way the security of KEEN. Examples of security issues include but are not limited to:
 
 - account takeover (session fixation/replay/confusion/race condition/concurrent revocation)
 - privilege escalation or auth bypass
