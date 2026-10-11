@@ -23,7 +23,7 @@ chmod 600 .env
 
 Before starting, edit `.env`:
 
-- Set a strong, unique `KEEN_BOOTSTRAP_ADMIN_PASSWORD`. The bootstrap account is created only when the user database is empty.
+- Set a strong, unique `KEEN_BOOTSTRAP_ADMIN_PASSWORD`. The bootstrap account is created only when the user database is empty. After confirming you can sign in, remove both bootstrap variables and recreate the containers; the account and its current password remain in the database.
 - Replace `POSTGRES_PASSWORD` and `KEEN_REDIS_PASSWORD` with separate random passwords. The supplied database and Redis URLs interpolate these values; URL-encode reserved characters if you write connection URLs yourself.
 - Set `KEEN_PUBLIC_BASE_URL` to the browser-facing origin. For an HTTPS deployment, set `KEEN_COOKIE_SECURE=true` and configure a TLS reverse proxy to the UI service.
 - Set `KEEN_INTEGRATION_SECRET_KEY` to a persistent Fernet key before saving source credentials. API and worker services must use the same key. Generate one with `openssl rand -base64 32 | tr '+/' '-_'` and keep it in your secrets manager and protected backups.

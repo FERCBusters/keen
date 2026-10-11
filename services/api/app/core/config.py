@@ -23,30 +23,11 @@ class Settings(BaseSettings):
     # -----------------------------------------------------------------------------
     # Authentication / sessions
     # -----------------------------------------------------------------------------
-    # Bootstrap admin user (optional, for first-run only)
-    # If set and no users exist, the API will create this initial admin user on startup.
-    # REQUIRED in production: must be set via environment variable, no default value.
+    # Optional first-run credentials. Importing settings must also work for
+    # migrations, workers and existing installations without bootstrap secrets.
+    # Validate credentials at account creation, after checking the user database.
     bootstrap_admin_username: str = Field(default="")
-
-    @field_validator("bootstrap_admin_username")
-    @classmethod
-    def validate_bootstrap_admin_username(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError(
-                "KEEN_BOOTSTRAP_ADMIN_USERNAME must be set when bootstrapping admin user"
-            )
-        return v.strip()
-
     bootstrap_admin_password: str = Field(default="")
-
-    @field_validator("bootstrap_admin_password")
-    @classmethod
-    def validate_bootstrap_admin_password(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError(
-                "KEEN_BOOTSTRAP_ADMIN_PASSWORD must be set when bootstrapping admin user"
-            )
-        return v.strip()
 
     # Hosted owner-only v1. This is a security boundary, not UI configuration.
     demo_mode: bool = False

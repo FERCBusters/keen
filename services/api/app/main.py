@@ -116,19 +116,29 @@ def bootstrap_initial_admin():
         return  # Owner is created explicitly before API startup.
     uname = (settings.bootstrap_admin_username or "").strip()
     pwd = (settings.bootstrap_admin_password or "").strip()
-    if not uname or not pwd:
-        return
+    if not uname and not pwd:
+        return  # Explicit bootstrap is optional; no account is created.
 
     db = SessionLocal()
     try:
         if db.query(User).count() > 0:
             return
+        if not uname or not pwd:
+            raise ValueError(
+                "Supply both bootstrap credentials for initial account creation"
+            )
+        if len(pwd) < 8:
+            raise ValueError("Bootstrap password must be at least eight characters")
         create_user(db, username=uname, password=pwd, role=ROLE_ADMIN)
         print(f"[keen] Bootstrapped initial admin user: {uname}")
-    except Exception:  # pragma: no cover
-        print(
-            "[keen] Failed to bootstrap admin user; check database and bootstrap configuration"
-        )
+    except Exception:
+        # Do not expose passwords or database diagnostics in startup failures.
+        db.rollback()
+        raise RuntimeError(
+            "Initial administrator creation failed; on an empty installation supply "
+            "both KEEN_BOOTSTRAP_ADMIN_USERNAME and KEEN_BOOTSTRAP_ADMIN_PASSWORD "
+            "(at least eight characters), and check database availability"
+        ) from None
     finally:
         db.close()
 
