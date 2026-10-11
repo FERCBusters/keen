@@ -1,5 +1,5 @@
 import { safeNext } from './navigation-security.js';
-import { qs, toast } from '/app.js';
+import { qs, toast } from '/vendor/mosp-design-system/app.js';
 
 const status = document.getElementById('status');
 const form = document.getElementById('loginForm');
@@ -10,6 +10,12 @@ const btn = document.getElementById('loginBtn');
 const ssoSection = document.getElementById('ssoSection');
 const ssoButtons = document.getElementById('ssoButtons');
 const localLoginHint = document.getElementById('localLoginHint');
+
+// Clean the current history entry before using its query as a return destination.
+// This cannot remove requests already recorded by the browser or reverse proxy.
+if (new URL(location.href).searchParams.has('password')) {
+  history.replaceState(null, '', safeNext(location.pathname + location.search + location.hash));
+}
 
 const explicitNext = qs('next', null);
 const hadExplicitNext = !!explicitNext;
@@ -182,4 +188,10 @@ if (form) {
       if (btn) btn.disabled = false;
     }
   });
+}
+
+// Enable credentials only after the handler that prevents native submission exists.
+if (form) {
+  document.getElementById('loginFields').disabled = false;
+  document.getElementById('loginLoading').hidden = true;
 }

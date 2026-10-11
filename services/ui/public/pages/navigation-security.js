@@ -6,6 +6,11 @@ export function safeNext(raw, origin = location.origin) {
   try {
     const url = new URL(value, origin);
     if (url.origin !== origin || ['/login.html', '/mfa.html'].includes(url.pathname)) return '/';
+    // Never carry credentials accidentally placed in a login URL into redirects.
+    if (url.searchParams.has('password')) {
+      url.searchParams.delete('password');
+      url.searchParams.delete('username');
+    }
     return url.pathname + url.search + url.hash;
   } catch {
     return '/';

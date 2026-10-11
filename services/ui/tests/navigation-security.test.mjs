@@ -21,3 +21,13 @@ for (const value of ['/events.html?source=github#results', '/account.html#securi
     assert.equal(safeNext(value, origin), value),
   );
 }
+
+test('post-authentication navigation drops accidental login credentials', () => {
+  const destination = new URL(
+    safeNext('/events.html?password=synthetic-secret&username=test&source=loki', origin),
+    origin,
+  );
+  assert.equal(destination.searchParams.has('password'), false);
+  assert.equal(destination.searchParams.has('username'), false);
+  assert.equal(destination.searchParams.get('source'), 'loki');
+});
