@@ -97,3 +97,91 @@ Reviewers check these boundaries after every round of changes and before a relea
 - **Untrusted data and isolation:** exercise SQL/configuration injection, stored and reflected XSS, unsafe links, CSV formulas, regex resource exhaustion and malicious upstream evidence. Trace credentials, caches, cursors, artifacts and redaction through two connections of the same provider. Check audit output, errors, logs and exports for leaks and preserve evidence identity and ownership.
 
 The full validation workflow uses PostgreSQL and Valkey. SQLite, mocked transports and DOM tests are useful focused checks; they do not establish PostgreSQL locking/migrations, real-browser behaviour or resistance to sustained distributed attacks. Missing coverage is an explicit review limitation requiring follow-up, not evidence of safety.
+
+## Required review procedure
+
+The checklist above is an inventory of security concerns. Reviewers also follow this procedure to establish which application surfaces and behaviours have been assessed. Apply it to the affected workflows after a change and to the complete installation before a release. A review of individual components does not establish the security of their interactions.
+
+### Establish the review scope and attack surface
+
+Record the exact source revision, final working-tree changes, dependency versions, build output and deployment configuration under review. Identify the supported authentication methods, storage backends, source types and optional features that are enabled or assessed. Do not use results from a different revision or configuration as verification of the delivered application.
+
+Build an inventory from the actual code, build and deployment configuration. Include:
+
+- Browser pages, forms, navigation, static assets, direct and dynamic module dependencies, and native browser actions.
+- Reverse-proxy locations and rewrites, authentication subrequests, public asset exceptions, caching and response-header inheritance, and the externally reachable API paths.
+- API reads and writes, public protocol exceptions, WebSockets, previews, downloads, exports and alternate representations of the same records.
+- Workers, scheduled jobs, collectors, outbound notifications, queues, retries, administrative scripts and migrations.
+- Databases, session stores, credential stores, artifact backends, caches, temporary files, logging and diagnostic outputs.
+
+For each entry, identify its owner, entry points, authentication authority, required permissions or credentials, data handled, dependencies and applicable security properties. Reconcile the inventory with registered routes, forms and imports, worker entry points, source registrations and proxy rules. Explain exclusions. A surface absent from the review record is unreviewed; absence from the existing test suite does not make it out of scope.
+
+### Trace complete workflows and sensitive data
+
+For each sensitive workflow, trace an ordinary permitted operation and a realistic unauthorised operation from the external entry point to every durable write and externally visible result. Include the actual browser, proxy, API, service, database, session store, worker and storage boundaries that participate. Mark where identity is established, permissions are checked, untrusted data is validated, secrets are redacted, resource budgets are enforced and transactions commit.
+
+Trace passwords, factor proofs, session identifiers, one-time links, upstream credentials and sensitive evidence through request URLs and bodies, redirects, browser history, referrers, proxy logs, application logs, exceptions, queues, caches, database records, artifacts and exports. Use synthetic recognisable values to detect unexpected retention or disclosure. A shared redaction helper protects only the paths that call it; inspect direct storage writes, bulk operations, snapshots and alternate export paths separately.
+
+Treat reads and transformations as security boundaries as well as mutations. Search results, summaries, counts, relationship APIs, previews and exports must not disclose records that their callers cannot read. Sampling, linking, copying and sharing require separate checks for access to the source and authority over the destination. Record any intentional disclosure through authorised sharing and how that authority is established and revoked.
+
+### Define and exercise authorisation rules
+
+Maintain a review matrix for each resource and operation. Distinguish read, create, edit, delete, share, sample, export, administer and ownership transfer where supported. Include anonymous callers, permitted non-administrators, users without the required permission, owners, other users, delegated administrators, inactive users, pending authentication ceremonies and machine identities as applicable.
+
+Define permission implications explicitly. Read access does not establish write access; permission to edit one resource does not establish permission to read or share another. Application-wide administrators, delegated administrators and resource owners have distinct authority. Establish trusted ownership from server-side records, including records created by workers, and reject attempts to choose identity, ownership or permissions through client data.
+
+Exercise these rules through assembled entry points with real authentication and permission resolution. Also check secondary routes and representations of the same object. A hidden button, an injected administrator fixture or a service test alone cannot verify the externally enforced authorisation boundary.
+
+### Exercise failures, defaults and state transitions
+
+Test what happens when the application code or a dependency that normally enforces a property is unavailable. Relevant cases include failed or delayed scripts and imports, missing assets, unavailable authentication or rate-limit stores, database errors, interrupted uploads, storage failures, malformed upstream responses, expired credentials, retries, cancellation and process restarts.
+
+Inspect native browser, framework, library, proxy and SDK defaults wherever application code normally overrides them. For credential-bearing forms, verify their initial HTML, native method and destination, serialised fields, implicit Enter-key submission, and behaviour before handlers attach or when scripts fail. Credentials and factor proofs must not enter URLs or unsafe fallback requests. Verify that unauthenticated workflows can load their complete required asset graph with the expected status codes, media types and effective security headers.
+
+Test state transitions, not only steady states: sign-in and sign-out, pending-to-authenticated ceremonies, permission changes, account deactivation and reactivation, credential rotation and revocation, ownership changes, source removal, audit completion and reopening, retention and deletion. Exercise duplicate delivery, replay, out-of-order operations and concurrent changes where they can affect authority, confidentiality, integrity or availability. Distinguish operations that are intentionally allowed to finish in flight from subsequent operations that must be rejected.
+
+For rejected operations, check the absence of unintended side effects as well as the response. Examine database rows, stored objects, queues, notifications, cached authority and cleanup work. A rollback of one system does not prove rollback of another.
+
+### Verify the enforcing deployment surface
+
+Use a disposable installation and synthetic data. Verify each security property at the surface that enforces it:
+
+| Property | Required evidence |
+| --- | --- |
+| Browser form behaviour, module loading, navigation, cookies and CSP | Real-browser checks through the supplied UI build and nginx configuration, including failed-script cases and unauthenticated access |
+| Proxy path handling, static asset access and effective response headers | Requests through the actual proxy configuration, including rewrites, error responses and nested locations |
+| API authentication, authorisation, CSRF and body limits | Requests through the assembled application with authentication, middleware and permission resolution active |
+| Locking, concurrent revocation, migrations and transaction guarantees | Disposable PostgreSQL with the supported migrations and representative concurrent operations |
+| Session-store atomicity, expiry and service failures | Valkey with representative configuration and controlled failure cases |
+| Destination restrictions, TLS verification and credential ordering | Local network and certificate fixtures exercising the actual transport and supported dependency versions |
+| Artifact persistence, downloads, immutability and cleanup | Representative local and S3 storage paths, including actual-byte checks and controlled failures |
+
+Static inspection, SQLite, DOM tests and mocks provide useful evidence within their limits. Identify those limits explicitly. An inventory or static configuration assertion does not replace a browser or proxy test; a mocked transport does not establish its library's real network behaviour. Do not infer that an untested deployment surface is safe because a substitute test passed.
+
+### Record evidence and change impact
+
+For each applicable checklist item and workflow, retain a review record containing:
+
+- The surface and security property being assessed, attacker authority and prerequisites, expected permitted behaviour and expected rejection or containment.
+- The exact revision, configuration and dependencies, inspection or test performed, reproducible test reference and observed result.
+- The evidence level: static inspection, isolated or mocked test, assembled application, or representative deployment integration.
+- Status: **verified at the stated evidence level**, **failed**, **unverified**, or **not applicable with justification**.
+- Untested prerequisites, supported configurations still requiring assessment, known limitations and required follow-up.
+
+Test totals and coverage percentages supplement this record; they do not establish that every entry point, failure mode or security property has been tested. Do not describe a review as complete when applicable required evidence is missing.
+
+For each change, identify the workflows and security properties it can affect. Trace callers and consumers of shared helpers, middleware, dependencies, proxy rules, schemas, build tooling and vendored assets. Include generated output and indirect consumers such as module imports, exports and worker tasks. A small shared change can affect a workflow whose own source files were not edited. Reassess the relevant boundaries on the final formatted and built tree.
+
+### Retain regression coverage and enforce release checks
+
+A confirmed issue requires a reproducible regression demonstrating the realistic prerequisite, the previously unsafe behaviour and the expected rejection or containment. Verify permitted behaviour as well. Run the test against the vulnerable version where practical to establish that it detects the defect. Inspect neighbouring entry points for the same underlying failure and add coverage for materially distinct paths.
+
+Keep regressions in the ordinary test workflow. Where safe and practical, deliberately remove or bypass a guard in an isolated copy to check that its regression fails. A test that remains green without the guard does not demonstrate that boundary. Keep browser/proxy, PostgreSQL and Valkey integration checks in the release validation workflow rather than relying on reviewers to remember them.
+
+Before a release, reconcile the complete attack-surface inventory, authorisation matrix and evidence record with the final build and supported deployment configuration. An applicable critical security property without its required evidence remains an unmet release check. Failed checks require resolution or a documented change to supported scope that removes the affected exposure. A skipped test, unavailable environment or broad disclaimer does not satisfy the check. Record the release decision and its supporting evidence outside this policy document.
+
+## Security claims and review records
+
+The security-model sections describe current supported behaviour and realistic risks. Each security claim must identify its enforcing code or configuration and supporting test or other verification evidence in the review record. Where a supported configuration lacks evidence, record the gap and assess whether the claim needs qualification. Review requirements describe obligations; their presence does not assert that the required validation has been performed.
+
+Keep findings, remediation history, per-review results, exceptions and release decisions in the corresponding review or delivery records. Do not turn this document into a cumulative list of fixes or describe an intended future control as current protection.
