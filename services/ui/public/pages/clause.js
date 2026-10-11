@@ -50,7 +50,13 @@ const clausePestleTab = document.getElementById('clausePestleTab');
 const clausePestleRows = document.getElementById('clausePestleRows');
 const openPestleFromClause = document.getElementById('openPestleFromClause');
 const clauseChangelogEl = document.getElementById('clauseChangelog');
-const canViewIsms = !!(me?.is_admin || me?.can_view_isms || me?.can_manage_isms || me?.can_view_risks || me?.can_manage_risks);
+const canViewIsms = !!(
+  me?.is_admin ||
+  me?.can_view_isms ||
+  me?.can_manage_isms ||
+  me?.can_view_risks ||
+  me?.can_manage_risks
+);
 let ismsLoaded = false;
 
 function setClauseTabQuery(tabName) {
@@ -61,16 +67,23 @@ function setClauseTabQuery(tabName) {
 }
 
 function activateClauseTab(tabName) {
-  const tab = (tabName === 'changelog')
-    ? clauseChangelogTab
-    : (tabName === 'isms' ? clauseIsmsTab : (tabName === 'pestle' ? clausePestleTab : clauseControlsTab));
+  const tab =
+    tabName === 'changelog'
+      ? clauseChangelogTab
+      : tabName === 'isms'
+        ? clauseIsmsTab
+        : tabName === 'pestle'
+          ? clausePestleTab
+          : clauseControlsTab;
   if (!tab || !window.bootstrap?.Tab) return;
   window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
 
-
 function pestleHref(itemId) {
-  return withFramework(`/pestle_item.html?id=${encodeURIComponent(itemId || '')}`, clause?.framework || framework);
+  return withFramework(
+    `/pestle_item.html?id=${encodeURIComponent(itemId || '')}`,
+    clause?.framework || framework,
+  );
 }
 
 function pestleRelevanceBadge(rel) {
@@ -84,18 +97,22 @@ function pestleRelevanceBadge(rel) {
 
 async function loadClausePestle() {
   if (!clausePestleRows || !id) return;
-  clausePestleRows.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">Loading PESTLE(E) relevance…</td></tr>';
+  clausePestleRows.innerHTML =
+    '<tr><td colspan="6" class="p-4 small-muted">Loading PESTLE(E) relevance…</td></tr>';
   try {
     const data = await apiGet(`/api/v1/clauses/${encodeURIComponent(id)}/pestle`);
     const items = data?.items || [];
-    if (openPestleFromClause) openPestleFromClause.href = withFramework('/pestle.html', clause?.framework || framework);
+    if (openPestleFromClause)
+      openPestleFromClause.href = withFramework('/pestle.html', clause?.framework || framework);
     if (!items.length) {
-      clausePestleRows.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">No PESTLE(E) items are currently linked to this clause.</td></tr>';
+      clausePestleRows.innerHTML =
+        '<tr><td colspan="6" class="p-4 small-muted">No PESTLE(E) items are currently linked to this clause.</td></tr>';
       return;
     }
-    clausePestleRows.innerHTML = items.map((row) => {
-      const it = row.pestle_item || {};
-      return `<tr>
+    clausePestleRows.innerHTML = items
+      .map((row) => {
+        const it = row.pestle_item || {};
+        return `<tr>
         <td>${esc(it.type || '')}</td>
         <td>${esc(it.lens || '')}</td>
         <td><a class="fw-semibold" href="${esc(pestleHref(it.id))}">${esc(it.item || '')}</a></td>
@@ -103,9 +120,11 @@ async function loadClausePestle() {
         <td>${pestleRelevanceBadge(it.overall_relevance)}</td>
         <td class="wrap small-muted">${esc(it.rationale || '—')}</td>
       </tr>`;
-    }).join('');
+      })
+      .join('');
   } catch (e) {
-    clausePestleRows.innerHTML = '<tr><td colspan="6" class="p-4 text-danger">Failed to load PESTLE(E) relevance.</td></tr>';
+    clausePestleRows.innerHTML =
+      '<tr><td colspan="6" class="p-4 text-danger">Failed to load PESTLE(E) relevance.</td></tr>';
   }
 }
 
@@ -115,7 +134,7 @@ async function loadClauseChangelog() {
     await loadEntityChangelog(
       clauseChangelogEl,
       `/api/v1/clauses/${encodeURIComponent(id)}/changelog?limit=100`,
-      {empty: 'No clause changes have been recorded yet.'}
+      { empty: 'No clause changes have been recorded yet.' },
     );
   } catch (e) {
     clauseChangelogEl.innerHTML = '<div class="text-danger p-3">Failed to load changelog.</div>';
@@ -124,7 +143,12 @@ async function loadClauseChangelog() {
 
 function _ismsEntityRows(data) {
   const groups = [
-    ['Objectives', data.objectives, (x) => x.goal || x.requirement || 'Objective', '/isms.html?tab=objectives'],
+    [
+      'Objectives',
+      data.objectives,
+      (x) => x.goal || x.requirement || 'Objective',
+      '/isms.html?tab=objectives',
+    ],
     ['Documents', data.documents, (x) => x.title || 'Document', '/isms.html?tab=documents'],
     ['Organisation Chart', data.org_nodes, (x) => x.name || 'Org node', '/isms.html?tab=org'],
     ['Assets', data.assets, (x) => x.asset || 'Asset', '/isms.html?tab=assets'],
@@ -132,19 +156,29 @@ function _ismsEntityRows(data) {
   ];
   const rows = [];
   for (const [label, items, titleFn, href] of groups) {
-    for (const item of items || []) rows.push(`<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(href, clause?.framework || framework))}">${esc(titleFn(item))}</a></td><td class="small-muted">${esc(item.updated_at || '')}</td></tr>`);
+    for (const item of items || [])
+      rows.push(
+        `<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(href, clause?.framework || framework))}">${esc(titleFn(item))}</a></td><td class="small-muted">${esc(item.updated_at || '')}</td></tr>`,
+      );
   }
-  if (!rows.length) return '<div class="small-muted">No ISMS entities are currently linked to this clause.</div>';
+  if (!rows.length)
+    return '<div class="small-muted">No ISMS entities are currently linked to this clause.</div>';
   return `<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th style="width:190px;">Type</th><th>Entity</th><th style="width:190px;">Updated</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 
-async function loadClauseIsms({force = false} = {}) {
+async function loadClauseIsms({ force = false } = {}) {
   if (!clauseIsmsView || !id) return;
-  if (!canViewIsms) { clauseIsmsView.innerHTML = '<span class="small-muted">You do not have permission to view ISMS references.</span>'; return; }
+  if (!canViewIsms) {
+    clauseIsmsView.innerHTML =
+      '<span class="small-muted">You do not have permission to view ISMS references.</span>';
+    return;
+  }
   if (ismsLoaded && !force) return;
   clauseIsmsView.innerHTML = '<span class="small-muted">Loading ISMS references…</span>';
   try {
-    const data = await apiGet(`/api/v1/clauses/${encodeURIComponent(id)}/isms?framework=${encodeURIComponent(clause?.framework || framework)}`);
+    const data = await apiGet(
+      `/api/v1/clauses/${encodeURIComponent(id)}/isms?framework=${encodeURIComponent(clause?.framework || framework)}`,
+    );
     ismsLoaded = true;
     clauseIsmsView.innerHTML = _ismsEntityRows(data || {});
   } catch (e) {
@@ -185,7 +219,8 @@ function applicabilityLabel(v) {
 }
 
 function applicabilityBadge(v) {
-  if (v === 'partially_applicable') return '<span class="badge text-bg-warning">Partially applicable</span>';
+  if (v === 'partially_applicable')
+    return '<span class="badge text-bg-warning">Partially applicable</span>';
   if (v === 'applicable') return '<span class="badge badge-soft">Applicable</span>';
   return '<span class="badge text-bg-light">Not applicable</span>';
 }
@@ -205,12 +240,15 @@ function isIntermediateParentClause() {
 function clauseEvidenceMappings() {
   if (Array.isArray(clause?.evidence_mappings)) {
     return clause.evidence_mappings
-        .map((item) => ({title: String(item?.title || '').trim(), url: String(item?.url || '').trim()}))
-        .filter((item) => item.url);
+      .map((item) => ({
+        title: String(item?.title || '').trim(),
+        url: String(item?.url || '').trim(),
+      }))
+      .filter((item) => item.url);
   }
   return (Array.isArray(clause?.evidence_urls) ? clause.evidence_urls : [])
-      .map((url) => ({title: '', url: String(url || '').trim()}))
-      .filter((item) => item.url);
+    .map((url) => ({ title: '', url: String(url || '').trim() }))
+    .filter((item) => item.url);
 }
 
 function evidenceMappingRow(item = {}) {
@@ -264,7 +302,7 @@ function renderEvidenceMapping() {
   }
   if (clauseEvidenceLinks) {
     clauseEvidenceLinks.innerHTML = mappings.length
-      ? titledLinksHtml(mappings, {title: 'Open evidence mapping'})
+      ? titledLinksHtml(mappings, { title: 'Open evidence mapping' })
       : '<span class="small-muted">No evidence mapping links have been set.</span>';
   }
   if (editClauseEvidence) {
@@ -272,7 +310,7 @@ function renderEvidenceMapping() {
     editClauseEvidence.textContent = evidenceEditMode ? 'Hide edit' : 'Edit';
   }
   if (adminClauseEvidenceEditor) {
-    adminClauseEvidenceEditor.style.display = (me?.is_admin && evidenceEditMode) ? '' : 'none';
+    adminClauseEvidenceEditor.style.display = me?.is_admin && evidenceEditMode ? '' : 'none';
   }
   if (me?.is_admin && evidenceEditMode) renderEvidenceEditor();
 }
@@ -282,7 +320,8 @@ function renderClauseHeader() {
   const parts = [clause?.framework || framework];
   if (clause?.parent_ref) parts.push(`parent ${clause.parent_ref}`);
   clauseMeta.textContent = parts.filter(Boolean).join(' • ') || '—';
-  if (clausesBreadcrumb) clausesBreadcrumb.href = withFramework('/clauses.html', clause?.framework || framework);
+  if (clausesBreadcrumb)
+    clausesBreadcrumb.href = withFramework('/clauses.html', clause?.framework || framework);
 
   const url = safeExternalHref(clause?.upstream_url);
   clauseLinks.innerHTML = url
@@ -298,29 +337,37 @@ function renderClauseHeader() {
     editLinkedControls.textContent = linkedControlsEditMode ? 'Hide edit' : 'Edit';
   }
   if (adminControlsCard) {
-    adminControlsCard.style.display = (me?.is_admin && linkedControlsEditMode) ? '' : 'none';
+    adminControlsCard.style.display = me?.is_admin && linkedControlsEditMode ? '' : 'none';
   }
   renderEvidenceMapping();
-  if (openPestleFromClause) openPestleFromClause.href = withFramework('/pestle.html', clause?.framework || framework);
+  if (openPestleFromClause)
+    openPestleFromClause.href = withFramework('/pestle.html', clause?.framework || framework);
 }
 
 function renderControls(items) {
   const rows = Array.isArray(items) ? items : [];
-  if (controlsMeta) controlsMeta.textContent = `${rows.length} linked control${rows.length === 1 ? '' : 's'}`;
+  if (controlsMeta)
+    controlsMeta.textContent = `${rows.length} linked control${rows.length === 1 ? '' : 's'}`;
   if (!rows.length) {
-    rowsEl.innerHTML = '<tr><td colspan="4" class="small-muted p-4">No controls are linked to this clause.</td></tr>';
+    rowsEl.innerHTML =
+      '<tr><td colspan="4" class="small-muted p-4">No controls are linked to this clause.</td></tr>';
     return;
   }
 
-  rowsEl.innerHTML = rows.map((c) => {
-    const href = withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework);
-    return `<tr>
+  rowsEl.innerHTML = rows
+    .map((c) => {
+      const href = withFramework(
+        `/control.html?id=${encodeURIComponent(c.id)}`,
+        c.framework || framework,
+      );
+      return `<tr>
       <td class="fw-semibold"><a href="${esc(href)}">${esc(c.ref || '')}</a></td>
       <td class="wrap">${esc(c.title || '')}</td>
       <td data-sort="${esc(applicabilityLabel(c.applicability))}">${applicabilityBadge(c.applicability)}</td>
       <td>${c.in_scope ? '<span class="badge badge-soft">In scope</span>' : '<span class="badge text-bg-light">Out</span>'}</td>
     </tr>`;
-  }).join('');
+    })
+    .join('');
 }
 
 function renderAdminControls() {
@@ -339,8 +386,9 @@ function renderAdminControls() {
   if (saveClauseControls) saveClauseControls.disabled = false;
   const selected = linkedMap();
   const q = (controlSearch?.value || '').trim().toLowerCase();
-  const rows = (allControls || [])
-      .filter((c) => !q || `${c.ref || ''} ${c.title || ''}`.toLowerCase().includes(q));
+  const rows = (allControls || []).filter(
+    (c) => !q || `${c.ref || ''} ${c.title || ''}`.toLowerCase().includes(q),
+  );
   if (!rows.length) {
     adminControlsList.innerHTML = '<span class="small-muted">No controls match.</span>';
     return;
@@ -356,11 +404,15 @@ function renderAdminControls() {
           </tr>
         </thead>
         <tbody>
-          ${rows.map((c) => {
-            const cid = String(c.id || '');
-            const cur = selected.get(cid) || '';
-            const href = withFramework(`/control.html?id=${encodeURIComponent(cid)}`, c.framework || framework);
-            return `<tr>
+          ${rows
+            .map((c) => {
+              const cid = String(c.id || '');
+              const cur = selected.get(cid) || '';
+              const href = withFramework(
+                `/control.html?id=${encodeURIComponent(cid)}`,
+                c.framework || framework,
+              );
+              return `<tr>
               <td class="fw-semibold"><a href="${esc(href)}">${esc(c.ref || '')}</a></td>
               <td class="wrap small-muted">${esc(c.title || '')}</td>
               <td>
@@ -371,7 +423,8 @@ function renderAdminControls() {
                 </select>
               </td>
             </tr>`;
-          }).join('')}
+            })
+            .join('')}
         </tbody>
       </table>
     </div>`;
@@ -379,7 +432,9 @@ function renderAdminControls() {
 
 async function loadAdminControls() {
   if (!me?.is_admin || !clause) return;
-  const data = await apiGet(`/api/v1/controls?framework=${encodeURIComponent(clause.framework || framework)}&limit=5000`);
+  const data = await apiGet(
+    `/api/v1/controls?framework=${encodeURIComponent(clause.framework || framework)}&limit=5000`,
+  );
   allControls = (data?.items || []).filter((c) => c.type !== 'clause');
   renderAdminControls();
 }
@@ -394,7 +449,6 @@ async function reloadLinkedControls() {
   if (qs('tab') === 'pestle') await loadClausePestle();
 }
 
-
 async function load() {
   if (!id) {
     toast(status, 'Missing clause id.', 'danger');
@@ -408,7 +462,8 @@ async function load() {
     await loadAdminControls();
   } catch (e) {
     toast(status, `Failed to load clause: ${String(e)}`, 'danger');
-    rowsEl.innerHTML = '<tr><td colspan="4" class="small-muted p-4">Failed to load linked controls.</td></tr>';
+    rowsEl.innerHTML =
+      '<tr><td colspan="4" class="small-muted p-4">Failed to load linked controls.</td></tr>';
   }
 }
 
@@ -417,7 +472,7 @@ editClauseEvidence?.addEventListener('click', () => {
   evidenceEditMode = !evidenceEditMode;
   renderEvidenceMapping();
   if (evidenceEditMode) {
-    adminClauseEvidenceEditor?.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    adminClauseEvidenceEditor?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 });
 
@@ -431,18 +486,27 @@ addClauseEvidenceUrl?.addEventListener('click', () => {
 
 saveClauseEvidenceUrls?.addEventListener('click', async () => {
   if (!me?.is_admin || !clause?.id) return;
-  const evidenceMappings = Array.from(clauseEvidenceUrlInputs?.querySelectorAll('.clause-evidence-mapping-row') || [])
-      .map((row) => ({
-        title: String(row.querySelector('.clause-evidence-title')?.value || '').trim(),
-        url: String(row.querySelector('.clause-evidence-url')?.value || '').trim(),
-      }))
-      .filter((item) => item.url);
+  const evidenceMappings = Array.from(
+    clauseEvidenceUrlInputs?.querySelectorAll('.clause-evidence-mapping-row') || [],
+  )
+    .map((row) => ({
+      title: String(row.querySelector('.clause-evidence-title')?.value || '').trim(),
+      url: String(row.querySelector('.clause-evidence-url')?.value || '').trim(),
+    }))
+    .filter((item) => item.url);
   saveClauseEvidenceUrls.disabled = true;
   try {
-    const data = await apiPatch(`/api/v1/admin/clauses/${encodeURIComponent(clause.id)}/evidence-urls`, {
-      evidence_mappings: evidenceMappings,
-    });
-    clause = {...clause, evidence_mappings: data?.evidence_mappings || [], evidence_urls: data?.evidence_urls || []};
+    const data = await apiPatch(
+      `/api/v1/admin/clauses/${encodeURIComponent(clause.id)}/evidence-urls`,
+      {
+        evidence_mappings: evidenceMappings,
+      },
+    );
+    clause = {
+      ...clause,
+      evidence_mappings: data?.evidence_mappings || [],
+      evidence_urls: data?.evidence_urls || [],
+    };
     evidenceEditMode = false;
     renderEvidenceMapping();
     await loadClauseChangelog();
@@ -459,12 +523,16 @@ editLinkedControls?.addEventListener('click', async () => {
   linkedControlsEditMode = !linkedControlsEditMode;
   renderClauseHeader();
   if (linkedControlsEditMode && allControls.length === 0) {
-    try { await loadAdminControls(); } catch (e) { toast(status, `Failed to load controls: ${String(e)}`, 'danger'); }
+    try {
+      await loadAdminControls();
+    } catch (e) {
+      toast(status, `Failed to load controls: ${String(e)}`, 'danger');
+    }
   } else if (linkedControlsEditMode) {
     renderAdminControls();
   }
   if (linkedControlsEditMode) {
-    adminControlsCard?.scrollIntoView({behavior: 'smooth', block: 'start'});
+    adminControlsCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 });
 
@@ -472,10 +540,13 @@ saveClauseUpstreamUrl?.addEventListener('click', async () => {
   if (!me?.is_admin || !clause?.id) return;
   saveClauseUpstreamUrl.disabled = true;
   try {
-    const data = await apiPatch(`/api/v1/admin/clauses/${encodeURIComponent(clause.id)}/upstream-url`, {
-      upstream_url: (clauseUpstreamUrl?.value || '').trim() || null,
-    });
-    clause = {...clause, upstream_url: data?.upstream_url || null};
+    const data = await apiPatch(
+      `/api/v1/admin/clauses/${encodeURIComponent(clause.id)}/upstream-url`,
+      {
+        upstream_url: (clauseUpstreamUrl?.value || '').trim() || null,
+      },
+    );
+    clause = { ...clause, upstream_url: data?.upstream_url || null };
     renderClauseHeader();
     await loadClauseChangelog();
     toast(status, 'Clause URL saved', 'success');
@@ -492,11 +563,13 @@ saveClauseControls?.addEventListener('click', async () => {
   for (const sel of adminControlsList?.querySelectorAll('.control-applicability') || []) {
     const applicability = (sel.value || '').trim();
     if (!applicability) continue;
-    controls.push({control_id: sel.dataset.controlId, applicability});
+    controls.push({ control_id: sel.dataset.controlId, applicability });
   }
   saveClauseControls.disabled = true;
   try {
-    const data = await apiPatch(`/api/v1/admin/clauses/${encodeURIComponent(clause.id)}/controls`, {controls});
+    const data = await apiPatch(`/api/v1/admin/clauses/${encodeURIComponent(clause.id)}/controls`, {
+      controls,
+    });
     if (data?.skipped_intermediate_parent) {
       toast(status, data?.detail || 'This parent clause is inferred from child clauses.', 'info');
     } else {
@@ -504,7 +577,7 @@ saveClauseControls?.addEventListener('click', async () => {
     }
     await reloadLinkedControls();
     if (qs('tab') === 'changelog') await loadClauseChangelog();
-    if (qs('tab') === 'isms') await loadClauseIsms({force: true});
+    if (qs('tab') === 'isms') await loadClauseIsms({ force: true });
   } catch (e) {
     toast(status, `Failed to save linked controls: ${String(e)}`, 'danger');
   } finally {

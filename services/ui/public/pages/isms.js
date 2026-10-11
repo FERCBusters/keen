@@ -1,5 +1,5 @@
-import {safeExternalHref} from '/app.js';
-import {mountMeasurementExamples} from '/pages/measurement-examples.js';
+import { safeExternalHref } from '/app.js';
+import { mountMeasurementExamples } from '/pages/measurement-examples.js';
 import {
   initNavbar,
   apiGet,
@@ -35,84 +35,197 @@ enableTableSorting();
 const status = document.getElementById('status');
 const metaEl = document.getElementById('ismsMeta');
 
-let meta = {users: [], org_nodes: [], documents: [], assets: [], asset_categories: [], licenses: [], aws_accounts: [], business_processes: [], controls: [], clauses: [], effectiveness_metric_sources: [], effectiveness_metric_source_types: [], effectiveness_threshold_operators: []};
-let data = {counts: {}, objectives: [], documents: [], org_nodes: [], assets: [], access_control_matrix: [], effectiveness_measures: [], meetings: []};
+let meta = {
+  users: [],
+  org_nodes: [],
+  documents: [],
+  assets: [],
+  asset_categories: [],
+  licenses: [],
+  aws_accounts: [],
+  business_processes: [],
+  controls: [],
+  clauses: [],
+  effectiveness_metric_sources: [],
+  effectiveness_metric_source_types: [],
+  effectiveness_threshold_operators: [],
+};
+let data = {
+  counts: {},
+  objectives: [],
+  documents: [],
+  org_nodes: [],
+  assets: [],
+  access_control_matrix: [],
+  effectiveness_measures: [],
+  meetings: [],
+};
 let meetingPeople = [];
 let documentFolders = [];
 let documentTags = [];
 let documentTagFilter = '';
 const documentTagColors = ['primary', 'success', 'warning', 'info', 'danger', 'secondary'];
 function documentTagColor(tag) {
-  return documentTagColors[Array.from(tag).reduce((value, character) => value + character.codePointAt(0), 0) % documentTagColors.length];
+  return documentTagColors[
+    Array.from(tag).reduce((value, character) => value + character.codePointAt(0), 0) %
+      documentTagColors.length
+  ];
 }
 function tagChip(tag, removable = false) {
   return `<button type="button" class="btn btn-sm btn-outline-${documentTagColor(tag)} rounded-pill me-1 mb-1" ${removable ? `data-remove-doc-tag="${esc(tag)}"` : `data-filter-doc-tag="${esc(tag)}"`}>${esc(tag)}${removable ? ' ×' : ''}</button>`;
 }
 function renderDocumentTags() {
-  $('docSelectedTags').innerHTML = documentTags.map(tag => tagChip(tag, true)).join('');
-  const known = [...new Set((data.documents || []).flatMap(doc => doc.tags || []))].filter(tag => !documentTags.includes(tag));
-  $('docTagChoices').innerHTML = known.map(tag => `<button type="button" class="btn btn-sm btn-link p-1" data-add-doc-tag="${esc(tag)}">+ ${esc(tag)}</button>`).join('');
+  $('docSelectedTags').innerHTML = documentTags.map((tag) => tagChip(tag, true)).join('');
+  const known = [...new Set((data.documents || []).flatMap((doc) => doc.tags || []))].filter(
+    (tag) => !documentTags.includes(tag),
+  );
+  $('docTagChoices').innerHTML = known
+    .map(
+      (tag) =>
+        `<button type="button" class="btn btn-sm btn-link p-1" data-add-doc-tag="${esc(tag)}">+ ${esc(tag)}</button>`,
+    )
+    .join('');
 }
 function addDocumentTag(value) {
   const tag = value.trim();
-  if (tag && tag.length <= 64 && !documentTags.some(item => item.toLowerCase() === tag.toLowerCase()) && documentTags.length < 30) documentTags.push(tag);
+  if (
+    tag &&
+    tag.length <= 64 &&
+    !documentTags.some((item) => item.toLowerCase() === tag.toLowerCase()) &&
+    documentTags.length < 30
+  )
+    documentTags.push(tag);
   renderDocumentTags();
 }
-function documentMedium() { return document.querySelector('input[name="docMedium"]:checked')?.value || 'write'; }
+function documentMedium() {
+  return document.querySelector('input[name="docMedium"]:checked')?.value || 'write';
+}
 function showDocumentMedium() {
   const medium = documentMedium();
-  for (const [key, id] of Object.entries({write: 'docWritePane', upload: 'docUploadPane', link: 'docLinkPane'})) $(id).hidden = key !== medium;
+  for (const [key, id] of Object.entries({
+    write: 'docWritePane',
+    upload: 'docUploadPane',
+    link: 'docLinkPane',
+  }))
+    $(id).hidden = key !== medium;
 }
 async function loadDocumentFolders() {
   documentFolders = await apiGet('/api/v1/isms/document-folders');
   const selected = $('docFolder').value;
-  const names = new Map(documentFolders.map(folder => [folder.id, folder]));
+  const names = new Map(documentFolders.map((folder) => [folder.id, folder]));
   function label(folder) {
-    const path = [folder.name]; let parent = folder.parent_id; const seen = new Set([folder.id]);
-    while (names.has(parent) && !seen.has(parent)) { seen.add(parent); const next = names.get(parent); path.unshift(next.name); parent = next.parent_id; }
+    const path = [folder.name];
+    let parent = folder.parent_id;
+    const seen = new Set([folder.id]);
+    while (names.has(parent) && !seen.has(parent)) {
+      seen.add(parent);
+      const next = names.get(parent);
+      path.unshift(next.name);
+      parent = next.parent_id;
+    }
     return path.join(' / ');
   }
-  $('docFolder').innerHTML = '<option value="">Unfiled</option>' + documentFolders.map(folder => `<option value="${esc(folder.id)}">${esc(label(folder))}</option>`).join('');
+  $('docFolder').innerHTML =
+    '<option value="">Unfiled</option>' +
+    documentFolders
+      .map((folder) => `<option value="${esc(folder.id)}">${esc(label(folder))}</option>`)
+      .join('');
   $('docFolder').value = selected;
 }
 
 async function loadMeetingPeople() {
-  try { meetingPeople = (await apiGet('/api/v1/isms/people')).items || []; }
-  catch (err) { meetingPeople = []; toast(status, `Could not load People: ${String(err)}`, 'warning'); }
+  try {
+    meetingPeople = (await apiGet('/api/v1/isms/people')).items || [];
+  } catch (err) {
+    meetingPeople = [];
+    toast(status, `Could not load People: ${String(err)}`, 'warning');
+  }
 }
 
 function populateMeetingPeople() {
-  const options = optionList(meetingPeople, {label: (p) => `${p.name}${p.email ? ` · ${p.email}` : ''}`});
+  const options = optionList(meetingPeople, {
+    label: (p) => `${p.name}${p.email ? ` · ${p.email}` : ''}`,
+  });
   for (const id of ['meetingPersonAttendees', 'meetingPersonApologies']) {
-    const previous = selectedValues($(id)); $(id).innerHTML = options; setSelectValues($(id), previous);
+    const previous = selectedValues($(id));
+    $(id).innerHTML = options;
+    setSelectValues($(id), previous);
   }
 }
 
 function updateMeetingPersonBubble() {
-  const name=$('meetingNewPersonName')?.value.trim() || '';
-  const email=$('meetingNewPersonEmail')?.value.trim().toLowerCase() || '';
-  const matching=meetingPeople.find(p => email ? p.email?.trim().toLowerCase()===email : p.name?.trim().toLowerCase()===name.toLowerCase());
+  const name = $('meetingNewPersonName')?.value.trim() || '';
+  const email = $('meetingNewPersonEmail')?.value.trim().toLowerCase() || '';
+  const matching = meetingPeople.find((p) =>
+    email
+      ? p.email?.trim().toLowerCase() === email
+      : p.name?.trim().toLowerCase() === name.toLowerCase(),
+  );
   if (matching) {
-    const option=Array.from($('meetingPersonAttendees').options).find(o=>o.value===matching.id);
-    if (option) option.selected=true;
+    const option = Array.from($('meetingPersonAttendees').options).find(
+      (o) => o.value === matching.id,
+    );
+    if (option) option.selected = true;
   }
-  $('meetingCreatePerson').hidden=!(canManage && name && !matching);
+  $('meetingCreatePerson').hidden = !(canManage && name && !matching);
 }
 
 const loadedMetaSections = new Set();
 const loadedSummarySections = new Set();
 const sectionLoadPromises = new Map();
-const sectionByKind = {objective: 'objectives', document: 'documents', org: 'org', asset: 'assets', access: 'access', effectiveness: 'effectiveness', meeting: 'meetings'};
-const tabIdBySection = {overview: 'overviewTab', objectives: 'objectivesTab', documents: 'documentsTab', org: 'orgTab', assets: 'assetsTab', access: 'accessControlTab', effectiveness: 'effectivenessTab', meetings: 'meetingsTab', soa: 'soaTab'};
+const sectionByKind = {
+  objective: 'objectives',
+  document: 'documents',
+  org: 'org',
+  asset: 'assets',
+  access: 'access',
+  effectiveness: 'effectiveness',
+  meeting: 'meetings',
+};
+const tabIdBySection = {
+  overview: 'overviewTab',
+  objectives: 'objectivesTab',
+  documents: 'documentsTab',
+  org: 'orgTab',
+  assets: 'assetsTab',
+  access: 'accessControlTab',
+  effectiveness: 'effectivenessTab',
+  meetings: 'meetingsTab',
+  soa: 'soaTab',
+};
 const sectionAliases = {
-  overview: 'overview', summary: 'overview',
-  objective: 'objectives', objectives: 'objectives',
-  document: 'documents', documents: 'documents', policies: 'documents', policy: 'documents', processes: 'documents',
-  org: 'org', organisation: 'org', organization: 'org', orgnode: 'org', org_node: 'org', orgnodes: 'org', org_nodes: 'org',
-  asset: 'assets', assets: 'assets',
-  access: 'access', accesscontrol: 'access', access_control: 'access', accesscontrolmatrix: 'access', access_control_matrix: 'access',
-  effectiveness: 'effectiveness', effectivenessmeasure: 'effectiveness', effectiveness_measure: 'effectiveness', effectivenessmeasures: 'effectiveness', effectiveness_measures: 'effectiveness', measures: 'effectiveness', metrics: 'effectiveness',
-  meeting: 'meetings', meetings: 'meetings',
+  overview: 'overview',
+  summary: 'overview',
+  objective: 'objectives',
+  objectives: 'objectives',
+  document: 'documents',
+  documents: 'documents',
+  policies: 'documents',
+  policy: 'documents',
+  processes: 'documents',
+  org: 'org',
+  organisation: 'org',
+  organization: 'org',
+  orgnode: 'org',
+  org_node: 'org',
+  orgnodes: 'org',
+  org_nodes: 'org',
+  asset: 'assets',
+  assets: 'assets',
+  access: 'access',
+  accesscontrol: 'access',
+  access_control: 'access',
+  accesscontrolmatrix: 'access',
+  access_control_matrix: 'access',
+  effectiveness: 'effectiveness',
+  effectivenessmeasure: 'effectiveness',
+  effectiveness_measure: 'effectiveness',
+  effectivenessmeasures: 'effectiveness',
+  effectiveness_measures: 'effectiveness',
+  measures: 'effectiveness',
+  metrics: 'effectiveness',
+  meeting: 'meetings',
+  meetings: 'meetings',
   soa: 'soa',
 };
 
@@ -129,7 +242,7 @@ const rows = {
   meetings: $('meetingsRows'),
 };
 
-const editState = {kind: null, id: null};
+const editState = { kind: null, id: null };
 const endpoints = {
   objective: 'objectives',
   document: 'documents',
@@ -158,40 +271,81 @@ const submitLabels = {
   meeting: ['Create meeting minutes', 'Save meeting minutes'],
 };
 
-function setCount(id, n) { const el = $(id); if (el) el.textContent = String(Number(n || 0)); }
-function names(list) { return (list || []).map((x) => x?.username || x?.user?.username || x?.name || '').filter(Boolean).join(', ') || '—'; }
-function userBadges(list) { return userPillsHtml(list); }
-function objectiveUserPill(user) { return userPillHtml(user, {className: 'isms-objective-user-pill'}); }
-function objectiveUserBadges(list) { return userPillsHtml(list, {className: 'isms-objective-user-pill'}); }
+function setCount(id, n) {
+  const el = $(id);
+  if (el) el.textContent = String(Number(n || 0));
+}
+function names(list) {
+  return (
+    (list || [])
+      .map((x) => x?.username || x?.user?.username || x?.name || '')
+      .filter(Boolean)
+      .join(', ') || '—'
+  );
+}
+function userBadges(list) {
+  return userPillsHtml(list);
+}
+function objectiveUserPill(user) {
+  return userPillHtml(user, { className: 'isms-objective-user-pill' });
+}
+function objectiveUserBadges(list) {
+  return userPillsHtml(list, { className: 'isms-objective-user-pill' });
+}
 function badgeList(items, labelKey = 'ref', urlFn = null) {
   const arr = Array.isArray(items) ? items : [];
   if (!arr.length) return '<span class="small-muted">—</span>';
-  return arr.map((it) => {
-    const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
-    const title = String(it?.title || it?.name || label);
-    const href = urlFn ? urlFn(it) : '';
-    if (href) return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(title)}">${esc(label)}</a>`;
-    return `<span class="badge badge-soft me-1 mb-1" title="${esc(title)}">${esc(label)}</span>`;
-  }).join('');
+  return arr
+    .map((it) => {
+      const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
+      const title = String(it?.title || it?.name || label);
+      const href = urlFn ? urlFn(it) : '';
+      if (href)
+        return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(title)}">${esc(label)}</a>`;
+      return `<span class="badge badge-soft me-1 mb-1" title="${esc(title)}">${esc(label)}</span>`;
+    })
+    .join('');
 }
-function controlBadges(items) { return badgeList(items, 'ref', (c) => withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework)); }
-function clauseBadges(items) { return badgeList(items, 'ref', (c) => withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework)); }
+function controlBadges(items) {
+  return badgeList(items, 'ref', (c) =>
+    withFramework(
+      `/control.html?id=${encodeURIComponent(c.id)}&tab=isms`,
+      c.framework || framework,
+    ),
+  );
+}
+function clauseBadges(items) {
+  return badgeList(items, 'ref', (c) =>
+    withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework),
+  );
+}
 function docLink(d) {
-  if (d.external_url) return `<a href="${esc(safeExternalHref(d.external_url) || '#')}" target="_blank" rel="noopener noreferrer">External URL</a>`;
-  if (d.has_file) return `<a href="/api/v1/isms/documents/${encodeURIComponent(d.id)}/file" target="_blank" rel="noopener noreferrer">${esc(d.filename || 'Uploaded file')}</a>`;
+  if (d.external_url)
+    return `<a href="${esc(safeExternalHref(d.external_url) || '#')}" target="_blank" rel="noopener noreferrer">External URL</a>`;
+  if (d.has_file)
+    return `<a href="/api/v1/isms/documents/${encodeURIComponent(d.id)}/file" target="_blank" rel="noopener noreferrer">${esc(d.filename || 'Uploaded file')}</a>`;
   return '<span class="small-muted">—</span>';
 }
-function optionList(items, {value = 'id', label = 'username', includeBlank = false, blankLabel = '—'} = {}) {
+function optionList(
+  items,
+  { value = 'id', label = 'username', includeBlank = false, blankLabel = '—' } = {},
+) {
   const opts = [];
   if (includeBlank) opts.push(`<option value="">${esc(blankLabel)}</option>`);
   for (const it of items || []) {
-    const text = typeof label === 'function' ? label(it) : (it?.[label] || it?.name || it?.title || it?.asset || it?.username || 'Item');
+    const text =
+      typeof label === 'function'
+        ? label(it)
+        : it?.[label] || it?.name || it?.title || it?.asset || it?.username || 'Item';
     opts.push(`<option value="${esc(it?.[value] || '')}">${esc(text)}</option>`);
   }
   return opts.join('');
 }
-function selectedValues(select) { return Array.from(select?.selectedOptions || []).map((o) => o.value).filter(Boolean); }
-
+function selectedValues(select) {
+  return Array.from(select?.selectedOptions || [])
+    .map((o) => o.value)
+    .filter(Boolean);
+}
 
 function initMeetingNotesEditor() {
   initRichTextEditors(document.getElementById('meetingForm') || document);
@@ -207,7 +361,6 @@ function getMeetingNotesValue() {
   return syncRichTextEditor($('meetingNotes'));
 }
 
-
 const formCardIds = {
   objective: 'objectiveFormCard',
   document: 'documentFormCard',
@@ -218,17 +371,81 @@ const formCardIds = {
   meeting: 'meetingFormCard',
 };
 const ismsTableSections = [
-  {key: 'objectives', kind: 'objective', rowsId: 'objectivesRows', countId: 'objectivesCount', formCardId: 'objectiveFormCard', title: 'Objective filters', placeholder: 'Filter objectives by goal, metric, owner, controls or clauses…', addLabel: 'Add new objective'},
-  {key: 'documents', kind: 'document', rowsId: 'documentsRows', countId: 'documentsCount', formCardId: 'documentFormCard', title: 'Policies & Processes filters', placeholder: 'Filter documents by title, type, description, controls or clauses…', addLabel: 'Add new policy/process'},
-  {key: 'org', kind: 'org', rowsId: 'orgRows', countId: 'orgCount', formCardId: 'orgFormCard', title: 'Organisation Chart filters', placeholder: 'Filter organisation chart rows by name, parent, people, controls or clauses…', addLabel: 'Add new org node'},
-  {key: 'assets', kind: 'asset', rowsId: 'assetsRows', countId: 'assetsCount', formCardId: 'assetFormCard', title: 'Asset Matrix filters', placeholder: 'Filter assets by name, category, owner, license, controls or clauses…', addLabel: 'Add new asset'},
-  {key: 'access', kind: 'access', rowsId: 'accessMatrixRows', countId: 'accessControlCount', formCardId: 'accessControlFormCard', title: 'Access Control Matrix filters', placeholder: 'Filter access rows by task/action, service, account, role, approver or status…', addLabel: 'Add new access row'},
-  {key: 'effectiveness', kind: 'effectiveness', rowsId: 'effectivenessRows', countId: 'effectivenessCount', formCardId: 'effectivenessFormCard', title: 'Effectiveness Measures filters', placeholder: 'Filter effectiveness measures by summary, description, metric, linked controls, owner, source or latest value…', addLabel: 'Add new effectiveness measure'},
-  {key: 'meetings', kind: 'meeting', rowsId: 'meetingsRows', countId: 'meetingsCount', formCardId: 'meetingFormCard', title: 'Minutes of Meetings filters', placeholder: 'Filter meetings by date, title, attendees, links, controls or clauses…', addLabel: 'Add new meeting'},
+  {
+    key: 'objectives',
+    kind: 'objective',
+    rowsId: 'objectivesRows',
+    countId: 'objectivesCount',
+    formCardId: 'objectiveFormCard',
+    title: 'Objective filters',
+    placeholder: 'Filter objectives by goal, metric, owner, controls or clauses…',
+    addLabel: 'Add new objective',
+  },
+  {
+    key: 'documents',
+    kind: 'document',
+    rowsId: 'documentsRows',
+    countId: 'documentsCount',
+    formCardId: 'documentFormCard',
+    title: 'Policies & Processes filters',
+    placeholder: 'Filter documents by title, type, description, controls or clauses…',
+    addLabel: 'Add new policy/process',
+  },
+  {
+    key: 'org',
+    kind: 'org',
+    rowsId: 'orgRows',
+    countId: 'orgCount',
+    formCardId: 'orgFormCard',
+    title: 'Organisation Chart filters',
+    placeholder: 'Filter organisation chart rows by name, parent, people, controls or clauses…',
+    addLabel: 'Add new org node',
+  },
+  {
+    key: 'assets',
+    kind: 'asset',
+    rowsId: 'assetsRows',
+    countId: 'assetsCount',
+    formCardId: 'assetFormCard',
+    title: 'Asset Matrix filters',
+    placeholder: 'Filter assets by name, category, owner, license, controls or clauses…',
+    addLabel: 'Add new asset',
+  },
+  {
+    key: 'access',
+    kind: 'access',
+    rowsId: 'accessMatrixRows',
+    countId: 'accessControlCount',
+    formCardId: 'accessControlFormCard',
+    title: 'Access Control Matrix filters',
+    placeholder: 'Filter access rows by task/action, service, account, role, approver or status…',
+    addLabel: 'Add new access row',
+  },
+  {
+    key: 'effectiveness',
+    kind: 'effectiveness',
+    rowsId: 'effectivenessRows',
+    countId: 'effectivenessCount',
+    formCardId: 'effectivenessFormCard',
+    title: 'Effectiveness Measures filters',
+    placeholder:
+      'Filter effectiveness measures by summary, description, metric, linked controls, owner, source or latest value…',
+    addLabel: 'Add new effectiveness measure',
+  },
+  {
+    key: 'meetings',
+    kind: 'meeting',
+    rowsId: 'meetingsRows',
+    countId: 'meetingsCount',
+    formCardId: 'meetingFormCard',
+    title: 'Minutes of Meetings filters',
+    placeholder: 'Filter meetings by date, title, attendees, links, controls or clauses…',
+    addLabel: 'Add new meeting',
+  },
 ];
 
 function formCardIdForKind(kind) {
-  return formCardIds[kind] || (`${kind}FormCard`);
+  return formCardIds[kind] || `${kind}FormCard`;
 }
 
 function formCardForKind(kind) {
@@ -261,14 +478,16 @@ function tableCardForSection(cfg) {
   return $(cfg.countId)?.closest('.card') || $(cfg.rowsId)?.closest('.card') || null;
 }
 
-function addHeaderButton(header, {html, dataset}) {
+function addHeaderButton(header, { html, dataset }) {
   if (!header) return null;
   let actionWrap = header.querySelector('[data-isms-section-actions]');
   if (!actionWrap) {
     actionWrap = document.createElement('div');
     actionWrap.className = 'd-flex flex-wrap gap-2 align-items-center justify-content-end no-print';
     actionWrap.setAttribute('data-isms-section-actions', '1');
-    const count = Array.from(header.querySelectorAll('.badge[id]')).find((el) => /Count$/.test(el.id));
+    const count = Array.from(header.querySelectorAll('.badge[id]')).find((el) =>
+      /Count$/.test(el.id),
+    );
     if (count) {
       count.replaceWith(actionWrap);
       actionWrap.appendChild(count);
@@ -294,14 +513,23 @@ function installIsmsSectionChrome() {
     if (canManage) {
       addHeaderButton(header, {
         html: `<i class="bi bi-plus-lg me-1" aria-hidden="true"></i>${esc(cfg.addLabel)}`,
-        dataset: {'data-isms-add': cfg.kind},
+        dataset: { 'data-isms-add': cfg.kind },
       });
       if (cfg.kind === 'asset') {
-        addHeaderButton(header, {html: 'Manage categories', dataset: {'data-isms-toggle-card': 'assetCategoryCard'}});
-        addHeaderButton(header, {html: 'Manage licenses', dataset: {'data-isms-toggle-card': 'licenseCard'}});
+        addHeaderButton(header, {
+          html: 'Manage categories',
+          dataset: { 'data-isms-toggle-card': 'assetCategoryCard' },
+        });
+        addHeaderButton(header, {
+          html: 'Manage licenses',
+          dataset: { 'data-isms-toggle-card': 'licenseCard' },
+        });
       }
       if (cfg.kind === 'access') {
-        addHeaderButton(header, {html: 'Manage hosting accounts', dataset: {'data-isms-toggle-card': 'awsAccountCard'}});
+        addHeaderButton(header, {
+          html: 'Manage hosting accounts',
+          dataset: { 'data-isms-toggle-card': 'awsAccountCard' },
+        });
       }
     }
     const filterId = `${cfg.key}TableFilter`;
@@ -320,20 +548,26 @@ function installIsmsSectionChrome() {
       card.insertAdjacentElement('beforebegin', filter);
     }
   }
-  try { initCollapsibleFilterSections(); } catch {}
+  try {
+    initCollapsibleFilterSections();
+  } catch {}
 }
 
 function applyIsmsTableFilter(input) {
   const rowsId = input?.getAttribute?.('data-isms-table-filter') || '';
   const tbody = rowsId ? $(rowsId) : null;
   if (!tbody) return;
-  const q = String(input.value || '').trim().toLowerCase();
+  const q = String(input.value || '')
+    .trim()
+    .toLowerCase();
   for (const tr of Array.from(tbody.querySelectorAll('tr'))) {
     if (tr.querySelector('td[colspan]')) {
       tr.style.display = '';
       continue;
     }
-    const text = String(tr.getAttribute('data-isms-filter-text') || tr.textContent || '').toLowerCase();
+    const text = String(
+      tr.getAttribute('data-isms-filter-text') || tr.textContent || '',
+    ).toLowerCase();
     tr.style.display = !q || text.includes(q) ? '' : 'none';
   }
 }
@@ -345,22 +579,37 @@ function showNewIsmsForm(kind) {
   setFormMode(kind, null);
   setFormCardVisible(kind, true);
   const form = $(formIds[kind]);
-  form?.scrollIntoView({behavior: 'smooth', block: 'start'});
+  form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const first = form?.querySelector('input:not([type="hidden"]), textarea, select');
-  setTimeout(() => { try { first?.focus?.(); } catch {} }, 80);
+  setTimeout(() => {
+    try {
+      first?.focus?.();
+    } catch {}
+  }, 80);
 }
 
 function toggleAuxCard(id) {
   const card = $(id);
   if (!card || !canManage) return;
   const nextVisible = card.style.display === 'none' || card.hidden;
-  if (nextVisible) hideAllIsmsForms(id === 'assetCategoryCard' ? 'assetCategory' : id === 'licenseCard' ? 'license' : id === 'awsAccountCard' ? 'awsAccount' : '');
+  if (nextVisible)
+    hideAllIsmsForms(
+      id === 'assetCategoryCard'
+        ? 'assetCategory'
+        : id === 'licenseCard'
+          ? 'license'
+          : id === 'awsAccountCard'
+            ? 'awsAccount'
+            : '',
+    );
   card.hidden = false;
   card.style.display = nextVisible ? '' : 'none';
-  if (nextVisible) card.scrollIntoView({behavior: 'smooth', block: 'start'});
+  if (nextVisible) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function assetCategories() { return meta.asset_categories || []; }
+function assetCategories() {
+  return meta.asset_categories || [];
+}
 function currentAssetCategory() {
   const id = $('assetCategory')?.value || '';
   return assetCategories().find((c) => String(c.id) === String(id)) || assetCategories()[0] || null;
@@ -371,36 +620,50 @@ function renderAssetSubcategoryOptions(targetValue = '') {
   const category = currentAssetCategory();
   const subs = category?.subcategories || [];
   const cur = targetValue || select.value || subs[0]?.id || '';
-  select.innerHTML = subs.map((s) => `<option value="${esc(s.id)}">${esc(s.name || 'Subcategory')}</option>`).join('') || '<option value="">Add a subcategory first</option>';
-  select.value = subs.some((s) => String(s.id) === String(cur)) ? cur : (subs[0]?.id || '');
+  select.innerHTML =
+    subs
+      .map((s) => `<option value="${esc(s.id)}">${esc(s.name || 'Subcategory')}</option>`)
+      .join('') || '<option value="">Add a subcategory first</option>';
+  select.value = subs.some((s) => String(s.id) === String(cur)) ? cur : subs[0]?.id || '';
 }
 function renderAssetCategoryList() {
   const holder = $('assetCategoryList');
   if (!holder) return;
   const cats = assetCategories();
-  if (!cats.length) { holder.innerHTML = '<span class="small-muted">No asset categories yet.</span>'; return; }
-  holder.innerHTML = `<div class="vstack gap-2">${cats.map((c) => `
+  if (!cats.length) {
+    holder.innerHTML = '<span class="small-muted">No asset categories yet.</span>';
+    return;
+  }
+  holder.innerHTML = `<div class="vstack gap-2">${cats
+    .map(
+      (c) => `
     <div class="border rounded-3 p-2">
       <div class="fw-semibold">${esc(c.name || 'Category')}</div>
       <div class="d-flex flex-wrap gap-1 mt-1">${(c.subcategories || []).map((s) => `<span class="badge badge-soft">${esc(s.name || 'Subcategory')}</span>`).join('') || '<span class="small-muted">No subcategories</span>'}</div>
-    </div>`).join('')}</div>`;
+    </div>`,
+    )
+    .join('')}</div>`;
 }
 function populateAssetCategoryControls(targetCategoryId = '', targetSubcategoryId = '') {
   const cats = assetCategories();
-  const opts = cats.map((c) => `<option value="${esc(c.id)}">${esc(c.name || 'Category')}</option>`).join('');
+  const opts = cats
+    .map((c) => `<option value="${esc(c.id)}">${esc(c.name || 'Category')}</option>`)
+    .join('');
   for (const id of ['assetCategory', 'assetSubcategoryCategory']) {
     const el = $(id);
     if (!el) continue;
     const cur = targetCategoryId || el.value || cats[0]?.id || '';
     el.innerHTML = opts || '<option value="">Add a category first</option>';
-    el.value = cats.some((c) => String(c.id) === String(cur)) ? cur : (cats[0]?.id || '');
+    el.value = cats.some((c) => String(c.id) === String(cur)) ? cur : cats[0]?.id || '';
     el.disabled = !cats.length;
   }
   renderAssetSubcategoryOptions(targetSubcategoryId);
   renderAssetCategoryList();
 }
 
-function licenses() { return meta.licenses || []; }
+function licenses() {
+  return meta.licenses || [];
+}
 function licenseLabel(value) {
   const text = String(value || '').trim();
   return text || '—';
@@ -408,7 +671,7 @@ function licenseLabel(value) {
 function renderLicenseOptions(targetValue = '') {
   const select = $('assetLicense');
   if (!select) return;
-  const opts = optionList(licenses(), {label: 'name', includeBlank: true, blankLabel: '—'});
+  const opts = optionList(licenses(), { label: 'name', includeBlank: true, blankLabel: '—' });
   const cur = targetValue || select.value || '';
   select.innerHTML = opts;
   select.value = licenses().some((l) => String(l.id) === String(cur)) ? cur : '';
@@ -416,12 +679,17 @@ function renderLicenseOptions(targetValue = '') {
 function renderLicenses() {
   if (!rows.licenses) return;
   const items = licenses();
-  rows.licenses.innerHTML = items.map((l) => `<tr>
+  rows.licenses.innerHTML =
+    items
+      .map(
+        (l) => `<tr>
     <td class="fw-semibold">${esc(l.name || 'License')}</td>
     <td class="wrap small-muted">${esc(shorten(l.description || '', 180) || '—')}</td>
     <td>${Number(l.asset_count || 0)}</td>
     <td class="text-nowrap no-print"><div class="btn-group btn-group-sm" role="group"><button class="btn btn-outline-primary" type="button" data-license-edit="${esc(l.id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit license</span></button><button class="btn btn-outline-danger" type="button" data-license-delete="${esc(l.id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete license</span></button></div></td>
-  </tr>`).join('') || emptyRow(4, 'No licenses yet.');
+  </tr>`,
+      )
+      .join('') || emptyRow(4, 'No licenses yet.');
 }
 function resetLicenseForm(item = null) {
   const form = $('licenseForm');
@@ -433,7 +701,9 @@ function resetLicenseForm(item = null) {
   if (button) button.textContent = item ? 'Save license' : 'Add license';
 }
 
-function awsAccounts() { return meta.aws_accounts || []; }
+function awsAccounts() {
+  return meta.aws_accounts || [];
+}
 function awsAccountLabel(account) {
   if (!account) return 'hosting account';
   return `${account.name || 'hosting account'}${account.account_id ? ` (${account.account_id})` : ''}`;
@@ -441,19 +711,28 @@ function awsAccountLabel(account) {
 function renderAwsAccountOptions(targetValues = []) {
   const select = $('accessAwsAccounts');
   if (!select) return;
-  select.innerHTML = optionList(awsAccounts(), {label: awsAccountLabel});
+  select.innerHTML = optionList(awsAccounts(), { label: awsAccountLabel });
   if (Array.isArray(targetValues) && targetValues.length) setSelectValues(select, targetValues);
 }
 function renderAwsAccounts() {
   if (!rows.awsAccounts) return;
   const items = awsAccounts();
-  rows.awsAccounts.innerHTML = items.map((a) => `<tr>
+  rows.awsAccounts.innerHTML =
+    items
+      .map(
+        (a) => `<tr>
     <td class="fw-semibold">${esc(a.name || 'hosting account')}</td>
     <td>${esc(a.account_id || '—')}</td>
     <td class="wrap small-muted">${esc(shorten(a.notes || '', 180) || '—')}</td>
     <td>${Number(a.entry_count || 0)}</td>
     <td class="text-nowrap no-print"><div class="btn-group btn-group-sm" role="group"><button class="btn btn-outline-primary" type="button" data-aws-account-edit="${esc(a.id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit hosting account</span></button><button class="btn btn-outline-danger" type="button" data-aws-account-delete="${esc(a.id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete hosting account</span></button></div></td>
-  </tr>`).join('') || emptyRow(5, 'No managed hosting accounts yet. Add at least one before creating access control matrix rows.');
+  </tr>`,
+      )
+      .join('') ||
+    emptyRow(
+      5,
+      'No managed hosting accounts yet. Add at least one before creating access control matrix rows.',
+    );
 }
 function resetAwsAccountForm(item = null) {
   const form = $('awsAccountForm');
@@ -479,28 +758,50 @@ function setSelectValue(select, value = '') {
   }
   select.value = text;
 }
-function clearFileInput(input) { if (input) input.value = ''; }
-function timeForInput(value) { return String(value || '').slice(0, 5); }
-function itemControls(item) { return (item?.controls || []).map((x) => x.id).filter(Boolean); }
-function itemClauses(item) { return (item?.clauses || []).map((x) => x.id).filter(Boolean); }
+function clearFileInput(input) {
+  if (input) input.value = '';
+}
+function timeForInput(value) {
+  return String(value || '').slice(0, 5);
+}
+function itemControls(item) {
+  return (item?.controls || []).map((x) => x.id).filter(Boolean);
+}
+function itemClauses(item) {
+  return (item?.clauses || []).map((x) => x.id).filter(Boolean);
+}
 function actionsHtml(kind, id, extraClass = '') {
   const cls = ['text-nowrap', 'no-print', extraClass].filter(Boolean).join(' ');
   if (!id) return `<td class="${esc(cls)}"></td>`;
-  const sample = canSampleAudits ? `<button class="btn btn-outline-success" type="button" data-audit-sample-entity="${esc(kind)}" data-isms-id="${esc(id)}" title="Sample into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>` : '';
-  const editDelete = canManage ? `<button class="btn btn-outline-primary" type="button" data-isms-edit="${esc(kind)}" data-isms-id="${esc(id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit</span></button><button class="btn btn-outline-danger" type="button" data-isms-delete="${esc(kind)}" data-isms-id="${esc(id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete</span></button>` : '';
+  const sample = canSampleAudits
+    ? `<button class="btn btn-outline-success" type="button" data-audit-sample-entity="${esc(kind)}" data-isms-id="${esc(id)}" title="Sample into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>`
+    : '';
+  const editDelete = canManage
+    ? `<button class="btn btn-outline-primary" type="button" data-isms-edit="${esc(kind)}" data-isms-id="${esc(id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit</span></button><button class="btn btn-outline-danger" type="button" data-isms-delete="${esc(kind)}" data-isms-id="${esc(id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete</span></button>`
+    : '';
   if (!sample && !editDelete) return `<td class="${esc(cls)}"></td>`;
   return `<td class="${esc(cls)}"><div class="btn-group btn-group-sm" role="group">${sample}${editDelete}</div></td>`;
 }
-function emptyRow(colspan, message) { return `<tr><td colspan="${colspan}" class="p-4 small-muted">${esc(message)}</td></tr>`; }
+function emptyRow(colspan, message) {
+  return `<tr><td colspan="${colspan}" class="p-4 small-muted">${esc(message)}</td></tr>`;
+}
 function findItem(kind, id) {
-  const key = {objective: 'objectives', document: 'documents', org: 'org_nodes', asset: 'assets', access: 'access_control_matrix', effectiveness: 'effectiveness_measures', meeting: 'meetings'}[kind];
+  const key = {
+    objective: 'objectives',
+    document: 'documents',
+    org: 'org_nodes',
+    asset: 'assets',
+    access: 'access_control_matrix',
+    effectiveness: 'effectiveness_measures',
+    meeting: 'meetings',
+  }[kind];
   return (data?.[key] || []).find((x) => String(x.id) === String(id)) || null;
 }
 
 function findMetricEntry(id) {
   for (const measure of data.effectiveness_measures || []) {
     const entry = (measure.metric_entries || []).find((x) => String(x.id) === String(id));
-    if (entry) return {...entry, measure};
+    if (entry) return { ...entry, measure };
   }
   return null;
 }
@@ -537,7 +838,7 @@ function meetingHref(item) {
 }
 
 function ismsEntityEvidenceUrl(kind, id, item = null) {
-  const row = item || {id};
+  const row = item || { id };
   if (kind === 'objective') return objectiveHref(row);
   if (kind === 'document') return documentHref(row);
   if (kind === 'asset') return assetHref(row);
@@ -555,8 +856,10 @@ function ismsSampleTitle(kind, item) {
   if (kind === 'org') return item.name || 'Organisation chart node';
   if (kind === 'asset') return item.asset || item.name || 'ISMS asset';
   if (kind === 'access') return item.task_action || 'Access control matrix row';
-  if (kind === 'effectiveness') return item.summary || item.metric || item.effectiveness_measure || 'Effectiveness measure';
-  if (kind === 'metric') return item.value_display || item.measure?.metric || 'Effectiveness metric';
+  if (kind === 'effectiveness')
+    return item.summary || item.metric || item.effectiveness_measure || 'Effectiveness measure';
+  if (kind === 'metric')
+    return item.value_display || item.measure?.metric || 'Effectiveness metric';
   if (kind === 'meeting') return item.title || 'ISMS meeting';
   return item.display || 'ISMS item';
 }
@@ -580,7 +883,10 @@ function ensureCancelButton(kind) {
   if (!form || form.querySelector('[data-isms-cancel-edit]')) return;
   const submit = form.querySelector('button[type="submit"]');
   if (!submit) return;
-  submit.insertAdjacentHTML('afterend', ` <button class="btn btn-outline-secondary ms-2" type="button" style="display:none;" data-isms-cancel-edit="${esc(kind)}">Cancel edit</button>`);
+  submit.insertAdjacentHTML(
+    'afterend',
+    ` <button class="btn btn-outline-secondary ms-2" type="button" style="display:none;" data-isms-cancel-edit="${esc(kind)}">Cancel edit</button>`,
+  );
 }
 function setFormMode(kind, item = null) {
   ensureCancelButton(kind);
@@ -611,11 +917,24 @@ function resetForm(kind) {
   if (!form) return;
   form.reset();
   setFormMode(kind, null);
-  if (kind === 'document') { clearFileInput($('docFile')); documentTags = []; renderDocumentTags(); setRichTextEditorValue('docContent', ''); $('docMediumWrite').checked = true; showDocumentMedium(); }
+  if (kind === 'document') {
+    clearFileInput($('docFile'));
+    documentTags = [];
+    renderDocumentTags();
+    setRichTextEditorValue('docContent', '');
+    $('docMediumWrite').checked = true;
+    showDocumentMedium();
+  }
   if (kind === 'access') renderAccessFormOptions();
   if (kind === 'effectiveness') renderEffectivenessFormOptions();
-  if (kind === 'asset') { populateAssetCategoryControls(); renderLicenseOptions(); }
-  if (kind === 'meeting') { resetMeetingExternalLinks(); setMeetingNotesValue(''); }
+  if (kind === 'asset') {
+    populateAssetCategoryControls();
+    renderLicenseOptions();
+  }
+  if (kind === 'meeting') {
+    resetMeetingExternalLinks();
+    setMeetingNotesValue('');
+  }
   setFormCardVisible(kind, false);
 }
 function addMeetingExternalLinkRow(title = '', url = '') {
@@ -633,7 +952,9 @@ function resetMeetingExternalLinks(links = null) {
   const holder = $('meetingExternalLinks');
   if (!holder) return;
   holder.innerHTML = '';
-  const external = Array.isArray(links) ? links.filter((l) => l.link_type === 'external_url' && l.url) : [];
+  const external = Array.isArray(links)
+    ? links.filter((l) => l.link_type === 'external_url' && l.url)
+    : [];
   if (external.length) {
     for (const link of external) addMeetingExternalLinkRow(link.title || '', link.url || '');
   } else {
@@ -641,13 +962,16 @@ function resetMeetingExternalLinks(links = null) {
   }
 }
 function selectedMeetingLinks() {
-  const meetingLinks = selectedValues($('meetingDocuments')).map((id) => ({link_type: 'isms_document', document_id: id}));
+  const meetingLinks = selectedValues($('meetingDocuments')).map((id) => ({
+    link_type: 'isms_document',
+    document_id: id,
+  }));
   for (const row of Array.from(document.querySelectorAll('.meeting-external-link-row'))) {
     const title = String(row.querySelector('[data-meeting-link-title]')?.value || '').trim();
     const url = String(row.querySelector('[data-meeting-link-url]')?.value || '').trim();
     if (!title && !url) continue;
     if (!url) throw new Error('External meeting links need a URL.');
-    meetingLinks.push({link_type: 'external_url', title: title || null, url});
+    meetingLinks.push({ link_type: 'external_url', title: title || null, url });
   }
   return meetingLinks;
 }
@@ -686,14 +1010,29 @@ function populateEditForm(kind, item) {
     $('docDescription').value = item.description || '';
     $('docFolder').value = item.folder_id || '';
     if (item.folder_id && $('docFolder').value !== item.folder_id) {
-      loadDocumentFolders().then(() => { if ($('documentForm').dataset.editingId === item.id) $('docFolder').value = item.folder_id; })
-        .catch(err => toast(status, `Could not load document folder: ${String(err)}`, 'warning'));
+      loadDocumentFolders()
+        .then(() => {
+          if ($('documentForm').dataset.editingId === item.id)
+            $('docFolder').value = item.folder_id;
+        })
+        .catch((err) => toast(status, `Could not load document folder: ${String(err)}`, 'warning'));
     }
-    documentTags = [...(item.tags || [])]; renderDocumentTags();
+    documentTags = [...(item.tags || [])];
+    renderDocumentTags();
     initRichTextEditors($('documentForm'));
     setRichTextEditorValue('docContent', item.content_html || '');
-    $('docExistingFile').textContent = item.has_file ? `Current file: ${item.filename || 'uploaded file'}` : '';
-    $(item.content_html ? 'docMediumWrite' : item.has_file ? 'docMediumUpload' : item.external_url ? 'docMediumLink' : 'docMediumWrite').checked = true;
+    $('docExistingFile').textContent = item.has_file
+      ? `Current file: ${item.filename || 'uploaded file'}`
+      : '';
+    $(
+      item.content_html
+        ? 'docMediumWrite'
+        : item.has_file
+          ? 'docMediumUpload'
+          : item.external_url
+            ? 'docMediumLink'
+            : 'docMediumWrite',
+    ).checked = true;
     showDocumentMedium();
     clearFileInput($('docFile'));
     setSelectValues($('docControls'), itemControls(item));
@@ -708,7 +1047,10 @@ function populateEditForm(kind, item) {
     setSelectValues($('orgClauses'), itemClauses(item));
   } else if (kind === 'asset') {
     $('assetName').value = item.asset || item.name || '';
-    populateAssetCategoryControls(item.category_id || item.category?.id || '', item.subcategory_id || item.subcategory?.id || '');
+    populateAssetCategoryControls(
+      item.category_id || item.category?.id || '',
+      item.subcategory_id || item.subcategory?.id || '',
+    );
     renderLicenseOptions(item.license_id || '');
     $('assetOwner').value = item.owner_org_node_id || '';
     $('assetRegister').value = item.register_held_by_org_node_id || '';
@@ -722,7 +1064,10 @@ function populateEditForm(kind, item) {
     setSelectValues($('accessAwsAccounts'), item.aws_account_ids || []);
     $('accessStatus').value = item.status || 'Pending Approval';
     $('accessApprovedBy').value = item.approved_by_user_id || '';
-    setSelectValues($('accessRole'), item.role_org_node_ids || (item.role_org_node_id ? [item.role_org_node_id] : []));
+    setSelectValues(
+      $('accessRole'),
+      item.role_org_node_ids || (item.role_org_node_id ? [item.role_org_node_id] : []),
+    );
     $('accessNotes').value = item.notes || '';
   } else if (kind === 'effectiveness') {
     $('effSummary').value = item.summary || '';
@@ -747,30 +1092,48 @@ function populateEditForm(kind, item) {
     setSelectValues($('meetingApologies'), item.apology_user_ids || []);
     setSelectValues($('meetingPersonAttendees'), item.attendee_person_ids || []);
     setSelectValues($('meetingPersonApologies'), item.apology_person_ids || []);
-    setSelectValues($('meetingDocuments'), (item.links || []).filter((l) => l.link_type === 'isms_document' && l.document_id).map((l) => l.document_id));
+    setSelectValues(
+      $('meetingDocuments'),
+      (item.links || [])
+        .filter((l) => l.link_type === 'isms_document' && l.document_id)
+        .map((l) => l.document_id),
+    );
     resetMeetingExternalLinks(item.links || []);
     setMeetingNotesValue(item.agenda_minutes_notes || '');
     setSelectValues($('meetingControls'), itemControls(item));
     setSelectValues($('meetingClauses'), itemClauses(item));
   }
-  const card = $(kind === 'access' ? 'accessControlFormCard' : kind === 'effectiveness' ? 'effectivenessFormCard' : `${kind}FormCard`);
+  const card = $(
+    kind === 'access'
+      ? 'accessControlFormCard'
+      : kind === 'effectiveness'
+        ? 'effectivenessFormCard'
+        : `${kind}FormCard`,
+  );
   if (card) card.style.display = '';
-  formIds[kind] && $(formIds[kind])?.scrollIntoView({behavior: 'smooth', block: 'start'});
+  formIds[kind] && $(formIds[kind])?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 async function saveIsms(kind, createPayload, editingId = null) {
   const ep = endpoints[kind];
   if (!ep) throw new Error(`Unknown ISMS entity type: ${kind}`);
   const base = `/api/v1/isms/${ep}`;
-  if (editingId) return apiPatch(`${base}/${encodeURIComponent(editingId)}?framework=${encodeURIComponent(framework)}`, createPayload);
+  if (editingId)
+    return apiPatch(
+      `${base}/${encodeURIComponent(editingId)}?framework=${encodeURIComponent(framework)}`,
+      createPayload,
+    );
   return apiPost(`${base}?framework=${encodeURIComponent(framework)}`, createPayload);
 }
 async function deleteIsms(kind, id) {
   const ep = endpoints[kind];
   if (!ep || !id) return;
   const item = findItem(kind, id);
-  const label = item?.display || item?.title || item?.name || item?.asset || item?.goal || 'this ISMS item';
+  const label =
+    item?.display || item?.title || item?.name || item?.asset || item?.goal || 'this ISMS item';
   if (!confirm(`Delete ${label}? This will remove the ISMS record and its ISMS links.`)) return;
-  await apiDelete(`/api/v1/isms/${ep}/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`);
+  await apiDelete(
+    `/api/v1/isms/${ep}/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
+  );
   if (editState.id === id && editState.kind === kind) resetForm(kind);
   await reloadAfter('ISMS item deleted');
 }
@@ -780,11 +1143,16 @@ function renderOverview() {
   if (!root) return;
 
   const link = (href) => esc(withFramework(href, framework));
-  const button = ({label, href, x, y, w, h, lines = null}) => {
+  const button = ({ label, href, x, y, w, h, lines = null }) => {
     const textLines = Array.isArray(lines) && lines.length ? lines : [label];
-    const centreX = x + (w / 2);
-    const firstY = y + (h / 2) - ((textLines.length - 1) * 7) + 4;
-    const tspans = textLines.map((line, idx) => `<tspan x="${centreX}" ${idx ? 'dy="14"' : `y="${firstY}"`}>${esc(line)}</tspan>`).join('');
+    const centreX = x + w / 2;
+    const firstY = y + h / 2 - (textLines.length - 1) * 7 + 4;
+    const tspans = textLines
+      .map(
+        (line, idx) =>
+          `<tspan x="${centreX}" ${idx ? 'dy="14"' : `y="${firstY}"`}>${esc(line)}</tspan>`,
+      )
+      .join('');
     return `<a class="isms-flow-button" href="${link(href)}" aria-label="Open ${esc(label)}">
       <rect class="isms-flow-button-bg" x="${x}" y="${y}" width="${w}" height="${h}" rx="8"></rect>
       <text class="isms-flow-button-label" text-anchor="middle">${tspans}</text>
@@ -823,40 +1191,40 @@ function renderOverview() {
             <g class="isms-flow-section isms-flow-main">
               <rect class="isms-flow-section-bg" x="355" y="48" width="426" height="230" rx="18"></rect>
               <text class="isms-flow-section-title" x="568" y="88" text-anchor="middle">Strategy and Planning</text>
-              ${button({label: 'Objectives', href: '/isms.html?tab=objectives', x: 384, y: 100, w: 110, h: 34})}
-              ${button({label: 'CIA Triad Risks', href: '/risks.html', x: 506, y: 100, w: 138, h: 34})}
-              ${button({label: 'PESTLE(E)', href: '/pestle.html', x: 656, y: 100, w: 96, h: 34})}
-              ${button({label: 'Org Chart', href: '/isms.html?tab=org', x: 384, y: 146, w: 110, h: 34})}
-              ${button({label: 'Interested Parties', href: '/interested_parties.html', x: 506, y: 146, w: 138, h: 34})}
-              ${button({label: 'Asset Matrix', href: '/isms.html?tab=assets', x: 656, y: 146, w: 96, h: 34})}
-              ${button({label: 'Policies & Processes', href: '/isms.html?tab=documents', x: 384, y: 196, w: 174, h: 34})}
-              ${button({label: 'Access Control Matrix', href: '/isms.html?tab=access', x: 570, y: 196, w: 182, h: 34, lines: ['Access Control', 'Matrix']})}
-              ${button({label: 'Effectiveness Measures', href: '/isms.html?tab=effectiveness', x: 456, y: 238, w: 224, h: 34, lines: ['Effectiveness', 'Measures']})}
+              ${button({ label: 'Objectives', href: '/isms.html?tab=objectives', x: 384, y: 100, w: 110, h: 34 })}
+              ${button({ label: 'CIA Triad Risks', href: '/risks.html', x: 506, y: 100, w: 138, h: 34 })}
+              ${button({ label: 'PESTLE(E)', href: '/pestle.html', x: 656, y: 100, w: 96, h: 34 })}
+              ${button({ label: 'Org Chart', href: '/isms.html?tab=org', x: 384, y: 146, w: 110, h: 34 })}
+              ${button({ label: 'Interested Parties', href: '/interested_parties.html', x: 506, y: 146, w: 138, h: 34 })}
+              ${button({ label: 'Asset Matrix', href: '/isms.html?tab=assets', x: 656, y: 146, w: 96, h: 34 })}
+              ${button({ label: 'Policies & Processes', href: '/isms.html?tab=documents', x: 384, y: 196, w: 174, h: 34 })}
+              ${button({ label: 'Access Control Matrix', href: '/isms.html?tab=access', x: 570, y: 196, w: 182, h: 34, lines: ['Access Control', 'Matrix'] })}
+              ${button({ label: 'Effectiveness Measures', href: '/isms.html?tab=effectiveness', x: 456, y: 238, w: 224, h: 34, lines: ['Effectiveness', 'Measures'] })}
             </g>
 
             <g class="isms-flow-section isms-flow-compliance">
               <rect class="isms-flow-section-bg" x="96" y="155" width="218" height="178" rx="16"></rect>
               <text class="isms-flow-section-title isms-flow-section-title-sm" x="205" y="184" text-anchor="middle">Compliance Framework</text>
               <path class="isms-flow-inner-connector" marker-end="url(#ismsFlowArrow)" d="M 205 242 V 267"></path>
-              ${button({label: 'Clauses', href: '/clauses.html', x: 134, y: 206, w: 142, h: 34})}
-              ${button({label: 'Controls', href: '/controls.html', x: 134, y: 268, w: 142, h: 34})}
+              ${button({ label: 'Clauses', href: '/clauses.html', x: 134, y: 206, w: 142, h: 34 })}
+              ${button({ label: 'Controls', href: '/controls.html', x: 134, y: 268, w: 142, h: 34 })}
             </g>
 
             <g class="isms-flow-section">
               <rect class="isms-flow-section-bg" x="427" y="303" width="156" height="66" rx="14"></rect>
-              ${button({label: 'Sources', href: '/sources.html', x: 456, y: 319, w: 98, h: 34})}
+              ${button({ label: 'Sources', href: '/sources.html', x: 456, y: 319, w: 98, h: 34 })}
             </g>
 
             <g class="isms-flow-section">
               <rect class="isms-flow-section-bg" x="700" y="285" width="210" height="102" rx="16"></rect>
               <text class="isms-flow-section-title isms-flow-section-title-sm" x="805" y="312" text-anchor="middle">Evidence records</text>
-              ${button({label: 'Evidence', href: '/events.html', x: 722, y: 331, w: 82, h: 34})}
-              ${button({label: 'Diary', href: '/events.html?source=diary', x: 814, y: 331, w: 74, h: 34})}
+              ${button({ label: 'Evidence', href: '/events.html', x: 722, y: 331, w: 82, h: 34 })}
+              ${button({ label: 'Diary', href: '/events.html?source=diary', x: 814, y: 331, w: 74, h: 34 })}
             </g>
 
             <g class="isms-flow-section">
               <rect class="isms-flow-section-bg" x="827" y="123" width="158" height="66" rx="14"></rect>
-              ${button({label: 'Audits', href: '/audits.html', x: 858, y: 139, w: 96, h: 34})}
+              ${button({ label: 'Audits', href: '/audits.html', x: 858, y: 139, w: 96, h: 34 })}
             </g>
           </svg>
         </div>
@@ -867,33 +1235,51 @@ function renderOverview() {
 function renderObjectives() {
   const items = data.objectives || [];
   setCount('objectivesCount', items.length);
-  rows.objectives.innerHTML = items.map((o) => `<tr data-isms-row="objective" data-isms-id="${esc(o.id)}">
+  rows.objectives.innerHTML =
+    items
+      .map(
+        (o) => `<tr data-isms-row="objective" data-isms-id="${esc(o.id)}">
     <td class="wrap"><div class="fw-semibold"><a href="${esc(objectiveHref(o))}">${esc(shorten(o.goal || o.requirement || 'Objective', 150))}</a></div><div class="small-muted">${esc(shorten(o.requirement || '', 160))}</div></td>
     <td class="wrap">${esc(shorten(o.metric || '—', 180))}</td>
     <td class="isms-objectives-owner-cell">${objectiveUserPill(o.owner)}</td>
     <td class="wrap">${esc(o.completion_target_date || '—')}</td>
     <td class="isms-objectives-resources-cell">${objectiveUserBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 100))}</div></td>
     <td class="wrap">${controlBadges(o.controls)}</td><td class="wrap">${clauseBadges(o.clauses)}</td>${actionsHtml('objective', o.id, 'isms-objectives-actions')}
-  </tr>`).join('') || emptyRow(8, 'No ISMS objectives yet.');
+  </tr>`,
+      )
+      .join('') || emptyRow(8, 'No ISMS objectives yet.');
 }
 
 function renderDocuments() {
   const items = data.documents || [];
   setCount('documentsCount', items.length);
-  const tags = [...new Set(items.flatMap(item => item.tags || []))].sort();
-  $('docTagCloud').innerHTML = tags.length ? `<button type="button" class="btn btn-sm ${documentTagFilter ? 'btn-outline-secondary' : 'btn-secondary'} rounded-pill me-1 mb-1" data-filter-doc-tag="">All</button>${tags.map(tag => tagChip(tag)).join('')}` : '';
-  rows.documents.innerHTML = items.filter(item => !documentTagFilter || (item.tags || []).includes(documentTagFilter)).map((d) => `<tr data-isms-row="document">
-    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title || 'Document')}</a><div class="small">${(d.tags || []).map(tag => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '—')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in KEEN</span> ' : ''}${docLink(d)}</td>
+  const tags = [...new Set(items.flatMap((item) => item.tags || []))].sort();
+  $('docTagCloud').innerHTML = tags.length
+    ? `<button type="button" class="btn btn-sm ${documentTagFilter ? 'btn-outline-secondary' : 'btn-secondary'} rounded-pill me-1 mb-1" data-filter-doc-tag="">All</button>${tags.map((tag) => tagChip(tag)).join('')}`
+    : '';
+  rows.documents.innerHTML =
+    items
+      .filter((item) => !documentTagFilter || (item.tags || []).includes(documentTagFilter))
+      .map(
+        (d) => `<tr data-isms-row="document">
+    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title || 'Document')}</a><div class="small">${(d.tags || []).map((tag) => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '—')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in KEEN</span> ' : ''}${docLink(d)}</td>
     <td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '—')}</td><td>${controlBadges(d.controls)}</td><td>${clauseBadges(d.clauses)}</td><td class="small-muted">${esc(fmtTs(d.updated_at))}</td>${actionsHtml('document', d.id)}
-  </tr>`).join('') || emptyRow(8, 'No ISMS documents yet.');
+  </tr>`,
+      )
+      .join('') || emptyRow(8, 'No ISMS documents yet.');
 }
 
 function renderOrg() {
   const items = data.org_nodes || [];
   setCount('orgCount', items.length);
-  rows.org.innerHTML = items.map((n) => `<tr data-isms-row="org">
+  rows.org.innerHTML =
+    items
+      .map(
+        (n) => `<tr data-isms-row="org">
     <td class="fw-semibold">${esc(n.name || 'Org node')}</td><td>${esc(n.parent?.name || 'Root')}</td><td>${esc(n.node_type || '—')}</td><td>${userBadges(n.people)}</td><td class="wrap small-muted">${esc(shorten(n.description || '', 160) || '—')}</td><td>${controlBadges(n.controls)}</td><td>${clauseBadges(n.clauses)}</td>${actionsHtml('org', n.id)}
-  </tr>`).join('') || emptyRow(8, 'No organisation chart nodes yet.');
+  </tr>`,
+      )
+      .join('') || emptyRow(8, 'No organisation chart nodes yet.');
 }
 
 function orgDisplayName(node) {
@@ -903,8 +1289,8 @@ function orgDisplayName(node) {
 
 function buildOrgHierarchy(items) {
   const nodes = new Map();
-  const root = {id: 'root', name: 'ISMS Organisation', node_type: 'root', children: []};
-  for (const item of items || []) nodes.set(String(item.id), {...item, children: []});
+  const root = { id: 'root', name: 'ISMS Organisation', node_type: 'root', children: [] };
+  for (const item of items || []) nodes.set(String(item.id), { ...item, children: [] });
   for (const node of nodes.values()) {
     const parentId = node.parent_id || node.parent?.id;
     const parent = parentId ? nodes.get(String(parentId)) : null;
@@ -912,13 +1298,14 @@ function buildOrgHierarchy(items) {
     else root.children.push(node);
   }
   const sortTree = (node) => {
-    node.children = (node.children || []).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, {numeric: true}));
+    node.children = (node.children || []).sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true }),
+    );
     node.children.forEach(sortTree);
   };
   sortTree(root);
   return root;
 }
-
 
 function wrapSvgLabel(text, maxChars = 26, maxLines = 2) {
   const raw = String(text || '').trim();
@@ -968,11 +1355,11 @@ function renderOrgChart() {
   const d3 = window.d3;
   const treeData = buildOrgHierarchy(items);
   const root = d3.hierarchy(treeData);
-  const nodeBox = {width: 240, height: 76, rx: 12};
+  const nodeBox = { width: 240, height: 76, rx: 12 };
   const nodeXSpacing = 275;
   const nodeYSpacing = 132;
   const width = Math.max(920, el.clientWidth || 920);
-  const margin = {top: 48, right: 96, bottom: 64, left: 96};
+  const margin = { top: 48, right: 96, bottom: 64, left: 96 };
   const tree = d3.tree().nodeSize([nodeXSpacing, nodeYSpacing]);
   tree(root);
   const nodes = root.descendants();
@@ -982,40 +1369,62 @@ function renderOrgChart() {
   const maxY = d3.max(nodes, (d) => d.y) || 0;
   const viewW = Math.max(width, maxX - minX + margin.left + margin.right + nodeBox.width);
   const viewH = Math.max(420, maxY - minY + margin.top + margin.bottom + nodeBox.height);
-  const initialTranslateX = margin.left + (nodeBox.width / 2) - minX;
-  const initialTranslateY = margin.top + (nodeBox.height / 2) - minY;
-  const svg = d3.select(el).append('svg')
+  const initialTranslateX = margin.left + nodeBox.width / 2 - minX;
+  const initialTranslateY = margin.top + nodeBox.height / 2 - minY;
+  const svg = d3
+    .select(el)
+    .append('svg')
     .attr('width', '100%')
     .attr('height', viewH)
     .attr('viewBox', `0 0 ${viewW} ${viewH}`)
     .attr('role', 'img')
     .attr('aria-label', 'ISMS organisation chart hierarchy');
-  const g = svg.append('g').attr('transform', `translate(${initialTranslateX},${initialTranslateY})`);
-  const link = d3.linkVertical().x((d) => d.x).y((d) => d.y);
-  g.append('g').attr('fill', 'none').attr('stroke', 'currentColor').attr('stroke-opacity', 0.32).attr('stroke-width', 1.6)
-    .selectAll('path').data(root.links()).join('path').attr('d', link);
-  const node = g.append('g').selectAll('g').data(nodes).join('g').attr('transform', (d) => `translate(${d.x},${d.y})`);
-  node.append('rect')
+  const g = svg
+    .append('g')
+    .attr('transform', `translate(${initialTranslateX},${initialTranslateY})`);
+  const link = d3
+    .linkVertical()
+    .x((d) => d.x)
+    .y((d) => d.y);
+  g.append('g')
+    .attr('fill', 'none')
+    .attr('stroke', 'currentColor')
+    .attr('stroke-opacity', 0.32)
+    .attr('stroke-width', 1.6)
+    .selectAll('path')
+    .data(root.links())
+    .join('path')
+    .attr('d', link);
+  const node = g
+    .append('g')
+    .selectAll('g')
+    .data(nodes)
+    .join('g')
+    .attr('transform', (d) => `translate(${d.x},${d.y})`);
+  node
+    .append('rect')
     .attr('x', -nodeBox.width / 2)
     .attr('y', -nodeBox.height / 2)
     .attr('width', nodeBox.width)
     .attr('height', nodeBox.height)
     .attr('rx', nodeBox.rx)
-    .attr('class', (d) => d.depth === 0 ? 'isms-org-node isms-org-node-root' : 'isms-org-node');
+    .attr('class', (d) => (d.depth === 0 ? 'isms-org-node isms-org-node-root' : 'isms-org-node'));
   node.each(function drawNodeLabel(d) {
     const nodeGroup = d3.select(this);
     const titleLines = wrapSvgLabel(d.data.name || 'Org node', 28, 2);
     const subtitleLines = wrapSvgLabel(orgNodeSubtitle(d.data), 34, 1).filter((line) => line);
     const titleStart = titleLines.length > 1 ? -18 : -12;
     titleLines.forEach((line, idx) => {
-      nodeGroup.append('text')
+      nodeGroup
+        .append('text')
         .attr('text-anchor', 'middle')
-        .attr('dy', `${titleStart + (idx * 14)}px`)
+        .attr('dy', `${titleStart + idx * 14}px`)
         .attr('class', 'isms-org-node-title')
         .text(line);
     });
     if (subtitleLines.length) {
-      nodeGroup.append('text')
+      nodeGroup
+        .append('text')
         .attr('text-anchor', 'middle')
         .attr('dy', `${titleLines.length > 1 ? 20 : 15}px`)
         .attr('class', 'isms-org-node-subtitle')
@@ -1023,7 +1432,10 @@ function renderOrgChart() {
     }
   });
   node.append('title').text((d) => orgDisplayName(d.data));
-  const zoom = d3.zoom().scaleExtent([0.35, 3]).on('zoom', (event) => g.attr('transform', event.transform));
+  const zoom = d3
+    .zoom()
+    .scaleExtent([0.35, 3])
+    .on('zoom', (event) => g.attr('transform', event.transform));
   svg.call(zoom);
   const initial = d3.zoomIdentity.translate(initialTranslateX, initialTranslateY).scale(1);
   svg.call(zoom.transform, initial);
@@ -1031,14 +1443,23 @@ function renderOrgChart() {
   const zoomOut = $('orgChartZoomOut');
   const zoomReset = $('orgChartZoomReset');
   if (zoomIn) zoomIn.onclick = () => svg.transition().duration(140).call(zoom.scaleBy, 1.2);
-  if (zoomOut) zoomOut.onclick = () => svg.transition().duration(140).call(zoom.scaleBy, 1 / 1.2);
-  if (zoomReset) zoomReset.onclick = () => svg.transition().duration(160).call(zoom.transform, initial);
+  if (zoomOut)
+    zoomOut.onclick = () =>
+      svg
+        .transition()
+        .duration(140)
+        .call(zoom.scaleBy, 1 / 1.2);
+  if (zoomReset)
+    zoomReset.onclick = () => svg.transition().duration(160).call(zoom.transform, initial);
 }
 
 function renderAssets() {
   const items = data.assets || [];
   setCount('assetsCount', items.length);
-  rows.assets.innerHTML = items.map((a) => `<tr data-isms-row="asset">
+  rows.assets.innerHTML =
+    items
+      .map(
+        (a) => `<tr data-isms-row="asset">
     <td class="fw-semibold"><a href="${esc(assetHref(a))}">${esc(a.asset || a.name || 'Asset')}</a></td>
     <td>${esc(a.category?.name || a.category_name || '—')}</td>
     <td>${esc(a.subcategory?.name || a.subcategory_name || '—')}</td>
@@ -1048,9 +1469,10 @@ function renderAssets() {
     <td class="wrap small-muted">${esc(shorten(a.description || '', 160) || '—')}</td>
     <td>${Number(a.risk_count || 0)}</td>
     <td>${controlBadges(a.controls)}</td><td>${clauseBadges(a.clauses)}</td>${actionsHtml('asset', a.id)}
-  </tr>`).join('') || emptyRow(11, 'No assets yet.');
+  </tr>`,
+      )
+      .join('') || emptyRow(11, 'No assets yet.');
 }
-
 
 function accessStatusClass(value) {
   const v = String(value || '').toLowerCase();
@@ -1085,14 +1507,32 @@ function accessRoleColumns(items = []) {
   for (const entry of items || []) {
     for (const role of accessRoles(entry)) add(role);
   }
-  return out.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, {numeric: true}));
+  return out.sort((a, b) =>
+    String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true }),
+  );
 }
 
 function accessKeyLabel(item) {
-  const roles = accessRoles(item).map((role) => role?.name || '').filter(Boolean).join(', ');
-  const accounts = (item?.aws_accounts || []).map((acct) => awsAccountLabel(acct)).filter(Boolean).join(', ');
+  const roles = accessRoles(item)
+    .map((role) => role?.name || '')
+    .filter(Boolean)
+    .join(', ');
+  const accounts = (item?.aws_accounts || [])
+    .map((acct) => awsAccountLabel(acct))
+    .filter(Boolean)
+    .join(', ');
   const approver = item?.approved_by?.username || '';
-  return [item?.task_action || 'Task/Action', accessServiceLabel(item), item?.status || '', accounts, roles, approver, item?.notes || ''].filter(Boolean).join(' • ');
+  return [
+    item?.task_action || 'Task/Action',
+    accessServiceLabel(item),
+    item?.status || '',
+    accounts,
+    roles,
+    approver,
+    item?.notes || '',
+  ]
+    .filter(Boolean)
+    .join(' • ');
 }
 
 function accessAccountPillsHtml(entry) {
@@ -1107,7 +1547,9 @@ function accessAccountPillsHtml(entry) {
   });
   const remaining = accounts.length - visible.length;
   if (remaining > 0) {
-    pills.push(`<span class="badge badge-soft user-pill isms-aws-account-pill" title="${esc(labels.join('\n'))}">+${remaining}</span>`);
+    pills.push(
+      `<span class="badge badge-soft user-pill isms-aws-account-pill" title="${esc(labels.join('\n'))}">+${remaining}</span>`,
+    );
   }
   return `<span class="user-pill-list isms-aws-account-pill-list">${pills.join('')}</span>`;
 }
@@ -1123,14 +1565,17 @@ function initIsmsTooltips(root = document) {
   root.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => {
     const existing = window.bootstrap.Tooltip.getInstance(el);
     if (existing) existing.dispose();
-    new window.bootstrap.Tooltip(el, {container: 'body', trigger: 'hover focus'});
+    new window.bootstrap.Tooltip(el, { container: 'body', trigger: 'hover focus' });
   });
 }
 
 function accessRoleCellHtml(entry, roleId) {
   const roles = accessRoles(entry);
-  const matched = roles.find((role) => String(role?.id || role?.org_node_id || '') === String(roleId));
-  if (!matched) return '<td class="isms-app-cell isms-app-cell-empty isms-access-role-cell" data-sort=""></td>';
+  const matched = roles.find(
+    (role) => String(role?.id || role?.org_node_id || '') === String(roleId),
+  );
+  if (!matched)
+    return '<td class="isms-app-cell isms-app-cell-empty isms-access-role-cell" data-sort=""></td>';
   const name = matched.name || 'Role';
   return `<td class="isms-app-cell isms-access-cell-linked isms-access-role-cell text-center" data-sort="1" title="${esc(name)}"><span aria-label="${esc(name)} included">✓</span><span class="visually-hidden"> ${esc(name)}</span></td>`;
 }
@@ -1152,49 +1597,73 @@ function renderAccessControlMatrix() {
     const serviceId = entry.service_asset_id || entry.service?.id || 'unknown';
     let group = grouped.find((g) => String(g.id) === String(serviceId));
     if (!group) {
-      group = {id: serviceId, name: accessServiceLabel(entry), rows: []};
+      group = { id: serviceId, name: accessServiceLabel(entry), rows: [] };
       grouped.push(group);
     }
     group.rows.push(entry);
   }
-  grouped.sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, {numeric: true}));
-  rows.access.innerHTML = grouped.map((group) => group.rows.map((entry, idx) => {
-    const serviceHref = entry.service?.id ? assetHref({id: entry.service.id}) : '';
-    const serviceCell = idx === 0 ? `<td class="isms-app-group" rowspan="${group.rows.length}" data-sort="${esc(group.name)}"><span>${serviceHref ? `<a class="link-light" href="${esc(serviceHref)}">${esc(group.name)}</a>` : esc(group.name)}</span></td>` : '';
-    const approverText = entry.approved_by?.username || '';
-    return `<tr data-isms-row="access" data-isms-filter-text="${esc(accessKeyLabel(entry))}">
+  grouped.sort((a, b) =>
+    String(a.name).localeCompare(String(b.name), undefined, { numeric: true }),
+  );
+  rows.access.innerHTML = grouped
+    .map((group) =>
+      group.rows
+        .map((entry, idx) => {
+          const serviceHref = entry.service?.id ? assetHref({ id: entry.service.id }) : '';
+          const serviceCell =
+            idx === 0
+              ? `<td class="isms-app-group" rowspan="${group.rows.length}" data-sort="${esc(group.name)}"><span>${serviceHref ? `<a class="link-light" href="${esc(serviceHref)}">${esc(group.name)}</a>` : esc(group.name)}</span></td>`
+              : '';
+          const approverText = entry.approved_by?.username || '';
+          return `<tr data-isms-row="access" data-isms-filter-text="${esc(accessKeyLabel(entry))}">
       ${serviceCell}
       <td class="wrap isms-app-key-linkage" data-sort="${esc(entry.task_action || '')}"><div class="fw-semibold"><a href="${esc(accessControlHref(entry))}">${esc(entry.task_action || 'Task/Action')}</a></div></td>
       <td class="wrap isms-access-accounts" data-sort="${esc((entry.aws_accounts || []).map((acct) => awsAccountLabel(acct)).join(', '))}">${accessAccountPillsHtml(entry)}</td>
       <td class="isms-app-cell isms-access-status ${accessStatusClass(entry.status)} text-center" data-sort="${esc(entry.status || 'Pending Approval')}"><div class="fw-semibold">${esc(entry.status || 'Pending Approval')}</div></td>
-      <td class="wrap isms-access-approver" data-sort="${esc(approverText)}">${entry.approved_by ? userPillHtml(entry.approved_by, {className: 'isms-access-approver-pill'}) : '<span class="small-muted">—</span>'}</td>
+      <td class="wrap isms-access-approver" data-sort="${esc(approverText)}">${entry.approved_by ? userPillHtml(entry.approved_by, { className: 'isms-access-approver-pill' }) : '<span class="small-muted">—</span>'}</td>
       ${roleColumns.map((role) => accessRoleCellHtml(entry, role.id)).join('')}
       <td class="text-center small-muted isms-access-notes" data-sort="${esc(entry.notes || '')}">${noteTooltipHtml(entry.notes, 'Access row notes')}</td>
       ${actionsHtml('access', entry.id, 'isms-access-actions')}
     </tr>`;
-  }).join('')).join('');
+        })
+        .join(''),
+    )
+    .join('');
   initIsmsTooltips(rows.access);
 }
-
 
 function measureTitle(item) {
   return item?.summary || item?.metric || item?.effectiveness_measure || 'Effectiveness measure';
 }
 
 function effectivenessMeasureHref(item) {
-  return withFramework(`/isms-effectiveness-measure.html?id=${encodeURIComponent(item?.id || '')}`, framework);
+  return withFramework(
+    `/isms-effectiveness-measure.html?id=${encodeURIComponent(item?.id || '')}`,
+    framework,
+  );
 }
 
 function effectivenessMetricHref(entry) {
-  return withFramework(`/isms-effectiveness-metric.html?id=${encodeURIComponent(entry?.id || '')}`, framework);
+  return withFramework(
+    `/isms-effectiveness-metric.html?id=${encodeURIComponent(entry?.id || '')}`,
+    framework,
+  );
 }
 
 function metricValueHtml(entry, measure) {
   if (!entry) return '<span class="small-muted">No metric entries yet.</span>';
-  const period = entry.period || [entry.period_start || '', entry.period_end || ''].filter(Boolean).join(' → ');
-  const source = entry.source_url ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type || 'source')}</a>` : esc(entry.source_title || entry.source_type || 'other');
-  const eventLink = entry.source_event_id ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>` : '';
-  const valueHtml = effectivenessMetricValueHtml(entry, measure, {href: entry.id ? effectivenessMetricHref(entry) : '', fallback: 'Metric entry'});
+  const period =
+    entry.period || [entry.period_start || '', entry.period_end || ''].filter(Boolean).join(' → ');
+  const source = entry.source_url
+    ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type || 'source')}</a>`
+    : esc(entry.source_title || entry.source_type || 'other');
+  const eventLink = entry.source_event_id
+    ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>`
+    : '';
+  const valueHtml = effectivenessMetricValueHtml(entry, measure, {
+    href: entry.id ? effectivenessMetricHref(entry) : '',
+    fallback: 'Metric entry',
+  });
   const thresholdHtml = effectivenessMetricThresholdBadgeHtml(measure, entry);
   return `<div>${valueHtml}${thresholdHtml}</div><div class="small-muted">${esc(period || 'No period')} · ${source}${eventLink}</div>`;
 }
@@ -1206,25 +1675,57 @@ function metricHistoryLinkHtml(item) {
   return `<div class="small-muted mt-1"><a href="${esc(effectivenessMeasureHref(item))}#metrics">${esc(label)} in metric history</a></div>`;
 }
 
-
 function effectivenessActionsHtml(item) {
   const open = `<a class="btn btn-outline-primary" href="${esc(effectivenessMeasureHref(item))}" title="Open effectiveness measure"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span class="visually-hidden">Open</span></a>`;
-  const record = canManage ? `<button class="btn btn-outline-secondary" type="button" data-effectiveness-record="${esc(item.id)}" title="Record metric entry"><i class="bi bi-plus-circle" aria-hidden="true"></i><span class="visually-hidden">Record metric entry</span></button>` : '';
-  const sample = canSampleAudits ? `<button class="btn btn-outline-success" type="button" data-audit-sample-entity="effectiveness" data-isms-id="${esc(item.id)}" title="Sample into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>` : '';
-  const editDelete = canManage ? `<button class="btn btn-outline-primary" type="button" data-isms-edit="effectiveness" data-isms-id="${esc(item.id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit</span></button><button class="btn btn-outline-danger" type="button" data-isms-delete="effectiveness" data-isms-id="${esc(item.id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete</span></button>` : '';
+  const record = canManage
+    ? `<button class="btn btn-outline-secondary" type="button" data-effectiveness-record="${esc(item.id)}" title="Record metric entry"><i class="bi bi-plus-circle" aria-hidden="true"></i><span class="visually-hidden">Record metric entry</span></button>`
+    : '';
+  const sample = canSampleAudits
+    ? `<button class="btn btn-outline-success" type="button" data-audit-sample-entity="effectiveness" data-isms-id="${esc(item.id)}" title="Sample into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>`
+    : '';
+  const editDelete = canManage
+    ? `<button class="btn btn-outline-primary" type="button" data-isms-edit="effectiveness" data-isms-id="${esc(item.id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit</span></button><button class="btn btn-outline-danger" type="button" data-isms-delete="effectiveness" data-isms-id="${esc(item.id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete</span></button>`
+    : '';
   return `<td class="text-nowrap no-print isms-effectiveness-actions"><div class="btn-group btn-group-sm" role="group">${open}${record}${sample}${editDelete}</div></td>`;
 }
 
 function effectivenessFilterText(item) {
-  const entryBits = (item.metric_entries || []).flatMap((entry) => [entry?.value_display, entry?.source_type, entry?.source_title, entry?.source_reference]);
-  return [item.summary, item.description, item.effectiveness_measure, item.metric, item.metric_key, item.target_display, item.owner?.username, item.frequency, item.notes, item.latest_entry?.value_display, item.latest_entry?.source_type, item.latest_entry?.source_title, ...entryBits, ...(item.controls || []).map((c) => `${c.ref || ''} ${c.title || ''}`)].filter(Boolean).join(' • ');
+  const entryBits = (item.metric_entries || []).flatMap((entry) => [
+    entry?.value_display,
+    entry?.source_type,
+    entry?.source_title,
+    entry?.source_reference,
+  ]);
+  return [
+    item.summary,
+    item.description,
+    item.effectiveness_measure,
+    item.metric,
+    item.metric_key,
+    item.target_display,
+    item.owner?.username,
+    item.frequency,
+    item.notes,
+    item.latest_entry?.value_display,
+    item.latest_entry?.source_type,
+    item.latest_entry?.source_title,
+    ...entryBits,
+    ...(item.controls || []).map((c) => `${c.ref || ''} ${c.title || ''}`),
+  ]
+    .filter(Boolean)
+    .join(' • ');
 }
 
 function renderEffectivenessMeasures() {
   const items = data.effectiveness_measures || [];
   setCount('effectivenessCount', items.length);
   if (!rows.effectiveness) return;
-  rows.effectiveness.innerHTML = items.map((item) => `<tr data-isms-row="effectiveness" data-isms-id="${esc(item.id)}" data-isms-filter-text="${esc(effectivenessFilterText(item))}">
+  rows.effectiveness.innerHTML =
+    items
+      .map(
+        (
+          item,
+        ) => `<tr data-isms-row="effectiveness" data-isms-id="${esc(item.id)}" data-isms-filter-text="${esc(effectivenessFilterText(item))}">
     <td class="wrap"><div class="fw-semibold"><a href="${esc(effectivenessMeasureHref(item))}">${esc(shorten(item.summary || 'Effectiveness measure', 140))}</a></div>${item.description ? `<div class="small-muted whitespace-pre-wrap mt-1">${esc(shorten(item.description, 260))}</div>` : ''}${item.metric_key ? `<div class="small-muted mt-1"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
     <td class="wrap">${esc(shorten(item.effectiveness_measure || '', 220) || '—')}</td>
     <td class="wrap">${esc(shorten(item.metric || '', 180) || '—')}</td>
@@ -1233,14 +1734,21 @@ function renderEffectivenessMeasures() {
     <td>${userPillHtml(item.owner)}</td>
     <td class="wrap">${controlBadges(item.controls)}</td>
     ${effectivenessActionsHtml(item)}
-  </tr>`).join('') || emptyRow(8, 'No effectiveness measures yet.');
+  </tr>`,
+      )
+      .join('') || emptyRow(8, 'No effectiveness measures yet.');
   initIsmsTooltips(rows.effectiveness);
 }
 
 function effectivenessMetricSourceOptions() {
-  const sources = Array.isArray(meta.effectiveness_metric_sources) && meta.effectiveness_metric_sources.length
-    ? meta.effectiveness_metric_sources
-    : (meta.effectiveness_metric_source_types || ['other']).map((x) => ({id: x, source: x, label: x === 'other' ? 'Other' : x}));
+  const sources =
+    Array.isArray(meta.effectiveness_metric_sources) && meta.effectiveness_metric_sources.length
+      ? meta.effectiveness_metric_sources
+      : (meta.effectiveness_metric_source_types || ['other']).map((x) => ({
+          id: x,
+          source: x,
+          label: x === 'other' ? 'Other' : x,
+        }));
   const seen = new Set();
   const out = [];
   for (const src of sources) {
@@ -1249,21 +1757,28 @@ function effectivenessMetricSourceOptions() {
     seen.add(id);
     out.push({
       id,
-      label: id === 'other' ? 'Other' : (src?.label || src?.name || src?.source || id),
+      label: id === 'other' ? 'Other' : src?.label || src?.name || src?.source || id,
       source: src?.source || id,
     });
   }
-  if (!seen.has('other')) out.push({id: 'other', label: 'Other', source: 'other'});
+  if (!seen.has('other')) out.push({ id: 'other', label: 'Other', source: 'other' });
   return out;
 }
 
 function renderEffectivenessFormOptions() {
   const measureSelect = $('metricMeasureId');
-  if (measureSelect) measureSelect.innerHTML = optionList(data.effectiveness_measures || [], {label: (m) => `${measureTitle(m)}${m.metric_key ? ` (${m.metric_key})` : ''}`});
+  if (measureSelect)
+    measureSelect.innerHTML = optionList(data.effectiveness_measures || [], {
+      label: (m) => `${measureTitle(m)}${m.metric_key ? ` (${m.metric_key})` : ''}`,
+    });
   const owner = $('effOwner');
-  if (owner) owner.innerHTML = optionList(meta.users || [], {label: 'username', includeBlank: true});
+  if (owner)
+    owner.innerHTML = optionList(meta.users || [], { label: 'username', includeBlank: true });
   const sourceType = $('metricSourceType');
-  if (sourceType) sourceType.innerHTML = optionList(effectivenessMetricSourceOptions(), {label: (src) => src.source === 'other' ? 'Other' : `${src.label} (${src.source})`});
+  if (sourceType)
+    sourceType.innerHTML = optionList(effectivenessMetricSourceOptions(), {
+      label: (src) => (src.source === 'other' ? 'Other' : `${src.label} (${src.source})`),
+    });
 }
 
 function resetMetricEntryForm(measureId = '') {
@@ -1284,7 +1799,7 @@ function showMetricEntryForm(measureId = '') {
   if (!card) return;
   resetMetricEntryForm(measureId);
   card.style.display = '';
-  card.scrollIntoView({behavior: 'smooth', block: 'start'});
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function metricEntryPayloadFromForm() {
@@ -1303,40 +1818,103 @@ function metricEntryPayloadFromForm() {
     notes: $('metricNotes')?.value || '',
     raw_payload: {},
   };
-  if (raw.metric_value === null && !raw.qualitative_value.trim()) throw new Error('Provide a numeric value or a qualitative value.');
+  if (raw.metric_value === null && !raw.qualitative_value.trim())
+    throw new Error('Provide a numeric value or a qualitative value.');
   return raw;
 }
 
 function renderMeetings() {
   const items = data.meetings || [];
   setCount('meetingsCount', items.length);
-  rows.meetings.innerHTML = items.map((m) => {
-    const links = (m.links || []).map((l) => l.link_type === 'isms_document' && l.document ? `<a class="badge badge-soft text-decoration-none me-1" href="${esc(documentHref(l.document))}">${esc(l.document.title || 'ISMS document')}</a>` : (l.url ? `<a href="${esc(safeExternalHref(l.url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(l.title || l.url)}</a>` : '')).filter(Boolean).join('<br>') || '<span class="small-muted">—</span>';
-    const href = meetingHref(m);
-    return `<tr data-isms-row="meeting"><td>${esc(m.date || '—')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('–') || '—')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls)}</td><td>${clauseBadges(m.clauses)}</td>${actionsHtml('meeting', m.id)}</tr>`;
-  }).join('') || emptyRow(9, 'No meeting minutes yet.');
+  rows.meetings.innerHTML =
+    items
+      .map((m) => {
+        const links =
+          (m.links || [])
+            .map((l) =>
+              l.link_type === 'isms_document' && l.document
+                ? `<a class="badge badge-soft text-decoration-none me-1" href="${esc(documentHref(l.document))}">${esc(l.document.title || 'ISMS document')}</a>`
+                : l.url
+                  ? `<a href="${esc(safeExternalHref(l.url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(l.title || l.url)}</a>`
+                  : '',
+            )
+            .filter(Boolean)
+            .join('<br>') || '<span class="small-muted">—</span>';
+        const href = meetingHref(m);
+        return `<tr data-isms-row="meeting"><td>${esc(m.date || '—')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('–') || '—')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls)}</td><td>${clauseBadges(m.clauses)}</td>${actionsHtml('meeting', m.id)}</tr>`;
+      })
+      .join('') || emptyRow(9, 'No meeting minutes yet.');
 }
 
 function populateForms() {
   initRichTextEditors($('documentForm'));
-  loadDocumentFolders().catch(err => toast(status, `Could not load document folders: ${String(err)}`, 'warning'));
-  for (const id of ['objectiveFormCard', 'documentFormCard', 'orgFormCard', 'assetFormCard', 'assetCategoryCard', 'licenseCard', 'awsAccountCard', 'accessControlFormCard', 'meetingFormCard']) {
-    const el = $(id); if (el) el.style.display = 'none';
+  loadDocumentFolders().catch((err) =>
+    toast(status, `Could not load document folders: ${String(err)}`, 'warning'),
+  );
+  for (const id of [
+    'objectiveFormCard',
+    'documentFormCard',
+    'orgFormCard',
+    'assetFormCard',
+    'assetCategoryCard',
+    'licenseCard',
+    'awsAccountCard',
+    'accessControlFormCard',
+    'meetingFormCard',
+  ]) {
+    const el = $(id);
+    if (el) el.style.display = 'none';
   }
   for (const kind of Object.keys(formIds)) ensureCancelButton(kind);
-  const userOpts = optionList(meta.users || [], {label: 'username'});
-  for (const id of ['objResources', 'orgUsers', 'meetingAttendees', 'meetingApologies']) { const el = $(id); if (el) el.innerHTML = userOpts; }
+  const userOpts = optionList(meta.users || [], { label: 'username' });
+  for (const id of ['objResources', 'orgUsers', 'meetingAttendees', 'meetingApologies']) {
+    const el = $(id);
+    if (el) el.innerHTML = userOpts;
+  }
   populateMeetingPeople();
-  const owner = $('objOwner'); if (owner) owner.innerHTML = optionList(meta.users || [], {label: 'username', includeBlank: true});
-  const docType = $('docType'); if (docType) docType.innerHTML = optionList((meta.document_types || []).map((x) => ({id: x, name: x})), {label: 'name'});
-  const orgOpts = optionList(meta.org_nodes || [], {label: (n) => `${n.name || 'Node'} (${n.node_type || 'role'})`, includeBlank: true, blankLabel: 'Root'});
-  for (const id of ['orgParent', 'assetOwner', 'assetRegister']) { const el = $(id); if (el) el.innerHTML = orgOpts; }
-  const controlOpts = optionList(meta.controls || [], {label: (c) => `${c.ref || ''} ${c.title || ''}`.trim()});
-  const clauseOpts = optionList(meta.clauses || [], {label: (c) => `${c.ref || ''} ${c.title || ''}`.trim()});
-  for (const id of ['objControls', 'docControls', 'orgControls', 'assetControls', 'effControls', 'meetingControls']) { const el = $(id); if (el) el.innerHTML = controlOpts; }
-  for (const id of ['objClauses', 'docClauses', 'orgClauses', 'assetClauses', 'meetingClauses']) { const el = $(id); if (el) el.innerHTML = clauseOpts; }
-  const meetingDocs = $('meetingDocuments'); if (meetingDocs) meetingDocs.innerHTML = optionList(meta.documents || [], {label: 'title'});
-  const bp = $('appBusinessProcess'); if (bp) bp.innerHTML = optionList(meta.business_processes || [], {label: 'name'});
+  const owner = $('objOwner');
+  if (owner)
+    owner.innerHTML = optionList(meta.users || [], { label: 'username', includeBlank: true });
+  const docType = $('docType');
+  if (docType)
+    docType.innerHTML = optionList(
+      (meta.document_types || []).map((x) => ({ id: x, name: x })),
+      { label: 'name' },
+    );
+  const orgOpts = optionList(meta.org_nodes || [], {
+    label: (n) => `${n.name || 'Node'} (${n.node_type || 'role'})`,
+    includeBlank: true,
+    blankLabel: 'Root',
+  });
+  for (const id of ['orgParent', 'assetOwner', 'assetRegister']) {
+    const el = $(id);
+    if (el) el.innerHTML = orgOpts;
+  }
+  const controlOpts = optionList(meta.controls || [], {
+    label: (c) => `${c.ref || ''} ${c.title || ''}`.trim(),
+  });
+  const clauseOpts = optionList(meta.clauses || [], {
+    label: (c) => `${c.ref || ''} ${c.title || ''}`.trim(),
+  });
+  for (const id of [
+    'objControls',
+    'docControls',
+    'orgControls',
+    'assetControls',
+    'effControls',
+    'meetingControls',
+  ]) {
+    const el = $(id);
+    if (el) el.innerHTML = controlOpts;
+  }
+  for (const id of ['objClauses', 'docClauses', 'orgClauses', 'assetClauses', 'meetingClauses']) {
+    const el = $(id);
+    if (el) el.innerHTML = clauseOpts;
+  }
+  const meetingDocs = $('meetingDocuments');
+  if (meetingDocs) meetingDocs.innerHTML = optionList(meta.documents || [], { label: 'title' });
+  const bp = $('appBusinessProcess');
+  if (bp) bp.innerHTML = optionList(meta.business_processes || [], { label: 'name' });
   renderAccessFormOptions();
   renderEffectivenessFormOptions();
   renderLicenseOptions();
@@ -1345,13 +1923,24 @@ function populateForms() {
 
 function renderAccessFormOptions(targetAccountValues = []) {
   const service = $('accessService');
-  if (service) service.innerHTML = optionList(meta.assets || [], {label: (a) => a.asset || a.name || 'Asset'});
+  if (service)
+    service.innerHTML = optionList(meta.assets || [], {
+      label: (a) => a.asset || a.name || 'Asset',
+    });
   const approver = $('accessApprovedBy');
-  if (approver) approver.innerHTML = optionList(meta.users || [], {label: 'username', includeBlank: true});
+  if (approver)
+    approver.innerHTML = optionList(meta.users || [], { label: 'username', includeBlank: true });
   const role = $('accessRole');
-  if (role) role.innerHTML = optionList(meta.org_nodes || [], {label: (n) => `${n.name || 'Node'} (${n.node_type || 'role'})`});
+  if (role)
+    role.innerHTML = optionList(meta.org_nodes || [], {
+      label: (n) => `${n.name || 'Node'} (${n.node_type || 'role'})`,
+    });
   const status = $('accessStatus');
-  if (status) status.innerHTML = optionList((meta.access_statuses || ['Pending Approval', 'Approved']).map((x) => ({id: x, name: x})), {label: 'name'});
+  if (status)
+    status.innerHTML = optionList(
+      (meta.access_statuses || ['Pending Approval', 'Approved']).map((x) => ({ id: x, name: x })),
+      { label: 'name' },
+    );
   renderAwsAccountOptions(targetAccountValues);
 }
 
@@ -1360,7 +1949,7 @@ $('addAssetCategory')?.addEventListener('click', async () => {
   const input = $('assetCategoryName');
   const name = String(input?.value || '').trim();
   if (!name) return;
-  await apiPost('/api/v1/isms/asset-categories', {name});
+  await apiPost('/api/v1/isms/asset-categories', { name });
   if (input) input.value = '';
   await reloadAfter('Asset category added');
 });
@@ -1369,7 +1958,7 @@ $('addAssetSubcategory')?.addEventListener('click', async () => {
   const name = String(input?.value || '').trim();
   const categoryId = $('assetSubcategoryCategory')?.value || $('assetCategory')?.value || '';
   if (!name || !categoryId) return;
-  await apiPost('/api/v1/isms/asset-subcategories', {name, category_id: categoryId});
+  await apiPost('/api/v1/isms/asset-subcategories', { name, category_id: categoryId });
   if (input) input.value = '';
   await reloadAfter('Asset subcategory added');
 });
@@ -1382,14 +1971,16 @@ $('licenseForm')?.addEventListener('submit', async (ev) => {
     description: $('licenseDescription')?.value || '',
   };
   if (licenseId) {
-    await apiPatch(`/api/v1/isms/licenses/${encodeURIComponent(licenseId)}?framework=${encodeURIComponent(framework)}`, payload);
+    await apiPatch(
+      `/api/v1/isms/licenses/${encodeURIComponent(licenseId)}?framework=${encodeURIComponent(framework)}`,
+      payload,
+    );
   } else {
     await apiPost(`/api/v1/isms/licenses?framework=${encodeURIComponent(framework)}`, payload);
   }
   resetLicenseForm();
   await reloadAfter(licenseId ? 'License updated' : 'License added');
 });
-
 
 $('awsAccountForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -1408,7 +1999,6 @@ $('awsAccountForm')?.addEventListener('submit', async (ev) => {
   await reloadAfter(accountId ? 'hosting account updated' : 'hosting account added');
 });
 
-
 function selectedLinkPayload(prefix) {
   return {
     controls: selectedValues($(`${prefix}Controls`)),
@@ -1417,11 +2007,14 @@ function selectedLinkPayload(prefix) {
 }
 
 function selectedControlOnlyPayload(prefix) {
-  return {controls: selectedValues($(`${prefix}Controls`))};
+  return { controls: selectedValues($(`${prefix}Controls`)) };
 }
 
 function normaliseIsmsSection(value) {
-  const key = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const key = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
   return sectionAliases[key] || sectionAliases[key.replace(/_/g, '')] || null;
 }
 
@@ -1441,7 +2034,7 @@ function currentIsmsSection() {
 function mergePayload(target, payload) {
   if (!payload || typeof payload !== 'object') return;
   for (const [key, value] of Object.entries(payload)) {
-    if (key === 'counts') target.counts = {...(target.counts || {}), ...(value || {})};
+    if (key === 'counts') target.counts = { ...(target.counts || {}), ...(value || {}) };
     else target[key] = value;
   }
 }
@@ -1459,48 +2052,89 @@ function setSectionLoading(section) {
   if (section === 'org' && rows.org) rows.org.innerHTML = emptyRow(8, loading);
   if (section === 'assets' && rows.assets) rows.assets.innerHTML = emptyRow(11, loading);
   if (section === 'access' && rows.access) rows.access.innerHTML = emptyRow(3, loading);
-  if (section === 'effectiveness' && rows.effectiveness) rows.effectiveness.innerHTML = emptyRow(8, loading);
+  if (section === 'effectiveness' && rows.effectiveness)
+    rows.effectiveness.innerHTML = emptyRow(8, loading);
   if (section === 'app' && rows.app) rows.app.innerHTML = emptyRow(3, loading);
   if (section === 'meetings' && rows.meetings) rows.meetings.innerHTML = emptyRow(9, loading);
 }
 
 function renderSection(section) {
-  if (section === 'overview') { renderOverview(); return; }
-  if (section === 'objectives') { renderObjectives(); return; }
-  if (section === 'documents') { renderDocuments(); return; }
-  if (section === 'org') { renderOrg(); renderOrgChart(); return; }
-  if (section === 'assets') { renderLicenses(); renderAssets(); return; }
-  if (section === 'access') { renderAwsAccounts(); renderAccessControlMatrix(); return; }
-  if (section === 'effectiveness') { renderEffectivenessMeasures(); return; }
-  if (section === 'meetings') { renderMeetings(); return; }
+  if (section === 'overview') {
+    renderOverview();
+    return;
+  }
+  if (section === 'objectives') {
+    renderObjectives();
+    return;
+  }
+  if (section === 'documents') {
+    renderDocuments();
+    return;
+  }
+  if (section === 'org') {
+    renderOrg();
+    renderOrgChart();
+    return;
+  }
+  if (section === 'assets') {
+    renderLicenses();
+    renderAssets();
+    return;
+  }
+  if (section === 'access') {
+    renderAwsAccounts();
+    renderAccessControlMatrix();
+    return;
+  }
+  if (section === 'effectiveness') {
+    renderEffectivenessMeasures();
+    return;
+  }
+  if (section === 'meetings') {
+    renderMeetings();
+    return;
+  }
 }
 
 function renderAll() {
   renderMetaSummary();
   renderOverview();
-  for (const section of ['objectives', 'documents', 'org', 'assets', 'access', 'effectiveness', 'meetings']) renderSection(section);
+  for (const section of [
+    'objectives',
+    'documents',
+    'org',
+    'assets',
+    'access',
+    'effectiveness',
+    'meetings',
+  ])
+    renderSection(section);
   populateForms();
 }
 
-async function loadMetaSection(section, {force = false} = {}) {
+async function loadMetaSection(section, { force = false } = {}) {
   if (section === 'soa') return false;
   if (!force && loadedMetaSections.has(section)) return false;
-  const payload = await apiGet(`/api/v1/isms/meta?framework=${encodeURIComponent(framework)}&section=${encodeURIComponent(section)}`);
+  const payload = await apiGet(
+    `/api/v1/isms/meta?framework=${encodeURIComponent(framework)}&section=${encodeURIComponent(section)}`,
+  );
   mergePayload(meta, payload);
   loadedMetaSections.add(section);
   return true;
 }
 
-async function loadSummarySection(section, {force = false} = {}) {
+async function loadSummarySection(section, { force = false } = {}) {
   if (section === 'soa') return false;
   if (!force && loadedSummarySections.has(section)) return false;
-  const payload = await apiGet(`/api/v1/isms/summary?framework=${encodeURIComponent(framework)}&section=${encodeURIComponent(section)}`);
+  const payload = await apiGet(
+    `/api/v1/isms/summary?framework=${encodeURIComponent(framework)}&section=${encodeURIComponent(section)}`,
+  );
   mergePayload(data, payload);
   loadedSummarySections.add(section);
   return true;
 }
 
-async function ensureSection(section, {force = false} = {}) {
+async function ensureSection(section, { force = false } = {}) {
   const target = normaliseIsmsSection(section) || 'overview';
   if (target === 'soa') {
     renderMetaSummary();
@@ -1515,8 +2149,8 @@ async function ensureSection(section, {force = false} = {}) {
   const task = (async () => {
     if (status) status.style.display = 'none';
     setSectionLoading(target);
-    const metaChanged = await loadMetaSection(target, {force});
-    await loadSummarySection(target, {force});
+    const metaChanged = await loadMetaSection(target, { force });
+    await loadSummarySection(target, { force });
     if (target === 'meetings' && (metaChanged || force)) await loadMeetingPeople();
     renderMetaSummary();
     if (metaChanged) populateForms();
@@ -1548,7 +2182,7 @@ async function reloadAfter(message, section = null) {
   try {
     const target = section || currentIsmsSection();
     invalidateIsmsCache();
-    await ensureSection(target, {force: true});
+    await ensureSection(target, { force: true });
     toast(status, message, 'success');
   } catch (e) {
     toast(status, `Failed to reload ISMS: ${String(e)}`, 'danger');
@@ -1558,19 +2192,24 @@ async function reloadAfter(message, section = null) {
 $('objectiveForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const editingId = ev.target.dataset.editingId || null;
-  await saveIsms('objective', {
-    requirement: $('objRequirement').value,
-    goal: $('objGoal').value,
-    metric: $('objMetric').value,
-    owner_user_id: $('objOwner').value || null,
-    completion_target_date: $('objTarget').value || null,
-    completion_method: $('objCompletion').value,
-    evaluation_method: $('objEvaluation').value,
-    resource_requirements_text: $('objResourceText').value,
-    resource_user_ids: selectedValues($('objResources')),
-    ...selectedLinkPayload('obj'),
-  }, editingId);
-  resetForm('objective'); await reloadAfter(editingId ? 'ISMS objective updated' : 'ISMS objective created');
+  await saveIsms(
+    'objective',
+    {
+      requirement: $('objRequirement').value,
+      goal: $('objGoal').value,
+      metric: $('objMetric').value,
+      owner_user_id: $('objOwner').value || null,
+      completion_target_date: $('objTarget').value || null,
+      completion_method: $('objCompletion').value,
+      evaluation_method: $('objEvaluation').value,
+      resource_requirements_text: $('objResourceText').value,
+      resource_user_ids: selectedValues($('objResources')),
+      ...selectedLinkPayload('obj'),
+    },
+    editingId,
+  );
+  resetForm('objective');
+  await reloadAfter(editingId ? 'ISMS objective updated' : 'ISMS objective created');
 });
 
 $('documentForm')?.addEventListener('submit', async (ev) => {
@@ -1579,10 +2218,23 @@ $('documentForm')?.addEventListener('submit', async (ev) => {
   const medium = documentMedium();
   const file = medium === 'upload' ? $('docFile')?.files?.[0] : null;
   const existing = editingId ? findItem('document', editingId) : null;
-  if (medium === 'upload' && !file && !existing?.has_file) { toast(status, 'Select a document to upload.', 'warning'); return; }
-  if (medium === 'link' && !$('docUrl').value.trim()) { toast(status, 'Enter the document URL.', 'warning'); return; }
-  const payload = {title: $('docTitle').value, document_type: $('docType').value, external_url: medium === 'link' ? $('docUrl').value.trim() : null,
-    description: $('docDescription').value, folder_id: $('docFolder').value || null, tags: documentTags, ...selectedLinkPayload('doc')};
+  if (medium === 'upload' && !file && !existing?.has_file) {
+    toast(status, 'Select a document to upload.', 'warning');
+    return;
+  }
+  if (medium === 'link' && !$('docUrl').value.trim()) {
+    toast(status, 'Enter the document URL.', 'warning');
+    return;
+  }
+  const payload = {
+    title: $('docTitle').value,
+    document_type: $('docType').value,
+    external_url: medium === 'link' ? $('docUrl').value.trim() : null,
+    description: $('docDescription').value,
+    folder_id: $('docFolder').value || null,
+    tags: documentTags,
+    ...selectedLinkPayload('doc'),
+  };
   if (medium === 'write') {
     payload.content_html = syncRichTextEditor($('docContent'));
     if (editingId) payload.expected_content_version = existing?.content_version;
@@ -1597,67 +2249,144 @@ $('documentForm')?.addEventListener('submit', async (ev) => {
     fd.append('file', file, file.name);
     await apiPostForm(`/api/v1/isms/documents/${encodeURIComponent(saved.id)}/file`, fd);
   }
-  resetForm('document'); await reloadAfter(file ? 'Document saved and file uploaded' : (editingId ? 'Document updated' : 'Document created'));
+  resetForm('document');
+  await reloadAfter(
+    file ? 'Document saved and file uploaded' : editingId ? 'Document updated' : 'Document created',
+  );
 });
 $('docAddFolder')?.addEventListener('click', async () => {
-  const name = $('docNewFolder').value.trim(); if (!name) return;
+  const name = $('docNewFolder').value.trim();
+  if (!name) return;
   try {
-    const folder = await apiPost('/api/v1/isms/document-folders', {name, parent_id: $('docFolder').value || null});
-    await loadDocumentFolders(); $('docFolder').value = folder.id; $('docNewFolder').value = '';
+    const folder = await apiPost('/api/v1/isms/document-folders', {
+      name,
+      parent_id: $('docFolder').value || null,
+    });
+    await loadDocumentFolders();
+    $('docFolder').value = folder.id;
+    $('docNewFolder').value = '';
     toast(status, 'Folder created and selected.', 'success');
-  } catch (err) { toast(status, String(err), 'danger'); }
+  } catch (err) {
+    toast(status, String(err), 'danger');
+  }
 });
-$('docNewFolder')?.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); $('docAddFolder').click(); } });
-$('docTags')?.addEventListener('keydown', event => {
-  if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); addDocumentTag(event.target.value.replace(/,$/, '')); event.target.value = ''; }
+$('docNewFolder')?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    $('docAddFolder').click();
+  }
 });
-$('docTags')?.addEventListener('blur', event => { if (event.target.value.trim()) { addDocumentTag(event.target.value); event.target.value = ''; } });
-$('docTagChoices')?.addEventListener('click', event => { const button = event.target.closest('[data-add-doc-tag]'); if (button) addDocumentTag(button.dataset.addDocTag); });
-$('docSelectedTags')?.addEventListener('click', event => { const button = event.target.closest('[data-remove-doc-tag]'); if (button) { documentTags = documentTags.filter(tag => tag !== button.dataset.removeDocTag); renderDocumentTags(); } });
-$('docTagCloud')?.addEventListener('click', event => { const button = event.target.closest('[data-filter-doc-tag]'); if (button) { documentTagFilter = button.dataset.filterDocTag; renderDocuments(); } });
-document.querySelectorAll('input[name="docMedium"]').forEach(input => input.addEventListener('change', showDocumentMedium));
+$('docTags')?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ',') {
+    event.preventDefault();
+    addDocumentTag(event.target.value.replace(/,$/, ''));
+    event.target.value = '';
+  }
+});
+$('docTags')?.addEventListener('blur', (event) => {
+  if (event.target.value.trim()) {
+    addDocumentTag(event.target.value);
+    event.target.value = '';
+  }
+});
+$('docTagChoices')?.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-add-doc-tag]');
+  if (button) addDocumentTag(button.dataset.addDocTag);
+});
+$('docSelectedTags')?.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-remove-doc-tag]');
+  if (button) {
+    documentTags = documentTags.filter((tag) => tag !== button.dataset.removeDocTag);
+    renderDocumentTags();
+  }
+});
+$('docTagCloud')?.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-filter-doc-tag]');
+  if (button) {
+    documentTagFilter = button.dataset.filterDocTag;
+    renderDocuments();
+  }
+});
+document
+  .querySelectorAll('input[name="docMedium"]')
+  .forEach((input) => input.addEventListener('change', showDocumentMedium));
 
 $('orgForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const editingId = ev.target.dataset.editingId || null;
-  await saveIsms('org', {parent_id: $('orgParent').value || null, name: $('orgName').value, node_type: $('orgType').value || 'role', description: $('orgDescription').value, user_ids: selectedValues($('orgUsers')), ...selectedLinkPayload('org')}, editingId);
-  resetForm('org'); await reloadAfter(editingId ? 'Organisation chart node updated' : 'Organisation chart node created');
+  await saveIsms(
+    'org',
+    {
+      parent_id: $('orgParent').value || null,
+      name: $('orgName').value,
+      node_type: $('orgType').value || 'role',
+      description: $('orgDescription').value,
+      user_ids: selectedValues($('orgUsers')),
+      ...selectedLinkPayload('org'),
+    },
+    editingId,
+  );
+  resetForm('org');
+  await reloadAfter(
+    editingId ? 'Organisation chart node updated' : 'Organisation chart node created',
+  );
 });
 
 $('assetForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const editingId = ev.target.dataset.editingId || null;
-  await saveIsms('asset', {asset: $('assetName').value, category_id: $('assetCategory').value || null, subcategory_id: $('assetSubcategory').value || null, license_id: $('assetLicense').value || null, owner_org_node_id: $('assetOwner').value || null, register_held_by_org_node_id: $('assetRegister').value || null, description: $('assetDescription').value, ...selectedLinkPayload('asset')}, editingId);
-  resetForm('asset'); await reloadAfter(editingId ? 'ISMS asset updated' : 'ISMS asset created');
+  await saveIsms(
+    'asset',
+    {
+      asset: $('assetName').value,
+      category_id: $('assetCategory').value || null,
+      subcategory_id: $('assetSubcategory').value || null,
+      license_id: $('assetLicense').value || null,
+      owner_org_node_id: $('assetOwner').value || null,
+      register_held_by_org_node_id: $('assetRegister').value || null,
+      description: $('assetDescription').value,
+      ...selectedLinkPayload('asset'),
+    },
+    editingId,
+  );
+  resetForm('asset');
+  await reloadAfter(editingId ? 'ISMS asset updated' : 'ISMS asset created');
 });
-
 
 $('effectivenessForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const editingId = ev.target.dataset.editingId || null;
   const targetRaw = $('effTargetValue')?.value;
-  await saveIsms('effectiveness', {
-    summary: $('effSummary').value,
-    description: $('effDescription').value,
-    effectiveness_measure: $('effMeasure').value,
-    metric: $('effMetric').value,
-    metric_key: $('effMetricKey').value || null,
-    threshold_operator: $('effThresholdOperator').value || '',
-    target_value: targetRaw === '' ? null : Number(targetRaw),
-    target_unit: $('effTargetUnit').value || '',
-    owner_user_id: $('effOwner').value || null,
-    frequency: $('effFrequency').value || '',
-    notes: $('effNotes').value || '',
-    ...selectedControlOnlyPayload('eff'),
-  }, editingId);
-  resetForm('effectiveness'); await reloadAfter(editingId ? 'Effectiveness measure updated' : 'Effectiveness measure created');
+  await saveIsms(
+    'effectiveness',
+    {
+      summary: $('effSummary').value,
+      description: $('effDescription').value,
+      effectiveness_measure: $('effMeasure').value,
+      metric: $('effMetric').value,
+      metric_key: $('effMetricKey').value || null,
+      threshold_operator: $('effThresholdOperator').value || '',
+      target_value: targetRaw === '' ? null : Number(targetRaw),
+      target_unit: $('effTargetUnit').value || '',
+      owner_user_id: $('effOwner').value || null,
+      frequency: $('effFrequency').value || '',
+      notes: $('effNotes').value || '',
+      ...selectedControlOnlyPayload('eff'),
+    },
+    editingId,
+  );
+  resetForm('effectiveness');
+  await reloadAfter(editingId ? 'Effectiveness measure updated' : 'Effectiveness measure created');
 });
 
 $('metricEntryForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const measureId = $('metricMeasureId')?.value || '';
   if (!measureId) throw new Error('Select an effectiveness measure.');
-  await apiPost(`/api/v1/isms/effectiveness-measures/${encodeURIComponent(measureId)}/metrics?framework=${encodeURIComponent(framework)}`, metricEntryPayloadFromForm());
+  await apiPost(
+    `/api/v1/isms/effectiveness-measures/${encodeURIComponent(measureId)}/metrics?framework=${encodeURIComponent(framework)}`,
+    metricEntryPayloadFromForm(),
+  );
   $('metricEntryFormCard').style.display = 'none';
   await reloadAfter('Effectiveness metric recorded');
 });
@@ -1672,27 +2401,54 @@ $('accessControlForm')?.addEventListener('submit', async (ev) => {
   const editingId = ev.target.dataset.editingId || null;
   await saveIsms('access', accessPayloadFromForm(), editingId);
   resetForm('access');
-  await reloadAfter(editingId ? 'Access control matrix row updated' : 'Access control matrix row created');
+  await reloadAfter(
+    editingId ? 'Access control matrix row updated' : 'Access control matrix row created',
+  );
 });
 
-for (const id of ['meetingNewPersonName', 'meetingNewPersonEmail']) $(id)?.addEventListener('input', updateMeetingPersonBubble);
+for (const id of ['meetingNewPersonName', 'meetingNewPersonEmail'])
+  $(id)?.addEventListener('input', updateMeetingPersonBubble);
 $('meetingCreatePerson')?.addEventListener('click', async () => {
   try {
-    const name=$('meetingNewPersonName').value.trim();
-    const email=$('meetingNewPersonEmail').value.trim();
-    const person=await apiPost('/api/v1/isms/people', {name,email});
-    meetingPeople.push(person); populateMeetingPeople();
-    const option=Array.from($('meetingPersonAttendees').options).find(o=>o.value===person.id);
-    if (option) option.selected=true;
-    $('meetingNewPersonName').value=''; $('meetingNewPersonEmail').value='';
-    updateMeetingPersonBubble(); toast(status,'Person added to the directory and selected as an attendee.','success');
-  } catch(err) { toast(status,`Could not add Person: ${String(err)}`,'danger'); }
+    const name = $('meetingNewPersonName').value.trim();
+    const email = $('meetingNewPersonEmail').value.trim();
+    const person = await apiPost('/api/v1/isms/people', { name, email });
+    meetingPeople.push(person);
+    populateMeetingPeople();
+    const option = Array.from($('meetingPersonAttendees').options).find(
+      (o) => o.value === person.id,
+    );
+    if (option) option.selected = true;
+    $('meetingNewPersonName').value = '';
+    $('meetingNewPersonEmail').value = '';
+    updateMeetingPersonBubble();
+    toast(status, 'Person added to the directory and selected as an attendee.', 'success');
+  } catch (err) {
+    toast(status, `Could not add Person: ${String(err)}`, 'danger');
+  }
 });
 $('meetingForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const editingId = ev.target.dataset.editingId || null;
-  await saveIsms('meeting', {title: $('meetingTitle').value || 'ISMS Meeting', date: $('meetingDate').value, start_time: $('meetingStart').value || null, end_time: $('meetingEnd').value || null, attendee_user_ids: selectedValues($('meetingAttendees')), apology_user_ids: selectedValues($('meetingApologies')), attendee_person_ids: selectedValues($('meetingPersonAttendees')), apology_person_ids: selectedValues($('meetingPersonApologies')), links: selectedMeetingLinks(), agenda_minutes_notes: getMeetingNotesValue(), ...selectedLinkPayload('meeting')}, editingId);
-  resetForm('meeting'); await reloadAfter(editingId ? 'Meeting minutes updated' : 'Meeting minutes created');
+  await saveIsms(
+    'meeting',
+    {
+      title: $('meetingTitle').value || 'ISMS Meeting',
+      date: $('meetingDate').value,
+      start_time: $('meetingStart').value || null,
+      end_time: $('meetingEnd').value || null,
+      attendee_user_ids: selectedValues($('meetingAttendees')),
+      apology_user_ids: selectedValues($('meetingApologies')),
+      attendee_person_ids: selectedValues($('meetingPersonAttendees')),
+      apology_person_ids: selectedValues($('meetingPersonApologies')),
+      links: selectedMeetingLinks(),
+      agenda_minutes_notes: getMeetingNotesValue(),
+      ...selectedLinkPayload('meeting'),
+    },
+    editingId,
+  );
+  resetForm('meeting');
+  await reloadAfter(editingId ? 'Meeting minutes updated' : 'Meeting minutes created');
 });
 
 $('addMeetingExternalLink')?.addEventListener('click', () => addMeetingExternalLinkRow());
@@ -1732,7 +2488,11 @@ document.addEventListener('click', async (ev) => {
     }
     if (filterClearBtn) {
       const input = $(filterClearBtn.getAttribute('data-isms-filter-clear'));
-      if (input) { input.value = ''; applyIsmsTableFilter(input); input.focus(); }
+      if (input) {
+        input.value = '';
+        applyIsmsTableFilter(input);
+        input.focus();
+      }
       return;
     }
     if (removeMeetingLinkBtn) {
@@ -1748,12 +2508,17 @@ document.addEventListener('click', async (ev) => {
     if (metricEntryDeleteBtn) {
       const id = metricEntryDeleteBtn.getAttribute('data-metric-entry-delete');
       if (!confirm('Delete this effectiveness metric entry?')) return;
-      await apiDelete(`/api/v1/isms/effectiveness-metrics/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`);
+      await apiDelete(
+        `/api/v1/isms/effectiveness-metrics/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
+      );
       await reloadAfter('Effectiveness metric entry deleted');
       return;
     }
     if (sampleBtn) {
-      sampleIsmsEntity(sampleBtn.getAttribute('data-audit-sample-entity'), sampleBtn.getAttribute('data-isms-id'));
+      sampleIsmsEntity(
+        sampleBtn.getAttribute('data-audit-sample-entity'),
+        sampleBtn.getAttribute('data-isms-id'),
+      );
       return;
     }
     if (licenseEditBtn) {
@@ -1768,7 +2533,9 @@ document.addEventListener('click', async (ev) => {
       const item = licenses().find((l) => String(l.id) === String(id));
       const label = item?.name || 'this license';
       if (!confirm(`Delete ${label}? Licenses related to assets cannot be deleted.`)) return;
-      await apiDelete(`/api/v1/isms/licenses/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`);
+      await apiDelete(
+        `/api/v1/isms/licenses/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
+      );
       resetLicenseForm();
       await reloadAfter('License deleted');
       return;
@@ -1797,7 +2564,10 @@ document.addEventListener('click', async (ev) => {
       return;
     }
     if (deleteBtn) {
-      await deleteIsms(deleteBtn.getAttribute('data-isms-delete'), deleteBtn.getAttribute('data-isms-id'));
+      await deleteIsms(
+        deleteBtn.getAttribute('data-isms-delete'),
+        deleteBtn.getAttribute('data-isms-id'),
+      );
       return;
     }
     if (cancelBtn) {
@@ -1835,10 +2605,12 @@ async function activateInitialTab() {
     window.setTimeout(() => showMetricEntryForm(recordId), 180);
   } else if (measureId) {
     window.setTimeout(() => {
-      const row = document.querySelector(`[data-isms-row="effectiveness"][data-isms-id="${CSS.escape(String(measureId))}"]`);
+      const row = document.querySelector(
+        `[data-isms-row="effectiveness"][data-isms-id="${CSS.escape(String(measureId))}"]`,
+      );
       if (!row) return;
       row.classList.add('table-warning');
-      row.scrollIntoView({behavior: 'smooth', block: 'center'});
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 180);
   }
 }
@@ -1850,11 +2622,15 @@ for (const btn of Array.from(document.querySelectorAll('#ismsTabs [data-bs-toggl
     const url = new URL(window.location.href);
     url.searchParams.set('tab', tabName);
     window.history.replaceState({}, '', url.toString());
-    ensureSection(section).catch((e) => toast(status, `Failed to load ISMS section: ${String(e)}`, 'danger'));
+    ensureSection(section).catch((e) =>
+      toast(status, `Failed to load ISMS section: ${String(e)}`, 'danger'),
+    );
   });
 }
 
-load().then(() => activateInitialTab()).catch((e) => toast(status, `Failed to load ISMS: ${String(e)}`, 'danger'));
+load()
+  .then(() => activateInitialTab())
+  .catch((e) => toast(status, `Failed to load ISMS: ${String(e)}`, 'danger'));
 
 // BookStack is part of document management and loads only when expanded.
 const bookstackDocuments = document.getElementById('bookstackDocuments');
@@ -1865,7 +2641,7 @@ if (bookstackDocuments && me?.bookstack_enabled) {
     if (!bookstackDocuments.open || loaded) return;
     loaded = true;
     try {
-      const {initBookstackDocuments} = await import('./bookstack-sections.js');
+      const { initBookstackDocuments } = await import('./bookstack-sections.js');
       await initBookstackDocuments(me, document.getElementById('bookstackDocumentContent'));
     } catch (error) {
       loaded = false;
@@ -1875,6 +2651,10 @@ if (bookstackDocuments && me?.bookstack_enabled) {
   if (new URLSearchParams(location.search).get('bookstack') === '1') bookstackDocuments.open = true;
 }
 
-const measureExampleUpdate=mountMeasurementExamples($('effectivenessForm'),()=>({key:$('effMetricKey').value,framework,unit:$('effTargetUnit').value}));
-$('effectivenessForm').addEventListener('input',measureExampleUpdate);
-$('effectivenessForm').addEventListener('reset',()=>queueMicrotask(measureExampleUpdate));
+const measureExampleUpdate = mountMeasurementExamples($('effectivenessForm'), () => ({
+  key: $('effMetricKey').value,
+  framework,
+  unit: $('effTargetUnit').value,
+}));
+$('effectivenessForm').addEventListener('input', measureExampleUpdate);
+$('effectivenessForm').addEventListener('reset', () => queueMicrotask(measureExampleUpdate));

@@ -98,12 +98,13 @@ function showPrefsSaveToast(message, kind = 'success', ttlMs = 2400) {
     prefsSaveToastTimer = null;
   }
 
-  const cls = {
-    success: 'badge text-bg-success',
-    danger: 'badge text-bg-danger',
-    warning: 'badge text-bg-warning',
-    info: 'badge text-bg-secondary',
-  }[kind] || 'badge text-bg-secondary';
+  const cls =
+    {
+      success: 'badge text-bg-success',
+      danger: 'badge text-bg-danger',
+      warning: 'badge text-bg-warning',
+      info: 'badge text-bg-secondary',
+    }[kind] || 'badge text-bg-secondary';
 
   prefsSaveToast.className = cls;
   prefsSaveToast.textContent = message;
@@ -124,7 +125,6 @@ const sourceColorsResetAll = document.getElementById('sourceColorsResetAll');
 
 const me = await initNavbar();
 const canDeleteQuestions = Boolean(me?.is_admin || me?.can_delete_questions);
-
 
 // Hide local password management when using trusted proxy auth.
 if (pwCard && me?.password_change_enabled === false) {
@@ -157,14 +157,15 @@ function setTzEnabled() {
 }
 
 function renderThemeOptions(meObj) {
-  const avail = (meObj?.available_themes && Array.isArray(meObj.available_themes)) ?
-    meObj.available_themes :
-    THEMES;
+  const avail =
+    meObj?.available_themes && Array.isArray(meObj.available_themes)
+      ? meObj.available_themes
+      : THEMES;
 
   if (!prefTheme) return;
   prefTheme.innerHTML = avail
-      .map((t) => `<option value="${esc(String(t.id))}">${esc(String(t.name))}</option>`)
-      .join('');
+    .map((t) => `<option value="${esc(String(t.id))}">${esc(String(t.name))}</option>`)
+    .join('');
 }
 
 let currentLandingPagePref = (me?.preferences?.landing_page || '/').trim() || '/';
@@ -174,16 +175,16 @@ function renderLandingPageOptions(meObj, savedSearches = []) {
   if (!prefLandingPage) return;
 
   const fixed = [
-    {v: '/index.html', label: 'Home'},
-    {v: '/controls.html', label: 'Controls register'},
-    {v: '/events.html', label: 'Events'},
-    {v: '/sources.html', label: 'Sources'},
-    {v: '/risks.html', label: 'Risks'},
-    {v: '/isms.html', label: 'ISMS'},
-    {v: '/statement-of-applicability.html', label: 'Statement of Applicability'},
-    {v: '/account.html', label: 'Account'},
+    { v: '/index.html', label: 'Home' },
+    { v: '/controls.html', label: 'Controls register' },
+    { v: '/events.html', label: 'Events' },
+    { v: '/sources.html', label: 'Sources' },
+    { v: '/risks.html', label: 'Risks' },
+    { v: '/isms.html', label: 'ISMS' },
+    { v: '/statement-of-applicability.html', label: 'Statement of Applicability' },
+    { v: '/account.html', label: 'Account' },
   ];
-  if (meObj?.is_admin) fixed.push({v: '/admin.html', label: 'Admin'});
+  if (meObj?.is_admin) fixed.push({ v: '/admin.html', label: 'Admin' });
 
   const cur = (currentLandingPagePref || '/').trim() || '/';
 
@@ -196,7 +197,7 @@ function renderLandingPageOptions(meObj, savedSearches = []) {
     const name = String(s?.name || '').trim();
     const url = String(s?.url || '').trim();
     if (!name || !url) continue;
-    saved.push({name, url});
+    saved.push({ name, url });
   }
 
   // Disambiguate duplicate names by suffixing with a shortened URL.
@@ -208,21 +209,17 @@ function renderLandingPageOptions(meObj, savedSearches = []) {
   const savedLabels = saved.map((s) => {
     const dup = (nameCounts.get(s.name.toLowerCase()) || 0) > 1;
     const label = dup ? `${esc(s.name)} — ${esc(shorten(s.url, 60))}` : esc(s.name);
-    return {v: s.url, label};
+    return { v: s.url, label };
   });
 
   const savedUrls = new Set(savedLabels.map((o) => o.v));
 
-  let html = fixed
-      .map((o) => `<option value="${esc(o.v)}">${esc(o.label)}</option>`)
-      .join('');
+  let html = fixed.map((o) => `<option value="${esc(o.v)}">${esc(o.label)}</option>`).join('');
 
   if (savedLabels.length) {
     html += `\n<optgroup label="Saved searches">`;
     // Show most recently updated first as returned by API; keep that order.
-    html += savedLabels
-        .map((o) => `<option value="${esc(o.v)}">${esc(o.label)}</option>`)
-        .join('');
+    html += savedLabels.map((o) => `<option value="${esc(o.v)}">${esc(o.label)}</option>`).join('');
     html += `</optgroup>`;
   }
 
@@ -244,14 +241,16 @@ function renderLandingPageOptions(meObj, savedSearches = []) {
   }
 }
 
-
 function loadPrefs(meObj) {
   const prefs = meObj?.preferences || {};
   if (prefDefaultTzHelp) {
     prefDefaultTzHelp.textContent = `Default timezone: ${meObj?.default_timezone || 'Etc/UTC'}.`;
   }
   if (prefDefaultDateFormatHelp) {
-    const fmt = String(meObj?.default_date_format || 'ymd').toLowerCase() === 'dmy' ? 'DD/MM/YYYY' : 'YYYY-MM-DD';
+    const fmt =
+      String(meObj?.default_date_format || 'ymd').toLowerCase() === 'dmy'
+        ? 'DD/MM/YYYY'
+        : 'YYYY-MM-DD';
     prefDefaultDateFormatHelp.textContent = `App default: ${fmt}. API values remain YYYY-MM-DD.`;
   }
 
@@ -297,12 +296,12 @@ async function loadDefaultFrameworkOptions(meObj) {
       const slug = String(it?.slug || '').trim();
       if (!slug || seen.has(slug)) continue;
       seen.add(slug);
-      uniq.push({...it, slug});
+      uniq.push({ ...it, slug });
     }
 
     const saved = String(currentDefaultFrameworkPref || '').trim();
     if (saved && !seen.has(saved)) {
-      uniq.unshift({slug: saved, name: saved, control_count: 0});
+      uniq.unshift({ slug: saved, name: saved, control_count: 0 });
       seen.add(saved);
     }
 
@@ -311,7 +310,9 @@ async function loadDefaultFrameworkOptions(meObj) {
 
     const opts = [
       `<option value="">Use system default (${esc(defaultLabel)})</option>`,
-      ...uniq.map((it) => `<option value="${esc(it.slug)}">${esc(_frameworkOptionLabel(it))}</option>`),
+      ...uniq.map(
+        (it) => `<option value="${esc(it.slug)}">${esc(_frameworkOptionLabel(it))}</option>`,
+      ),
     ];
 
     prefDefaultFramework.innerHTML = opts.join('');
@@ -331,22 +332,26 @@ async function loadDefaultFrameworkOptions(meObj) {
 loadPrefs(me);
 await loadDefaultFrameworkOptions(me);
 
-
 // ---------------------------------------------------------------------------
 // Source color overrides (user preference)
 // ---------------------------------------------------------------------------
 
 let sourceColorsLoaded = false;
 let sourceColorsDirty = false;
-let sourceColorOverrides = (me?.preferences?.source_colors && typeof me.preferences.source_colors === 'object') ?
-  {...me.preferences.source_colors} :
-  {};
+let sourceColorOverrides =
+  me?.preferences?.source_colors && typeof me.preferences.source_colors === 'object'
+    ? { ...me.preferences.source_colors }
+    : {};
 
 function normalizeHex(hex) {
   const h = String(hex || '').trim();
   if (!h) return '';
   let s = h.startsWith('#') ? h.slice(1) : h;
-  if (/^[0-9a-fA-F]{3}$/.test(s)) s = s.split('').map((c) => c + c).join('');
+  if (/^[0-9a-fA-F]{3}$/.test(s))
+    s = s
+      .split('')
+      .map((c) => c + c)
+      .join('');
   if (!/^[0-9a-fA-F]{6}$/.test(s)) return '';
   return ('#' + s).toUpperCase();
 }
@@ -355,7 +360,7 @@ function colorChipHtml(hex) {
   const c = normalizeHex(hex);
   if (!c) return '<span class="small-muted">–</span>';
   const fg = idealTextColor(c);
-  const border = (fg === '#FFFFFF') ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.14)';
+  const border = fg === '#FFFFFF' ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.14)';
   return `<span class="badge" style="background:${c}; border:1px solid ${border}; color:${fg}; font-weight:650;">${c}</span>`;
 }
 
@@ -402,7 +407,7 @@ function updateSourceColorRow(src) {
   const overrideColor = normalizeHex(sourceColorOverrides[src] || '');
   const effective = overrideColor || defaultColor || '#000000';
   const fg = idealTextColor(effective);
-  const border = (fg === '#FFFFFF') ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.14)';
+  const border = fg === '#FFFFFF' ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.14)';
 
   if (picker) picker.value = effective;
   if (hexInp) hexInp.value = overrideColor || defaultColor || '';
@@ -510,7 +515,6 @@ if (sourceColorsResetAll) {
 
 loadSourceColors();
 
-
 // ---------------------------------------------------------------------------
 // Saved searches
 // ---------------------------------------------------------------------------
@@ -523,7 +527,8 @@ function renderSavedSearches(items) {
 
   for (const s of arr) {
     const row = document.createElement('div');
-    row.className = 'list-group-item d-flex flex-wrap gap-2 align-items-center justify-content-between';
+    row.className =
+      'list-group-item d-flex flex-wrap gap-2 align-items-center justify-content-between';
 
     const left = document.createElement('div');
     left.className = 'me-2';
@@ -585,13 +590,14 @@ async function loadSavedSearches() {
 
 loadSavedSearches();
 
-
 // ---------------------------------------------------------------------------
 // Account tabs
 // ---------------------------------------------------------------------------
 
 function accountTabTargetFromHash(hash) {
-  const h = String(hash || '').trim().toLowerCase();
+  const h = String(hash || '')
+    .trim()
+    .toLowerCase();
   if (h === '#profile' || h === '#preferences') return '#preferences-pane';
   if (h === '#saved-searches' || h === '#savedsearches') return '#saved-searches-pane';
   if (h === '#my-questions' || h === '#questions') return '#my-questions-pane';
@@ -600,7 +606,8 @@ function accountTabTargetFromHash(hash) {
   if (h === '#my-risks' || h === '#risks-i-own' || h === '#risks') return '#my-risks-pane';
   if (h === '#my-isms-objectives' || h === '#isms-objectives') return '#my-isms-objectives-pane';
   if (h === '#my-isms-role' || h === '#isms-role' || h === '#my-role') return '#my-isms-role-pane';
-  if (h === '#my-isms-assets' || h === '#isms-assets' || h === '#assets-i-manage') return '#my-isms-assets-pane';
+  if (h === '#my-isms-assets' || h === '#isms-assets' || h === '#assets-i-manage')
+    return '#my-isms-assets-pane';
   if (h === '#security' || h === '#password') return '#security-pane';
   return '';
 }
@@ -623,7 +630,11 @@ function bindAccountTabs() {
       const hash = btn.getAttribute('data-tab-hash') || '';
       if (hash && window.location.hash !== hash) {
         try {
-          window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${hash}`);
+          window.history.replaceState(
+            null,
+            '',
+            `${window.location.pathname}${window.location.search}${hash}`,
+          );
         } catch {
           // ignore
         }
@@ -643,7 +654,6 @@ function bindAccountTabs() {
   maybeLoadActiveAccountTab('#preferences-pane');
 }
 
-
 // ---------------------------------------------------------------------------
 // My Questions
 // ---------------------------------------------------------------------------
@@ -660,11 +670,18 @@ function myQuestionStatusBadge(st, unread) {
 
 function myQuestionRow(it) {
   const framework = getCurrentFramework();
-  const rawHref = withFramework(it?.target_url || `/event.html?id=${encodeURIComponent(it?.event_id || '')}&thread=${encodeURIComponent(it?.thread_id || '')}#questions`, framework);
+  const rawHref = withFramework(
+    it?.target_url ||
+      `/event.html?id=${encodeURIComponent(it?.event_id || '')}&thread=${encodeURIComponent(it?.thread_id || '')}#questions`,
+    framework,
+  );
   const href = safeExternalHref(rawHref) || '#';
   const title = it.target_label || it.event_summary || '(no summary)';
-  const src = it.target_type && it.target_type !== 'event' ? String(it.target_type).replaceAll('_', ' ') : (it.event_source || '');
-  const ts = it.event_timestamp ? fmtTs(it.event_timestamp) : (it.target_ref || '—');
+  const src =
+    it.target_type && it.target_type !== 'event'
+      ? String(it.target_type).replaceAll('_', ' ')
+      : it.event_source || '';
+  const ts = it.event_timestamp ? fmtTs(it.event_timestamp) : it.target_ref || '—';
   const updated = it.updated_at ? fmtTs(it.updated_at) : '—';
   const badge = myQuestionStatusBadge(it.status, !!it.unread);
 
@@ -750,7 +767,6 @@ myQuestionsTbody?.addEventListener('click', async (ev) => {
   }
 });
 
-
 // ---------------------------------------------------------------------------
 // My Audits
 // ---------------------------------------------------------------------------
@@ -764,7 +780,10 @@ function auditStatusLabel(s) {
 }
 
 function myAuditRow(a) {
-  const url = withFramework(`/audit.html?id=${encodeURIComponent(a.id)}`, a.framework_slug || getCurrentFramework());
+  const url = withFramework(
+    `/audit.html?id=${encodeURIComponent(a.id)}`,
+    a.framework_slug || getCurrentFramework(),
+  );
   const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ') || '—';
   const attendeeRole = String(a?.my_attendee?.role || '').trim() || 'Attendee';
   const updated = a.updated_at ? fmtTs(a.updated_at) : '—';
@@ -843,7 +862,10 @@ function riskScoreBadge(score) {
 }
 
 function myRiskRow(r) {
-  const url = withFramework(`/risk.html?id=${encodeURIComponent(r.id || '')}`, r.framework || getCurrentFramework());
+  const url = withFramework(
+    `/risk.html?id=${encodeURIComponent(r.id || '')}`,
+    r.framework || getCurrentFramework(),
+  );
   const asset = String(r.asset || r.asset_entity?.name || 'Risk').trim() || 'Risk';
   const threat = String(r.threat_summary || '').trim();
   const categoryBits = [r.category?.name, r.subcategory?.name].filter(Boolean);
@@ -852,7 +874,8 @@ function myRiskRow(r) {
   const typeHtml = types.length
     ? types.map((t) => `<span class="badge badge-soft me-1">${esc(t)}</span>`).join('')
     : '<span class="small-muted">—</span>';
-  const controlsText = Number(r.control_count || 0) === 1 ? '1 control' : `${Number(r.control_count || 0)} controls`;
+  const controlsText =
+    Number(r.control_count || 0) === 1 ? '1 control' : `${Number(r.control_count || 0)} controls`;
   const updated = r.updated_at ? fmtTs(r.updated_at) : '—';
 
   return `<tr>
@@ -916,8 +939,6 @@ myRisksRefresh?.addEventListener('click', () => {
   loadMyRisks();
 });
 
-
-
 // ---------------------------------------------------------------------------
 // My ISMS account cross-references
 // ---------------------------------------------------------------------------
@@ -948,9 +969,9 @@ function orgNodeLabel(node) {
 function orgPathLabel(path) {
   const rows = Array.isArray(path) ? path : [];
   return rows
-      .map((entry) => orgNodeLabel(entry))
-      .filter(Boolean)
-      .join(' → ');
+    .map((entry) => orgNodeLabel(entry))
+    .filter(Boolean)
+    .join(' → ');
 }
 
 function meetingTimeLabel(item) {
@@ -1037,7 +1058,8 @@ async function loadMyIsmsObjectives() {
   if (!myIsmsObjectivesTbody) return;
   try {
     if (myIsmsObjectivesStatus) myIsmsObjectivesStatus.style.display = 'none';
-    myIsmsObjectivesTbody.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">Loading…</td></tr>';
+    myIsmsObjectivesTbody.innerHTML =
+      '<tr><td colspan="6" class="p-4 small-muted">Loading…</td></tr>';
     if (myIsmsObjectivesTableWrap) myIsmsObjectivesTableWrap.style.display = '';
     if (myIsmsObjectivesEmpty) myIsmsObjectivesEmpty.style.display = 'none';
 
@@ -1138,8 +1160,13 @@ function assetRoleLabel(item) {
 }
 
 function myIsmsAssetRow(item) {
-  const asset = (item?.asset && typeof item.asset === 'object') ? item.asset : (item || {});
-  const taxonomy = [asset.category?.name || asset.category_name, asset.subcategory?.name || asset.subcategory_name].filter(Boolean).join(' / ');
+  const asset = item?.asset && typeof item.asset === 'object' ? item.asset : item || {};
+  const taxonomy = [
+    asset.category?.name || asset.category_name,
+    asset.subcategory?.name || asset.subcategory_name,
+  ]
+    .filter(Boolean)
+    .join(' / ');
   return `<tr>
     <td class="wrap"><span class="fw-semibold">${esc(asset.asset || asset.name || 'Asset')}</span><div class="small-muted">${esc(taxonomy || asset.description || '')}</div></td>
     <td>${esc(asset.license || '—')}</td>
@@ -1253,7 +1280,8 @@ if (prefsForm) {
       currentDefaultFrameworkPref = String(updated?.default_framework || '').trim();
       window.keenPreferredFramework = currentDefaultFrameworkPref;
       try {
-        if (currentDefaultFrameworkPref) localStorage.setItem('keen_framework', currentDefaultFrameworkPref);
+        if (currentDefaultFrameworkPref)
+          localStorage.setItem('keen_framework', currentDefaultFrameworkPref);
         else localStorage.removeItem('keen_framework');
       } catch {
         // ignore
@@ -1295,8 +1323,8 @@ if (pwForm && me?.password_change_enabled !== false) {
     ev.preventDefault();
     if (status) status.style.display = 'none';
 
-    const current_password = (curPw?.value || '');
-    const new_password = (newPw?.value || '');
+    const current_password = curPw?.value || '';
+    const new_password = newPw?.value || '';
 
     if (!current_password || !new_password) {
       toast(status, 'Both current and new password are required', 'warning');
@@ -1304,7 +1332,7 @@ if (pwForm && me?.password_change_enabled !== false) {
     }
 
     try {
-      await apiPost('/api/v1/me/password', {current_password, new_password});
+      await apiPost('/api/v1/me/password', { current_password, new_password });
       toast(status, 'Password updated. Sign in again to continue.', 'success');
       location.assign('/login.html');
       if (curPw) curPw.value = '';

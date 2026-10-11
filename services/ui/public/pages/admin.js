@@ -1,9 +1,26 @@
-import {initNavbar, apiGet, apiPost, apiPatch, apiPut, apiDelete, apiPostForm, esc, toast, debounce, fmtTs, getCurrentFramework, withFramework, safeExternalHref, entityChangelogHtml, userPillHtml} from '/app.js';
+import {
+  initNavbar,
+  apiGet,
+  apiPost,
+  apiPatch,
+  apiPut,
+  apiDelete,
+  apiPostForm,
+  esc,
+  toast,
+  debounce,
+  fmtTs,
+  getCurrentFramework,
+  withFramework,
+  safeExternalHref,
+  entityChangelogHtml,
+  userPillHtml,
+} from '/app.js';
 
 const me = await initNavbar();
 const currentFramework = getCurrentFramework();
 
-const autoApplyFilters = !!(me?.preferences?.auto_apply_filters);
+const autoApplyFilters = !!me?.preferences?.auto_apply_filters;
 
 const frameworkInput = document.getElementById('framework');
 if (frameworkInput && !frameworkInput.value) frameworkInput.value = currentFramework;
@@ -15,7 +32,9 @@ async function loadSourceCatalogue() {
   if (!node || !isAdmin) return;
   try {
     const data = await apiGet('/api/v1/admin/source-catalogue');
-    node.innerHTML = (data.items || []).map(item => `
+    node.innerHTML = (data.items || [])
+      .map(
+        (item) => `
       <div class="col-md-6 col-xl-4"><div class="border rounded p-3 h-100">
         <strong>${esc(item.adapter)}</strong> <span class="badge ${item.paused ? 'text-bg-warning' : item.enabled ? 'text-bg-success' : 'text-bg-secondary'}">${item.paused ? 'Paused' : item.enabled ? 'Enabled' : 'Disabled'}</span>
         <div class="small-muted">${item.collection_items} collection items · ${item.definitions} definitions</div>
@@ -23,26 +42,44 @@ async function loadSourceCatalogue() {
         ${item.paused ? '<p class="small mt-2 mb-1">Collection is paused across all connections of this type. Existing evidence is retained.</p>' : ''}
         ${item.can_pause ? `<button type="button" class="btn btn-sm ${item.paused ? 'btn-outline-success' : 'btn-outline-warning'} mt-2" data-source-pause="${esc(item.adapter)}" data-paused="${!item.paused}" ${!item.enabled && !item.paused ? 'disabled' : ''}>${item.paused ? 'Resume ingestion' : 'Pause ingestion'}</button>` : ''}
         ${!item.enabled ? '<div class="small-muted mt-1">Disabled by installation settings; resuming does not enable it.</div>' : ''}
-      </div></div>`).join('');
+      </div></div>`,
+      )
+      .join('');
     for (const button of node.querySelectorAll('[data-source-pause]')) {
       button.addEventListener('click', async () => {
         button.disabled = true;
         try {
           const paused = button.dataset.paused === 'true';
-          await apiPut(`/api/v1/admin/sources/${encodeURIComponent(button.dataset.sourcePause)}/ingestion-state`, {paused});
-          toast(document.getElementById('status'), paused ? 'Ingestion paused. A run already in progress may finish.' : 'Ingestion resumed. Scheduled collectors continue on their next run.', 'success');
+          await apiPut(
+            `/api/v1/admin/sources/${encodeURIComponent(button.dataset.sourcePause)}/ingestion-state`,
+            { paused },
+          );
+          toast(
+            document.getElementById('status'),
+            paused
+              ? 'Ingestion paused. A run already in progress may finish.'
+              : 'Ingestion resumed. Scheduled collectors continue on their next run.',
+            'success',
+          );
           await loadSourceCatalogue();
         } catch (error) {
           button.disabled = false;
-          toast(document.getElementById('status'), `Could not change ingestion state: ${String(error)}`, 'danger');
+          toast(
+            document.getElementById('status'),
+            `Could not change ingestion state: ${String(error)}`,
+            'danger',
+          );
         }
       });
     }
-  } catch (e) { node.textContent = `Could not load source catalogue: ${String(e)}`; }
+  } catch (e) {
+    node.textContent = `Could not load source catalogue: ${String(e)}`;
+  }
 }
-document.getElementById('tab-evidence-config')?.addEventListener('shown.bs.tab', loadSourceCatalogue);
+document
+  .getElementById('tab-evidence-config')
+  ?.addEventListener('shown.bs.tab', loadSourceCatalogue);
 const canAudit = !!me?.can_audit_trail;
-
 
 const status = document.getElementById('status');
 const out = document.getElementById('out');
@@ -74,14 +111,15 @@ function selValues(selectEl) {
 function setOptions(selectEl, items, getValue, getLabel, selected = []) {
   if (!selectEl) return;
   const sel = new Set((selected || []).map((v) => String(v)));
-  selectEl.innerHTML = (items || []).map((it) => {
-    const v = String(getValue(it));
-    const label = String(getLabel(it));
-    const s = sel.has(v) ? 'selected' : '';
-    return `<option value="${esc(v)}" ${s} title="${esc(label)}">${esc(label)}</option>`;
-  }).join('');
+  selectEl.innerHTML = (items || [])
+    .map((it) => {
+      const v = String(getValue(it));
+      const label = String(getLabel(it));
+      const s = sel.has(v) ? 'selected' : '';
+      return `<option value="${esc(v)}" ${s} title="${esc(label)}">${esc(label)}</option>`;
+    })
+    .join('');
 }
-
 
 function enhanceWrappedMultiSelect(selectEl) {
   // Turns a <select multiple> into a scrollable checkbox list with wrapped labels.
@@ -128,7 +166,6 @@ function enhanceWrappedMultiSelect(selectEl) {
   }
 }
 
-
 // Hide ingest runners that are disabled at runtime (e.g. KEEN_TAIGA_ENABLED=false).
 async function hideDisabledIngestButtons() {
   try {
@@ -161,8 +198,11 @@ if (isAdmin) {
 // ------------------------------------------------------------------
 
 const TAB_HASH_TO_ID = {
-  '#overview':'tab-overview', '#agents':'tab-agents', '#integrations':'tab-integrations',
-  '#evidence-config':'tab-evidence-config', '#framework-editor':'tab-framework-editor',
+  '#overview': 'tab-overview',
+  '#agents': 'tab-agents',
+  '#integrations': 'tab-integrations',
+  '#evidence-config': 'tab-evidence-config',
+  '#framework-editor': 'tab-framework-editor',
   '#retention': 'tab-retention',
   '#users': 'tab-users',
   '#groups': 'tab-groups',
@@ -201,7 +241,8 @@ activateTabFromHash();
 window.addEventListener('hashchange', activateTabFromHash);
 
 function setOut(msg) {
-  const outputCard=document.getElementById("admin-output-card"); if(outputCard)outputCard.hidden=false;
+  const outputCard = document.getElementById('admin-output-card');
+  if (outputCard) outputCard.hidden = false;
   if (out) out.textContent = msg;
   // If output is collapsed, pop it open whenever we write something non-trivial.
   const collapseEl = document.getElementById('outCollapse');
@@ -209,7 +250,7 @@ function setOut(msg) {
   const shouldOpen = (msg || '').trim() && (msg || '').trim() !== 'Ready.';
   if (!shouldOpen || !window.bootstrap?.Collapse) return;
   try {
-    window.bootstrap.Collapse.getOrCreateInstance(collapseEl, {toggle: false}).show();
+    window.bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false }).show();
   } catch {
     // ignore
   }
@@ -288,15 +329,16 @@ function groupRoleSuffix(g) {
 
 function renderUsers(users) {
   if (!usersRows) return;
-  const rows = (users || []).map((u) => {
-    const role = (u.role || 'normal').toLowerCase();
-    const effRole = (u.effective_role || role || 'normal').toLowerCase();
-    const showEff = effRole && effRole !== role;
-    const activeChecked = u.is_active ? 'checked' : '';
-    const created = u.created_at ? fmtTs(u.created_at) : '–';
-    const updated = u.updated_at ? fmtTs(u.updated_at) : '–';
+  const rows = (users || [])
+    .map((u) => {
+      const role = (u.role || 'normal').toLowerCase();
+      const effRole = (u.effective_role || role || 'normal').toLowerCase();
+      const showEff = effRole && effRole !== role;
+      const activeChecked = u.is_active ? 'checked' : '';
+      const created = u.created_at ? fmtTs(u.created_at) : '–';
+      const updated = u.updated_at ? fmtTs(u.updated_at) : '–';
 
-    return `
+      return `
       <tr data-user-id="${esc(u.id)}">
         <td data-username="${esc(u.username || '')}">${userPillHtml(u)}</td>
         <td>
@@ -325,7 +367,8 @@ function renderUsers(users) {
         </td>
       </tr>
     `;
-  }).join('');
+    })
+    .join('');
 
   usersRows.innerHTML = rows || `<tr><td colspan="7" class="small-muted">No users found.</td></tr>`;
 
@@ -343,7 +386,11 @@ function renderUsers(users) {
 
       usersStatus.style.display = 'none';
       try {
-        await apiPatch(`/api/v1/users/${encodeURIComponent(userId)}`, {role, is_active: isActive, email});
+        await apiPatch(`/api/v1/users/${encodeURIComponent(userId)}`, {
+          role,
+          is_active: isActive,
+          email,
+        });
         toast(usersStatus, 'User updated', 'success');
         await refreshUsers(false);
       } catch (e) {
@@ -374,7 +421,7 @@ function renderUsers(users) {
 
       usersStatus.style.display = 'none';
       try {
-        await apiPost(`/api/v1/users/${encodeURIComponent(userId)}/password`, {new_password: pw});
+        await apiPost(`/api/v1/users/${encodeURIComponent(userId)}/password`, { new_password: pw });
         toast(usersStatus, `Password updated for ${username}`, 'success');
       } catch (e) {
         toast(usersStatus, `Failed: ${String(e)}`, 'danger');
@@ -388,7 +435,12 @@ function renderUsers(users) {
       if (!tr) return;
       const userId = tr.getAttribute('data-user-id');
       const username = (tr.querySelector('td')?.textContent || '').trim() || 'user';
-      if (!confirm(`Delete ${username} permanently? This removes the account row but keeps historical audit/question records with a blank/deleted author.`)) return;
+      if (
+        !confirm(
+          `Delete ${username} permanently? This removes the account row but keeps historical audit/question records with a blank/deleted author.`,
+        )
+      )
+        return;
       usersStatus.style.display = 'none';
       try {
         await apiDelete(`/api/v1/users/${encodeURIComponent(userId)}`);
@@ -399,7 +451,6 @@ function renderUsers(users) {
       }
     });
   });
-
 }
 
 async function refreshUsers(showLoading = true) {
@@ -427,13 +478,13 @@ if (userCreateForm) {
     try {
       const username = (newUsername?.value || '').trim();
       const email = (newEmail?.value || '').trim();
-      const password = (newPassword?.value || '');
+      const password = newPassword?.value || '';
       const role = (newRole?.value || 'inherit').trim();
 
       if (!username) throw new Error('Username is required');
       if (!password) throw new Error('Password is required');
 
-      await apiPost('/api/v1/users', {username, email, password, role});
+      await apiPost('/api/v1/users', { username, email, password, role });
       toast(usersStatus, `Created ${username} (${roleLabel(role)})`, 'success');
       if (newUsername) newUsername.value = '';
       if (newEmail) newEmail.value = '';
@@ -497,18 +548,18 @@ async function openUserAccessModal(userId, username) {
 
   // Populate option lists
   setOptions(
-      userAccessGroups,
-      (cachedGroups || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name))),
-      (g) => g.id,
-      (g) => `${g.name}${groupRoleSuffix(g)}`,
-      []
+    userAccessGroups,
+    (cachedGroups || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    (g) => g.id,
+    (g) => `${g.name}${groupRoleSuffix(g)}`,
+    [],
   );
   setOptions(
-      userAccessPerms,
-      (cachedPerms || []).slice().sort((a, b) => String(a.code).localeCompare(String(b.code))),
-      (p) => p.code,
-      (p) => p.description ? `${p.code} — ${p.description}` : p.code,
-      []
+    userAccessPerms,
+    (cachedPerms || []).slice().sort((a, b) => String(a.code).localeCompare(String(b.code))),
+    (p) => p.code,
+    (p) => (p.description ? `${p.code} — ${p.description}` : p.code),
+    [],
   );
 
   try {
@@ -517,18 +568,18 @@ async function openUserAccessModal(userId, username) {
     showUserAccessStatus('', 'info');
 
     setOptions(
-        userAccessGroups,
-        (cachedGroups || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name))),
-        (g) => g.id,
-        (g) => `${g.name}${groupRoleSuffix(g)}`,
-        access.group_ids || []
+      userAccessGroups,
+      (cachedGroups || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name))),
+      (g) => g.id,
+      (g) => `${g.name}${groupRoleSuffix(g)}`,
+      access.group_ids || [],
     );
     setOptions(
-        userAccessPerms,
-        (cachedPerms || []).slice().sort((a, b) => String(a.code).localeCompare(String(b.code))),
-        (p) => p.code,
-        (p) => p.description ? `${p.code} — ${p.description}` : p.code,
-        access.explicit_permission_codes || []
+      userAccessPerms,
+      (cachedPerms || []).slice().sort((a, b) => String(a.code).localeCompare(String(b.code))),
+      (p) => p.code,
+      (p) => (p.description ? `${p.code} — ${p.description}` : p.code),
+      access.explicit_permission_codes || [],
     );
 
     if (userAccessEffective) {
@@ -568,7 +619,6 @@ if (userAccessSave) {
     }
   });
 }
-
 
 // ------------------------------------------------------------------
 // Groups & permissions tab
@@ -612,10 +662,11 @@ function showGroupsStatus(msg, kind = 'info') {
 function renderGroups(groups) {
   if (!groupsRows) return;
   const items = Array.isArray(groups) ? groups : [];
-  const rows = items.map((g) => {
-    const isSel = selectedGroupId && String(g.id) === String(selectedGroupId);
-    const roleText = g.role ? roleLabel(g.role) : '—';
-    return `
+  const rows = items
+    .map((g) => {
+      const isSel = selectedGroupId && String(g.id) === String(selectedGroupId);
+      const roleText = g.role ? roleLabel(g.role) : '—';
+      return `
       <tr data-group-id="${esc(g.id)}" style="cursor:pointer;" class="${isSel ? 'table-active' : ''}">
         <td class="mono">${esc(g.name || '')}</td>
         <td class="mono">${esc(roleText)}</td>
@@ -623,7 +674,8 @@ function renderGroups(groups) {
         <td class="mono">${esc(String(g.permission_count ?? 0))}</td>
       </tr>
     `;
-  }).join('');
+    })
+    .join('');
 
   groupsRows.innerHTML = rows || `<tr><td colspan="4" class="small-muted">No groups.</td></tr>`;
   groupsRows.querySelectorAll('tr[data-group-id]').forEach((tr) => {
@@ -674,14 +726,31 @@ async function openGroupDetail(gid) {
     if (groupName) groupName.value = detail.name || '';
     if (groupDesc) groupDesc.value = detail.description || '';
     if (groupRole) groupRole.value = (detail.role || '').trim();
-    if (groupDetailMeta) groupDetailMeta.textContent = detail.created_at ? `Created ${fmtTs(detail.created_at)}` : '';
+    if (groupDetailMeta)
+      groupDetailMeta.textContent = detail.created_at ? `Created ${fmtTs(detail.created_at)}` : '';
 
     // Options
-    const usersSorted = (cachedUsers || []).slice().sort((a, b) => String(a.username).localeCompare(String(b.username)));
-    setOptions(groupMembers, usersSorted, (u) => u.id, (u) => u.username, detail.user_ids || []);
+    const usersSorted = (cachedUsers || [])
+      .slice()
+      .sort((a, b) => String(a.username).localeCompare(String(b.username)));
+    setOptions(
+      groupMembers,
+      usersSorted,
+      (u) => u.id,
+      (u) => u.username,
+      detail.user_ids || [],
+    );
 
-    const permsSorted = (cachedPerms || []).slice().sort((a, b) => String(a.code).localeCompare(String(b.code)));
-    setOptions(groupPermissions, permsSorted, (p) => p.code, (p) => p.description ? `${p.code} — ${p.description}` : p.code, detail.permission_codes || []);
+    const permsSorted = (cachedPerms || [])
+      .slice()
+      .sort((a, b) => String(a.code).localeCompare(String(b.code)));
+    setOptions(
+      groupPermissions,
+      permsSorted,
+      (p) => p.code,
+      (p) => (p.description ? `${p.code} — ${p.description}` : p.code),
+      detail.permission_codes || [],
+    );
     enhanceWrappedMultiSelect(groupPermissions);
 
     // Highlight selection in list
@@ -703,7 +772,7 @@ if (groupCreateForm) {
       const roleRaw = (newGroupRole?.value || '').trim();
       const role = roleRaw ? roleRaw : null;
       if (!name) throw new Error('Group name is required');
-      const g = await apiPost('/api/v1/admin/groups', {name, description, role});
+      const g = await apiPost('/api/v1/admin/groups', { name, description, role });
       toast(groupsStatus, `Created group ${name}`, 'success');
       if (newGroupName) newGroupName.value = '';
       if (newGroupDesc) newGroupDesc.value = '';
@@ -726,7 +795,10 @@ if (groupSave) {
         description: (groupDesc?.value || '').trim(),
         role: (groupRole?.value || '').trim(),
       };
-      const res = await apiPatch(`/api/v1/admin/groups/${encodeURIComponent(String(selectedGroupId))}`, payload);
+      const res = await apiPatch(
+        `/api/v1/admin/groups/${encodeURIComponent(String(selectedGroupId))}`,
+        payload,
+      );
       toast(groupsStatus, 'Group updated', 'success');
       await refreshGroups(false);
       await openGroupDetail(res.id || selectedGroupId);
@@ -760,7 +832,9 @@ if (groupApplyMembers) {
     try {
       showGroupsStatus('Saving members…', 'info');
       const user_ids = selValues(groupMembers);
-      await apiPut(`/api/v1/admin/groups/${encodeURIComponent(String(selectedGroupId))}/members`, {user_ids});
+      await apiPut(`/api/v1/admin/groups/${encodeURIComponent(String(selectedGroupId))}/members`, {
+        user_ids,
+      });
       showGroupsStatus('Members saved', 'success');
       await refreshGroups(false);
       await openGroupDetail(selectedGroupId);
@@ -776,7 +850,10 @@ if (groupApplyPermissions) {
     try {
       showGroupsStatus('Saving permissions…', 'info');
       const permission_codes = selValues(groupPermissions);
-      await apiPut(`/api/v1/admin/groups/${encodeURIComponent(String(selectedGroupId))}/permissions`, {permission_codes});
+      await apiPut(
+        `/api/v1/admin/groups/${encodeURIComponent(String(selectedGroupId))}/permissions`,
+        { permission_codes },
+      );
       showGroupsStatus('Permissions saved', 'success');
       await refreshGroups(false);
       await openGroupDetail(selectedGroupId);
@@ -793,7 +870,7 @@ if (permissionCreateForm) {
       const code = (newPermCode?.value || '').trim();
       const description = (newPermDesc?.value || '').trim() || null;
       if (!code) throw new Error('Permission code is required');
-      await apiPost('/api/v1/admin/permissions', {code, description});
+      await apiPost('/api/v1/admin/permissions', { code, description });
       toast(groupsStatus, `Created permission ${code}`, 'success');
       if (newPermCode) newPermCode.value = '';
       if (newPermDesc) newPermDesc.value = '';
@@ -805,11 +882,9 @@ if (permissionCreateForm) {
   });
 }
 
-
 // ------------------------------------------------------------------
 // Ingest runners / remap
 // ------------------------------------------------------------------
-
 
 document.querySelectorAll('[data-run]').forEach((btn) => {
   btn.addEventListener('click', async () => {
@@ -819,7 +894,7 @@ document.querySelectorAll('[data-run]').forEach((btn) => {
 
 document.getElementById('resetLokiCursors')?.addEventListener('click', async () => {
   const ok = window.confirm(
-    'Reset all Loki ingestion cursors to now? Existing events are not deleted, but old Loki backlog will be skipped.'
+    'Reset all Loki ingestion cursors to now? Existing events are not deleted, but old Loki backlog will be skipped.',
   );
   if (!ok) return;
   await runJsonPost('/api/v1/admin/ingest/loki/reset', {});
@@ -890,7 +965,7 @@ function diaryReadLinks() {
   diaryLinksWrap.querySelectorAll('[data-link-row]').forEach((row) => {
     const url = (row.querySelector('[data-link-url]')?.value || '').trim();
     const text = (row.querySelector('[data-link-text]')?.value || '').trim();
-    if (url) links.push({url, text});
+    if (url) links.push({ url, text });
   });
   return links;
 }
@@ -899,19 +974,20 @@ document.getElementById('diaryAddLink')?.addEventListener('click', () => diaryAd
 // Start with one empty row for convenience
 if (diaryLinksWrap && diaryLinksWrap.children.length === 0) diaryAddLinkRow();
 
-
 function renderSelected() {
   const wrap = document.getElementById('controlSelected');
   if (!wrap) return;
 
-  wrap.innerHTML = selectedRefs.map((ref) => {
-    return `
+  wrap.innerHTML = selectedRefs
+    .map((ref) => {
+      return `
       <span class="badge badge-soft">
         ${esc(ref)}
         <button type="button" class="btn btn-sm btn-link link-danger p-0 ms-1" data-remove="${esc(ref)}" aria-label="Remove">×</button>
       </span>
     `;
-  }).join('');
+    })
+    .join('');
 
   wrap.querySelectorAll('[data-remove]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -931,13 +1007,17 @@ function renderResults(items) {
     return;
   }
 
-  resEl.innerHTML = items.map((it) => {
-    const title = it.title ? ` <span class="small-muted">${esc(it.title)}</span>` : '';
-    const disabled = selectedRefs.includes(it.ref) ? 'disabled' : '';
-    return `<button type="button" class="list-group-item list-group-item-action ${disabled}" data-ref="${esc(it.ref)}">` +
-      `<span class="badge badge-chip me-2">${esc(it.ref)}</span>${title}` +
-      `</button>`;
-  }).join('');
+  resEl.innerHTML = items
+    .map((it) => {
+      const title = it.title ? ` <span class="small-muted">${esc(it.title)}</span>` : '';
+      const disabled = selectedRefs.includes(it.ref) ? 'disabled' : '';
+      return (
+        `<button type="button" class="list-group-item list-group-item-action ${disabled}" data-ref="${esc(it.ref)}">` +
+        `<span class="badge badge-chip me-2">${esc(it.ref)}</span>${title}` +
+        `</button>`
+      );
+    })
+    .join('');
 
   resEl.querySelectorAll('[data-ref]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -954,7 +1034,9 @@ function renderResults(items) {
 
 async function loadControls() {
   try {
-    const res = await apiGet(`/api/v1/controls?framework=${encodeURIComponent(selectedFrameworkFallback())}&limit=5000`);
+    const res = await apiGet(
+      `/api/v1/controls?framework=${encodeURIComponent(selectedFrameworkFallback())}&limit=5000`,
+    );
     allControls = (res.items || []).filter((it) => it.ref);
   } catch {
     allControls = [];
@@ -1005,10 +1087,11 @@ document.getElementById('diaryForm')?.addEventListener('submit', async (ev) => {
 
     for (const ref of selectedRefs) fd.append('controls', ref);
 
-
     const files = document.getElementById('diaryImages').files;
     if (files && files.length) {
-      Array.from(files).slice(0, 10).forEach((f) => fd.append('attachments', f, f.name));
+      Array.from(files)
+        .slice(0, 10)
+        .forEach((f) => fd.append('attachments', f, f.name));
     }
 
     const res = await apiPostForm('/api/v1/admin/diary', fd);
@@ -1016,7 +1099,10 @@ document.getElementById('diaryForm')?.addEventListener('submit', async (ev) => {
     toast(status, 'Diary evidence created', 'success');
 
     if (res && res.event_id) {
-      const openUrl = withFramework(`/event.html?id=${encodeURIComponent(res.event_id)}`, selectedFrameworkFallback());
+      const openUrl = withFramework(
+        `/event.html?id=${encodeURIComponent(res.event_id)}`,
+        selectedFrameworkFallback(),
+      );
       setOut(`${out.textContent}\n\nOpen: ${location.origin}${openUrl}`);
     }
 
@@ -1027,7 +1113,8 @@ document.getElementById('diaryForm')?.addEventListener('submit', async (ev) => {
     document.getElementById('diaryImages').value = '';
 
     if (diaryLinksWrap) {
-      diaryLinksWrap.innerHTML = ''; diaryAddLinkRow();
+      diaryLinksWrap.innerHTML = '';
+      diaryAddLinkRow();
     }
   } catch (e) {
     setOut(String(e));
@@ -1064,11 +1151,13 @@ function renderEntityChanges(items, total) {
     entityChangeMeta.textContent = `Showing ${from}–${to} of ${total || 0}`;
   }
   if (entityChangePrev) entityChangePrev.disabled = entityChangeOffset <= 0;
-  if (entityChangeNext) entityChangeNext.disabled = (entityChangeOffset + entityChangeLimit) >= (total || 0);
+  if (entityChangeNext)
+    entityChangeNext.disabled = entityChangeOffset + entityChangeLimit >= (total || 0);
 }
 
 async function refreshEntityChanges() {
-  if (entityChangeRows) entityChangeRows.innerHTML = '<div class="p-3 small-muted">Loading changelog…</div>';
+  if (entityChangeRows)
+    entityChangeRows.innerHTML = '<div class="p-3 small-muted">Loading changelog…</div>';
   const url = new URL('/api/v1/admin/entity-changelog', location.origin);
   url.searchParams.set('limit', String(entityChangeLimit));
   url.searchParams.set('offset', String(entityChangeOffset));
@@ -1107,7 +1196,10 @@ entityChangeNext?.addEventListener('click', () => {
 });
 
 function wireEntityChangeAutoApply() {
-  const apply = () => { entityChangeOffset = 0; refreshEntityChanges(); };
+  const apply = () => {
+    entityChangeOffset = 0;
+    refreshEntityChanges();
+  };
   const applyOnEnter = (ev) => {
     if (ev.key === 'Enter') {
       ev.preventDefault();
@@ -1149,12 +1241,13 @@ let auditDebouncedApply = null;
 function renderAudit(items, total) {
   if (!auditRows) return;
 
-  auditRows.innerHTML = (items || []).map((a) => {
-    const qs = a.query_string ? `?${esc(a.query_string)}` : '';
-    return `
+  auditRows.innerHTML = (items || [])
+    .map((a) => {
+      const qs = a.query_string ? `?${esc(a.query_string)}` : '';
+      return `
       <tr>
         <td class="small-muted">${esc(fmtTs(a.ts))}</td>
-        <td>${userPillHtml(a.username, {empty: '-'})}</td>
+        <td>${userPillHtml(a.username, { empty: '-' })}</td>
         <td class="mono">${esc(a.method)}</td>
         <td class="mono">${esc(a.path)}${qs}</td>
         <td class="mono">${esc(String(a.status_code))}</td>
@@ -1163,7 +1256,8 @@ function renderAudit(items, total) {
         <td class="small-muted">${esc(a.user_agent || '-')}</td>
       </tr>
     `;
-  }).join('');
+    })
+    .join('');
 
   if (auditMeta) {
     const from = total ? auditOffset + 1 : 0;
@@ -1172,7 +1266,7 @@ function renderAudit(items, total) {
   }
 
   if (auditPrev) auditPrev.disabled = auditOffset <= 0;
-  if (auditNext) auditNext.disabled = (auditOffset + auditLimit) >= (total || 0);
+  if (auditNext) auditNext.disabled = auditOffset + auditLimit >= (total || 0);
 }
 
 async function refreshAudit() {
@@ -1240,18 +1334,20 @@ if (autoApplyFilters) {
   auditUser?.addEventListener('input', auditDebouncedApply);
   auditPath?.addEventListener('input', auditDebouncedApply);
   auditUser?.addEventListener('change', () => {
- auditDebouncedApply?.cancel?.(); applyAuditNow();
+    auditDebouncedApply?.cancel?.();
+    applyAuditNow();
   });
   auditPath?.addEventListener('change', () => {
- auditDebouncedApply?.cancel?.(); applyAuditNow();
+    auditDebouncedApply?.cancel?.();
+    applyAuditNow();
   });
   auditMethod?.addEventListener('change', () => {
- auditDebouncedApply?.cancel?.(); applyAuditNow();
+    auditDebouncedApply?.cancel?.();
+    applyAuditNow();
   });
   auditUser?.addEventListener('keydown', applyOnEnter);
   auditPath?.addEventListener('keydown', applyOnEnter);
 }
-
 
 // ------------------------------------------------------------------
 // Questions queue (admin-only)
@@ -1266,16 +1362,30 @@ function questionStatusBadge(status) {
 
 function renderQuestionsQueue(items) {
   if (!questionsRows) return;
-  const rows = (items || []).map((it) => {
-    // Render the status badge (typo here previously caused: "ReferenceError: question is not defined")
-    const st = questionStatusBadge(it.status);
-    const upd = it.updated_at ? fmtTs(it.updated_at) : '–';
-    const askedBy = userPillHtml(it.created_by_username, {empty: '–'});
-    const evSum = esc(it.target_label || it.event_summary || '(no summary)');
-    const evMeta = esc([it.target_type && it.target_type !== 'event' ? String(it.target_type).replaceAll('_', ' ') : (it.event_source || ''), it.event_timestamp ? fmtTs(it.event_timestamp) : (it.target_ref || '—')].filter(Boolean).join(' • '));
-    const rawHref = withFramework(it?.target_url || `/event.html?id=${encodeURIComponent(it?.event_id || '')}&thread=${encodeURIComponent(it?.thread_id || '')}#questions`, currentFramework);
-    const href = safeExternalHref(rawHref) || '#';
-    return `
+  const rows = (items || [])
+    .map((it) => {
+      // Render the status badge (typo here previously caused: "ReferenceError: question is not defined")
+      const st = questionStatusBadge(it.status);
+      const upd = it.updated_at ? fmtTs(it.updated_at) : '–';
+      const askedBy = userPillHtml(it.created_by_username, { empty: '–' });
+      const evSum = esc(it.target_label || it.event_summary || '(no summary)');
+      const evMeta = esc(
+        [
+          it.target_type && it.target_type !== 'event'
+            ? String(it.target_type).replaceAll('_', ' ')
+            : it.event_source || '',
+          it.event_timestamp ? fmtTs(it.event_timestamp) : it.target_ref || '—',
+        ]
+          .filter(Boolean)
+          .join(' • '),
+      );
+      const rawHref = withFramework(
+        it?.target_url ||
+          `/event.html?id=${encodeURIComponent(it?.event_id || '')}&thread=${encodeURIComponent(it?.thread_id || '')}#questions`,
+        currentFramework,
+      );
+      const href = safeExternalHref(rawHref) || '#';
+      return `
       <tr>
         <td>${st}</td>
         <td class="small-muted">${esc(upd)}</td>
@@ -1293,8 +1403,10 @@ function renderQuestionsQueue(items) {
         </td>
       </tr>
     `;
-  }).join('');
-  questionsRows.innerHTML = rows || `<tr><td colspan="5" class="small-muted">No matching questions.</td></tr>`;
+    })
+    .join('');
+  questionsRows.innerHTML =
+    rows || `<tr><td colspan="5" class="small-muted">No matching questions.</td></tr>`;
 }
 
 async function refreshQuestionsQueue() {
@@ -1344,7 +1456,6 @@ questionsRows?.addEventListener('click', async (ev) => {
   }
 });
 
-
 // ------------------------------------------------------------------
 // Init
 // ------------------------------------------------------------------
@@ -1371,16 +1482,17 @@ if (!isAdmin && !canAudit) {
 const navigationToggle = document.getElementById('admin-navigation-toggle');
 navigationToggle?.addEventListener('click', () => {
   const open = document.getElementById('adminTabs').classList.toggle('admin-nav-open');
-  navigationToggle.setAttribute('aria-expanded',String(open));
+  navigationToggle.setAttribute('aria-expanded', String(open));
 });
-document.getElementById('adminTabs')?.addEventListener('shown.bs.tab', e => {
+document.getElementById('adminTabs')?.addEventListener('shown.bs.tab', (e) => {
   document.getElementById('adminTabs').classList.remove('admin-nav-open');
-  navigationToggle?.setAttribute('aria-expanded','false');
-  if(navigationToggle)navigationToggle.textContent=e.target.textContent.trim()+' · Menu';
-  const card=document.getElementById('admin-output-card');if(card)card.hidden=true;
+  navigationToggle?.setAttribute('aria-expanded', 'false');
+  if (navigationToggle) navigationToggle.textContent = e.target.textContent.trim() + ' · Menu';
+  const card = document.getElementById('admin-output-card');
+  if (card) card.hidden = true;
 });
 
-import {initEvidenceRetention} from '/pages/evidence-retention.js';
+import { initEvidenceRetention } from '/pages/evidence-retention.js';
 initEvidenceRetention(isAdmin);
 
 // Populate the collapsed source catalogue even when its tab starts active.

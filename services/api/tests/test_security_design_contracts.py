@@ -778,3 +778,55 @@ def test_admin_source_types_expose_display_labels(
         assert types["github"]["label"] == "GitHub"
     finally:
         main.app.dependency_overrides.pop(get_db, None)
+
+
+def test_audit_domain_adapter_preserves_access_and_csrf(production_client, contract_db):
+    from app.db.models import AuditAttendee
+    from app.db.session import get_db
+    from app import main
+    import uuid
+
+    client, redis, admin, reader = production_client
+
+    def database():
+        yield contract_db
+
+    main.app.dependency_overrides[get_db] = database
+    try:
+
+        def sign_in(user):
+            sid = sessions.create_session(redis, user_id=str(user.id), ttl_seconds=300)
+            client.cookies.set(settings.session_cookie_name, sid)
+
+        sign_in(admin)
+        assert client.post("/v1/audits", json={"title": "Review"}).status_code == 403
+        client.cookies.set(csrf.csrf_cookie_name(), "audit-token")
+        headers = {
+            csrf.csrf_header_name(): "audit-token",
+            "Origin": "https://keen.example",
+        }
+        created = client.post("/v1/audits", json={"title": "Review"}, headers=headers)
+        assert created.status_code == 200, created.text
+        audit_id = created.json()["id"]
+        sign_in(reader)
+        assert client.get(f"/v1/audits/{audit_id}").status_code == 403
+        contract_db.add(
+            AuditAttendee(
+                audit_id=uuid.UUID(audit_id), user_id=reader.id, name="Reader"
+            )
+        )
+        contract_db.commit()
+        assert client.get(f"/v1/audits/{audit_id}").status_code == 200
+        assert (
+            client.patch(
+                f"/v1/audits/{audit_id}", json={"title": "Changed"}, headers=headers
+            ).status_code
+            == 403
+        )
+        sign_in(admin)
+        invalid = client.get("/v1/audits/not-a-uuid")
+        assert invalid.status_code == 400
+        assert invalid.json() == {"detail": "audit_id must be a UUID"}
+        assert invalid.headers["cache-control"] == "no-store"
+    finally:
+        main.app.dependency_overrides.pop(get_db, None)

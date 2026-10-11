@@ -78,3 +78,18 @@ Be as comprehensive in any security review of your completed work as you possibl
 - When delivering an incremental patch, state its base, verify application against that base, and include new files. Use a text patch compatible with `patch -p1`; handle binary changes separately.
 - Avoid contrastive-negation language.
 - Write in Australian or British English.
+
+## Frontend source and domain boundaries
+
+- Keep first-party JavaScript and CSS formatted with `bash format-ui.sh --write`;
+  verify with `bash format-ui.sh --check`. Install its pinned tools using
+  `npm ci --prefix services/ui/tests`. Minification belongs in generated UI build
+  output, never committed source. Do not reformat vendored code.
+- Evidence export code belongs in `pages/evidence-export/`; give page-specific
+  preferences and state to its factory explicitly. Preserve masking, cleanup,
+  filename handling and export cancellation when changing it.
+- Audit HTTP adapters retain permission dependencies and transport handling.
+  Domain operations belong in `services/audits/` and must not import API routes
+  or FastAPI. Preserve transaction boundaries and object access checks.
+- Keep Forgejo and Gitea collectors separate so their upstream APIs can evolve
+  independently. Shared stateless utilities remain appropriate.

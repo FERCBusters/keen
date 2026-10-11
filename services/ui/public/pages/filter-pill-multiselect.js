@@ -36,7 +36,10 @@ function optionFromDom(opt) {
 function readElementValues(el) {
   if (!el) return [];
   if (el.dataset.filterPillValue !== undefined) return splitValues(el.dataset.filterPillValue);
-  if (el.tagName === 'SELECT' && el.multiple) return Array.from(el.selectedOptions || []).map((opt) => String(opt.value || '').trim()).filter(Boolean);
+  if (el.tagName === 'SELECT' && el.multiple)
+    return Array.from(el.selectedOptions || [])
+      .map((opt) => String(opt.value || '').trim())
+      .filter(Boolean);
   return splitValues(el.value || '');
 }
 
@@ -62,10 +65,10 @@ function writeElementValues(el, values) {
 function normaliseOptions(options) {
   return (options || [])
     .map((opt) => {
-      if (typeof opt === 'string') return {value: opt, label: opt, title: opt};
+      if (typeof opt === 'string') return { value: opt, label: opt, title: opt };
       const value = String(opt?.value || '').trim();
       const label = String(opt?.label || opt?.name || opt?.text || value).trim() || value;
-      return {value, label, title: String(opt?.title || label || value).trim() || label || value};
+      return { value, label, title: String(opt?.title || label || value).trim() || label || value };
     })
     .filter((opt) => opt.value);
 }
@@ -78,7 +81,7 @@ function optionsFromElement(el) {
 }
 
 function labelForCount(count, singular, plural) {
-  return count === 1 ? singular : (plural || `${singular}s`);
+  return count === 1 ? singular : plural || `${singular}s`;
 }
 
 function sortOptions(options, selectedSet) {
@@ -86,7 +89,10 @@ function sortOptions(options, selectedSet) {
     const aSel = selectedSet.has(a.value) ? 0 : 1;
     const bSel = selectedSet.has(b.value) ? 0 : 1;
     if (aSel !== bSel) return aSel - bSel;
-    return String(a.label || a.value).localeCompare(String(b.label || b.value), undefined, {numeric: true, sensitivity: 'base'});
+    return String(a.label || a.value).localeCompare(String(b.label || b.value), undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    });
   });
 }
 
@@ -132,7 +138,7 @@ function createModal(id, config) {
   return modal;
 }
 
-function chipHtml(option, {selected = false, removable = false} = {}) {
+function chipHtml(option, { selected = false, removable = false } = {}) {
   const value = String(option?.value || '').trim();
   const label = String(option?.label || value).trim() || value;
   const title = String(option?.title || label).trim() || label;
@@ -191,7 +197,9 @@ function buildInstance(el, config = {}) {
   el.insertAdjacentElement('afterend', picker);
 
   const modal = createModal(el.id, state.config);
-  const modalInstance = globalThis.bootstrap?.Modal ? globalThis.bootstrap.Modal.getOrCreateInstance(modal) : null;
+  const modalInstance = globalThis.bootstrap?.Modal
+    ? globalThis.bootstrap.Modal.getOrCreateInstance(modal)
+    : null;
   const openBtn = picker.querySelector('.keen-filter-pill-open');
   const clearBtn = picker.querySelector('.keen-filter-pill-clear');
   const summary = picker.querySelector('.keen-filter-pill-summary');
@@ -202,45 +210,56 @@ function buildInstance(el, config = {}) {
   const selectedHost = modal.querySelector('.keen-filter-pill-selected');
   const grid = modal.querySelector('.keen-filter-pill-grid');
 
-  function selectedSet() { return new Set(state.selected); }
-  function selectedOptions() {
-    return state.selected.map((value) => state.optionMap.get(value) || {value, label: value, title: value});
+  function selectedSet() {
+    return new Set(state.selected);
   }
-  function commit({dispatchChange = true} = {}) {
+  function selectedOptions() {
+    return state.selected.map(
+      (value) => state.optionMap.get(value) || { value, label: value, title: value },
+    );
+  }
+  function commit({ dispatchChange = true } = {}) {
     const before = el.dataset.filterPillValue || '';
     writeElementValues(el, state.selected);
     render();
     const after = el.dataset.filterPillValue || '';
-    if (dispatchChange && before !== after) el.dispatchEvent(new Event('change', {bubbles: true}));
+    if (dispatchChange && before !== after)
+      el.dispatchEvent(new Event('change', { bubbles: true }));
   }
   function setSelected(values, opts = {}) {
     const allowed = new Set(state.options.map((opt) => opt.value));
     const prune = opts.pruneSelected !== false;
     state.selected = uniqueValues(values).filter((value) => !prune || allowed.has(value));
-    commit({dispatchChange: !!opts.dispatchChange});
+    commit({ dispatchChange: !!opts.dispatchChange });
   }
   function setOptions(optionsArg, opts = {}) {
     state.options = normaliseOptions(optionsArg);
     state.optionMap = new Map(state.options.map((opt) => [opt.value, opt]));
-    const nextSelected = Object.prototype.hasOwnProperty.call(opts, 'selectedValues') ? uniqueValues(opts.selectedValues) : state.selected;
-    setSelected(nextSelected, {pruneSelected: opts.pruneSelected !== false, dispatchChange: !!opts.dispatchChange});
+    const nextSelected = Object.prototype.hasOwnProperty.call(opts, 'selectedValues')
+      ? uniqueValues(opts.selectedValues)
+      : state.selected;
+    setSelected(nextSelected, {
+      pruneSelected: opts.pruneSelected !== false,
+      dispatchChange: !!opts.dispatchChange,
+    });
   }
   function toggle(value) {
     const v = String(value || '').trim();
     if (!v) return;
     const s = selectedSet();
-    if (s.has(v)) s.delete(v); else s.add(v);
+    if (s.has(v)) s.delete(v);
+    else s.add(v);
     state.selected = Array.from(s);
-    commit({dispatchChange: true});
+    commit({ dispatchChange: true });
   }
   function remove(value) {
     const v = String(value || '').trim();
     state.selected = state.selected.filter((item) => item !== v);
-    commit({dispatchChange: true});
+    commit({ dispatchChange: true });
   }
-  function clear({dispatchChange = true} = {}) {
+  function clear({ dispatchChange = true } = {}) {
     state.selected = [];
-    commit({dispatchChange});
+    commit({ dispatchChange });
   }
   function summaryText() {
     const count = state.selected.length;
@@ -256,8 +275,13 @@ function buildInstance(el, config = {}) {
       return;
     }
     inline.innerHTML = selected
-      .sort((a, b) => String(a.label || a.value).localeCompare(String(b.label || b.value), undefined, {numeric: true, sensitivity: 'base'}))
-      .map((opt) => chipHtml(opt, {selected: true, removable: true}))
+      .sort((a, b) =>
+        String(a.label || a.value).localeCompare(String(b.label || b.value), undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        }),
+      )
+      .map((opt) => chipHtml(opt, { selected: true, removable: true }))
       .join('');
   }
   function renderModal() {
@@ -266,15 +290,20 @@ function buildInstance(el, config = {}) {
     modalClear.classList.toggle('d-none', !state.selected.length);
     const selected = selectedOptions();
     selectedHost.innerHTML = selected.length
-      ? selected.map((opt) => chipHtml(opt, {selected: true, removable: true})).join('')
+      ? selected.map((opt) => chipHtml(opt, { selected: true, removable: true })).join('')
       : `<div class="small text-secondary">${esc(state.config.emptySelectedText)}</div>`;
     const q = String(state.query || '').toLowerCase();
-    const filtered = sortOptions(state.options.filter((opt) => {
-      if (!q) return true;
-      return `${opt.value} ${opt.label} ${opt.title}`.toLowerCase().includes(q);
-    }), s);
+    const filtered = sortOptions(
+      state.options.filter((opt) => {
+        if (!q) return true;
+        return `${opt.value} ${opt.label} ${opt.title}`.toLowerCase().includes(q);
+      }),
+      s,
+    );
     grid.innerHTML = filtered.length
-      ? filtered.map((opt) => chipHtml(opt, {selected: s.has(opt.value), removable: false})).join('')
+      ? filtered
+          .map((opt) => chipHtml(opt, { selected: s.has(opt.value), removable: false }))
+          .join('')
       : `<div class="small text-secondary p-2">${esc(state.config.noMatchText)}</div>`;
   }
   function render() {
@@ -288,8 +317,8 @@ function buildInstance(el, config = {}) {
     render();
     modalInstance?.show();
   });
-  clearBtn?.addEventListener('click', () => clear({dispatchChange: true}));
-  modalClear?.addEventListener('click', () => clear({dispatchChange: true}));
+  clearBtn?.addEventListener('click', () => clear({ dispatchChange: true }));
+  modalClear?.addEventListener('click', () => clear({ dispatchChange: true }));
   search?.addEventListener('input', () => {
     state.query = String(search.value || '');
     renderModal();

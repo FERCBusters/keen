@@ -84,3 +84,15 @@ Coverage measures the whole application rather than only selected new modules;
 there is no arbitrary global percentage gate yet. Use the HTML reports to find
 uncovered behaviour before adding assertions, rather than tests that only
 repeat implementation details.
+
+## Readable frontend source
+
+Install the pinned frontend tools with `npm ci --prefix services/ui/tests`.
+Run `bash format-ui.sh --write` to format first-party JavaScript and CSS, and
+`bash format-ui.sh --check` to check it. Pre-commit uses the same formatter for
+staged files; CI checks all first-party source, build scripts and UI tests.
+Generated files, dependencies and vendored code are excluded.
+
+The UI build writes minified JavaScript and CSS into `services/ui/dist/`.
+The files under `services/ui/public/` remain readable source. The Docker image
+serves the generated `dist/` directory.

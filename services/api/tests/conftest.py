@@ -36,21 +36,11 @@ def contract_postgres_engine():
         with engine.begin() as connection:
             config.attributes["connection"] = connection
             command.upgrade(config, "0001_release_schema")
-            import runpy
-
-            from alembic.migration import MigrationContext
-            from alembic.operations import Operations
-
-            with Operations.context(MigrationContext.configure(connection)):
-                runpy.run_path(
-                    str(root / "alembic/versions/0004_source_connections.py")
-                )["upgrade"]()
-                runpy.run_path(str(root / "alembic/versions/0005_agent_enrollment.py"))[
-                    "upgrade"
-                ]()
-                runpy.run_path(
-                    str(root / "alembic/versions/0006_session_revocation.py")
-                )["upgrade"]()
+            # Contract fixtures supply their own reference data. Skip only the
+            # expensive catalogue seed; discover every later migration via Alembic.
+            # The release-baseline tests exercise the full seeded upgrade separately.
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "head")
         yield engine
     finally:
         try:

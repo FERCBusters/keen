@@ -89,6 +89,11 @@ jobs:
           cd services/api
           poetry run ruff format --check ../..
 
+      - name: Check frontend formatting
+        run: |
+          if [ -f keen/format-ui.sh ]; then cd keen; fi
+          bash format-ui.sh --check
+
       - name: Run tests
         run: |
           set -eu

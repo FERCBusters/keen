@@ -6,15 +6,17 @@ export function sourceSetupProfile(source, connection = null) {
     inlineInput: true,
     hiddenFields: ['base_url'],
     hint: 'Enter one feed URL and its optional credentials. Save the source, then collect evidence or add a mapping rule.',
-    input: {label: 'Feed URL', value: connection?.inputs?.feeds?.[0]?.url || ''},
+    input: { label: 'Feed URL', value: connection?.inputs?.feeds?.[0]?.url || '' },
     prepare(value, configuration, inputs) {
       const url = new URL(value.trim());
       if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.hash) {
-        throw new Error('Use an HTTP or HTTPS feed URL without embedded credentials or a fragment.');
+        throw new Error(
+          'Use an HTTP or HTTPS feed URL without embedded credentials or a fragment.',
+        );
       }
       // The RSS transport binds credentials to this origin to prevent leakage.
       configuration.base_url = url.origin;
-      return {...inputs, feeds: [{...inputs.feeds?.[0], url: value.trim()}]};
+      return { ...inputs, feeds: [{ ...inputs.feeds?.[0], url: value.trim() }] };
     },
   };
 }

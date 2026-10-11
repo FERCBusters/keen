@@ -11,7 +11,7 @@ import {
   openAuditSampleModal,
   loadEntityChangelog,
 } from '/app.js';
-import {activateTabFromHashOrQuery, badgeList} from '/pages/isms-detail-common.js';
+import { activateTabFromHashOrQuery, badgeList } from '/pages/isms-detail-common.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -45,7 +45,12 @@ function accountLabel(acct) {
 function accountBadges(items) {
   const arr = Array.isArray(items) ? items : [];
   if (!arr.length) return '<span class="small-muted">—</span>';
-  return arr.map((acct) => `<span class="badge badge-soft me-1 mb-1" title="${esc(accountLabel(acct))}">${esc(accountLabel(acct))}</span>`).join('');
+  return arr
+    .map(
+      (acct) =>
+        `<span class="badge badge-soft me-1 mb-1" title="${esc(accountLabel(acct))}">${esc(accountLabel(acct))}</span>`,
+    )
+    .join('');
 }
 
 function renderAccess(row) {
@@ -53,7 +58,13 @@ function renderAccess(row) {
   const title = access.task_action || 'Access control row';
   document.title = `Keen – ${title}`;
   $('accessTitle').textContent = title;
-  $('accessMeta').textContent = [access.service?.asset || access.service?.name, access.status || 'Pending Approval', `updated ${fmtTs(access.updated_at) || '—'}`].filter(Boolean).join(' • ');
+  $('accessMeta').textContent = [
+    access.service?.asset || access.service?.name,
+    access.status || 'Pending Approval',
+    `updated ${fmtTs(access.updated_at) || '—'}`,
+  ]
+    .filter(Boolean)
+    .join(' • ');
   $('accessTask').textContent = access.task_action || '—';
   $('accessNotes').textContent = access.notes || 'No notes recorded.';
   $('accessService').innerHTML = serviceHtml(access);
@@ -65,7 +76,10 @@ function renderAccess(row) {
 
   const edit = $('editAccessLink');
   if (edit) {
-    edit.href = withFramework(`/isms.html?tab=access&edit=access:${encodeURIComponent(access.id || '')}`, framework);
+    edit.href = withFramework(
+      `/isms.html?tab=access&edit=access:${encodeURIComponent(access.id || '')}`,
+      framework,
+    );
     edit.style.display = canManageIsms ? '' : 'none';
   }
   const sample = $('sampleAccessAudit');
@@ -76,7 +90,7 @@ async function loadChangelog() {
   await loadEntityChangelog(
     $('accessChangelog'),
     `/api/v1/isms/access_control_matrix/${encodeURIComponent(accessId)}/changelog?limit=100`,
-    {empty: 'No access control matrix changes have been recorded yet.'}
+    { empty: 'No access control matrix changes have been recorded yet.' },
   );
 }
 
@@ -86,10 +100,12 @@ async function load() {
     return;
   }
   try {
-    const row = await apiGet(`/api/v1/isms/access-control-matrix/${encodeURIComponent(accessId)}?framework=${encodeURIComponent(framework)}`);
+    const row = await apiGet(
+      `/api/v1/isms/access-control-matrix/${encodeURIComponent(accessId)}?framework=${encodeURIComponent(framework)}`,
+    );
     renderAccess(row);
     await loadChangelog();
-    activateTabFromHashOrQuery(params, {changelog: $('accessChangelogTab')});
+    activateTabFromHashOrQuery(params, { changelog: $('accessChangelogTab') });
   } catch (e) {
     toast(status, `Failed to load access control row: ${String(e)}`, 'danger');
   }
@@ -108,5 +124,7 @@ $('sampleAccessAudit')?.addEventListener('click', () => {
   });
 });
 
-window.addEventListener('hashchange', () => activateTabFromHashOrQuery(params, {changelog: $('accessChangelogTab')}));
+window.addEventListener('hashchange', () =>
+  activateTabFromHashOrQuery(params, { changelog: $('accessChangelogTab') }),
+);
 load();

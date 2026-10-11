@@ -18,7 +18,9 @@
     "minify:public": "node scripts/minify-public.mjs",
     "build": "npm run vendor && npm run minify:public",
     "test": "node --experimental-vm-modules --test tests/*.test.mjs",
-    "test:coverage": "bash ../../tests-ui.sh"
+    "test:coverage": "bash ../../tests-ui.sh",
+    "format": "bash ../../format-ui.sh --write",
+    "format:check": "bash ../../format-ui.sh --check"
   },
   "version": "1.0.0"
 }

@@ -1,4 +1,14 @@
-import {initNavbar, apiGet, apiDelete, esc, fmtTs, toast, getCurrentFramework, withFramework, safeExternalHref} from '/app.js';
+import {
+  initNavbar,
+  apiGet,
+  apiDelete,
+  esc,
+  fmtTs,
+  toast,
+  getCurrentFramework,
+  withFramework,
+  safeExternalHref,
+} from '/app.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -19,7 +29,11 @@ function _statusBadge(st, unread) {
 }
 
 function _questionHref(it) {
-  const href = withFramework(it?.target_url || `/event.html?id=${encodeURIComponent(it?.event_id || '')}&thread=${encodeURIComponent(it?.thread_id || '')}#questions`, framework);
+  const href = withFramework(
+    it?.target_url ||
+      `/event.html?id=${encodeURIComponent(it?.event_id || '')}&thread=${encodeURIComponent(it?.thread_id || '')}#questions`,
+    framework,
+  );
   // Defence-in-depth: validate scheme so a future user-influenced target_url
   // cannot produce a javascript:/data: href.
   return safeExternalHref(href) || '#';
@@ -28,8 +42,11 @@ function _questionHref(it) {
 function _row(it) {
   const href = _questionHref(it);
   const title = it.target_label || it.event_summary || '(no summary)';
-  const src = it.target_type && it.target_type !== 'event' ? String(it.target_type).replaceAll('_', ' ') : (it.event_source || '');
-  const ts = it.event_timestamp ? fmtTs(it.event_timestamp) : (it.target_ref || '—');
+  const src =
+    it.target_type && it.target_type !== 'event'
+      ? String(it.target_type).replaceAll('_', ' ')
+      : it.event_source || '';
+  const ts = it.event_timestamp ? fmtTs(it.event_timestamp) : it.target_ref || '—';
   const updated = it.updated_at ? fmtTs(it.updated_at) : '—';
   const badge = _statusBadge(it.status, !!it.unread);
 
@@ -50,7 +67,6 @@ function _row(it) {
     </tr>
   `;
 }
-
 
 async function deleteQuestion(threadId) {
   const tid = String(threadId || '').trim();
@@ -84,7 +100,7 @@ async function load() {
 
     // Keep the navbar badge in sync if the user hits refresh here.
     try {
- window.keenRefreshQuestionBell?.();
+      window.keenRefreshQuestionBell?.();
     } catch {}
   } catch (err) {
     const msg = `Failed to load questions: ${String(err)}`;

@@ -20,16 +20,19 @@ export function renderJson(element, text) {
           i += text[i] === '\\' ? 2 : 1;
         }
         i = Math.min(text.length, i + 1);
-        yield {0: text.slice(start, i), index: start};
+        yield { 0: text.slice(start, i), index: start };
       } else {
         scalar.lastIndex = i;
         const match = scalar.exec(text);
-        if (match) { i = scalar.lastIndex; yield match; }
-        else i++;
+        if (match) {
+          i = scalar.lastIndex;
+          yield match;
+        } else i++;
       }
     }
   }
-  let end = 0, count = 0;
+  let end = 0,
+    count = 0;
   for (const match of tokens()) {
     if (++count > MAX_TOKENS) {
       element.textContent = text;

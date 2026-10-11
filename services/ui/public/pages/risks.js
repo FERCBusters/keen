@@ -33,7 +33,11 @@ enableTableSorting();
 const canViewRisks = !!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks);
 const canManageRisks = !!(me?.is_admin || me?.can_manage_risks);
 const canManagePestle = !!(me?.is_admin || me?.can_manage_pestle || me?.can_manage_risks);
-const canManageInterestedParties = !!(me?.is_admin || me?.can_manage_interested_parties || me?.can_manage_risks);
+const canManageInterestedParties = !!(
+  me?.is_admin ||
+  me?.can_manage_interested_parties ||
+  me?.can_manage_risks
+);
 const canSampleAudits = canSampleIntoAudit(me);
 
 const params = new URLSearchParams(location.search);
@@ -59,9 +63,9 @@ const reloadBtn = document.getElementById('reload');
 const newRiskBtn = document.getElementById('newRisk');
 
 const RISK_TYPE_FILTER_OPTIONS = [
-  {value: 'Confidentiality', label: 'Confidentiality'},
-  {value: 'Integrity', label: 'Integrity'},
-  {value: 'Availability', label: 'Availability'},
+  { value: 'Confidentiality', label: 'Confidentiality' },
+  { value: 'Integrity', label: 'Integrity' },
+  { value: 'Availability', label: 'Availability' },
 ];
 
 function filterValues(el) {
@@ -69,14 +73,17 @@ function filterValues(el) {
 }
 
 function setCsvParam(url, key, values) {
-  const cleaned = Array.from(new Set((values || []).map((v) => String(v || '').trim()).filter(Boolean)));
+  const cleaned = Array.from(
+    new Set((values || []).map((v) => String(v || '').trim()).filter(Boolean)),
+  );
   if (cleaned.length) url.searchParams.set(key, cleaned.join(','));
 }
 
 function setupRiskFilterPickers() {
   enhanceFilterPillMultiSelect(categoryFilter, {
     title: 'Choose risk categories',
-    description: 'Select one or more asset categories to include. Clear the selection to include every category.',
+    description:
+      'Select one or more asset categories to include. Clear the selection to include every category.',
     buttonLabel: 'Choose categories',
     singular: 'category',
     plural: 'categories',
@@ -87,7 +94,8 @@ function setupRiskFilterPickers() {
   });
   enhanceFilterPillMultiSelect(subcategoryFilter, {
     title: 'Choose risk subcategories',
-    description: 'Select one or more asset subcategories to include. Category selections narrow this list.',
+    description:
+      'Select one or more asset subcategories to include. Category selections narrow this list.',
     buttonLabel: 'Choose subcategories',
     singular: 'subcategory',
     plural: 'subcategories',
@@ -98,7 +106,8 @@ function setupRiskFilterPickers() {
   });
   enhanceFilterPillMultiSelect(typeFilter, {
     title: 'Choose CIA risk types',
-    description: 'Select one or more CIA Triad risk types to include. Clear the selection to include all types.',
+    description:
+      'Select one or more CIA Triad risk types to include. Clear the selection to include all types.',
     buttonLabel: 'Choose risk types',
     singular: 'risk type',
     plural: 'risk types',
@@ -109,7 +118,6 @@ function setupRiskFilterPickers() {
     options: RISK_TYPE_FILTER_OPTIONS,
   });
 }
-
 
 const editorCard = document.getElementById('editorCard');
 const editorTitle = document.getElementById('editorTitle');
@@ -198,7 +206,10 @@ let currentItems = [];
 let controlsWithoutRisksLoaded = false;
 let riskVisualisationsLoaded = false;
 let riskControlGraphData = null;
-let riskVizScoreMode = riskVizScoreModeInputs.find((input) => input.checked)?.value === 'inherent' ? 'inherent' : 'residual';
+let riskVizScoreMode =
+  riskVizScoreModeInputs.find((input) => input.checked)?.value === 'inherent'
+    ? 'inherent'
+    : 'residual';
 let lastMitigatorAnalysis = null;
 
 function scoreClass(score) {
@@ -249,9 +260,7 @@ function syncScorePreviews() {
 }
 
 function selectedRiskTypes() {
-  return [...document.querySelectorAll('.risk-type')]
-      .filter((x) => x.checked)
-      .map((x) => x.value);
+  return [...document.querySelectorAll('.risk-type')].filter((x) => x.checked).map((x) => x.value);
 }
 
 function setRiskTypes(values) {
@@ -281,13 +290,15 @@ function controlHref(id) {
 }
 
 function pestleHref(id, tab = 'details') {
-  return withFramework(`/pestle_item.html?id=${encodeURIComponent(id || '')}${tab ? `&tab=${encodeURIComponent(tab)}` : ''}`, framework);
+  return withFramework(
+    `/pestle_item.html?id=${encodeURIComponent(id || '')}${tab ? `&tab=${encodeURIComponent(tab)}` : ''}`,
+    framework,
+  );
 }
 
 function interestedPartyHref(id) {
   return withFramework(`/interested_party.html?id=${encodeURIComponent(id || '')}`, framework);
 }
-
 
 function clampRiskVizLimit(input, fallback) {
   const n = Math.floor(Number(input?.value || fallback));
@@ -300,7 +311,9 @@ function normaliseRiskVizScoreMode(value) {
 }
 
 function riskVizScoreLabel(mode = riskVizScoreMode) {
-  return normaliseRiskVizScoreMode(mode) === 'inherent' ? 'inherent risk score' : 'residual risk score';
+  return normaliseRiskVizScoreMode(mode) === 'inherent'
+    ? 'inherent risk score'
+    : 'residual risk score';
 }
 
 function riskVizScoreShortLabel(mode = riskVizScoreMode) {
@@ -336,13 +349,18 @@ function riskVizSecondaryLabel(node) {
 }
 
 function truncateRiskVizText(value, max = 72) {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  const text = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (text.length <= max) return text;
   return `${text.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
 }
 
 function splitRiskVizLabel(value, maxChars = 34, maxLines = 2) {
-  const text = String(value || '—').replace(/\s+/g, ' ').trim() || '—';
+  const text =
+    String(value || '—')
+      .replace(/\s+/g, ' ')
+      .trim() || '—';
   if (text.length <= maxChars) return [text];
   const words = text.split(' ');
   const lines = [];
@@ -366,8 +384,22 @@ function splitRiskVizLabel(value, maxChars = 34, maxLines = 2) {
   return lines.slice(0, maxLines);
 }
 
-function addRiskVizText(selection, lines, {x = 0, y = 0, anchor = 'start', fontSize = 12, weight = 600, lineHeight = 13, opacity = 1, underline = false} = {}) {
-  const text = selection.append('text')
+function addRiskVizText(
+  selection,
+  lines,
+  {
+    x = 0,
+    y = 0,
+    anchor = 'start',
+    fontSize = 12,
+    weight = 600,
+    lineHeight = 13,
+    opacity = 1,
+    underline = false,
+  } = {},
+) {
+  const text = selection
+    .append('text')
     .attr('x', x)
     .attr('y', y)
     .attr('font-size', fontSize)
@@ -377,7 +409,8 @@ function addRiskVizText(selection, lines, {x = 0, y = 0, anchor = 'start', fontS
     .attr('opacity', opacity);
   if (underline) text.style('text-decoration', 'underline');
   (lines || ['—']).forEach((line, idx) => {
-    text.append('tspan')
+    text
+      .append('tspan')
       .attr('x', x)
       .attr('dy', idx === 0 ? 0 : lineHeight)
       .text(line);
@@ -391,7 +424,7 @@ function riskVizButton(label, action, title) {
 
 function riskControlDataset() {
   const scoreMode = normaliseRiskVizScoreMode(riskVizScoreMode);
-  const data = riskControlGraphData || {nodes: [], links: []};
+  const data = riskControlGraphData || { nodes: [], links: [] };
   const nodeById = new Map((data.nodes || []).map((node) => [node.id, node]));
   const linkedRiskIds = new Set();
   const linkedControlIds = new Set();
@@ -401,25 +434,48 @@ function riskControlDataset() {
   }
   const risks = (data.nodes || [])
     .filter((node) => node.node_kind === 'risk' && linkedRiskIds.has(node.id))
-    .sort((a, b) => (Number(b.link_count || 0) - Number(a.link_count || 0)) || (riskVizScoreValue(b, scoreMode) - riskVizScoreValue(a, scoreMode)) || String(a.label || '').localeCompare(String(b.label || '')))
+    .sort(
+      (a, b) =>
+        Number(b.link_count || 0) - Number(a.link_count || 0) ||
+        riskVizScoreValue(b, scoreMode) - riskVizScoreValue(a, scoreMode) ||
+        String(a.label || '').localeCompare(String(b.label || '')),
+    )
     .slice(0, clampRiskVizLimit(riskVizTopRisks, 30));
   const selectedRiskIds = new Set(risks.map((node) => node.id));
-  const controlsForTopRisks = new Set((data.links || []).filter((link) => selectedRiskIds.has(link.source)).map((link) => link.target));
+  const controlsForTopRisks = new Set(
+    (data.links || [])
+      .filter((link) => selectedRiskIds.has(link.source))
+      .map((link) => link.target),
+  );
   const controls = (data.nodes || [])
-    .filter((node) => node.node_kind === 'control' && linkedControlIds.has(node.id) && controlsForTopRisks.has(node.id))
-    .sort((a, b) => (Number(b.link_count || 0) - Number(a.link_count || 0)) || String(a.ref || a.label || '').localeCompare(String(b.ref || b.label || '')))
+    .filter(
+      (node) =>
+        node.node_kind === 'control' &&
+        linkedControlIds.has(node.id) &&
+        controlsForTopRisks.has(node.id),
+    )
+    .sort(
+      (a, b) =>
+        Number(b.link_count || 0) - Number(a.link_count || 0) ||
+        String(a.ref || a.label || '').localeCompare(String(b.ref || b.label || '')),
+    )
     .slice(0, clampRiskVizLimit(riskVizTopControls, 50));
   const controlIds = new Set(controls.map((node) => node.id));
-  const links = (data.links || []).filter((link) => selectedRiskIds.has(link.source) && controlIds.has(link.target));
-  return {risks, controls, links};
+  const links = (data.links || []).filter(
+    (link) => selectedRiskIds.has(link.source) && controlIds.has(link.target),
+  );
+  return { risks, controls, links };
 }
 
 function renderRiskControlsGraph() {
   const el = riskControlsGraph;
   if (!el) return;
-  if (!window.d3) { el.textContent = 'D3 is not available.'; return; }
+  if (!window.d3) {
+    el.textContent = 'D3 is not available.';
+    return;
+  }
   const scoreMode = normaliseRiskVizScoreMode(riskVizScoreMode);
-  const {risks, controls: controlNodes, links} = riskControlDataset();
+  const { risks, controls: controlNodes, links } = riskControlDataset();
   if (!risks.length || !controlNodes.length || !links.length) {
     el.textContent = 'No risk/control mappings are available for this framework yet.';
     return;
@@ -436,16 +492,33 @@ function renderRiskControlsGraph() {
   const bottomPad = 40;
   const contentHeight = Math.max(340, rowCount * rowGap + topPad + bottomPad);
   const viewportHeight = Math.max(520, Math.min(920, contentHeight));
-  const leftColumnWidth = Math.max(compact ? 180 : 280, Math.min(compact ? 300 : 430, viewportWidth * 0.34));
-  const rightColumnWidth = Math.max(compact ? 180 : 250, Math.min(compact ? 300 : 380, viewportWidth * 0.30));
+  const leftColumnWidth = Math.max(
+    compact ? 180 : 280,
+    Math.min(compact ? 300 : 430, viewportWidth * 0.34),
+  );
+  const rightColumnWidth = Math.max(
+    compact ? 180 : 250,
+    Math.min(compact ? 300 : 380, viewportWidth * 0.3),
+  );
   const middleWidth = Math.max(compact ? 220 : 330, Math.min(560, viewportWidth * 0.42));
   const contentWidth = Math.ceil(leftColumnWidth + middleWidth + rightColumnWidth + 56);
   const leftX = Math.round(leftColumnWidth + 18);
   const rightX = Math.round(leftX + middleWidth);
-  const riskY = d3.scalePoint().domain(risks.map((node) => node.id)).range([topPad + 32, contentHeight - bottomPad]).padding(0.6);
-  const controlY = d3.scalePoint().domain(controlNodes.map((node) => node.id)).range([topPad + 32, contentHeight - bottomPad]).padding(0.6);
+  const riskY = d3
+    .scalePoint()
+    .domain(risks.map((node) => node.id))
+    .range([topPad + 32, contentHeight - bottomPad])
+    .padding(0.6);
+  const controlY = d3
+    .scalePoint()
+    .domain(controlNodes.map((node) => node.id))
+    .range([topPad + 32, contentHeight - bottomPad])
+    .padding(0.6);
   const maxScore = d3.max(links, (link) => riskVizScoreValue(link, scoreMode)) || 1;
-  const strokeWidth = d3.scaleLinear().domain([0, Math.max(1, maxScore)]).range([1.5, 6.5]);
+  const strokeWidth = d3
+    .scaleLinear()
+    .domain([0, Math.max(1, maxScore)])
+    .range([1.5, 6.5]);
 
   const zoomControls = document.createElement('div');
   zoomControls.className = 'viz-zoom-controls no-print';
@@ -456,7 +529,9 @@ function renderRiskControlsGraph() {
   ].join('');
   el.appendChild(zoomControls);
 
-  const svg = d3.select(el).append('svg')
+  const svg = d3
+    .select(el)
+    .append('svg')
     .attr('width', '100%')
     .attr('height', viewportHeight)
     .attr('viewBox', `0 0 ${viewportWidth} ${viewportHeight}`)
@@ -464,13 +539,21 @@ function renderRiskControlsGraph() {
     .attr('role', 'img')
     .attr('aria-label', 'Risks to controls graph');
   const scene = svg.append('g').attr('class', 'risk-controls-graph-scene');
-  const fitScale = Math.min(1, (viewportWidth - 20) / contentWidth, (viewportHeight - 20) / contentHeight);
+  const fitScale = Math.min(
+    1,
+    (viewportWidth - 20) / contentWidth,
+    (viewportHeight - 20) / contentHeight,
+  );
   const fitX = Math.max(10, (viewportWidth - contentWidth * fitScale) / 2);
   const fitY = Math.max(10, (viewportHeight - contentHeight * fitScale) / 2);
   const fitTransform = d3.zoomIdentity.translate(fitX, fitY).scale(fitScale);
-  const zoom = d3.zoom()
+  const zoom = d3
+    .zoom()
     .scaleExtent([Math.min(0.15, fitScale), 4])
-    .translateExtent([[-contentWidth, -contentHeight], [contentWidth * 2, contentHeight * 2]])
+    .translateExtent([
+      [-contentWidth, -contentHeight],
+      [contentWidth * 2, contentHeight * 2],
+    ])
     .on('zoom', (ev) => scene.attr('transform', ev.transform));
   svg.call(zoom).on('wheel.zoom', null);
   svg.call(zoom.transform, fitTransform);
@@ -483,9 +566,22 @@ function renderRiskControlsGraph() {
     else svg.transition().duration(160).call(zoom.transform, fitTransform);
   });
 
-  addRiskVizText(scene, ['Risks'], {x: leftX - 16, y: 24, anchor: 'end', fontSize: 13, weight: 700});
-  addRiskVizText(scene, ['Controls'], {x: rightX + 16, y: 24, anchor: 'start', fontSize: 13, weight: 700});
-  scene.append('text')
+  addRiskVizText(scene, ['Risks'], {
+    x: leftX - 16,
+    y: 24,
+    anchor: 'end',
+    fontSize: 13,
+    weight: 700,
+  });
+  addRiskVizText(scene, ['Controls'], {
+    x: rightX + 16,
+    y: 24,
+    anchor: 'start',
+    fontSize: 13,
+    weight: 700,
+  });
+  scene
+    .append('text')
     .attr('x', leftX - 16)
     .attr('y', 46)
     .attr('font-size', 12)
@@ -500,7 +596,12 @@ function renderRiskControlsGraph() {
     const mid = (leftX + rightX) / 2;
     return `M${leftX},${y1} C${mid},${y1} ${mid},${y2} ${rightX},${y2}`;
   };
-  scene.append('g').attr('fill', 'none').selectAll('path').data(links).join('path')
+  scene
+    .append('g')
+    .attr('fill', 'none')
+    .selectAll('path')
+    .data(links)
+    .join('path')
     .attr('d', path)
     .attr('stroke', (link) => riskMap.get(link.source)?.color || 'currentColor')
     .attr('stroke-opacity', 0.28)
@@ -519,25 +620,51 @@ function renderRiskControlsGraph() {
     const yScale = isRisk ? riskY : controlY;
     const anchor = isRisk ? 'end' : 'start';
     const labelX = isRisk ? -14 : 14;
-    const maxPrimary = isRisk ? (compact ? 28 : 44) : (compact ? 28 : 36);
-    const maxSecondary = isRisk ? (compact ? 26 : 42) : (compact ? 28 : 48);
-    selection.attr('class', 'interested-party-bipartite-node')
+    const maxPrimary = isRisk ? (compact ? 28 : 44) : compact ? 28 : 36;
+    const maxSecondary = isRisk ? (compact ? 26 : 42) : compact ? 28 : 48;
+    selection
+      .attr('class', 'interested-party-bipartite-node')
       .attr('transform', (node) => `translate(${x},${yScale(node.id) || topPad})`);
-    selection.append('circle')
+    selection
+      .append('circle')
       .attr('r', isRisk ? 7 : 6)
       .attr('fill', (node) => node.color || 'currentColor')
       .attr('opacity', isRisk ? 0.85 : 0.62);
-    selection.each(function(node) {
+    selection.each(function (node) {
       const group = d3.select(this);
       const href = riskVizNodeHref(node);
       const primary = `${riskVizPrimaryLabel(node)}${node.link_count ? ` (${node.link_count})` : ''}`;
       const primaryLines = splitRiskVizLabel(primary, maxPrimary, isRisk ? 3 : 2);
-      addRiskVizText(group, primaryLines, {x: labelX, y: primaryLines.length > 1 ? -10 : -3, anchor, fontSize: 12, weight: 650, lineHeight: 12.5, underline: Boolean(href)});
+      addRiskVizText(group, primaryLines, {
+        x: labelX,
+        y: primaryLines.length > 1 ? -10 : -3,
+        anchor,
+        fontSize: 12,
+        weight: 650,
+        lineHeight: 12.5,
+        underline: Boolean(href),
+      });
       const secondary = riskVizSecondaryLabel(node);
-      if (secondary) addRiskVizText(group, splitRiskVizLabel(secondary, maxSecondary, 1), {x: labelX, y: primaryLines.length > 1 ? 22 : 13, anchor, fontSize: 10.5, weight: 400, opacity: 0.68});
-      if (href) group.style('cursor', 'pointer').on('click', () => { window.location.href = href; });
+      if (secondary)
+        addRiskVizText(group, splitRiskVizLabel(secondary, maxSecondary, 1), {
+          x: labelX,
+          y: primaryLines.length > 1 ? 22 : 13,
+          anchor,
+          fontSize: 10.5,
+          weight: 400,
+          opacity: 0.68,
+        });
+      if (href)
+        group.style('cursor', 'pointer').on('click', () => {
+          window.location.href = href;
+        });
     });
-    selection.append('title').text((node) => `${riskVizPrimaryLabel(node)}${riskVizSecondaryLabel(node) ? `\n${riskVizSecondaryLabel(node)}` : ''}`);
+    selection
+      .append('title')
+      .text(
+        (node) =>
+          `${riskVizPrimaryLabel(node)}${riskVizSecondaryLabel(node) ? `\n${riskVizSecondaryLabel(node)}` : ''}`,
+      );
   };
   scene.append('g').selectAll('g').data(risks).join('g').call(renderNode, 'risk');
   scene.append('g').selectAll('g').data(controlNodes).join('g').call(renderNode, 'control');
@@ -547,7 +674,7 @@ function renderRiskControlsHeatmap() {
   const el = riskControlsHeatmap;
   if (!el) return;
   const scoreMode = normaliseRiskVizScoreMode(riskVizScoreMode);
-  const {risks, controls: controlNodes, links} = riskControlDataset();
+  const { risks, controls: controlNodes, links } = riskControlDataset();
   if (!risks.length || !controlNodes.length || !links.length) {
     el.textContent = 'No risk/control mappings are available for this framework yet.';
     return;
@@ -571,23 +698,31 @@ function renderRiskControlsHeatmap() {
     const colMatches = new Set();
     if (qText) {
       for (const risk of risks) {
-        const haystack = `${risk.label || ''} ${risk.asset || ''} ${risk.category || ''} ${risk.subcategory || ''} ${(risk.risk_types || []).join(' ')} ${risk.threat_summary || ''}`.toLowerCase();
+        const haystack =
+          `${risk.label || ''} ${risk.asset || ''} ${risk.category || ''} ${risk.subcategory || ''} ${(risk.risk_types || []).join(' ')} ${risk.threat_summary || ''}`.toLowerCase();
         if (haystack.includes(qText)) rowMatches.add(risk.id);
       }
       for (const control of controlNodes) {
-        const haystack = `${control.ref || ''} ${control.label || ''} ${control.title || ''}`.toLowerCase();
+        const haystack =
+          `${control.ref || ''} ${control.label || ''} ${control.title || ''}`.toLowerCase();
         if (haystack.includes(qText)) colMatches.add(control.id);
       }
     }
-    const visibleCols = !qText || rowMatches.size ? controlNodes : controlNodes.filter((node) => colMatches.has(node.id));
+    const visibleCols =
+      !qText || rowMatches.size
+        ? controlNodes
+        : controlNodes.filter((node) => colMatches.has(node.id));
     const visibleColIds = new Set(visibleCols.map((node) => node.id));
     const visibleRows = !qText
       ? risks
       : rowMatches.size
         ? risks.filter((node) => rowMatches.has(node.id))
-        : risks.filter((node) => links.some((link) => link.source === node.id && visibleColIds.has(link.target)));
+        : risks.filter((node) =>
+            links.some((link) => link.source === node.id && visibleColIds.has(link.target)),
+          );
     if (!visibleRows.length || !visibleCols.length) {
-      host.innerHTML = '<div class="border rounded p-3 bg-light small-muted">No risks or controls match that filter.</div>';
+      host.innerHTML =
+        '<div class="border rounded p-3 bg-light small-muted">No risks or controls match that filter.</div>';
       return;
     }
     host.innerHTML = `
@@ -600,25 +735,33 @@ function renderRiskControlsHeatmap() {
             </tr>
           </thead>
           <tbody>
-            ${visibleRows.map((risk) => {
-              const linkedCount = visibleCols.reduce((total, control) => total + (linkMap.has(`${risk.id}::${control.id}`) ? 1 : 0), 0);
-              const subtitle = riskVizSecondaryLabel(risk);
-              return `<tr>
+            ${visibleRows
+              .map((risk) => {
+                const linkedCount = visibleCols.reduce(
+                  (total, control) => total + (linkMap.has(`${risk.id}::${control.id}`) ? 1 : 0),
+                  0,
+                );
+                const subtitle = riskVizSecondaryLabel(risk);
+                return `<tr>
                 <th class="matrix-sticky-col matrix-party-label">
                   <a class="fw-semibold" href="${esc(riskHref(risk.risk_id || ''))}">${esc(truncateRiskVizText(riskVizPrimaryLabel(risk), 92))}</a>
                   <div class="small-muted">${esc(subtitle)}${linkedCount ? ` • ${linkedCount} shown control(s)` : ''}</div>
                   <div class="small-muted">Risk score: ${esc(String(risk.risk_score ?? '—'))} • Residual: ${esc(String(risk.residual_risk_score ?? '—'))}</div>
                 </th>
-                ${visibleCols.map((control) => {
-                  const link = linkMap.get(`${risk.id}::${control.id}`);
-                  if (!link) return '<td class="matrix-cell matrix-cell-empty" aria-label="Not linked"></td>';
-                  const score = riskVizScoreValue(link, scoreMode);
-                  const alpha = Math.max(0.18, Math.min(0.92, 0.16 + (score / maxScore) * 0.74));
-                  const title = `${riskVizPrimaryLabel(risk)} → ${riskVizPrimaryLabel(control)} — ${riskVizScoreShortLabel(scoreMode).toLowerCase()} ${score}, inherent ${link.risk_score ?? link.value ?? '—'}, residual ${link.residual_risk_score ?? '—'}`;
-                  return `<td class="matrix-cell risk-control-heatmap-cell" title="${esc(title)}" style="background:rgba(var(--bs-primary-rgb), ${alpha.toFixed(3)});"><a href="${esc(controlHref(control.control_id || ''))}" aria-label="${esc(title)}">${esc(String(score))}</a></td>`;
-                }).join('')}
+                ${visibleCols
+                  .map((control) => {
+                    const link = linkMap.get(`${risk.id}::${control.id}`);
+                    if (!link)
+                      return '<td class="matrix-cell matrix-cell-empty" aria-label="Not linked"></td>';
+                    const score = riskVizScoreValue(link, scoreMode);
+                    const alpha = Math.max(0.18, Math.min(0.92, 0.16 + (score / maxScore) * 0.74));
+                    const title = `${riskVizPrimaryLabel(risk)} → ${riskVizPrimaryLabel(control)} — ${riskVizScoreShortLabel(scoreMode).toLowerCase()} ${score}, inherent ${link.risk_score ?? link.value ?? '—'}, residual ${link.residual_risk_score ?? '—'}`;
+                    return `<td class="matrix-cell risk-control-heatmap-cell" title="${esc(title)}" style="background:rgba(var(--bs-primary-rgb), ${alpha.toFixed(3)});"><a href="${esc(controlHref(control.control_id || ''))}" aria-label="${esc(title)}">${esc(String(score))}</a></td>`;
+                  })
+                  .join('')}
               </tr>`;
-            }).join('')}
+              })
+              .join('')}
           </tbody>
         </table>
       </div>
@@ -631,22 +774,34 @@ function renderRiskControlsHeatmap() {
 function renderRiskVisualisations() {
   renderRiskControlsGraph();
   renderRiskControlsHeatmap();
-  const {risks, controls: controlNodes, links} = riskControlDataset();
-  const totalRisks = (riskControlGraphData?.nodes || []).filter((node) => node.node_kind === 'risk').length;
-  const totalControls = (riskControlGraphData?.nodes || []).filter((node) => node.node_kind === 'control').length;
+  const { risks, controls: controlNodes, links } = riskControlDataset();
+  const totalRisks = (riskControlGraphData?.nodes || []).filter(
+    (node) => node.node_kind === 'risk',
+  ).length;
+  const totalControls = (riskControlGraphData?.nodes || []).filter(
+    (node) => node.node_kind === 'control',
+  ).length;
   const meta = `${risks.length} of ${totalRisks} risks, ${controlNodes.length} of ${totalControls} controls, ${links.length} visible mappings for ${framework || 'the current framework'}.`;
   const scoreLabel = riskVizScoreLabel();
-  if (riskControlsGraphMeta) riskControlsGraphMeta.textContent = `${meta} Link thickness follows ${scoreLabel}.`;
-  if (riskControlsHeatmapMeta) riskControlsHeatmapMeta.textContent = `${meta} Darker cells have higher ${scoreLabel}.`;
+  if (riskControlsGraphMeta)
+    riskControlsGraphMeta.textContent = `${meta} Link thickness follows ${scoreLabel}.`;
+  if (riskControlsHeatmapMeta)
+    riskControlsHeatmapMeta.textContent = `${meta} Darker cells have higher ${scoreLabel}.`;
 }
 
 async function loadRiskVisualisations(opts = {}) {
   if (!canViewRisks) return;
   if (!riskControlsGraph && !riskControlsHeatmap) return;
   if (!riskControlGraphData || opts.force) {
-    if (riskControlsGraph) riskControlsGraph.innerHTML = '<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risk/control graph…</span></div>';
-    if (riskControlsHeatmap) riskControlsHeatmap.innerHTML = '<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risk/control heatmap…</span></div>';
-    riskControlGraphData = await apiGet(`/api/v1/graph/risk_control?framework=${encodeURIComponent(framework)}`);
+    if (riskControlsGraph)
+      riskControlsGraph.innerHTML =
+        '<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risk/control graph…</span></div>';
+    if (riskControlsHeatmap)
+      riskControlsHeatmap.innerHTML =
+        '<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risk/control heatmap…</span></div>';
+    riskControlGraphData = await apiGet(
+      `/api/v1/graph/risk_control?framework=${encodeURIComponent(framework)}`,
+    );
   }
   renderRiskVisualisations();
   riskVisualisationsLoaded = true;
@@ -654,11 +809,13 @@ async function loadRiskVisualisations(opts = {}) {
 
 function assetLabel(assetRow) {
   const parts = [assetRow?.category?.name, assetRow?.subcategory?.name].filter(Boolean).join(' / ');
-  return parts ? `${assetRow?.name || 'Asset'} — ${parts}` : (assetRow?.name || 'Asset');
+  return parts ? `${assetRow?.name || 'Asset'} — ${parts}` : assetRow?.name || 'Asset';
 }
 
 function normaliseAssetName(value) {
-  return String(value || '').trim().toLowerCase();
+  return String(value || '')
+    .trim()
+    .toLowerCase();
 }
 
 function selectedAssetRow() {
@@ -692,7 +849,7 @@ function selectExistingAsset(id) {
   syncAssetEditorState();
 }
 
-function clearSelectedAsset({clearName = false} = {}) {
+function clearSelectedAsset({ clearName = false } = {}) {
   if (assetId) assetId.value = '';
   if (clearName && asset) asset.value = '';
   if (category) category.value = categories[0]?.id || '';
@@ -705,9 +862,12 @@ function matchingAssetsForInput() {
   const qv = normaliseAssetName(asset?.value || '');
   if (!qv) return [];
   return [...assets]
-      .filter((a) => normaliseAssetName(assetLabel(a)).includes(qv) || normaliseAssetName(a.name).includes(qv))
-      .sort((a, b) => assetLabel(a).localeCompare(assetLabel(b), undefined, {numeric: true}))
-      .slice(0, 8);
+    .filter(
+      (a) =>
+        normaliseAssetName(assetLabel(a)).includes(qv) || normaliseAssetName(a.name).includes(qv),
+    )
+    .sort((a, b) => assetLabel(a).localeCompare(assetLabel(b), undefined, { numeric: true }))
+    .slice(0, 8);
 }
 
 function syncAssetSelectionFromText() {
@@ -745,25 +905,35 @@ function renderAssetSuggestionBox(selected) {
         <div class="d-flex flex-wrap gap-2">${matches.map((a) => `<button class="btn btn-sm btn-outline-primary" type="button" data-use-asset="${esc(a.id)}">${esc(assetLabel(a))}</button>`).join('')}</div>`;
       selectedAssetSummary.style.display = '';
     } else {
-      box.innerHTML = 'No existing asset matches this text. Saving will create a new reusable asset with the selected category and subcategory.';
+      box.innerHTML =
+        'No existing asset matches this text. Saving will create a new reusable asset with the selected category and subcategory.';
       selectedAssetSummary.style.display = '';
     }
   } else if (canManageRisks) {
-    box.innerHTML = 'Type an asset name. Matching existing assets will appear here so you can reuse them instead of creating duplicates.';
+    box.innerHTML =
+      'Type an asset name. Matching existing assets will appear here so you can reuse them instead of creating duplicates.';
     selectedAssetSummary.style.display = '';
   } else {
     selectedAssetSummary.style.display = 'none';
   }
-  box.querySelectorAll('[data-use-asset]').forEach((btn) => btn.addEventListener('click', () => selectExistingAsset(btn.dataset.useAsset || '')));
-  box.querySelector('[data-clear-asset]')?.addEventListener('click', () => clearSelectedAsset({clearName: true}));
+  box
+    .querySelectorAll('[data-use-asset]')
+    .forEach((btn) =>
+      btn.addEventListener('click', () => selectExistingAsset(btn.dataset.useAsset || '')),
+    );
+  box
+    .querySelector('[data-clear-asset]')
+    ?.addEventListener('click', () => clearSelectedAsset({ clearName: true }));
 }
 
 function renderAssets(targetValue = '') {
-  const sorted = [...assets].sort((a, b) => assetLabel(a).localeCompare(assetLabel(b), undefined, {numeric: true}));
+  const sorted = [...assets].sort((a, b) =>
+    assetLabel(a).localeCompare(assetLabel(b), undefined, { numeric: true }),
+  );
   if (assetOptions) {
     assetOptions.innerHTML = sorted
-        .map((a) => `<option value="${esc(a.name || '')}" label="${esc(assetLabel(a))}"></option>`)
-        .join('');
+      .map((a) => `<option value="${esc(a.name || '')}" label="${esc(assetLabel(a))}"></option>`)
+      .join('');
   }
   if (targetValue) {
     selectExistingAsset(targetValue);
@@ -772,7 +942,7 @@ function renderAssets(targetValue = '') {
   }
 }
 
-function syncAssetEditorState({clearForNew = false} = {}) {
+function syncAssetEditorState({ clearForNew = false } = {}) {
   const selected = selectedAssetRow();
   const readonly = !canManageRisks;
   if (selected) {
@@ -804,7 +974,7 @@ function renderSubcategories(targetValue = '') {
   if (subcategory) {
     const cur = targetValue || subcategory.value || subs[0]?.id || '';
     subcategory.innerHTML = opts || '<option value="">No subcategories</option>';
-    subcategory.value = subs.some((s) => String(s.id) === String(cur)) ? cur : (subs[0]?.id || '');
+    subcategory.value = subs.some((s) => String(s.id) === String(cur)) ? cur : subs[0]?.id || '';
   }
 }
 
@@ -815,12 +985,18 @@ function renderFilterSubcategories() {
   const sourceCategories = categoryIds.size
     ? categories.filter((c) => categoryIds.has(String(c.id)))
     : categories;
-  const subs = sourceCategories.flatMap((c) => (c.subcategories || []).map((s) => ({...s, categoryName: c.name})));
+  const subs = sourceCategories.flatMap((c) =>
+    (c.subcategories || []).map((s) => ({ ...s, categoryName: c.name })),
+  );
   const valid = new Set(subs.map((s) => String(s.id)));
   setFilterPillOptions(
     subcategoryFilter,
-    subs.map((s) => ({value: String(s.id), label: s.categoryName ? `${s.categoryName} / ${s.name}` : s.name, title: s.name || ''})),
-    {selectedValues: cur.filter((value) => valid.has(String(value))), dispatchChange: false}
+    subs.map((s) => ({
+      value: String(s.id),
+      label: s.categoryName ? `${s.categoryName} / ${s.name}` : s.name,
+      title: s.name || '',
+    })),
+    { selectedValues: cur.filter((value) => valid.has(String(value))), dispatchChange: false },
   );
 }
 
@@ -867,24 +1043,29 @@ function showEditor(risk = null) {
     }
     ensureOwnerOption(risk);
     ensureControlOptions(risk.controls || []);
-    if (owner) owner.value = risk.risk_owner?.id ? `${risk.risk_owner.type === 'role' ? 'role:' : ''}${risk.risk_owner.id}` : '';
+    if (owner)
+      owner.value = risk.risk_owner?.id
+        ? `${risk.risk_owner.type === 'role' ? 'role:' : ''}${risk.risk_owner.id}`
+        : '';
     setRiskTypes(risk.risk_types || []);
     if (threatSummary) threatSummary.value = risk.threat_summary || '';
     if (inherentLikelihood) inherentLikelihood.value = scoreFieldValue(risk.register_likelihood);
     if (inherentImpact) inherentImpact.value = scoreFieldValue(risk.register_impact);
-    if (residualLikelihood) residualLikelihood.value = scoreFieldValue(risk.register_residual_likelihood);
+    if (residualLikelihood)
+      residualLikelihood.value = scoreFieldValue(risk.register_residual_likelihood);
     if (residualImpact) residualImpact.value = scoreFieldValue(risk.register_residual_impact);
     if (note) note.value = risk.note || '';
     setSelectedControls(risk.controls || []);
     if (deleteRisk) deleteRisk.style.display = '';
     const threat = (risk.threat_summary || '').trim();
-    const title = threat ? `${risk.asset || 'Asset'} — ${threat}` : (risk.asset || 'Risk');
-    if (editorTitle) editorTitle.textContent = `${canManageRisks ? 'Edit' : 'View'} risk scenario: ${title}`;
+    const title = threat ? `${risk.asset || 'Asset'} — ${threat}` : risk.asset || 'Risk';
+    if (editorTitle)
+      editorTitle.textContent = `${canManageRisks ? 'Edit' : 'View'} risk scenario: ${title}`;
   }
   syncScorePreviews();
   if (editorCard) editorCard.style.display = '';
   showTab(newRiskScenarioTab);
-  editorCard?.scrollIntoView({behavior: 'smooth', block: 'start'});
+  editorCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   (risk ? threatSummary : asset)?.focus();
 }
 
@@ -901,25 +1082,31 @@ function hideEditor() {
 }
 
 function renderCategories() {
-  const opts = categories.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+  const opts = categories
+    .map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`)
+    .join('');
   if (category) {
     const cur = category.value || categories[0]?.id || '';
     category.innerHTML = opts || '<option value="">No categories</option>';
-    category.value = categories.some((c) => String(c.id) === String(cur)) ? cur : (categories[0]?.id || '');
+    category.value = categories.some((c) => String(c.id) === String(cur))
+      ? cur
+      : categories[0]?.id || '';
   }
   renderSubcategories();
   if (categoryFilter) {
     const cur = filterValues(categoryFilter);
     setFilterPillOptions(
       categoryFilter,
-      categories.map((c) => ({value: String(c.id), label: c.name || '', title: c.name || ''})),
-      {selectedValues: cur, dispatchChange: false}
+      categories.map((c) => ({ value: String(c.id), label: c.name || '', title: c.name || '' })),
+      { selectedValues: cur, dispatchChange: false },
     );
   }
   if (manageSubcategoryCategory) {
     const cur = manageSubcategoryCategory.value || category?.value || categories[0]?.id || '';
     manageSubcategoryCategory.innerHTML = opts || '<option value="">Add a category first</option>';
-    manageSubcategoryCategory.value = categories.some((c) => String(c.id) === String(cur)) ? cur : (categories[0]?.id || '');
+    manageSubcategoryCategory.value = categories.some((c) => String(c.id) === String(cur))
+      ? cur
+      : categories[0]?.id || '';
     manageSubcategoryCategory.disabled = !categories.length;
   }
   if (manageAddSubcategory) manageAddSubcategory.disabled = !categories.length;
@@ -932,66 +1119,90 @@ function renderCategories() {
     categoryList.innerHTML = '<span class="small-muted">No categories yet.</span>';
     return;
   }
-  categoryList.innerHTML = `<div class="vstack gap-2">${categories.map((c) => `
+  categoryList.innerHTML = `<div class="vstack gap-2">${categories
+    .map(
+      (c) => `
     <div class="border rounded-3 p-2">
       <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
         <div class="fw-semibold">${esc(c.name)}</div>
         ${canManageRisks ? `<button class="btn btn-sm btn-link p-0 text-danger" type="button" title="Delete category" data-del-category="${esc(c.id)}">Delete</button>` : ''}
       </div>
       <div class="small-muted mt-1">Subcategories</div>
-      <div class="d-flex flex-wrap gap-2 mt-1">${(c.subcategories || []).map((s) => `
+      <div class="d-flex flex-wrap gap-2 mt-1">${
+        (c.subcategories || [])
+          .map(
+            (s) => `
         <span class="badge text-bg-light d-inline-flex align-items-center gap-2">
           <span>${esc(s.name)}</span>
           ${canManageRisks ? `<button class="btn btn-sm btn-link p-0 text-danger" type="button" title="Delete subcategory" data-del-subcategory="${esc(s.id)}">×</button>` : ''}
-        </span>`).join('') || '<span class="small-muted">No subcategories</span>'}</div>
-    </div>`).join('')}</div>`;
-  categoryList.querySelectorAll('[data-del-category]').forEach((btn) => btn.addEventListener('click', async () => {
-    const id = btn.dataset.delCategory || '';
-    const cat = categories.find((c) => c.id === id);
-    if (!id || !confirm(`Delete category “${cat?.name || id}”? Categories in use cannot be deleted.`)) return;
-    try {
-      await apiDelete(`/api/v1/risks/categories/${encodeURIComponent(id)}`);
-      await loadCategories();
-      toast(status, 'Category deleted', 'success');
-    } catch (e) {
-      toast(status, `Failed to delete category: ${String(e)}`, 'danger');
-    }
-  }));
-  categoryList.querySelectorAll('[data-del-subcategory]').forEach((btn) => btn.addEventListener('click', async () => {
-    const id = btn.dataset.delSubcategory || '';
-    const sub = categories.flatMap((c) => c.subcategories || []).find((s) => s.id === id);
-    if (!id || !confirm(`Delete subcategory “${sub?.name || id}”? Subcategories in use cannot be deleted.`)) return;
-    try {
-      await apiDelete(`/api/v1/risks/subcategories/${encodeURIComponent(id)}`);
-      await loadCategories();
-      toast(status, 'Subcategory deleted', 'success');
-    } catch (e) {
-      toast(status, `Failed to delete subcategory: ${String(e)}`, 'danger');
-    }
-  }));
+        </span>`,
+          )
+          .join('') || '<span class="small-muted">No subcategories</span>'
+      }</div>
+    </div>`,
+    )
+    .join('')}</div>`;
+  categoryList.querySelectorAll('[data-del-category]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.delCategory || '';
+      const cat = categories.find((c) => c.id === id);
+      if (
+        !id ||
+        !confirm(`Delete category “${cat?.name || id}”? Categories in use cannot be deleted.`)
+      )
+        return;
+      try {
+        await apiDelete(`/api/v1/risks/categories/${encodeURIComponent(id)}`);
+        await loadCategories();
+        toast(status, 'Category deleted', 'success');
+      } catch (e) {
+        toast(status, `Failed to delete category: ${String(e)}`, 'danger');
+      }
+    }),
+  );
+  categoryList.querySelectorAll('[data-del-subcategory]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.delSubcategory || '';
+      const sub = categories.flatMap((c) => c.subcategories || []).find((s) => s.id === id);
+      if (
+        !id ||
+        !confirm(`Delete subcategory “${sub?.name || id}”? Subcategories in use cannot be deleted.`)
+      )
+        return;
+      try {
+        await apiDelete(`/api/v1/risks/subcategories/${encodeURIComponent(id)}`);
+        await loadCategories();
+        toast(status, 'Subcategory deleted', 'success');
+      } catch (e) {
+        toast(status, `Failed to delete subcategory: ${String(e)}`, 'danger');
+      }
+    }),
+  );
 }
 
 function renderUsers() {
   if (!owner) return;
   const cur = owner.value || '';
-  owner.innerHTML = `<option value="">No owner</option><optgroup label="Organisational roles">${ownerRoles.map(r => `<option value="role:${esc(r.id)}">${esc(r.name)}</option>`).join('')}</optgroup><optgroup label="Users">${users.map((u) => `<option value="${esc(u.id)}">${esc(u.username)}</option>`).join('')}</optgroup>`;
+  owner.innerHTML = `<option value="">No owner</option><optgroup label="Organisational roles">${ownerRoles.map((r) => `<option value="role:${esc(r.id)}">${esc(r.name)}</option>`).join('')}</optgroup><optgroup label="Users">${users.map((u) => `<option value="${esc(u.id)}">${esc(u.username)}</option>`).join('')}</optgroup>`;
   owner.value = cur;
 }
 
 function renderControlOptions() {
   if (!controls) return;
   controls.innerHTML = allControls
-      .filter((c) => c.type !== 'clause')
-      .sort((a, b) => String(a.ref || '').localeCompare(String(b.ref || ''), undefined, {numeric: true}))
-      .map((c) => `<option value="${esc(c.id)}">${esc(c.ref || '')} — ${esc(c.title || '')}</option>`)
-      .join('');
+    .filter((c) => c.type !== 'clause')
+    .sort((a, b) =>
+      String(a.ref || '').localeCompare(String(b.ref || ''), undefined, { numeric: true }),
+    )
+    .map((c) => `<option value="${esc(c.id)}">${esc(c.ref || '')} — ${esc(c.title || '')}</option>`)
+    .join('');
 }
 
 function ensureOwnerOption(risk) {
   const ro = risk?.risk_owner || null;
   if (ro?.type === 'role') return;
   if (!ro?.id || users.some((u) => String(u.id) === String(ro.id))) return;
-  users = [...users, {id: String(ro.id), username: ro.username || 'Risk owner'}];
+  users = [...users, { id: String(ro.id), username: ro.username || 'Risk owner' }];
   renderUsers();
 }
 
@@ -1015,21 +1226,36 @@ function ensureControlOptions(items) {
 
 function setFormReadonly(readonly) {
   const disabled = !!readonly;
-  for (const el of [owner, threatSummary, inherentLikelihood, inherentImpact, residualLikelihood, residualImpact, controls, note]) {
+  for (const el of [
+    owner,
+    threatSummary,
+    inherentLikelihood,
+    inherentImpact,
+    residualLikelihood,
+    residualImpact,
+    controls,
+    note,
+  ]) {
     if (el) el.disabled = disabled;
   }
-  document.querySelectorAll('.risk-type').forEach((cb) => { cb.disabled = disabled; });
+  document.querySelectorAll('.risk-type').forEach((cb) => {
+    cb.disabled = disabled;
+  });
   syncAssetEditorState();
   if (saveRisk) saveRisk.style.display = disabled ? 'none' : '';
-  if (deleteRisk) deleteRisk.style.display = disabled ? 'none' : (riskId?.value ? '' : 'none');
+  if (deleteRisk) deleteRisk.style.display = disabled ? 'none' : riskId?.value ? '' : 'none';
 }
 
 function defaultRiskSort(a, b) {
   const riskCmp = Number(b.risk_score || 0) - Number(a.risk_score || 0);
   if (riskCmp) return riskCmp;
-  const assetCmp = String(a.asset || '').localeCompare(String(b.asset || ''), undefined, {numeric: true});
+  const assetCmp = String(a.asset || '').localeCompare(String(b.asset || ''), undefined, {
+    numeric: true,
+  });
   if (assetCmp) return assetCmp;
-  return String(a.threat_summary || '').localeCompare(String(b.threat_summary || ''), undefined, {numeric: true});
+  return String(a.threat_summary || '').localeCompare(String(b.threat_summary || ''), undefined, {
+    numeric: true,
+  });
 }
 
 function markDefaultRiskSort() {
@@ -1048,14 +1274,21 @@ function markDefaultRiskSort() {
 function renderRows(items) {
   if (!rows) return;
   if (!items.length) {
-    rows.innerHTML = '<tr><td colspan="9" class="p-4 text-center small-muted">No risks match.</td></tr>';
+    rows.innerHTML =
+      '<tr><td colspan="9" class="p-4 text-center small-muted">No risks match.</td></tr>';
     return;
   }
-  rows.innerHTML = items.map((r) => {
-    const types = (r.risk_types || []).map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`).join('');
-    const controlsText = Number(r.control_count || 0) === 1 ? '1 control' : `${Number(r.control_count || 0)} controls`;
-    const threat = (r.threat_summary || '').trim();
-    return `<tr>
+  rows.innerHTML = items
+    .map((r) => {
+      const types = (r.risk_types || [])
+        .map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`)
+        .join('');
+      const controlsText =
+        Number(r.control_count || 0) === 1
+          ? '1 control'
+          : `${Number(r.control_count || 0)} controls`;
+      const threat = (r.threat_summary || '').trim();
+      return `<tr>
       <td>
         <div class="fw-semibold"><a href="${esc(riskHref(r.id))}" data-open-risk="${esc(r.id)}">${esc(r.asset || '')}</a></div>
         <div class="small-muted text-truncate" style="max-width:420px;">${esc(threat || 'No threat summary')}</div>
@@ -1075,44 +1308,57 @@ function renderRows(items) {
         </div>
       </td>
     </tr>`;
-  }).join('');
+    })
+    .join('');
 
-  rows.querySelectorAll('[data-sample-risk]').forEach((el) => el.addEventListener('click', (ev) => {
-    ev.preventDefault();
-    const riskId = el.dataset.sampleRisk || '';
-    const risk = (currentItems || []).find((x) => String(x.id) === String(riskId));
-    openAuditSampleModal({
-      me,
-      entityType: 'risk',
-      entityId: riskId,
-      title: risk ? `${risk.asset || 'Risk'}${risk.threat_summary ? ` — ${risk.threat_summary}` : ''}` : 'CIA Triad risk',
-      framework,
-      statusEl: status,
-    });
-  }));
-  rows.querySelectorAll('[data-edit-risk]').forEach((el) => el.addEventListener('click', async (ev) => {
-    if (ev.metaKey || ev.ctrlKey) return;
-    ev.preventDefault();
-    const id = el.dataset.editRisk || '';
-    await openRisk(id);
-  }));
+  rows.querySelectorAll('[data-sample-risk]').forEach((el) =>
+    el.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const riskId = el.dataset.sampleRisk || '';
+      const risk = (currentItems || []).find((x) => String(x.id) === String(riskId));
+      openAuditSampleModal({
+        me,
+        entityType: 'risk',
+        entityId: riskId,
+        title: risk
+          ? `${risk.asset || 'Risk'}${risk.threat_summary ? ` — ${risk.threat_summary}` : ''}`
+          : 'CIA Triad risk',
+        framework,
+        statusEl: status,
+      });
+    }),
+  );
+  rows.querySelectorAll('[data-edit-risk]').forEach((el) =>
+    el.addEventListener('click', async (ev) => {
+      if (ev.metaKey || ev.ctrlKey) return;
+      ev.preventDefault();
+      const id = el.dataset.editRisk || '';
+      await openRisk(id);
+    }),
+  );
 }
 
 function renderControlsWithoutRisksRows(items) {
   if (!controlsWithoutRisksRows) return;
   if (!items.length) {
-    controlsWithoutRisksRows.innerHTML = '<tr><td colspan="5" class="p-4 text-center small-muted">All controls currently have at least one associated risk scenario.</td></tr>';
+    controlsWithoutRisksRows.innerHTML =
+      '<tr><td colspan="5" class="p-4 text-center small-muted">All controls currently have at least one associated risk scenario.</td></tr>';
     return;
   }
-  controlsWithoutRisksRows.innerHTML = items.map((c) => {
-    const scoped = c.in_scope === false ? '<span class="badge text-bg-secondary">Out of scope</span>' : '<span class="badge text-bg-success">In scope</span>';
-    return `<tr>
+  controlsWithoutRisksRows.innerHTML = items
+    .map((c) => {
+      const scoped =
+        c.in_scope === false
+          ? '<span class="badge text-bg-secondary">Out of scope</span>'
+          : '<span class="badge text-bg-success">In scope</span>';
+      return `<tr>
       <td data-sort="${esc(c.ref || '')}"><a class="fw-semibold" href="${esc(controlHref(c.id))}">${esc(c.ref || 'Control')}</a></td>
       <td>${esc(c.title || '')}</td>
       <td>${scoped}</td>
       <td class="no-print"><a class="btn btn-sm btn-outline-secondary" href="${esc(controlHref(c.id))}">View</a></td>
     </tr>`;
-  }).join('');
+    })
+    .join('');
 }
 
 async function loadControlsWithoutRisks() {
@@ -1132,7 +1378,9 @@ async function loadControlsWithoutRisks() {
       controlsWithoutRisksMeta.textContent = `${total} control${total === 1 ? '' : 's'} without associated risk scenarios for ${data?.framework || framework || 'the current framework'}.`;
     }
   } catch (e) {
-    if (controlsWithoutRisksRows) controlsWithoutRisksRows.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-danger">Failed to load controls without risks.</td></tr>';
+    if (controlsWithoutRisksRows)
+      controlsWithoutRisksRows.innerHTML =
+        '<tr><td colspan="5" class="p-4 text-center text-danger">Failed to load controls without risks.</td></tr>';
     toast(status, `Failed to load controls without risks: ${String(e)}`, 'danger');
   }
 }
@@ -1204,7 +1452,7 @@ function formPayload() {
   if (!types.length) throw new Error('Select at least one risk type');
   const payload = {
     risk_types: types,
-    risk_owner_user_id: owner?.value?.startsWith('role:') ? null : (owner?.value || null),
+    risk_owner_user_id: owner?.value?.startsWith('role:') ? null : owner?.value || null,
     risk_owner_role_id: owner?.value?.startsWith('role:') ? owner.value.slice(5) : null,
     threat_summary: threatSummary?.value || '',
     register_likelihood: clampScore(inherentLikelihood?.value),
@@ -1223,8 +1471,10 @@ function formPayload() {
   } else {
     const assetName = (asset?.value || '').trim();
     if (!assetName) throw new Error('Enter an asset name, or choose an existing matching asset');
-    if (!category?.value) throw new Error('Select an asset category, or add one in the Asset categories tab');
-    if (!subcategory?.value) throw new Error('Select an asset subcategory, or add one in the Asset categories tab');
+    if (!category?.value)
+      throw new Error('Select an asset category, or add one in the Asset categories tab');
+    if (!subcategory?.value)
+      throw new Error('Select an asset subcategory, or add one in the Asset categories tab');
     payload.asset_name = assetName;
     payload.category_id = category.value;
     payload.subcategory_id = subcategory.value;
@@ -1239,7 +1489,13 @@ async function saveCurrentRisk(ev) {
   try {
     const id = riskId?.value || '';
     const payload = formPayload();
-    if (!id && selectedLibraryTemplateId && templateFrameworkEnabled && templateIncludeControls?.checked && templateControlRefs.length) {
+    if (
+      !id &&
+      selectedLibraryTemplateId &&
+      templateFrameworkEnabled &&
+      templateIncludeControls?.checked &&
+      templateControlRefs.length
+    ) {
       payload.library_template_id = selectedLibraryTemplateId;
     }
     const saved = id
@@ -1276,13 +1532,13 @@ async function deleteCurrentRisk() {
   }
 }
 
-async function createCategoryFromInput(inputEl, buttonEl, {syncEditor = false} = {}) {
+async function createCategoryFromInput(inputEl, buttonEl, { syncEditor = false } = {}) {
   if (!canManageRisks) return;
   const name = (inputEl?.value || '').trim();
   if (!name) return;
   if (buttonEl) buttonEl.disabled = true;
   try {
-    const row = await apiPost('/api/v1/risks/categories', {name});
+    const row = await apiPost('/api/v1/risks/categories', { name });
     if (inputEl) inputEl.value = '';
     await loadCategories();
     if (row?.id) {
@@ -1300,14 +1556,19 @@ async function createCategoryFromInput(inputEl, buttonEl, {syncEditor = false} =
   }
 }
 
-async function createSubcategoryFromInput(inputEl, categoryEl, buttonEl, {syncEditor = false} = {}) {
+async function createSubcategoryFromInput(
+  inputEl,
+  categoryEl,
+  buttonEl,
+  { syncEditor = false } = {},
+) {
   if (!canManageRisks) return;
   const name = (inputEl?.value || '').trim();
   const categoryId = categoryEl?.value || '';
   if (!name || !categoryId) return;
   if (buttonEl) buttonEl.disabled = true;
   try {
-    const row = await apiPost('/api/v1/risks/subcategories', {name, category_id: categoryId});
+    const row = await apiPost('/api/v1/risks/subcategories', { name, category_id: categoryId });
     if (inputEl) inputEl.value = '';
     await loadCategories();
     if (syncEditor) {
@@ -1322,7 +1583,6 @@ async function createSubcategoryFromInput(inputEl, categoryEl, buttonEl, {syncEd
   }
 }
 
-
 function syncMitigatorWeightLabels() {
   document.querySelectorAll('.mitigator-weight').forEach((range) => {
     const rt = range.dataset.riskType || '';
@@ -1333,8 +1593,8 @@ function syncMitigatorWeightLabels() {
 
 function selectedMitigatorRiskTypes() {
   return [...document.querySelectorAll('.mitigator-risk-type')]
-      .filter((x) => x.checked)
-      .map((x) => x.value);
+    .filter((x) => x.checked)
+    .map((x) => x.value);
 }
 
 function mitigatorRiskWeights() {
@@ -1366,15 +1626,27 @@ function renderMitigatorSubcategories(targetValue = '') {
   const selectedCategoryId = mitigatorCategory?.value || categories[0]?.id || '';
   const subs = subcategoriesForMitigatorCategory(selectedCategoryId);
   const cur = targetValue || mitigatorSubcategory.value || subs[0]?.id || '';
-  mitigatorSubcategory.innerHTML = subs.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('') || '<option value="">No subcategories</option>';
-  mitigatorSubcategory.value = subs.some((s) => String(s.id) === String(cur)) ? cur : (subs[0]?.id || '');
+  mitigatorSubcategory.innerHTML =
+    subs.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('') ||
+    '<option value="">No subcategories</option>';
+  mitigatorSubcategory.value = subs.some((s) => String(s.id) === String(cur))
+    ? cur
+    : subs[0]?.id || '';
 }
 
 function renderMitigatorCategories() {
   if (!mitigatorCategory) return;
-  const cur = mitigatorCategory.value || categories.find((c) => String(c.name || '').toLowerCase() === 'data')?.id || categories[0]?.id || '';
-  mitigatorCategory.innerHTML = categories.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('') || '<option value="">No categories</option>';
-  mitigatorCategory.value = categories.some((c) => String(c.id) === String(cur)) ? cur : (categories[0]?.id || '');
+  const cur =
+    mitigatorCategory.value ||
+    categories.find((c) => String(c.name || '').toLowerCase() === 'data')?.id ||
+    categories[0]?.id ||
+    '';
+  mitigatorCategory.innerHTML =
+    categories.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('') ||
+    '<option value="">No categories</option>';
+  mitigatorCategory.value = categories.some((c) => String(c.id) === String(cur))
+    ? cur
+    : categories[0]?.id || '';
   renderMitigatorSubcategories();
 }
 
@@ -1382,10 +1654,16 @@ function resetMitigator() {
   lastMitigatorAnalysis = null;
   if (mitigatorIssue) mitigatorIssue.value = '';
   if (mitigatorAsset) mitigatorAsset.value = '';
-  document.querySelectorAll('.mitigator-risk-type').forEach((cb) => { cb.checked = cb.value === 'Confidentiality'; });
-  const defaults = {Confidentiality: 60, Integrity: 40, Availability: 40};
-  document.querySelectorAll('.mitigator-weight').forEach((range) => { range.value = String(defaults[range.dataset.riskType] || 40); });
-  document.querySelectorAll('.mitigator-impact').forEach((cb) => { cb.checked = false; });
+  document.querySelectorAll('.mitigator-risk-type').forEach((cb) => {
+    cb.checked = cb.value === 'Confidentiality';
+  });
+  const defaults = { Confidentiality: 60, Integrity: 40, Availability: 40 };
+  document.querySelectorAll('.mitigator-weight').forEach((range) => {
+    range.value = String(defaults[range.dataset.riskType] || 40);
+  });
+  document.querySelectorAll('.mitigator-impact').forEach((cb) => {
+    cb.checked = false;
+  });
   if (mitigatorResultsCard) mitigatorResultsCard.style.display = 'none';
   if (mitigatorSignals) mitigatorSignals.innerHTML = '';
   if (mitigatorSuggestions) mitigatorSuggestions.innerHTML = '';
@@ -1398,7 +1676,8 @@ function resetMitigator() {
 
 function confidenceBadge(confidence) {
   const c = String(confidence || '').toLowerCase();
-  const cls = c === 'strong' ? 'text-bg-success' : (c === 'medium' ? 'text-bg-warning' : 'text-bg-secondary');
+  const cls =
+    c === 'strong' ? 'text-bg-success' : c === 'medium' ? 'text-bg-warning' : 'text-bg-secondary';
   return `<span class="badge ${cls}">${esc(c ? c[0].toUpperCase() + c.slice(1) : 'Suggested')}</span>`;
 }
 
@@ -1410,17 +1689,30 @@ function renderMitigatorSignals(signals, data = null) {
   const pestle = existing.pestle_items || [];
   const parties = existing.interested_parties || [];
   const duplicateBits = [];
-  if (cia.length) duplicateBits.push(`<strong>${esc(String(cia.length))}</strong> possible CIA Triad risk${cia.length === 1 ? '' : 's'}`);
-  if (pestle.length) duplicateBits.push(`<strong>${esc(String(pestle.length))}</strong> possible PESTLE(E) item${pestle.length === 1 ? '' : 's'}`);
-  if (parties.length) duplicateBits.push(`<strong>${esc(String(parties.length))}</strong> possible Interested Part${parties.length === 1 ? 'y' : 'ies'}`);
+  if (cia.length)
+    duplicateBits.push(
+      `<strong>${esc(String(cia.length))}</strong> possible CIA Triad risk${cia.length === 1 ? '' : 's'}`,
+    );
+  if (pestle.length)
+    duplicateBits.push(
+      `<strong>${esc(String(pestle.length))}</strong> possible PESTLE(E) item${pestle.length === 1 ? '' : 's'}`,
+    );
+  if (parties.length)
+    duplicateBits.push(
+      `<strong>${esc(String(parties.length))}</strong> possible Interested Part${parties.length === 1 ? 'y' : 'ies'}`,
+    );
 
-  const duplicateHtml = duplicateBits.length ? `<div class="alert alert-warning py-2 mb-3">
+  const duplicateHtml = duplicateBits.length
+    ? `<div class="alert alert-warning py-2 mb-3">
     <div class="fw-semibold">Potential existing risks found</div>
     <div class="small">${duplicateBits.join(', ')} already exist or look related. Review these before creating a new risk definition.</div>
-  </div>` : '';
+  </div>`
+    : '';
 
-  const signalHtml = rows.length ? `<div class="small-muted mb-2">Signals used by the deterministic rules</div>
-    <div class="d-flex flex-wrap gap-2">${rows.map((sig) => `<span class="badge text-bg-light border" title="${esc(sig.reason || '')}">${esc(sig.label || sig.kind || 'Signal')}</span>`).join('')}</div>` : '<div class="small-muted">No extra rule signals were matched beyond the selected questionnaire answers.</div>';
+  const signalHtml = rows.length
+    ? `<div class="small-muted mb-2">Signals used by the deterministic rules</div>
+    <div class="d-flex flex-wrap gap-2">${rows.map((sig) => `<span class="badge text-bg-light border" title="${esc(sig.reason || '')}">${esc(sig.label || sig.kind || 'Signal')}</span>`).join('')}</div>`
+    : '<div class="small-muted">No extra rule signals were matched beyond the selected questionnaire answers.</div>';
 
   mitigatorSignals.innerHTML = `${duplicateHtml}${signalHtml}`;
 }
@@ -1430,9 +1722,33 @@ function renderExistingMatchesSection(existing) {
   const pestle = existing?.pestle_items || [];
   const parties = existing?.interested_parties || [];
   if (!cia.length && !pestle.length && !parties.length) return '';
-  const ciaHtml = cia.map((r) => `<li><a href="${esc(riskHref(r.id || ''))}">${esc(r.asset_name || 'CIA Triad risk')}</a> — ${esc((r.risk_types || []).join(', ') || 'CIA')} <span class="small-muted">${esc(r.threat_summary || '')}</span></li>`).join('');
-  const pestleHtml = pestle.map((p) => `<li><a href="${esc(pestleHref(p.id || ''))}">${esc(p.item || 'PESTLE(E) item')}</a> <span class="badge text-bg-light border">${esc(p.type || '')}</span>${(p.clauses || []).length ? ` <span class="small-muted">Clauses: ${esc((p.clauses || []).map((c) => c?.clause?.ref || '').filter(Boolean).join(', '))}</span>` : ''}</li>`).join('');
-  const partyHtml = parties.map((p) => `<li><a href="${esc(interestedPartyHref(p.id || ''))}">${esc(p.label || p.name || 'Interested Party')}</a></li>`).join('');
+  const ciaHtml = cia
+    .map(
+      (r) =>
+        `<li><a href="${esc(riskHref(r.id || ''))}">${esc(r.asset_name || 'CIA Triad risk')}</a> — ${esc((r.risk_types || []).join(', ') || 'CIA')} <span class="small-muted">${esc(r.threat_summary || '')}</span></li>`,
+    )
+    .join('');
+  const pestleHtml = pestle
+    .map(
+      (p) =>
+        `<li><a href="${esc(pestleHref(p.id || ''))}">${esc(p.item || 'PESTLE(E) item')}</a> <span class="badge text-bg-light border">${esc(p.type || '')}</span>${
+          (p.clauses || []).length
+            ? ` <span class="small-muted">Clauses: ${esc(
+                (p.clauses || [])
+                  .map((c) => c?.clause?.ref || '')
+                  .filter(Boolean)
+                  .join(', '),
+              )}</span>`
+            : ''
+        }</li>`,
+    )
+    .join('');
+  const partyHtml = parties
+    .map(
+      (p) =>
+        `<li><a href="${esc(interestedPartyHref(p.id || ''))}">${esc(p.label || p.name || 'Interested Party')}</a></li>`,
+    )
+    .join('');
   return `<div class="mitigator-suggestion-card border-warning-subtle">
     <div class="fw-semibold mb-2"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Existing related risks to review first</div>
     ${ciaHtml ? `<div class="small fw-semibold mt-2">Risk scenarios</div><ul class="small mb-1">${ciaHtml}</ul>` : ''}
@@ -1448,12 +1764,16 @@ function renderControlSuggestionsSection(suggestions) {
       <div class="alert alert-warning mb-0">No controls matched strongly enough. Try adding more detail or selecting more impact prompts.</div>
     </div>`;
   }
-  const rows = suggestions.map((item, idx) => {
-    const c = item.control || {};
-    const terms = (item.matched_terms || []).slice(0, 8).map((t) => `<span class="badge text-bg-light mitigator-term-badge">${esc(t)}</span>`).join('');
-    const reasons = (item.reasons || []).map((r) => `<li>${esc(r)}</li>`).join('');
-    const checked = idx < 8 ? 'checked' : '';
-    return `<div class="mitigator-suggestion-card">
+  const rows = suggestions
+    .map((item, idx) => {
+      const c = item.control || {};
+      const terms = (item.matched_terms || [])
+        .slice(0, 8)
+        .map((t) => `<span class="badge text-bg-light mitigator-term-badge">${esc(t)}</span>`)
+        .join('');
+      const reasons = (item.reasons || []).map((r) => `<li>${esc(r)}</li>`).join('');
+      const checked = idx < 8 ? 'checked' : '';
+      return `<div class="mitigator-suggestion-card">
       <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between">
         <div class="form-check">
           <input class="form-check-input mitigator-suggestion-select" type="checkbox" value="${esc(c.id || '')}" id="mitigatorSuggestion${idx}" ${checked}>
@@ -1466,7 +1786,8 @@ function renderControlSuggestionsSection(suggestions) {
       ${reasons ? `<ul class="small mt-2 mb-2">${reasons}</ul>` : ''}
       ${terms ? `<div class="d-flex flex-wrap gap-1">${terms}</div>` : ''}
     </div>`;
-  }).join('');
+    })
+    .join('');
   return `<div>
     <div class="fw-semibold mb-2">Suggested framework controls</div>
     <div class="vstack gap-2">${rows}</div>
@@ -1478,12 +1799,24 @@ function renderPestleSuggestionsSection(data) {
   const hits = data?.pestle_hits || [];
   const draft = data?.draft_pestle_item || null;
   if (!suggestions.length && !hits.length && !draft) return '';
-  const hitBadges = hits.map((h) => `<span class="badge text-bg-info">${esc(h.type || 'PESTLE(E)')}</span>`).join('');
-  const draftHtml = draft ? `<div class="small-muted mb-2">Draft if you choose to create: <span class="fw-semibold">${esc(draft.type || '')}</span> / ${esc(draft.lens || '')} — ${esc(draft.item || '')}${(draft.business_processes || []).length ? `; business processes: ${esc((draft.business_processes || []).map((bp) => bp.name).join(', '))}` : ''}</div>` : '';
-  const existingHtml = suggestions.length ? suggestions.map((item) => {
-    const terms = (item.matched_terms || []).slice(0, 8).map((t) => `<span class="badge text-bg-light mitigator-term-badge">${esc(t)}</span>`).join('');
-    const clauses = (item.clauses || []).map((c) => c?.clause?.ref || '').filter(Boolean).join(', ');
-    return `<div class="mitigator-suggestion-card">
+  const hitBadges = hits
+    .map((h) => `<span class="badge text-bg-info">${esc(h.type || 'PESTLE(E)')}</span>`)
+    .join('');
+  const draftHtml = draft
+    ? `<div class="small-muted mb-2">Draft if you choose to create: <span class="fw-semibold">${esc(draft.type || '')}</span> / ${esc(draft.lens || '')} — ${esc(draft.item || '')}${(draft.business_processes || []).length ? `; business processes: ${esc((draft.business_processes || []).map((bp) => bp.name).join(', '))}` : ''}</div>`
+    : '';
+  const existingHtml = suggestions.length
+    ? suggestions
+        .map((item) => {
+          const terms = (item.matched_terms || [])
+            .slice(0, 8)
+            .map((t) => `<span class="badge text-bg-light mitigator-term-badge">${esc(t)}</span>`)
+            .join('');
+          const clauses = (item.clauses || [])
+            .map((c) => c?.clause?.ref || '')
+            .filter(Boolean)
+            .join(', ');
+          return `<div class="mitigator-suggestion-card">
       <div class="d-flex flex-wrap gap-2 justify-content-between align-items-start">
         <div><a class="fw-semibold" href="${esc(pestleHref(item.id || ''))}">${esc(item.item || 'PESTLE(E) item')}</a>
           <div class="small-muted">${esc(item.type || '')} / ${esc(item.lens || '')}${clauses ? ` • Clauses: ${esc(clauses)}` : ''}</div>
@@ -1492,7 +1825,9 @@ function renderPestleSuggestionsSection(data) {
       </div>
       ${terms ? `<div class="d-flex flex-wrap gap-1 mt-2">${terms}</div>` : ''}
     </div>`;
-  }).join('') : '<div class="small-muted">No existing PESTLE(E) items matched strongly.</div>';
+        })
+        .join('')
+    : '<div class="small-muted">No existing PESTLE(E) items matched strongly.</div>';
   return `<div>
     <div class="fw-semibold mb-2">PESTLE(E) signals and related existing items ${hitBadges}</div>
     ${draftHtml}
@@ -1503,11 +1838,15 @@ function renderPestleSuggestionsSection(data) {
 function renderInterestedPartySuggestionsSection(data) {
   const suggestions = data?.interested_party_suggestions || [];
   if (!suggestions.length) return '';
-  const rows = suggestions.map((item, idx) => {
-    const terms = (item.matched_terms || []).slice(0, 8).map((t) => `<span class="badge text-bg-light mitigator-term-badge">${esc(t)}</span>`).join('');
-    const disabled = item.duplicate_exact ? 'disabled' : '';
-    const checked = item.duplicate_exact ? '' : 'checked';
-    return `<div class="mitigator-suggestion-card">
+  const rows = suggestions
+    .map((item, idx) => {
+      const terms = (item.matched_terms || [])
+        .slice(0, 8)
+        .map((t) => `<span class="badge text-bg-light mitigator-term-badge">${esc(t)}</span>`)
+        .join('');
+      const disabled = item.duplicate_exact ? 'disabled' : '';
+      const checked = item.duplicate_exact ? '' : 'checked';
+      return `<div class="mitigator-suggestion-card">
       <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between">
         <div class="form-check">
           <input class="form-check-input mitigator-interested-select" type="checkbox" value="${esc(String(idx))}" id="mitigatorParty${idx}" ${checked} ${disabled}>
@@ -1521,7 +1860,8 @@ function renderInterestedPartySuggestionsSection(data) {
       <div class="small-muted mt-1">${esc(item.reason || '')}</div>
       ${terms ? `<div class="d-flex flex-wrap gap-1 mt-2">${terms}</div>` : ''}
     </div>`;
-  }).join('');
+    })
+    .join('');
   return `<div>
     <div class="fw-semibold mb-2">Suggested Interested Parties</div>
     <div class="vstack gap-2">${rows}</div>
@@ -1531,10 +1871,14 @@ function renderInterestedPartySuggestionsSection(data) {
 function renderLibrarySuggestionsSection(data) {
   const items = data?.library_suggestions || [];
   if (data?.framework !== 'KEEN-AF:1.0') return '';
-  const cards = items.map(item => {
-    const example = item.suggested_assessment || {};
-    const href = withFramework(`/risks.html?template=${encodeURIComponent(item.id)}`, data.framework);
-    return `<div class="mitigator-suggestion-card">
+  const cards = items
+    .map((item) => {
+      const example = item.suggested_assessment || {};
+      const href = withFramework(
+        `/risks.html?template=${encodeURIComponent(item.id)}`,
+        data.framework,
+      );
+      return `<div class="mitigator-suggestion-card">
       <div class="fw-semibold">${esc(item.name)}</div>
       <p>${esc(item.threat_summary || '')}</p>
       <div class="small-muted">${esc(item.reason || '')}</div>
@@ -1543,7 +1887,8 @@ function renderLibrarySuggestionsSection(data) {
       ${example.inherent_likelihood && example.inherent_impact ? `<div class="small-muted">Example inherent rating: ${esc(example.inherent_likelihood)} × ${esc(example.inherent_impact)}. Review before saving.</div>` : ''}
       ${canManageRisks ? `<a class="btn btn-sm btn-outline-primary mt-2" href="${esc(href)}">Review this template</a>` : ''}
     </div>`;
-  }).join('');
+    })
+    .join('');
   return `<section><h2 class="h6">Reusable risk library</h2><p class="small-muted">Live library scenarios inform the KEEN Assurance Framework control suggestions. Templates are starting points, not existing assessments.</p><div class="vstack gap-2">${cards || '<p>No sufficiently specific library match. Try describing the threat, affected asset and consequence.</p>'}</div></section>`;
 }
 
@@ -1560,8 +1905,11 @@ function renderMitigatorSuggestions(data) {
   renderMitigatorSignals(data?.signals || [], data);
   if (!mitigatorSuggestions) return;
   if (mitigatorCreateRisk) mitigatorCreateRisk.disabled = !canManageRisks || !data?.draft_risk;
-  if (mitigatorCreatePestle) mitigatorCreatePestle.disabled = !canManagePestle || !data?.draft_pestle_item;
-  if (mitigatorCreateInterested) mitigatorCreateInterested.disabled = !canManageInterestedParties || !parties.some((p) => !p.duplicate_exact);
+  if (mitigatorCreatePestle)
+    mitigatorCreatePestle.disabled = !canManagePestle || !data?.draft_pestle_item;
+  if (mitigatorCreateInterested)
+    mitigatorCreateInterested.disabled =
+      !canManageInterestedParties || !parties.some((p) => !p.duplicate_exact);
 
   const sections = [
     renderExistingMatchesSection(existing),
@@ -1579,7 +1927,9 @@ function mitigatorPayload() {
   if (!mitigatorCategory?.value) throw new Error('Select an asset category');
   if (!mitigatorSubcategory?.value) throw new Error('Select an asset subcategory');
   const cat = categories.find((c) => String(c.id) === String(mitigatorCategory.value));
-  const sub = (cat?.subcategories || []).find((x) => String(x.id) === String(mitigatorSubcategory.value));
+  const sub = (cat?.subcategories || []).find(
+    (x) => String(x.id) === String(mitigatorSubcategory.value),
+  );
   return {
     issue,
     asset_name: (mitigatorAsset?.value || '').trim(),
@@ -1612,9 +1962,9 @@ async function analyseMitigator(ev) {
 
 function selectedMitigatorControls() {
   return [...document.querySelectorAll('.mitigator-suggestion-select')]
-      .filter((cb) => cb.checked)
-      .map((cb) => cb.value)
-      .filter(Boolean);
+    .filter((cb) => cb.checked)
+    .map((cb) => cb.value)
+    .filter(Boolean);
 }
 
 async function createRiskFromMitigator() {
@@ -1627,7 +1977,7 @@ async function createRiskFromMitigator() {
   }
   const selected = selectedMitigatorControls();
   if (!selected.length && !confirm('Create the risk without any linked controls?')) return;
-  const draft = {...lastMitigatorAnalysis.draft_risk};
+  const draft = { ...lastMitigatorAnalysis.draft_risk };
   draft.asset_name = assetName;
   draft.category_id = mitigatorCategory?.value || draft.category_id || null;
   draft.subcategory_id = mitigatorSubcategory?.value || draft.subcategory_id || null;
@@ -1651,12 +2001,15 @@ async function createRiskFromMitigator() {
   }
 }
 
-
 async function createPestleFromMitigator() {
   if (!canManagePestle || !lastMitigatorAnalysis?.draft_pestle_item) return;
   const existing = lastMitigatorAnalysis.existing_matches?.pestle_items || [];
-  if (existing.length && !confirm('Related PESTLE(E) items already exist. Create a new item anyway?')) return;
-  const draft = {...lastMitigatorAnalysis.draft_pestle_item, framework};
+  if (
+    existing.length &&
+    !confirm('Related PESTLE(E) items already exist. Create a new item anyway?')
+  )
+    return;
+  const draft = { ...lastMitigatorAnalysis.draft_pestle_item, framework };
   const businessProcesses = draft.business_processes || [];
   delete draft.business_processes;
   if (mitigatorCreatePestle) mitigatorCreatePestle.disabled = true;
@@ -1666,7 +2019,10 @@ async function createPestleFromMitigator() {
       await apiPatch(`/api/v1/pestle/items/${encodeURIComponent(saved.id)}/business-processes`, {
         items: businessProcesses
           .filter((bp) => bp.id)
-          .map((bp) => ({business_process_id: bp.id, relevance_code: bp.relevance_code || 'medium'})),
+          .map((bp) => ({
+            business_process_id: bp.id,
+            relevance_code: bp.relevance_code || 'medium',
+          })),
       });
     }
     toast(status, 'PESTLE(E) item created from Keen Mitigator', 'success');
@@ -1681,9 +2037,9 @@ async function createPestleFromMitigator() {
 function selectedMitigatorInterestedPartyDrafts() {
   const suggestions = lastMitigatorAnalysis?.interested_party_suggestions || [];
   return [...document.querySelectorAll('.mitigator-interested-select')]
-      .filter((cb) => cb.checked && !cb.disabled)
-      .map((cb) => suggestions[Number(cb.value)]?.draft)
-      .filter(Boolean);
+    .filter((cb) => cb.checked && !cb.disabled)
+    .map((cb) => suggestions[Number(cb.value)]?.draft)
+    .filter(Boolean);
 }
 
 async function createInterestedPartiesFromMitigator() {
@@ -1712,10 +2068,20 @@ async function createInterestedPartiesFromMitigator() {
       }
     }
     if (created.length) {
-      toast(status, `${created.length} Interested Part${created.length === 1 ? 'y' : 'ies'} created from Keen Mitigator`, 'success');
-      if (created.length === 1 && created[0]?.id) location.href = interestedPartyHref(created[0].id);
+      toast(
+        status,
+        `${created.length} Interested Part${created.length === 1 ? 'y' : 'ies'} created from Keen Mitigator`,
+        'success',
+      );
+      if (created.length === 1 && created[0]?.id)
+        location.href = interestedPartyHref(created[0].id);
     }
-    if (failed.length) toast(status, `Some Interested Parties could not be created: ${failed.join('; ')}`, 'warning');
+    if (failed.length)
+      toast(
+        status,
+        `Some Interested Parties could not be created: ${failed.join('; ')}`,
+        'warning',
+      );
   } finally {
     if (mitigatorCreateInterested) mitigatorCreateInterested.disabled = false;
   }
@@ -1745,7 +2111,7 @@ for (const el of [inherentLikelihood, inherentImpact, residualLikelihood, residu
 }
 
 setupRiskFilterPickers();
-setFilterPillOptions(typeFilter, RISK_TYPE_FILTER_OPTIONS, {dispatchChange: false});
+setFilterPillOptions(typeFilter, RISK_TYPE_FILTER_OPTIONS, { dispatchChange: false });
 
 q?.addEventListener('input', debounce(loadRisks, 250));
 controlsWithoutRisksQ?.addEventListener('input', debounce(loadControlsWithoutRisks, 250));
@@ -1768,11 +2134,19 @@ mitigatorClear?.addEventListener('click', resetMitigator);
 mitigatorCreateRisk?.addEventListener('click', createRiskFromMitigator);
 mitigatorCreatePestle?.addEventListener('click', createPestleFromMitigator);
 mitigatorCreateInterested?.addEventListener('click', createInterestedPartiesFromMitigator);
-document.querySelectorAll('.mitigator-weight').forEach((range) => range.addEventListener('input', syncMitigatorWeightLabels));
+document
+  .querySelectorAll('.mitigator-weight')
+  .forEach((range) => range.addEventListener('input', syncMitigatorWeightLabels));
 reloadControlsWithoutRisks?.addEventListener('click', loadControlsWithoutRisks);
-reloadRiskVisualisations?.addEventListener('click', () => loadRiskVisualisations({force: true}).catch(e => toast(status, String(e), 'danger')));
-riskVizTopRisks?.addEventListener('change', () => loadRiskVisualisations().catch(e => toast(status, String(e), 'danger')));
-riskVizTopControls?.addEventListener('change', () => loadRiskVisualisations().catch(e => toast(status, String(e), 'danger')));
+reloadRiskVisualisations?.addEventListener('click', () =>
+  loadRiskVisualisations({ force: true }).catch((e) => toast(status, String(e), 'danger')),
+);
+riskVizTopRisks?.addEventListener('change', () =>
+  loadRiskVisualisations().catch((e) => toast(status, String(e), 'danger')),
+);
+riskVizTopControls?.addEventListener('change', () =>
+  loadRiskVisualisations().catch((e) => toast(status, String(e), 'danger')),
+);
 for (const input of riskVizScoreModeInputs) {
   input.addEventListener('change', () => {
     if (!input.checked) return;
@@ -1783,40 +2157,69 @@ for (const input of riskVizScoreModeInputs) {
 risksListTab?.addEventListener('shown.bs.tab', () => setRiskPageTabQuery('risks'));
 riskVisualisationsTab?.addEventListener('shown.bs.tab', () => {
   setRiskPageTabQuery('visualisations');
-  if (!riskVisualisationsLoaded) loadRiskVisualisations().catch(e => toast(status, `Failed to load risk visualisations: ${String(e)}`, 'danger'));
+  if (!riskVisualisationsLoaded)
+    loadRiskVisualisations().catch((e) =>
+      toast(status, `Failed to load risk visualisations: ${String(e)}`, 'danger'),
+    );
 });
 controlsWithoutRisksTab?.addEventListener('shown.bs.tab', () => {
   setRiskPageTabQuery('controls-without-risks');
   if (!controlsWithoutRisksLoaded) loadControlsWithoutRisks();
 });
 newRiskScenarioTab?.addEventListener('shown.bs.tab', () => setRiskPageTabQuery('new'));
-document.getElementById('riskCategoriesTab')?.addEventListener('shown.bs.tab', () => setRiskPageTabQuery('categories'));
+document
+  .getElementById('riskCategoriesTab')
+  ?.addEventListener('shown.bs.tab', () => setRiskPageTabQuery('categories'));
 newRiskBtn?.addEventListener('click', () => showEditor());
 newRiskScenarioTab?.addEventListener('click', () => {
   if (canViewRisks && !riskId?.value && editorCard?.style.display === 'none') showEditor();
 });
 riskForm?.addEventListener('submit', saveCurrentRisk);
 deleteRisk?.addEventListener('click', deleteCurrentRisk);
-manageAddCategory?.addEventListener('click', () => createCategoryFromInput(manageCategoryName, manageAddCategory, {syncEditor: false}));
-manageAddSubcategory?.addEventListener('click', () => createSubcategoryFromInput(manageSubcategoryName, manageSubcategoryCategory, manageAddSubcategory, {syncEditor: false}));
+manageAddCategory?.addEventListener('click', () =>
+  createCategoryFromInput(manageCategoryName, manageAddCategory, { syncEditor: false }),
+);
+manageAddSubcategory?.addEventListener('click', () =>
+  createSubcategoryFromInput(
+    manageSubcategoryName,
+    manageSubcategoryCategory,
+    manageAddSubcategory,
+    { syncEditor: false },
+  ),
+);
 manageCategoryName?.addEventListener('keydown', (ev) => {
   if (ev.key === 'Enter') {
     ev.preventDefault();
-    createCategoryFromInput(manageCategoryName, manageAddCategory, {syncEditor: false});
+    createCategoryFromInput(manageCategoryName, manageAddCategory, { syncEditor: false });
   }
 });
 manageSubcategoryName?.addEventListener('keydown', (ev) => {
   if (ev.key === 'Enter') {
     ev.preventDefault();
-    createSubcategoryFromInput(manageSubcategoryName, manageSubcategoryCategory, manageAddSubcategory, {syncEditor: false});
+    createSubcategoryFromInput(
+      manageSubcategoryName,
+      manageSubcategoryCategory,
+      manageAddSubcategory,
+      { syncEditor: false },
+    );
   }
 });
 
 if (!canViewRisks) {
-  toast(status, isMitigatorPage ? 'You need risk.read permission to use Keen Mitigator.' : 'You need risk.read permission to view the risk register.', 'danger');
-  if (rows) rows.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-danger">risk.read permission required</td></tr>';
+  toast(
+    status,
+    isMitigatorPage
+      ? 'You need risk.read permission to use Keen Mitigator.'
+      : 'You need risk.read permission to view the risk register.',
+    'danger',
+  );
+  if (rows)
+    rows.innerHTML =
+      '<tr><td colspan="9" class="p-4 text-center text-danger">risk.read permission required</td></tr>';
   if (isMitigatorPage && mitigatorForm) {
-    mitigatorForm.querySelectorAll('input, select, textarea, button').forEach((el) => { el.disabled = true; });
+    mitigatorForm.querySelectorAll('input, select, textarea, button').forEach((el) => {
+      el.disabled = true;
+    });
   }
   if (newRiskBtn) newRiskBtn.style.display = 'none';
   if (newRiskScenarioTabItem) newRiskScenarioTabItem.style.display = 'none';
@@ -1824,7 +2227,8 @@ if (!canViewRisks) {
   if (controlsWithoutRisksTabItem) controlsWithoutRisksTabItem.style.display = 'none';
   if (riskVisualisationsTabItem) riskVisualisationsTabItem.style.display = 'none';
 } else {
-  if (newRiskScenarioTab) newRiskScenarioTab.textContent = canManageRisks ? 'New risk scenario' : 'Risk scenario';
+  if (newRiskScenarioTab)
+    newRiskScenarioTab.textContent = canManageRisks ? 'New risk scenario' : 'Risk scenario';
   if (!canManageRisks) {
     if (newRiskBtn) newRiskBtn.style.display = 'none';
     if (mitigatorCreateRisk) mitigatorCreateRisk.style.display = 'none';
@@ -1834,7 +2238,8 @@ if (!canViewRisks) {
     categoryCard.style.display = '';
   }
   if (!canManagePestle && mitigatorCreatePestle) mitigatorCreatePestle.style.display = 'none';
-  if (!canManageInterestedParties && mitigatorCreateInterested) mitigatorCreateInterested.style.display = 'none';
+  if (!canManageInterestedParties && mitigatorCreateInterested)
+    mitigatorCreateInterested.style.display = 'none';
 
   syncMitigatorWeightLabels();
   await loadCategories();
@@ -1855,10 +2260,10 @@ if (!canViewRisks) {
   } else if (!isMitigatorPage && requestedTemplateId) {
     const [library, catalog] = await Promise.all([
       apiGet('/api/v1/risks/library'),
-      getFrameworkCatalog().catch(() => ({items: []})),
+      getFrameworkCatalog().catch(() => ({ items: [] })),
     ]);
-    templateFrameworkEnabled = catalog.items.some(item => item.slug === 'KEEN-AF:1.0');
-    const template = (library.items || []).find(item => item.id === requestedTemplateId);
+    templateFrameworkEnabled = catalog.items.some((item) => item.slug === 'KEEN-AF:1.0');
+    const template = (library.items || []).find((item) => item.id === requestedTemplateId);
     if (template) {
       showEditor();
       setRiskTypes(template.risk_types || []);
@@ -1866,33 +2271,63 @@ if (!canViewRisks) {
       note.value = template.treatment_guidance || '';
       const suggestion = template.suggested_assessment || {};
       selectedLibraryTemplateId = template.id;
-      templateControlRefs = Array.isArray(suggestion.keen_af_control_refs) ? suggestion.keen_af_control_refs : [];
-      if (templateControlsCard) templateControlsCard.hidden = !templateFrameworkEnabled || !templateControlRefs.length;
+      templateControlRefs = Array.isArray(suggestion.keen_af_control_refs)
+        ? suggestion.keen_af_control_refs
+        : [];
+      if (templateControlsCard)
+        templateControlsCard.hidden = !templateFrameworkEnabled || !templateControlRefs.length;
       if (templateIncludeControls) {
         templateIncludeControls.disabled = !templateFrameworkEnabled || !canManageRisks;
         templateIncludeControls.checked = templateFrameworkEnabled;
       }
-      if (templateControlsList) templateControlsList.textContent = templateControlRefs.length
-        ? `${templateControlRefs.join(', ')}. These links are saved under KEEN-AF:1.0; mappings for other frameworks remain available.` : '';
-      for (const [field, key] of [[inherentLikelihood, 'inherent_likelihood'], [inherentImpact, 'inherent_impact'],
-                                  [residualLikelihood, 'residual_likelihood'], [residualImpact, 'residual_impact']]) {
-        if (field && Number.isInteger(suggestion[key]) && suggestion[key] >= 1 && suggestion[key] <= 5) field.value = suggestion[key];
+      if (templateControlsList)
+        templateControlsList.textContent = templateControlRefs.length
+          ? `${templateControlRefs.join(', ')}. These links are saved under KEEN-AF:1.0; mappings for other frameworks remain available.`
+          : '';
+      for (const [field, key] of [
+        [inherentLikelihood, 'inherent_likelihood'],
+        [inherentImpact, 'inherent_impact'],
+        [residualLikelihood, 'residual_likelihood'],
+        [residualImpact, 'residual_impact'],
+      ]) {
+        if (
+          field &&
+          Number.isInteger(suggestion[key]) &&
+          suggestion[key] >= 1 &&
+          suggestion[key] <= 5
+        )
+          field.value = suggestion[key];
       }
       const canonicalAsset = (suggestion.asset || '').trim().toLowerCase();
       const knownAssets = {
-        'all': 'All', 'all company policies and procedures': 'All company policies and procedures',
-        'suppliers': 'Supplier systems', '3rd party software': 'Supplier systems',
-        'paper information': 'Paper information', 'electonic information': 'Electronic information',
-        'electronic information': 'Electronic information', 'premises': 'Premises',
-        'staff': 'Staff', 'home offices': 'Home offices', 'laptops': 'Devices',
+        all: 'All',
+        'all company policies and procedures': 'All company policies and procedures',
+        suppliers: 'Supplier systems',
+        '3rd party software': 'Supplier systems',
+        'paper information': 'Paper information',
+        'electonic information': 'Electronic information',
+        'electronic information': 'Electronic information',
+        premises: 'Premises',
+        staff: 'Staff',
+        'home offices': 'Home offices',
+        laptops: 'Devices',
       };
-      const assetName = knownAssets[canonicalAsset] || (canonicalAsset.includes('internal systems') ? 'Internal systems' :
-        canonicalAsset.includes('laptops') ? 'Devices' : suggestion.asset);
-      const match = assets.find(row => row.name?.toLowerCase() === assetName?.toLowerCase());
+      const assetName =
+        knownAssets[canonicalAsset] ||
+        (canonicalAsset.includes('internal systems')
+          ? 'Internal systems'
+          : canonicalAsset.includes('laptops')
+            ? 'Devices'
+            : suggestion.asset);
+      const match = assets.find((row) => row.name?.toLowerCase() === assetName?.toLowerCase());
       if (match) selectExistingAsset(match.id);
       else if (assetName) asset.value = assetName;
       syncScorePreviews();
-      toast(status, 'Template loaded with example ratings and a suggested asset. Review its applicability, scores and controls before saving.', 'info');
+      toast(
+        status,
+        'Template loaded with example ratings and a suggested asset. Review its applicability, scores and controls before saving.',
+        'info',
+      );
     }
   } else if (!isMitigatorPage && requestedTab === 'new') {
     showEditor();

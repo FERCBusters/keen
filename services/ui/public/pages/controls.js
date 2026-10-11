@@ -1,10 +1,25 @@
-import {initNavbar, apiGet, apiPost, esc, fmtTs, toast, qs, qbool, setQuery, enableTableSorting, attachSavedSearchAutocomplete, resolveSavedSearchUrl, getCurrentFramework, withFramework, showTableLoading} from '/app.js';
+import {
+  initNavbar,
+  apiGet,
+  apiPost,
+  esc,
+  fmtTs,
+  toast,
+  qs,
+  qbool,
+  setQuery,
+  enableTableSorting,
+  attachSavedSearchAutocomplete,
+  resolveSavedSearchUrl,
+  getCurrentFramework,
+  withFramework,
+  showTableLoading,
+} from '/app.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
 
 enableTableSorting();
-
 
 // Keep top action links on the selected framework.
 for (const a of Array.from(document.querySelectorAll('a[href]'))) {
@@ -19,7 +34,6 @@ attachSavedSearchAutocomplete(document.getElementById('frontQ'));
 
 const status = document.getElementById('status');
 const tbody = document.getElementById('rows');
-
 
 const inpFilter = document.getElementById('filterText');
 const chkGaps = document.getElementById('onlyGaps');
@@ -58,15 +72,15 @@ function render() {
   });
 
   for (const c of view) {
-    const scope = c.in_scope ?
-      `<span class="badge badge-soft">in</span>` :
-      `<span class="badge text-bg-light">out</span>`;
+    const scope = c.in_scope
+      ? `<span class="badge badge-soft">in</span>`
+      : `<span class="badge text-bg-light">out</span>`;
 
     const ev = c.evidence_count || 0;
     const evHtml =
-      ev > 0 ?
-        `<a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" class="badge badge-soft">${ev}</a>` :
-        `<span class="badge text-bg-light">0</span>`;
+      ev > 0
+        ? `<a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" class="badge badge-soft">${ev}</a>`
+        : `<span class="badge text-bg-light">0</span>`;
 
     const lastIso = c.last_evidence || '';
     const lastTxt = c.last_evidence ? fmtTs(c.last_evidence) : '—';
@@ -97,13 +111,21 @@ function setKpiText(id, value) {
 function applySummary(summary) {
   setKpiText('kpiEventsMapped', summary?.events?.mapped ?? '–');
   setKpiText('kpiEventsUnmapped', summary?.events?.unmapped ?? '–');
-  setKpiText('kpiControlsWith', summary ? all.filter(c => c.in_scope && (c.evidence_count || 0) > 0).length : '–');
-  setKpiText('kpiControlsWithout', summary ? all.filter(c => c.in_scope && !(c.evidence_count || 0)).length : '–');
+  setKpiText(
+    'kpiControlsWith',
+    summary ? all.filter((c) => c.in_scope && (c.evidence_count || 0) > 0).length : '–',
+  );
+  setKpiText(
+    'kpiControlsWithout',
+    summary ? all.filter((c) => c.in_scope && !(c.evidence_count || 0)).length : '–',
+  );
 }
 
 async function loadSummary() {
   try {
-    const summary = await apiGet(`/api/v1/stats/summary?framework=${encodeURIComponent(framework)}`);
+    const summary = await apiGet(
+      `/api/v1/stats/summary?framework=${encodeURIComponent(framework)}`,
+    );
     applySummary(summary);
   } catch (e) {
     applySummary(null);
@@ -119,11 +141,14 @@ async function load() {
   setKpiText('kpiControlsWith', '…');
   setKpiText('kpiControlsWithout', '…');
   try {
-    const data = await apiGet(`/api/v1/stats/controls?limit=5000&framework=${encodeURIComponent(framework)}`);
-    all = (data.items || []).filter(item => item.type !== 'clause');
+    const data = await apiGet(
+      `/api/v1/stats/controls?limit=5000&framework=${encodeURIComponent(framework)}`,
+    );
+    all = (data.items || []).filter((item) => item.type !== 'clause');
     if (all.length === 0) {
       toast(status, 'No controls loaded yet. Go to Admin → Frameworks.', 'warning');
-      tbody.innerHTML = '<tr><td colspan="6" class="small-muted p-4">No controls loaded yet. Go to Admin → Frameworks.</td></tr>';
+      tbody.innerHTML =
+        '<tr><td colspan="6" class="small-muted p-4">No controls loaded yet. Go to Admin → Frameworks.</td></tr>';
       await loadSummary();
       return;
     }
@@ -131,7 +156,8 @@ async function load() {
     await loadSummary();
   } catch (e) {
     toast(status, `Failed to load controls: ${String(e)}`, 'danger');
-    tbody.innerHTML = '<tr><td colspan="6" class="small-muted p-4">Failed to load controls.</td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="6" class="small-muted p-4">Failed to load controls.</td></tr>';
     applySummary(null);
   }
 }
@@ -157,15 +183,14 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
   if (qRaw) parts.push(`q=${qRaw}`);
   if (onlyGaps) parts.push('gaps');
   if (!onlyInScope) parts.push('all-scope');
-  const defName = ('Controls' + (parts.length ? ` (${parts.join(', ')})` : ''))
-      .slice(0, 128);
+  const defName = ('Controls' + (parts.length ? ` (${parts.join(', ')})` : '')).slice(0, 128);
 
   const name = (prompt('Name this saved search', defName) || '').trim();
   if (!name) return;
 
   const url = location.pathname + (location.search || '');
   try {
-    await apiPost('/api/v1/me/saved-searches', {name, url});
+    await apiPost('/api/v1/me/saved-searches', { name, url });
     toast(status, 'Saved', 'success');
   } catch (e) {
     toast(status, `Failed to save: ${String(e)}`, 'danger');
@@ -191,6 +216,5 @@ document.getElementById('frontSearch').addEventListener('submit', (ev) => {
   url.searchParams.set('framework', framework);
   location.href = url.pathname + url.search;
 });
-
 
 load();

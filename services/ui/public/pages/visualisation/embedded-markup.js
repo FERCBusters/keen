@@ -1,5 +1,5 @@
 // Embedded visualisation controls and mount options. No page initialization.
-import {esc} from '/app.js';
+import { esc } from '/app.js';
 
 const EMBEDDED_VIZ_MODE_OPTIONS = {
   graph: 'Graph: sources × controls',
@@ -26,7 +26,10 @@ const EMBEDDED_VIZ_MODE_ORDER = [
 function _embeddedVizModesFromMount(mount) {
   const raw = String(mount?.dataset?.vizModes || '').trim();
   if (!raw || raw.toLowerCase() === 'all') return EMBEDDED_VIZ_MODE_ORDER.slice();
-  const modes = raw.split(',').map((x) => x.trim()).filter((x) => EMBEDDED_VIZ_MODE_OPTIONS[x]);
+  const modes = raw
+    .split(',')
+    .map((x) => x.trim())
+    .filter((x) => EMBEDDED_VIZ_MODE_OPTIONS[x]);
   return modes.length ? modes : EMBEDDED_VIZ_MODE_ORDER.slice();
 }
 
@@ -34,11 +37,21 @@ export function ensureEmbeddedVisualisationMarkup() {
   const mount = document.querySelector('[data-keen-visualisation-mount]');
   if (!mount || mount.dataset.visualisationMarkupReady === '1') return;
   const modes = _embeddedVizModesFromMount(mount);
-  const options = modes.map((mode, idx) => `<option value="${mode}"${idx === 0 ? ' selected' : ''}>${EMBEDDED_VIZ_MODE_OPTIONS[mode]}</option>`).join('');
+  const options = modes
+    .map(
+      (mode, idx) =>
+        `<option value="${mode}"${idx === 0 ? ' selected' : ''}>${EMBEDDED_VIZ_MODE_OPTIONS[mode]}</option>`,
+    )
+    .join('');
   const distribution = String(mount.dataset.showDistribution || '1') !== '0';
   const gaps = String(mount.dataset.showCoverageGaps || '1') !== '0';
   const title = esc(String(mount.dataset.vizTitle || 'Visualisations').trim() || 'Visualisations');
-  const intro = esc(String(mount.dataset.vizIntro || 'Explore evidence relationships in context without leaving this page.').trim());
+  const intro = esc(
+    String(
+      mount.dataset.vizIntro ||
+        'Explore evidence relationships in context without leaving this page.',
+    ).trim(),
+  );
   mount.innerHTML = `
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
@@ -125,7 +138,9 @@ export function ensureEmbeddedVisualisationMarkup() {
           </div>
         </div>
       </div>
-      ${distribution ? `<div class="col-12 col-lg-4">
+      ${
+        distribution
+          ? `<div class="col-12 col-lg-4">
         <div class="card mb-3">
           <div class="card-header">
             <div class="fw-bold" id="distributionTitle">Evidence distribution</div>
@@ -152,7 +167,9 @@ export function ensureEmbeddedVisualisationMarkup() {
             </div>
           </div>
         </div>
-        ${gaps ? `<div class="card">
+        ${
+          gaps
+            ? `<div class="card">
           <div class="card-header d-flex gap-2 align-items-start justify-content-between">
             <div>
               <div class="fw-bold" id="coverageGapsTitle">Controls without events for this date range</div>
@@ -171,8 +188,12 @@ export function ensureEmbeddedVisualisationMarkup() {
               <div id="gaps" class="small-muted"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading controls…</span></div></div>
             </div>
           </div>
-        </div>` : ''}
-      </div>` : ''}
+        </div>`
+            : ''
+        }
+      </div>`
+          : ''
+      }
     </div>`;
   mount.dataset.visualisationMarkupReady = '1';
 }

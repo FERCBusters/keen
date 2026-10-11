@@ -1,5 +1,5 @@
-import {safeExternalHref} from '/app.js';
-import {mountMeasurementExamples} from '/pages/measurement-examples.js';
+import { safeExternalHref } from '/app.js';
+import { mountMeasurementExamples } from '/pages/measurement-examples.js';
 import {
   initNavbar,
   apiGet,
@@ -35,42 +35,73 @@ let metrics = [];
 let sourceMeta = {};
 
 function measureHref(id = measureId) {
-  return withFramework(`/isms-effectiveness-measure.html?id=${encodeURIComponent(id || '')}`, framework);
+  return withFramework(
+    `/isms-effectiveness-measure.html?id=${encodeURIComponent(id || '')}`,
+    framework,
+  );
 }
 
 function metricHref(id) {
-  return withFramework(`/isms-effectiveness-metric.html?id=${encodeURIComponent(id || '')}`, framework);
+  return withFramework(
+    `/isms-effectiveness-metric.html?id=${encodeURIComponent(id || '')}`,
+    framework,
+  );
 }
 
 function controlBadges(items) {
   const arr = Array.isArray(items) ? items : [];
   if (!arr.length) return '<span class="small-muted">No controls linked.</span>';
-  return arr.map((c) => `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`).join('');
+  return arr
+    .map(
+      (c) =>
+        `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`,
+    )
+    .join('');
 }
 
 function sourceHtml(entry) {
   const source = entry?.source_type || 'other';
-  const badge = sourceBadgeHtml(source, sourceMeta, source ? withFramework(`/source.html?source=${encodeURIComponent(source)}`, framework) : '');
+  const badge = sourceBadgeHtml(
+    source,
+    sourceMeta,
+    source ? withFramework(`/source.html?source=${encodeURIComponent(source)}`, framework) : '',
+  );
   const title = entry?.source_url
     ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || 'Open source')}</a>`
     : esc(entry?.source_title || '');
-  const event = entry?.source_event_id ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>` : '';
-  const ref = entry?.source_reference ? ` · <span class="small-muted">${esc(entry.source_reference)}</span>` : '';
+  const event = entry?.source_event_id
+    ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>`
+    : '';
+  const ref = entry?.source_reference
+    ? ` · <span class="small-muted">${esc(entry.source_reference)}</span>`
+    : '';
   return `<div>${badge}</div><div class="small-muted mt-1">${title || '—'}${ref}${event}</div>`;
 }
 
 function latestValueHtml(entry, row) {
   if (!entry) return '<span class="small-muted">No metric entries yet.</span>';
-  const valueHtml = effectivenessMetricValueHtml(entry, row, {href: metricHref(entry.id), fallback: 'Metric entry'});
+  const valueHtml = effectivenessMetricValueHtml(entry, row, {
+    href: metricHref(entry.id),
+    fallback: 'Metric entry',
+  });
   return `${valueHtml}${effectivenessMetricThresholdBadgeHtml(row, entry)}${entry.period ? `<div class="small-muted">${esc(entry.period)}</div>` : ''}`;
 }
 
 function renderMeasure(row) {
   measure = row || {};
-  const title = measure.summary || measure.metric || measure.effectiveness_measure || 'Effectiveness measure';
+  const title =
+    measure.summary || measure.metric || measure.effectiveness_measure || 'Effectiveness measure';
   document.title = `Keen – ${title}`;
   $('measureTitle').textContent = title;
-  $('measureMeta').textContent = [measure.framework || framework, measure.metric_key ? `key: ${measure.metric_key}` : '', measure.metric_entry_count ? `${measure.metric_entry_count} metric entries` : 'No metric entries'].filter(Boolean).join(' • ');
+  $('measureMeta').textContent = [
+    measure.framework || framework,
+    measure.metric_key ? `key: ${measure.metric_key}` : '',
+    measure.metric_entry_count
+      ? `${measure.metric_entry_count} metric entries`
+      : 'No metric entries',
+  ]
+    .filter(Boolean)
+    .join(' • ');
   $('measureSummary').textContent = measure.summary || 'Effectiveness measure';
   $('measureDescription').textContent = measure.description || 'No description recorded.';
   $('measureBody').textContent = measure.effectiveness_measure || '—';
@@ -78,21 +109,38 @@ function renderMeasure(row) {
   $('measureNotes').textContent = measure.notes || 'No notes recorded.';
   $('latestValue').innerHTML = latestValueHtml(measure.latest_entry, measure);
   $('targetDisplay').textContent = measure.target_display || '—';
-  $('metricCount').innerHTML = measure.metric_entry_count ? `<a href="#metrics">${esc(measure.metric_entry_count)} metric ${measure.metric_entry_count === 1 ? 'entry' : 'entries'}</a>` : '0';
+  $('metricCount').innerHTML = measure.metric_entry_count
+    ? `<a href="#metrics">${esc(measure.metric_entry_count)} metric ${measure.metric_entry_count === 1 ? 'entry' : 'entries'}</a>`
+    : '0';
   $('measureFrequency').textContent = measure.frequency || '—';
   $('measureOwner').innerHTML = userPillHtml(measure.owner);
-  if(canManageIsms && !document.getElementById('measurement-examples')) {const panel=document.createElement('div');panel.id='measurement-examples';$('metricKey').closest('.card').after(panel);mountMeasurementExamples(panel,()=>({key:measure.metric_key,framework:measure.framework||framework,unit:measure.target_unit||''}));}
+  if (canManageIsms && !document.getElementById('measurement-examples')) {
+    const panel = document.createElement('div');
+    panel.id = 'measurement-examples';
+    $('metricKey').closest('.card').after(panel);
+    mountMeasurementExamples(panel, () => ({
+      key: measure.metric_key,
+      framework: measure.framework || framework,
+      unit: measure.target_unit || '',
+    }));
+  }
   $('metricKey').innerHTML = measure.metric_key ? `<code>${esc(measure.metric_key)}</code>` : '—';
   $('measureUpdated').textContent = fmtTs(measure.updated_at) || '—';
   $('linkedControls').innerHTML = controlBadges(measure.controls);
   const edit = $('editMeasureLink');
   if (edit) {
-    edit.href = withFramework(`/isms.html?tab=effectiveness&edit=effectiveness:${encodeURIComponent(measure.id)}`, framework);
+    edit.href = withFramework(
+      `/isms.html?tab=effectiveness&edit=effectiveness:${encodeURIComponent(measure.id)}`,
+      framework,
+    );
     edit.style.display = canManageIsms ? '' : 'none';
   }
   const record = $('recordMetricLink');
   if (record) {
-    record.href = withFramework(`/isms.html?tab=effectiveness&record=${encodeURIComponent(measure.id)}`, framework);
+    record.href = withFramework(
+      `/isms.html?tab=effectiveness&record=${encodeURIComponent(measure.id)}`,
+      framework,
+    );
     record.style.display = canManageIsms ? '' : 'none';
   }
   const sample = $('sampleMeasureAudit');
@@ -102,26 +150,46 @@ function renderMeasure(row) {
 function renderMetrics() {
   const tbody = $('metricsRows');
   if (!tbody) return;
-  const q = String($('metricsFilter')?.value || '').trim().toLowerCase();
+  const q = String($('metricsFilter')?.value || '')
+    .trim()
+    .toLowerCase();
   const filtered = metrics.filter((entry) => {
-    const hay = [entry.value_display, entry.period, entry.source_type, entry.source_title, entry.source_reference, entry.notes, entry.qualitative_value].filter(Boolean).join(' • ').toLowerCase();
+    const hay = [
+      entry.value_display,
+      entry.period,
+      entry.source_type,
+      entry.source_title,
+      entry.source_reference,
+      entry.notes,
+      entry.qualitative_value,
+    ]
+      .filter(Boolean)
+      .join(' • ')
+      .toLowerCase();
     return !q || hay.includes(q);
   });
   $('metricsMeta').textContent = `${filtered.length} / ${metrics.length}`;
-  tbody.innerHTML = filtered.map((entry) => {
-    const sample = canSampleAudits ? `<button class="btn btn-sm btn-outline-success" type="button" data-sample-metric="${esc(entry.id)}" title="Sample metric into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample metric into audit</span></button>` : '';
-    const del = canManageIsms ? `<button class="btn btn-sm btn-outline-danger" type="button" data-delete-metric="${esc(entry.id)}" title="Delete metric entry"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete metric entry</span></button>` : '';
-    return `<tr data-metric-id="${esc(entry.id)}">
+  tbody.innerHTML =
+    filtered
+      .map((entry) => {
+        const sample = canSampleAudits
+          ? `<button class="btn btn-sm btn-outline-success" type="button" data-sample-metric="${esc(entry.id)}" title="Sample metric into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample metric into audit</span></button>`
+          : '';
+        const del = canManageIsms
+          ? `<button class="btn btn-sm btn-outline-danger" type="button" data-delete-metric="${esc(entry.id)}" title="Delete metric entry"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete metric entry</span></button>`
+          : '';
+        return `<tr data-metric-id="${esc(entry.id)}">
       <td class="small-muted" data-sort="${esc(entry.recorded_at || '')}">${esc(fmtTs(entry.recorded_at) || '—')}</td>
       <td>${esc(entry.period || '—')}</td>
-      <td>${effectivenessMetricValueHtml(entry, measure, {href: metricHref(entry.id), fallback: 'Metric entry'})}${effectivenessMetricThresholdBadgeHtml(measure, entry)}</td>
+      <td>${effectivenessMetricValueHtml(entry, measure, { href: metricHref(entry.id), fallback: 'Metric entry' })}${effectivenessMetricThresholdBadgeHtml(measure, entry)}</td>
       <td class="wrap">${sourceHtml(entry)}</td>
       <td class="wrap small-muted">${esc(shorten(entry.notes || entry.qualitative_value || '', 180) || '—')}</td>
       <td class="no-print text-nowrap"><div class="btn-group btn-group-sm"><a class="btn btn-outline-primary" href="${esc(metricHref(entry.id))}" title="Open metric entry"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span class="visually-hidden">Open</span></a>${sample}${del}</div></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="6" class="p-4 small-muted">No metric entries recorded yet.</td></tr>';
+      })
+      .join('') ||
+    '<tr><td colspan="6" class="p-4 small-muted">No metric entries recorded yet.</td></tr>';
 }
-
 
 function metricEntryDate(entry) {
   const raw = entry?.recorded_at || entry?.created_at || '';
@@ -141,7 +209,7 @@ function numericMetricEntriesForTrend() {
   const fromMs = from ? Date.parse(`${from}T00:00:00Z`) : null;
   const toMs = to ? Date.parse(`${to}T23:59:59.999Z`) : null;
   return (metrics || [])
-    .map((entry) => ({entry, date: metricEntryDate(entry), value: Number(entry.metric_value)}))
+    .map((entry) => ({ entry, date: metricEntryDate(entry), value: Number(entry.metric_value) }))
     .filter((x) => x.date && Number.isFinite(x.value))
     .filter((x) => !src || String(x.entry.source_type || '') === src)
     .filter((x) => fromMs === null || x.date.getTime() >= fromMs)
@@ -153,8 +221,14 @@ function populateTrendSources() {
   const select = $('trendSource');
   if (!select) return;
   const current = String(select.value || '').trim();
-  const sources = Array.from(new Set((metrics || []).map((entry) => String(entry.source_type || 'other').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
-  select.innerHTML = '<option value="">All sources</option>' + sources.map((src) => `<option value="${esc(src)}">${esc(src)}</option>`).join('');
+  const sources = Array.from(
+    new Set(
+      (metrics || []).map((entry) => String(entry.source_type || 'other').trim()).filter(Boolean),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+  select.innerHTML =
+    '<option value="">All sources</option>' +
+    sources.map((src) => `<option value="${esc(src)}">${esc(src)}</option>`).join('');
   const latestSource = String(measure?.latest_entry?.source_type || '').trim();
   if (current && sources.includes(current)) select.value = current;
   else if (latestSource && sources.includes(latestSource)) select.value = latestSource;
@@ -162,7 +236,10 @@ function populateTrendSources() {
 }
 
 function resetTrendRangeToData() {
-  const dated = (metrics || []).map(metricEntryDate).filter(Boolean).sort((a, b) => a - b);
+  const dated = (metrics || [])
+    .map(metricEntryDate)
+    .filter(Boolean)
+    .sort((a, b) => a - b);
   if ($('trendFrom')) $('trendFrom').value = dated.length ? isoDateOnly(dated[0]) : '';
   if ($('trendTo')) $('trendTo').value = dated.length ? isoDateOnly(dated[dated.length - 1]) : '';
 }
@@ -178,21 +255,27 @@ function renderMetricTrend() {
   }
   const data = numericMetricEntriesForTrend();
   const selectedSource = String($('trendSource')?.value || '').trim();
-  const totalInSelection = (metrics || []).filter((entry) => !selectedSource || String(entry.source_type || '') === selectedSource).length;
+  const totalInSelection = (metrics || []).filter(
+    (entry) => !selectedSource || String(entry.source_type || '') === selectedSource,
+  ).length;
   const nonNumericCount = Math.max(0, totalInSelection - data.length);
   const svg = d3lib.select(svgEl);
   svg.selectAll('*').remove();
 
-  const width = Math.max(720, Math.floor(svgEl.getBoundingClientRect().width || svgEl.parentElement?.clientWidth || 900));
+  const width = Math.max(
+    720,
+    Math.floor(svgEl.getBoundingClientRect().width || svgEl.parentElement?.clientWidth || 900),
+  );
   const height = 360;
-  const margin = {top: 24, right: 28, bottom: 72, left: 72};
+  const margin = { top: 24, right: 28, bottom: 72, left: 72 };
   svg.attr('viewBox', `0 0 ${width} ${height}`).attr('width', '100%').attr('height', height);
 
   if (!data.length) {
     meta.textContent = nonNumericCount
       ? 'No numeric metric values are available for this source and period; qualitative entries cannot be plotted as a value trend.'
       : 'No metric entries match this source and period.';
-    svg.append('text')
+    svg
+      .append('text')
       .attr('x', width / 2)
       .attr('y', height / 2)
       .attr('text-anchor', 'middle')
@@ -205,33 +288,52 @@ function renderMetricTrend() {
   const maxDate = data[data.length - 1].date;
   let xDomain = [minDate, maxDate];
   if (minDate.getTime() === maxDate.getTime()) {
-    xDomain = [new Date(minDate.getTime() - 60 * 60 * 1000), new Date(maxDate.getTime() + 60 * 60 * 1000)];
+    xDomain = [
+      new Date(minDate.getTime() - 60 * 60 * 1000),
+      new Date(maxDate.getTime() + 60 * 60 * 1000),
+    ];
   }
   const yMax = Math.max(...data.map((d) => d.value), Number(measure?.target_value || 0));
   const yMin = Math.min(0, ...data.map((d) => d.value));
-  const x = d3lib.scaleTime().domain(xDomain).range([margin.left, width - margin.right]);
-  const y = d3lib.scaleLinear().domain([yMin, yMax || 1]).nice().range([height - margin.bottom, margin.top]);
-  const barWidth = Math.max(4, Math.min(34, (width - margin.left - margin.right) / Math.max(data.length, 1) * 0.55));
+  const x = d3lib
+    .scaleTime()
+    .domain(xDomain)
+    .range([margin.left, width - margin.right]);
+  const y = d3lib
+    .scaleLinear()
+    .domain([yMin, yMax || 1])
+    .nice()
+    .range([height - margin.bottom, margin.top]);
+  const barWidth = Math.max(
+    4,
+    Math.min(34, ((width - margin.left - margin.right) / Math.max(data.length, 1)) * 0.55),
+  );
 
-  svg.append('g')
+  svg
+    .append('g')
     .attr('transform', `translate(0,${height - margin.bottom})`)
-    .call(d3lib.axisBottom(x).ticks(Math.min(8, Math.max(2, data.length))).tickSizeOuter(0))
+    .call(
+      d3lib
+        .axisBottom(x)
+        .ticks(Math.min(8, Math.max(2, data.length)))
+        .tickSizeOuter(0),
+    )
     .selectAll('text')
     .attr('transform', 'rotate(-30)')
     .attr('text-anchor', 'end');
 
-  svg.append('g')
-    .attr('transform', `translate(${margin.left},0)`)
-    .call(d3lib.axisLeft(y).ticks(6));
+  svg.append('g').attr('transform', `translate(${margin.left},0)`).call(d3lib.axisLeft(y).ticks(6));
 
-  svg.append('text')
+  svg
+    .append('text')
     .attr('x', margin.left)
     .attr('y', 14)
     .attr('class', 'metric-trend-axis-label')
     .text(measure?.target_unit ? `Value (${measure.target_unit})` : 'Value');
 
   const baseline = y(0);
-  svg.selectAll('rect.metric-trend-bar')
+  svg
+    .selectAll('rect.metric-trend-bar')
     .data(data)
     .join('rect')
     .attr('class', 'metric-trend-bar')
@@ -240,9 +342,13 @@ function renderMetricTrend() {
     .attr('width', barWidth)
     .attr('height', (d) => Math.max(1, Math.abs(y(d.value) - baseline)))
     .append('title')
-    .text((d) => `${d.entry.value_display || d.value}\n${fmtTs(d.entry.recorded_at)}\n${d.entry.source_title || d.entry.source_type || ''}`);
+    .text(
+      (d) =>
+        `${d.entry.value_display || d.value}\n${fmtTs(d.entry.recorded_at)}\n${d.entry.source_title || d.entry.source_type || ''}`,
+    );
 
-  svg.selectAll('circle.metric-trend-point')
+  svg
+    .selectAll('circle.metric-trend-point')
     .data(data)
     .join('circle')
     .attr('class', 'metric-trend-point')
@@ -252,13 +358,15 @@ function renderMetricTrend() {
 
   const target = Number(measure?.target_value);
   if (Number.isFinite(target) && target >= y.domain()[0] && target <= y.domain()[1]) {
-    svg.append('line')
+    svg
+      .append('line')
       .attr('class', 'metric-trend-target')
       .attr('x1', margin.left)
       .attr('x2', width - margin.right)
       .attr('y1', y(target))
       .attr('y2', y(target));
-    svg.append('text')
+    svg
+      .append('text')
       .attr('class', 'metric-trend-target-label')
       .attr('x', width - margin.right)
       .attr('y', y(target) - 6)
@@ -276,7 +384,11 @@ async function loadSourceMeta() {
     for (const x of data.items || []) {
       const src = String(x.source || '').trim();
       if (!src) continue;
-      sourceMeta[src] = {source: src, label: String(x.label || src).trim() || src, color: String(x.color || '').trim()};
+      sourceMeta[src] = {
+        source: src,
+        label: String(x.label || src).trim() || src,
+        color: String(x.color || '').trim(),
+      };
     }
   } catch {
     sourceMeta = {};
@@ -288,20 +400,24 @@ async function loadChangelog() {
     await loadEntityChangelog(
       $('measureChangelog'),
       `/api/v1/isms/effectiveness_measure/${encodeURIComponent(measureId)}/changelog?limit=100`,
-      {empty: 'No effectiveness measure changes have been recorded yet.'}
+      { empty: 'No effectiveness measure changes have been recorded yet.' },
     );
   } catch {
-    $('measureChangelog').innerHTML = '<div class="text-danger p-3">Failed to load changelog.</div>';
+    $('measureChangelog').innerHTML =
+      '<div class="text-danger p-3">Failed to load changelog.</div>';
   }
 }
 
 function activateTabFromHashOrQuery() {
   const tab = String(params.get('tab') || location.hash.replace(/^#/, '') || '').toLowerCase();
-  const target = tab === 'metrics'
-    ? $('measureMetricsTab')
-    : (tab === 'visualisations' || tab === 'visualizations'
-      ? $('measureVisualisationsTab')
-      : (tab === 'changelog' ? $('measureChangelogTab') : null));
+  const target =
+    tab === 'metrics'
+      ? $('measureMetricsTab')
+      : tab === 'visualisations' || tab === 'visualizations'
+        ? $('measureVisualisationsTab')
+        : tab === 'changelog'
+          ? $('measureChangelogTab')
+          : null;
   if (target && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(target).show();
 }
 
@@ -312,9 +428,13 @@ async function load() {
   }
   try {
     await loadSourceMeta();
-    const row = await apiGet(`/api/v1/isms/effectiveness-measures/${encodeURIComponent(measureId)}?framework=${encodeURIComponent(framework)}`);
+    const row = await apiGet(
+      `/api/v1/isms/effectiveness-measures/${encodeURIComponent(measureId)}?framework=${encodeURIComponent(framework)}`,
+    );
     renderMeasure(row);
-    const metricData = await apiGet(`/api/v1/isms/effectiveness-measures/${encodeURIComponent(measureId)}/metrics?framework=${encodeURIComponent(framework)}`);
+    const metricData = await apiGet(
+      `/api/v1/isms/effectiveness-measures/${encodeURIComponent(measureId)}/metrics?framework=${encodeURIComponent(framework)}`,
+    );
     metrics = metricData.items || [];
     renderMetrics();
     populateTrendSources();
@@ -331,9 +451,13 @@ window.addEventListener('hashchange', activateTabFromHashOrQuery);
 $('metricsFilter')?.addEventListener('input', renderMetrics);
 $('trendSource')?.addEventListener('change', renderMetricTrend);
 $('trendApply')?.addEventListener('click', renderMetricTrend);
-$('trendReset')?.addEventListener('click', () => { resetTrendRangeToData(); renderMetricTrend(); });
+$('trendReset')?.addEventListener('click', () => {
+  resetTrendRangeToData();
+  renderMetricTrend();
+});
 window.addEventListener('resize', () => {
-  if (document.getElementById('measureVisualisationsPane')?.classList.contains('active')) renderMetricTrend();
+  if (document.getElementById('measureVisualisationsPane')?.classList.contains('active'))
+    renderMetricTrend();
 });
 $('sampleMeasureAudit')?.addEventListener('click', () => {
   if (!measure) return;
@@ -369,9 +493,12 @@ document.addEventListener('click', async (ev) => {
     const id = deleteBtn.getAttribute('data-delete-metric');
     if (!id || !confirm('Delete this effectiveness metric entry?')) return;
     try {
-      await apiDelete(`/api/v1/isms/effectiveness-metrics/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`);
+      await apiDelete(
+        `/api/v1/isms/effectiveness-metrics/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
+      );
       metrics = metrics.filter((x) => String(x.id) !== String(id));
-      if (measure) measure.metric_entry_count = Math.max(0, Number(measure.metric_entry_count || 0) - 1);
+      if (measure)
+        measure.metric_entry_count = Math.max(0, Number(measure.metric_entry_count || 0) - 1);
       renderMetrics();
       populateTrendSources();
       renderMetricTrend();
@@ -384,7 +511,10 @@ document.addEventListener('click', async (ev) => {
 
 for (const btn of Array.from(document.querySelectorAll('#measureTabs [data-bs-toggle="tab"]'))) {
   btn.addEventListener('shown.bs.tab', () => {
-    const name = String(btn.id || '').replace(/^measure/, '').replace(/Tab$/, '').toLowerCase();
+    const name = String(btn.id || '')
+      .replace(/^measure/, '')
+      .replace(/Tab$/, '')
+      .toLowerCase();
     const url = new URL(window.location.href);
     if (name && name !== 'details') url.searchParams.set('tab', name);
     else url.searchParams.delete('tab');

@@ -1,14 +1,40 @@
-import {csvEscape} from '../csv.js';
-import {ensureEmbeddedVisualisationMarkup} from './visualisation/embedded-markup.js';
-import {MS_PER_DAY, histStepMs, histNextFinerInterval, histBucketToUtcMs, isIsoDate, utcMsFromIsoDate, isoDateFromUtcMs, isoTodayUtc, isoAddDays, diffDaysInclusive} from './visualisation/dates.js';
-import {truncateMiddleText, renderWrappedNodeLabel} from './visualisation/labels.js';
-import {initNavbar, apiGet, apiPatch, esc, toast, debounce, enableTableSorting, isoDateToDmy, dmyToIsoDate, wireIsoDmyDateField, getCurrentFramework, withFramework, showInlineLoading, showTableLoading, initCollapsibleFilterSections} from '/app.js';
-
+import { csvEscape } from '../csv.js';
+import { ensureEmbeddedVisualisationMarkup } from './visualisation/embedded-markup.js';
+import {
+  MS_PER_DAY,
+  histStepMs,
+  histNextFinerInterval,
+  histBucketToUtcMs,
+  isIsoDate,
+  utcMsFromIsoDate,
+  isoDateFromUtcMs,
+  isoTodayUtc,
+  isoAddDays,
+  diffDaysInclusive,
+} from './visualisation/dates.js';
+import { truncateMiddleText, renderWrappedNodeLabel } from './visualisation/labels.js';
+import {
+  initNavbar,
+  apiGet,
+  apiPatch,
+  esc,
+  toast,
+  debounce,
+  enableTableSorting,
+  isoDateToDmy,
+  dmyToIsoDate,
+  wireIsoDmyDateField,
+  getCurrentFramework,
+  withFramework,
+  showInlineLoading,
+  showTableLoading,
+  initCollapsibleFilterSections,
+} from '/app.js';
 
 ensureEmbeddedVisualisationMarkup();
 initCollapsibleFilterSections();
 
-const me = window.keenMe || window.mospMe || await initNavbar();
+const me = window.keenMe || window.mospMe || (await initNavbar());
 const framework = getCurrentFramework();
 const visualisationMount = document.querySelector('[data-keen-visualisation-mount]');
 function scopedSourceFilter() {
@@ -23,8 +49,7 @@ function scopedSourceFilter() {
   }
 }
 const scopedSource = scopedSourceFilter();
-const autoApplyFilters = !!(me?.preferences?.auto_apply_filters);
-
+const autoApplyFilters = !!me?.preferences?.auto_apply_filters;
 
 const status = document.getElementById('status');
 const gapsEl = document.getElementById('gaps');
@@ -102,8 +127,14 @@ function _setRangeIso(fromIso, toIso) {
   _syncDmyFromIso();
 }
 
-wireIsoDmyDateField(dateFrom, dateFromDmy, dateFromPick, {listenInput: false, dispatchChangeOnText: true});
-wireIsoDmyDateField(dateTo, dateToDmy, dateToPick, {listenInput: false, dispatchChangeOnText: true});
+wireIsoDmyDateField(dateFrom, dateFromDmy, dateFromPick, {
+  listenInput: false,
+  dispatchChangeOnText: true,
+});
+wireIsoDmyDateField(dateTo, dateToDmy, dateToPick, {
+  listenInput: false,
+  dispatchChangeOnText: true,
+});
 
 const controlsHeatmap = document.getElementById('controlsHeatmap');
 const heatmapTopSources = document.getElementById('heatmapTopSources');
@@ -125,9 +156,12 @@ const graphTopControls = document.getElementById('graphTopControls');
 const graphMinEdge = document.getElementById('graphMinEdge');
 const graphApply = document.getElementById('graphApply');
 
-const exportCsvBtn = document.getElementById('vizExportCsv') || document.getElementById('exportCsv');
-const exportJsonBtn = document.getElementById('vizExportJson') || document.getElementById('exportJson');
-const exportSvgBtn = document.getElementById('vizExportSvg') || document.getElementById('exportSvg');
+const exportCsvBtn =
+  document.getElementById('vizExportCsv') || document.getElementById('exportCsv');
+const exportJsonBtn =
+  document.getElementById('vizExportJson') || document.getElementById('exportJson');
+const exportSvgBtn =
+  document.getElementById('vizExportSvg') || document.getElementById('exportSvg');
 const copyVizLinkBtn = document.getElementById('copyVizLink');
 
 // Capture the HTML defaults for numeric controls before query-string overrides apply.
@@ -146,8 +180,8 @@ const wrap = document.getElementById('vizWrap');
 const ACCENT_RGB = (() => {
   try {
     const v = getComputedStyle(document.documentElement)
-        .getPropertyValue('--keen-accent-rgb')
-        .trim();
+      .getPropertyValue('--keen-accent-rgb')
+      .trim();
     return v || '124, 58, 237';
   } catch {
     return '124, 58, 237';
@@ -186,11 +220,7 @@ function _relativeLuminance(rgb) {
 function _mixRgb(a, b, t) {
   // t=0 -> a, t=1 -> b
   const tt = _clamp01(t);
-  return d3.rgb(
-      a.r + (b.r - a.r) * tt,
-      a.g + (b.g - a.g) * tt,
-      a.b + (b.b - a.b) * tt
-  );
+  return d3.rgb(a.r + (b.r - a.r) * tt, a.g + (b.g - a.g) * tt, a.b + (b.b - a.b) * tt);
 }
 
 // -------------------------
@@ -199,13 +229,16 @@ function _mixRgb(a, b, t) {
 const _histogramColorCache = new Map();
 
 function _histFillStrokeForBase(baseHex) {
-  const key = String(baseHex || '').trim().toLowerCase() || '__fallback';
+  const key =
+    String(baseHex || '')
+      .trim()
+      .toLowerCase() || '__fallback';
   if (_histogramColorCache.has(key)) return _histogramColorCache.get(key);
 
   // Special-case neutral "Other" key (kept intentionally grey).
   // We want it to be visible but not compete with the primary source hues.
   if (key.includes('31,31,42') || key === '__other__' || key === 'other') {
-    const out = {fill: 'rgba(31,31,42,0.30)', stroke: 'rgba(31,31,42,0.55)'};
+    const out = { fill: 'rgba(31,31,42,0.30)', stroke: 'rgba(31,31,42,0.55)' };
     _histogramColorCache.set(key, out);
     return out;
   }
@@ -215,7 +248,7 @@ function _histFillStrokeForBase(baseHex) {
   const f = _heatColorForBase(key);
   const out = {
     fill: f(0.72),
-    stroke: f(0.90),
+    stroke: f(0.9),
   };
   _histogramColorCache.set(key, out);
   return out;
@@ -230,7 +263,10 @@ function _heatIntensity(v, vMax) {
 }
 
 function _heatColorForBase(baseHex) {
-  const key = String(baseHex || '').trim().toLowerCase() || '__fallback';
+  const key =
+    String(baseHex || '')
+      .trim()
+      .toLowerCase() || '__fallback';
   if (_heatmapColorCache.has(key)) return _heatmapColorCache.get(key);
 
   const fallback = d3.color('#7c3aed'); // matches default accent in most themes
@@ -244,14 +280,14 @@ function _heatColorForBase(baseHex) {
   // How much to mix towards white for the low end.
   // Lower = closer to base (more saturated); higher = closer to white.
   let whiteMix = 0.55;
-  if (lum > 0.75) whiteMix = 0.30;
-  else if (lum > 0.60) whiteMix = 0.38;
+  if (lum > 0.75) whiteMix = 0.3;
+  else if (lum > 0.6) whiteMix = 0.38;
   else if (lum < 0.25) whiteMix = 0.62;
 
   // How much to mix towards black for the high end.
   let blackMix = 0.62;
   if (lum > 0.75) blackMix = 0.78;
-  else if (lum > 0.60) blackMix = 0.72;
+  else if (lum > 0.6) blackMix = 0.72;
   else if (lum < 0.25) blackMix = 0.55;
 
   const lowRgb = _mixRgb(baseRgb, d3.rgb('#ffffff'), whiteMix);
@@ -273,8 +309,8 @@ function _heatColorForBase(baseHex) {
 }
 
 let graphData = null;
-let graphDatasets = {control_source: null, clause_source: null, clause_control: null};
-let graphDatasetPromises = {control_source: null, clause_source: null, clause_control: null};
+let graphDatasets = { control_source: null, clause_source: null, clause_control: null };
+let graphDatasetPromises = { control_source: null, clause_source: null, clause_control: null };
 // Stats returned by /api/v1/stats/controls for the active date range.
 // Used for exports and the "Coverage gaps" list.
 let controlStats = null;
@@ -298,16 +334,26 @@ const HIST_MAX_BUCKETS = 5000;
 let histZoomModeOn = false;
 let histBrushShiftActive = false;
 let _setHistogramBrushEnabled = null;
-const _VIZ_MODES = ['graph', 'heatmap', 'sunburst_source', 'sunburst_control', 'graph_clause_events', 'heatmap_clause_events', 'graph_clause_control', 'histogram'];
+const _VIZ_MODES = [
+  'graph',
+  'heatmap',
+  'sunburst_source',
+  'sunburst_control',
+  'graph_clause_events',
+  'heatmap_clause_events',
+  'graph_clause_control',
+  'histogram',
+];
 
-let defaultVizPref = (me?.preferences?.default_visualisation && typeof me.preferences.default_visualisation === 'object') ?
-  me.preferences.default_visualisation :
-  null;
+let defaultVizPref =
+  me?.preferences?.default_visualisation && typeof me.preferences.default_visualisation === 'object'
+    ? me.preferences.default_visualisation
+    : null;
 
 function availableVizModes() {
   const modes = Array.from(vizSelect?.options || [])
-      .map((opt) => String(opt.value || '').trim())
-      .filter((mode) => _VIZ_MODES.includes(mode));
+    .map((opt) => String(opt.value || '').trim())
+    .filter((mode) => _VIZ_MODES.includes(mode));
   return modes.length ? modes : _VIZ_MODES.slice();
 }
 
@@ -320,18 +366,27 @@ function isAvailableVizMode(mode) {
 }
 
 function getDefaultVizMode() {
-  const mountDefault = String(document.querySelector('[data-keen-visualisation-mount]')?.dataset?.vizDefaultMode || '').trim();
+  const mountDefault = String(
+    document.querySelector('[data-keen-visualisation-mount]')?.dataset?.vizDefaultMode || '',
+  ).trim();
   const fallback = isAvailableVizMode(mountDefault) ? mountDefault : firstAvailableVizMode();
-  const m = (defaultVizPref && typeof defaultVizPref.mode === 'string' && isAvailableVizMode(defaultVizPref.mode)) ?
-    defaultVizPref.mode :
-    fallback;
+  const m =
+    defaultVizPref &&
+    typeof defaultVizPref.mode === 'string' &&
+    isAvailableVizMode(defaultVizPref.mode)
+      ? defaultVizPref.mode
+      : fallback;
   return isAvailableVizMode(m) ? m : fallback;
 }
 
 function getDefaultSunburstFocus() {
-  if (defaultVizPref && defaultVizPref.sunburst_focus && typeof defaultVizPref.sunburst_focus === 'object') {
+  if (
+    defaultVizPref &&
+    defaultVizPref.sunburst_focus &&
+    typeof defaultVizPref.sunburst_focus === 'object'
+  ) {
     // Shallow-copy to avoid mutating the preference object.
-    return {...defaultVizPref.sunburst_focus};
+    return { ...defaultVizPref.sunburst_focus };
   }
   return null;
 }
@@ -339,10 +394,26 @@ function getDefaultSunburstFocus() {
 function clearVizQueryOverrides() {
   try {
     const u = new URL(location.href);
-    for (const k of ['mode', 'from', 'to', 'days', 'hs', 'hc', 'gs', 'gc', 'minw', 'hstart', 'hend', 'hint']) {
+    for (const k of [
+      'mode',
+      'from',
+      'to',
+      'days',
+      'hs',
+      'hc',
+      'gs',
+      'gc',
+      'minw',
+      'hstart',
+      'hend',
+      'hint',
+    ]) {
       u.searchParams.delete(k);
     }
-    const next = u.pathname + (u.searchParams.toString() ? `?${u.searchParams.toString()}` : '') + (u.hash || '');
+    const next =
+      u.pathname +
+      (u.searchParams.toString() ? `?${u.searchParams.toString()}` : '') +
+      (u.hash || '');
     history.replaceState({}, '', next);
   } catch {
     // ignore
@@ -356,12 +427,15 @@ let vizMode = getDefaultVizMode();
 if (!isAvailableVizMode(vizMode)) vizMode = firstAvailableVizMode();
 
 // Track the current sunburst zoom (top-level segment). Stored in the same shape as the preference.
-let sunburstFocus = (defaultVizPref && defaultVizPref.sunburst_focus && typeof defaultVizPref.sunburst_focus === 'object') ?
-  defaultVizPref.sunburst_focus :
-  null;
+let sunburstFocus =
+  defaultVizPref &&
+  defaultVizPref.sunburst_focus &&
+  typeof defaultVizPref.sunburst_focus === 'object'
+    ? defaultVizPref.sunburst_focus
+    : null;
 
 // Captures the data currently being shown (used by Export).
-let lastView = {mode: null, payload: null, range: null};
+let lastView = { mode: null, payload: null, range: null };
 
 const VIZ_META = {
   graph: {
@@ -427,7 +501,6 @@ function setVizCaption(mode = vizMode, detail = '') {
 // Date range (all visualisations)
 // -------------------------
 
-
 function updateHistogramZoomButtons() {
   const active = Array.isArray(histZoomStack) ? histZoomStack.length : 0;
   if (histBack) histBack.classList.toggle('d-none', active < 1);
@@ -442,7 +515,7 @@ function updateHistogramBrushEnabled() {
     histZoomModeBtn.textContent = histZoomModeOn ? 'Zoom mode: on' : 'Zoom mode';
   }
 
-  const enabled = (vizMode === 'histogram') && (histZoomModeOn || histBrushShiftActive);
+  const enabled = vizMode === 'histogram' && (histZoomModeOn || histBrushShiftActive);
   try {
     if (typeof _setHistogramBrushEnabled === 'function') _setHistogramBrushEnabled(enabled);
   } catch {
@@ -450,15 +523,14 @@ function updateHistogramBrushEnabled() {
   }
 }
 
-
 function getActiveRange() {
   const from = dateFrom?.value || '';
   const to = dateTo?.value || '';
   if (!isIsoDate(from) || !isIsoDate(to)) return null;
   if (utcMsFromIsoDate(from) > utcMsFromIsoDate(to)) {
-    return {from: to, to: from};
+    return { from: to, to: from };
   }
-  return {from, to};
+  return { from, to };
 }
 
 let _suppressRangeSync = false;
@@ -488,7 +560,8 @@ function syncRangeFromHistDays() {
 function initDateRangeDefaults() {
   if (!dateFrom || !dateTo) return;
 
-  const dr = (defaultVizPref && typeof defaultVizPref === 'object') ? defaultVizPref.date_range : null;
+  const dr =
+    defaultVizPref && typeof defaultVizPref === 'object' ? defaultVizPref.date_range : null;
 
   // Default window: last 7 days ending today (UTC).
   const fallbackEnd = isoTodayUtc();
@@ -524,7 +597,8 @@ applyQueryOverrides();
 
 function showControls() {
   const isHeatmap = vizMode === 'heatmap' || vizMode === 'heatmap_clause_events';
-  const isGraph = vizMode === 'graph' || vizMode === 'graph_clause_events' || vizMode === 'graph_clause_control';
+  const isGraph =
+    vizMode === 'graph' || vizMode === 'graph_clause_events' || vizMode === 'graph_clause_control';
 
   // Bootstrap's display utility classes use `!important`, so toggling inline
   // styles isn't reliable. Use classList instead.
@@ -584,8 +658,10 @@ function setViz(mode, opts = {}) {
       showTableLoading(topControlsEl, 2, `Loading ${vizRelationshipLabels(vizMode).rightPlural}…`);
       showVizLoading('Loading visualisation data…');
       ensureGraphDatasetForMode(vizMode)
-          .then(() => drawActive())
-          .catch((err) => toast(status, `Failed to load visualisation data: ${String(err)}`, 'danger'));
+        .then(() => drawActive())
+        .catch((err) =>
+          toast(status, `Failed to load visualisation data: ${String(err)}`, 'danger'),
+        );
     } else {
       drawActive();
     }
@@ -611,16 +687,16 @@ function renderGaps() {
   }
 
   gapsEl.innerHTML = view
-      .slice(0, 200)
-      .map((c) => {
-        return `<div class="gap-item">
+    .slice(0, 200)
+    .map((c) => {
+      return `<div class="gap-item">
       <a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" class="link-dark text-decoration-none">
         <span class="badge badge-chip me-1">${esc(c.ref)}</span>
         <span class="small-muted">${esc(c.title || '')}</span>
       </a>
     </div>`;
-      })
-      .join('');
+    })
+    .join('');
 }
 
 function renderTopLists() {
@@ -634,25 +710,29 @@ function renderTopLists() {
   // Prefer backend-provided distinct mapped event totals (avoids double-counting).
   const hasMappedTotals = nodes.some((n) => typeof n.mapped_events === 'number');
 
-  const topSources = (hasMappedTotals ?
-    sourceNodes.map((n) => ({
-      node: n,
-      total: Number(n.mapped_events || 0),
-    })) :
-    [])
-      .filter((x) => x.total > 0)
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 12);
+  const topSources = (
+    hasMappedTotals
+      ? sourceNodes.map((n) => ({
+          node: n,
+          total: Number(n.mapped_events || 0),
+        }))
+      : []
+  )
+    .filter((x) => x.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 12);
 
-  const topControls = (hasMappedTotals ?
-    controlNodes.map((n) => ({
-      node: n,
-      total: Number(n.mapped_events || 0),
-    })) :
-    [])
-      .filter((x) => x.total > 0)
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 12);
+  const topControls = (
+    hasMappedTotals
+      ? controlNodes.map((n) => ({
+          node: n,
+          total: Number(n.mapped_events || 0),
+        }))
+      : []
+  )
+    .filter((x) => x.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 12);
 
   // Fallback (older API): sum link weights (may overcount when events map to multiple controls)
   if (!hasMappedTotals) {
@@ -671,57 +751,63 @@ function renderTopLists() {
     topControls.length = 0;
 
     topSources.push(
-        ...Array.from(srcTotals.entries())
-            .map(([id, total]) => ({node: nodeById.get(id), total}))
-            .filter((x) => x.node)
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 12)
+      ...Array.from(srcTotals.entries())
+        .map(([id, total]) => ({ node: nodeById.get(id), total }))
+        .filter((x) => x.node)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 12),
     );
 
     topControls.push(
-        ...Array.from(ctrlTotals.entries())
-            .map(([id, total]) => ({node: nodeById.get(id), total}))
-            .filter((x) => x.node)
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 12)
+      ...Array.from(ctrlTotals.entries())
+        .map(([id, total]) => ({ node: nodeById.get(id), total }))
+        .filter((x) => x.node)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 12),
     );
   }
 
-  topSourcesEl.innerHTML = topSources.length ? topSources
-      .map((s) => {
-        const label = s.node?.label || s.node?.id || '';
-        const key = s.node?.source || label;
-        const href = (s.node?.node_kind === 'clause')
-          ? withFramework(`/clause.html?id=${encodeURIComponent(s.node?.clause_id || '')}`, framework)
-          : buildEventsHref(key, '');
-        return `<tr>
-      <td><a class="link-dark text-decoration-none" href="${href}">${esc(
-    label
-)}</a></td>
-      <td class="text-end" data-sort="${s.total}">${esc(
-    String(s.total)
-)}</td>
+  topSourcesEl.innerHTML = topSources.length
+    ? topSources
+        .map((s) => {
+          const label = s.node?.label || s.node?.id || '';
+          const key = s.node?.source || label;
+          const href =
+            s.node?.node_kind === 'clause'
+              ? withFramework(
+                  `/clause.html?id=${encodeURIComponent(s.node?.clause_id || '')}`,
+                  framework,
+                )
+              : buildEventsHref(key, '');
+          return `<tr>
+      <td><a class="link-dark text-decoration-none" href="${href}">${esc(label)}</a></td>
+      <td class="text-end" data-sort="${s.total}">${esc(String(s.total))}</td>
     </tr>`;
-      })
-      .join('') : `<tr><td colspan="2" class="small-muted p-3">${esc(labels.emptyLeft)}</td></tr>`;
+        })
+        .join('')
+    : `<tr><td colspan="2" class="small-muted p-3">${esc(labels.emptyLeft)}</td></tr>`;
 
-  topControlsEl.innerHTML = topControls.length ? topControls
-      .map((c) => {
-        const ref = c.node?.label || c.node?.id || '';
-        const cid = c.node?.control_id || '';
-        const href = (c.node?.node_kind === 'clause')
-          ? withFramework(`/clause.html?id=${encodeURIComponent(c.node?.clause_id || cid || '')}`, framework)
-          : (cid ? withFramework(`/control.html?id=${encodeURIComponent(cid)}`, framework) : '#');
-        return `<tr>
-      <td><a class="link-dark text-decoration-none" href="${href}">${esc(
-    ref
-)}</a></td>
-      <td class="text-end" data-sort="${c.total}">${esc(
-    String(c.total)
-)}</td>
+  topControlsEl.innerHTML = topControls.length
+    ? topControls
+        .map((c) => {
+          const ref = c.node?.label || c.node?.id || '';
+          const cid = c.node?.control_id || '';
+          const href =
+            c.node?.node_kind === 'clause'
+              ? withFramework(
+                  `/clause.html?id=${encodeURIComponent(c.node?.clause_id || cid || '')}`,
+                  framework,
+                )
+              : cid
+                ? withFramework(`/control.html?id=${encodeURIComponent(cid)}`, framework)
+                : '#';
+          return `<tr>
+      <td><a class="link-dark text-decoration-none" href="${href}">${esc(ref)}</a></td>
+      <td class="text-end" data-sort="${c.total}">${esc(String(c.total))}</td>
     </tr>`;
-      })
-      .join('') : `<tr><td colspan="2" class="small-muted p-3">${esc(labels.emptyRight)}</td></tr>`;
+        })
+        .join('')
+    : `<tr><td colspan="2" class="small-muted p-3">${esc(labels.emptyRight)}</td></tr>`;
 
   enableTableSorting(document);
 }
@@ -783,7 +869,10 @@ function openControl(controlId) {
 function openGraphNode(node, ev = null) {
   if (!node) return;
   if (node.node_kind === 'clause' || node.type === 'clause') {
-    const href = withFramework(`/clause.html?id=${encodeURIComponent(node.clause_id || node.control_id || '')}`, framework);
+    const href = withFramework(
+      `/clause.html?id=${encodeURIComponent(node.clause_id || node.control_id || '')}`,
+      framework,
+    );
     if (ev && (ev.metaKey || ev.ctrlKey)) window.open(href, '_blank', 'noopener');
     else location.href = href;
     return;
@@ -811,7 +900,6 @@ function datasetKeyForMode(mode = vizMode) {
   return 'control_source';
 }
 
-
 function vizRelationshipLabels(mode = vizMode) {
   const key = datasetKeyForMode(mode);
   if (key === 'clause_control') {
@@ -827,7 +915,8 @@ function vizRelationshipLabels(mode = vizMode) {
       emptyLeft: 'No mapped clause/control relationships.',
       emptyRight: 'No mapped clause/control relationships.',
       gapsTitle: 'Controls without events for this date range',
-      gapsSubtitle: '<strong>For this date range</strong>, no events occurred for the following controls.',
+      gapsSubtitle:
+        '<strong>For this date range</strong>, no events occurred for the following controls.',
       gapsIntro: 'Open this panel to load controls without events for the selected date range.',
     };
   }
@@ -844,7 +933,8 @@ function vizRelationshipLabels(mode = vizMode) {
       emptyLeft: 'No mapped source evidence in this date range.',
       emptyRight: 'No mapped clause evidence in this date range.',
       gapsTitle: 'Controls without events for this date range',
-      gapsSubtitle: '<strong>For this date range</strong>, no events occurred for the following controls.',
+      gapsSubtitle:
+        '<strong>For this date range</strong>, no events occurred for the following controls.',
       gapsIntro: 'Open this panel to load controls without events for the selected date range.',
     };
   }
@@ -860,18 +950,17 @@ function vizRelationshipLabels(mode = vizMode) {
     emptyLeft: 'No mapped source evidence in this date range.',
     emptyRight: 'No mapped control evidence in this date range.',
     gapsTitle: 'Controls without events for this date range',
-    gapsSubtitle: '<strong>For this date range</strong>, no events occurred for the following controls.',
+    gapsSubtitle:
+      '<strong>For this date range</strong>, no events occurred for the following controls.',
     gapsIntro: 'Open this panel to load controls without events for the selected date range.',
   };
 }
 
 function rebuildCoverageGaps() {
-  const items = (controlStats && controlStats.items) ? controlStats.items : [];
-  let view = items
-      .filter((c) => c.in_scope)
-      .filter((c) => Number(c.evidence_count || 0) === 0);
+  const items = controlStats && controlStats.items ? controlStats.items : [];
+  let view = items.filter((c) => c.in_scope).filter((c) => Number(c.evidence_count || 0) === 0);
 
-  gaps = view.map((c) => ({id: c.id, ref: c.ref, title: c.title}));
+  gaps = view.map((c) => ({ id: c.id, ref: c.ref, title: c.title }));
 }
 
 function activateGraphDataForMode(mode = vizMode) {
@@ -902,13 +991,13 @@ async function loadGraphDataset(key, opts = {}) {
   if (!graphDatasets[k] || opts.force) {
     if (!graphDatasetPromises[k] || opts.force) {
       graphDatasetPromises[k] = apiGet(buildGraphDatasetUrl(k))
-          .then((payload) => {
-            graphDatasets[k] = payload;
-            return payload;
-          })
-          .finally(() => {
-            graphDatasetPromises[k] = null;
-          });
+        .then((payload) => {
+          graphDatasets[k] = payload;
+          return payload;
+        })
+        .finally(() => {
+          graphDatasetPromises[k] = null;
+        });
     }
     return graphDatasetPromises[k];
   }
@@ -943,19 +1032,19 @@ async function loadControlStatsForGaps(opts = {}) {
   if (!controlStatsPromise || opts.force) {
     if (gapsEl) showInlineLoading(gapsEl, 'Loading controls…');
     controlStatsPromise = apiGet(buildControlStatsUrl())
-        .then((payload) => {
-          controlStats = payload;
-          rebuildCoverageGaps();
-          renderGaps();
-          return payload;
-        })
-        .catch((err) => {
-          if (gapsEl) gapsEl.textContent = 'Failed to load controls.';
-          throw err;
-        })
-        .finally(() => {
-          controlStatsPromise = null;
-        });
+      .then((payload) => {
+        controlStats = payload;
+        rebuildCoverageGaps();
+        renderGaps();
+        return payload;
+      })
+      .catch((err) => {
+        if (gapsEl) gapsEl.textContent = 'Failed to load controls.';
+        throw err;
+      })
+      .finally(() => {
+        controlStatsPromise = null;
+      });
   }
   return controlStatsPromise;
 }
@@ -973,7 +1062,7 @@ function clearRangeSensitiveCaches() {
     clause_source: null,
     clause_control: graphDatasets.clause_control || null,
   };
-  graphDatasetPromises = {control_source: null, clause_source: null, clause_control: null};
+  graphDatasetPromises = { control_source: null, clause_source: null, clause_control: null };
   graphData = null;
   controlStats = null;
   controlStatsPromise = null;
@@ -1020,31 +1109,28 @@ function downloadBlob(filename, blob) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-
 function toCsv(rows) {
   const r = rows || [];
   if (r.length === 0) return '';
   const keys = Array.from(
-      r.reduce((acc, row) => {
-        Object.keys(row || {}).forEach((k) => acc.add(k));
-        return acc;
-      }, new Set())
+    r.reduce((acc, row) => {
+      Object.keys(row || {}).forEach((k) => acc.add(k));
+      return acc;
+    }, new Set()),
   );
   const header = keys.map(csvEscape).join(',');
-  const body = r
-      .map((row) => keys.map((k) => csvEscape(row?.[k])).join(','))
-      .join('\n');
+  const body = r.map((row) => keys.map((k) => csvEscape(row?.[k])).join(',')).join('\n');
   return header + '\n' + body + '\n';
 }
 
 function downloadCsv(filename, rows) {
   const csv = toCsv(rows);
-  downloadBlob(filename, new Blob([csv], {type: 'text/csv;charset=utf-8'}));
+  downloadBlob(filename, new Blob([csv], { type: 'text/csv;charset=utf-8' }));
 }
 
 function downloadJson(filename, obj) {
   const json = JSON.stringify(obj, null, 2) + '\n';
-  downloadBlob(filename, new Blob([json], {type: 'application/json'}));
+  downloadBlob(filename, new Blob([json], { type: 'application/json' }));
 }
 
 function downloadCurrentSvg(filename) {
@@ -1054,7 +1140,7 @@ function downloadCurrentSvg(filename) {
   // Ensure xmlns so the downloaded SVG opens cleanly.
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   const svgText = new XMLSerializer().serializeToString(clone);
-  downloadBlob(filename, new Blob([svgText], {type: 'image/svg+xml;charset=utf-8'}));
+  downloadBlob(filename, new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' }));
 }
 
 function buildShareUrl() {
@@ -1080,9 +1166,10 @@ function buildShareUrl() {
   // Histogram zoom window (precise timestamps).
   // We store only the current zoom level (top of the stack) in the URL.
   // This keeps share links short, while still restoring the zoomed view.
-  const hz = (vizMode === 'histogram' && Array.isArray(histZoomStack) && histZoomStack.length) ?
-    histZoomStack[histZoomStack.length - 1] :
-    null;
+  const hz =
+    vizMode === 'histogram' && Array.isArray(histZoomStack) && histZoomStack.length
+      ? histZoomStack[histZoomStack.length - 1]
+      : null;
   if (hz && hz.start_ts && hz.end_ts) {
     u.searchParams.set('hstart', String(hz.start_ts));
     u.searchParams.set('hend', String(hz.end_ts));
@@ -1154,12 +1241,15 @@ function applyQueryOverrides() {
     const okEnd = hend && Number.isFinite(Date.parse(hend));
     if (okStart && okEnd && Date.parse(hend) > Date.parse(hstart)) {
       const it = String(hint || 'day').toLowerCase();
-      const interval = (it === 'day' || it === 'hour' || it === 'minute' || it === 'second') ? it : 'day';
-      histZoomStack = [{
-        start_ts: hstart,
-        end_ts: hend,
-        interval,
-      }];
+      const interval =
+        it === 'day' || it === 'hour' || it === 'minute' || it === 'second' ? it : 'day';
+      histZoomStack = [
+        {
+          start_ts: hstart,
+          end_ts: hend,
+          interval,
+        },
+      ];
       updateHistogramZoomButtons();
     }
   }
@@ -1180,7 +1270,6 @@ function applyQueryOverrides() {
   if (days && histDays) histDays.value = days;
 }
 
-
 function clearSvg() {
   svg.selectAll('*').remove();
 }
@@ -1191,13 +1280,14 @@ function showVizLoading(message = 'Loading visualisation data…') {
   const width = getWrapWidth();
   const height = 320;
   sizeSvg(width, height);
-  svg.append('text')
-      .attr('x', width / 2)
-      .attr('y', height / 2)
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'middle')
-      .attr('class', 'small-muted')
-      .text(message);
+  svg
+    .append('text')
+    .attr('x', width / 2)
+    .attr('y', height / 2)
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('class', 'small-muted')
+    .text(message);
 }
 
 function setSunburstOtherPanel(html) {
@@ -1209,16 +1299,15 @@ function setSunburstOtherPanel(html) {
 
 function sizeSvg(width, height) {
   svg
-      .attr('viewBox', `0 0 ${width} ${height}`)
-      .attr('width', width)
-      .attr('height', height)
-      .style('height', `${height}px`);
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('width', width)
+    .attr('height', height)
+    .style('height', `${height}px`);
 }
 
 function getWrapWidth(min = 680) {
   return Math.max(min, wrap?.clientWidth || 900);
 }
-
 
 function drawGraph(minW, topS = null, topC = null) {
   clearSvg();
@@ -1226,14 +1315,14 @@ function drawGraph(minW, topS = null, topC = null) {
 
   const nodeById = new Map((graphData.nodes || []).map((n) => [n.id, n]));
   const linksAll = (graphData.links || [])
-      .filter((l) => Number(l.value || 0) >= minW)
-      .filter((l) => nodeById.has(l.source) && nodeById.has(l.target))
-      .map((l) => ({
-        ...l,
-        value: Number(l.value || 0),
-        sourceNode: nodeById.get(l.source),
-        targetNode: nodeById.get(l.target),
-      }));
+    .filter((l) => Number(l.value || 0) >= minW)
+    .filter((l) => nodeById.has(l.source) && nodeById.has(l.target))
+    .map((l) => ({
+      ...l,
+      value: Number(l.value || 0),
+      sourceNode: nodeById.get(l.source),
+      targetNode: nodeById.get(l.target),
+    }));
 
   // Connected nodes only
   const connected = new Set();
@@ -1283,19 +1372,20 @@ function drawGraph(minW, topS = null, topC = null) {
     const width = getWrapWidth(680);
     sizeSvg(width, 280);
     svg
-        .append('text')
-        .attr('x', 14)
-        .attr('y', 24)
-        .attr('class', 'small-muted')
-        .text('No edges match the current Graph filters.');
+      .append('text')
+      .attr('x', 14)
+      .attr('y', 24)
+      .attr('class', 'small-muted')
+      .text('No edges match the current Graph filters.');
     setVizCaption(vizMode, 'No edges match the current Graph filters.');
-    lastView = {mode: 'graph', payload: {edges: []}, range: getActiveRange()};
+    lastView = { mode: 'graph', payload: { edges: [] }, range: getActiveRange() };
     return;
   }
 
   const width = getWrapWidth(680);
   const graphLabels = vizRelationshipLabels(vizMode);
-  const linkMetricLabel = graphKind() === 'clause_control_relationship' ? 'Link count' : 'Mapped events';
+  const linkMetricLabel =
+    graphKind() === 'clause_control_relationship' ? 'Link count' : 'Mapped events';
 
   // Make the chart comfortably tall. We use a row-based height heuristic so
   // the diagram expands when there are many sources/controls.
@@ -1303,7 +1393,7 @@ function drawGraph(minW, topS = null, topC = null) {
   const rows = Math.max(sources.length, controls.length, 10);
   const height = Math.max(820, rows * rowPx + 140);
 
-  const margin = {top: 24, right: 18, bottom: 24, left: 18};
+  const margin = { top: 24, right: 18, bottom: 24, left: 18 };
   const sourceNodeW = 170;
   const controlNodeW = 170;
 
@@ -1311,16 +1401,16 @@ function drawGraph(minW, topS = null, topC = null) {
   const xR = width - margin.right - controlNodeW;
 
   const yS = d3
-      .scaleBand()
-      .domain(sources.map((s) => s.id))
-      .range([margin.top, height - margin.bottom])
-      .padding(0.2);
+    .scaleBand()
+    .domain(sources.map((s) => s.id))
+    .range([margin.top, height - margin.bottom])
+    .padding(0.2);
 
   const yC = d3
-      .scaleBand()
-      .domain(controls.map((c) => c.id))
-      .range([margin.top, height - margin.bottom])
-      .padding(0.2);
+    .scaleBand()
+    .domain(controls.map((c) => c.id))
+    .range([margin.top, height - margin.bottom])
+    .padding(0.2);
 
   sizeSvg(width, height);
 
@@ -1330,7 +1420,7 @@ function drawGraph(minW, topS = null, topC = null) {
   const defs = svg.append('defs');
 
   const _safeBaseColor = (hex) => {
-    const c = (typeof hex === 'string') ? d3.color(hex.trim()) : null;
+    const c = typeof hex === 'string' ? d3.color(hex.trim()) : null;
     return c || d3.rgb(124, 58, 237);
   };
 
@@ -1346,36 +1436,36 @@ function drawGraph(minW, topS = null, topC = null) {
     // We darken more for very light colours so white text stays readable.
     let darken = 0.28;
     if (lum > 0.78) darken = 0.52;
-    else if (lum > 0.62) darken = 0.40;
+    else if (lum > 0.62) darken = 0.4;
     else if (lum < 0.25) darken = 0.18;
 
     const fill = _mixRgb(base, d3.rgb(0, 0, 0), darken).formatHex();
     // Border: a subtle lighter rim, still tied to the source hue.
     const stroke = _mixRgb(base, d3.rgb(255, 255, 255), 0.16).formatHex();
 
-    sourceStyleById.set(s.id, {fill, stroke, base: base.formatHex()});
+    sourceStyleById.set(s.id, { fill, stroke, base: base.formatHex() });
 
     // Gradient for edges from this source → controls.
     const gradId = `srcgrad_${_idSafe(s.id)}`;
-    const darker = _mixRgb(base, d3.rgb(0, 0, 0), 0.30);
+    const darker = _mixRgb(base, d3.rgb(0, 0, 0), 0.3);
     const lighter = _mixRgb(base, d3.rgb(255, 255, 255), 0.52);
 
     const g = defs
-        .append('linearGradient')
-        .attr('id', gradId)
-        .attr('x1', '0%')
-        .attr('y1', '0%')
-        .attr('x2', '100%')
-        .attr('y2', '0%');
+      .append('linearGradient')
+      .attr('id', gradId)
+      .attr('x1', '0%')
+      .attr('y1', '0%')
+      .attr('x2', '100%')
+      .attr('y2', '0%');
 
     g.append('stop')
-        .attr('offset', '0%')
-        .attr('stop-color', darker.formatHex())
-        .attr('stop-opacity', 0.62);
+      .attr('offset', '0%')
+      .attr('stop-color', darker.formatHex())
+      .attr('stop-opacity', 0.62);
     g.append('stop')
-        .attr('offset', '100%')
-        .attr('stop-color', lighter.formatHex())
-        .attr('stop-opacity', 0.52);
+      .attr('offset', '100%')
+      .attr('stop-color', lighter.formatHex())
+      .attr('stop-opacity', 0.52);
 
     sourceGradById.set(s.id, `url(#${gradId})`);
   }
@@ -1388,82 +1478,83 @@ function drawGraph(minW, topS = null, topC = null) {
   // Links
   const gLinks = svg.append('g').attr('class', 'links');
   const link = gLinks
-      .selectAll('path')
-      .data(links)
-      .enter()
-      .append('path')
-      .attr('class', 'link')
-      .attr('fill', 'none')
-      .attr('stroke-width', (d) => wScale(d.value))
-      .style('stroke', (d) => sourceGradById.get(d.source) || accent(0.30))
-      .style('stroke-linecap', 'round')
-      .attr('d', (d) => {
-        const y1 = (yS(d.source) ?? 0) + yS.bandwidth() / 2;
-        const y2 = (yC(d.target) ?? 0) + yC.bandwidth() / 2;
-        const x1 = xL + sourceNodeW;
-        const x2 = xR;
-        const xm = (x1 + x2) / 2;
-        return `M ${x1} ${y1} C ${xm} ${y1}, ${xm} ${y2}, ${x2} ${y2}`;
-      })
-      .on('click', (ev, d) => {
-        ev.preventDefault();
-        if (d.link_kind === 'relationship' || isRelationshipGraph()) {
-          openGraphNode(d.targetNode || d.sourceNode, ev);
-          return;
-        }
-        const srcKey = d.sourceNode?.source || '';
-        const target = d.targetNode || {};
-        if (target.node_kind === 'clause') {
-          openEventsForLink(srcKey, '', ev, null, {clause: target.label || target.ref || target.clause_id || ''});
-          return;
-        }
-        // Use human-friendly control refs (e.g. A.8.6) for the Events page filter.
-        const ctrlRef = target.label || target.control_ref || '';
-        openEventsForLink(srcKey, ctrlRef, ev);
-      });
+    .selectAll('path')
+    .data(links)
+    .enter()
+    .append('path')
+    .attr('class', 'link')
+    .attr('fill', 'none')
+    .attr('stroke-width', (d) => wScale(d.value))
+    .style('stroke', (d) => sourceGradById.get(d.source) || accent(0.3))
+    .style('stroke-linecap', 'round')
+    .attr('d', (d) => {
+      const y1 = (yS(d.source) ?? 0) + yS.bandwidth() / 2;
+      const y2 = (yC(d.target) ?? 0) + yC.bandwidth() / 2;
+      const x1 = xL + sourceNodeW;
+      const x2 = xR;
+      const xm = (x1 + x2) / 2;
+      return `M ${x1} ${y1} C ${xm} ${y1}, ${xm} ${y2}, ${x2} ${y2}`;
+    })
+    .on('click', (ev, d) => {
+      ev.preventDefault();
+      if (d.link_kind === 'relationship' || isRelationshipGraph()) {
+        openGraphNode(d.targetNode || d.sourceNode, ev);
+        return;
+      }
+      const srcKey = d.sourceNode?.source || '';
+      const target = d.targetNode || {};
+      if (target.node_kind === 'clause') {
+        openEventsForLink(srcKey, '', ev, null, {
+          clause: target.label || target.ref || target.clause_id || '',
+        });
+        return;
+      }
+      // Use human-friendly control refs (e.g. A.8.6) for the Events page filter.
+      const ctrlRef = target.label || target.control_ref || '';
+      openEventsForLink(srcKey, ctrlRef, ev);
+    });
 
-  link
-      .append('title')
-      .text((d) => {
-        const s = d.sourceNode?.label || d.source;
-        const c = d.targetNode?.label || d.target;
-        return `${s} → ${c}\n${linkMetricLabel}: ${d.value}`;
-      });
+  link.append('title').text((d) => {
+    const s = d.sourceNode?.label || d.source;
+    const c = d.targetNode?.label || d.target;
+    return `${s} → ${c}\n${linkMetricLabel}: ${d.value}`;
+  });
 
   // Nodes
   const gNodes = svg.append('g').attr('class', 'nodes');
 
   const srcG = gNodes
-      .selectAll('g.source')
-      .data(sources)
-      .enter()
-      .append('g')
-      .attr('class', 'node node-source')
-      .attr('transform', (d) => `translate(${xL}, ${yS(d.id) ?? 0})`)
-      .on('click', (ev, d) => {
-        ev.preventDefault();
-        openGraphNode(d, ev);
-      });
+    .selectAll('g.source')
+    .data(sources)
+    .enter()
+    .append('g')
+    .attr('class', 'node node-source')
+    .attr('transform', (d) => `translate(${xL}, ${yS(d.id) ?? 0})`)
+    .on('click', (ev, d) => {
+      ev.preventDefault();
+      openGraphNode(d, ev);
+    });
 
   srcG
-      .append('rect')
-      .attr('rx', 8)
-      .attr('ry', 8)
-      .attr('width', sourceNodeW)
-      .attr('height', () => yS.bandwidth());
+    .append('rect')
+    .attr('rx', 8)
+    .attr('ry', 8)
+    .attr('width', sourceNodeW)
+    .attr('height', () => yS.bandwidth());
 
   // Apply per-source fill/stroke colours to the left nodes.
-  srcG.selectAll('rect')
-      .style('fill', (d) => sourceStyleById.get(d.id)?.fill || accent(0.12))
-      .style('stroke', (d) => sourceStyleById.get(d.id)?.stroke || accent(0.35))
-      .style('stroke-width', 1);
+  srcG
+    .selectAll('rect')
+    .style('fill', (d) => sourceStyleById.get(d.id)?.fill || accent(0.12))
+    .style('stroke', (d) => sourceStyleById.get(d.id)?.stroke || accent(0.35))
+    .style('stroke-width', 1);
 
   srcG
     .append('text')
     .attr('x', sourceNodeW / 2)
     .attr('y', () => yS.bandwidth() / 2)
     .attr('text-anchor', 'middle')
-    .each(function(d) {
+    .each(function (d) {
       renderWrappedNodeLabel(d3.select(this), d.label, {
         width: sourceNodeW,
         height: yS.bandwidth(),
@@ -1476,78 +1567,82 @@ function drawGraph(minW, topS = null, topC = null) {
     });
 
   srcG
-      .append('title')
-      .text(
-          (d) =>
-            `${d.label}\n${graphLabels.leftMetric}: ${
-              Number(d.mapped_events || 0) || totalById.get(d.id) || 0
-            }`
-      );
+    .append('title')
+    .text(
+      (d) =>
+        `${d.label}\n${graphLabels.leftMetric}: ${
+          Number(d.mapped_events || 0) || totalById.get(d.id) || 0
+        }`,
+    );
 
   const ctrlG = gNodes
-      .selectAll('g.control')
-      .data(controls)
-      .enter()
-      .append('g')
-      .attr('class', 'node node-control')
-      .attr('transform', (d) => `translate(${xR}, ${yC(d.id) ?? 0})`)
-      .on('click', (ev, d) => {
-        ev.preventDefault();
-        openGraphNode(d, ev);
-      });
+    .selectAll('g.control')
+    .data(controls)
+    .enter()
+    .append('g')
+    .attr('class', 'node node-control')
+    .attr('transform', (d) => `translate(${xR}, ${yC(d.id) ?? 0})`)
+    .on('click', (ev, d) => {
+      ev.preventDefault();
+      openGraphNode(d, ev);
+    });
 
   ctrlG
-      .append('rect')
-      .attr('rx', 8)
-      .attr('ry', 8)
-      .attr('width', controlNodeW)
-      .attr('height', () => yC.bandwidth());
+    .append('rect')
+    .attr('rx', 8)
+    .attr('ry', 8)
+    .attr('width', controlNodeW)
+    .attr('height', () => yC.bandwidth());
 
   // Controls don't have per-control colours; render them as dark neutral tiles
   // so the graph reads as a two-column matrix with white labels.
-  ctrlG.selectAll('rect')
-      .style('fill', 'rgba(31,31,42,0.82)')
-      .style('stroke', 'rgba(255,255,255,0.18)')
-      .style('stroke-width', 1);
+  ctrlG
+    .selectAll('rect')
+    .style('fill', 'rgba(31,31,42,0.82)')
+    .style('stroke', 'rgba(255,255,255,0.18)')
+    .style('stroke-width', 1);
 
   ctrlG
-      .append('text')
-      .attr('x', 10)
-      .attr('y', () => yC.bandwidth() / 2)
-      .attr('text-anchor', 'start')
-      .each(function(d) {
-        renderWrappedNodeLabel(d3.select(this), d.label, {
-          width: controlNodeW - 18,
-          height: yC.bandwidth(),
-          x: 10,
-          y: yC.bandwidth() / 2,
-          linePx: 13,
-          charPx: 6.2,
-          maxLines: 2,
-        });
+    .append('text')
+    .attr('x', 10)
+    .attr('y', () => yC.bandwidth() / 2)
+    .attr('text-anchor', 'start')
+    .each(function (d) {
+      renderWrappedNodeLabel(d3.select(this), d.label, {
+        width: controlNodeW - 18,
+        height: yC.bandwidth(),
+        x: 10,
+        y: yC.bandwidth() / 2,
+        linePx: 13,
+        charPx: 6.2,
+        maxLines: 2,
       });
+    });
 
   ctrlG
-      .append('title')
-      .text(
-          (d) =>
-            `${d.label} — ${d.title || ''}\n${graphLabels.rightMetric}: ${
-              Number(d.mapped_events || 0) || totalById.get(d.id) || 0
-            }`
-      );
+    .append('title')
+    .text(
+      (d) =>
+        `${d.label} — ${d.title || ''}\n${graphLabels.rightMetric}: ${
+          Number(d.mapped_events || 0) || totalById.get(d.id) || 0
+        }`,
+    );
 
   // A tiny caption with counts
   svg
-      .append('text')
-      .attr('x', margin.left)
-      .attr('y', 14)
-      .attr('class', 'small-muted')
-      .text(`Edges shown: ${links.length}`);
+    .append('text')
+    .attr('x', margin.left)
+    .attr('y', 14)
+    .attr('class', 'small-muted')
+    .text(`Edges shown: ${links.length}`);
 
   // Update caption + export payload.
   {
     const leftLabel = graphKind() === 'clause_control_relationship' ? 'clauses' : 'sources';
-    setVizCaption(vizMode, `Showing ${sources.length} ${leftLabel} × ${controls.length} controls (edges ≥ ${minW}).`);
+    setVizCaption(
+      vizMode,
+      `Showing ${sources.length} ${leftLabel} × ${controls.length} controls (edges ≥ ${minW}).`,
+    );
   }
 
   lastView = {
@@ -1575,13 +1670,13 @@ function drawHeatmap() {
 
   const nodes = graphData.nodes || [];
   const sourcesAll = nodes
-      .filter((n) => n.type === 'source')
-      .slice()
-      .sort((a, b) => Number(b.mapped_events || 0) - Number(a.mapped_events || 0));
+    .filter((n) => n.type === 'source')
+    .slice()
+    .sort((a, b) => Number(b.mapped_events || 0) - Number(a.mapped_events || 0));
   const controlsAll = nodes
-      .filter((n) => n.type === 'control')
-      .slice()
-      .sort((a, b) => Number(b.mapped_events || 0) - Number(a.mapped_events || 0));
+    .filter((n) => n.type === 'control')
+    .slice()
+    .sort((a, b) => Number(b.mapped_events || 0) - Number(a.mapped_events || 0));
 
   const sources = sourcesAll.slice(0, topS);
   const controls = controlsAll.slice(0, topC);
@@ -1602,7 +1697,8 @@ function drawHeatmap() {
 
   const cell = 18;
   const heatmapLabels = vizRelationshipLabels(vizMode);
-  const heatmapMetricLabel = graphKind() === 'clause_control_relationship' ? 'Link count' : 'Mapped events';
+  const heatmapMetricLabel =
+    graphKind() === 'clause_control_relationship' ? 'Link count' : 'Mapped events';
   const wrapWidth = getWrapWidth(680);
   // Leave ample headroom for rotated control labels.
   const margin = {
@@ -1612,10 +1708,7 @@ function drawHeatmap() {
     left: 190,
   };
 
-  const width = Math.max(
-      wrapWidth,
-      margin.left + margin.right + controls.length * cell
-  );
+  const width = Math.max(wrapWidth, margin.left + margin.right + controls.length * cell);
   const heightNeeded = margin.top + margin.bottom + sources.length * cell;
   const height = Math.max(260, heightNeeded); // 260 is a small "safety" minimum
 
@@ -1632,9 +1725,9 @@ function drawHeatmap() {
     const legendX = width - margin.right - legendW - 10;
     const legendY = 44;
     const lg = svg
-        .append('g')
-        .attr('class', 'viz-legend')
-        .attr('transform', `translate(${legendX}, ${legendY})`);
+      .append('g')
+      .attr('class', 'viz-legend')
+      .attr('transform', `translate(${legendX}, ${legendY})`);
 
     // Keep legend text readable on small screens:
     //  - Put the title above the bar
@@ -1642,34 +1735,31 @@ function drawHeatmap() {
     const titleY = -12;
     const numY = legendH + 14;
 
-    lg
-        .append('text')
-        .attr('x', legendW)
-        .attr('y', titleY)
-        .attr('text-anchor', 'end')
-        .attr('class', 'small-muted')
-        .text(heatmapMetricLabel);
+    lg.append('text')
+      .attr('x', legendW)
+      .attr('y', titleY)
+      .attr('text-anchor', 'end')
+      .attr('class', 'small-muted')
+      .text(heatmapMetricLabel);
 
     for (let i = 0; i < legendW; i++) {
       const t = i / (legendW - 1);
       const v = t * Math.max(1, vMax);
-      lg
-          .append('rect')
-          .attr('x', i)
-          .attr('y', 0)
-          .attr('width', 1)
-          .attr('height', legendH)
-          .attr('fill', v <= 0 ? 'rgba(31,31,42,0.02)' : exampleLegendColor(_heatIntensity(v, vMax)));
+      lg.append('rect')
+        .attr('x', i)
+        .attr('y', 0)
+        .attr('width', 1)
+        .attr('height', legendH)
+        .attr('fill', v <= 0 ? 'rgba(31,31,42,0.02)' : exampleLegendColor(_heatIntensity(v, vMax)));
     }
 
     lg.append('text').attr('x', 0).attr('y', numY).attr('class', 'small-muted').text('0');
-    lg
-        .append('text')
-        .attr('x', legendW)
-        .attr('y', numY)
-        .attr('text-anchor', 'end')
-        .attr('class', 'small-muted')
-        .text(String(vMax || 0));
+    lg.append('text')
+      .attr('x', legendW)
+      .attr('y', numY)
+      .attr('text-anchor', 'end')
+      .attr('class', 'small-muted')
+      .text(String(vMax || 0));
   }
 
   // Column labels (controls)
@@ -1679,28 +1769,28 @@ function drawHeatmap() {
   // Place labels well above the grid so they don't overlap the first row.
   const colLabelY = y0 - 56;
   const colLabels = svg
-      .append('g')
-      .attr('class', 'viz-axis')
-      .attr('transform', `translate(${x0}, ${colLabelY})`);
+    .append('g')
+    .attr('class', 'viz-axis')
+    .attr('transform', `translate(${x0}, ${colLabelY})`);
 
   colLabels
-      .selectAll('text')
-      .data(controls)
-      .enter()
-      .append('text')
-      .attr('x', (_, i) => i * cell + cell / 2)
-      .attr('y', 0)
-      .attr('dy', '0.32em')
-      .attr('text-anchor', 'end')
-      .attr('transform', (_, i) => `rotate(-45, ${i * cell + cell / 2}, 0)`)
-      .text((d) => d.label)
-      .style('cursor', 'pointer')
-      .on('click', (ev, d) => {
-        ev.preventDefault();
-        openGraphNode(d, ev);
-      })
-      .append('title')
-      .text((d) => `${d.label} — ${d.title || ''}`);
+    .selectAll('text')
+    .data(controls)
+    .enter()
+    .append('text')
+    .attr('x', (_, i) => i * cell + cell / 2)
+    .attr('y', 0)
+    .attr('dy', '0.32em')
+    .attr('text-anchor', 'end')
+    .attr('transform', (_, i) => `rotate(-45, ${i * cell + cell / 2}, 0)`)
+    .text((d) => d.label)
+    .style('cursor', 'pointer')
+    .on('click', (ev, d) => {
+      ev.preventDefault();
+      openGraphNode(d, ev);
+    })
+    .append('title')
+    .text((d) => `${d.label} — ${d.title || ''}`);
 
   // Row labels (sources)
   // Ensure the swatch never overlaps the first heatmap column.
@@ -1711,50 +1801,50 @@ function drawHeatmap() {
   const rowLabelsX = x0 - ROW_GRID_GAP - (ROW_SWATCH_X + ROW_SWATCH);
 
   const rowLabels = svg
-      .append('g')
-      .attr('class', 'viz-axis')
-      .attr('transform', `translate(${rowLabelsX}, ${y0})`);
+    .append('g')
+    .attr('class', 'viz-axis')
+    .attr('transform', `translate(${rowLabelsX}, ${y0})`);
 
   // Colour swatch per source (matches source colour across the app)
   rowLabels
-      .selectAll('rect')
-      .data(sources)
-      .enter()
-      .append('rect')
-      .attr('x', ROW_SWATCH_X)
-      .attr('y', (_, i) => i * cell + (cell / 2) - 5)
-      .attr('width', ROW_SWATCH)
-      .attr('height', ROW_SWATCH)
-      .attr('rx', 2)
-      .attr('ry', 2)
-      .attr('fill', (d) => d?.color || '#7c3aed')
-      .attr('stroke', 'rgba(0,0,0,0.25)')
-      .attr('stroke-width', 1)
-      .style('cursor', 'pointer')
-      .on('click', (ev, d) => {
-        ev.preventDefault();
-        openGraphNode(d, ev);
-      })
-      .append('title')
-      .text((d) => d?.label || '');
+    .selectAll('rect')
+    .data(sources)
+    .enter()
+    .append('rect')
+    .attr('x', ROW_SWATCH_X)
+    .attr('y', (_, i) => i * cell + cell / 2 - 5)
+    .attr('width', ROW_SWATCH)
+    .attr('height', ROW_SWATCH)
+    .attr('rx', 2)
+    .attr('ry', 2)
+    .attr('fill', (d) => d?.color || '#7c3aed')
+    .attr('stroke', 'rgba(0,0,0,0.25)')
+    .attr('stroke-width', 1)
+    .style('cursor', 'pointer')
+    .on('click', (ev, d) => {
+      ev.preventDefault();
+      openGraphNode(d, ev);
+    })
+    .append('title')
+    .text((d) => d?.label || '');
 
   rowLabels
-      .selectAll('text')
-      .data(sources)
-      .enter()
-      .append('text')
-      .attr('x', 0)
-      .attr('y', (_, i) => i * cell + cell / 2)
-      .attr('text-anchor', 'end')
-      .attr('dominant-baseline', 'middle')
-      .text((d) => truncateMiddleText(d.label, 28))
-      .style('cursor', 'pointer')
-      .on('click', (ev, d) => {
-        ev.preventDefault();
-        openGraphNode(d, ev);
-      })
-      .append('title')
-      .text((d) => d.label || '');
+    .selectAll('text')
+    .data(sources)
+    .enter()
+    .append('text')
+    .attr('x', 0)
+    .attr('y', (_, i) => i * cell + cell / 2)
+    .attr('text-anchor', 'end')
+    .attr('dominant-baseline', 'middle')
+    .text((d) => truncateMiddleText(d.label, 28))
+    .style('cursor', 'pointer')
+    .on('click', (ev, d) => {
+      ev.preventDefault();
+      openGraphNode(d, ev);
+    })
+    .append('title')
+    .text((d) => d.label || '');
 
   // Cells
   const cells = [];
@@ -1775,55 +1865,65 @@ function drawHeatmap() {
   }
 
   svg
-      .append('g')
-      .attr('transform', `translate(${x0}, ${y0})`)
-      .selectAll('rect')
-      .data(cells)
-      .enter()
-      .append('rect')
-      .attr('class', 'heat-cell')
-      .attr('x', (d) => d.j * cell)
-      .attr('y', (d) => d.i * cell)
-      .attr('width', cell)
-      .attr('height', cell)
-      .attr('fill', (d) => {
-        if (!d.v) return 'rgba(31,31,42,0.02)';
-        const f = _heatColorForBase(d.s?.color);
-        return f(_heatIntensity(d.v, vMax));
-      })
-      .on('click', (ev, d) => {
-        ev.preventDefault();
-        if (!d.v) return;
-        if (d.c?.node_kind === 'clause') {
-          openEventsForLink(d.s?.source || '', '', ev, null, {clause: d.c?.label || d.c?.ref || d.c?.clause_id || ''});
-          return;
-        }
-        if (d.s?.node_kind === 'clause' || isRelationshipGraph()) {
-          openGraphNode(d.c || d.s, ev);
-          return;
-        }
-        // Pass control ref (shown in dropdowns) instead of UUID.
-        openEventsForLink(d.s.source, d.c?.label || d.c?.control_ref || '', ev);
-      })
-      .append('title')
-      .text((d) => {
-        const s = d.s?.label || '';
-        const c = d.c?.label || '';
-        return `${s} → ${c}\n${heatmapMetricLabel}: ${d.v}`;
-      });
+    .append('g')
+    .attr('transform', `translate(${x0}, ${y0})`)
+    .selectAll('rect')
+    .data(cells)
+    .enter()
+    .append('rect')
+    .attr('class', 'heat-cell')
+    .attr('x', (d) => d.j * cell)
+    .attr('y', (d) => d.i * cell)
+    .attr('width', cell)
+    .attr('height', cell)
+    .attr('fill', (d) => {
+      if (!d.v) return 'rgba(31,31,42,0.02)';
+      const f = _heatColorForBase(d.s?.color);
+      return f(_heatIntensity(d.v, vMax));
+    })
+    .on('click', (ev, d) => {
+      ev.preventDefault();
+      if (!d.v) return;
+      if (d.c?.node_kind === 'clause') {
+        openEventsForLink(d.s?.source || '', '', ev, null, {
+          clause: d.c?.label || d.c?.ref || d.c?.clause_id || '',
+        });
+        return;
+      }
+      if (d.s?.node_kind === 'clause' || isRelationshipGraph()) {
+        openGraphNode(d.c || d.s, ev);
+        return;
+      }
+      // Pass control ref (shown in dropdowns) instead of UUID.
+      openEventsForLink(d.s.source, d.c?.label || d.c?.control_ref || '', ev);
+    })
+    .append('title')
+    .text((d) => {
+      const s = d.s?.label || '';
+      const c = d.c?.label || '';
+      return `${s} → ${c}\n${heatmapMetricLabel}: ${d.v}`;
+    });
 
   // A note
   svg
-      .append('text')
-      .attr('x', 14)
-      .attr('y', 18)
-      .attr('class', 'small-muted')
-      .text(`Showing ${sources.length} ${heatmapLabels.leftPlural} × ${controls.length} ${heatmapLabels.rightPlural}`);
+    .append('text')
+    .attr('x', 14)
+    .attr('y', 18)
+    .attr('class', 'small-muted')
+    .text(
+      `Showing ${sources.length} ${heatmapLabels.leftPlural} × ${controls.length} ${heatmapLabels.rightPlural}`,
+    );
 
   if (graphKind() === 'clause_control_relationship') {
-    setVizCaption(vizMode, `Showing top ${sources.length} clauses × top ${controls.length} controls (cells show link count).`);
+    setVizCaption(
+      vizMode,
+      `Showing top ${sources.length} clauses × top ${controls.length} controls (cells show link count).`,
+    );
   } else {
-    setVizCaption(vizMode, `Showing top ${sources.length} ${heatmapLabels.leftPlural} × top ${controls.length} ${heatmapLabels.rightPlural} (ranked by mapped events).`);
+    setVizCaption(
+      vizMode,
+      `Showing top ${sources.length} ${heatmapLabels.leftPlural} × top ${controls.length} ${heatmapLabels.rightPlural} (ranked by mapped events).`,
+    );
   }
 
   lastView = {
@@ -1833,27 +1933,28 @@ function drawHeatmap() {
       top_sources: sources.length,
       top_controls: controls.length,
       vmax: vMax,
-      cells: cells.filter((d) => d.v).map((d) => ({
-        source: d.s?.source || '',
-        source_label: d.s?.label || '',
-        control_id: d.c?.control_id || '',
-        control_ref: d.c?.label || '',
-        control_title: d.c?.title || '',
-        mapped_events: d.v,
-      })),
+      cells: cells
+        .filter((d) => d.v)
+        .map((d) => ({
+          source: d.s?.source || '',
+          source_label: d.s?.label || '',
+          control_id: d.c?.control_id || '',
+          control_ref: d.c?.label || '',
+          control_title: d.c?.title || '',
+          mapped_events: d.v,
+        })),
     },
   };
 }
 
 function buildHierarchy(mode) {
-  if (!graphData) return {name: 'All', children: []};
+  if (!graphData) return { name: 'All', children: [] };
 
   // Used to estimate *absolute* slice angle when deciding whether something is too small to
   // render as its own segment. This must be based on the whole sunburst total, not the
   // parent subtotal, otherwise we can dramatically overestimate angles for children of small
   // top-level segments (which is what produces the hairline-slice clusters).
   let ROOT_TOTAL_FOR_ANGLE = 0;
-
 
   // Sunburst: merge very small sibling segments into a single "Other" slice.
   // This reduces the hairline-slice problem (and unreadable label "smear")
@@ -1863,12 +1964,12 @@ function buildHierarchy(mode) {
   //  - by source: controls can get very fragmented; be more aggressive
   //  - by control: sources are usually fewer; be less aggressive
   const OTHER_DEFAULTS = {
-    min_frac: 0.006,     // merge children <0.6% of the parent total (after keeping the largest few)
-    min_keep: 10,        // always keep at least this many largest children
-    max_keep: 26,        // cap visible children; remainder goes into Other
-    min_merge: 2,        // only create Other if at least this many children are merged
-    keep_upto: 0.992,    // keep explicit slices until we cover this fraction of the parent total
-    min_angle_rad: 0.0,  // additional visual guardrail: merge if slice angle is too small
+    min_frac: 0.006, // merge children <0.6% of the parent total (after keeping the largest few)
+    min_keep: 10, // always keep at least this many largest children
+    max_keep: 26, // cap visible children; remainder goes into Other
+    min_merge: 2, // only create Other if at least this many children are merged
+    keep_upto: 0.992, // keep explicit slices until we cover this fraction of the parent total
+    min_angle_rad: 0.0, // additional visual guardrail: merge if slice angle is too small
     force_min_keep: false, // when true, keep the largest min_keep even if individually small
   };
 
@@ -1886,12 +1987,27 @@ function buildHierarchy(mode) {
       // Goal: if a source is visually tiny in ring-1, it should be folded into the single
       // global "Other" wedge so it doesn't leave thin slivers (and their fragmented ring-2 leaves)
       // floating after "Other".
-      root:  {min_frac: 0.010, min_keep: 5, max_keep: 10, keep_upto: 0.980, min_merge: 2, min_angle_rad: 0.160, extend_outer: true},
-      child: {min_frac: 0.004, min_keep: 6, max_keep: 16, keep_upto: 0.985, min_merge: 2, min_angle_rad: 0.050},
+      root: {
+        min_frac: 0.01,
+        min_keep: 5,
+        max_keep: 10,
+        keep_upto: 0.98,
+        min_merge: 2,
+        min_angle_rad: 0.16,
+        extend_outer: true,
+      },
+      child: {
+        min_frac: 0.004,
+        min_keep: 6,
+        max_keep: 16,
+        keep_upto: 0.985,
+        min_merge: 2,
+        min_angle_rad: 0.05,
+      },
     },
     // Ring 1 = controls, Ring 2 = sources mapped to that control
     sunburst_control: {
-      root:  {...OTHER_DEFAULTS, min_frac: 0.006, min_angle_rad: 0.080, extend_outer: true},
+      root: { ...OTHER_DEFAULTS, min_frac: 0.006, min_angle_rad: 0.08, extend_outer: true },
       child: OTHER_DEFAULTS,
     },
   };
@@ -1902,9 +2018,13 @@ function buildHierarchy(mode) {
     const OTHER_MIN_FRAC = Number.isFinite(opts.min_frac) ? opts.min_frac : OTHER_DEFAULTS.min_frac;
     const OTHER_MIN_KEEP = Number.isFinite(opts.min_keep) ? opts.min_keep : OTHER_DEFAULTS.min_keep;
     const OTHER_MAX_KEEP = Number.isFinite(opts.max_keep) ? opts.max_keep : OTHER_DEFAULTS.max_keep;
-    const OTHER_MIN_MERGE = Number.isFinite(opts.min_merge) ? opts.min_merge : OTHER_DEFAULTS.min_merge;
+    const OTHER_MIN_MERGE = Number.isFinite(opts.min_merge)
+      ? opts.min_merge
+      : OTHER_DEFAULTS.min_merge;
     const KEEP_UPTO = Number.isFinite(opts.keep_upto) ? opts.keep_upto : OTHER_DEFAULTS.keep_upto;
-    const MIN_ANGLE = Number.isFinite(opts.min_angle_rad) ? opts.min_angle_rad : OTHER_DEFAULTS.min_angle_rad;
+    const MIN_ANGLE = Number.isFinite(opts.min_angle_rad)
+      ? opts.min_angle_rad
+      : OTHER_DEFAULTS.min_angle_rad;
     const FORCE_MIN_KEEP = !!opts.force_min_keep;
     const EXTEND_OUTER = !!opts.extend_outer;
 
@@ -1927,8 +2047,8 @@ function buildHierarchy(mode) {
     };
 
     const kids = parent.children
-        .map((node) => ({node, v: childTotal(node)}))
-        .filter((kv) => Number.isFinite(kv.v) && kv.v > 0);
+      .map((node) => ({ node, v: childTotal(node) }))
+      .filter((kv) => Number.isFinite(kv.v) && kv.v > 0);
 
     if (kids.length === 0) return;
 
@@ -1954,7 +2074,9 @@ function buildHierarchy(mode) {
       const angle = 2 * Math.PI * absFrac;
 
       // Keep the largest few to preserve recognisable structure, then rely on size thresholds.
-      const mustKeep = keep.length < OTHER_MIN_KEEP && (FORCE_MIN_KEEP || (frac >= OTHER_MIN_FRAC && angle >= MIN_ANGLE));
+      const mustKeep =
+        keep.length < OTHER_MIN_KEEP &&
+        (FORCE_MIN_KEEP || (frac >= OTHER_MIN_FRAC && angle >= MIN_ANGLE));
 
       // Visual + fraction gating (prevents lots of hairline slices).
       const keepBySize = frac >= OTHER_MIN_FRAC;
@@ -2022,15 +2144,17 @@ function buildHierarchy(mode) {
       other_nodes: otherNodes,
     };
     if (EXTEND_OUTER) {
-      otherNode.children = [{
-        name: 'Other',
-        kind,
-        is_other: true,
-        value: mergedTotal,
-        other_count: merged.length,
-        other_items: otherItems,
-        other_nodes: otherNodes,
-      }];
+      otherNode.children = [
+        {
+          name: 'Other',
+          kind,
+          is_other: true,
+          value: mergedTotal,
+          other_count: merged.length,
+          other_items: otherItems,
+          other_nodes: otherNodes,
+        },
+      ];
     } else {
       otherNode.value = mergedTotal;
     }
@@ -2042,7 +2166,7 @@ function buildHierarchy(mode) {
 
   const nodes = graphData.nodes || [];
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const root = {name: 'All', children: []};
+  const root = { name: 'All', children: [] };
 
   if (mode === 'sunburst_source') {
     const srcMap = new Map();
@@ -2085,7 +2209,7 @@ function buildHierarchy(mode) {
     ROOT_TOTAL_FOR_ANGLE = totalAll;
 
     // Source/control sunbursts keep a single root-level "Other" bucket.
-    const modeOpts = (OTHER_OPTS[mode] || OTHER_OPTS.sunburst_source);
+    const modeOpts = OTHER_OPTS[mode] || OTHER_OPTS.sunburst_source;
 
     root.children = Array.from(srcMap.values()).map((s) => {
       s.children.sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
@@ -2142,7 +2266,7 @@ function buildHierarchy(mode) {
   ROOT_TOTAL_FOR_ANGLE = totalAll;
 
   // Control/source sunbursts keep a single root-level "Other" bucket.
-  const modeOpts = (OTHER_OPTS[mode] || OTHER_OPTS.sunburst_control);
+  const modeOpts = OTHER_OPTS[mode] || OTHER_OPTS.sunburst_control;
 
   root.children = Array.from(ctrlMap.values()).map((c) => {
     c.children.sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
@@ -2165,7 +2289,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
   if (!graphData) return;
 
   const isDrill = !!(drill && typeof drill === 'object' && drill.data);
-  const drillBack = isDrill ? (drill.back || null) : null;
+  const drillBack = isDrill ? drill.back || null : null;
   const data = isDrill ? drill.data : buildHierarchy(mode);
 
   // If we're drilling into "Other", update the copy in the header so it's clear
@@ -2185,11 +2309,11 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
     const w = getWrapWidth(680);
     sizeSvg(w, 360);
     svg
-        .append('text')
-        .attr('x', 14)
-        .attr('y', 24)
-        .attr('class', 'small-muted')
-        .text('No mapped events yet.');
+      .append('text')
+      .attr('x', 14)
+      .attr('y', 24)
+      .attr('class', 'small-muted')
+      .text('No mapped events yet.');
     return;
   }
 
@@ -2203,9 +2327,9 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
   const radius = Math.min(width, height) / 2 - 20;
 
   const root = d3
-      .hierarchy(data)
-      .sum((d) => Number(d.value || 0))
-      .sort((a, b) => (b.value || 0) - (a.value || 0));
+    .hierarchy(data)
+    .sum((d) => Number(d.value || 0))
+    .sort((a, b) => (b.value || 0) - (a.value || 0));
 
   // Make the centre "hole" smaller (more chart area), while keeping the outer radius the same.
   // We do this by asking d3.partition for a slightly larger radial size, then shifting everything
@@ -2215,7 +2339,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
   root.each((d) => {
     d.y0 = Math.max(0, d.y0 - holeDelta);
     d.y1 = Math.max(0, d.y1 - holeDelta);
-    d.current = {x0: d.x0, x1: d.x1, y0: d.y0, y1: d.y1};
+    d.current = { x0: d.x0, x1: d.x1, y0: d.y0, y1: d.y1 };
   });
 
   // Colour strategy:
@@ -2256,7 +2380,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
       let darken = 0.18;
       if (lum > 0.78) darken = 0.38;
       else if (lum > 0.62) darken = 0.28;
-      else if (lum < 0.22) darken = 0.10;
+      else if (lum < 0.22) darken = 0.1;
       return _mixRgb(rgb, d3.rgb(0, 0, 0), darken).formatHex();
     } catch {
       // ignore
@@ -2271,15 +2395,13 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
   }
 
   const arc = d3
-      .arc()
-      .startAngle((d) => d.x0)
-      .endAngle((d) => d.x1)
-      .innerRadius((d) => d.y0)
-      .outerRadius((d) => d.y1);
+    .arc()
+    .startAngle((d) => d.x0)
+    .endAngle((d) => d.x1)
+    .innerRadius((d) => d.y0)
+    .outerRadius((d) => d.y1);
 
-  const g = svg
-      .append('g')
-      .attr('transform', `translate(${width / 2}, ${height / 2})`);
+  const g = svg.append('g').attr('transform', `translate(${width / 2}, ${height / 2})`);
 
   const arcVisible = (c) => c.y1 <= radius && c.y0 >= 0 && c.x1 > c.x0;
   const isControlRef = (s) => /^A\.\d+(?:\.\d+)*$/i.test(String(s || '').trim());
@@ -2326,15 +2448,17 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
 
     // Minimums tuned to prevent the "ink smear" effect when there are many tiny slices.
     // Relax ONLY for control refs on Sunburst (by source) ring-2 labels.
-    const minAngle = relaxedCtrl ? 0.08 : (d.depth === 1 ? 0.12 : 0.16); // ~4.6° / ~7° / ~9°
-    const minRadial = relaxedCtrl ? 10 : (d.depth === 1 ? 16 : 12);
-    const minArc = relaxedCtrl ?
-      Math.max(42, need) :
-      (d.depth === 1 ? Math.max(70, need) : Math.max(90, need + 8));
+    const minAngle = relaxedCtrl ? 0.08 : d.depth === 1 ? 0.12 : 0.16; // ~4.6° / ~7° / ~9°
+    const minRadial = relaxedCtrl ? 10 : d.depth === 1 ? 16 : 12;
+    const minArc = relaxedCtrl
+      ? Math.max(42, need)
+      : d.depth === 1
+        ? Math.max(70, need)
+        : Math.max(90, need + 8);
 
     // Also require a small share of the total so we don't label near-zero slices.
     const frac = (d.value || 0) / (root.value || 1);
-    const minFrac = relaxedCtrl ? 0.001 : (d.depth === 1 ? 0.01 : 0.005);
+    const minFrac = relaxedCtrl ? 0.001 : d.depth === 1 ? 0.01 : 0.005;
 
     return radial >= minRadial && angle >= minAngle && arcLen >= minArc && frac >= minFrac;
   };
@@ -2361,114 +2485,119 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
   const centerR = Math.max(40, innerHoleR + 4);
 
   const parent = g
-      .append('circle')
-      .datum(root)
-      .attr('class', 'sunburst-center-target')
-      .attr('r', centerR)
-      .attr('fill', 'rgba(255,255,255,0.95)')
-      .attr('stroke', 'rgba(31,31,42,0.10)')
-      .attr('stroke-width', 1)
-      .style('pointer-events', 'all')
-      .style('cursor', (isDrill && drillBack) ? 'pointer' : 'default')
-      .on('click', (ev, d) => {
-        ev.preventDefault();
-        // In "Other" drill-down mode, clicking the center at the drill root returns
-        // to the main sunburst.
-        if (isDrill && drillBack && (!focus || !focus.parent)) {
-          setViz(mode, {skipDraw: true});
-          drawSunburst(mode, drillBack.initialFocus || null);
-          return;
-        }
-        // `d` is the parent of the current focus (set in clicked()).
-        if (d) clicked(d);
-      });
-
+    .append('circle')
+    .datum(root)
+    .attr('class', 'sunburst-center-target')
+    .attr('r', centerR)
+    .attr('fill', 'rgba(255,255,255,0.95)')
+    .attr('stroke', 'rgba(31,31,42,0.10)')
+    .attr('stroke-width', 1)
+    .style('pointer-events', 'all')
+    .style('cursor', isDrill && drillBack ? 'pointer' : 'default')
+    .on('click', (ev, d) => {
+      ev.preventDefault();
+      // In "Other" drill-down mode, clicking the center at the drill root returns
+      // to the main sunburst.
+      if (isDrill && drillBack && (!focus || !focus.parent)) {
+        setViz(mode, { skipDraw: true });
+        drawSunburst(mode, drillBack.initialFocus || null);
+        return;
+      }
+      // `d` is the parent of the current focus (set in clicked()).
+      if (d) clicked(d);
+    });
 
   function renderOtherPanel(node) {
-  // Show breakdown when:
-  //  - focused on root (depth 0) and the root has an "Other" top-level slice, OR
-  //  - focused on a top-level segment (depth 1) and that segment has an "Other" child slice.
-  if (!node || (node.depth !== 0 && node.depth !== 1)) {
-    setSunburstOtherPanel('');
-    return;
-  }
-
-  const other = (node.children || []).find((c) => !!c?.data?.is_other) || null;
-  const items = other && Array.isArray(other.data?.other_items) ? other.data.other_items.slice() : [];
-  if (!other || items.length === 0) {
-    setSunburstOtherPanel('');
-    return;
-  }
-
-  items.sort((a, b) => Number(b?.value || 0) - Number(a?.value || 0));
-
-  const r = getActiveRange();
-
-  const otherItemType = (() => {
-    if (node.depth === 0) {
-      if (mode === 'sunburst_source') return 'source';
-      if (mode === 'sunburst_control') return 'control';
-      return 'segment';
-    }
-    if (mode === 'sunburst_source') return 'control';
-    if (mode === 'sunburst_control') return 'source';
-    return 'segment';
-  })();
-
-  const labelForType = (t, plural = false) => {
-    const labels = {
-      source: ['Source', 'Sources'],
-      control: ['Control', 'Controls'],
-      clause: ['Clause', 'Clauses'],
-      segment: ['Segment', 'Segments'],
-    };
-    const pair = labels[t] || labels.segment;
-    return plural ? pair[1] : pair[0];
-  };
-
-  const title = `${labelForType(otherItemType, true)} merged into "Other"`;
-  const scopeName = node.depth === 0 ? 'All' : String(node.data?.name || '');
-  const header = labelForType(otherItemType, false);
-  const countLabel = 'events';
-  const itemActionLabel = 'open filtered events';
-
-  const hrefForOtherItem = (it) => {
-    const label = String(it?.name || '');
-
-    if (mode === 'sunburst_source') {
-      if (otherItemType === 'source') return buildEventsHref(String(it?.source_key || '').trim(), '');
-      const src = String(node.data?.source_key || '').trim();
-      const control = String(it?.control_ref || label || it?.control_id || '').trim();
-      return buildEventsHref(src, control);
+    // Show breakdown when:
+    //  - focused on root (depth 0) and the root has an "Other" top-level slice, OR
+    //  - focused on a top-level segment (depth 1) and that segment has an "Other" child slice.
+    if (!node || (node.depth !== 0 && node.depth !== 1)) {
+      setSunburstOtherPanel('');
+      return;
     }
 
-    if (mode === 'sunburst_control') {
-      if (otherItemType === 'control') {
-        const control = String(it?.control_ref || label || it?.control_id || '').trim();
-        return buildEventsHref('', control);
+    const other = (node.children || []).find((c) => !!c?.data?.is_other) || null;
+    const items =
+      other && Array.isArray(other.data?.other_items) ? other.data.other_items.slice() : [];
+    if (!other || items.length === 0) {
+      setSunburstOtherPanel('');
+      return;
+    }
+
+    items.sort((a, b) => Number(b?.value || 0) - Number(a?.value || 0));
+
+    const r = getActiveRange();
+
+    const otherItemType = (() => {
+      if (node.depth === 0) {
+        if (mode === 'sunburst_source') return 'source';
+        if (mode === 'sunburst_control') return 'control';
+        return 'segment';
       }
-      const src = String(it?.source_key || '').trim();
-      const control = String(node.data?.control_ref || node.data?.name || node.data?.control_id || '').trim();
-      return buildEventsHref(src, control);
-    }
+      if (mode === 'sunburst_source') return 'control';
+      if (mode === 'sunburst_control') return 'source';
+      return 'segment';
+    })();
 
-    return '#';
-  };
+    const labelForType = (t, plural = false) => {
+      const labels = {
+        source: ['Source', 'Sources'],
+        control: ['Control', 'Controls'],
+        clause: ['Clause', 'Clauses'],
+        segment: ['Segment', 'Segments'],
+      };
+      const pair = labels[t] || labels.segment;
+      return plural ? pair[1] : pair[0];
+    };
 
-  const rows = items.map((it) => {
-    const v = Number(it?.value || 0);
-    const label = String(it?.name || '');
-    const href = hrefForOtherItem(it);
-    return `<tr>
+    const title = `${labelForType(otherItemType, true)} merged into "Other"`;
+    const scopeName = node.depth === 0 ? 'All' : String(node.data?.name || '');
+    const header = labelForType(otherItemType, false);
+    const countLabel = 'events';
+    const itemActionLabel = 'open filtered events';
+
+    const hrefForOtherItem = (it) => {
+      const label = String(it?.name || '');
+
+      if (mode === 'sunburst_source') {
+        if (otherItemType === 'source')
+          return buildEventsHref(String(it?.source_key || '').trim(), '');
+        const src = String(node.data?.source_key || '').trim();
+        const control = String(it?.control_ref || label || it?.control_id || '').trim();
+        return buildEventsHref(src, control);
+      }
+
+      if (mode === 'sunburst_control') {
+        if (otherItemType === 'control') {
+          const control = String(it?.control_ref || label || it?.control_id || '').trim();
+          return buildEventsHref('', control);
+        }
+        const src = String(it?.source_key || '').trim();
+        const control = String(
+          node.data?.control_ref || node.data?.name || node.data?.control_id || '',
+        ).trim();
+        return buildEventsHref(src, control);
+      }
+
+      return '#';
+    };
+
+    const rows = items
+      .map((it) => {
+        const v = Number(it?.value || 0);
+        const label = String(it?.name || '');
+        const href = hrefForOtherItem(it);
+        return `<tr>
       <td><a class="link-dark text-decoration-none" href="${href}">${esc(label)}</a></td>
       <td class="text-end" data-sort="${v}">${esc(String(Math.round(v)))}</td>
     </tr>`;
-  }).join('');
+      })
+      .join('');
 
-  const total = Math.round(items.reduce((acc, it) => acc + Number(it?.value || 0), 0));
-  const rangeTxt = (r && r.from && r.to) ? `${esc(r.from)} → ${esc(r.to)}` : '';
+    const total = Math.round(items.reduce((acc, it) => acc + Number(it?.value || 0), 0));
+    const rangeTxt = r && r.from && r.to ? `${esc(r.from)} → ${esc(r.to)}` : '';
 
-  setSunburstOtherPanel(`
+    setSunburstOtherPanel(`
     <div class="border rounded p-2" style="background: rgba(31,31,42,0.03)">
       <div class="d-flex justify-content-between align-items-baseline">
         <div class="small-muted fw-bold">${title}</div>
@@ -2488,52 +2617,51 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
       </div>
     </div>
   `);
-}
-
+  }
 
   const centerLabel = g
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'middle')
-      .attr('class', 'small-muted')
-      .style('font-size', '16px')
-      .style('font-weight', 700)
-      .style('pointer-events', 'none')
-      .text('All');
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('class', 'small-muted')
+    .style('font-size', '16px')
+    .style('font-weight', 700)
+    .style('pointer-events', 'none')
+    .text('All');
 
   // Breadcrumb + hint (shown only when zoomed in)
   const centerBreadcrumb = g
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'middle')
-      .attr('class', 'small-muted')
-      .attr('y', 18)
-      .style('font-size', '11.5px')
-      .style('pointer-events', 'none')
-      .style('opacity', 0)
-      .text('');
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('class', 'small-muted')
+    .attr('y', 18)
+    .style('font-size', '11.5px')
+    .style('pointer-events', 'none')
+    .style('opacity', 0)
+    .text('');
 
   const centerHint = g
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'middle')
-      .attr('class', 'small-muted')
-      .attr('y', 4)
-      .style('font-size', '12.5px')
-      .style('pointer-events', 'none')
-      .style('opacity', 1)
-      .text('');
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('class', 'small-muted')
+    .attr('y', 4)
+    .style('font-size', '12.5px')
+    .style('pointer-events', 'none')
+    .style('opacity', 1)
+    .text('');
 
   const centerHintZoom = g
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'middle')
-      .attr('class', 'small-muted')
-      .attr('y', 34)
-      .style('font-size', '11.5px')
-      .style('pointer-events', 'none')
-      .style('opacity', 0)
-      .text('Click center to zoom out');
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('class', 'small-muted')
+    .attr('y', 34)
+    .style('font-size', '11.5px')
+    .style('pointer-events', 'none')
+    .style('opacity', 0)
+    .text('Click center to zoom out');
 
   function setMultilineText(textSel, lines, lineDyEm = 1.18) {
     if (!textSel) return;
@@ -2541,10 +2669,10 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
     const ll = Array.isArray(lines) ? lines : [String(lines || '')];
     ll.filter((x) => String(x || '').trim()).forEach((line, i) => {
       textSel
-          .append('tspan')
-          .attr('x', 0)
-          .attr('dy', i === 0 ? 0 : `${lineDyEm}em`)
-          .text(String(line));
+        .append('tspan')
+        .attr('x', 0)
+        .attr('dy', i === 0 ? 0 : `${lineDyEm}em`)
+        .text(String(line));
     });
   }
 
@@ -2560,10 +2688,10 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
 
   function breadcrumbsFor(node) {
     const parts = node
-        .ancestors()
-        .reverse()
-        .map((a) => a.data?.name)
-        .filter(Boolean);
+      .ancestors()
+      .reverse()
+      .map((a) => a.data?.name)
+      .filter(Boolean);
     if (parts.length <= 1) return 'All';
     return parts.join(' › ');
   }
@@ -2586,9 +2714,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
       }
     } else {
       centerHint.style('opacity', 0);
-      centerBreadcrumb
-          .style('opacity', 1)
-          .text(truncateMiddle(breadcrumbsFor(node)));
+      centerBreadcrumb.style('opacity', 1).text(truncateMiddle(breadcrumbsFor(node)));
       centerHintZoom.style('opacity', 1).text('Click center to zoom out');
     }
   }
@@ -2596,150 +2722,156 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
   updateCenterUI(root);
 
   const path = g
-      .append('g')
-      .selectAll('path')
-      .data(root.descendants().filter((d) => d.depth))
-      .join('path')
-      .attr('class', 'sunburst-arc')
-      .attr('fill', (d) => _fillFor(d))
-      // Less translucent = less "pastel" looking.
-      .attr('fill-opacity', (d) => (arcVisible(d.current) ? (d.depth === 1 ? 0.97 : 0.90) : 0))
-      .attr('pointer-events', (d) => (arcVisible(d.current) ? 'auto' : 'none'))
-      .attr('d', (d) => arc(d.current))
-      .on('click', (ev, d) => {
-        ev.preventDefault();
-        if (!d) return;
+    .append('g')
+    .selectAll('path')
+    .data(root.descendants().filter((d) => d.depth))
+    .join('path')
+    .attr('class', 'sunburst-arc')
+    .attr('fill', (d) => _fillFor(d))
+    // Less translucent = less "pastel" looking.
+    .attr('fill-opacity', (d) => (arcVisible(d.current) ? (d.depth === 1 ? 0.97 : 0.9) : 0))
+    .attr('pointer-events', (d) => (arcVisible(d.current) ? 'auto' : 'none'))
+    .attr('d', (d) => arc(d.current))
+    .on('click', (ev, d) => {
+      ev.preventDefault();
+      if (!d) return;
 
-        // "Other" represents many aggregated segments.
-        // Default behaviour: drill into it and render a fresh sunburst containing
-        // the merged segments as explicit ring-1 slices.
-        // (Shift-click keeps the old behaviour: show a breakdown list with links.)
-        if (d?.data?.is_other) {
-          const p = d.parent || root;
-          if (ev.shiftKey) {
-            if (p && focus !== p) clicked(p);
-            else renderOtherPanel(p);
-            return;
-          }
-
-          const nodes = Array.isArray(d?.data?.other_nodes) ? d.data.other_nodes : [];
-          if (nodes.length) {
-            // If this is a second-ring "Other" bucket, preserve the focused
-            // parent (for example, the clause) as the drill-down root so leaf
-            // clicks still carry the correct source/control/clause context.
-            const contextualParent = (d.parent && d.parent.depth > 0 && !d.parent?.data?.is_other) ? d.parent : null;
-            const drillRoot = contextualParent ? {...(contextualParent.data || {}), children: nodes} : {name: 'Other', children: nodes};
-            drawSunburst(mode, null, {
-              data: drillRoot,
-              back: {initialFocus: sunburstFocus},
-            });
-            return;
-          }
-
-          // Fallback: if we don't have drill nodes for some reason, show the list.
+      // "Other" represents many aggregated segments.
+      // Default behaviour: drill into it and render a fresh sunburst containing
+      // the merged segments as explicit ring-1 slices.
+      // (Shift-click keeps the old behaviour: show a breakdown list with links.)
+      if (d?.data?.is_other) {
+        const p = d.parent || root;
+        if (ev.shiftKey) {
           if (p && focus !== p) clicked(p);
           else renderOtherPanel(p);
           return;
         }
 
-        // If the user clicks a leaf (no children), open filtered Events.
-        // Also: if the user is already focused on a segment (can't zoom further), clicking it opens Events.
-        const isLeaf = !d.children;
-        const isFocused = (focus === d);
-
-        const filters = (() => {
-          let sourceKey = '';
-          let controlRef = '';
-          let clauseRef = '';
-          let clauseId = '';
-          let controlId = '';
-          for (const a of d.ancestors()) {
-            if (!sourceKey && a.data?.kind === 'source' && a.data?.source_key) sourceKey = String(a.data.source_key);
-            // Prefer human-friendly ref (e.g. A.8.6) over UUID for Events filtering.
-            if (!controlRef && a.data?.kind === 'control') {
-              const v = a.data?.control_ref || a.data?.name || '';
-              if (v) controlRef = String(v);
-              if (a.data?.control_id) controlId = String(a.data.control_id);
-            }
-            if (!clauseRef && a.data?.kind === 'clause') {
-              const v = a.data?.clause_ref || a.data?.name || '';
-              if (v) clauseRef = String(v);
-              if (a.data?.clause_id) clauseId = String(a.data.clause_id);
-            }
-          }
-          return {sourceKey, controlRef, clauseRef, clauseId, controlId};
-        })();
-
-        if (isLeaf || isFocused) {
-          openEventsForLink(filters.sourceKey, filters.controlRef, ev, null, {clause: filters.clauseRef});
+        const nodes = Array.isArray(d?.data?.other_nodes) ? d.data.other_nodes : [];
+        if (nodes.length) {
+          // If this is a second-ring "Other" bucket, preserve the focused
+          // parent (for example, the clause) as the drill-down root so leaf
+          // clicks still carry the correct source/control/clause context.
+          const contextualParent =
+            d.parent && d.parent.depth > 0 && !d.parent?.data?.is_other ? d.parent : null;
+          const drillRoot = contextualParent
+            ? { ...(contextualParent.data || {}), children: nodes }
+            : { name: 'Other', children: nodes };
+          drawSunburst(mode, null, {
+            data: drillRoot,
+            back: { initialFocus: sunburstFocus },
+          });
           return;
         }
 
-        // Otherwise, zoom into the clicked node.
-        if (d.children) clicked(d);
-      });
+        // Fallback: if we don't have drill nodes for some reason, show the list.
+        if (p && focus !== p) clicked(p);
+        else renderOtherPanel(p);
+        return;
+      }
+
+      // If the user clicks a leaf (no children), open filtered Events.
+      // Also: if the user is already focused on a segment (can't zoom further), clicking it opens Events.
+      const isLeaf = !d.children;
+      const isFocused = focus === d;
+
+      const filters = (() => {
+        let sourceKey = '';
+        let controlRef = '';
+        let clauseRef = '';
+        let clauseId = '';
+        let controlId = '';
+        for (const a of d.ancestors()) {
+          if (!sourceKey && a.data?.kind === 'source' && a.data?.source_key)
+            sourceKey = String(a.data.source_key);
+          // Prefer human-friendly ref (e.g. A.8.6) over UUID for Events filtering.
+          if (!controlRef && a.data?.kind === 'control') {
+            const v = a.data?.control_ref || a.data?.name || '';
+            if (v) controlRef = String(v);
+            if (a.data?.control_id) controlId = String(a.data.control_id);
+          }
+          if (!clauseRef && a.data?.kind === 'clause') {
+            const v = a.data?.clause_ref || a.data?.name || '';
+            if (v) clauseRef = String(v);
+            if (a.data?.clause_id) clauseId = String(a.data.clause_id);
+          }
+        }
+        return { sourceKey, controlRef, clauseRef, clauseId, controlId };
+      })();
+
+      if (isLeaf || isFocused) {
+        openEventsForLink(filters.sourceKey, filters.controlRef, ev, null, {
+          clause: filters.clauseRef,
+        });
+        return;
+      }
+
+      // Otherwise, zoom into the clicked node.
+      if (d.children) clicked(d);
+    });
 
   function arcCursor(d, coords = d.current) {
     if (!arcVisible(coords)) return 'default';
     // Leaves always open Events. Nodes with children zoom unless already focused.
     if (!d.children) return 'pointer';
-    return (focus === d) ? 'pointer' : 'zoom-in';
+    return focus === d ? 'pointer' : 'zoom-in';
   }
 
   path.style('cursor', (d) => arcCursor(d));
 
-  path
-      .append('title')
-      .text((d) => {
-        const names = d
-            .ancestors()
-            .reverse()
-            .map((a) => a.data?.name)
-            .filter(Boolean)
-            .slice(1);
-        const label = names.join(' → ');
-        if (d?.data?.is_other) {
-          const n = Number(d?.data?.other_count || (Array.isArray(d?.data?.other_items) ? d.data.other_items.length : 0)) || 0;
-          return `${label}\nMerged: ${n} segments\nMapped events: ${Math.round(d.value || 0)}`;
-        }
-        return `${label}\nMapped events: ${Math.round(d.value || 0)}`;
-      });
+  path.append('title').text((d) => {
+    const names = d
+      .ancestors()
+      .reverse()
+      .map((a) => a.data?.name)
+      .filter(Boolean)
+      .slice(1);
+    const label = names.join(' → ');
+    if (d?.data?.is_other) {
+      const n =
+        Number(
+          d?.data?.other_count ||
+            (Array.isArray(d?.data?.other_items) ? d.data.other_items.length : 0),
+        ) || 0;
+      return `${label}\nMerged: ${n} segments\nMapped events: ${Math.round(d.value || 0)}`;
+    }
+    return `${label}\nMapped events: ${Math.round(d.value || 0)}`;
+  });
 
   const labels = g
-      .append('g')
-      .attr('class', 'sunburst-labels')
-      .attr('pointer-events', 'none')
-      .selectAll('text')
-      .data(root.descendants().filter((d) => d.depth))
-      .join('text')
-      .attr('class', (d) => `sunburst-label sunburst-label-depth${d.depth}`)
-      .attr('dy', '0.32em')
-      .attr('text-anchor', 'middle')
-      .style('opacity', (d) => (labelVisible(d) ? 1 : 0))
-      .attr('transform', (d) => labelTransform(d.current))
-      .text(labelText);
+    .append('g')
+    .attr('class', 'sunburst-labels')
+    .attr('pointer-events', 'none')
+    .selectAll('text')
+    .data(root.descendants().filter((d) => d.depth))
+    .join('text')
+    .attr('class', (d) => `sunburst-label sunburst-label-depth${d.depth}`)
+    .attr('dy', '0.32em')
+    .attr('text-anchor', 'middle')
+    .style('opacity', (d) => (labelVisible(d) ? 1 : 0))
+    .attr('transform', (d) => labelTransform(d.current))
+    .text(labelText);
 
   // Labels: default to white (requested). With bolder segment colours and higher opacity,
   // this stays readable without switching some labels to black.
   labels
-      .style('fill', 'rgba(255,255,255,0.92)')
-      .style('paint-order', 'stroke')
-      .style('stroke', (d) => (d?.depth === 1 ? 'rgba(0,0,0,0.30)' : 'none'))
-      .style('stroke-width', (d) => (d?.depth === 1 ? '1.05px' : '0px'))
-      .style('font-weight', (d) => (d?.data?.is_other ? '700' : '600'));
+    .style('fill', 'rgba(255,255,255,0.92)')
+    .style('paint-order', 'stroke')
+    .style('stroke', (d) => (d?.depth === 1 ? 'rgba(0,0,0,0.30)' : 'none'))
+    .style('stroke-width', (d) => (d?.depth === 1 ? '1.05px' : '0px'))
+    .style('font-weight', (d) => (d?.data?.is_other ? '700' : '600'));
 
-  labels
-      .append('title')
-      .text((d) => {
-        const names = d
-            .ancestors()
-            .reverse()
-            .map((a) => a.data?.name)
-            .filter(Boolean)
-            .slice(1);
-        const label = names.join(' → ');
-        return `${label}\nMapped events: ${Math.round(d.value || 0)}`;
-      });
+  labels.append('title').text((d) => {
+    const names = d
+      .ancestors()
+      .reverse()
+      .map((a) => a.data?.name)
+      .filter(Boolean)
+      .slice(1);
+    const label = names.join(' → ');
+    return `${label}\nMapped events: ${Math.round(d.value || 0)}`;
+  });
 
   // Ensure the center click target stays above arcs.
   // During zoom, some arcs can reach y0=0 and would otherwise intercept clicks.
@@ -2757,19 +2889,13 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
     updateCenterUI(p);
     renderOtherPanel(p);
     parent
-        .datum(p.parent || root)
-        .style('cursor', p.parent ? 'pointer' : ((isDrill && drillBack) ? 'pointer' : 'default'));
+      .datum(p.parent || root)
+      .style('cursor', p.parent ? 'pointer' : isDrill && drillBack ? 'pointer' : 'default');
 
     root.each((d) => {
       d.target = {
-        x0:
-          Math.max(0, Math.min(1, (d.x0 - p.x0) / (p.x1 - p.x0))) *
-          2 *
-          Math.PI,
-        x1:
-          Math.max(0, Math.min(1, (d.x1 - p.x0) / (p.x1 - p.x0))) *
-          2 *
-          Math.PI,
+        x0: Math.max(0, Math.min(1, (d.x0 - p.x0) / (p.x1 - p.x0))) * 2 * Math.PI,
+        x1: Math.max(0, Math.min(1, (d.x1 - p.x0) / (p.x1 - p.x0))) * 2 * Math.PI,
         y0: Math.max(0, d.y0 - p.y0),
         y1: Math.max(0, d.y1 - p.y0),
       };
@@ -2781,30 +2907,30 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
     const t = g.transition().duration(750);
 
     path
-        .transition(t)
-        .tween('data', (d) => {
-          const i = d3.interpolate(d.current, d.target);
-          return (tt) => {
-            d.current = i(tt);
-          };
-        })
-        .attrTween('d', (d) => () => arc(d.current))
-    // Use the *target* geometry to decide final visibility and pointer events.
-    // (Using d.current here can leave hidden arcs clickable until the next click.)
-        .attr('fill-opacity', (d) =>
+      .transition(t)
+      .tween('data', (d) => {
+        const i = d3.interpolate(d.current, d.target);
+        return (tt) => {
+          d.current = i(tt);
+        };
+      })
+      .attrTween('d', (d) => () => arc(d.current))
+      // Use the *target* geometry to decide final visibility and pointer events.
+      // (Using d.current here can leave hidden arcs clickable until the next click.)
+      .attr('fill-opacity', (d) =>
         // Keep the bolder colour treatment during/after zoom as well.
-        arcVisible(d.target) ? (d.depth === 1 ? 0.97 : 0.90) : 0
-        )
-        .attr('pointer-events', (d) => (arcVisible(d.target) ? 'auto' : 'none'));
+        arcVisible(d.target) ? (d.depth === 1 ? 0.97 : 0.9) : 0,
+      )
+      .attr('pointer-events', (d) => (arcVisible(d.target) ? 'auto' : 'none'));
 
     // Cursor semantics change with focus.
     path.style('cursor', (d) => arcCursor(d, d.target));
 
     labels
-        .transition(t)
-    // Use target geometry so labels don't get "stuck" visible after zoom.
-        .style('opacity', (d) => (labelVisible(d, d.target) ? 1 : 0))
-        .attrTween('transform', (d) => () => labelTransform(d.current));
+      .transition(t)
+      // Use target geometry so labels don't get "stuck" visible after zoom.
+      .style('opacity', (d) => (labelVisible(d, d.target) ? 1 : 0))
+      .attrTween('transform', (d) => () => labelTransform(d.current));
 
     // Remember the current zoom level so it can be saved / restored.
     // In "Other" drill-down mode, don't overwrite the main-chart focus state.
@@ -2813,10 +2939,10 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
         sunburstFocus = null;
       } else if (mode === 'sunburst_source') {
         const k = focus.data?.source_key;
-        sunburstFocus = k ? {source_key: String(k)} : null;
+        sunburstFocus = k ? { source_key: String(k) } : null;
       } else if (mode === 'sunburst_control') {
         const k = focus.data?.control_id;
-        sunburstFocus = k ? {control_id: String(k)} : null;
+        sunburstFocus = k ? { control_id: String(k) } : null;
       }
     }
   }
@@ -2843,7 +2969,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
 }
 
 async function loadTimeseries(days, opts = null) {
-  const o = (opts && typeof opts === 'object') ? opts : {};
+  const o = opts && typeof opts === 'object' ? opts : {};
   const breakdown = String(o.breakdown || '').trim();
   const interval = String(o.interval || '').trim();
   const startTs = String(o.start_ts || '').trim();
@@ -2851,11 +2977,12 @@ async function loadTimeseries(days, opts = null) {
 
   const d = Math.max(1, Math.min(3650, Number(days || 7)));
   const r = getActiveRange();
-  const key = (r ? `range:${r.from}:${r.to}` : `days:${d}`)
-      + (breakdown ? `:bd:${breakdown}` : '')
-      + (interval ? `:int:${interval}` : '')
-      + (startTs ? `:sts:${startTs}` : '')
-      + (endTs ? `:ets:${endTs}` : '');
+  const key =
+    (r ? `range:${r.from}:${r.to}` : `days:${d}`) +
+    (breakdown ? `:bd:${breakdown}` : '') +
+    (interval ? `:int:${interval}` : '') +
+    (startTs ? `:sts:${startTs}` : '') +
+    (endTs ? `:ets:${endTs}` : '');
   if (timeseriesCache.has(key)) return timeseriesCache.get(key);
 
   const u = new URL('/api/v1/charts/event_volume_timeseries', location.origin);
@@ -2881,19 +3008,21 @@ async function loadTimeseries(days, opts = null) {
   // Update export payload (sunburst uses the same edge list as the graph).
   {
     const nodeById = new Map((graphData?.nodes || []).map((n) => [n.id, n]));
-    const edges = (graphData?.links || []).map((l) => {
-      const s = nodeById.get(l.source);
-      const c = nodeById.get(l.target);
-      return {
-        source: s?.source || '',
-        source_label: s?.label || s?.source || '',
-        control_id: c?.control_id || '',
-        control_ref: c?.label || '',
-        control_title: c?.title || '',
-        mapped_events: Number(l.value || 0),
-      };
-    }).filter((e) => e.mapped_events > 0);
-    lastView = {mode, range: getActiveRange(), payload: {edges}};
+    const edges = (graphData?.links || [])
+      .map((l) => {
+        const s = nodeById.get(l.source);
+        const c = nodeById.get(l.target);
+        return {
+          source: s?.source || '',
+          source_label: s?.label || s?.source || '',
+          control_id: c?.control_id || '',
+          control_ref: c?.label || '',
+          control_title: c?.title || '',
+          mapped_events: Number(l.value || 0),
+        };
+      })
+      .filter((e) => e.mapped_events > 0);
+    lastView = { mode, range: getActiveRange(), payload: { edges } };
   }
 }
 
@@ -2906,9 +3035,10 @@ async function drawHistogram() {
 
   // Zoom state: when active, the histogram becomes time-precision (hour/minute/second)
   // for the selected window.
-  const zoom = (Array.isArray(histZoomStack) && histZoomStack.length > 0) ?
-    histZoomStack[histZoomStack.length - 1] :
-    null;
+  const zoom =
+    Array.isArray(histZoomStack) && histZoomStack.length > 0
+      ? histZoomStack[histZoomStack.length - 1]
+      : null;
 
   // Stacked chart: each bucket is one bar, stacked by source (badge colours).
   // The backend includes per-source colours that respect user overrides.
@@ -2920,17 +3050,20 @@ async function drawHistogram() {
     end_ts: zoom?.end_ts || '',
   });
 
-  const intervalEff = String(res?.interval || reqInterval || 'day').trim().toLowerCase() || 'day';
+  const intervalEff =
+    String(res?.interval || reqInterval || 'day')
+      .trim()
+      .toLowerCase() || 'day';
   const items = Array.isArray(res?.items) ? res.items : [];
   if (items.length === 0) {
     const w = getWrapWidth(680);
     sizeSvg(w, 360);
     svg
-        .append('text')
-        .attr('x', 14)
-        .attr('y', 24)
-        .attr('class', 'small-muted')
-        .text('No events in the selected window.');
+      .append('text')
+      .attr('x', 14)
+      .attr('y', 24)
+      .attr('class', 'small-muted')
+      .text('No events in the selected window.');
     return;
   }
   // If the backend coarsened the requested interval (eg too many buckets),
@@ -2948,31 +3081,31 @@ async function drawHistogram() {
   // We'll set lastView after we determine the displayed stack keys,
   // so CSV/JSON exports can reflect exactly what is shown.
 
-  const margin = {top: 62, right: 18, bottom: 122, left: 54};
+  const margin = { top: 62, right: 18, bottom: 122, left: 54 };
 
   // Choose a compact bar width for very dense buckets (minute/second).
   const targetW = Math.max(680, getWrapWidth(680));
-  const bar = Math.max(2, Math.min(12, Math.floor((targetW - margin.left - margin.right) / Math.max(1, items.length))));
-  const width = Math.max(
-      targetW,
-      margin.left + margin.right + items.length * bar
+  const bar = Math.max(
+    2,
+    Math.min(12, Math.floor((targetW - margin.left - margin.right) / Math.max(1, items.length))),
   );
+  const width = Math.max(targetW, margin.left + margin.right + items.length * bar);
   const height = 520;
   sizeSvg(width, height);
 
   const buckets = items.map((d) => d.bucket || d.date);
   const x = d3
-      .scaleBand()
-      .domain(buckets)
-      .range([margin.left, width - margin.right])
+    .scaleBand()
+    .domain(buckets)
+    .range([margin.left, width - margin.right])
 
-      .padding(items.length > 240 ? 0.02 : 0.1);
+    .padding(items.length > 240 ? 0.02 : 0.1);
 
   // Determine the source stacks to show (top N by volume in the window).
   const sourcesMeta = Array.isArray(res?.sources) ? res.sources : [];
   const sourcesSorted = sourcesMeta
-      .slice()
-      .sort((a, b) => Number(b?.total || 0) - Number(a?.total || 0));
+    .slice()
+    .sort((a, b) => Number(b?.total || 0) - Number(a?.total || 0));
 
   const MAX_STACKS = 12;
   const primary = sourcesSorted.slice(0, MAX_STACKS);
@@ -3022,7 +3155,7 @@ async function drawHistogram() {
     }
 
     let other = 0;
-    const by = (it && typeof it.by_source === 'object' && it.by_source) ? it.by_source : {};
+    const by = it && typeof it.by_source === 'object' && it.by_source ? it.by_source : {};
     for (const [src, n] of Object.entries(by)) {
       const key = String(src);
       const v = Number(n || 0);
@@ -3037,10 +3170,10 @@ async function drawHistogram() {
 
   const yMax = d3.max(stackedData, (d) => d3.sum(stackKeys, (k) => Number(d[k] || 0))) || 1;
   const y = d3
-      .scaleLinear()
-      .domain([0, yMax])
-      .nice()
-      .range([height - margin.bottom, margin.top]);
+    .scaleLinear()
+    .domain([0, yMax])
+    .nice()
+    .range([height - margin.bottom, margin.top]);
 
   const gAxis = svg.append('g');
 
@@ -3064,24 +3197,19 @@ async function drawHistogram() {
   };
 
   gAxis
-      .append('g')
-      .attr('class', 'viz-axis')
-      .attr('transform', `translate(0, ${mainBottom})`)
-      .call(
-          d3
-              .axisBottom(x)
-              .tickValues(tickVals)
-              .tickFormat(tickFormat)
-      )
-      .selectAll('text')
-      .attr('text-anchor', 'end')
-      .attr('transform', 'rotate(-35)');
+    .append('g')
+    .attr('class', 'viz-axis')
+    .attr('transform', `translate(0, ${mainBottom})`)
+    .call(d3.axisBottom(x).tickValues(tickVals).tickFormat(tickFormat))
+    .selectAll('text')
+    .attr('text-anchor', 'end')
+    .attr('transform', 'rotate(-35)');
 
   gAxis
-      .append('g')
-      .attr('class', 'viz-axis')
-      .attr('transform', `translate(${margin.left}, 0)`)
-      .call(d3.axisLeft(y).ticks(6));
+    .append('g')
+    .attr('class', 'viz-axis')
+    .attr('transform', `translate(${margin.left}, 0)`)
+    .call(d3.axisLeft(y).ticks(6));
 
   // Bars (stacked by source)
   const gBars = svg.append('g');
@@ -3090,69 +3218,69 @@ async function drawHistogram() {
   const series = stack(stackedData);
 
   const layer = gBars
-      .selectAll('g.layer')
-      .data(series)
-      .enter()
-      .append('g')
-      .attr('class', 'layer')
-      // Pastel fill + stronger outline per stack key (similar to Graph nodes)
-      .attr('fill', (s) => {
-        const base = colorByKey.get(s.key) || accent(0.55);
-        return _histFillStrokeForBase(base).fill;
-      });
+    .selectAll('g.layer')
+    .data(series)
+    .enter()
+    .append('g')
+    .attr('class', 'layer')
+    // Pastel fill + stronger outline per stack key (similar to Graph nodes)
+    .attr('fill', (s) => {
+      const base = colorByKey.get(s.key) || accent(0.55);
+      return _histFillStrokeForBase(base).fill;
+    });
 
   layer
-      .selectAll('rect')
-      .data((s) => s.map((d) => ({key: s.key, y0: d[0], y1: d[1], data: d.data})))
-      .enter()
-      .append('rect')
-      .attr('x', (d) => x(d.data.bucket))
-      .attr('y', (d) => y(d.y1))
-      .attr('width', x.bandwidth())
-      .attr('height', (d) => Math.max(0, y(d.y0) - y(d.y1)))
-      .attr('stroke', (d) => {
-        const base = colorByKey.get(d.key) || accent(0.55);
-        return _histFillStrokeForBase(base).stroke;
-      })
-      .attr('stroke-width', 1)
-      .attr('vector-effect', 'non-scaling-stroke')
-      .style('cursor', (d) => ((d.y1 - d.y0) > 0 ? 'pointer' : 'default'))
-      .on('click', (ev, d) => {
-        ev.preventDefault();
-        const n = Number(d?.y1 || 0) - Number(d?.y0 || 0);
-        if (!(n > 0)) return;
-        const bucket = String(d?.data?.bucket || '').trim();
-        if (!bucket) return;
-        const src = d.key === OTHER_KEY ? '' : String(d.key || '').trim();
-        if (intervalEff === 'day') {
-          // Filter Events page to the clicked day (start=end) and source.
-          openEventsForLink(src, '', ev, {from: bucket, to: bucket});
-          return;
-        }
+    .selectAll('rect')
+    .data((s) => s.map((d) => ({ key: s.key, y0: d[0], y1: d[1], data: d.data })))
+    .enter()
+    .append('rect')
+    .attr('x', (d) => x(d.data.bucket))
+    .attr('y', (d) => y(d.y1))
+    .attr('width', x.bandwidth())
+    .attr('height', (d) => Math.max(0, y(d.y0) - y(d.y1)))
+    .attr('stroke', (d) => {
+      const base = colorByKey.get(d.key) || accent(0.55);
+      return _histFillStrokeForBase(base).stroke;
+    })
+    .attr('stroke-width', 1)
+    .attr('vector-effect', 'non-scaling-stroke')
+    .style('cursor', (d) => (d.y1 - d.y0 > 0 ? 'pointer' : 'default'))
+    .on('click', (ev, d) => {
+      ev.preventDefault();
+      const n = Number(d?.y1 || 0) - Number(d?.y0 || 0);
+      if (!(n > 0)) return;
+      const bucket = String(d?.data?.bucket || '').trim();
+      if (!bucket) return;
+      const src = d.key === OTHER_KEY ? '' : String(d.key || '').trim();
+      if (intervalEff === 'day') {
+        // Filter Events page to the clicked day (start=end) and source.
+        openEventsForLink(src, '', ev, { from: bucket, to: bucket });
+        return;
+      }
 
-        // For hour/minute/second views, pass an exact time window so the Events page
-        // can filter precisely (rather than collapsing back to day-only).
-        const startMs = histBucketToUtcMs(bucket, intervalEff);
-        if (!Number.isFinite(startMs)) return;
-        const endMs = startMs + histStepMs(intervalEff);
-        openEventsForLink(src, '', ev, {
-          start_ts: new Date(startMs).toISOString(),
-          end_ts: new Date(endMs).toISOString(),
-        });
-      })
-      .append('title')
-      .text((d) => {
-        const label = labelByKey.get(d.key) || d.key;
-        const n = Math.max(0, Math.round((d.y1 - d.y0) * 1000) / 1000);
-        const t = d.data;
-        return `${t.bucket}\n${label}: ${n}\nTotal: ${t.total}\nMapped: ${t.mapped}\nUnmapped: ${t.unmapped}`;
+      // For hour/minute/second views, pass an exact time window so the Events page
+      // can filter precisely (rather than collapsing back to day-only).
+      const startMs = histBucketToUtcMs(bucket, intervalEff);
+      if (!Number.isFinite(startMs)) return;
+      const endMs = startMs + histStepMs(intervalEff);
+      openEventsForLink(src, '', ev, {
+        start_ts: new Date(startMs).toISOString(),
+        end_ts: new Date(endMs).toISOString(),
       });
+    })
+    .append('title')
+    .text((d) => {
+      const label = labelByKey.get(d.key) || d.key;
+      const n = Math.max(0, Math.round((d.y1 - d.y0) * 1000) / 1000);
+      const t = d.data;
+      return `${t.bucket}\n${label}: ${n}\nTotal: ${t.total}\nMapped: ${t.mapped}\nUnmapped: ${t.unmapped}`;
+    });
 
   // Legend (wrap across rows so it doesn't overlap)
   const legend = svg
-      .append('g')
-      .attr('class', 'viz-legend')
-      .attr('transform', `translate(${margin.left}, 16)`);
+    .append('g')
+    .attr('class', 'viz-legend')
+    .attr('transform', `translate(${margin.left}, 16)`);
 
   const maxLegendW = Math.max(180, width - margin.left - margin.right);
   let lx = 0;
@@ -3174,20 +3302,20 @@ async function drawHistogram() {
 
     const g = legend.append('g').attr('transform', `translate(${lx}, ${ly})`);
     g.append('rect')
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('width', sw)
-        .attr('height', sw)
-        .attr('rx', 3)
-        .attr('ry', 3)
-        .attr('fill', cs.fill)
-        .attr('stroke', cs.stroke)
-        .attr('stroke-width', 1)
-        .attr('vector-effect', 'non-scaling-stroke');
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', sw)
+      .attr('height', sw)
+      .attr('rx', 3)
+      .attr('ry', 3)
+      .attr('fill', cs.fill)
+      .attr('stroke', cs.stroke)
+      .attr('stroke-width', 1)
+      .attr('vector-effect', 'non-scaling-stroke');
     g.append('text')
-        .attr('x', sw + gap)
-        .attr('y', 10)
-        .text(label);
+      .attr('x', sw + gap)
+      .attr('y', 10)
+      .text(label);
 
     lx += approxW;
   }
@@ -3196,10 +3324,14 @@ async function drawHistogram() {
     const r = getActiveRange();
     const startLabel = String(res?.start_ts || zoom?.start_ts || '') || '';
     const endLabel = String(res?.end_ts || zoom?.end_ts || '') || '';
-    const intervalLabel = intervalEff === 'day' ? 'Daily' : intervalEff.charAt(0).toUpperCase() + intervalEff.slice(1);
+    const intervalLabel =
+      intervalEff === 'day' ? 'Daily' : intervalEff.charAt(0).toUpperCase() + intervalEff.slice(1);
     const hint = 'Shift-drag (or toggle Zoom mode) on the chart to select a time window.';
     if (zoom && startLabel && endLabel) {
-      setVizCaption(vizMode, `${intervalLabel} volume from ${startLabel} to ${endLabel}. ${hint} Use Back to return.`);
+      setVizCaption(
+        vizMode,
+        `${intervalLabel} volume from ${startLabel} to ${endLabel}. ${hint} Use Back to return.`,
+      );
     } else if (r) {
       setVizCaption(vizMode, `Daily volume from ${r.from} to ${r.to} (${days} days). ${hint}`);
     } else {
@@ -3217,52 +3349,57 @@ async function drawHistogram() {
       return Math.max(0, Math.min(buckets.length - 1, i));
     };
 
-    const brush = d3.brushX()
-        .extent([[margin.left, margin.top], [width - margin.right, mainBottom]])
-        .on('end', (ev) => {
-          const sel = ev?.selection;
-          if (!sel || !Array.isArray(sel)) return;
-          const [px0, px1] = sel;
-          if (!(px1 > px0)) return;
+    const brush = d3
+      .brushX()
+      .extent([
+        [margin.left, margin.top],
+        [width - margin.right, mainBottom],
+      ])
+      .on('end', (ev) => {
+        const sel = ev?.selection;
+        if (!sel || !Array.isArray(sel)) return;
+        const [px0, px1] = sel;
+        if (!(px1 > px0)) return;
 
-          const i0 = bandIndexForPx(px0);
-          const i1 = Math.max(i0, Math.min(buckets.length - 1, Math.ceil((px1 - x.range()[0]) / x.step()) - 1));
+        const i0 = bandIndexForPx(px0);
+        const i1 = Math.max(
+          i0,
+          Math.min(buckets.length - 1, Math.ceil((px1 - x.range()[0]) / x.step()) - 1),
+        );
 
-          // If we're already at second-level precision, require more than one bucket.
-          if (intervalEff === 'second' && i1 <= i0) {
-            return;
-          }
+        // If we're already at second-level precision, require more than one bucket.
+        if (intervalEff === 'second' && i1 <= i0) {
+          return;
+        }
 
-          const b0 = buckets[i0];
-          const b1 = buckets[i1];
-          const startMs = histBucketToUtcMs(b0, intervalEff);
-          const endMs = histBucketToUtcMs(b1, intervalEff);
-          if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return;
-          const endExclMs = endMs + histStepMs(intervalEff);
+        const b0 = buckets[i0];
+        const b1 = buckets[i1];
+        const startMs = histBucketToUtcMs(b0, intervalEff);
+        const endMs = histBucketToUtcMs(b1, intervalEff);
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return;
+        const endExclMs = endMs + histStepMs(intervalEff);
 
-          // Progressive drill-down: day -> hour -> minute -> second (when feasible).
-          const cand = histNextFinerInterval(intervalEff);
-          const candBuckets = Math.ceil((endExclMs - startMs) / histStepMs(cand));
-          const nextInterval = (candBuckets > HIST_MAX_BUCKETS) ? intervalEff : cand;
+        // Progressive drill-down: day -> hour -> minute -> second (when feasible).
+        const cand = histNextFinerInterval(intervalEff);
+        const candBuckets = Math.ceil((endExclMs - startMs) / histStepMs(cand));
+        const nextInterval = candBuckets > HIST_MAX_BUCKETS ? intervalEff : cand;
 
-          histZoomStack = Array.isArray(histZoomStack) ? histZoomStack : [];
-          histZoomStack.push({
-            start_ts: new Date(startMs).toISOString(),
-            end_ts: new Date(endExclMs).toISOString(),
-            interval: nextInterval,
-          });
-          updateHistogramZoomButtons();
-          syncAddressBarToShareState();
-
-          // Re-render histogram for the zoomed range.
-          drawHistogram().catch((err) => {
-            toast(status, `Failed to load histogram zoom: ${String(err)}`, 'danger');
-          });
+        histZoomStack = Array.isArray(histZoomStack) ? histZoomStack : [];
+        histZoomStack.push({
+          start_ts: new Date(startMs).toISOString(),
+          end_ts: new Date(endExclMs).toISOString(),
+          interval: nextInterval,
         });
+        updateHistogramZoomButtons();
+        syncAddressBarToShareState();
 
-    const brushG = svg.append('g')
-        .attr('class', 'hist-main-brush')
-        .call(brush);
+        // Re-render histogram for the zoomed range.
+        drawHistogram().catch((err) => {
+          toast(status, `Failed to load histogram zoom: ${String(err)}`, 'danger');
+        });
+      });
+
+    const brushG = svg.append('g').attr('class', 'hist-main-brush').call(brush);
 
     // Provide a setter so global keyboard / button handlers can enable/disable it
     // without needing to re-render the chart.
@@ -3272,11 +3409,14 @@ async function drawHistogram() {
       // d3.brush attaches pointer-events to the overlay rect explicitly.
       // So disabling the parent <g> is not enough; we must turn off pointer-events
       // on the brush primitives themselves, otherwise they will steal clicks from bars.
-      brushG.selectAll('.overlay,.selection,.handle')
-          .style('pointer-events', on ? 'all' : 'none');
+      brushG.selectAll('.overlay,.selection,.handle').style('pointer-events', on ? 'all' : 'none');
       brushG.selectAll('.overlay').style('cursor', on ? 'crosshair' : 'default');
       if (!on) {
-        try { brushG.call(brush.move, null); } catch { /* ignore */ }
+        try {
+          brushG.call(brush.move, null);
+        } catch {
+          /* ignore */
+        }
       }
     };
 
@@ -3294,7 +3434,11 @@ function drawActive() {
   }
 
   try {
-    if (vizMode === 'graph' || vizMode === 'graph_clause_events' || vizMode === 'graph_clause_control') {
+    if (
+      vizMode === 'graph' ||
+      vizMode === 'graph_clause_events' ||
+      vizMode === 'graph_clause_control'
+    ) {
       drawGraph(getGraphMinEdge(), getGraphTopSources(), getGraphTopControls());
       return;
     }
@@ -3320,19 +3464,28 @@ function drawActive() {
   }
 }
 
-
 gapQ?.addEventListener('input', () => {
   if (!controlStats && coverageGapsOpen()) {
-    loadControlStatsForGaps().catch((err) => toast(status, `Failed to load controls: ${String(err)}`, 'danger'));
+    loadControlStatsForGaps().catch((err) =>
+      toast(status, `Failed to load controls: ${String(err)}`, 'danger'),
+    );
     return;
   }
   renderGaps();
 });
-(document.getElementById('vizReloadGaps') || document.getElementById('reload'))?.addEventListener('click', () => {
-  loadControlStatsForGaps({force: true}).catch((err) => toast(status, `Failed to load controls: ${String(err)}`, 'danger'));
-});
+(document.getElementById('vizReloadGaps') || document.getElementById('reload'))?.addEventListener(
+  'click',
+  () => {
+    loadControlStatsForGaps({ force: true }).catch((err) =>
+      toast(status, `Failed to load controls: ${String(err)}`, 'danger'),
+    );
+  },
+);
 coverageGapsPanel?.addEventListener('shown.bs.collapse', () => {
-  if (!controlStats) loadControlStatsForGaps().catch((err) => toast(status, `Failed to load controls: ${String(err)}`, 'danger'));
+  if (!controlStats)
+    loadControlStatsForGaps().catch((err) =>
+      toast(status, `Failed to load controls: ${String(err)}`, 'danger'),
+    );
 });
 
 function normalizeRangeInputs() {
@@ -3360,12 +3513,12 @@ dateApply?.addEventListener('click', () => {
   load();
 });
 
-const debRangeApply = autoApplyFilters ?
-  debounce(() => {
-    if (!normalizeRangeInputs()) return;
-    load();
-  }, 500) :
-  null;
+const debRangeApply = autoApplyFilters
+  ? debounce(() => {
+      if (!normalizeRangeInputs()) return;
+      load();
+    }, 500)
+  : null;
 
 resetBtn?.addEventListener('click', () => {
   // Cancel any pending auto-apply (so it doesn't run after resetting).
@@ -3385,7 +3538,7 @@ resetBtn?.addEventListener('click', () => {
   updateHistogramZoomButtons();
   sunburstFocus = getDefaultSunburstFocus();
   initDateRangeDefaults();
-  setViz(getDefaultVizMode(), {skipDraw: true});
+  setViz(getDefaultVizMode(), { skipDraw: true });
 
   // Remove share-link query params (mode/range/etc) from the address bar.
   clearVizQueryOverrides();
@@ -3428,9 +3581,7 @@ saveDefaultViz?.addEventListener('click', async () => {
 
   const defaultState = {
     mode: vizMode,
-    date_range: (days && r.to === today) ?
-      {days} :
-      {start_date: r.from, end_date: r.to},
+    date_range: days && r.to === today ? { days } : { start_date: r.from, end_date: r.to },
   };
 
   if (vizMode === 'sunburst_source' || vizMode === 'sunburst_control') {
@@ -3440,11 +3591,14 @@ saveDefaultViz?.addEventListener('click', async () => {
   }
 
   try {
-    const updated = await apiPatch('/api/v1/me/preferences', {default_visualisation: defaultState});
+    const updated = await apiPatch('/api/v1/me/preferences', {
+      default_visualisation: defaultState,
+    });
     window.keenPreferences = updated || window.keenPreferences || {};
-    defaultVizPref = (updated && updated.default_visualisation && typeof updated.default_visualisation === 'object') ?
-      updated.default_visualisation :
-      defaultVizPref;
+    defaultVizPref =
+      updated && updated.default_visualisation && typeof updated.default_visualisation === 'object'
+        ? updated.default_visualisation
+        : defaultVizPref;
     // Success feedback should be transient.
     toast(status, 'Saved as your default visualisation.', 'success', 2800);
   } catch (err) {
@@ -3458,7 +3612,12 @@ heatmapApply?.addEventListener('click', () => {
 });
 
 graphApply?.addEventListener('click', () => {
-  if (!(vizMode === 'graph' || vizMode === 'graph_clause_events' || vizMode === 'graph_clause_control')) return;
+  if (!(
+    vizMode === 'graph' ||
+    vizMode === 'graph_clause_events' ||
+    vizMode === 'graph_clause_control'
+  ))
+    return;
   drawActive();
 });
 
@@ -3472,9 +3631,14 @@ exportCsvBtn?.addEventListener('click', () => {
       const payload = lastView?.payload || {};
       const items = Array.isArray(payload.items) ? payload.items : [];
       const stackKeys = Array.isArray(payload.stack_keys) ? payload.stack_keys : [];
-      const labelByKey = (payload.label_by_key && typeof payload.label_by_key === 'object') ? payload.label_by_key : {};
+      const labelByKey =
+        payload.label_by_key && typeof payload.label_by_key === 'object'
+          ? payload.label_by_key
+          : {};
       const otherKey = String(payload.other_key || '__other__');
-      const primary = new Set(stackKeys.filter((k) => String(k) !== otherKey).map((k) => String(k)));
+      const primary = new Set(
+        stackKeys.filter((k) => String(k) !== otherKey).map((k) => String(k)),
+      );
 
       // Flatten by_source objects into one column per displayed stack.
       const rows = items.map((it) => {
@@ -3483,7 +3647,7 @@ exportCsvBtn?.addEventListener('click', () => {
           total: Number(it?.total || 0),
         };
 
-        const by = (it && typeof it.by_source === 'object' && it.by_source) ? it.by_source : {};
+        const by = it && typeof it.by_source === 'object' && it.by_source ? it.by_source : {};
 
         if (stackKeys.length > 0) {
           for (const k0 of stackKeys) {
@@ -3551,13 +3715,13 @@ copyVizLinkBtn?.addEventListener('click', async () => {
   const u = buildShareUrl();
   const ok = await copyToClipboard(u);
   // Always auto-hide this feedback so it doesn't stick around.
-  toast(status,
+  toast(
+    status,
     ok ? 'Copied link to clipboard.' : 'Could not copy link.',
     ok ? 'success' : 'warning',
-    ok ? 2400 : 3600
+    ok ? 2400 : 3600,
   );
 });
-
 
 histZoomModeBtn?.addEventListener('click', () => {
   histZoomModeOn = !histZoomModeOn;
@@ -3565,12 +3729,21 @@ histZoomModeBtn?.addEventListener('click', () => {
 
   if (vizMode !== 'histogram') return;
   if (histZoomModeOn) {
-    toast(status, 'Zoom mode enabled: drag on the histogram to select a time window. Turn it off to click bars.', 'secondary', 5200);
+    toast(
+      status,
+      'Zoom mode enabled: drag on the histogram to select a time window. Turn it off to click bars.',
+      'secondary',
+      5200,
+    );
   } else {
-    toast(status, 'Zoom mode disabled. Tip: hold Shift and drag to zoom temporarily.', 'secondary', 4200);
+    toast(
+      status,
+      'Zoom mode disabled. Tip: hold Shift and drag to zoom temporarily.',
+      'secondary',
+      4200,
+    );
   }
 });
-
 
 histApply?.addEventListener('click', () => {
   // Applying a new day-based range resets histogram zoom.
@@ -3592,7 +3765,9 @@ histBack?.addEventListener('click', () => {
   updateHistogramZoomButtons();
   syncAddressBarToShareState();
   if (vizMode === 'histogram') {
-    drawHistogram().catch((err) => toast(status, `Failed to render histogram: ${String(err)}`, 'danger'));
+    drawHistogram().catch((err) =>
+      toast(status, `Failed to render histogram: ${String(err)}`, 'danger'),
+    );
   }
 });
 
@@ -3602,7 +3777,9 @@ histResetZoom?.addEventListener('click', () => {
   updateHistogramZoomButtons();
   syncAddressBarToShareState();
   if (vizMode === 'histogram') {
-    drawHistogram().catch((err) => toast(status, `Failed to render histogram: ${String(err)}`, 'danger'));
+    drawHistogram().catch((err) =>
+      toast(status, `Failed to render histogram: ${String(err)}`, 'danger'),
+    );
   }
 });
 
@@ -3617,7 +3794,12 @@ if (autoApplyFilters) {
   heatmapTopControls?.addEventListener('input', () => debHeatmap());
 
   const debGraph = debounce(() => {
-    if (!(vizMode === 'graph' || vizMode === 'graph_clause_events' || vizMode === 'graph_clause_control')) return;
+    if (!(
+      vizMode === 'graph' ||
+      vizMode === 'graph_clause_events' ||
+      vizMode === 'graph_clause_control'
+    ))
+      return;
     drawActive();
   }, 250);
 
@@ -3669,15 +3851,19 @@ async function load() {
     showTableLoading(topControlsEl, 2, `Loading ${vizRelationshipLabels(vizMode).rightPlural}…`);
     showVizLoading('Loading visualisation data…');
   } else {
-    if (topSourcesEl) topSourcesEl.innerHTML = '<tr><td colspan="2" class="small-muted p-3">Evidence distribution loads when a graph, heatmap, or sunburst is selected.</td></tr>';
-    if (topControlsEl) topControlsEl.innerHTML = '<tr><td colspan="2" class="small-muted p-3">Evidence distribution loads when a graph, heatmap, or sunburst is selected.</td></tr>';
+    if (topSourcesEl)
+      topSourcesEl.innerHTML =
+        '<tr><td colspan="2" class="small-muted p-3">Evidence distribution loads when a graph, heatmap, or sunburst is selected.</td></tr>';
+    if (topControlsEl)
+      topControlsEl.innerHTML =
+        '<tr><td colspan="2" class="small-muted p-3">Evidence distribution loads when a graph, heatmap, or sunburst is selected.</td></tr>';
   }
   renderGaps();
 
   try {
     const jobs = [];
-    if (vizMode !== 'histogram') jobs.push(ensureGraphDatasetForMode(vizMode, {force: true}));
-    if (coverageGapsOpen()) jobs.push(loadControlStatsForGaps({force: true}));
+    if (vizMode !== 'histogram') jobs.push(ensureGraphDatasetForMode(vizMode, { force: true }));
+    if (coverageGapsOpen()) jobs.push(loadControlStatsForGaps({ force: true }));
     await Promise.all(jobs);
 
     // Draw only after the selected graph dataset is present. Clause datasets are
@@ -3692,22 +3878,28 @@ async function load() {
   } catch (err) {
     toast(status, `Failed to load visualisation: ${String(err)}`, 'danger');
     if (gapsEl && coverageGapsOpen()) gapsEl.textContent = 'Failed to load controls.';
-    if (topSourcesEl) topSourcesEl.innerHTML = `<tr><td colspan="2" class="small-muted p-3">Failed to load ${esc(vizRelationshipLabels(vizMode).leftPlural)}.</td></tr>`;
-    if (topControlsEl) topControlsEl.innerHTML = `<tr><td colspan="2" class="small-muted p-3">Failed to load ${esc(vizRelationshipLabels(vizMode).rightPlural)}.</td></tr>`;
+    if (topSourcesEl)
+      topSourcesEl.innerHTML = `<tr><td colspan="2" class="small-muted p-3">Failed to load ${esc(vizRelationshipLabels(vizMode).leftPlural)}.</td></tr>`;
+    if (topControlsEl)
+      topControlsEl.innerHTML = `<tr><td colspan="2" class="small-muted p-3">Failed to load ${esc(vizRelationshipLabels(vizMode).rightPlural)}.</td></tr>`;
   }
 }
 
-
 function embeddedVisualisationPane() {
-  return document.getElementById('embeddedVisualisationsPane') ||
+  return (
+    document.getElementById('embeddedVisualisationsPane') ||
     document.querySelector('[data-keen-visualisation-mount]')?.closest('.tab-pane') ||
-    null;
+    null
+  );
 }
 
 function embeddedVisualisationTabButton(pane = embeddedVisualisationPane()) {
   const paneId = String(pane?.id || '').trim();
   if (!paneId) return null;
-  const escapedPaneId = (window.CSS && typeof window.CSS.escape === 'function') ? window.CSS.escape(paneId) : paneId.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+  const escapedPaneId =
+    window.CSS && typeof window.CSS.escape === 'function'
+      ? window.CSS.escape(paneId)
+      : paneId.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
   const selector = `[data-bs-target="#${escapedPaneId}"], [href="#${escapedPaneId}"]`;
   return document.querySelector(selector);
 }
@@ -3728,7 +3920,13 @@ function setEmbeddedVisualisationTabQuery(active) {
     const u = new URL(location.href);
     if (active) u.searchParams.set('tab', 'visualisations');
     else if (u.searchParams.get('tab') === 'visualisations') u.searchParams.delete('tab');
-    history.replaceState({}, '', u.pathname + (u.searchParams.toString() ? `?${u.searchParams.toString()}` : '') + (u.hash || ''));
+    history.replaceState(
+      {},
+      '',
+      u.pathname +
+        (u.searchParams.toString() ? `?${u.searchParams.toString()}` : '') +
+        (u.hash || ''),
+    );
   } catch {
     // ignore
   }
@@ -3745,12 +3943,18 @@ activateEmbeddedVisualisationTabFromQuery();
 
 const embeddedPane = embeddedVisualisationPane();
 const embeddedTabButton = embeddedVisualisationTabButton(embeddedPane);
-if (embeddedPane && !embeddedPane.classList.contains('active') && !embeddedPane.classList.contains('show')) {
+if (
+  embeddedPane &&
+  !embeddedPane.classList.contains('active') &&
+  !embeddedPane.classList.contains('show')
+) {
   embeddedTabButton?.addEventListener('shown.bs.tab', () => {
     setEmbeddedVisualisationTabQuery(true);
     startVisualisation();
   });
-  const otherTabButtons = Array.from(document.querySelectorAll('[data-bs-toggle="tab"]')).filter((btn) => btn !== embeddedTabButton);
+  const otherTabButtons = Array.from(document.querySelectorAll('[data-bs-toggle="tab"]')).filter(
+    (btn) => btn !== embeddedTabButton,
+  );
   for (const btn of otherTabButtons) {
     btn.addEventListener('shown.bs.tab', () => setEmbeddedVisualisationTabQuery(false));
   }
@@ -3758,4 +3962,3 @@ if (embeddedPane && !embeddedPane.classList.contains('active') && !embeddedPane.
   if (embeddedPane) setEmbeddedVisualisationTabQuery(true);
   startVisualisation();
 }
-

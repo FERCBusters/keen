@@ -1,13 +1,44 @@
-import {initNavbar, apiGet, apiPatch, apiPost, apiPut, apiDelete, apiPostForm, esc, fmtTs, fmtTsFilename, toast, qs, getCurrentFramework, withFramework, isAuditLocked, auditStatusLabel, wireIsoDateTextField, isoDateToDisplay, dateFormatPlaceholder, initRichTextEditors, refreshRichTextEditorStates, renderRichTextContent, setRichTextEditorValue, syncRichTextEditor, syncRichTextEditors, userPillHtml} from '/app.js';
+import {
+  initNavbar,
+  apiGet,
+  apiPatch,
+  apiPost,
+  apiPut,
+  apiDelete,
+  apiPostForm,
+  esc,
+  fmtTs,
+  fmtTsFilename,
+  toast,
+  qs,
+  getCurrentFramework,
+  withFramework,
+  isAuditLocked,
+  auditStatusLabel,
+  wireIsoDateTextField,
+  isoDateToDisplay,
+  dateFormatPlaceholder,
+  initRichTextEditors,
+  refreshRichTextEditorStates,
+  renderRichTextContent,
+  setRichTextEditorValue,
+  syncRichTextEditor,
+  syncRichTextEditors,
+  userPillHtml,
+} from '/app.js';
 
 const me = await initNavbar();
 
-const _eventDataMaskingMode = String(me?.event_data_masking || 'false').trim().toLowerCase();
+const _eventDataMaskingMode = String(me?.event_data_masking || 'false')
+  .trim()
+  .toLowerCase();
 function _maskSampleExportsEnabled() {
   return _eventDataMaskingMode === 'samples' || _eventDataMaskingMode === 'true';
 }
 function _isValidIpv4Literal(value) {
-  return /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(String(value || ''));
+  return /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(
+    String(value || ''),
+  );
 }
 function _isMaskableIpv6Candidate(raw) {
   const candidate = String(raw || '').split('%', 1)[0];
@@ -40,12 +71,21 @@ function _isMaskableIpv6Candidate(raw) {
 function maskEventDataString(value) {
   if (value == null) return value;
   let txt = String(value);
-  txt = txt.replace(/(^|[^A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{1,128})@([A-Za-z0-9.-]+\.[A-Za-z]{2,63})(?![A-Za-z0-9._%+-])/g, '$1[MASKED_EMAIL]');
-  txt = txt.replace(/(^|[^\w:.])([A-Fa-f0-9:.]+(?::[A-Fa-f0-9:.]*)+(?:%[A-Za-z0-9_.-]+)?)(?![\w:])/g, (match, prefix, raw) => {
-    if (!_isMaskableIpv6Candidate(raw)) return match;
-    return `${prefix}[MASKED_IP]`;
-  });
-  txt = txt.replace(/(^|[^\w.])((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})(?![\w.])/g, '$1[MASKED_IP]');
+  txt = txt.replace(
+    /(^|[^A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{1,128})@([A-Za-z0-9.-]+\.[A-Za-z]{2,63})(?![A-Za-z0-9._%+-])/g,
+    '$1[MASKED_EMAIL]',
+  );
+  txt = txt.replace(
+    /(^|[^\w:.])([A-Fa-f0-9:.]+(?::[A-Fa-f0-9:.]*)+(?:%[A-Za-z0-9_.-]+)?)(?![\w:])/g,
+    (match, prefix, raw) => {
+      if (!_isMaskableIpv6Candidate(raw)) return match;
+      return `${prefix}[MASKED_IP]`;
+    },
+  );
+  txt = txt.replace(
+    /(^|[^\w.])((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})(?![\w.])/g,
+    '$1[MASKED_IP]',
+  );
   return txt;
 }
 function _maskExportDom(root) {
@@ -66,7 +106,8 @@ function _maskExportDom(root) {
   });
   root.querySelectorAll('[title], [alt], [aria-label]').forEach((el) => {
     for (const attr of ['title', 'alt', 'aria-label']) {
-      if (el.hasAttribute(attr)) el.setAttribute(attr, maskEventDataString(el.getAttribute(attr) || ''));
+      if (el.hasAttribute(attr))
+        el.setAttribute(attr, maskEventDataString(el.getAttribute(attr) || ''));
     }
   });
 }
@@ -84,13 +125,35 @@ const status = document.getElementById('status');
 
 const auditStart = document.getElementById('auditStart');
 const auditEnd = document.getElementById('auditEnd');
-const auditStartWire = wireIsoDateTextField(auditStart, document.getElementById('auditStartText'), document.getElementById('auditStartPick'), {dispatchChangeOnText: true});
-const auditEndWire = wireIsoDateTextField(auditEnd, document.getElementById('auditEndText'), document.getElementById('auditEndPick'), {dispatchChangeOnText: true});
+const auditStartWire = wireIsoDateTextField(
+  auditStart,
+  document.getElementById('auditStartText'),
+  document.getElementById('auditStartPick'),
+  { dispatchChangeOnText: true },
+);
+const auditEndWire = wireIsoDateTextField(
+  auditEnd,
+  document.getElementById('auditEndText'),
+  document.getElementById('auditEndPick'),
+  { dispatchChangeOnText: true },
+);
 const tmplScheduleStart = document.getElementById('tmplScheduleStart');
 const tmplUntil = document.getElementById('tmplUntil');
-const tmplScheduleStartWire = wireIsoDateTextField(tmplScheduleStart, document.getElementById('tmplScheduleStartText'), document.getElementById('tmplScheduleStartPick'), {dispatchChangeOnText: true});
-const tmplUntilWire = wireIsoDateTextField(tmplUntil, document.getElementById('tmplUntilText'), document.getElementById('tmplUntilPick'), {dispatchChangeOnText: true});
-for (const el of ['auditStartText', 'auditEndText', 'tmplScheduleStartText', 'tmplUntilText'].map((id) => document.getElementById(id))) {
+const tmplScheduleStartWire = wireIsoDateTextField(
+  tmplScheduleStart,
+  document.getElementById('tmplScheduleStartText'),
+  document.getElementById('tmplScheduleStartPick'),
+  { dispatchChangeOnText: true },
+);
+const tmplUntilWire = wireIsoDateTextField(
+  tmplUntil,
+  document.getElementById('tmplUntilText'),
+  document.getElementById('tmplUntilPick'),
+  { dispatchChangeOnText: true },
+);
+for (const el of ['auditStartText', 'auditEndText', 'tmplScheduleStartText', 'tmplUntilText'].map(
+  (id) => document.getElementById(id),
+)) {
   if (el) el.setAttribute('placeholder', dateFormatPlaceholder());
 }
 
@@ -117,14 +180,16 @@ function _isFuzzyScheduleDateRule(rule) {
 }
 
 function _fuzzyScheduleRuleLabel(rule) {
-  return {
-    first_weekday_of_month: 'first weekday',
-    first_monday_of_month: 'first Monday',
-    first_tuesday_of_month: 'first Tuesday',
-    first_wednesday_of_month: 'first Wednesday',
-    first_thursday_of_month: 'first Thursday',
-    first_friday_of_month: 'first Friday',
-  }[String(rule || '')] || 'first weekday';
+  return (
+    {
+      first_weekday_of_month: 'first weekday',
+      first_monday_of_month: 'first Monday',
+      first_tuesday_of_month: 'first Tuesday',
+      first_wednesday_of_month: 'first Wednesday',
+      first_thursday_of_month: 'first Thursday',
+      first_friday_of_month: 'first Friday',
+    }[String(rule || '')] || 'first weekday'
+  );
 }
 
 function _firstScheduleRuleDateIso(year, month, rule) {
@@ -171,16 +236,22 @@ function updateTemplateScheduleDateMode() {
   if (fuzzy && recurrence?.value === 'weekly') recurrence.value = 'yearly';
 
   if (fuzzy) {
-    const year = Number(document.getElementById('tmplFuzzyYear')?.value || _isoYear(tmplScheduleStart?.value));
-    const month = Number(document.getElementById('tmplFuzzyMonth')?.value || _isoMonth(tmplScheduleStart?.value));
+    const year = Number(
+      document.getElementById('tmplFuzzyYear')?.value || _isoYear(tmplScheduleStart?.value),
+    );
+    const month = Number(
+      document.getElementById('tmplFuzzyMonth')?.value || _isoMonth(tmplScheduleStart?.value),
+    );
     const iso = _firstScheduleRuleDateIso(year, month, mode);
     const label = _fuzzyScheduleRuleLabel(mode);
     const monthLabel = document.getElementById('tmplFuzzyMonthLabel');
     if (monthLabel) monthLabel.textContent = `${label.charAt(0).toUpperCase()}${label.slice(1)} of`;
     if (tmplScheduleStart) tmplScheduleStart.value = iso;
-    if (document.getElementById('tmplScheduleStartText')) document.getElementById('tmplScheduleStartText').value = isoDateToDisplay(iso);
+    if (document.getElementById('tmplScheduleStartText'))
+      document.getElementById('tmplScheduleStartText').value = isoDateToDisplay(iso);
     const preview = document.getElementById('tmplSchedulePreview');
-    if (preview) preview.textContent = `Next run will be ${isoDateToDisplay(iso)}; future runs keep the ${label} rule.`;
+    if (preview)
+      preview.textContent = `Next run will be ${isoDateToDisplay(iso)}; future runs keep the ${label} rule.`;
   } else {
     const preview = document.getElementById('tmplSchedulePreview');
     if (preview) preview.textContent = '';
@@ -193,7 +264,7 @@ function _templateScheduleStartForSubmit() {
     return tmplScheduleStart?.value || '';
   }
   const ok = tmplScheduleStartWire?.syncHiddenFromText?.();
-  return ok === false ? '' : (tmplScheduleStart?.value || '');
+  return ok === false ? '' : tmplScheduleStart?.value || '';
 }
 
 function canViewAudits() {
@@ -213,7 +284,11 @@ function auditLocked() {
 }
 
 function auditTemplate() {
-  return String(audit?.status || '').trim().toLowerCase() === 'template';
+  return (
+    String(audit?.status || '')
+      .trim()
+      .toLowerCase() === 'template'
+  );
 }
 
 function canEditAudit() {
@@ -261,7 +336,18 @@ function applyAuditEditability() {
     notice.textContent = locked ? auditLockedMessage() : '';
   }
 
-  ['auditTitle', 'auditFramework', 'auditType', 'auditStart', 'auditEnd', 'auditStartText', 'auditStartPick', 'auditEndText', 'auditEndPick', 'auditExecutiveSummary'].forEach((id) => _setDisabled(id, !canEdit));
+  [
+    'auditTitle',
+    'auditFramework',
+    'auditType',
+    'auditStart',
+    'auditEnd',
+    'auditStartText',
+    'auditStartPick',
+    'auditEndText',
+    'auditEndPick',
+    'auditExecutiveSummary',
+  ].forEach((id) => _setDisabled(id, !canEdit));
   const template = auditTemplate();
   _setDisabled('auditStatus', !canManage || template);
 
@@ -322,9 +408,17 @@ function selectedAttr(value, current) {
 
 function showMeta(a) {
   document.getElementById('title').textContent = a?.title || 'Audit';
-  const dates = [a?.start_date, a?.end_date].filter(Boolean).map((d) => isoDateToDisplay(d)).join(' → ') || 'No dates set';
-  document.getElementById('meta').innerHTML = `${esc(a?.framework_slug || '')} · ${esc(auditTypeLabel(a?.audit_type))} · ${esc(statusLabel(a?.status))} · ${esc(dates)} · Author: ${userPillHtml(a?.created_by_username)}`;
-  document.getElementById('sampleEventLink').href = withFramework('/events.html', a?.framework_slug || getCurrentFramework());
+  const dates =
+    [a?.start_date, a?.end_date]
+      .filter(Boolean)
+      .map((d) => isoDateToDisplay(d))
+      .join(' → ') || 'No dates set';
+  document.getElementById('meta').innerHTML =
+    `${esc(a?.framework_slug || '')} · ${esc(auditTypeLabel(a?.audit_type))} · ${esc(statusLabel(a?.status))} · ${esc(dates)} · Author: ${userPillHtml(a?.created_by_username)}`;
+  document.getElementById('sampleEventLink').href = withFramework(
+    '/events.html',
+    a?.framework_slug || getCurrentFramework(),
+  );
 }
 
 function setTemplateScheduleForm(a) {
@@ -344,8 +438,10 @@ function setTemplateScheduleForm(a) {
   const info = document.getElementById('tmplScheduleInfo');
   if (info) {
     const bits = [];
-    if (a?.schedule_last_run_date) bits.push(`Last materialised: ${isoDateToDisplay(a.schedule_last_run_date)}`);
-    if (a?.schedule_next_run_date) bits.push(`Next run: ${isoDateToDisplay(a.schedule_next_run_date)}`);
+    if (a?.schedule_last_run_date)
+      bits.push(`Last materialised: ${isoDateToDisplay(a.schedule_last_run_date)}`);
+    if (a?.schedule_next_run_date)
+      bits.push(`Next run: ${isoDateToDisplay(a.schedule_next_run_date)}`);
     info.textContent = bits.join(' · ') || 'This template has not materialised an audit yet.';
   }
 }
@@ -468,23 +564,28 @@ function renderReport(a) {
 }
 
 function renderKpis(a) {
-  document.getElementById('kpiEvidence').textContent = String(a?.evidence_count ?? (a?.evidence || []).length ?? 0);
+  document.getElementById('kpiEvidence').textContent = String(
+    a?.evidence_count ?? (a?.evidence || []).length ?? 0,
+  );
   const documentCount = Number(a?.document_scope_count ?? (a?.scoped_documents || []).length ?? 0);
   const controlCount = Number(a?.control_scope_count ?? (a?.scoped_controls || []).length ?? 0);
   const clauseCount = Number(a?.clause_scope_count ?? (a?.scoped_clauses || []).length ?? 0);
   const scopeEl = document.getElementById('kpiScope');
-  scopeEl.textContent = String(a?.scope_count ?? (documentCount + controlCount + clauseCount));
+  scopeEl.textContent = String(a?.scope_count ?? documentCount + controlCount + clauseCount);
   scopeEl.title = `${documentCount} documents, ${clauseCount} clauses, ${controlCount} controls`;
-  document.getElementById('kpiPeople').textContent = String(a?.attendee_count ?? (a?.attendees || []).length ?? 0);
-  document.getElementById('kpiFindings').textContent = String(a?.finding_count ?? (a?.findings || []).length ?? 0);
+  document.getElementById('kpiPeople').textContent = String(
+    a?.attendee_count ?? (a?.attendees || []).length ?? 0,
+  );
+  document.getElementById('kpiFindings').textContent = String(
+    a?.finding_count ?? (a?.findings || []).length ?? 0,
+  );
 }
-
 
 // ------------------------------------------------------------------
 // Audit ZIP/PDF export helpers
 // ------------------------------------------------------------------
 
-const _A4_PORTRAIT = {w: 595.28, h: 841.89};
+const _A4_PORTRAIT = { w: 595.28, h: 841.89 };
 const _utf8 = new TextEncoder();
 
 function _pageSize() {
@@ -494,10 +595,10 @@ function _pageSize() {
 function _sanitizeFilename(s) {
   const str = String(s || '');
   return str
-      .replace(/[\\/]+/g, ' ')
-      .replace(/[<>"\?\*\|\0]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    .replace(/[\\/]+/g, ' ')
+    .replace(/[<>"\?\*\|\0]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function _safeZipPathSegment(s, fallback = 'file') {
@@ -528,7 +629,11 @@ function _parseContentDispositionFilename(header) {
     let v = mStar[1].trim().replace(/^"|"$/g, '');
     const parts = v.split("''");
     if (parts.length === 2) {
-      try { return decodeURIComponent(parts[1]); } catch { return parts[1]; }
+      try {
+        return decodeURIComponent(parts[1]);
+      } catch {
+        return parts[1];
+      }
     }
     return v;
   }
@@ -537,8 +642,13 @@ function _parseContentDispositionFilename(header) {
 }
 
 function _uniqueZipName(name, seen) {
-  let n = String(name || 'file').replace(/\\+/g, '/').replace(/\/+/g, '/');
-  n = n.split('/').map((p, idx) => _safeZipPathSegment(p, idx === 0 ? 'folder' : 'file')).join('/');
+  let n = String(name || 'file')
+    .replace(/\\+/g, '/')
+    .replace(/\/+/g, '/');
+  n = n
+    .split('/')
+    .map((p, idx) => _safeZipPathSegment(p, idx === 0 ? 'folder' : 'file'))
+    .join('/');
   if (!n || n === '/') n = 'file';
   const key = n.toLowerCase();
   const count = seen.get(key) || 0;
@@ -564,18 +674,20 @@ function auditFileStem(a) {
 async function _waitForImages(root, timeoutMs = 15_000) {
   if (!root) return;
   const imgs = Array.from(root.querySelectorAll('img'));
-  const pending = imgs.filter((img) => img && img.src).map((img) => {
-    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-    return new Promise((resolve) => {
-      const done = () => {
-        img.removeEventListener('load', done);
-        img.removeEventListener('error', done);
-        resolve();
-      };
-      img.addEventListener('load', done);
-      img.addEventListener('error', done);
+  const pending = imgs
+    .filter((img) => img && img.src)
+    .map((img) => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise((resolve) => {
+        const done = () => {
+          img.removeEventListener('load', done);
+          img.removeEventListener('error', done);
+          resolve();
+        };
+        img.addEventListener('load', done);
+        img.addEventListener('error', done);
+      });
     });
-  });
   if (!pending.length) return;
   await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, timeoutMs))]);
 }
@@ -584,17 +696,23 @@ function _lookupOriginalControlValue(cloned) {
   const id = cloned.getAttribute('id');
   if (id) {
     const src = document.getElementById(id);
-    if (src) return {value: src.value ?? '', checked: !!src.checked, selectedIndex: src.selectedIndex};
+    if (src)
+      return { value: src.value ?? '', checked: !!src.checked, selectedIndex: src.selectedIndex };
   }
   const evidenceNotesId = cloned.getAttribute('data-evidence-notes');
   if (evidenceNotesId) {
     const src = document.querySelector(`[data-evidence-notes="${CSS.escape(evidenceNotesId)}"]`);
-    if (src) return {value: src.value ?? '', checked: !!src.checked, selectedIndex: src.selectedIndex};
+    if (src)
+      return { value: src.value ?? '', checked: !!src.checked, selectedIndex: src.selectedIndex };
   }
-  return {value: cloned.value ?? cloned.textContent ?? '', checked: !!cloned.checked, selectedIndex: cloned.selectedIndex};
+  return {
+    value: cloned.value ?? cloned.textContent ?? '',
+    checked: !!cloned.checked,
+    selectedIndex: cloned.selectedIndex,
+  };
 }
 
-function _formStaticBlock(text, extraClass = '', {richText = false} = {}) {
+function _formStaticBlock(text, extraClass = '', { richText = false } = {}) {
   const div = document.createElement('div');
   div.className = `form-control bg-white export-static-field ${extraClass}`.trim();
   div.style.whiteSpace = 'pre-wrap';
@@ -617,11 +735,15 @@ function _scopeExportList(items, emptyText) {
     wrap.innerHTML = `<div class="small-muted border rounded p-2 bg-white">${esc(emptyText || 'No scoped items.')}</div>`;
     return wrap;
   }
-  wrap.innerHTML = arr.map((item) => `
+  wrap.innerHTML = arr
+    .map(
+      (item) => `
     <div class="border rounded p-2 mb-2 bg-white">
       <span class="fw-semibold">${esc(item.ref || '')}</span>
       <span class="small-muted">${esc(item.title || '')}</span>
-    </div>`).join('');
+    </div>`,
+    )
+    .join('');
   return wrap;
 }
 
@@ -635,13 +757,23 @@ function _replaceAuditScopeListsForExport(clone) {
   if (documentFilter) documentFilter.remove();
   if (clauseFilter) clauseFilter.remove();
   if (controlFilter) controlFilter.remove();
-  if (documentsList) documentsList.replaceWith(_scopeExportList(audit?.scoped_documents || [], 'No ISMS documents selected for this audit.'));
-  if (clausesList) clausesList.replaceWith(_scopeExportList(audit?.scoped_clauses || [], 'No clauses selected for this audit.'));
-  if (controlsList) controlsList.replaceWith(_scopeExportList(audit?.scoped_controls || [], 'No controls selected for this audit.'));
+  if (documentsList)
+    documentsList.replaceWith(
+      _scopeExportList(audit?.scoped_documents || [], 'No ISMS documents selected for this audit.'),
+    );
+  if (clausesList)
+    clausesList.replaceWith(
+      _scopeExportList(audit?.scoped_clauses || [], 'No clauses selected for this audit.'),
+    );
+  if (controlsList)
+    controlsList.replaceWith(
+      _scopeExportList(audit?.scoped_controls || [], 'No controls selected for this audit.'),
+    );
   const documentCount = clone.querySelector('#documentScopeCount');
   const clauseCount = clone.querySelector('#clauseScopeCount');
   const controlCount = clone.querySelector('#controlScopeCount');
-  if (documentCount) documentCount.textContent = `${(audit?.scoped_documents || []).length} in scope`;
+  if (documentCount)
+    documentCount.textContent = `${(audit?.scoped_documents || []).length} in scope`;
   if (clauseCount) clauseCount.textContent = `${(audit?.scoped_clauses || []).length} in scope`;
   if (controlCount) controlCount.textContent = `${(audit?.scoped_controls || []).length} in scope`;
 }
@@ -655,18 +787,24 @@ function _prepareAuditCloneForPdf(clone) {
   });
   clone.querySelectorAll('.collapsing').forEach((el) => el.classList.remove('collapsing'));
   clone.querySelectorAll('.d-none').forEach((el) => el.remove());
-  clone.querySelectorAll('#reportForm, #urlEvidenceForm, #attendeeForm, #findingForm, [data-finding-edit-form]').forEach((el) => el.remove());
+  clone
+    .querySelectorAll(
+      '#reportForm, #urlEvidenceForm, #attendeeForm, #findingForm, [data-finding-edit-form]',
+    )
+    .forEach((el) => el.remove());
   _replaceAuditScopeListsForExport(clone);
 
   clone.querySelectorAll('textarea').forEach((el) => {
-    const {value} = _lookupOriginalControlValue(el);
-    const block = _formStaticBlock(value, 'export-static-textarea', {richText: el.matches?.('textarea[data-rich-text]')});
+    const { value } = _lookupOriginalControlValue(el);
+    const block = _formStaticBlock(value, 'export-static-textarea', {
+      richText: el.matches?.('textarea[data-rich-text]'),
+    });
     block.style.minHeight = `${Math.max(3, Number(el.getAttribute('rows') || 3)) * 1.55}rem`;
     el.replaceWith(block);
   });
 
   clone.querySelectorAll('select').forEach((el) => {
-    const {selectedIndex} = _lookupOriginalControlValue(el);
+    const { selectedIndex } = _lookupOriginalControlValue(el);
     const options = Array.from(el.options || []);
     const opt = options[selectedIndex >= 0 ? selectedIndex : el.selectedIndex];
     el.replaceWith(_formStaticBlock(opt?.textContent || el.value || ''));
@@ -678,7 +816,7 @@ function _prepareAuditCloneForPdf(clone) {
       el.remove();
       return;
     }
-    const {value, checked} = _lookupOriginalControlValue(el);
+    const { value, checked } = _lookupOriginalControlValue(el);
     if (type === 'checkbox' || type === 'radio') {
       const span = document.createElement('span');
       span.className = 'export-checkbox';
@@ -754,7 +892,7 @@ async function _canvasToJpegBytes(canvas, quality = 0.92) {
 }
 
 async function _sliceCanvasToA4JpegPages(canvas, header, footerText) {
-  const {w: pageW, h: pageH} = _pageSize();
+  const { w: pageW, h: pageH } = _pageSize();
   const pages = [];
   const w = canvas.width;
   const ratio = pageW / w;
@@ -768,12 +906,12 @@ async function _sliceCanvasToA4JpegPages(canvas, header, footerText) {
 
   const cuts = [];
   for (let y = 0; y < canvas.height; y += contentHeightPx) {
-    cuts.push({y, h: Math.min(contentHeightPx, canvas.height - y)});
+    cuts.push({ y, h: Math.min(contentHeightPx, canvas.height - y) });
   }
   const totalPages = cuts.length || 1;
 
   for (let i = 0; i < cuts.length; i++) {
-    const {y: y0, h: sliceH} = cuts[i];
+    const { y: y0, h: sliceH } = cuts[i];
     const page = document.createElement('canvas');
     page.width = w;
     page.height = pageHeightPx;
@@ -810,25 +948,31 @@ async function _sliceCanvasToA4JpegPages(canvas, header, footerText) {
     ctx.textAlign = 'right';
     ctx.fillText(`Page ${i + 1} of ${totalPages}`, w - 8, top + footerPx / 2);
 
-    pages.push({bytes: await _canvasToJpegBytes(page, 0.92), w, h: pageHeightPx});
+    pages.push({ bytes: await _canvasToJpegBytes(page, 0.92), w, h: pageHeightPx });
   }
   return pages;
 }
 
 function _buildPdfFromJpegPages(pages) {
   if (!pages.length) throw new Error('No pages to export');
-  const {w: pageW, h: pageH} = _pageSize();
+  const { w: pageW, h: pageH } = _pageSize();
   const parts = [];
   let offset = 0;
   const offsets = [0];
-  const push = (u8) => { parts.push(u8); offset += u8.length; };
+  const push = (u8) => {
+    parts.push(u8);
+    offset += u8.length;
+  };
   const pushStr = (str) => push(_utf8.encode(str));
 
   pushStr('%PDF-1.4\n');
-  push(new Uint8Array([0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A]));
+  push(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
 
   let nextObj = 1;
-  const beginObj = (id) => { offsets[id] = offset; pushStr(`${id} 0 obj\n`); };
+  const beginObj = (id) => {
+    offsets[id] = offset;
+    pushStr(`${id} 0 obj\n`);
+  };
   const endObj = () => pushStr('\nendobj\n');
   const catalogObj = nextObj++;
   const pagesObj = nextObj++;
@@ -860,7 +1004,9 @@ function _buildPdfFromJpegPages(pages) {
 
     beginObj(imgObj);
     pushStr(`<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} `);
-    pushStr(`/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.bytes.length} >>\n`);
+    pushStr(
+      `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.bytes.length} >>\n`,
+    );
     pushStr('stream\n');
     push(p.bytes);
     pushStr('\nendstream');
@@ -892,7 +1038,7 @@ function _buildPdfFromJpegPages(pages) {
   pushStr(`<< /Size ${nextObj} /Root ${catalogObj} 0 R >>\n`);
   pushStr('startxref\n');
   pushStr(`${xrefOffset}\n%%EOF`);
-  return new Blob(parts, {type: 'application/pdf'});
+  return new Blob(parts, { type: 'application/pdf' });
 }
 
 async function buildAuditPagePdfBlob(a) {
@@ -906,7 +1052,9 @@ async function buildAuditPagePdfBlob(a) {
   const exportWindowWidth = 1280;
   const width = 1180;
   const exportedIso = new Date().toISOString();
-  const header = _sampleMaskedFilename(`Keen audit export ${fmtTsFilename(exportedIso)} - ${a?.title || a?.id || ''}`);
+  const header = _sampleMaskedFilename(
+    `Keen audit export ${fmtTsFilename(exportedIso)} - ${a?.title || a?.id || ''}`,
+  );
   const footer = (me?.sample_pdf_footer || '').trim();
   const wrap = _makeAuditExportContainer(width);
   try {
@@ -921,7 +1069,9 @@ async function buildAuditPagePdfBlob(a) {
     const pages = await _sliceCanvasToA4JpegPages(canvas, header, footer);
     return _buildPdfFromJpegPages(pages);
   } finally {
-    try { wrap.remove(); } catch {}
+    try {
+      wrap.remove();
+    } catch {}
   }
 }
 
@@ -929,20 +1079,20 @@ const _crcTable = (() => {
   const tbl = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
     let c = n;
-    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
     tbl[n] = c >>> 0;
   }
   return tbl;
 })();
 
 function _crc32(buf) {
-  let c = 0xFFFFFFFF;
-  for (let i = 0; i < buf.length; i++) c = _crcTable[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
-  return (c ^ 0xFFFFFFFF) >>> 0;
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = _crcTable[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
 }
 
 function _dosTimeDate(d) {
-  const dt = (d instanceof Date && !Number.isNaN(d.valueOf())) ? d : new Date();
+  const dt = d instanceof Date && !Number.isNaN(d.valueOf()) ? d : new Date();
   let year = dt.getFullYear();
   if (year < 1980) year = 1980;
   const month = dt.getMonth() + 1;
@@ -950,10 +1100,15 @@ function _dosTimeDate(d) {
   const hours = dt.getHours();
   const minutes = dt.getMinutes();
   const seconds = Math.floor(dt.getSeconds() / 2);
-  return {time: (hours << 11) | (minutes << 5) | seconds, date: ((year - 1980) << 9) | (month << 5) | day};
+  return {
+    time: (hours << 11) | (minutes << 5) | seconds,
+    date: ((year - 1980) << 9) | (month << 5) | day,
+  };
 }
 
-function _u8(viewBuf) { return new Uint8Array(viewBuf); }
+function _u8(viewBuf) {
+  return new Uint8Array(viewBuf);
+}
 
 function _zipLocalHeader(nameLen, crc, size, time, date) {
   const buf = new ArrayBuffer(30);
@@ -1017,9 +1172,9 @@ function buildZipStore(files) {
 
   for (const f of files) {
     const nameBytes = _utf8.encode(String(f.name || 'file'));
-    const data = (f.data instanceof Uint8Array) ? f.data : new Uint8Array(f.data || []);
+    const data = f.data instanceof Uint8Array ? f.data : new Uint8Array(f.data || []);
     const crc = _crc32(data);
-    const {time, date} = _dosTimeDate(f.mtime);
+    const { time, date } = _dosTimeDate(f.mtime);
     const local = _zipLocalHeader(nameBytes.length, crc, data.length, time, date);
     parts.push(local, nameBytes, data);
     const localOffset = offset;
@@ -1032,11 +1187,11 @@ function buildZipStore(files) {
   const cdOffset = offset;
   parts.push(...central);
   parts.push(_zipEndRecord(files.length, cdSize, cdOffset));
-  return new Blob(parts, {type: 'application/zip'});
+  return new Blob(parts, { type: 'application/zip' });
 }
 
 async function _fetchBytes(url) {
-  const res = await fetch(url, {credentials: 'include'});
+  const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`Failed to download ${url} (HTTP ${res.status})`);
   const dispName = _parseContentDispositionFilename(res.headers.get('Content-Disposition') || '');
   const contentType = res.headers.get('Content-Type') || '';
@@ -1056,7 +1211,9 @@ function _downloadBlob(blob, filename) {
   a.click();
   a.remove();
   setTimeout(() => {
-    try { URL.revokeObjectURL(obj); } catch {}
+    try {
+      URL.revokeObjectURL(obj);
+    } catch {}
   }, 15_000);
 }
 
@@ -1088,11 +1245,16 @@ async function exportAuditZip() {
     if (audit.final_report?.download_url) {
       toast(status, 'Adding final report…', 'info');
       const finalReport = await _fetchBytes(audit.final_report.download_url);
-      const reportName = finalReport.filename || audit.final_report.filename || `final-report${_extFromContentType(finalReport.contentType || audit.final_report.content_type)}`;
+      const reportName =
+        finalReport.filename ||
+        audit.final_report.filename ||
+        `final-report${_extFromContentType(finalReport.contentType || audit.final_report.content_type)}`;
       files.push({
         name: _uniqueZipName(`final-report/${reportName}`, seenNames),
         data: finalReport.data,
-        mtime: audit.final_report.uploaded_at ? new Date(audit.final_report.uploaded_at) : new Date(),
+        mtime: audit.final_report.uploaded_at
+          ? new Date(audit.final_report.uploaded_at)
+          : new Date(),
       });
     }
 
@@ -1103,19 +1265,34 @@ async function exportAuditZip() {
       const eventId = item.event_id || item.event?.id;
       if (!eventId) continue;
       toast(status, `Collecting sampled evidence ${i + 1}/${evidenceItems.length}…`, 'info');
-      const eventData = await apiGet(_sampleExportUrl(`/api/v1/events/${encodeURIComponent(eventId)}?framework=${encodeURIComponent(audit.framework_slug || getCurrentFramework())}`));
+      const eventData = await apiGet(
+        _sampleExportUrl(
+          `/api/v1/events/${encodeURIComponent(eventId)}?framework=${encodeURIComponent(audit.framework_slug || getCurrentFramework())}`,
+        ),
+      );
       const artifacts = Array.isArray(eventData?.artifacts) ? eventData.artifacts : [];
       if (!artifacts.length) continue;
-      const eventStamp = eventData?.timestamp ? fmtTsFilename(eventData.timestamp) : String(i + 1).padStart(3, '0');
-      const eventLabel = _safeZipPathSegment(`${String(i + 1).padStart(3, '0')} ${eventStamp} ${eventData?.source || 'event'} ${String(eventId).slice(0, 8)}`, `evidence-${i + 1}`);
+      const eventStamp = eventData?.timestamp
+        ? fmtTsFilename(eventData.timestamp)
+        : String(i + 1).padStart(3, '0');
+      const eventLabel = _safeZipPathSegment(
+        `${String(i + 1).padStart(3, '0')} ${eventStamp} ${eventData?.source || 'event'} ${String(eventId).slice(0, 8)}`,
+        `evidence-${i + 1}`,
+      );
 
       for (let j = 0; j < artifacts.length; j++) {
         const art = artifacts[j];
         artifactCount += 1;
         toast(status, `Downloading sampled evidence artifact ${artifactCount}…`, 'info');
-        const downloaded = await _fetchBytes(_sampleExportUrl(`/api/v1/artifacts/${encodeURIComponent(art.id)}/download`));
-        const ext = downloaded.filename ? '' : _extFromContentType(downloaded.contentType || art.content_type);
-        const artifactName = _sampleMaskedFilename(downloaded.filename || `artifact-${art.id}${ext}`);
+        const downloaded = await _fetchBytes(
+          _sampleExportUrl(`/api/v1/artifacts/${encodeURIComponent(art.id)}/download`),
+        );
+        const ext = downloaded.filename
+          ? ''
+          : _extFromContentType(downloaded.contentType || art.content_type);
+        const artifactName = _sampleMaskedFilename(
+          downloaded.filename || `artifact-${art.id}${ext}`,
+        );
         files.push({
           name: _uniqueZipName(`sampled-evidence/${eventLabel}/${artifactName}`, seenNames),
           data: downloaded.data,
@@ -1129,10 +1306,18 @@ async function exportAuditZip() {
     _downloadBlob(zipBlob, `${stem}.zip`);
     const extra = [];
     if (audit.final_report?.download_url) extra.push('final report');
-    if (artifactCount) extra.push(`${artifactCount} sampled evidence attachment${artifactCount === 1 ? '' : 's'}`);
-    toast(status, `Audit ZIP download started${extra.length ? ` (${extra.join(', ')})` : ''}`, 'success', 3000);
+    if (artifactCount)
+      extra.push(`${artifactCount} sampled evidence attachment${artifactCount === 1 ? '' : 's'}`);
+    toast(
+      status,
+      `Audit ZIP download started${extra.length ? ` (${extra.join(', ')})` : ''}`,
+      'success',
+      3000,
+    );
     setTimeout(() => {
-      try { status.style.display = 'none'; } catch {}
+      try {
+        status.style.display = 'none';
+      } catch {}
     }, 3300);
   } catch (err) {
     toast(status, String(err), 'danger');
@@ -1185,7 +1370,8 @@ function _rebuildClauseHierarchy() {
 }
 
 function _clauseHasChildren(clauseOrId) {
-  const id = typeof clauseOrId === 'object' ? String(clauseOrId?.id || '') : String(clauseOrId || '');
+  const id =
+    typeof clauseOrId === 'object' ? String(clauseOrId?.id || '') : String(clauseOrId || '');
   if (!id) return false;
   if ((clauseChildrenByParentId.get(id) || []).length > 0) return true;
   if (typeof clauseOrId === 'object') return Number(clauseOrId?.child_count || 0) > 0;
@@ -1203,7 +1389,7 @@ function _selectableDescendantClauseIds(clauseId) {
 
 function _selectClauseOrChildren(clauseId) {
   const id = String(clauseId || '');
-  if (!id) return {clausesAdded: 0, controlsAdded: 0};
+  if (!id) return { clausesAdded: 0, controlsAdded: 0 };
   const selectableIds = _selectableDescendantClauseIds(id).filter((x) => x && x !== id);
   const targetIds = selectableIds.length ? selectableIds : [id];
   let clausesAdded = 0;
@@ -1219,7 +1405,7 @@ function _selectClauseOrChildren(clauseId) {
     }
     controlsAdded += _addControlsLinkedToClause(targetId);
   }
-  return {clausesAdded, controlsAdded};
+  return { clausesAdded, controlsAdded };
 }
 
 function _normaliseSelectedClausesToChildren() {
@@ -1243,12 +1429,18 @@ function _addScopeLinkedToDocument(documentId) {
   for (const clause of doc?.clauses || []) {
     const id = String(clause.id || '');
     if (!id) continue;
-    if (!selectedClauseIds.has(id)) { selectedClauseIds.add(id); added += 1; }
+    if (!selectedClauseIds.has(id)) {
+      selectedClauseIds.add(id);
+      added += 1;
+    }
     added += _addControlsLinkedToClause(id);
   }
   for (const control of doc?.controls || []) {
     const id = String(control.id || '');
-    if (id && !selectedControlIds.has(id)) { selectedControlIds.add(id); added += 1; }
+    if (id && !selectedControlIds.has(id)) {
+      selectedControlIds.add(id);
+      added += 1;
+    }
   }
   return added;
 }
@@ -1260,18 +1452,23 @@ function renderDocuments() {
   if (countEl) countEl.textContent = `${selectedDocumentIds.size} selected`;
   updateScopeActionButtons();
   if (!wrap) return;
-  const rows = allDocuments.filter((d) => matchesFilter({ref: d.document_type, title: d.title}, filter));
-  wrap.innerHTML = rows.map((d) => {
-    const id = String(d.id);
-    const checked = selectedDocumentIds.has(id) ? 'checked' : '';
-    const linked = `${(d.clauses || []).length} clauses, ${(d.controls || []).length} controls`;
-    return `<div class="col-12">
+  const rows = allDocuments.filter((d) =>
+    matchesFilter({ ref: d.document_type, title: d.title }, filter),
+  );
+  wrap.innerHTML =
+    rows
+      .map((d) => {
+        const id = String(d.id);
+        const checked = selectedDocumentIds.has(id) ? 'checked' : '';
+        const linked = `${(d.clauses || []).length} clauses, ${(d.controls || []).length} controls`;
+        return `<div class="col-12">
       <label class="border rounded p-2 d-flex gap-2 align-items-start h-100">
         <input class="form-check-input mt-1" type="checkbox" data-document-id="${esc(id)}" ${checked}>
         <span><span class="fw-semibold">${esc(d.title || 'Document')}</span> <span class="badge text-bg-light ms-1">${esc(d.document_type || 'document')}</span><div class="small-muted">${esc(linked)}</div></span>
       </label>
     </div>`;
-  }).join('') || `<div class="small-muted">No ISMS documents match.</div>`;
+      })
+      .join('') || `<div class="small-muted">No ISMS documents match.</div>`;
   wrap.querySelectorAll('[data-document-id]').forEach((cb) => {
     cb.disabled = !canEditAudit();
     cb.addEventListener('change', () => {
@@ -1280,7 +1477,10 @@ function renderDocuments() {
       if (cb.checked) {
         selectedDocumentIds.add(id);
         const added = _addScopeLinkedToDocument(id);
-        if (added > 0) { renderClauses(); renderControls(); }
+        if (added > 0) {
+          renderClauses();
+          renderControls();
+        }
       } else {
         selectedDocumentIds.delete(id);
       }
@@ -1312,7 +1512,14 @@ async function loadScopeItems() {
 
 function matchesFilter(item, filter) {
   if (!filter) return true;
-  return String(item.ref || '').toLowerCase().includes(filter) || String(item.title || '').toLowerCase().includes(filter);
+  return (
+    String(item.ref || '')
+      .toLowerCase()
+      .includes(filter) ||
+    String(item.title || '')
+      .toLowerCase()
+      .includes(filter)
+  );
 }
 
 function clauseIndent(c) {
@@ -1327,29 +1534,36 @@ function renderClauses() {
   if (countEl) countEl.textContent = `${selectedClauseIds.size} selected`;
   updateScopeActionButtons();
   const rows = allClauses.filter((c) => matchesFilter(c, filter));
-  wrap.innerHTML = rows.map((c) => {
-    const id = String(c.id);
-    const hasChildren = _clauseHasChildren(c);
-    const descendants = hasChildren ? _selectableDescendantClauseIds(id).filter((x) => x !== id) : [];
-    const allChildrenSelected = descendants.length > 0 && descendants.every((childId) => selectedClauseIds.has(String(childId)));
-    const checked = !hasChildren && selectedClauseIds.has(id) ? 'checked' : '';
-    const pad = clauseIndent(c) * 1.1;
-    const hint = hasChildren
-      ? `<span class="badge text-bg-secondary ms-2">${allChildrenSelected ? 'child clauses selected' : 'selects child clauses'}</span>`
-      : '';
-    const rowClass = hasChildren
-      ? 'border rounded p-2 d-flex gap-2 align-items-start h-100 bg-body-tertiary text-muted'
-      : 'border rounded p-2 d-flex gap-2 align-items-start h-100';
-    const title = hasChildren
-      ? 'Parent clauses are grouping headings. Selecting this will add the individual child clauses instead.'
-      : '';
-    return `<div class="col-12">
+  wrap.innerHTML =
+    rows
+      .map((c) => {
+        const id = String(c.id);
+        const hasChildren = _clauseHasChildren(c);
+        const descendants = hasChildren
+          ? _selectableDescendantClauseIds(id).filter((x) => x !== id)
+          : [];
+        const allChildrenSelected =
+          descendants.length > 0 &&
+          descendants.every((childId) => selectedClauseIds.has(String(childId)));
+        const checked = !hasChildren && selectedClauseIds.has(id) ? 'checked' : '';
+        const pad = clauseIndent(c) * 1.1;
+        const hint = hasChildren
+          ? `<span class="badge text-bg-secondary ms-2">${allChildrenSelected ? 'child clauses selected' : 'selects child clauses'}</span>`
+          : '';
+        const rowClass = hasChildren
+          ? 'border rounded p-2 d-flex gap-2 align-items-start h-100 bg-body-tertiary text-muted'
+          : 'border rounded p-2 d-flex gap-2 align-items-start h-100';
+        const title = hasChildren
+          ? 'Parent clauses are grouping headings. Selecting this will add the individual child clauses instead.'
+          : '';
+        return `<div class="col-12">
       <label class="${rowClass}" style="margin-left:${pad}rem" title="${esc(title)}">
         <input class="form-check-input mt-1" type="checkbox" data-clause-id="${esc(id)}" ${checked}>
         <span><span class="fw-semibold">${esc(c.ref || '')}</span> <span class="small-muted">${esc(c.title || '')}</span>${hint}</span>
       </label>
     </div>`;
-  }).join('') || `<div class="small-muted">No clauses match.</div>`;
+      })
+      .join('') || `<div class="small-muted">No clauses match.</div>`;
   wrap.querySelectorAll('[data-clause-id]').forEach((cb) => {
     cb.disabled = !canEditAudit();
     cb.addEventListener('change', () => {
@@ -1357,10 +1571,15 @@ function renderClauses() {
       const id = cb.getAttribute('data-clause-id');
       if (_clauseHasChildren(id)) {
         cb.checked = false;
-        const {clausesAdded, controlsAdded} = _selectClauseOrChildren(id);
+        const { clausesAdded, controlsAdded } = _selectClauseOrChildren(id);
         renderScopeLists();
         if (clausesAdded || controlsAdded) {
-          toast(status, `Selected ${clausesAdded} child clause${clausesAdded === 1 ? '' : 's'} and ${controlsAdded} linked control${controlsAdded === 1 ? '' : 's'}.`, 'info', 3000);
+          toast(
+            status,
+            `Selected ${clausesAdded} child clause${clausesAdded === 1 ? '' : 's'} and ${controlsAdded} linked control${controlsAdded === 1 ? '' : 's'}.`,
+            'info',
+            3000,
+          );
         }
         return;
       }
@@ -1384,16 +1603,19 @@ function renderControls() {
   if (countEl) countEl.textContent = `${selectedControlIds.size} selected`;
   updateScopeActionButtons();
   const rows = allControls.filter((c) => matchesFilter(c, filter));
-  wrap.innerHTML = rows.map((c) => {
-    const id = String(c.id);
-    const checked = selectedControlIds.has(id) ? 'checked' : '';
-    return `<div class="col-12 col-lg-6">
+  wrap.innerHTML =
+    rows
+      .map((c) => {
+        const id = String(c.id);
+        const checked = selectedControlIds.has(id) ? 'checked' : '';
+        return `<div class="col-12 col-lg-6">
       <label class="border rounded p-2 d-flex gap-2 align-items-start h-100">
         <input class="form-check-input mt-1" type="checkbox" data-control-id="${esc(id)}" ${checked}>
         <span><span class="fw-semibold">${esc(c.ref || '')}</span> <span class="small-muted">${esc(c.title || '')}</span></span>
       </label>
     </div>`;
-  }).join('') || `<div class="small-muted">No controls match.</div>`;
+      })
+      .join('') || `<div class="small-muted">No controls match.</div>`;
   wrap.querySelectorAll('[data-control-id]').forEach((cb) => {
     cb.disabled = !canEditAudit();
     cb.addEventListener('change', () => {
@@ -1420,11 +1642,15 @@ function _scopeApplicabilityLabel(value) {
 }
 
 function _scopeApplicabilityColor(value) {
-  const base = getComputedStyle(document.documentElement).getPropertyValue('--bs-primary').trim() || '#0d6efd';
+  const base =
+    getComputedStyle(document.documentElement).getPropertyValue('--bs-primary').trim() || '#0d6efd';
   if (String(value || '') === 'partially_applicable') {
     try {
       const c = d3.color(base);
-      if (c) { c.opacity = 0.58; return c.formatRgb(); }
+      if (c) {
+        c.opacity = 0.58;
+        return c.formatRgb();
+      }
     } catch {}
   }
   return base;
@@ -1450,12 +1676,16 @@ function _splitLongToken(token, maxChars) {
 }
 
 function _scopeLabelLines(value, maxCharsPerLine, maxLines = 3) {
-  const raw = String(value || '').replace(/\s+/g, ' ').trim();
+  const raw = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const perLine = Math.max(4, Number(maxCharsPerLine || 18));
   const lineLimit = Math.max(1, Number(maxLines || 1));
   if (!raw) return [];
 
-  const tokens = raw.split(' ').flatMap((w) => w.length > perLine ? _splitLongToken(w, perLine) : [w]);
+  const tokens = raw
+    .split(' ')
+    .flatMap((w) => (w.length > perLine ? _splitLongToken(w, perLine) : [w]));
   const lines = [];
   let line = '';
   for (const token of tokens) {
@@ -1485,18 +1715,21 @@ function _renderScopeNodeLabel(textSel, value, opts = {}) {
   const y = Number(opts.y ?? height / 2);
   const linePx = Number(opts.linePx || 13);
   const charPx = Number(opts.charPx || 7);
-  const maxLines = Math.max(1, Math.min(Number(opts.maxLines || 3), Math.floor(Math.max(1, height - 8) / linePx) || 1));
+  const maxLines = Math.max(
+    1,
+    Math.min(Number(opts.maxLines || 3), Math.floor(Math.max(1, height - 8) / linePx) || 1),
+  );
   const maxChars = Math.max(4, Math.floor(Math.max(20, width - 16) / charPx));
   const lines = _scopeLabelLines(value, maxChars, maxLines);
   const totalHeight = Math.max(linePx, lines.length * linePx);
-  const startY = y - (totalHeight / 2) + (linePx / 2) - 1;
+  const startY = y - totalHeight / 2 + linePx / 2 - 1;
 
   textSel.text(null);
   lines.forEach((line, idx) => {
     textSel
       .append('tspan')
       .attr('x', x)
-      .attr('y', startY + (idx * linePx))
+      .attr('y', startY + idx * linePx)
       .text(line);
   });
 }
@@ -1511,11 +1744,17 @@ function _openScopeHref(href, ev) {
 }
 
 function _scopeClauseHref(clause) {
-  return withFramework(`/clause.html?id=${encodeURIComponent(clause?.id || '')}`, audit?.framework_slug);
+  return withFramework(
+    `/clause.html?id=${encodeURIComponent(clause?.id || '')}`,
+    audit?.framework_slug,
+  );
 }
 
 function _scopeControlHref(control) {
-  return withFramework(`/control.html?id=${encodeURIComponent(control?.id || '')}`, audit?.framework_slug);
+  return withFramework(
+    `/control.html?id=${encodeURIComponent(control?.id || '')}`,
+    audit?.framework_slug,
+  );
 }
 
 function renderScopeBipartiteGraph(data) {
@@ -1533,7 +1772,8 @@ function renderScopeBipartiteGraph(data) {
   }
 
   if (!clauses.length || !controls.length) {
-    wrap.innerHTML = '<div class="small-muted p-3">Select at least one clause and one control to show the audit scope graph.</div>';
+    wrap.innerHTML =
+      '<div class="small-muted p-3">Select at least one clause and one control to show the audit scope graph.</div>';
     return;
   }
 
@@ -1559,20 +1799,23 @@ function renderScopeBipartiteGraph(data) {
     const ac = linkedClauseCounts.get(String(a.id)) || 0;
     const bc = linkedClauseCounts.get(String(b.id)) || 0;
     if (bc !== ac) return bc - ac;
-    return String(a.ref || '').localeCompare(String(b.ref || ''), undefined, {numeric: true});
+    return String(a.ref || '').localeCompare(String(b.ref || ''), undefined, { numeric: true });
   });
   const orderedControls = controls.slice().sort((a, b) => {
     const ac = linkedControlCounts.get(String(a.id)) || 0;
     const bc = linkedControlCounts.get(String(b.id)) || 0;
     if (bc !== ac) return bc - ac;
-    return String(a.ref || '').localeCompare(String(b.ref || ''), undefined, {numeric: true});
+    return String(a.ref || '').localeCompare(String(b.ref || ''), undefined, { numeric: true });
   });
 
-  const rowPx = Math.max(34, Math.min(46, orderedClauses.length > 60 || orderedControls.length > 60 ? 34 : 42));
+  const rowPx = Math.max(
+    34,
+    Math.min(46, orderedClauses.length > 60 || orderedControls.length > 60 ? 34 : 42),
+  );
   const rows = Math.max(orderedClauses.length, orderedControls.length, 6);
   const width = Math.max(760, (wrap.clientWidth || 900) - 18);
   const height = Math.max(340, rows * rowPx + 96);
-  const margin = {top: 48, right: 18, bottom: 48, left: 18};
+  const margin = { top: 48, right: 18, bottom: 48, left: 18 };
   const leftW = Math.min(280, Math.max(190, Math.floor(width * 0.28)));
   const rightW = Math.min(280, Math.max(190, Math.floor(width * 0.28)));
   const xL = margin.left;
@@ -1580,24 +1823,33 @@ function renderScopeBipartiteGraph(data) {
   const linkGap = Math.max(80, xR - (xL + leftW));
 
   if (summary) {
-    const orphanControls = stats.controls_in_scope_without_selected_clause_link ?? (controls.length - linkedControlCounts.size);
-    const orphanClauses = stats.clauses_without_selected_control_link ?? (clauses.length - linkedClauseCounts.size);
+    const orphanControls =
+      stats.controls_in_scope_without_selected_clause_link ??
+      controls.length - linkedControlCounts.size;
+    const orphanClauses =
+      stats.clauses_without_selected_control_link ?? clauses.length - linkedClauseCounts.size;
     const extras = [];
-    if (orphanClauses > 0) extras.push(`${orphanClauses} selected clause(s) have no selected control link`);
-    if (orphanControls > 0) extras.push(`${orphanControls} selected control(s) have no selected clause link`);
+    if (orphanClauses > 0)
+      extras.push(`${orphanClauses} selected clause(s) have no selected control link`);
+    if (orphanControls > 0)
+      extras.push(`${orphanControls} selected control(s) have no selected clause link`);
     if (extras.length) summary.textContent += ` ${extras.join('; ')}.`;
   }
 
-  const yClauses = d3.scaleBand()
+  const yClauses = d3
+    .scaleBand()
     .domain(orderedClauses.map((c) => String(c.id)))
     .range([margin.top, height - margin.bottom])
     .padding(0.22);
-  const yControls = d3.scaleBand()
+  const yControls = d3
+    .scaleBand()
     .domain(orderedControls.map((c) => String(c.id)))
     .range([margin.top, height - margin.bottom])
     .padding(0.22);
 
-  const svg = d3.select(wrap).append('svg')
+  const svg = d3
+    .select(wrap)
+    .append('svg')
     .attr('width', width)
     .attr('height', height)
     .attr('role', 'img')
@@ -1605,20 +1857,25 @@ function renderScopeBipartiteGraph(data) {
     .style('display', 'block')
     .style('min-width', `${width}px`);
 
-  svg.append('text')
+  svg
+    .append('text')
     .attr('x', margin.left)
     .attr('y', 20)
     .attr('class', 'small-muted')
     .style('font-size', '12px')
-    .text('Clauses are on the left; controls are on the right. Click a clause or control to open its detail page.');
+    .text(
+      'Clauses are on the left; controls are on the right. Click a clause or control to open its detail page.',
+    );
 
-  svg.append('text')
+  svg
+    .append('text')
     .attr('x', xL)
     .attr('y', margin.top - 10)
     .attr('class', 'small-muted')
     .style('font-size', '12px')
     .text('Clauses in scope');
-  svg.append('text')
+  svg
+    .append('text')
     .attr('x', xR)
     .attr('y', margin.top - 10)
     .attr('class', 'small-muted')
@@ -1626,31 +1883,39 @@ function renderScopeBipartiteGraph(data) {
     .text('Controls in scope');
 
   const defs = svg.append('defs');
-  const grad = defs.append('linearGradient')
+  const grad = defs
+    .append('linearGradient')
     .attr('id', 'auditScopeLinkGradient')
     .attr('x1', '0%')
     .attr('y1', '0%')
     .attr('x2', '100%')
     .attr('y2', '0%');
-  grad.append('stop')
+  grad
+    .append('stop')
     .attr('offset', '0%')
     .attr('stop-color', _scopeApplicabilityColor('applicable'))
     .attr('stop-opacity', 0.62);
-  grad.append('stop')
+  grad
+    .append('stop')
     .attr('offset', '100%')
     .attr('stop-color', _scopeApplicabilityColor('applicable'))
-    .attr('stop-opacity', 0.30);
+    .attr('stop-opacity', 0.3);
 
   const gLinks = svg.append('g').attr('class', 'audit-scope-links');
-  const linkSel = gLinks.selectAll('path')
+  const linkSel = gLinks
+    .selectAll('path')
     .data(validLinks)
     .enter()
     .append('path')
     .attr('fill', 'none')
-    .attr('stroke-width', (d) => d.applicability === 'partially_applicable' ? 1.7 : 2.8)
-    .attr('stroke-dasharray', (d) => d.applicability === 'partially_applicable' ? '5 5' : null)
-    .style('stroke', (d) => d.applicability === 'partially_applicable' ? _scopeApplicabilityColor(d.applicability) : 'url(#auditScopeLinkGradient)')
-    .style('stroke-opacity', (d) => d.applicability === 'partially_applicable' ? 0.60 : 0.76)
+    .attr('stroke-width', (d) => (d.applicability === 'partially_applicable' ? 1.7 : 2.8))
+    .attr('stroke-dasharray', (d) => (d.applicability === 'partially_applicable' ? '5 5' : null))
+    .style('stroke', (d) =>
+      d.applicability === 'partially_applicable'
+        ? _scopeApplicabilityColor(d.applicability)
+        : 'url(#auditScopeLinkGradient)',
+    )
+    .style('stroke-opacity', (d) => (d.applicability === 'partially_applicable' ? 0.6 : 0.76))
     .style('stroke-linecap', 'round')
     .attr('d', (d) => {
       const y1 = (yClauses(d.clause_id) ?? margin.top) + yClauses.bandwidth() / 2;
@@ -1661,24 +1926,25 @@ function renderScopeBipartiteGraph(data) {
       return `M ${x1} ${y1} C ${xm} ${y1}, ${xm} ${y2}, ${x2} ${y2}`;
     });
 
-  linkSel.append('title')
-    .text((d) => {
-      const clause = clauseById.get(d.clause_id) || {};
-      const control = controlById.get(d.control_id) || {};
-      return `${clause.ref || 'Clause'} → ${control.ref || 'Control'}\n${_scopeApplicabilityLabel(d.applicability)}`;
-    });
+  linkSel.append('title').text((d) => {
+    const clause = clauseById.get(d.clause_id) || {};
+    const control = controlById.get(d.control_id) || {};
+    return `${clause.ref || 'Clause'} → ${control.ref || 'Control'}\n${_scopeApplicabilityLabel(d.applicability)}`;
+  });
 
   const gNodes = svg.append('g').attr('class', 'audit-scope-nodes');
 
-  const clauseNodes = gNodes.selectAll('a.scope-clause')
+  const clauseNodes = gNodes
+    .selectAll('a.scope-clause')
     .data(orderedClauses)
     .enter()
     .append('a')
     .attr('class', 'scope-clause')
     .attr('href', (d) => _scopeClauseHref(d))
-    .each(function(d) {
+    .each(function (d) {
       const y = yClauses(String(d.id)) ?? 0;
-      const group = d3.select(this)
+      const group = d3
+        .select(this)
         .append('g')
         .attr('class', 'node node-source audit-scope-node audit-scope-clause')
         .attr('transform', `translate(${xL}, ${y})`)
@@ -1687,16 +1953,23 @@ function renderScopeBipartiteGraph(data) {
           ev.preventDefault();
           _openScopeHref(_scopeClauseHref(d), ev);
         });
-      group.append('rect')
+      group
+        .append('rect')
         .attr('rx', 8)
         .attr('ry', 8)
         .attr('width', leftW)
         .attr('height', yClauses.bandwidth())
-        .style('fill', linkedClauseCounts.has(String(d.id)) ? 'rgba(var(--keen-accent-rgb),0.86)' : 'rgba(108,117,125,0.72)')
+        .style(
+          'fill',
+          linkedClauseCounts.has(String(d.id))
+            ? 'rgba(var(--keen-accent-rgb),0.86)'
+            : 'rgba(108,117,125,0.72)',
+        )
         .style('stroke', 'rgba(255,255,255,0.20)')
         .style('stroke-width', 1);
       const label = `${d.ref || 'Clause'}${d.title ? ` — ${d.title}` : ''}`;
-      group.append('text')
+      group
+        .append('text')
         .attr('x', leftW / 2)
         .attr('y', yClauses.bandwidth() / 2)
         .attr('text-anchor', 'middle')
@@ -1704,7 +1977,7 @@ function renderScopeBipartiteGraph(data) {
         .style('font-weight', 700)
         .style('fill', 'rgba(255,255,255,0.94)')
         .style('pointer-events', 'none')
-        .each(function() {
+        .each(function () {
           _renderScopeNodeLabel(d3.select(this), label, {
             width: leftW,
             height: yClauses.bandwidth(),
@@ -1715,18 +1988,24 @@ function renderScopeBipartiteGraph(data) {
             maxLines: 3,
           });
         });
-      group.append('title').text(`${label}\n${linkedClauseCounts.get(String(d.id)) || 0} linked control(s) in this audit scope`);
+      group
+        .append('title')
+        .text(
+          `${label}\n${linkedClauseCounts.get(String(d.id)) || 0} linked control(s) in this audit scope`,
+        );
     });
 
-  const controlNodes = gNodes.selectAll('a.scope-control')
+  const controlNodes = gNodes
+    .selectAll('a.scope-control')
     .data(orderedControls)
     .enter()
     .append('a')
     .attr('class', 'scope-control')
     .attr('href', (d) => _scopeControlHref(d))
-    .each(function(d) {
+    .each(function (d) {
       const y = yControls(String(d.id)) ?? 0;
-      const group = d3.select(this)
+      const group = d3
+        .select(this)
         .append('g')
         .attr('class', 'node node-control audit-scope-node audit-scope-control')
         .attr('transform', `translate(${xR}, ${y})`)
@@ -1735,16 +2014,21 @@ function renderScopeBipartiteGraph(data) {
           ev.preventDefault();
           _openScopeHref(_scopeControlHref(d), ev);
         });
-      group.append('rect')
+      group
+        .append('rect')
         .attr('rx', 8)
         .attr('ry', 8)
         .attr('width', rightW)
         .attr('height', yControls.bandwidth())
-        .style('fill', linkedControlCounts.has(String(d.id)) ? 'rgba(31,31,42,0.84)' : 'rgba(108,117,125,0.72)')
+        .style(
+          'fill',
+          linkedControlCounts.has(String(d.id)) ? 'rgba(31,31,42,0.84)' : 'rgba(108,117,125,0.72)',
+        )
         .style('stroke', 'rgba(255,255,255,0.18)')
         .style('stroke-width', 1);
       const label = `${d.ref || 'Control'}${d.title ? ` — ${d.title}` : ''}`;
-      group.append('text')
+      group
+        .append('text')
         .attr('x', 10)
         .attr('y', yControls.bandwidth() / 2)
         .attr('text-anchor', 'start')
@@ -1752,7 +2036,7 @@ function renderScopeBipartiteGraph(data) {
         .style('font-weight', 700)
         .style('fill', 'rgba(255,255,255,0.94)')
         .style('pointer-events', 'none')
-        .each(function() {
+        .each(function () {
           _renderScopeNodeLabel(d3.select(this), label, {
             width: rightW - 18,
             height: yControls.bandwidth(),
@@ -1763,21 +2047,37 @@ function renderScopeBipartiteGraph(data) {
             maxLines: 3,
           });
         });
-      group.append('title').text(`${label}\n${linkedControlCounts.get(String(d.id)) || 0} linked clause(s) in this audit scope`);
+      group
+        .append('title')
+        .text(
+          `${label}\n${linkedControlCounts.get(String(d.id)) || 0} linked clause(s) in this audit scope`,
+        );
     });
 
   const legend = svg.append('g').attr('transform', `translate(${margin.left}, ${height - 26})`);
   const legendItems = [
-    {label: 'Applicable relationship', applicability: 'applicable', dashed: false},
-    {label: 'Partially applicable relationship', applicability: 'partially_applicable', dashed: true},
-    {label: 'Grey node = in scope, no selected relationship', applicability: '', grey: true},
+    { label: 'Applicable relationship', applicability: 'applicable', dashed: false },
+    {
+      label: 'Partially applicable relationship',
+      applicability: 'partially_applicable',
+      dashed: true,
+    },
+    { label: 'Grey node = in scope, no selected relationship', applicability: '', grey: true },
   ];
-  const legendG = legend.selectAll('g').data(legendItems).enter().append('g')
+  const legendG = legend
+    .selectAll('g')
+    .data(legendItems)
+    .enter()
+    .append('g')
     .attr('transform', (_, i) => `translate(${i * 235},0)`);
-  legendG.each(function(d) {
+  legendG.each(function (d) {
     const g = d3.select(this);
     if (d.grey) {
-      g.append('rect').attr('width', 28).attr('height', 10).attr('rx', 3).attr('fill', 'rgba(108,117,125,0.72)');
+      g.append('rect')
+        .attr('width', 28)
+        .attr('height', 10)
+        .attr('rx', 3)
+        .attr('fill', 'rgba(108,117,125,0.72)');
     } else {
       g.append('line')
         .attr('x1', 0)
@@ -1789,7 +2089,12 @@ function renderScopeBipartiteGraph(data) {
         .attr('stroke', _scopeApplicabilityColor(d.applicability))
         .attr('stroke-linecap', 'round');
     }
-    g.append('text').attr('x', 36).attr('y', 9).style('font-size', '12px').attr('class', 'small-muted').text(d.label);
+    g.append('text')
+      .attr('x', 36)
+      .attr('y', 9)
+      .style('font-size', '12px')
+      .attr('class', 'small-muted')
+      .text(d.label);
   });
 }
 
@@ -1800,7 +2105,8 @@ async function loadScopeVisualisation() {
     const data = await apiGet(`/api/v1/audits/${encodeURIComponent(auditId)}/scope-map`);
     renderScopeBipartiteGraph(data);
   } catch (e) {
-    if (wrap) wrap.innerHTML = `<div class="text-danger small p-3">Failed to load scope visualisation: ${esc(String(e))}</div>`;
+    if (wrap)
+      wrap.innerHTML = `<div class="text-danger small p-3">Failed to load scope visualisation: ${esc(String(e))}</div>`;
   }
 }
 
@@ -1808,34 +2114,58 @@ function renderAttendeeUserOptions() {
   const sel = document.getElementById('attendeeUserId');
   if (!sel) return;
   const cur = sel.value || '';
-  const rows = (attendeeUsers || []).slice().sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
+  const rows = (attendeeUsers || [])
+    .slice()
+    .sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
   sel.innerHTML = `<option value="">Custom / external attendee</option>${rows.map((u) => `<option value="${esc(u.id)}">${esc(u.username)}${u.email ? ` · ${esc(u.email)}` : ''}</option>`).join('')}`;
   sel.value = rows.some((u) => String(u.id) === cur) ? cur : '';
 }
 
 function renderAttendeePersonOptions() {
-  const sel=document.getElementById('attendeePersonId'); if (!sel) return;
-  const current=sel.value;
-  sel.innerHTML='<option value="">Choose a Person or enter a new name below</option>'+
-    attendeePeople.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}${p.email ? ` · ${esc(p.email)}` : ''}</option>`).join('');
-  sel.value=attendeePeople.some(p=>p.id===current) ? current : '';
+  const sel = document.getElementById('attendeePersonId');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML =
+    '<option value="">Choose a Person or enter a new name below</option>' +
+    attendeePeople
+      .map(
+        (p) =>
+          `<option value="${esc(p.id)}">${esc(p.name)}${p.email ? ` · ${esc(p.email)}` : ''}</option>`,
+      )
+      .join('');
+  sel.value = attendeePeople.some((p) => p.id === current) ? current : '';
 }
 
 async function loadAttendeePeople() {
-  try { attendeePeople=(await apiGet('/api/v1/isms/people')).items || []; renderAttendeePersonOptions(); }
-  catch (err) { attendeePeople=[]; renderAttendeePersonOptions(); }
+  try {
+    attendeePeople = (await apiGet('/api/v1/isms/people')).items || [];
+    renderAttendeePersonOptions();
+  } catch (err) {
+    attendeePeople = [];
+    renderAttendeePersonOptions();
+  }
 }
 
 function suggestPersonCreation() {
-  const button=document.getElementById('attendeeCreatePerson'); if (!button) return;
-  const name=document.getElementById('attendeeName')?.value.trim() || '';
-  const email=document.getElementById('attendeeEmail')?.value.trim().toLowerCase() || '';
-  const matching=attendeePeople.find(p=>email ? p.email?.trim().toLowerCase()===email : p.name?.trim().toLowerCase()===name.toLowerCase());
+  const button = document.getElementById('attendeeCreatePerson');
+  if (!button) return;
+  const name = document.getElementById('attendeeName')?.value.trim() || '';
+  const email = document.getElementById('attendeeEmail')?.value.trim().toLowerCase() || '';
+  const matching = attendeePeople.find((p) =>
+    email
+      ? p.email?.trim().toLowerCase() === email
+      : p.name?.trim().toLowerCase() === name.toLowerCase(),
+  );
   if (matching && !document.getElementById('attendeePersonId').value) {
-    document.getElementById('attendeePersonId').value=matching.id;
-    document.getElementById('attendeeUserId').value='';
+    document.getElementById('attendeePersonId').value = matching.id;
+    document.getElementById('attendeeUserId').value = '';
   }
-  button.hidden=!(name && !matching && !document.getElementById('attendeePersonId')?.value && (me?.is_admin || me?.can_manage_isms));
+  button.hidden = !(
+    name &&
+    !matching &&
+    !document.getElementById('attendeePersonId')?.value &&
+    (me?.is_admin || me?.can_manage_isms)
+  );
 }
 
 async function loadAttendeeUsers() {
@@ -1869,45 +2199,63 @@ function syncAttendeeUserSelection() {
   }
 }
 document.getElementById('attendeePersonId')?.addEventListener('change', () => {
-  const p=attendeePeople.find(person=>person.id===document.getElementById('attendeePersonId').value);
+  const p = attendeePeople.find(
+    (person) => person.id === document.getElementById('attendeePersonId').value,
+  );
   if (p) {
-    document.getElementById('attendeeUserId').value='';
-    document.getElementById('attendeeName').value=p.name;
-    document.getElementById('attendeeEmail').value=p.email || '';
+    document.getElementById('attendeeUserId').value = '';
+    document.getElementById('attendeeName').value = p.name;
+    document.getElementById('attendeeEmail').value = p.email || '';
   }
   suggestPersonCreation();
 });
-for (const id of ['attendeeName','attendeeEmail']) document.getElementById(id)?.addEventListener('input', suggestPersonCreation);
+for (const id of ['attendeeName', 'attendeeEmail'])
+  document.getElementById(id)?.addEventListener('input', suggestPersonCreation);
 document.getElementById('attendeeCreatePerson')?.addEventListener('click', async () => {
   try {
-    const name=document.getElementById('attendeeName').value.trim();
-    const email=document.getElementById('attendeeEmail').value.trim();
-    const p=await apiPost('/api/v1/isms/people', {name,email});
-    await loadAttendeePeople(); document.getElementById('attendeePersonId').value=p.id;
-    suggestPersonCreation(); toast(status,'Person saved to the directory. Add them to the audit below.','success');
-  } catch (err) { toast(status,`Could not add Person: ${String(err)}`,'danger'); }
+    const name = document.getElementById('attendeeName').value.trim();
+    const email = document.getElementById('attendeeEmail').value.trim();
+    const p = await apiPost('/api/v1/isms/people', { name, email });
+    await loadAttendeePeople();
+    document.getElementById('attendeePersonId').value = p.id;
+    suggestPersonCreation();
+    toast(status, 'Person saved to the directory. Add them to the audit below.', 'success');
+  } catch (err) {
+    toast(status, `Could not add Person: ${String(err)}`, 'danger');
+  }
 });
 
 function renderAttendees(items) {
   const el = document.getElementById('attendees');
   const arr = items || [];
-  if (!arr.length) { el.innerHTML = '<span class="small-muted">No people listed yet.</span>'; return; }
-  el.innerHTML = `<div class="list-group">${arr.map((x) => {
-    const meta = [x.email, x.role].filter(Boolean);
-    const who = x.user_id ? userPillHtml({username: x.username || x.name, email: x.email}) : esc(x.name || x.email || 'Attendee');
-    return `<div class="list-group-item d-flex justify-content-between gap-2 align-items-start">
+  if (!arr.length) {
+    el.innerHTML = '<span class="small-muted">No people listed yet.</span>';
+    return;
+  }
+  el.innerHTML = `<div class="list-group">${arr
+    .map((x) => {
+      const meta = [x.email, x.role].filter(Boolean);
+      const who = x.user_id
+        ? userPillHtml({ username: x.username || x.name, email: x.email })
+        : esc(x.name || x.email || 'Attendee');
+      return `<div class="list-group-item d-flex justify-content-between gap-2 align-items-start">
       <div>
         <div class="fw-semibold">${who}</div>
         <div class="small-muted">${esc(meta.join(' · ') || '—')}</div>
       </div>
       ${canEditAudit() ? `<button class="btn btn-sm btn-outline-danger" data-del-attendee="${esc(x.id)}">Remove</button>` : ''}
     </div>`;
-  }).join('')}</div>`;
-  el.querySelectorAll('[data-del-attendee]').forEach((btn) => btn.addEventListener('click', async () => {
-    if (!ensureAuditEditable()) return;
-    await apiDelete(`/api/v1/audits/${encodeURIComponent(auditId)}/attendees/${encodeURIComponent(btn.getAttribute('data-del-attendee'))}`);
-    await loadAudit({preserveUnsaved: true});
-  }));
+    })
+    .join('')}</div>`;
+  el.querySelectorAll('[data-del-attendee]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      if (!ensureAuditEditable()) return;
+      await apiDelete(
+        `/api/v1/audits/${encodeURIComponent(auditId)}/attendees/${encodeURIComponent(btn.getAttribute('data-del-attendee'))}`,
+      );
+      await loadAudit({ preserveUnsaved: true });
+    }),
+  );
 }
 
 function findingKindOptions(current) {
@@ -1926,8 +2274,13 @@ function findingStatusOptions(current) {
 function renderFindings(items) {
   const el = document.getElementById('findings');
   const arr = items || [];
-  if (!arr.length) { el.innerHTML = '<span class="small-muted">No findings yet.</span>'; return; }
-  el.innerHTML = arr.map((f) => `<div class="border rounded p-3 mb-2" data-finding-card="${esc(f.id)}">
+  if (!arr.length) {
+    el.innerHTML = '<span class="small-muted">No findings yet.</span>';
+    return;
+  }
+  el.innerHTML = arr
+    .map(
+      (f) => `<div class="border rounded p-3 mb-2" data-finding-card="${esc(f.id)}">
     <div class="d-flex justify-content-between gap-2 align-items-start">
       <div>
         <span class="badge text-bg-light me-2">${esc(kindLabel(f.kind))}</span>
@@ -1938,7 +2291,9 @@ function renderFindings(items) {
     </div>
     ${f.control ? `<div class="small-muted mt-1">Control: ${esc(f.control.ref)} ${esc(f.control.title || '')}</div>` : ''}
     ${f.description ? `<div class="mt-2 rich-text-content">${renderRichTextContent(f.description, '')}</div>` : ''}
-    ${canEditAudit() ? `<form class="row g-2 mt-3 d-none" data-finding-edit-form="${esc(f.id)}">
+    ${
+      canEditAudit()
+        ? `<form class="row g-2 mt-3 d-none" data-finding-edit-form="${esc(f.id)}">
       <div class="col-12 col-md-4"><select class="form-select" data-finding-edit-kind="${esc(f.id)}">${findingKindOptions(f.kind)}</select></div>
       <div class="col-12 col-md-4"><input class="form-control" data-finding-edit-title="${esc(f.id)}" value="${esc(f.title || '')}" required /></div>
       <div class="col-12 col-md-4"><select class="form-select" data-finding-edit-status="${esc(f.id)}">${findingStatusOptions(f.status)}</select></div>
@@ -1948,52 +2303,84 @@ function renderFindings(items) {
         <button class="btn btn-sm btn-primary" type="submit">Save finding</button>
         <button class="btn btn-sm btn-outline-secondary" type="button" data-cancel-finding="${esc(f.id)}">Cancel</button>
       </div>
-    </form>` : ''}
-  </div>`).join('');
+    </form>`
+        : ''
+    }
+  </div>`,
+    )
+    .join('');
   initRichTextEditors(el);
   refreshRichTextEditorStates(el);
-  el.querySelectorAll('[data-edit-finding]').forEach((btn) => btn.addEventListener('click', () => {
-    const id = btn.getAttribute('data-edit-finding');
-    el.querySelector(`[data-finding-edit-form="${CSS.escape(id)}"]`)?.classList.remove('d-none');
-  }));
-  el.querySelectorAll('[data-cancel-finding]').forEach((btn) => btn.addEventListener('click', () => {
-    const id = btn.getAttribute('data-cancel-finding');
-    el.querySelector(`[data-finding-edit-form="${CSS.escape(id)}"]`)?.classList.add('d-none');
-  }));
-  el.querySelectorAll('[data-finding-edit-form]').forEach((form) => form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    if (!ensureAuditEditable()) return;
-    const id = form.getAttribute('data-finding-edit-form');
-    await apiPatch(`/api/v1/audits/${encodeURIComponent(auditId)}/findings/${encodeURIComponent(id)}`, {
-      kind: el.querySelector(`[data-finding-edit-kind="${CSS.escape(id)}"]`)?.value,
-      title: el.querySelector(`[data-finding-edit-title="${CSS.escape(id)}"]`)?.value,
-      status: el.querySelector(`[data-finding-edit-status="${CSS.escape(id)}"]`)?.value,
-      control: el.querySelector(`[data-finding-edit-control="${CSS.escape(id)}"]`)?.value || null,
-      description: syncRichTextEditor(el.querySelector(`[data-finding-edit-desc="${CSS.escape(id)}"]`)) || '',
-    });
-    toast(status, 'Finding saved', 'success');
-    await loadAudit({preserveUnsaved: true});
-  }));
-  el.querySelectorAll('[data-del-finding]').forEach((btn) => btn.addEventListener('click', async () => {
-    if (!ensureAuditEditable()) return;
-    await apiDelete(`/api/v1/audits/${encodeURIComponent(auditId)}/findings/${encodeURIComponent(btn.getAttribute('data-del-finding'))}`);
-    await loadAudit({preserveUnsaved: true});
-  }));
+  el.querySelectorAll('[data-edit-finding]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-edit-finding');
+      el.querySelector(`[data-finding-edit-form="${CSS.escape(id)}"]`)?.classList.remove('d-none');
+    }),
+  );
+  el.querySelectorAll('[data-cancel-finding]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-cancel-finding');
+      el.querySelector(`[data-finding-edit-form="${CSS.escape(id)}"]`)?.classList.add('d-none');
+    }),
+  );
+  el.querySelectorAll('[data-finding-edit-form]').forEach((form) =>
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      if (!ensureAuditEditable()) return;
+      const id = form.getAttribute('data-finding-edit-form');
+      await apiPatch(
+        `/api/v1/audits/${encodeURIComponent(auditId)}/findings/${encodeURIComponent(id)}`,
+        {
+          kind: el.querySelector(`[data-finding-edit-kind="${CSS.escape(id)}"]`)?.value,
+          title: el.querySelector(`[data-finding-edit-title="${CSS.escape(id)}"]`)?.value,
+          status: el.querySelector(`[data-finding-edit-status="${CSS.escape(id)}"]`)?.value,
+          control:
+            el.querySelector(`[data-finding-edit-control="${CSS.escape(id)}"]`)?.value || null,
+          description:
+            syncRichTextEditor(el.querySelector(`[data-finding-edit-desc="${CSS.escape(id)}"]`)) ||
+            '',
+        },
+      );
+      toast(status, 'Finding saved', 'success');
+      await loadAudit({ preserveUnsaved: true });
+    }),
+  );
+  el.querySelectorAll('[data-del-finding]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      if (!ensureAuditEditable()) return;
+      await apiDelete(
+        `/api/v1/audits/${encodeURIComponent(auditId)}/findings/${encodeURIComponent(btn.getAttribute('data-del-finding'))}`,
+      );
+      await loadAudit({ preserveUnsaved: true });
+    }),
+  );
 }
 
 function renderEvidence(items) {
   const el = document.getElementById('evidence');
   const arr = items || [];
-  if (!arr.length) { el.innerHTML = '<span class="small-muted">No evidence sampled yet. Use the “Sample into audit” button on an event, risk or ISMS page, or paste a URL above.</span>'; return; }
-  el.innerHTML = arr.map((x) => {
-    const ev = x.event;
-    const entity = x.entity || null;
-    const href = x.evidence_url || entity?.href || (ev?.id ? withFramework(`/event.html?id=${encodeURIComponent(ev.id)}`, audit?.framework_slug) : '#');
-    const title = x.title || entity?.title || ev?.summary || x.evidence_url || 'Evidence';
-    const controls = (x.controls || ev?.controls || entity?.controls || []).map((c) => `<span class="badge badge-soft me-1">${esc(c.ref)}</span>`).join('');
-    const kind = entity?.kind || (ev ? 'Event evidence' : 'Evidence URL');
-    const subtitle = entity?.subtitle ? ` · ${entity.subtitle}` : '';
-    return `<div class="border rounded p-3 mb-3" data-evidence-card="${esc(x.id)}">
+  if (!arr.length) {
+    el.innerHTML =
+      '<span class="small-muted">No evidence sampled yet. Use the “Sample into audit” button on an event, risk or ISMS page, or paste a URL above.</span>';
+    return;
+  }
+  el.innerHTML = arr
+    .map((x) => {
+      const ev = x.event;
+      const entity = x.entity || null;
+      const href =
+        x.evidence_url ||
+        entity?.href ||
+        (ev?.id
+          ? withFramework(`/event.html?id=${encodeURIComponent(ev.id)}`, audit?.framework_slug)
+          : '#');
+      const title = x.title || entity?.title || ev?.summary || x.evidence_url || 'Evidence';
+      const controls = (x.controls || ev?.controls || entity?.controls || [])
+        .map((c) => `<span class="badge badge-soft me-1">${esc(c.ref)}</span>`)
+        .join('');
+      const kind = entity?.kind || (ev ? 'Event evidence' : 'Evidence URL');
+      const subtitle = entity?.subtitle ? ` · ${entity.subtitle}` : '';
+      return `<div class="border rounded p-3 mb-3" data-evidence-card="${esc(x.id)}">
       <div class="d-flex flex-wrap gap-2 justify-content-between">
         <div>
           <div class="mb-1"><span class="badge text-bg-light">${esc(kind)}</span></div>
@@ -2007,28 +2394,42 @@ function renderEvidence(items) {
       <div class="rich-text-editor"><textarea class="form-control" rows="3" data-rich-text="1" data-evidence-notes="${esc(x.id)}" ${canEditAudit() ? '' : 'readonly'}>${esc(x.notes || '')}</textarea></div>
       ${canEditAudit() ? `<div class="mt-2"><button class="btn btn-sm btn-outline-primary" data-save-evidence="${esc(x.id)}">Save notes</button></div>` : ''}
     </div>`;
-  }).join('');
+    })
+    .join('');
   initRichTextEditors(el);
   refreshRichTextEditorStates(el);
-  el.querySelectorAll('[data-save-evidence]').forEach((btn) => btn.addEventListener('click', async () => {
-    if (!ensureAuditEditable()) return;
-    const id = btn.getAttribute('data-save-evidence');
-    const notes = syncRichTextEditor(el.querySelector(`[data-evidence-notes="${CSS.escape(id)}"]`)) || '';
-    await apiPatch(`/api/v1/audits/${encodeURIComponent(auditId)}/evidence/${encodeURIComponent(id)}`, {notes});
-    toast(status, 'Evidence notes saved', 'success');
-    await loadAudit({preserveUnsaved: true});
-  }));
-  el.querySelectorAll('[data-del-evidence]').forEach((btn) => btn.addEventListener('click', async () => {
-    if (!ensureAuditEditable()) return;
-    await apiDelete(`/api/v1/audits/${encodeURIComponent(auditId)}/evidence/${encodeURIComponent(btn.getAttribute('data-del-evidence'))}`);
-    await loadAudit({preserveUnsaved: true});
-  }));
+  el.querySelectorAll('[data-save-evidence]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      if (!ensureAuditEditable()) return;
+      const id = btn.getAttribute('data-save-evidence');
+      const notes =
+        syncRichTextEditor(el.querySelector(`[data-evidence-notes="${CSS.escape(id)}"]`)) || '';
+      await apiPatch(
+        `/api/v1/audits/${encodeURIComponent(auditId)}/evidence/${encodeURIComponent(id)}`,
+        { notes },
+      );
+      toast(status, 'Evidence notes saved', 'success');
+      await loadAudit({ preserveUnsaved: true });
+    }),
+  );
+  el.querySelectorAll('[data-del-evidence]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      if (!ensureAuditEditable()) return;
+      await apiDelete(
+        `/api/v1/audits/${encodeURIComponent(auditId)}/evidence/${encodeURIComponent(btn.getAttribute('data-del-evidence'))}`,
+      );
+      await loadAudit({ preserveUnsaved: true });
+    }),
+  );
 }
 
-async function loadAudit({preserveUnsaved = false} = {}) {
+async function loadAudit({ preserveUnsaved = false } = {}) {
   const unsavedState = preserveUnsaved ? captureUnsavedPageState() : null;
   if (!ensureAuditRead()) return;
-  if (!auditId) { toast(status, 'Missing audit id', 'danger'); return; }
+  if (!auditId) {
+    toast(status, 'Missing audit id', 'danger');
+    return;
+  }
   audit = await apiGet(`/api/v1/audits/${encodeURIComponent(auditId)}`);
   showMeta(audit);
   setForm(audit);
@@ -2068,7 +2469,11 @@ document.getElementById('detailsForm')?.addEventListener('submit', async (ev) =>
       return;
     }
     if (auditLocked() && isAuditLocked(nextStatus)) {
-      toast(status, 'Choose Open or In progress to reopen this audit before editing it.', 'warning');
+      toast(
+        status,
+        'Choose Open or In progress to reopen this audit before editing it.',
+        'warning',
+      );
       return;
     }
 
@@ -2082,29 +2487,37 @@ document.getElementById('detailsForm')?.addEventListener('submit', async (ev) =>
         executive_summary: document.getElementById('auditExecutiveSummary').value,
       });
       toast(status, 'Template details saved', 'success');
-      await loadAudit({preserveUnsaved: true});
+      await loadAudit({ preserveUnsaved: true });
       return;
     }
 
-    const body = auditLocked() ? {status: nextStatus} : {
-      title: document.getElementById('auditTitle').value,
-      framework_slug: document.getElementById('auditFramework').value,
-      status: nextStatus,
-      audit_type: document.getElementById('auditType').value,
-      start_date: startDate,
-      end_date: endDate,
-      executive_summary: document.getElementById('auditExecutiveSummary').value,
-    };
+    const body = auditLocked()
+      ? { status: nextStatus }
+      : {
+          title: document.getElementById('auditTitle').value,
+          framework_slug: document.getElementById('auditFramework').value,
+          status: nextStatus,
+          audit_type: document.getElementById('auditType').value,
+          start_date: startDate,
+          end_date: endDate,
+          executive_summary: document.getElementById('auditExecutiveSummary').value,
+        };
     await apiPatch(`/api/v1/audits/${encodeURIComponent(auditId)}`, body);
     toast(status, auditLocked() ? 'Audit reopened' : 'Audit details saved', 'success');
-    await loadAudit({preserveUnsaved: !auditLocked()});
-  } catch (e) { toast(status, `Failed: ${String(e)}`, 'danger'); }
+    await loadAudit({ preserveUnsaved: !auditLocked() });
+  } catch (e) {
+    toast(status, `Failed: ${String(e)}`, 'danger');
+  }
 });
 
 document.getElementById('tmplDateRule')?.addEventListener('change', updateTemplateScheduleDateMode);
-document.getElementById('tmplFuzzyMonth')?.addEventListener('change', updateTemplateScheduleDateMode);
+document
+  .getElementById('tmplFuzzyMonth')
+  ?.addEventListener('change', updateTemplateScheduleDateMode);
 document.getElementById('tmplFuzzyYear')?.addEventListener('input', updateTemplateScheduleDateMode);
-document.getElementById('tmplRecurrence')?.addEventListener('change', updateTemplateScheduleDateMode);
+document
+  .getElementById('tmplRecurrence')
+  ?.addEventListener('change', updateTemplateScheduleDateMode);
 
 document.getElementById('templateScheduleForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -2119,14 +2532,20 @@ document.getElementById('templateScheduleForm')?.addEventListener('submit', asyn
     await apiPatch(`/api/v1/audits/scheduled/${encodeURIComponent(auditId)}`, {
       start_date: startDate,
       schedule_date_rule: document.getElementById('tmplDateRule')?.value || 'exact',
-      schedule_anchor_month: _isFuzzyScheduleDateRule(document.getElementById('tmplDateRule')?.value || 'exact') ? Number(document.getElementById('tmplFuzzyMonth')?.value || 1) : null,
+      schedule_anchor_month: _isFuzzyScheduleDateRule(
+        document.getElementById('tmplDateRule')?.value || 'exact',
+      )
+        ? Number(document.getElementById('tmplFuzzyMonth')?.value || 1)
+        : null,
       schedule_recurrence: document.getElementById('tmplRecurrence')?.value || 'once',
       schedule_interval: Number(document.getElementById('tmplInterval')?.value || 1),
       schedule_until_date: tmplUntil?.value || null,
     });
     toast(status, 'Template schedule saved', 'success');
-    await loadAudit({preserveUnsaved: false});
-  } catch (e) { toast(status, `Failed: ${String(e)}`, 'danger'); }
+    await loadAudit({ preserveUnsaved: false });
+  } catch (e) {
+    toast(status, `Failed: ${String(e)}`, 'danger');
+  }
 });
 
 document.getElementById('reportNotesForm')?.addEventListener('submit', async (ev) => {
@@ -2138,8 +2557,10 @@ document.getElementById('reportNotesForm')?.addEventListener('submit', async (ev
       report_notes: syncRichTextEditor(document.getElementById('auditNotes')),
     });
     toast(status, 'Report notes saved', 'success');
-    await loadAudit({preserveUnsaved: true});
-  } catch (e) { toast(status, `Failed: ${String(e)}`, 'danger'); }
+    await loadAudit({ preserveUnsaved: true });
+  } catch (e) {
+    toast(status, `Failed: ${String(e)}`, 'danger');
+  }
 });
 
 document.getElementById('reportForm')?.addEventListener('submit', async (ev) => {
@@ -2153,8 +2574,10 @@ document.getElementById('reportForm')?.addEventListener('submit', async (ev) => 
     await apiPostForm(`/api/v1/audits/${encodeURIComponent(auditId)}/report`, fd);
     document.getElementById('reportFile').value = '';
     toast(status, 'Final report uploaded', 'success');
-    await loadAudit({preserveUnsaved: true});
-  } catch (e) { toast(status, `Failed: ${String(e)}`, 'danger'); }
+    await loadAudit({ preserveUnsaved: true });
+  } catch (e) {
+    toast(status, `Failed: ${String(e)}`, 'danger');
+  }
 });
 
 document.getElementById('documentFilter')?.addEventListener('input', renderDocuments);
@@ -2188,9 +2611,15 @@ document.getElementById('saveScope')?.addEventListener('click', async () => {
       clauses: Array.from(selectedClauseIds),
       controls: Array.from(selectedControlIds),
     });
-    toast(status, 'Scope saved; linked controls for selected clauses were included automatically.', 'success');
-    await loadAudit({preserveUnsaved: true});
-  } catch (e) { toast(status, `Failed: ${String(e)}`, 'danger'); }
+    toast(
+      status,
+      'Scope saved; linked controls for selected clauses were included automatically.',
+      'success',
+    );
+    await loadAudit({ preserveUnsaved: true });
+  } catch (e) {
+    toast(status, `Failed: ${String(e)}`, 'danger');
+  }
 });
 
 document.getElementById('attendeeUserId')?.addEventListener('change', syncAttendeeUserSelection);
@@ -2219,8 +2648,10 @@ document.getElementById('attendeeForm')?.addEventListener('submit', async (ev) =
     document.getElementById('attendeeEmail').value = '';
     document.getElementById('attendeeRole').value = '';
     toast(status, 'Person added', 'success');
-    await loadAudit({preserveUnsaved: true});
-  } catch (e) { toast(status, `Failed: ${String(e)}`, 'danger'); }
+    await loadAudit({ preserveUnsaved: true });
+  } catch (e) {
+    toast(status, `Failed: ${String(e)}`, 'danger');
+  }
 });
 
 document.getElementById('findingForm')?.addEventListener('submit', async (ev) => {
@@ -2240,13 +2671,22 @@ document.getElementById('findingForm')?.addEventListener('submit', async (ev) =>
     document.getElementById('findingControl').value = '';
     setRichTextEditorValue('findingDesc', '');
     toast(status, 'Finding added', 'success');
-    await loadAudit({preserveUnsaved: true});
-  } catch (e) { toast(status, `Failed: ${String(e)}`, 'danger'); }
+    await loadAudit({ preserveUnsaved: true });
+  } catch (e) {
+    toast(status, `Failed: ${String(e)}`, 'danger');
+  }
 });
 
 function applyManageVisibility() {
   if (canManageAudits()) return;
-  ['detailsForm', 'reportForm', 'reportNotesForm', 'urlEvidenceForm', 'attendeeForm', 'findingForm'].forEach((id) => {
+  [
+    'detailsForm',
+    'reportForm',
+    'reportNotesForm',
+    'urlEvidenceForm',
+    'attendeeForm',
+    'findingForm',
+  ].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.classList.add('d-none');
   });
@@ -2254,7 +2694,12 @@ function applyManageVisibility() {
   document.getElementById('deselectDocuments')?.classList.add('d-none');
   document.getElementById('deselectClauses')?.classList.add('d-none');
   document.getElementById('deselectControls')?.classList.add('d-none');
-  document.getElementById('status')?.insertAdjacentHTML('beforeend', '<div class="alert alert-info mt-2 mb-0">You have read-only access to this audit.</div>');
+  document
+    .getElementById('status')
+    ?.insertAdjacentHTML(
+      'beforeend',
+      '<div class="alert alert-info mt-2 mb-0">You have read-only access to this audit.</div>',
+    );
 }
 
 applyManageVisibility();
@@ -2265,11 +2710,13 @@ document.getElementById('urlEvidenceForm')?.addEventListener('submit', async (ev
     if (!ensureAuditEditable()) return;
     const url = document.getElementById('urlEvidence').value.trim();
     if (!url) return;
-    await apiPost(`/api/v1/audits/${encodeURIComponent(auditId)}/evidence`, {evidence_url: url});
+    await apiPost(`/api/v1/audits/${encodeURIComponent(auditId)}/evidence`, { evidence_url: url });
     document.getElementById('urlEvidence').value = '';
     toast(status, 'Evidence URL added', 'success');
-    await loadAudit({preserveUnsaved: true});
-  } catch (e) { toast(status, `Failed: ${String(e)}`, 'danger'); }
+    await loadAudit({ preserveUnsaved: true });
+  } catch (e) {
+    toast(status, `Failed: ${String(e)}`, 'danger');
+  }
 });
 
 document.getElementById('btnAuditZip')?.addEventListener('click', () => exportAuditZip());
@@ -2279,7 +2726,12 @@ document.getElementById('deleteAudit')?.addEventListener('click', async () => {
     return;
   }
   const title = audit?.title || 'this audit';
-  if (!confirm(`Delete audit "${title}"? This permanently removes the audit, its scope, attendees, sample links and findings. Events protected only by this audit become eligible for evidence retention or purge.`)) return;
+  if (
+    !confirm(
+      `Delete audit "${title}"? This permanently removes the audit, its scope, attendees, sample links and findings. Events protected only by this audit become eligible for evidence retention or purge.`,
+    )
+  )
+    return;
   try {
     await apiDelete(`/api/v1/audits/${encodeURIComponent(auditId)}`);
     toast(status, 'Audit deleted', 'success');

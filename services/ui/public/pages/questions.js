@@ -1,4 +1,15 @@
-import {initNavbar, apiGet, apiDelete, esc, fmtTs, toast, getCurrentFramework, withFramework, safeExternalHref, userPillHtml} from '/app.js';
+import {
+  initNavbar,
+  apiGet,
+  apiDelete,
+  esc,
+  fmtTs,
+  toast,
+  getCurrentFramework,
+  withFramework,
+  safeExternalHref,
+  userPillHtml,
+} from '/app.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -36,7 +47,11 @@ function statusBadge(status, unread = false) {
 }
 
 function questionHref(it) {
-  const href = withFramework(it?.target_url || `/event.html?id=${encodeURIComponent(it?.event_id || '')}&thread=${encodeURIComponent(it?.thread_id || '')}#questions`, framework);
+  const href = withFramework(
+    it?.target_url ||
+      `/event.html?id=${encodeURIComponent(it?.event_id || '')}&thread=${encodeURIComponent(it?.thread_id || '')}#questions`,
+    framework,
+  );
   // Defence-in-depth: target_url is server-constructed today, but validate the
   // scheme so a future change that lets it carry user input cannot yield a
   // javascript:/data: href. safeExternalHref returns '' for unsafe URLs.
@@ -48,16 +63,20 @@ function questionTitle(it) {
 }
 
 function questionSubline(it) {
-  const typ = it?.target_type && it.target_type !== 'event' ? it.target_type.replaceAll('_', ' ') : (it?.event_source || '');
-  const ts = it?.event_timestamp ? fmtTs(it.event_timestamp) : (it?.target_ref || '—');
+  const typ =
+    it?.target_type && it.target_type !== 'event'
+      ? it.target_type.replaceAll('_', ' ')
+      : it?.event_source || '';
+  const ts = it?.event_timestamp ? fmtTs(it.event_timestamp) : it?.target_ref || '—';
   return [typ, ts].filter(Boolean).join(' • ');
 }
 
 function renderAdmin(items) {
   if (!queueBodyEl) return;
-  const rows = (items || []).map((it) => {
-    const href = questionHref(it);
-    return `
+  const rows = (items || [])
+    .map((it) => {
+      const href = questionHref(it);
+      return `
       <tr>
         <td>${statusBadge(it.status)}</td>
         <td class="small-muted">${esc(it.updated_at ? fmtTs(it.updated_at) : '—')}</td>
@@ -74,8 +93,10 @@ function renderAdmin(items) {
         </td>
       </tr>
     `;
-  }).join('');
-  queueBodyEl.innerHTML = rows || '<tr><td colspan="5" class="small-muted">No matching questions.</td></tr>';
+    })
+    .join('');
+  queueBodyEl.innerHTML =
+    rows || '<tr><td colspan="5" class="small-muted">No matching questions.</td></tr>';
 }
 
 function renderUser(items) {
@@ -88,9 +109,10 @@ function renderUser(items) {
   }
   if (emptyEl) emptyEl.style.display = 'none';
   if (tableWrapEl) tableWrapEl.style.display = '';
-  questionsTbodyEl.innerHTML = items.map((it) => {
-    const href = questionHref(it);
-    return `
+  questionsTbodyEl.innerHTML = items
+    .map((it) => {
+      const href = questionHref(it);
+      return `
       <tr class="${it.unread ? 'table-warning' : ''}">
         <td class="wrap">
           <div class="fw-semibold">${esc(questionTitle(it))}</div>
@@ -106,9 +128,9 @@ function renderUser(items) {
         </td>
       </tr>
     `;
-  }).join('');
+    })
+    .join('');
 }
-
 
 async function deleteQuestion(threadId) {
   const tid = String(threadId || '').trim();
@@ -140,27 +162,33 @@ async function loadAdmin() {
   if (status) url.searchParams.set('status', status);
   const data = await apiGet(url.pathname + url.search);
   renderAdmin(Array.isArray(data?.items) ? data.items : []);
-  try { window.mospRefreshBell?.(); } catch {}
+  try {
+    window.mospRefreshBell?.();
+  } catch {}
 }
 
 async function loadUser() {
   clearError();
   const data = await apiGet('/api/v1/me/questions');
   renderUser(Array.isArray(data?.items) ? data.items : []);
-  try { window.mospRefreshBell?.(); } catch {}
+  try {
+    window.mospRefreshBell?.();
+  } catch {}
 }
 
 async function load() {
   try {
     if (isAdmin) {
       pageTitleEl.textContent = 'Questions';
-      pageSubtitleEl.textContent = 'Open and answered question threads across evidence, CIA Triad risks and PESTLE(E) items.';
+      pageSubtitleEl.textContent =
+        'Open and answered question threads across evidence, CIA Triad risks and PESTLE(E) items.';
       adminCardEl.style.display = '';
       userCardEl.style.display = 'none';
       await loadAdmin();
     } else {
       pageTitleEl.textContent = 'Questions';
-      pageSubtitleEl.textContent = 'Threads you have opened on evidence, CIA Triad risks and PESTLE(E) items, including any admin responses.';
+      pageSubtitleEl.textContent =
+        'Threads you have opened on evidence, CIA Triad risks and PESTLE(E) items, including any admin responses.';
       userCardEl.style.display = '';
       adminCardEl.style.display = 'none';
       await loadUser();

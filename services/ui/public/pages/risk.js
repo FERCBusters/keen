@@ -59,7 +59,12 @@ function setRiskTabQuery(tabName) {
 }
 
 function activateRiskTab(tabName) {
-  const tab = (tabName === 'changelog') ? riskChangelogTab : ((tabName === 'questions') ? riskQuestionsTab : riskDetailsTab);
+  const tab =
+    tabName === 'changelog'
+      ? riskChangelogTab
+      : tabName === 'questions'
+        ? riskQuestionsTab
+        : riskDetailsTab;
   if (!tab || !window.bootstrap?.Tab) return;
   window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
@@ -91,7 +96,6 @@ function wireRiskTabs() {
   activateRiskTab(qs('tab', 'details'));
 }
 
-
 function _qStatusBadge(status) {
   const s = String(status || '').toLowerCase();
   if (s === 'answered') return '<span class="badge text-bg-success">answered</span>';
@@ -107,21 +111,30 @@ function _renderRiskQuestionThread(t) {
   const statusVal = String(t?.status || 'unanswered').toLowerCase();
   const posts = Array.isArray(t?.posts) ? t.posts : [];
   const isAdmin = !!me?.is_admin;
-  const isAuthor = (me?.user && createdBy && String(me.user) === String(createdBy));
+  const isAuthor = me?.user && createdBy && String(me.user) === String(createdBy);
   const canReply = isAdmin || isAuthor;
-  const statusCtl = isAdmin ? `
+  const statusCtl = isAdmin
+    ? `
     <select class="form-select form-select-sm" style="width:auto;" data-action="set-risk-question-status" data-thread="${esc(tid)}">
       <option value="unanswered" ${statusVal === 'unanswered' ? 'selected' : ''}>unanswered</option>
       <option value="reviewing" ${statusVal === 'reviewing' ? 'selected' : ''}>reviewing</option>
       <option value="answered" ${statusVal === 'answered' ? 'selected' : ''}>answered</option>
-    </select>` : '';
-  const deleteCtl = canDeleteQuestions ? `<button class="btn btn-sm btn-outline-danger" type="button" data-action="delete-risk-question" data-thread="${esc(tid)}">Delete</button>` : '';
-  const postsHtml = posts.map((p) => `
+    </select>`
+    : '';
+  const deleteCtl = canDeleteQuestions
+    ? `<button class="btn btn-sm btn-outline-danger" type="button" data-action="delete-risk-question" data-thread="${esc(tid)}">Delete</button>`
+    : '';
+  const postsHtml = posts
+    .map(
+      (p) => `
     <div class="question-post">
       <div class="question-post-meta"><div class="small-muted"><span class="fw-bold">${esc(p?.author_username || '—')}</span> • ${esc(p?.created_at ? fmtTs(p.created_at) : '—')}</div></div>
       <div class="mt-2">${esc(p?.body || '').replace(/\n/g, '<br>')}</div>
-    </div>`).join('');
-  const replyHtml = canReply ? `
+    </div>`,
+    )
+    .join('');
+  const replyHtml = canReply
+    ? `
     <div class="mt-3 no-print">
       <div class="small-muted mb-1">Reply</div>
       <textarea class="form-control" rows="3" id="riskReplyBody-${esc(tid)}" placeholder="Write a response…"></textarea>
@@ -129,7 +142,8 @@ function _renderRiskQuestionThread(t) {
         <button class="btn btn-sm btn-primary" data-action="reply-risk-question" data-thread="${esc(tid)}">Send reply</button>
       </div>
       <div class="form-text">Only admins or the original author can reply.</div>
-    </div>` : '<div class="small-muted mt-3">Only admins or the original author can reply.</div>';
+    </div>`
+    : '<div class="small-muted mt-3">Only admins or the original author can reply.</div>';
   return `
     <div class="question-thread" id="thread-${esc(tid)}">
       <div class="question-header">
@@ -147,7 +161,9 @@ function _renderRiskQuestionThread(t) {
 function _renderRiskQuestions(threads) {
   const arr = Array.isArray(threads) ? threads : [];
   if (!riskQuestionsEl) return;
-  riskQuestionsEl.innerHTML = arr.length ? arr.map(_renderRiskQuestionThread).join('') : '<span class="badge text-bg-light">none</span>';
+  riskQuestionsEl.innerHTML = arr.length
+    ? arr.map(_renderRiskQuestionThread).join('')
+    : '<span class="badge text-bg-light">none</span>';
 }
 
 async function refreshRiskQuestions() {
@@ -156,14 +172,20 @@ async function refreshRiskQuestions() {
     const res = await apiGet(`/api/v1/questions/entities/risk/${encodeURIComponent(id)}`);
     _renderRiskQuestions(res?.threads || []);
     if (!me?.is_admin) {
-      try { await apiPost(`/api/v1/questions/entities/risk/${encodeURIComponent(id)}/mark-seen`, {}); } catch {}
+      try {
+        await apiPost(`/api/v1/questions/entities/risk/${encodeURIComponent(id)}/mark-seen`, {});
+      } catch {}
     }
     if (focusThreadId && !didFocusThread) {
       const el = document.getElementById(`thread-${focusThreadId}`);
       if (el) {
         didFocusThread = true;
         el.classList.add('question-thread-focus');
-        try { el.scrollIntoView({behavior: 'smooth', block: 'start'}); } catch { el.scrollIntoView(); }
+        try {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch {
+          el.scrollIntoView();
+        }
       }
     }
   } catch (e) {
@@ -203,7 +225,6 @@ function renderTypes(risk) {
     : '<span class="small-muted">No risk type</span>';
 }
 
-
 function renderMitigatorContext(risk) {
   const ctx = risk?.mitigator_context || {};
   const isMitigator = ctx && ctx.source === 'keen_mitigator';
@@ -216,12 +237,24 @@ function renderMitigatorContext(risk) {
   const weights = ctx.risk_weights || {};
   const selected = Array.isArray(ctx.selected_control_ids) ? ctx.selected_control_ids.length : 0;
   const suggested = Array.isArray(ctx.suggested_controls) ? ctx.suggested_controls : [];
-  const impacts = Object.entries(ctx.impact_flags || {}).filter(([, v]) => !!v).map(([k]) => k.replaceAll('_', ' '));
+  const impacts = Object.entries(ctx.impact_flags || {})
+    .filter(([, v]) => !!v)
+    .map(([k]) => k.replaceAll('_', ' '));
   riskMitigatorContext.innerHTML = `
     <div class="mb-2"><span class="fw-semibold">Risk weighting:</span> ${esc(['Confidentiality', 'Integrity', 'Availability'].map((rt) => `${rt} ${Number(weights[rt] || 0)}`).join(' / '))}</div>
     ${impacts.length ? `<div class="mb-2"><span class="fw-semibold">Impact prompts:</span> ${esc(impacts.join(', '))}</div>` : ''}
     <div class="mb-2"><span class="fw-semibold">Suggested controls:</span> ${esc(String(suggested.length))}${selected ? esc(` (${selected} selected when created)`) : ''}</div>
-    ${suggested.length ? `<div class="d-flex flex-wrap gap-1">${suggested.slice(0, 12).map((c) => `<span class="badge text-bg-light border">${esc(c.ref || '')} ${esc(c.confidence || '')}</span>`).join('')}</div>` : ''}`;
+    ${
+      suggested.length
+        ? `<div class="d-flex flex-wrap gap-1">${suggested
+            .slice(0, 12)
+            .map(
+              (c) =>
+                `<span class="badge text-bg-light border">${esc(c.ref || '')} ${esc(c.confidence || '')}</span>`,
+            )
+            .join('')}</div>`
+        : ''
+    }`;
 }
 
 function renderControls(risk) {
@@ -244,14 +277,19 @@ function renderControls(risk) {
         </tr>
       </thead>
       <tbody>
-        ${items.map((c) => {
-          const href = withFramework(`/control.html?id=${encodeURIComponent(c.id || '')}`, risk?.framework || framework);
-          return `<tr>
+        ${items
+          .map((c) => {
+            const href = withFramework(
+              `/control.html?id=${encodeURIComponent(c.id || '')}`,
+              risk?.framework || framework,
+            );
+            return `<tr>
             <td class="fw-semibold"><a href="${esc(href)}">${esc(c.ref || '')}</a></td>
             <td class="wrap">${esc(c.title || '')}</td>
             <td>${c.in_scope ? '<span class="badge badge-soft">In scope</span>' : '<span class="badge text-bg-light">Out of scope</span>'}</td>
           </tr>`;
-        }).join('')}
+          })
+          .join('')}
       </tbody>
     </table>`;
 }
@@ -262,14 +300,25 @@ function renderRisk(risk) {
   const threat = String(risk?.threat_summary || '').trim();
   if (riskTitle) riskTitle.textContent = threat ? `${asset} — ${threat}` : asset;
   if (riskMeta) {
-    const bits = [risk?.framework || framework, `updated ${fmtTs(risk?.updated_at) || 'unknown'}`].filter(Boolean);
+    const bits = [
+      risk?.framework || framework,
+      `updated ${fmtTs(risk?.updated_at) || 'unknown'}`,
+    ].filter(Boolean);
     riskMeta.textContent = bits.join(' • ');
   }
-  if (risksBreadcrumb) risksBreadcrumb.href = withFramework('/risks.html', risk?.framework || framework);
-  if (riskVisualisation) riskVisualisation.href = withFramework('/risks.html?tab=visualisations', risk?.framework || framework);
+  if (risksBreadcrumb)
+    risksBreadcrumb.href = withFramework('/risks.html', risk?.framework || framework);
+  if (riskVisualisation)
+    riskVisualisation.href = withFramework(
+      '/risks.html?tab=visualisations',
+      risk?.framework || framework,
+    );
   if (sampleRiskAudit) sampleRiskAudit.style.display = canSampleIntoAudit(me) ? '' : 'none';
   if (editRisk) {
-    editRisk.href = withFramework(`/risks.html?edit=${encodeURIComponent(risk?.id || id)}`, risk?.framework || framework);
+    editRisk.href = withFramework(
+      `/risks.html?edit=${encodeURIComponent(risk?.id || id)}`,
+      risk?.framework || framework,
+    );
     editRisk.style.display = canManageRisks ? '' : 'none';
   }
 
@@ -292,15 +341,15 @@ function renderRisk(risk) {
   renderControls(risk);
 }
 
-
-
 sampleRiskAudit?.addEventListener('click', () => {
   const risk = currentRisk;
   openAuditSampleModal({
     me,
     entityType: 'risk',
     entityId: risk?.id || id,
-    title: risk ? `${risk.asset || 'Risk'}${risk.threat_summary ? ` — ${risk.threat_summary}` : ''}` : 'CIA Triad risk',
+    title: risk
+      ? `${risk.asset || 'Risk'}${risk.threat_summary ? ` — ${risk.threat_summary}` : ''}`
+      : 'CIA Triad risk',
     framework: risk?.framework || framework,
     statusEl: status,
   });
@@ -316,7 +365,7 @@ riskAskQuestion?.addEventListener('click', async () => {
   const prev = riskAskQuestion.textContent;
   riskAskQuestion.textContent = 'Submitting…';
   try {
-    await apiPost(`/api/v1/questions/entities/risk/${encodeURIComponent(id)}`, {body});
+    await apiPost(`/api/v1/questions/entities/risk/${encodeURIComponent(id)}`, { body });
     if (riskQuestionBody) riskQuestionBody.value = '';
     await refreshRiskQuestions();
     toast(status, 'Question submitted', 'success');
@@ -356,7 +405,7 @@ riskQuestionsEl?.addEventListener('click', async (ev) => {
   const prev = btn.textContent;
   btn.textContent = 'Sending…';
   try {
-    await apiPost(`/api/v1/questions/${encodeURIComponent(tid)}/posts`, {body});
+    await apiPost(`/api/v1/questions/${encodeURIComponent(tid)}/posts`, { body });
     if (bodyEl) bodyEl.value = '';
     await refreshRiskQuestions();
     toast(status, 'Reply sent', 'success');
@@ -375,7 +424,7 @@ riskQuestionsEl?.addEventListener('change', async (ev) => {
   const newStatus = String(sel.value || '').trim();
   if (!tid || !newStatus) return;
   try {
-    await apiPatch(`/api/v1/admin/questions/${encodeURIComponent(tid)}`, {status: newStatus});
+    await apiPatch(`/api/v1/admin/questions/${encodeURIComponent(tid)}`, { status: newStatus });
     await refreshRiskQuestions();
   } catch (e) {
     toast(status, String(e), 'danger');
@@ -399,7 +448,8 @@ async function loadRisk() {
     if (qs('tab') === 'questions') await refreshRiskQuestions();
   } catch (e) {
     toast(status, `Failed to load risk: ${String(e)}`, 'danger');
-    if (linkedControls) linkedControls.innerHTML = '<span class="text-danger">Failed to load linked controls.</span>';
+    if (linkedControls)
+      linkedControls.innerHTML = '<span class="text-danger">Failed to load linked controls.</span>';
   }
 }
 

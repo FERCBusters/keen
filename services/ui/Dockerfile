@@ -35,7 +35,7 @@ RUN npm run build
 FROM nginx:1.30.4-alpine
 
 COPY services/ui/nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY --from=vendor /build/public/ /usr/share/nginx/html/
+COPY --from=vendor /build/dist/ /usr/share/nginx/html/
 
 # Make the npm manifests available in the runtime image so you can copy them
 # out after a build (e.g. docker cp) without needing to run npm on the host.

@@ -25,7 +25,13 @@ const requestedTab = params.get('tab') || 'details';
 const focusThreadId = String(params.get('thread') || '').trim();
 let didFocusThread = false;
 
-const canViewPestle = !!(me?.is_admin || me?.can_view_pestle || me?.can_manage_pestle || me?.can_view_risks || me?.can_manage_risks);
+const canViewPestle = !!(
+  me?.is_admin ||
+  me?.can_view_pestle ||
+  me?.can_manage_pestle ||
+  me?.can_view_risks ||
+  me?.can_manage_risks
+);
 const canManagePestle = !!(me?.is_admin || me?.can_manage_pestle || me?.can_manage_risks);
 const canAskQuestions = !!(me?.is_admin || me?.can_question_events);
 
@@ -68,7 +74,7 @@ const pestleQuestionsEl = document.getElementById('pestleQuestions');
 const pestleQuestionBody = document.getElementById('pestleQuestionBody');
 const pestleAskQuestion = document.getElementById('pestleAskQuestion');
 
-let meta = {types: [], lenses: [], relevance_levels: []};
+let meta = { types: [], lenses: [], relevance_levels: [] };
 let currentItem = null;
 let processRelevanceRows = [];
 let clauseRelevanceRows = [];
@@ -83,12 +89,13 @@ function setTabQuery(tabName) {
 }
 
 function activateTab(tabName) {
-  const tab = {
-    details: pestleDetailsTab,
-    relevance: pestleRelevanceTab,
-    questions: pestleQuestionsTab,
-    changelog: pestleChangelogTab,
-  }[tabName || 'details'] || pestleDetailsTab;
+  const tab =
+    {
+      details: pestleDetailsTab,
+      relevance: pestleRelevanceTab,
+      questions: pestleQuestionsTab,
+      changelog: pestleChangelogTab,
+    }[tabName || 'details'] || pestleDetailsTab;
   if (!tab || !window.bootstrap?.Tab) return;
   window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
@@ -117,11 +124,15 @@ function relevanceLabel(rowOrCode) {
 }
 
 function relevanceOptions(selectedCodeOrId = 'na') {
-  const selected = selectedCodeOrId === null || selectedCodeOrId === undefined ? 'na' : String(selectedCodeOrId);
-  return (meta.relevance_levels || []).map((r) => {
-    const isSelected = selected !== '' && (selected === String(r.id) || selected === String(r.code));
-    return `<option value="${esc(r.code)}" ${isSelected ? 'selected' : ''}>${esc(r.label)}</option>`;
-  }).join('');
+  const selected =
+    selectedCodeOrId === null || selectedCodeOrId === undefined ? 'na' : String(selectedCodeOrId);
+  return (meta.relevance_levels || [])
+    .map((r) => {
+      const isSelected =
+        selected !== '' && (selected === String(r.id) || selected === String(r.code));
+      return `<option value="${esc(r.code)}" ${isSelected ? 'selected' : ''}>${esc(r.label)}</option>`;
+    })
+    .join('');
 }
 
 function badgeForRelevance(rel) {
@@ -134,8 +145,12 @@ function badgeForRelevance(rel) {
 }
 
 function fillSelects() {
-  const typeOptions = (meta.types || []).map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
-  const lensOptions = (meta.lenses || []).map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  const typeOptions = (meta.types || [])
+    .map((x) => `<option value="${esc(x)}">${esc(x)}</option>`)
+    .join('');
+  const lensOptions = (meta.lenses || [])
+    .map((x) => `<option value="${esc(x)}">${esc(x)}</option>`)
+    .join('');
   if (pestleType) pestleType.innerHTML = typeOptions;
   if (pestleLens) pestleLens.innerHTML = lensOptions;
   if (pestleOverallRelevance) pestleOverallRelevance.innerHTML = relevanceOptions('na');
@@ -151,13 +166,21 @@ function controlHref(id) {
 
 function setFormReadOnly(readonly) {
   const disabled = !!readonly;
-  for (const el of [pestleType, pestleLens, pestleOverallRelevance, pestleItemText, pestleRationale]) {
+  for (const el of [
+    pestleType,
+    pestleLens,
+    pestleOverallRelevance,
+    pestleItemText,
+    pestleRationale,
+  ]) {
     if (el) el.disabled = disabled;
   }
   if (savePestleItem) savePestleItem.style.display = disabled ? 'none' : '';
-  if (samplePestleAudit) samplePestleAudit.style.display = (canSampleIntoAudit(me) && itemId) ? '' : 'none';
-  if (deletePestleItem) deletePestleItem.style.display = (!disabled && itemId) ? '' : 'none';
-  if (saveBusinessProcessRelevance) saveBusinessProcessRelevance.style.display = disabled ? 'none' : '';
+  if (samplePestleAudit)
+    samplePestleAudit.style.display = canSampleIntoAudit(me) && itemId ? '' : 'none';
+  if (deletePestleItem) deletePestleItem.style.display = !disabled && itemId ? '' : 'none';
+  if (saveBusinessProcessRelevance)
+    saveBusinessProcessRelevance.style.display = disabled ? 'none' : '';
   if (saveClauseRelevance) saveClauseRelevance.style.display = disabled ? 'none' : '';
 }
 
@@ -185,17 +208,22 @@ function renderRelatedControls(item) {
   }
   if (!rows.length) {
     relatedControls.className = 'p-3 small-muted';
-    relatedControls.innerHTML = 'No controls are related through non-N/A clause relevance mappings yet.';
+    relatedControls.innerHTML =
+      'No controls are related through non-N/A clause relevance mappings yet.';
     return;
   }
   relatedControls.className = 'table-responsive';
   relatedControls.innerHTML = `<table class="table table-sm table-hover align-middle mb-0">
     <thead><tr><th style="width:130px;">Control</th><th>Title</th><th style="width:120px;">Scope</th></tr></thead>
-    <tbody>${rows.map((c) => `<tr>
+    <tbody>${rows
+      .map(
+        (c) => `<tr>
       <td class="fw-semibold"><a href="${esc(controlHref(c.id || ''))}">${esc(c.ref || '')}</a></td>
       <td class="wrap">${esc(c.title || '')}</td>
       <td>${c.in_scope ? '<span class="badge badge-soft">In scope</span>' : '<span class="badge text-bg-light">Out of scope</span>'}</td>
-    </tr>`).join('')}</tbody>
+    </tr>`,
+      )
+      .join('')}</tbody>
   </table>`;
 }
 
@@ -211,10 +239,17 @@ function renderItem(item = null) {
   const isExisting = !!item?.id;
   const title = isExisting ? shorten(item.item || 'PESTLE(E) item', 90) : 'New PESTLE(E) item';
   if (pestleItemTitle) pestleItemTitle.textContent = title;
-  if (pestleEditorTitle) pestleEditorTitle.textContent = isExisting ? `${canManagePestle ? 'Edit' : 'View'} PESTLE(E) item` : 'New PESTLE(E) item';
+  if (pestleEditorTitle)
+    pestleEditorTitle.textContent = isExisting
+      ? `${canManagePestle ? 'Edit' : 'View'} PESTLE(E) item`
+      : 'New PESTLE(E) item';
   if (pestleItemMeta) {
     const bits = isExisting
-      ? [item.framework || framework, `${item.type || ''} / ${item.lens || ''}`, `updated ${fmtTs(item.updated_at) || 'unknown'}`]
+      ? [
+          item.framework || framework,
+          `${item.type || ''} / ${item.lens || ''}`,
+          `updated ${fmtTs(item.updated_at) || 'unknown'}`,
+        ]
       : [framework || 'selected framework', 'new item'];
     pestleItemMeta.textContent = bits.filter(Boolean).join(' • ');
   }
@@ -227,8 +262,10 @@ function renderItem(item = null) {
   setFormReadOnly(!canManagePestle);
   renderRelatedControls(item);
   if (!isExisting) {
-    if (pestleChangelogEl) pestleChangelogEl.innerHTML = '<div class="p-3 small-muted">Save the item first.</div>';
-    if (pestleQuestionsEl) pestleQuestionsEl.innerHTML = '<div class="small-muted">Save the item first.</div>';
+    if (pestleChangelogEl)
+      pestleChangelogEl.innerHTML = '<div class="p-3 small-muted">Save the item first.</div>';
+    if (pestleQuestionsEl)
+      pestleQuestionsEl.innerHTML = '<div class="small-muted">Save the item first.</div>';
     processRelevanceRows = [];
     clauseRelevanceRows = [];
     renderProcessRelevance();
@@ -243,18 +280,21 @@ function renderProcessRelevance() {
     return;
   }
   if (!processRelevanceRows.length) {
-    businessProcessRelevanceList.innerHTML = '<div class="small-muted">No business processes exist yet. Add them from the PESTLE(E) Impact Assessment page.</div>';
+    businessProcessRelevanceList.innerHTML =
+      '<div class="small-muted">No business processes exist yet. Add them from the PESTLE(E) Impact Assessment page.</div>';
     return;
   }
   businessProcessRelevanceList.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle mb-0">
     <thead><tr><th>Business process</th><th style="width:140px;">Relevance</th></tr></thead>
-    <tbody>${processRelevanceRows.map((row) => {
-      const bp = row.business_process || {};
-      return `<tr>
+    <tbody>${processRelevanceRows
+      .map((row) => {
+        const bp = row.business_process || {};
+        return `<tr>
         <td>${esc(bp.name || '')}</td>
         <td><select class="form-select form-select-sm process-relevance" data-process-id="${esc(bp.id || '')}" ${canManagePestle ? '' : 'disabled'}>${relevanceOptions(row.relevance?.code || 'na')}</select></td>
       </tr>`;
-    }).join('')}</tbody>
+      })
+      .join('')}</tbody>
   </table></div>`;
 }
 
@@ -264,7 +304,9 @@ function renderClauseRelevance() {
     clauseRelevanceList.innerHTML = '<div class="small-muted">Save the item first.</div>';
     return;
   }
-  const q = String(clauseRelevanceFilter?.value || '').trim().toLowerCase();
+  const q = String(clauseRelevanceFilter?.value || '')
+    .trim()
+    .toLowerCase();
   const rows = clauseRelevanceRows.filter((row) => {
     if (!q) return true;
     const c = row.clause || {};
@@ -276,14 +318,16 @@ function renderClauseRelevance() {
   }
   clauseRelevanceList.innerHTML = `<div class="table-responsive" style="max-height:620px;"><table class="table table-sm align-middle mb-0">
     <thead><tr><th style="width:120px;">Clause</th><th>Title</th><th style="width:140px;">Relevance</th></tr></thead>
-    <tbody>${rows.map((row) => {
-      const c = row.clause || {};
-      return `<tr>
+    <tbody>${rows
+      .map((row) => {
+        const c = row.clause || {};
+        return `<tr>
         <td><a class="fw-semibold" href="${esc(clauseHref(c.id || ''))}">${esc(c.ref || '')}</a></td>
         <td class="wrap small-muted">${esc(c.title || '')}</td>
         <td><select class="form-select form-select-sm clause-relevance" data-clause-id="${esc(c.id || '')}" ${canManagePestle ? '' : 'disabled'}>${relevanceOptions(row.relevance?.code || 'na')}</select></td>
       </tr>`;
-    }).join('')}</tbody>
+      })
+      .join('')}</tbody>
   </table></div>`;
 }
 
@@ -329,7 +373,10 @@ async function loadPestleChangelog() {
     return;
   }
   try {
-    const u = new URL(`/api/v1/pestle/items/${encodeURIComponent(itemId)}/changelog`, location.origin);
+    const u = new URL(
+      `/api/v1/pestle/items/${encodeURIComponent(itemId)}/changelog`,
+      location.origin,
+    );
     if (framework) u.searchParams.set('framework', framework);
     u.searchParams.set('limit', '100');
     await loadEntityChangelog(pestleChangelogEl, u.pathname + u.search, {
@@ -355,21 +402,30 @@ function _renderPestleQuestionThread(t) {
   const statusVal = String(t?.status || 'unanswered').toLowerCase();
   const posts = Array.isArray(t?.posts) ? t.posts : [];
   const isAdmin = !!me?.is_admin;
-  const isAuthor = (me?.user && createdBy && String(me.user) === String(createdBy));
+  const isAuthor = me?.user && createdBy && String(me.user) === String(createdBy);
   const canReply = isAdmin || isAuthor;
-  const statusCtl = isAdmin ? `
+  const statusCtl = isAdmin
+    ? `
     <select class="form-select form-select-sm" style="width:auto;" data-action="set-pestle-question-status" data-thread="${esc(tid)}">
       <option value="unanswered" ${statusVal === 'unanswered' ? 'selected' : ''}>unanswered</option>
       <option value="reviewing" ${statusVal === 'reviewing' ? 'selected' : ''}>reviewing</option>
       <option value="answered" ${statusVal === 'answered' ? 'selected' : ''}>answered</option>
-    </select>` : '';
-  const deleteCtl = canDeleteQuestions ? `<button class="btn btn-sm btn-outline-danger" type="button" data-action="delete-pestle-question" data-thread="${esc(tid)}">Delete</button>` : '';
-  const postsHtml = posts.map((p) => `
+    </select>`
+    : '';
+  const deleteCtl = canDeleteQuestions
+    ? `<button class="btn btn-sm btn-outline-danger" type="button" data-action="delete-pestle-question" data-thread="${esc(tid)}">Delete</button>`
+    : '';
+  const postsHtml = posts
+    .map(
+      (p) => `
     <div class="question-post">
       <div class="question-post-meta"><div class="small-muted"><span class="fw-bold">${esc(p?.author_username || '—')}</span> • ${esc(p?.created_at ? fmtTs(p.created_at) : '—')}</div></div>
       <div class="mt-2">${esc(p?.body || '').replace(/\n/g, '<br>')}</div>
-    </div>`).join('');
-  const replyHtml = canReply ? `
+    </div>`,
+    )
+    .join('');
+  const replyHtml = canReply
+    ? `
     <div class="mt-3 no-print">
       <div class="small-muted mb-1">Reply</div>
       <textarea class="form-control" rows="3" id="pestleReplyBody-${esc(tid)}" placeholder="Write a response…"></textarea>
@@ -377,7 +433,8 @@ function _renderPestleQuestionThread(t) {
         <button class="btn btn-sm btn-primary" data-action="reply-pestle-question" data-thread="${esc(tid)}">Send reply</button>
       </div>
       <div class="form-text">Only admins or the original author can reply.</div>
-    </div>` : '<div class="small-muted mt-3">Only admins or the original author can reply.</div>';
+    </div>`
+    : '<div class="small-muted mt-3">Only admins or the original author can reply.</div>';
   return `
     <div class="question-thread" id="thread-${esc(tid)}">
       <div class="question-header">
@@ -395,7 +452,9 @@ function _renderPestleQuestionThread(t) {
 function _renderPestleQuestions(threads) {
   const arr = Array.isArray(threads) ? threads : [];
   if (!pestleQuestionsEl) return;
-  pestleQuestionsEl.innerHTML = arr.length ? arr.map(_renderPestleQuestionThread).join('') : '<span class="badge text-bg-light">none</span>';
+  pestleQuestionsEl.innerHTML = arr.length
+    ? arr.map(_renderPestleQuestionThread).join('')
+    : '<span class="badge text-bg-light">none</span>';
 }
 
 async function refreshPestleQuestions() {
@@ -405,17 +464,28 @@ async function refreshPestleQuestions() {
     return;
   }
   try {
-    const res = await apiGet(`/api/v1/questions/entities/pestle_item/${encodeURIComponent(itemId)}`);
+    const res = await apiGet(
+      `/api/v1/questions/entities/pestle_item/${encodeURIComponent(itemId)}`,
+    );
     _renderPestleQuestions(res?.threads || []);
     if (!me?.is_admin) {
-      try { await apiPost(`/api/v1/questions/entities/pestle_item/${encodeURIComponent(itemId)}/mark-seen`, {}); } catch {}
+      try {
+        await apiPost(
+          `/api/v1/questions/entities/pestle_item/${encodeURIComponent(itemId)}/mark-seen`,
+          {},
+        );
+      } catch {}
     }
     if (focusThreadId && !didFocusThread) {
       const el = document.getElementById(`thread-${focusThreadId}`);
       if (el) {
         didFocusThread = true;
         el.classList.add('question-thread-focus');
-        try { el.scrollIntoView({behavior: 'smooth', block: 'start'}); } catch { el.scrollIntoView(); }
+        try {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch {
+          el.scrollIntoView();
+        }
       }
     }
   } catch (e) {
@@ -436,7 +506,11 @@ async function saveCurrentItem(ev) {
     currentItem = saved;
     renderItem(saved);
     await Promise.all([loadItemRelations(itemId), loadPestleChangelog(), refreshPestleQuestions()]);
-    history.replaceState({}, '', withFramework(`/pestle_item.html?id=${encodeURIComponent(itemId)}`, framework));
+    history.replaceState(
+      {},
+      '',
+      withFramework(`/pestle_item.html?id=${encodeURIComponent(itemId)}`, framework),
+    );
     toast(status, 'PESTLE(E) item saved', 'success');
   } catch (e) {
     toast(status, `Failed to save PESTLE(E) item: ${String(e)}`, 'danger');
@@ -447,24 +521,30 @@ async function saveCurrentItem(ev) {
 
 function collectProcessRelevancePayload() {
   return {
-    items: Array.from(businessProcessRelevanceList?.querySelectorAll('.process-relevance') || []).map((sel) => ({
-      business_process_id: sel.dataset.processId,
-      relevance_code: sel.value || 'na',
-    })).filter((x) => x.business_process_id),
+    items: Array.from(businessProcessRelevanceList?.querySelectorAll('.process-relevance') || [])
+      .map((sel) => ({
+        business_process_id: sel.dataset.processId,
+        relevance_code: sel.value || 'na',
+      }))
+      .filter((x) => x.business_process_id),
   };
 }
 
 function collectClauseRelevancePayload() {
   const visible = Array.from(clauseRelevanceList?.querySelectorAll('.clause-relevance') || []);
-  const updates = new Map(visible.map((sel) => [String(sel.dataset.clauseId || ''), sel.value || 'na']));
+  const updates = new Map(
+    visible.map((sel) => [String(sel.dataset.clauseId || ''), sel.value || 'na']),
+  );
   return {
-    items: clauseRelevanceRows.map((row) => {
-      const cid = String(row.clause?.id || '');
-      return {
-        clause_id: cid,
-        relevance_code: updates.has(cid) ? updates.get(cid) : (row.relevance?.code || 'na'),
-      };
-    }).filter((x) => x.clause_id),
+    items: clauseRelevanceRows
+      .map((row) => {
+        const cid = String(row.clause?.id || '');
+        return {
+          clause_id: cid,
+          relevance_code: updates.has(cid) ? updates.get(cid) : row.relevance?.code || 'na',
+        };
+      })
+      .filter((x) => x.clause_id),
   };
 }
 
@@ -475,7 +555,10 @@ saveBusinessProcessRelevance?.addEventListener('click', async () => {
   if (!canManagePestle || !itemId) return;
   saveBusinessProcessRelevance.disabled = true;
   try {
-    const data = await apiPatch(`/api/v1/pestle/items/${encodeURIComponent(itemId)}/business-processes`, collectProcessRelevancePayload());
+    const data = await apiPatch(
+      `/api/v1/pestle/items/${encodeURIComponent(itemId)}/business-processes`,
+      collectProcessRelevancePayload(),
+    );
     processRelevanceRows = data?.items || [];
     renderProcessRelevance();
     await Promise.all([loadItem(), loadPestleChangelog()]);
@@ -491,7 +574,10 @@ saveClauseRelevance?.addEventListener('click', async () => {
   if (!canManagePestle || !itemId) return;
   saveClauseRelevance.disabled = true;
   try {
-    const data = await apiPatch(`/api/v1/pestle/items/${encodeURIComponent(itemId)}/clauses`, collectClauseRelevancePayload());
+    const data = await apiPatch(
+      `/api/v1/pestle/items/${encodeURIComponent(itemId)}/clauses`,
+      collectClauseRelevancePayload(),
+    );
     clauseRelevanceRows = data?.items || [];
     renderClauseRelevance();
     await Promise.all([loadItem(), loadPestleChangelog()]);
@@ -502,7 +588,6 @@ saveClauseRelevance?.addEventListener('click', async () => {
     saveClauseRelevance.disabled = false;
   }
 });
-
 
 samplePestleAudit?.addEventListener('click', () => {
   openAuditSampleModal({
@@ -539,7 +624,7 @@ pestleAskQuestion?.addEventListener('click', async () => {
   const prev = pestleAskQuestion.textContent;
   pestleAskQuestion.textContent = 'Submitting…';
   try {
-    await apiPost(`/api/v1/questions/entities/pestle_item/${encodeURIComponent(itemId)}`, {body});
+    await apiPost(`/api/v1/questions/entities/pestle_item/${encodeURIComponent(itemId)}`, { body });
     if (pestleQuestionBody) pestleQuestionBody.value = '';
     await refreshPestleQuestions();
     toast(status, 'Question submitted', 'success');
@@ -579,7 +664,7 @@ pestleQuestionsEl?.addEventListener('click', async (ev) => {
   const prev = btn.textContent;
   btn.textContent = 'Sending…';
   try {
-    await apiPost(`/api/v1/questions/${encodeURIComponent(tid)}/posts`, {body});
+    await apiPost(`/api/v1/questions/${encodeURIComponent(tid)}/posts`, { body });
     if (bodyEl) bodyEl.value = '';
     await refreshPestleQuestions();
     toast(status, 'Reply sent', 'success');
@@ -598,7 +683,7 @@ pestleQuestionsEl?.addEventListener('change', async (ev) => {
   const newStatus = String(sel.value || '').trim();
   if (!tid || !newStatus) return;
   try {
-    await apiPatch(`/api/v1/admin/questions/${encodeURIComponent(tid)}`, {status: newStatus});
+    await apiPatch(`/api/v1/admin/questions/${encodeURIComponent(tid)}`, { status: newStatus });
     await refreshPestleQuestions();
   } catch (e) {
     toast(status, String(e), 'danger');
@@ -607,7 +692,8 @@ pestleQuestionsEl?.addEventListener('change', async (ev) => {
 
 if (pestleBreadcrumb) pestleBreadcrumb.href = withFramework('/pestle.html', framework);
 if (pestleList) pestleList.href = withFramework('/pestle.html', framework);
-if (pestleVisualisations) pestleVisualisations.href = withFramework('/pestle.html?tab=visualisations', framework);
+if (pestleVisualisations)
+  pestleVisualisations.href = withFramework('/pestle.html?tab=visualisations', framework);
 
 wireTabs();
 

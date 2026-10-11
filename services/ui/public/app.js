@@ -3,8 +3,19 @@ export * from '/vendor/mosp-design-system/app.js';
 
 // Keen's UI pages historically imported a couple of helpers from /app.js.
 // Keep them here so older pages (e.g. account.js) continue to work.
-import { getCurrentFramework, apiGet, apiPost, esc, fmtTs, getUiConfig, safeExternalHref, toast, sourceBadgeHtml as _mospSourceBadgeHtml, initNavbar as _mospInitNavbar, initCollapsibleFilterSections as _mospInitCollapsibleFilterSections } from '/vendor/mosp-design-system/app.js';
-
+import {
+  getCurrentFramework,
+  apiGet,
+  apiPost,
+  esc,
+  fmtTs,
+  getUiConfig,
+  safeExternalHref,
+  toast,
+  sourceBadgeHtml as _mospSourceBadgeHtml,
+  initNavbar as _mospInitNavbar,
+  initCollapsibleFilterSections as _mospInitCollapsibleFilterSections,
+} from '/vendor/mosp-design-system/app.js';
 
 function _frameworkForHref() {
   try {
@@ -27,7 +38,6 @@ function _withCurrentFramework(path) {
   }
 }
 
-
 export function sourceBadgeHtml(source, metaMap, href = null) {
   const s = String(source || '').trim();
   const target = href || (s ? `/source.html?source=${encodeURIComponent(s)}` : '');
@@ -42,7 +52,9 @@ function _patchRiskNavDropdown() {
   const links = Array.from(navRoot.querySelectorAll('a[href]'));
   const riskLink = links.find((a) => {
     const href = String(a.getAttribute('href') || '');
-    const txt = String(a.textContent || '').trim().toLowerCase();
+    const txt = String(a.textContent || '')
+      .trim()
+      .toLowerCase();
     return href.includes('/risks.html') || txt === 'risks';
   });
   if (!riskLink) return;
@@ -70,7 +82,9 @@ function _patchIsmsNavDropdown() {
 
   const existing = Array.from(navRoot.querySelectorAll('a[href]')).find((a) => {
     const href = String(a.getAttribute('href') || '');
-    const txt = String(a.textContent || '').trim().toLowerCase();
+    const txt = String(a.textContent || '')
+      .trim()
+      .toLowerCase();
     return href.includes('/isms.html') || txt === 'isms';
   });
   if (existing) {
@@ -82,7 +96,9 @@ function _patchIsmsNavDropdown() {
   const links = Array.from(navRoot.querySelectorAll('a[href]'));
   const riskLink = links.find((a) => {
     const href = String(a.getAttribute('href') || '');
-    const txt = String(a.textContent || '').trim().toLowerCase();
+    const txt = String(a.textContent || '')
+      .trim()
+      .toLowerCase();
     return href.includes('/risks.html') || txt === 'risks';
   });
   const riskLi = riskLink?.closest?.('li');
@@ -121,7 +137,9 @@ function _removeHomeNavItem() {
   if (!navRoot || navRoot.dataset.homeRemoved === '1') return;
   const links = Array.from(navRoot.querySelectorAll('a[href]'));
   for (const a of links) {
-    const label = String(a.textContent || '').trim().toLowerCase();
+    const label = String(a.textContent || '')
+      .trim()
+      .toLowerCase();
     const href = String(a.getAttribute('href') || '').trim();
     if (label !== 'home') continue;
     let isHome = href === '/' || href === 'index.html' || href.endsWith('/index.html');
@@ -147,67 +165,93 @@ function _collapseFilterSectionsByDefault() {
 export async function refreshFrameworkNavigation(savedCatalog = null, cfgOverrides = null) {
   const cfg = getUiConfig(cfgOverrides);
   const navRoot = document.getElementById('navbar');
-  const clauseLinks = [...(navRoot?.querySelectorAll('a[href]') || [])].filter(a=>new URL(a.href,location.origin).pathname==='/clauses.html');
+  const clauseLinks = [...(navRoot?.querySelectorAll('a[href]') || [])].filter(
+    (a) => new URL(a.href, location.origin).pathname === '/clauses.html',
+  );
   for (const link of clauseLinks) (link.closest('li') || link).hidden = true;
-  const data = savedCatalog || await getFrameworkCatalog(cfgOverrides);
-  const catalog = {...data, items: (data.items || []).filter(item => item.enabled !== false)};
-  const allowed = new Set(catalog.items.map(item=>item.slug));
+  const data = savedCatalog || (await getFrameworkCatalog(cfgOverrides));
+  const catalog = { ...data, items: (data.items || []).filter((item) => item.enabled !== false) };
+  const allowed = new Set(catalog.items.map((item) => item.slug));
   let selected = getCurrentFramework();
   window.mospFrameworkDefault = catalog.default || '';
   window.keenFrameworkDefault = catalog.default || '';
   if (!allowed.has(selected) && catalog.default) {
     selected = catalog.default;
-    const url = new URL(location.href); url.searchParams.set('framework', selected);
+    const url = new URL(location.href);
+    url.searchParams.set('framework', selected);
     history.replaceState(history.state, '', url.pathname + url.search + url.hash);
-    window.mospFramework = selected; window.keenFramework = selected;
-    try { localStorage.setItem(cfg.storage.frameworkKey, selected); } catch {}
-    for (const link of (navRoot?.querySelectorAll('a[href]') || [])) {
+    window.mospFramework = selected;
+    window.keenFramework = selected;
+    try {
+      localStorage.setItem(cfg.storage.frameworkKey, selected);
+    } catch {}
+    for (const link of navRoot?.querySelectorAll('a[href]') || []) {
       const target = new URL(link.href, location.origin);
-      if (target.origin !== location.origin || (!link.hasAttribute('data-nav-fw') && !target.searchParams.has('framework'))) continue;
+      if (
+        target.origin !== location.origin ||
+        (!link.hasAttribute('data-nav-fw') && !target.searchParams.has('framework'))
+      )
+        continue;
       target.searchParams.set('framework', selected);
       link.href = target.pathname + target.search + target.hash;
     }
   }
   const picker = navRoot?.querySelector('#navFrameworkSelect');
   if (picker) {
-    picker.replaceChildren(...catalog.items.map(item=> {
-      const option = new Option(item.name || item.slug, item.slug);
-      option.title = `${item.name} (${item.slug})`; return option;
-    }));
+    picker.replaceChildren(
+      ...catalog.items.map((item) => {
+        const option = new Option(item.name || item.slug, item.slug);
+        option.title = `${item.name} (${item.slug})`;
+        return option;
+      }),
+    );
     picker.value = selected;
     picker.disabled = !catalog.items.length;
     const describe = () => {
-      const item = catalog.items.find(item=>item.slug===picker.value);
-      picker.title = item ? `${item.name} (${item.slug})` : 'No frameworks available; ask an administrator to check organisation settings';
+      const item = catalog.items.find((item) => item.slug === picker.value);
+      picker.title = item
+        ? `${item.name} (${item.slug})`
+        : 'No frameworks available; ask an administrator to check organisation settings';
       picker.setAttribute('aria-label', `Framework: ${picker.title}`);
     };
     describe();
   }
-  const framework=catalog.items.find(item=>item.slug===selected);
-  for(const a of clauseLinks)(a.closest('li')||a).hidden=framework?.has_clauses!==true;
-  window.dispatchEvent(new CustomEvent('keen:framework-catalog-changed', {detail: catalog}));
+  const framework = catalog.items.find((item) => item.slug === selected);
+  for (const a of clauseLinks) (a.closest('li') || a).hidden = framework?.has_clauses !== true;
+  window.dispatchEvent(new CustomEvent('keen:framework-catalog-changed', { detail: catalog }));
   return catalog;
 }
 
 export async function initNavbar(...args) {
   const cfg = getUiConfig(args[0]);
-  const me = await _mospInitNavbar({...cfg, brandIcon: '/keen-mitigator.png',
-    nav: {...cfg.nav, expandClass: 'navbar-expand-lg'},
-    framework: {...cfg.framework, selectMaxChars: 19, selectMinChars: 14}});
+  const me = await _mospInitNavbar({
+    ...cfg,
+    brandIcon: '/keen-mitigator.png',
+    nav: { ...cfg.nav, expandClass: 'navbar-expand-lg' },
+    framework: { ...cfg.framework, selectMaxChars: 19, selectMinChars: 14 },
+  });
   const navRoot = document.getElementById('navbar');
   if (navRoot && !navRoot.querySelector('[data-keen-documentation]')) {
     const list = navRoot.querySelector('.navbar-nav');
     const link = document.createElement('a');
-    link.href = '/help/'; link.textContent = 'Help';
-    link.className = 'nav-link'; link.dataset.keenDocumentation = '1';
-    if (list) { const item = document.createElement('li'); item.className = 'nav-item'; item.append(link); list.append(item); }
-    else navRoot.append(link);
+    link.href = '/help/';
+    link.textContent = 'Help';
+    link.className = 'nav-link';
+    link.dataset.keenDocumentation = '1';
+    if (list) {
+      const item = document.createElement('li');
+      item.className = 'nav-item';
+      item.append(link);
+      list.append(item);
+    } else navRoot.append(link);
   }
-  try { await refreshFrameworkNavigation(null, cfg); }
-  catch {
+  try {
+    await refreshFrameworkNavigation(null, cfg);
+  } catch {
     // Keep optional navigation hidden when the catalogue cannot be checked.
     for (const link of navRoot?.querySelectorAll('a[href]') || []) {
-      if (new URL(link.href, location.origin).pathname === '/clauses.html') (link.closest('li') || link).hidden = true;
+      if (new URL(link.href, location.origin).pathname === '/clauses.html')
+        (link.closest('li') || link).hidden = true;
     }
   }
   _removeHomeNavItem();
@@ -218,13 +262,37 @@ export async function initNavbar(...args) {
   return me;
 }
 
-
-const RICH_TEXT_ALLOWED_TAGS = new Set(['a', 'blockquote', 'br', 'code', 'div', 'em', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'li', 'ol', 'p', 'pre', 's', 'strike', 'strong', 'u', 'ul']);
+const RICH_TEXT_ALLOWED_TAGS = new Set([
+  'a',
+  'blockquote',
+  'br',
+  'code',
+  'div',
+  'em',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'hr',
+  'li',
+  'ol',
+  'p',
+  'pre',
+  's',
+  'strike',
+  'strong',
+  'u',
+  'ul',
+]);
 const RICH_TEXT_VOID_TAGS = new Set(['br', 'hr']);
 const _richTextEditors = new WeakMap();
 
 export function isRichTextHtmlLike(value) {
-  return /<\/?(?:p|br|hr|h[1-6]|ul|ol|li|strong|em|u|s|strike|a|blockquote|pre|code|div)\b/i.test(String(value || ''));
+  return /<\/?(?:p|br|hr|h[1-6]|ul|ol|li|strong|em|u|s|strike|a|blockquote|pre|code|div)\b/i.test(
+    String(value || ''),
+  );
 }
 
 function _safeRichTextHref(href) {
@@ -277,7 +345,10 @@ export function sanitizeRichTextHtml(source) {
 function _inlineRichTextMarkdown(text) {
   let out = esc(text || '');
   // Small escaped markdown subset for legacy textarea values.
-  out = out.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  out = out.replace(
+    /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+  );
   out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   out = out.replace(/\*([^*]+)\*/g, '<em>$1</em>');
@@ -285,7 +356,9 @@ function _inlineRichTextMarkdown(text) {
 }
 
 export function legacyRichTextMarkdownToHtml(text, emptyHtml = '') {
-  const source = String(text || '').replace(/\r\n?/g, '\n').trim();
+  const source = String(text || '')
+    .replace(/\r\n?/g, '\n')
+    .trim();
   if (!source) return emptyHtml;
 
   const lines = source.split('\n');
@@ -300,7 +373,9 @@ export function legacyRichTextMarkdownToHtml(text, emptyHtml = '') {
   };
   const flushList = () => {
     if (!list.length) return;
-    html.push(`<ul>${list.map((item) => `<li>${_inlineRichTextMarkdown(item)}</li>`).join('')}</ul>`);
+    html.push(
+      `<ul>${list.map((item) => `<li>${_inlineRichTextMarkdown(item)}</li>`).join('')}</ul>`,
+    );
     list = [];
   };
 
@@ -344,7 +419,9 @@ export function richTextEditorValue(raw) {
 export function renderRichTextContent(raw, emptyHtml = '<span class="small-muted">—</span>') {
   const value = String(raw || '').trim();
   if (!value) return emptyHtml;
-  const html = isRichTextHtmlLike(value) ? sanitizeRichTextHtml(value) : legacyRichTextMarkdownToHtml(value, emptyHtml);
+  const html = isRichTextHtmlLike(value)
+    ? sanitizeRichTextHtml(value)
+    : legacyRichTextMarkdownToHtml(value, emptyHtml);
   return html || emptyHtml;
 }
 
@@ -376,7 +453,9 @@ export function syncRichTextEditor(textarea) {
 }
 
 export function syncRichTextEditors(root = document) {
-  root?.querySelectorAll?.('textarea[data-rich-text]').forEach((textarea) => syncRichTextEditor(textarea));
+  root
+    ?.querySelectorAll?.('textarea[data-rich-text]')
+    .forEach((textarea) => syncRichTextEditor(textarea));
 }
 
 export function refreshRichTextEditorStates(root = document) {
@@ -405,23 +484,34 @@ export function initRichTextEditors(root = document, opts = {}) {
     if (_richTextEditors.has(textarea)) continue;
     textarea.setAttribute('data-wysi-fallback', '1');
     try {
-      const instance = window.Wysi({
-        el: textarea,
-        height: opts.height || Number(textarea.dataset.richTextHeight || 260),
-        autoGrow: opts.autoGrow ?? true,
-        autoHide: opts.autoHide ?? false,
-        tools: opts.tools || [
-          'format', '|',
-          'bold', 'italic', 'underline', 'strike', '|',
-          'ul', 'ol', '|',
-          'link', 'hr', 'quote', '|',
-          'removeFormat',
-        ],
-        onChange: (content) => {
-          textarea.value = String(content || '');
-          opts.onChange?.(textarea, textarea.value);
-        },
-      }) || null;
+      const instance =
+        window.Wysi({
+          el: textarea,
+          height: opts.height || Number(textarea.dataset.richTextHeight || 260),
+          autoGrow: opts.autoGrow ?? true,
+          autoHide: opts.autoHide ?? false,
+          tools: opts.tools || [
+            'format',
+            '|',
+            'bold',
+            'italic',
+            'underline',
+            'strike',
+            '|',
+            'ul',
+            'ol',
+            '|',
+            'link',
+            'hr',
+            'quote',
+            '|',
+            'removeFormat',
+          ],
+          onChange: (content) => {
+            textarea.value = String(content || '');
+            opts.onChange?.(textarea, textarea.value);
+          },
+        }) || null;
       _richTextEditors.set(textarea, instance || true);
       textarea.closest('.rich-text-editor')?.setAttribute('data-rich-text-ready', '1');
       setRichTextEditorValue(textarea, textarea.value || '');
@@ -435,23 +525,32 @@ export function initRichTextEditors(root = document, opts = {}) {
 }
 
 export function setRichTextEditorValue(textareaOrId, value) {
-  const textarea = typeof textareaOrId === 'string' ? document.getElementById(textareaOrId) : textareaOrId;
+  const textarea =
+    typeof textareaOrId === 'string' ? document.getElementById(textareaOrId) : textareaOrId;
   if (!textarea) return;
   textarea.value = richTextEditorValue(value);
   const instance = _richTextEditors.get(textarea);
   if (instance && typeof instance?.setContent === 'function') {
-    try { instance.setContent(textarea.value); } catch {}
+    try {
+      instance.setContent(textarea.value);
+    } catch {}
   }
   const editable = _richTextEditable(textarea);
   if (editable) editable.innerHTML = textarea.value || '';
 }
 
 function _hexToRgb(hex) {
-  const raw = String(hex || '').trim().replace(/^#/, '');
+  const raw = String(hex || '')
+    .trim()
+    .replace(/^#/, '');
   if (!raw) return null;
-  const h = raw.length === 3
-    ? raw.split('').map((c) => c + c).join('')
-    : raw;
+  const h =
+    raw.length === 3
+      ? raw
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : raw;
   if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
   const n = parseInt(h, 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
@@ -480,8 +579,10 @@ export function idealTextColor(bgHex) {
 
 export function userDisplayName(userOrName, fallback = '') {
   if (userOrName === null || userOrName === undefined) return String(fallback || '').trim();
-  if (typeof userOrName === 'string' || typeof userOrName === 'number') return String(userOrName || fallback || '').trim();
-  const user = userOrName.user && typeof userOrName.user === 'object' ? userOrName.user : userOrName;
+  if (typeof userOrName === 'string' || typeof userOrName === 'number')
+    return String(userOrName || fallback || '').trim();
+  const user =
+    userOrName.user && typeof userOrName.user === 'object' ? userOrName.user : userOrName;
   const fields = [
     user.username,
     user.name,
@@ -502,34 +603,37 @@ export function userDisplayName(userOrName, fallback = '') {
   return String(fallback || '').trim();
 }
 
-export function userPillHtml(userOrName, {empty = '—', className = '', title = '', prefix = ''} = {}) {
+export function userPillHtml(
+  userOrName,
+  { empty = '—', className = '', title = '', prefix = '' } = {},
+) {
   const label = userDisplayName(userOrName);
   if (!label) return `<span class="small-muted">${esc(empty || '—')}</span>`;
-  const user = userOrName && typeof userOrName === 'object' ? (userOrName.user || userOrName) : null;
+  const user = userOrName && typeof userOrName === 'object' ? userOrName.user || userOrName : null;
   const tip = String(title || user?.email || label || '').trim();
   const cls = ['badge', 'badge-soft', 'user-pill', className].filter(Boolean).join(' ');
   return `<span class="${esc(cls)}"${tip ? ` title="${esc(tip)}"` : ''}>${esc(prefix || '')}${esc(label)}</span>`;
 }
 
 export function userPillsHtml(items = [], opts = {}) {
-  const rows = Array.isArray(items) ? items : (items ? [items] : []);
+  const rows = Array.isArray(items) ? items : items ? [items] : [];
   const html = rows
-    .map((item) => userPillHtml(item, {...opts, empty: ''}))
+    .map((item) => userPillHtml(item, { ...opts, empty: '' }))
     .filter((value) => value && !value.includes('small-muted'))
     .join('');
   if (!html) return `<span class="small-muted">${esc(opts.empty || '—')}</span>`;
   return `<span class="user-pill-list">${html}</span>`;
 }
 
-
 export const ACTIVE_AUDIT_STATUSES = new Set(['open', 'in_progress']);
 export const LOCKED_AUDIT_STATUSES = new Set(['completed', 'archived']);
 
 export function auditStatusValue(auditOrStatus = null) {
-  const raw = (auditOrStatus && typeof auditOrStatus === 'object')
-    ? auditOrStatus.status
-    : auditOrStatus;
-  return String(raw || 'open').trim().toLowerCase();
+  const raw =
+    auditOrStatus && typeof auditOrStatus === 'object' ? auditOrStatus.status : auditOrStatus;
+  return String(raw || 'open')
+    .trim()
+    .toLowerCase();
 }
 
 export function isAuditActive(auditOrStatus = null) {
@@ -655,12 +759,14 @@ export async function openAuditSampleModal({
   }
 
   const els = _entityAuditSampleEls();
-  if (els.title) els.title.textContent = title ? `Sample “${title}” into audit` : 'Sample item into audit';
+  if (els.title)
+    els.title.textContent = title ? `Sample “${title}” into audit` : 'Sample item into audit';
   if (els.status) els.status.style.display = 'none';
   if (els.notes) {
     els.notes.value = '';
     els.notes.disabled = false;
-    els.notes.placeholder = notesPlaceholder || 'Why this item was sampled, what was verified, screenshots taken, etc.';
+    els.notes.placeholder =
+      notesPlaceholder || 'Why this item was sampled, what was verified, screenshots taken, etc.';
   }
   if (els.useUrl) {
     els.useUrl.checked = true;
@@ -673,17 +779,26 @@ export async function openAuditSampleModal({
     try {
       const data = await apiGet(_sampleAuditsUrl(framework));
       const items = (data?.items || []).filter((a) => isAuditActive(a));
-      els.select.innerHTML = items.map((a) => {
-        const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ');
-        const suffix = dates ? ` · ${dates}` : '';
-        const statusSuffix = auditStatusValue(a) === 'in_progress' ? ' · In progress' : ' · Open';
-        return `<option value="${esc(a.id)}">${esc(a.title || 'Audit')}${esc(suffix)}${esc(statusSuffix)}</option>`;
-      }).join('') || '<option value="">No open or in-progress audits — start one first</option>';
+      els.select.innerHTML =
+        items
+          .map((a) => {
+            const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ');
+            const suffix = dates ? ` · ${dates}` : '';
+            const statusSuffix =
+              auditStatusValue(a) === 'in_progress' ? ' · In progress' : ' · Open';
+            return `<option value="${esc(a.id)}">${esc(a.title || 'Audit')}${esc(suffix)}${esc(statusSuffix)}</option>`;
+          })
+          .join('') || '<option value="">No open or in-progress audits — start one first</option>';
       const disabled = !items.length;
       if (els.submit) els.submit.disabled = disabled;
       if (els.notes) els.notes.disabled = disabled;
       if (els.useUrl) els.useUrl.disabled = disabled;
-      if (disabled) toast(els.status || statusEl, 'No open or in-progress audits are available. Start an Audit first, then sample this item into it.', 'warning');
+      if (disabled)
+        toast(
+          els.status || statusEl,
+          'No open or in-progress audits are available. Start an Audit first, then sample this item into it.',
+          'warning',
+        );
     } catch (e) {
       els.select.innerHTML = '<option value="">Failed to load audits</option>';
       if (els.submit) els.submit.disabled = true;
@@ -696,17 +811,24 @@ export async function openAuditSampleModal({
   const submitHandler = async () => {
     const auditId = (els.select?.value || '').trim();
     if (!auditId) {
-      toast(els.status || statusEl, 'Start an Audit first, then sample this item into it.', 'warning');
+      toast(
+        els.status || statusEl,
+        'Start an Audit first, then sample this item into it.',
+        'warning',
+      );
       return;
     }
     const btn = document.getElementById('entityAuditSampleSubmit');
     const prev = btn?.textContent || '';
-    if (btn) { btn.disabled = true; btn.textContent = 'Sampling…'; }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Sampling…';
+    }
     try {
       const body = {
         entity_type: cleanEntityType,
         entity_id: cleanEntityId,
-        evidence_url: els.useUrl?.checked ? (evidenceUrl || _sampleCurrentRelativeUrl()) : null,
+        evidence_url: els.useUrl?.checked ? evidenceUrl || _sampleCurrentRelativeUrl() : null,
         title: title || 'Keen item',
         notes: els.notes?.value || '',
       };
@@ -719,7 +841,10 @@ export async function openAuditSampleModal({
     } catch (e) {
       toast(els.status || statusEl, `Failed: ${String(e)}`, 'danger');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = prev || 'Sample into audit'; }
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prev || 'Sample into audit';
+      }
     }
   };
 
@@ -742,7 +867,7 @@ export function auditSampleActionButtonHtml({
   return `<button class="${esc(className)}" type="button" ${attrs} title="${esc(title)}"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="d-none d-xl-inline ms-1">${esc(label)}</span></button>`;
 }
 
-export function loadingSpinnerHtml(message = 'Loading data…', {small = true} = {}) {
+export function loadingSpinnerHtml(message = 'Loading data…', { small = true } = {}) {
   const msg = esc(message || 'Loading data…');
   const spinnerClass = small ? 'spinner-border spinner-border-sm' : 'spinner-border';
   return `<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted">
@@ -753,7 +878,7 @@ export function loadingSpinnerHtml(message = 'Loading data…', {small = true} =
 
 export function tableLoadingHtml(colspan = 1, message = 'Loading data…') {
   const n = Math.max(1, parseInt(colspan, 10) || 1);
-  return `<tr class="table-loading-row"><td colspan="${n}" class="p-4">${loadingSpinnerHtml(message, {small: true})}</td></tr>`;
+  return `<tr class="table-loading-row"><td colspan="${n}" class="p-4">${loadingSpinnerHtml(message, { small: true })}</td></tr>`;
 }
 
 export function showTableLoading(tbody, colspan = 1, message = 'Loading data…') {
@@ -763,10 +888,13 @@ export function showTableLoading(tbody, colspan = 1, message = 'Loading data…'
 
 export function showInlineLoading(el, message = 'Loading data…') {
   if (!el) return;
-  el.innerHTML = loadingSpinnerHtml(message, {small: true});
+  el.innerHTML = loadingSpinnerHtml(message, { small: true });
 }
 
-export function arrowLinkHtml(url, {className = 'btn btn-sm btn-outline-secondary', title = 'Open link'} = {}) {
+export function arrowLinkHtml(
+  url,
+  { className = 'btn btn-sm btn-outline-secondary', title = 'Open link' } = {},
+) {
   const safe = safeExternalHref(url);
   if (!safe) return '';
   const label = title || 'Open link';
@@ -789,33 +917,55 @@ export function safeAbsoluteHttpHref(url) {
   return '';
 }
 
-export function linkArrowsHtml(urls, {className = 'btn btn-sm btn-outline-secondary', title = 'Open link', empty = ''} = {}) {
-  const rows = Array.isArray(urls) ? urls : (urls ? [urls] : []);
+export function linkArrowsHtml(
+  urls,
+  { className = 'btn btn-sm btn-outline-secondary', title = 'Open link', empty = '' } = {},
+) {
+  const rows = Array.isArray(urls) ? urls : urls ? [urls] : [];
   const links = rows
-      .map((url, idx) => arrowLinkHtml(url, {className, title: rows.length > 1 ? `${title} ${idx + 1}` : title}))
-      .filter(Boolean);
+    .map((url, idx) =>
+      arrowLinkHtml(url, { className, title: rows.length > 1 ? `${title} ${idx + 1}` : title }),
+    )
+    .filter(Boolean);
   if (!links.length) return empty || '';
   return `<div class="btn-group btn-group-sm" role="group">${links.join('')}</div>`;
 }
 
-export function titledLinksHtml(items, {className = 'link-primary', title = 'Open link', empty = '', itemClass = 'd-inline-flex align-items-center gap-2 me-2 mb-1'} = {}) {
-  const rows = Array.isArray(items) ? items : (items ? [items] : []);
-  const links = rows.map((item, idx) => {
-    const url = typeof item === 'string' ? item : (item?.url || item?.href || item?.link || '');
-    const safe = safeExternalHref(url);
-    if (!safe) return '';
-    const label = String((typeof item === 'object' && item ? (item.title || item.label || item.name) : '') || url || `Evidence ${idx + 1}`).trim();
-    const linkTitle = rows.length > 1 ? `${title} ${idx + 1}` : title;
-    return `<span class="${esc(itemClass)}"><a class="${esc(className)} text-break" href="${esc(safe)}" target="_blank" rel="noopener noreferrer" title="${esc(linkTitle)}">${esc(label)}</a></span>`;
-  }).filter(Boolean);
+export function titledLinksHtml(
+  items,
+  {
+    className = 'link-primary',
+    title = 'Open link',
+    empty = '',
+    itemClass = 'd-inline-flex align-items-center gap-2 me-2 mb-1',
+  } = {},
+) {
+  const rows = Array.isArray(items) ? items : items ? [items] : [];
+  const links = rows
+    .map((item, idx) => {
+      const url = typeof item === 'string' ? item : item?.url || item?.href || item?.link || '';
+      const safe = safeExternalHref(url);
+      if (!safe) return '';
+      const label = String(
+        (typeof item === 'object' && item ? item.title || item.label || item.name : '') ||
+          url ||
+          `Evidence ${idx + 1}`,
+      ).trim();
+      const linkTitle = rows.length > 1 ? `${title} ${idx + 1}` : title;
+      return `<span class="${esc(itemClass)}"><a class="${esc(className)} text-break" href="${esc(safe)}" target="_blank" rel="noopener noreferrer" title="${esc(linkTitle)}">${esc(label)}</a></span>`;
+    })
+    .filter(Boolean);
   if (!links.length) return empty || '';
   return `<div class="d-flex flex-wrap align-items-center gap-1">${links.join('')}</div>`;
 }
 
-export function upstreamLinkHtml(url, {className = 'btn btn-sm btn-outline-secondary', title = 'Open upstream link'} = {}) {
+export function upstreamLinkHtml(
+  url,
+  { className = 'btn btn-sm btn-outline-secondary', title = 'Open upstream link' } = {},
+) {
   const safe = safeAbsoluteHttpHref(url);
   if (!safe) return '';
-  return arrowLinkHtml(safe, {className, title});
+  return arrowLinkHtml(safe, { className, title });
 }
 
 // Fetch the framework catalog for the account page's "default framework" dropdown.
@@ -855,7 +1005,7 @@ function _byIds(root, ids = []) {
 }
 
 export function collectOffsetPagerButtons({
-  scope = (typeof document !== 'undefined' ? document : null),
+  scope = typeof document !== 'undefined' ? document : null,
   prevIds = ['prev', 'prevBottom'],
   nextIds = ['next', 'nextBottom'],
   prevSelector = '[data-pager="prev"], [data-offset-pager="prev"], .js-offset-page[data-direction="prev"]',
@@ -868,7 +1018,7 @@ export function collectOffsetPagerButtons({
   };
 }
 
-export function offsetPagerState({total = 0, offset = 0, limit = 50} = {}) {
+export function offsetPagerState({ total = 0, offset = 0, limit = 50 } = {}) {
   const safeTotal = Math.max(0, Number(total || 0));
   const safeLimit = Math.max(1, Number(limit || 50));
   const safeOffset = Math.max(0, Number(offset || 0));
@@ -911,9 +1061,9 @@ export function offsetPaginationHtml({
   summaryPrefix = '',
   formatNumber = false,
 } = {}) {
-  const s = offsetPagerState({total, offset, limit});
+  const s = offsetPagerState({ total, offset, limit });
   if (s.total <= s.limit) return '';
-  const fmt = (n) => formatNumber ? Number(n || 0).toLocaleString() : String(n);
+  const fmt = (n) => (formatNumber ? Number(n || 0).toLocaleString() : String(n));
   const kindAttr = kind ? ` data-kind="${esc(kind)}"` : '';
   return `<div class="${esc(wrapperClass)}">
     <div class="small-muted">${esc(summaryPrefix)}${fmt(s.start)}–${fmt(s.end)} of ${fmt(s.total)}</div>
@@ -947,8 +1097,14 @@ export function effectivenessMetricThresholdState(measure, entry) {
   if (!measure || !entry) return null;
   const op = String(measure.threshold_operator || '').trim();
   if (!['lt', 'lte', 'eq', 'gte', 'gt'].includes(op)) return null;
-  if (entry.metric_value === null || entry.metric_value === undefined || entry.metric_value === '') return null;
-  if (measure.target_value === null || measure.target_value === undefined || measure.target_value === '') return null;
+  if (entry.metric_value === null || entry.metric_value === undefined || entry.metric_value === '')
+    return null;
+  if (
+    measure.target_value === null ||
+    measure.target_value === undefined ||
+    measure.target_value === ''
+  )
+    return null;
   const value = Number(entry.metric_value);
   const target = Number(measure.target_value);
   if (!Number.isFinite(value) || !Number.isFinite(target)) return null;
@@ -958,7 +1114,7 @@ export function effectivenessMetricThresholdState(measure, entry) {
   if (op === 'eq') ok = Math.abs(value - target) < 1e-9;
   if (op === 'gte') ok = value >= target;
   if (op === 'gt') ok = value > target;
-  const symbol = {lt: '<', lte: '≤', eq: '=', gte: '≥', gt: '>'}[op] || op;
+  const symbol = { lt: '<', lte: '≤', eq: '=', gte: '≥', gt: '>' }[op] || op;
   const unit = String(measure.target_unit || entry.metric_unit || '').trim();
   const targetText = `${symbol} ${target}${unit ? ` ${unit}` : ''}`;
   return {
@@ -969,9 +1125,18 @@ export function effectivenessMetricThresholdState(measure, entry) {
   };
 }
 
-export function effectivenessMetricValueHtml(entry, measure, {href = '', fallback = 'Metric entry', className = ''} = {}) {
+export function effectivenessMetricValueHtml(
+  entry,
+  measure,
+  { href = '', fallback = 'Metric entry', className = '' } = {},
+) {
   if (!entry) return `<span class="small-muted">${esc(fallback)}</span>`;
-  const value = entry.value_display || [entry.metric_value ?? '', entry.metric_unit || '', entry.qualitative_value || ''].filter(Boolean).join(' ') || fallback;
+  const value =
+    entry.value_display ||
+    [entry.metric_value ?? '', entry.metric_unit || '', entry.qualitative_value || '']
+      .filter(Boolean)
+      .join(' ') ||
+    fallback;
   const state = effectivenessMetricThresholdState(measure, entry);
   const baseClass = className || 'fw-semibold';
   if (!state) {
@@ -998,7 +1163,11 @@ function _changelogValueHtml(value) {
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'object') {
     let text = '';
-    try { text = JSON.stringify(value, null, 2); } catch { text = String(value); }
+    try {
+      text = JSON.stringify(value, null, 2);
+    } catch {
+      text = String(value);
+    }
     if (text.length > 1200) text = text.slice(0, 1200) + '…';
     return `<pre class="small bg-light border rounded p-2 mb-0 changelog-json">${esc(text)}</pre>`;
   }
@@ -1006,18 +1175,19 @@ function _changelogValueHtml(value) {
   return `<span class="text-break">${esc(text.length > 1000 ? text.slice(0, 1000) + '…' : text)}</span>`;
 }
 
-export function entityChangelogHtml(items = [], {empty = 'No changelog entries yet.'} = {}) {
+export function entityChangelogHtml(items = [], { empty = 'No changelog entries yet.' } = {}) {
   const rows = Array.isArray(items) ? items : [];
   if (!rows.length) return `<div class="small-muted p-3">${esc(empty)}</div>`;
   return `<div class="list-group list-group-flush">
-    ${rows.map((entry) => {
-      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
-      const actor = entry?.changed_by_username || 'system';
-      const action = String(entry?.action || '').replaceAll('_', ' ') || 'updated';
-      const details = changes.length
-        ? `<div class="table-responsive mt-2"><table class="table table-sm align-middle mb-0 changelog-diff-table"><thead><tr><th style="width:180px;">Field</th><th>Before</th><th>After</th></tr></thead><tbody>${changes.map((c) => `<tr><td class="fw-semibold">${esc(c?.label || c?.field || '')}</td><td>${_changelogValueHtml(c?.before)}</td><td>${_changelogValueHtml(c?.after)}</td></tr>`).join('')}</tbody></table></div>`
-        : '<div class="small-muted mt-2">No field-level changes recorded.</div>';
-      return `<div class="list-group-item">
+    ${rows
+      .map((entry) => {
+        const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+        const actor = entry?.changed_by_username || 'system';
+        const action = String(entry?.action || '').replaceAll('_', ' ') || 'updated';
+        const details = changes.length
+          ? `<div class="table-responsive mt-2"><table class="table table-sm align-middle mb-0 changelog-diff-table"><thead><tr><th style="width:180px;">Field</th><th>Before</th><th>After</th></tr></thead><tbody>${changes.map((c) => `<tr><td class="fw-semibold">${esc(c?.label || c?.field || '')}</td><td>${_changelogValueHtml(c?.before)}</td><td>${_changelogValueHtml(c?.after)}</td></tr>`).join('')}</tbody></table></div>`
+          : '<div class="small-muted mt-2">No field-level changes recorded.</div>';
+        return `<div class="list-group-item">
         <div class="d-flex flex-wrap gap-2 justify-content-between align-items-start">
           <div>
             <div class="fw-semibold">${esc(entry?.summary || 'Entity changed')}</div>
@@ -1027,14 +1197,19 @@ export function entityChangelogHtml(items = [], {empty = 'No changelog entries y
         </div>
         ${details}
       </div>`;
-    }).join('')}
+      })
+      .join('')}
   </div>`;
 }
 
-export async function loadEntityChangelog(container, url, {empty = 'No changelog entries yet.', loading = 'Loading changelog…'} = {}) {
+export async function loadEntityChangelog(
+  container,
+  url,
+  { empty = 'No changelog entries yet.', loading = 'Loading changelog…' } = {},
+) {
   if (!container) return null;
-  container.innerHTML = loadingSpinnerHtml(loading, {small: true});
+  container.innerHTML = loadingSpinnerHtml(loading, { small: true });
   const res = await apiGet(url);
-  container.innerHTML = entityChangelogHtml(res?.items || [], {empty});
+  container.innerHTML = entityChangelogHtml(res?.items || [], { empty });
   return res;
 }

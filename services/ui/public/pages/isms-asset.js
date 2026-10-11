@@ -10,7 +10,11 @@ import {
   openAuditSampleModal,
   loadEntityChangelog,
 } from '/app.js';
-import {activateTabFromHashOrQuery, clauseBadges, controlBadges} from '/pages/isms-detail-common.js';
+import {
+  activateTabFromHashOrQuery,
+  clauseBadges,
+  controlBadges,
+} from '/pages/isms-detail-common.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -31,7 +35,14 @@ function renderAsset(row) {
   const title = asset.asset || asset.name || 'Asset';
   document.title = `Keen – ${title}`;
   $('assetTitle').textContent = title;
-  $('assetMeta').textContent = [asset.category?.name || asset.category_name, asset.subcategory?.name || asset.subcategory_name, asset.license_name || asset.license, `updated ${fmtTs(asset.updated_at) || '—'}`].filter(Boolean).join(' • ');
+  $('assetMeta').textContent = [
+    asset.category?.name || asset.category_name,
+    asset.subcategory?.name || asset.subcategory_name,
+    asset.license_name || asset.license,
+    `updated ${fmtTs(asset.updated_at) || '—'}`,
+  ]
+    .filter(Boolean)
+    .join(' • ');
   $('assetDescription').textContent = asset.description || 'No description recorded.';
   $('assetCategory').textContent = asset.category?.name || asset.category_name || '—';
   $('assetSubcategory').textContent = asset.subcategory?.name || asset.subcategory_name || '—';
@@ -45,7 +56,10 @@ function renderAsset(row) {
 
   const edit = $('editAssetLink');
   if (edit) {
-    edit.href = withFramework(`/isms.html?tab=assets&edit=asset:${encodeURIComponent(asset.id || '')}`, framework);
+    edit.href = withFramework(
+      `/isms.html?tab=assets&edit=asset:${encodeURIComponent(asset.id || '')}`,
+      framework,
+    );
     edit.style.display = canManageIsms ? '' : 'none';
   }
   const sample = $('sampleAssetAudit');
@@ -56,7 +70,7 @@ async function loadChangelog() {
   await loadEntityChangelog(
     $('assetChangelog'),
     `/api/v1/isms/asset/${encodeURIComponent(assetId)}/changelog?limit=100`,
-    {empty: 'No asset changes have been recorded yet.'}
+    { empty: 'No asset changes have been recorded yet.' },
   );
 }
 
@@ -66,10 +80,12 @@ async function load() {
     return;
   }
   try {
-    const row = await apiGet(`/api/v1/isms/assets/${encodeURIComponent(assetId)}?framework=${encodeURIComponent(framework)}`);
+    const row = await apiGet(
+      `/api/v1/isms/assets/${encodeURIComponent(assetId)}?framework=${encodeURIComponent(framework)}`,
+    );
     renderAsset(row);
     await loadChangelog();
-    activateTabFromHashOrQuery(params, {changelog: $('assetChangelogTab')});
+    activateTabFromHashOrQuery(params, { changelog: $('assetChangelogTab') });
   } catch (e) {
     toast(status, `Failed to load asset: ${String(e)}`, 'danger');
   }
@@ -88,5 +104,7 @@ $('sampleAssetAudit')?.addEventListener('click', () => {
   });
 });
 
-window.addEventListener('hashchange', () => activateTabFromHashOrQuery(params, {changelog: $('assetChangelogTab')}));
+window.addEventListener('hashchange', () =>
+  activateTabFromHashOrQuery(params, { changelog: $('assetChangelogTab') }),
+);
 load();

@@ -1,4 +1,20 @@
-import {initNavbar, apiGet, apiPost, esc, fmtTs, toast, qs, qbool, setQuery, enableTableSorting, attachSavedSearchAutocomplete, resolveSavedSearchUrl, getCurrentFramework, withFramework, showTableLoading} from '/app.js';
+import {
+  initNavbar,
+  apiGet,
+  apiPost,
+  esc,
+  fmtTs,
+  toast,
+  qs,
+  qbool,
+  setQuery,
+  enableTableSorting,
+  attachSavedSearchAutocomplete,
+  resolveSavedSearchUrl,
+  getCurrentFramework,
+  withFramework,
+  showTableLoading,
+} from '/app.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -12,7 +28,8 @@ function _safeInternalPath(raw) {
   if (s.startsWith('//')) return '';
   if (s === '/login.html' || s.startsWith('/login.html?')) return '';
   const deprecatedVisualisationPath = '/visualisation' + '.html';
-  if (s === deprecatedVisualisationPath || s.startsWith(`${deprecatedVisualisationPath}?`)) return '/sources.html?tab=visualisations';
+  if (s === deprecatedVisualisationPath || s.startsWith(`${deprecatedVisualisationPath}?`))
+    return '/sources.html?tab=visualisations';
   return s;
 }
 
@@ -23,7 +40,6 @@ if (!qbool('stay', false)) {
   }
 }
 enableTableSorting();
-
 
 // Keep top action links on the selected framework.
 for (const a of Array.from(document.querySelectorAll('a[href]'))) {
@@ -38,7 +54,6 @@ attachSavedSearchAutocomplete(document.getElementById('frontQ'));
 
 const status = document.getElementById('status');
 const tbody = document.getElementById('rows');
-
 
 const inpFilter = document.getElementById('filterText');
 const chkGaps = document.getElementById('onlyGaps');
@@ -77,15 +92,15 @@ function render() {
   });
 
   for (const c of view) {
-    const scope = c.in_scope ?
-      `<span class="badge badge-soft">in</span>` :
-      `<span class="badge text-bg-light">out</span>`;
+    const scope = c.in_scope
+      ? `<span class="badge badge-soft">in</span>`
+      : `<span class="badge text-bg-light">out</span>`;
 
     const ev = c.evidence_count || 0;
     const evHtml =
-      ev > 0 ?
-        `<a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" class="badge badge-soft">${ev}</a>` :
-        `<span class="badge text-bg-light">0</span>`;
+      ev > 0
+        ? `<a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" class="badge badge-soft">${ev}</a>`
+        : `<span class="badge text-bg-light">0</span>`;
 
     const lastIso = c.last_evidence || '';
     const lastTxt = c.last_evidence ? fmtTs(c.last_evidence) : '—';
@@ -111,23 +126,29 @@ async function load() {
   status.style.display = 'none';
   showTableLoading(tbody, 5, 'Loading controls…');
   try {
-    const summary = await apiGet(`/api/v1/stats/summary?framework=${encodeURIComponent(framework)}`);
+    const summary = await apiGet(
+      `/api/v1/stats/summary?framework=${encodeURIComponent(framework)}`,
+    );
     document.getElementById('kpiEventsMapped').textContent = summary.events.mapped;
     document.getElementById('kpiEventsUnmapped').textContent = summary.events.unmapped;
     document.getElementById('kpiControlsWith').textContent = summary.controls.with_evidence;
     document.getElementById('kpiControlsWithout').textContent = summary.controls.without_evidence;
 
-    const data = await apiGet(`/api/v1/stats/controls?limit=5000&framework=${encodeURIComponent(framework)}`);
+    const data = await apiGet(
+      `/api/v1/stats/controls?limit=5000&framework=${encodeURIComponent(framework)}`,
+    );
     all = data.items || [];
     if (all.length === 0) {
       toast(status, 'No controls loaded yet. Go to Admin → Import controls.', 'warning');
-      tbody.innerHTML = '<tr><td colspan="5" class="small-muted p-4">No controls loaded yet. Go to Admin → Import controls.</td></tr>';
+      tbody.innerHTML =
+        '<tr><td colspan="5" class="small-muted p-4">No controls loaded yet. Go to Admin → Import controls.</td></tr>';
       return;
     }
     render();
   } catch (e) {
     toast(status, `Failed to load dashboard: ${String(e)}`, 'danger');
-    tbody.innerHTML = '<tr><td colspan="5" class="small-muted p-4">Failed to load controls.</td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="5" class="small-muted p-4">Failed to load controls.</td></tr>';
   }
 }
 
@@ -152,15 +173,14 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
   if (qRaw) parts.push(`q=${qRaw}`);
   if (onlyGaps) parts.push('gaps');
   if (!onlyInScope) parts.push('all-scope');
-  const defName = ('Controls' + (parts.length ? ` (${parts.join(', ')})` : ''))
-      .slice(0, 128);
+  const defName = ('Controls' + (parts.length ? ` (${parts.join(', ')})` : '')).slice(0, 128);
 
   const name = (prompt('Name this saved search', defName) || '').trim();
   if (!name) return;
 
   const url = location.pathname + (location.search || '');
   try {
-    await apiPost('/api/v1/me/saved-searches', {name, url});
+    await apiPost('/api/v1/me/saved-searches', { name, url });
     toast(status, 'Saved', 'success');
   } catch (e) {
     toast(status, `Failed to save: ${String(e)}`, 'danger');
@@ -186,6 +206,5 @@ document.getElementById('frontSearch').addEventListener('submit', (ev) => {
   url.searchParams.set('framework', framework);
   location.href = url.pathname + url.search;
 });
-
 
 load();

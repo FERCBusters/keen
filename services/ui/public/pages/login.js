@@ -1,5 +1,5 @@
-import {safeNext} from './navigation-security.js';
-import {qs, toast} from '/app.js';
+import { safeNext } from './navigation-security.js';
+import { qs, toast } from '/app.js';
 
 const status = document.getElementById('status');
 const form = document.getElementById('loginForm');
@@ -25,7 +25,7 @@ function computeNext() {
 
 async function fetchLandingPage() {
   try {
-    const r = await fetch('/api/v1/me', {credentials: 'same-origin'});
+    const r = await fetch('/api/v1/me', { credentials: 'same-origin' });
     if (!r.ok) return '/';
     const me = await r.json();
     const lp = me?.preferences?.landing_page || '/';
@@ -37,7 +37,7 @@ async function fetchLandingPage() {
 
 async function maybeAlreadyLoggedIn() {
   try {
-    const r = await fetch('/api/v1/me', {credentials: 'same-origin'});
+    const r = await fetch('/api/v1/me', { credentials: 'same-origin' });
     if (!r.ok) return false;
     // Logged in already; go where the user intended.
     let n = computeNext();
@@ -69,7 +69,9 @@ function renderSsoButtons(providers) {
   if (!ssoSection || !ssoButtons || !providers.length) return;
   ssoButtons.replaceChildren();
   for (const provider of providers) {
-    const key = String(provider?.key || '').trim().toLowerCase();
+    const key = String(provider?.key || '')
+      .trim()
+      .toLowerCase();
     const label = String(provider?.label || 'single sign-on').trim() || 'single sign-on';
     const button = document.createElement('button');
     button.className = 'btn btn-outline-primary w-100';
@@ -79,7 +81,7 @@ function renderSsoButtons(providers) {
     const text = document.createElement('span');
     text.textContent = `Continue with ${label}`;
     button.append(icon, text);
-    button.addEventListener('click', () => startOidc(provider.start_url), {once: true});
+    button.addEventListener('click', () => startOidc(provider.start_url), { once: true });
     ssoButtons.appendChild(button);
   }
   ssoSection.classList.remove('d-none');
@@ -88,7 +90,7 @@ function renderSsoButtons(providers) {
 async function loadAuthMethods() {
   let methods = null;
   try {
-    const r = await fetch('/api/v1/auth/methods', {credentials: 'same-origin'});
+    const r = await fetch('/api/v1/auth/methods', { credentials: 'same-origin' });
     if (r.ok) methods = await r.json();
   } catch {
     methods = null;
@@ -100,12 +102,18 @@ async function loadAuthMethods() {
 
   if (methods?.ldap_enabled && form) {
     const label = document.createElement('label');
-    label.className = 'form-label'; label.htmlFor = 'login-method'; label.textContent = 'Sign-in method';
-    const select = document.createElement('select'); select.id = 'login-method'; select.className = 'form-select mb-3';
+    label.className = 'form-label';
+    label.htmlFor = 'login-method';
+    label.textContent = 'Sign-in method';
+    const select = document.createElement('select');
+    select.id = 'login-method';
+    select.className = 'form-select mb-3';
     select.add(new Option('LDAP directory', 'ldap'));
     if (methods.local_enabled) select.add(new Option('Local KEEN account', 'local'));
     form.prepend(label, select);
-    if (localLoginHint) localLoginHint.textContent = 'Use your directory username and password, or select a local KEEN account.';
+    if (localLoginHint)
+      localLoginHint.textContent =
+        'Use your directory username and password, or select a local KEEN account.';
   }
   if (methods && methods.local_enabled === false && !methods.ldap_enabled) {
     if (form) form.classList.add('d-none');
@@ -130,7 +138,7 @@ if (form) {
     if (status) status.style.display = 'none';
 
     const username = (usernameEl?.value || '').trim();
-    const password = (passwordEl?.value || '');
+    const password = passwordEl?.value || '';
 
     if (!username || !password) {
       toast(status, 'Username and password are required', 'warning');
@@ -142,8 +150,12 @@ if (form) {
       const r = await fetch('/api/v1/auth/login', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({username, password, method: document.getElementById('login-method')?.value || 'local'}),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          password,
+          method: document.getElementById('login-method')?.value || 'local',
+        }),
       });
       if (!r.ok) {
         let msg = `HTTP ${r.status}`;
@@ -155,8 +167,8 @@ if (form) {
       }
       const result = await r.json();
       if (result.mfa_required) {
-        passwordEl.value = "";
-        location.assign("/mfa.html?next=" + encodeURIComponent(computeNext()));
+        passwordEl.value = '';
+        location.assign('/mfa.html?next=' + encodeURIComponent(computeNext()));
         return;
       }
       let n = computeNext();

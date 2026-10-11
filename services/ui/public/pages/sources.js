@@ -1,4 +1,16 @@
-import {initNavbar, apiGet, esc, fmtTs, tsSortKey, toast, enableTableSorting, sourceBadgeHtml, getCurrentFramework, withFramework, showTableLoading} from '/app.js';
+import {
+  initNavbar,
+  apiGet,
+  esc,
+  fmtTs,
+  tsSortKey,
+  toast,
+  enableTableSorting,
+  sourceBadgeHtml,
+  getCurrentFramework,
+  withFramework,
+  showTableLoading,
+} from '/app.js';
 
 await initNavbar();
 const framework = getCurrentFramework();
@@ -35,7 +47,7 @@ function render(items) {
   for (const s of items) {
     const src = s.source || 'unknown';
     const openHref = sourceHref(src);
-    const unmappedHref = sourceHref(src, {unmapped: true});
+    const unmappedHref = sourceHref(src, { unmapped: true });
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td data-sort="${esc(src)}">${sourceBadgeHtml(src, sourceMeta, openHref)}</td>
@@ -53,7 +65,9 @@ function render(items) {
 
   if (items.length === 0) {
     const tr = document.createElement('tr');
-    const msg = filterSource ? `No sources match "${esc(filterSourceRaw)}".` : 'No sources found. Ingest some data first.';
+    const msg = filterSource
+      ? `No sources match "${esc(filterSourceRaw)}".`
+      : 'No sources found. Ingest some data first.';
     tr.innerHTML = `<td colspan="6" class="small-muted p-4">${msg}</td>`;
     tbody.appendChild(tr);
   }
@@ -81,19 +95,26 @@ async function load() {
     render(items);
   } catch (e) {
     toast(status, `Failed to load sources: ${String(e)}`, 'danger');
-    tbody.innerHTML = '<tr><td colspan="6" class="small-muted p-4">Failed to load sources.</td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="6" class="small-muted p-4">Failed to load sources.</td></tr>';
   }
 }
 
 function activateInitialTab() {
   const tab = String(new URLSearchParams(location.search || '').get('tab') || '').toLowerCase();
-  const target = (tab === 'visualisations' || tab === 'visualizations') ? document.getElementById('sourcesVisualisationsTab') : null;
+  const target =
+    tab === 'visualisations' || tab === 'visualizations'
+      ? document.getElementById('sourcesVisualisationsTab')
+      : null;
   if (target && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(target).show();
 }
 
 for (const btn of Array.from(document.querySelectorAll('#sourcesTabs [data-bs-toggle="tab"]'))) {
   btn.addEventListener('shown.bs.tab', () => {
-    const name = String(btn.id || '').replace(/^sources/, '').replace(/Tab$/, '').toLowerCase();
+    const name = String(btn.id || '')
+      .replace(/^sources/, '')
+      .replace(/Tab$/, '')
+      .toLowerCase();
     const url = new URL(window.location.href);
     if (name && name !== 'register') url.searchParams.set('tab', name);
     else url.searchParams.delete('tab');
@@ -101,5 +122,7 @@ for (const btn of Array.from(document.querySelectorAll('#sourcesTabs [data-bs-to
   });
 }
 
-document.getElementById('reload').addEventListener('click', async () => { await load().then(activateInitialTab); });
+document.getElementById('reload').addEventListener('click', async () => {
+  await load().then(activateInitialTab);
+});
 load().then(activateInitialTab);

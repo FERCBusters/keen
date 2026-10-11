@@ -11,3 +11,6 @@ test-results/
 .coverage.*
 htmlcov/
 .ruff_cache
+/services/ui/dist/
+*.orig
+*.rej

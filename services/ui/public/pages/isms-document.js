@@ -1,4 +1,4 @@
-import {safeExternalHref} from '/app.js';
+import { safeExternalHref } from '/app.js';
 import {
   initNavbar,
   apiGet,
@@ -13,7 +13,11 @@ import {
   loadEntityChangelog,
   renderRichTextContent,
 } from '/app.js';
-import {activateTabFromHashOrQuery, clauseBadges, controlBadges} from '/pages/isms-detail-common.js';
+import {
+  activateTabFromHashOrQuery,
+  clauseBadges,
+  controlBadges,
+} from '/pages/isms-detail-common.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -38,7 +42,14 @@ function renderDocument(row) {
   const title = documentRow.title || 'Policy / Process';
   document.title = `Keen – ${title}`;
   $('documentTitle').textContent = title;
-  $('documentMeta').textContent = [documentRow.document_type || 'document', documentRow.has_file ? 'uploaded file' : '', documentRow.external_url ? 'external URL' : '', `updated ${fmtTs(documentRow.updated_at) || '—'}`].filter(Boolean).join(' • ');
+  $('documentMeta').textContent = [
+    documentRow.document_type || 'document',
+    documentRow.has_file ? 'uploaded file' : '',
+    documentRow.external_url ? 'external URL' : '',
+    `updated ${fmtTs(documentRow.updated_at) || '—'}`,
+  ]
+    .filter(Boolean)
+    .join(' • ');
   $('documentDescription').textContent = documentRow.description || 'No description recorded.';
   $('documentContentCard').hidden = !documentRow.content_html;
   $('documentContent').innerHTML = renderRichTextContent(documentRow.content_html);
@@ -52,8 +63,12 @@ function renderDocument(row) {
 
   const external = documentRow.external_url || '';
   const file = fileHref(documentRow);
-  $('documentUrl').innerHTML = external ? `<a href="${esc(safeExternalHref(external) || '#')}" target="_blank" rel="noopener noreferrer">${esc(external)}</a>` : '<span class="small-muted">—</span>';
-  $('documentFile').innerHTML = file ? `<a href="${esc(file)}" target="_blank" rel="noopener noreferrer">${esc(documentRow.filename || 'Uploaded file')}</a>` : '<span class="small-muted">—</span>';
+  $('documentUrl').innerHTML = external
+    ? `<a href="${esc(safeExternalHref(external) || '#')}" target="_blank" rel="noopener noreferrer">${esc(external)}</a>`
+    : '<span class="small-muted">—</span>';
+  $('documentFile').innerHTML = file
+    ? `<a href="${esc(file)}" target="_blank" rel="noopener noreferrer">${esc(documentRow.filename || 'Uploaded file')}</a>`
+    : '<span class="small-muted">—</span>';
 
   const open = $('openDocumentLink');
   if (open) {
@@ -63,7 +78,10 @@ function renderDocument(row) {
   }
   const edit = $('editDocumentLink');
   if (edit) {
-    edit.href = withFramework(`/isms.html?tab=documents&edit=document:${encodeURIComponent(documentRow.id || '')}`, framework);
+    edit.href = withFramework(
+      `/isms.html?tab=documents&edit=document:${encodeURIComponent(documentRow.id || '')}`,
+      framework,
+    );
     edit.style.display = canManageIsms ? '' : 'none';
   }
   const sample = $('sampleDocumentAudit');
@@ -74,7 +92,7 @@ async function loadChangelog() {
   await loadEntityChangelog(
     $('documentChangelog'),
     `/api/v1/isms/document/${encodeURIComponent(documentId)}/changelog?limit=100`,
-    {empty: 'No document changes have been recorded yet.'}
+    { empty: 'No document changes have been recorded yet.' },
   );
 }
 
@@ -84,10 +102,12 @@ async function load() {
     return;
   }
   try {
-    const row = await apiGet(`/api/v1/isms/documents/${encodeURIComponent(documentId)}?framework=${encodeURIComponent(framework)}`);
+    const row = await apiGet(
+      `/api/v1/isms/documents/${encodeURIComponent(documentId)}?framework=${encodeURIComponent(framework)}`,
+    );
     renderDocument(row);
     await loadChangelog();
-    activateTabFromHashOrQuery(params, {changelog: $('documentChangelogTab')});
+    activateTabFromHashOrQuery(params, { changelog: $('documentChangelogTab') });
   } catch (e) {
     toast(status, `Failed to load document: ${String(e)}`, 'danger');
   }
@@ -106,5 +126,7 @@ $('sampleDocumentAudit')?.addEventListener('click', () => {
   });
 });
 
-window.addEventListener('hashchange', () => activateTabFromHashOrQuery(params, {changelog: $('documentChangelogTab')}));
+window.addEventListener('hashchange', () =>
+  activateTabFromHashOrQuery(params, { changelog: $('documentChangelogTab') }),
+);
 load();

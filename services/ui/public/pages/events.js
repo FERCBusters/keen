@@ -49,9 +49,7 @@ try {
   // non-fatal
 }
 
-
-const autoApplyFilters = !!(me?.preferences?.auto_apply_filters);
-
+const autoApplyFilters = !!me?.preferences?.auto_apply_filters;
 
 const status = document.getElementById('status');
 const tbody = document.getElementById('rows');
@@ -74,7 +72,10 @@ function controlHeading(ref) {
         let t = String(opt.textContent || '').trim();
         t = t.replace(/\s*\(\d+\)\s*$/, '').trim(); // strip trailing counts
         t = t.replace(/^Current filter:\s*/i, '').trim();
-        const parts = t.split('—').map((x) => x.trim()).filter(Boolean);
+        const parts = t
+          .split('—')
+          .map((x) => x.trim())
+          .filter(Boolean);
         // Option text is usually: "A.8.6 — Secure coding" → extract the title part
         if (parts.length >= 2) title = parts.slice(1).join(' — ');
       }
@@ -87,10 +88,13 @@ function controlHeading(ref) {
   return title ? `${r} — ${title}` : r;
 }
 
-function updatePageTitle({source, control, clause} = {}) {
-  const src = source !== undefined ? String(source || '').trim() : String(state.source || '').trim();
-  const ctl = control !== undefined ? String(control || '').trim() : String(state.control || '').trim();
-  const cls = clause !== undefined ? String(clause || '').trim() : String(state.clause || '').trim();
+function updatePageTitle({ source, control, clause } = {}) {
+  const src =
+    source !== undefined ? String(source || '').trim() : String(state.source || '').trim();
+  const ctl =
+    control !== undefined ? String(control || '').trim() : String(state.control || '').trim();
+  const cls =
+    clause !== undefined ? String(clause || '').trim() : String(state.clause || '').trim();
 
   const srcLabel = src ? String(sourceLabel(src, sourceMeta) || src).trim() : '';
   const ctlLabel = ctl ? controlHeading(ctl) : '';
@@ -109,7 +113,7 @@ function updatePageTitle({source, control, clause} = {}) {
 }
 
 function updatePageTitleFromInputs() {
-  updatePageTitle({source: selSource?.value || '', control: selControl?.value || ''});
+  updatePageTitle({ source: selSource?.value || '', control: selControl?.value || '' });
 }
 
 const inpQ = document.getElementById('q');
@@ -180,7 +184,7 @@ function parseIsoTs(v) {
 
   let raw = raw0;
   // If the user supplied a timestamp without timezone, treat it as UTC.
-  if (/^\d{4}-\d{2}-\d{2}T/.test(raw) && !(/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw))) {
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw) && !/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)) {
     raw = `${raw}Z`;
   }
 
@@ -193,10 +197,10 @@ function parseIsoTs(v) {
 function normalizeDateRange(a, b) {
   const s = (a || '').trim();
   const e = (b || '').trim();
-  if (!s && !e) return {start: '', end: ''};
+  if (!s && !e) return { start: '', end: '' };
   // Compare YYYY-MM-DD lexicographically.
-  if (s && e && s > e) return {start: e, end: s};
-  return {start: s, end: e};
+  if (s && e && s > e) return { start: e, end: s };
+  return { start: s, end: e };
 }
 
 function buildEventsHref(overrides = {}) {
@@ -260,13 +264,13 @@ async function loadSources() {
       };
     }
     const opts = items
-        .map((x) => {
-          const src = x.source;
-          const label = String(x.label || sourceLabel(src, sourceMeta) || src);
-          const text = label && label !== src ? `${label} (${src})` : src;
-          return `<option value="${esc(src)}">${esc(text)}</option>`;
-        })
-        .join('');
+      .map((x) => {
+        const src = x.source;
+        const label = String(x.label || sourceLabel(src, sourceMeta) || src);
+        const text = label && label !== src ? `${label} (${src})` : src;
+        return `<option value="${esc(src)}">${esc(text)}</option>`;
+      })
+      .join('');
     selSource.innerHTML = `<option value="">All sources</option>` + opts;
     if (state.source) selSource.value = state.source;
   } catch {
@@ -276,14 +280,16 @@ async function loadSources() {
 
 async function loadControls() {
   try {
-    const data = await apiGet(`/api/v1/controls?limit=5000&framework=${encodeURIComponent(framework)}`);
+    const data = await apiGet(
+      `/api/v1/controls?limit=5000&framework=${encodeURIComponent(framework)}`,
+    );
     const items = (data.items || []).filter((c) => c.ref);
 
     controlsIndex = {};
     for (const c of items) {
       const ref = String(c.ref || '').trim();
       if (!ref) continue;
-      controlsIndex[ref] = {ref, title: String(c.title || '').trim(), type: c.type || 'control'};
+      controlsIndex[ref] = { ref, title: String(c.title || '').trim(), type: c.type || 'control' };
     }
 
     const byType = {};
@@ -300,17 +306,19 @@ async function loadControls() {
     for (const t of types) {
       const group = byType[t];
       const options = group
-          .map((c) => {
-            const label = c.title ? `${c.ref} — ${c.title}` : c.ref;
-            return `<option value="${esc(c.ref)}">${esc(label)}</option>`;
-          })
-          .join('');
+        .map((c) => {
+          const label = c.title ? `${c.ref} — ${c.title}` : c.ref;
+          return `<option value="${esc(c.ref)}">${esc(label)}</option>`;
+        })
+        .join('');
       html += `<optgroup label="${esc(t)}">${options}</optgroup>`;
     }
 
     // Preserve a UUID/ref filter that isn't in the current controls list (rare, but possible)
     if (state.control && !knownRefs.has(state.control)) {
-      html = `<option value="${esc(state.control)}">Current filter: ${esc(state.control)}</option>` + html;
+      html =
+        `<option value="${esc(state.control)}">Current filter: ${esc(state.control)}</option>` +
+        html;
     }
 
     selControl.innerHTML = html;
@@ -328,18 +336,17 @@ async function loadControls() {
   }
 }
 
-
 function renderSourceOptions(facets) {
   const current = state.source || '';
   const rows = Array.isArray(facets) ? facets : [];
   const counts = new Map(rows.map((r) => [String(r.source), Number(r.count || 0)]));
 
   const items = rows
-      .filter((r) => r && r.source && Number(r.count || 0) > 0)
-      .map((r) => ({
-        source: String(r.source),
-        count: Number(r.count || 0),
-      }));
+    .filter((r) => r && r.source && Number(r.count || 0) > 0)
+    .map((r) => ({
+      source: String(r.source),
+      count: Number(r.count || 0),
+    }));
 
   let html = '<option value="">All sources</option>';
 
@@ -374,7 +381,7 @@ function renderControlOptions(facets) {
     if (count <= 0) continue;
     const ty = String(r.type || controlsIndex[ref]?.type || 'control');
     byType[ty] = byType[ty] || [];
-    byType[ty].push({ref, title: String(r.title || controlsIndex[ref]?.title || ''), count});
+    byType[ty].push({ ref, title: String(r.title || controlsIndex[ref]?.title || ''), count });
   }
 
   let html = '<option value="">All controls</option>';
@@ -387,12 +394,12 @@ function renderControlOptions(facets) {
   const types = Object.keys(byType).sort();
   for (const ty of types) {
     const opts = byType[ty]
-        .sort((a, b) => (b.count - a.count) || a.ref.localeCompare(b.ref))
-        .map((c) => {
-          const label = c.title ? `${c.ref} — ${c.title}` : c.ref;
-          return `<option value="${esc(c.ref)}">${esc(label)} (${c.count})</option>`;
-        })
-        .join('');
+      .sort((a, b) => b.count - a.count || a.ref.localeCompare(b.ref))
+      .map((c) => {
+        const label = c.title ? `${c.ref} — ${c.title}` : c.ref;
+        return `<option value="${esc(c.ref)}">${esc(label)} (${c.count})</option>`;
+      })
+      .join('');
     html += `<optgroup label="${esc(ty)}">${opts}</optgroup>`;
   }
 
@@ -461,22 +468,29 @@ function renderRows(items) {
 
     const controlsHtml =
       shown
-          .map(
-              (c) =>
-                `<a class="badge badge-soft me-1 mb-1" href="${withFramework(`/control.html?id=${encodeURIComponent(
-                    c.id
-                )}`, framework)}" title="${esc(c.title || '')}">${esc(c.ref)}</a>`
-          )
-          .join('') + (more ? `<span class="badge text-bg-light">+${more}</span>` : '');
+        .map(
+          (c) =>
+            `<a class="badge badge-soft me-1 mb-1" href="${withFramework(
+              `/control.html?id=${encodeURIComponent(c.id)}`,
+              framework,
+            )}" title="${esc(c.title || '')}">${esc(c.ref)}</a>`,
+        )
+        .join('') + (more ? `<span class="badge text-bg-light">+${more}</span>` : '');
 
-    const sourceHref = e.source ? withFramework(`/source.html?source=${encodeURIComponent(e.source)}`, framework) : '';
-    const sourceHtml = (e.source ? sourceBadgeHtml(e.source, sourceMeta, sourceHref) : '') + (e.connection_id ? `<div class="small text-muted" title="${esc(e.connection_id)}">${esc(e.connection_name || e.connection_id)}</div>` : '');
+    const sourceHref = e.source
+      ? withFramework(`/source.html?source=${encodeURIComponent(e.source)}`, framework)
+      : '';
+    const sourceHtml =
+      (e.source ? sourceBadgeHtml(e.source, sourceMeta, sourceHref) : '') +
+      (e.connection_id
+        ? `<div class="small text-muted" title="${esc(e.connection_id)}">${esc(e.connection_name || e.connection_id)}</div>`
+        : '');
 
-    const artifactHtml = e.artifact_count ?
-      `<span class="badge badge-soft">${e.artifact_count}</span>` :
-      `<span class="badge text-bg-light">0</span>`;
+    const artifactHtml = e.artifact_count
+      ? `<span class="badge badge-soft">${e.artifact_count}</span>`
+      : `<span class="badge text-bg-light">0</span>`;
 
-    const linksHtml = upstreamLinkHtml(e.source_url, {title: 'Open source event'});
+    const linksHtml = upstreamLinkHtml(e.source_url, { title: 'Open source event' });
 
     const tr = document.createElement('tr');
 
@@ -490,8 +504,8 @@ function renderRows(items) {
       <td data-sort="${esc(e.source || '')}">${sourceHtml}</td>
       <td class="small-muted" data-sort="${esc(context)}">${context ? esc(context) : ''}</td>
       <td class="wrap"><a href="${withFramework(`/event.html?id=${encodeURIComponent(e.id)}`, framework)}" class="fw-semibold" title="${esc(
-    e.summary || '(no summary)'
-)}">${esc(shorten(e.summary || '(no summary)', 160))}</a></td>
+        e.summary || '(no summary)',
+      )}">${esc(shorten(e.summary || '(no summary)', 160))}</a></td>
       <td class="wrap">${controlsHtml}</td>
       <td class="text-center">${linksHtml}</td>
       <td data-sort="${esc(e.artifact_count || 0)}">${artifactHtml}</td>
@@ -529,7 +543,10 @@ async function loadEvents() {
     state.total = data.total || 0;
 
     const page = offsetPagerState(state);
-    const timeNote = (state.start_ts && state.end_ts) ? ` • window ${fmtTs(state.start_ts)}–${fmtTs(state.end_ts)}` : '';
+    const timeNote =
+      state.start_ts && state.end_ts
+        ? ` • window ${fmtTs(state.start_ts)}–${fmtTs(state.end_ts)}`
+        : '';
     meta.textContent = `${page.start}–${page.end} of ${page.total}${timeNote}`;
 
     renderRows(data.items || []);
@@ -538,7 +555,8 @@ async function loadEvents() {
   } catch (e) {
     toast(status, `Failed to load events: ${String(e)}`, 'danger');
     meta.textContent = '—';
-    tbody.innerHTML = '<tr><td colspan="7" class="small-muted p-4">Failed to load events.</td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="7" class="small-muted p-4">Failed to load events.</td></tr>';
   }
 }
 
@@ -563,7 +581,7 @@ function applyFromInputs(resetOffset = true) {
       if (iso) {
         startDate.value = iso;
       } else {
-        toast(status, 'Invalid \'From\' date. Use dd/mm/yyyy.', 'warning');
+        toast(status, "Invalid 'From' date. Use dd/mm/yyyy.", 'warning');
         // keep previous hidden value
       }
     }
@@ -576,7 +594,7 @@ function applyFromInputs(resetOffset = true) {
       if (iso) {
         endDate.value = iso;
       } else {
-        toast(status, 'Invalid \'To\' date. Use dd/mm/yyyy.', 'warning');
+        toast(status, "Invalid 'To' date. Use dd/mm/yyyy.", 'warning');
         // keep previous hidden value
       }
     }
@@ -590,11 +608,11 @@ function applyFromInputs(resetOffset = true) {
   let endIso = endRaw ? parseIsoDate(endRaw) : '';
 
   if (startRaw && !startIso) {
-    toast(status, 'Invalid \'From\' date. Use dd/mm/yyyy.', 'warning');
+    toast(status, "Invalid 'From' date. Use dd/mm/yyyy.", 'warning');
     startIso = state.start_date || '';
   }
   if (endRaw && !endIso) {
-    toast(status, 'Invalid \'To\' date. Use dd/mm/yyyy.', 'warning');
+    toast(status, "Invalid 'To' date. Use dd/mm/yyyy.", 'warning');
     endIso = state.end_date || '';
   }
 
@@ -604,7 +622,8 @@ function applyFromInputs(resetOffset = true) {
 
   // If the user changed the day-range controls, drop any precise time window
   // (start_ts/end_ts) because there is no time-based UI on this page.
-  const dateChanged = (state.start_date || '') !== prevStartDate || (state.end_date || '') !== prevEndDate;
+  const dateChanged =
+    (state.start_date || '') !== prevStartDate || (state.end_date || '') !== prevEndDate;
   if (dateChanged) {
     state.start_ts = '';
     state.end_ts = '';
@@ -665,7 +684,20 @@ document.getElementById('reset').addEventListener('click', () => {
   if (startDateDmy) startDateDmy.value = '';
   if (endDateDmy) endDateDmy.value = '';
   selLimit.value = '50';
-  state = {...state, q: '', source: '', control: '', clause: '', unmapped: false, start_date: '', end_date: '', start_ts: '', end_ts: '', limit: 50, offset: 0};
+  state = {
+    ...state,
+    q: '',
+    source: '',
+    control: '',
+    clause: '',
+    unmapped: false,
+    start_date: '',
+    end_date: '',
+    start_ts: '',
+    end_ts: '',
+    limit: 50,
+    offset: 0,
+  };
   reloadWithFacets(true);
 });
 
@@ -705,7 +737,6 @@ if (autoApplyFilters) {
   startDate?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
   endDate?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
 }
-
 
 let exportInFlight = false;
 
@@ -749,15 +780,23 @@ function exportEvents(fmt) {
 }
 
 exportCsvBtn?.addEventListener('click', (ev) => {
-  ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.(); exportEvents('csv');
+  ev.preventDefault();
+  ev.stopPropagation();
+  ev.stopImmediatePropagation?.();
+  exportEvents('csv');
 });
 exportJsonBtn?.addEventListener('click', (ev) => {
-  ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.(); exportEvents('json');
+  ev.preventDefault();
+  ev.stopPropagation();
+  ev.stopImmediatePropagation?.();
+  exportEvents('json');
 });
 exportNdjsonBtn?.addEventListener('click', (ev) => {
-  ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation?.(); exportEvents('ndjson');
+  ev.preventDefault();
+  ev.stopPropagation();
+  ev.stopImmediatePropagation?.();
+  exportEvents('ndjson');
 });
-
 
 document.getElementById('saveSearch').addEventListener('click', async () => {
   // Sync current inputs to state + URL
@@ -789,7 +828,7 @@ document.getElementById('saveSearch').addEventListener('click', async () => {
   if (!name) return;
 
   try {
-    await apiPost('/api/v1/me/saved-searches', {name, url});
+    await apiPost('/api/v1/me/saved-searches', { name, url });
     toast(status, 'Saved', 'success');
   } catch (e) {
     toast(status, `Failed to save: ${String(e)}`, 'danger');
@@ -798,9 +837,8 @@ document.getElementById('saveSearch').addEventListener('click', async () => {
 
 // Pager listeners (bind to BOTH top + bottom)
 wireOffsetPagerButtons(pagerButtons, (direction) => {
-  state.offset = direction === 'prev'
-    ? Math.max(0, state.offset - state.limit)
-    : state.offset + state.limit;
+  state.offset =
+    direction === 'prev' ? Math.max(0, state.offset - state.limit) : state.offset + state.limit;
   applyFromInputs(false);
   loadEvents();
 });
@@ -811,8 +849,8 @@ selLimit.addEventListener('change', () => {
 
 // Date helpers: open native picker via the hidden <input type="date">, but
 // display dd/mm/yyyy in the visible text boxes.
-wireIsoDmyDateField(startDate, startDateDmy, startDatePick, {dispatchChangeOnText: false});
-wireIsoDmyDateField(endDate, endDateDmy, endDatePick, {dispatchChangeOnText: false});
+wireIsoDmyDateField(startDate, startDateDmy, startDatePick, { dispatchChangeOnText: false });
+wireIsoDmyDateField(endDate, endDateDmy, endDatePick, { dispatchChangeOnText: false });
 
 // Init from query
 syncInputs();

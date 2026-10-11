@@ -3,3 +3,11 @@ repos:
     rev: v0.17.0
     hooks:
       - id: ruff-format
+  - repo: local
+    hooks:
+      - id: frontend-format
+        name: Format first-party JavaScript and CSS
+        entry: bash format-ui.sh --write
+        language: system
+        files: '^services/ui/.*\.(js|mjs|css)$'
+        exclude: '/(vendor|node_modules|dist)/|\.min\.(js|css)$'

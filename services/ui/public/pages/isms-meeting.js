@@ -1,4 +1,4 @@
-import {safeExternalHref} from '/app.js';
+import { safeExternalHref } from '/app.js';
 import {
   initNavbar,
   apiGet,
@@ -28,27 +28,40 @@ function personBadges(list) {
 function badgeList(items, labelKey = 'ref', urlFn = null) {
   const arr = Array.isArray(items) ? items : [];
   if (!arr.length) return '<span class="small-muted">—</span>';
-  return arr.map((it) => {
-    const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
-    const title = String(it?.title || it?.name || label);
-    const href = urlFn ? urlFn(it) : '';
-    if (href) return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(title)}">${esc(label)}</a>`;
-    return `<span class="badge badge-soft me-1 mb-1" title="${esc(title)}">${esc(label)}</span>`;
-  }).join('');
+  return arr
+    .map((it) => {
+      const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
+      const title = String(it?.title || it?.name || label);
+      const href = urlFn ? urlFn(it) : '';
+      if (href)
+        return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(title)}">${esc(label)}</a>`;
+      return `<span class="badge badge-soft me-1 mb-1" title="${esc(title)}">${esc(label)}</span>`;
+    })
+    .join('');
 }
 
 function controlBadges(items) {
-  return badgeList(items, 'ref', (c) => withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework));
+  return badgeList(items, 'ref', (c) =>
+    withFramework(
+      `/control.html?id=${encodeURIComponent(c.id)}&tab=isms`,
+      c.framework || framework,
+    ),
+  );
 }
 
 function clauseBadges(items) {
-  return badgeList(items, 'ref', (c) => withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework));
+  return badgeList(items, 'ref', (c) =>
+    withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework),
+  );
 }
 
 function linkHtml(link) {
   if (link?.link_type === 'isms_document' && link.document) {
     const doc = link.document;
-    const href = withFramework(`/isms-document.html?id=${encodeURIComponent(doc.id || link.document_id || '')}`, framework);
+    const href = withFramework(
+      `/isms-document.html?id=${encodeURIComponent(doc.id || link.document_id || '')}`,
+      framework,
+    );
     return `<li><a href="${esc(href)}">${esc(doc.title || link.title || 'ISMS document')}</a><span class="small-muted ms-2">ISMS document</span></li>`;
   }
   if (link?.url) {
@@ -57,19 +70,19 @@ function linkHtml(link) {
   return '';
 }
 
-
 function renderMeetingNotes(text) {
   return renderRichTextContent(text, '<p>No agenda/minutes/notes recorded.</p>');
 }
-
 
 function renderMeeting(meeting) {
   const title = meeting.title || 'Meeting minutes';
   document.title = `Keen – ${title}`;
   $('meetingTitle').textContent = title;
-  $('meetingMeta').textContent = `${meeting.date || 'No date'} • ${[meeting.start_time, meeting.end_time].filter(Boolean).join('–') || 'No time recorded'}`;
+  $('meetingMeta').textContent =
+    `${meeting.date || 'No date'} • ${[meeting.start_time, meeting.end_time].filter(Boolean).join('–') || 'No time recorded'}`;
   $('meetingDate').textContent = meeting.date || '—';
-  $('meetingTime').textContent = [meeting.start_time, meeting.end_time].filter(Boolean).join('–') || '—';
+  $('meetingTime').textContent =
+    [meeting.start_time, meeting.end_time].filter(Boolean).join('–') || '—';
   $('meetingAttendees').innerHTML = personBadges(meeting.attendees);
   $('meetingApologies').innerHTML = personBadges(meeting.apologies);
   $('meetingUpdated').textContent = fmtTs(meeting.updated_at) || '—';
@@ -81,7 +94,10 @@ function renderMeeting(meeting) {
   $('meetingClauses').innerHTML = clauseBadges(meeting.clauses);
   const edit = $('editMeetingLink');
   if (edit) {
-    edit.href = withFramework(`/isms.html?tab=meetings&edit=meeting:${encodeURIComponent(meeting.id)}`, framework);
+    edit.href = withFramework(
+      `/isms.html?tab=meetings&edit=meeting:${encodeURIComponent(meeting.id)}`,
+      framework,
+    );
     edit.style.display = canManageIsms ? '' : 'none';
   }
 }
@@ -90,7 +106,7 @@ async function loadChangelog() {
   await loadEntityChangelog(
     $('meetingChangelog'),
     `/api/v1/isms/meeting/${encodeURIComponent(meetingId)}/changelog?limit=100`,
-    {empty: 'No meeting changes have been recorded yet.'}
+    { empty: 'No meeting changes have been recorded yet.' },
   );
 }
 
@@ -106,7 +122,9 @@ async function load() {
     return;
   }
   try {
-    const meeting = await apiGet(`/api/v1/isms/meetings/${encodeURIComponent(meetingId)}?framework=${encodeURIComponent(framework)}`);
+    const meeting = await apiGet(
+      `/api/v1/isms/meetings/${encodeURIComponent(meetingId)}?framework=${encodeURIComponent(framework)}`,
+    );
     renderMeeting(meeting);
     await loadChangelog();
     activateTabFromHashOrQuery();

@@ -27,7 +27,13 @@ enableTableSorting();
 const framework = getCurrentFramework();
 const params = new URLSearchParams(window.location.search || '');
 const sourceName = String(params.get('source') || params.get('type') || '').trim();
-const canViewIsms = !!(me?.is_admin || me?.can_view_isms || me?.can_manage_isms || me?.can_view_risks || me?.can_manage_risks);
+const canViewIsms = !!(
+  me?.is_admin ||
+  me?.can_view_isms ||
+  me?.can_manage_isms ||
+  me?.can_view_risks ||
+  me?.can_manage_risks
+);
 
 const status = document.getElementById('status');
 const sourceTitle = document.getElementById('sourceTitle');
@@ -83,7 +89,7 @@ function sourcePageHref(src = sourceName, overrides = {}) {
   return `/source.html?${p.toString()}`;
 }
 
-function eventsHref({unmapped = false} = {}) {
+function eventsHref({ unmapped = false } = {}) {
   const p = new URLSearchParams();
   if (framework) p.set('framework', framework);
   if (sourceName) p.set('source', sourceName);
@@ -109,8 +115,10 @@ function updateQuery() {
 
 function syncInputs() {
   if (eventQ) eventQ.value = state.q || '';
-  if (eventStartDate) eventStartDate.value = /^\d{4}-\d{2}-\d{2}$/.test(state.start_date) ? state.start_date : '';
-  if (eventEndDate) eventEndDate.value = /^\d{4}-\d{2}-\d{2}$/.test(state.end_date) ? state.end_date : '';
+  if (eventStartDate)
+    eventStartDate.value = /^\d{4}-\d{2}-\d{2}$/.test(state.start_date) ? state.start_date : '';
+  if (eventEndDate)
+    eventEndDate.value = /^\d{4}-\d{2}-\d{2}$/.test(state.end_date) ? state.end_date : '';
   if (eventLimit) eventLimit.value = String(state.limit);
   if (eventUnmapped) eventUnmapped.checked = !!state.unmapped;
 }
@@ -122,7 +130,7 @@ function renderSourceChrome(row = null) {
     return;
   }
   const label = sourceLabel(sourceName, sourceMeta) || sourceName;
-  sourceTitle.innerHTML = `${sourceBadgeHtml(sourceName, sourceMeta, sourcePageHref(sourceName, {tab: 'events', q: '', start_date: '', end_date: '', unmapped: false, offset: 0}))} <span class="ms-2 align-middle">${esc(label)}</span>`;
+  sourceTitle.innerHTML = `${sourceBadgeHtml(sourceName, sourceMeta, sourcePageHref(sourceName, { tab: 'events', q: '', start_date: '', end_date: '', unmapped: false, offset: 0 }))} <span class="ms-2 align-middle">${esc(label)}</span>`;
   document.title = `Keen – ${label}`;
   if (row) {
     sourceMetaEl.textContent = `${Number(row.total_events || 0).toLocaleString()} events • ${Number(row.mapped_events || 0).toLocaleString()} mapped • ${Number(row.unmapped_events || 0).toLocaleString()} unmapped • last seen ${fmtTs(row.last_seen) || '—'}`;
@@ -130,7 +138,7 @@ function renderSourceChrome(row = null) {
     sourceMetaEl.textContent = 'Source summary unavailable.';
   }
   if (openEventsLink) openEventsLink.href = eventsHref();
-  if (openUnmappedLink) openUnmappedLink.href = eventsHref({unmapped: true});
+  if (openUnmappedLink) openUnmappedLink.href = eventsHref({ unmapped: true });
 }
 
 async function loadSourceMeta() {
@@ -141,7 +149,11 @@ async function loadSourceMeta() {
     for (const x of data.items || []) {
       const src = String(x.source || '').trim();
       if (!src) continue;
-      sourceMeta[src] = {source: src, label: String(x.label || src).trim() || src, color: String(x.color || '').trim()};
+      sourceMeta[src] = {
+        source: src,
+        label: String(x.label || src).trim() || src,
+        color: String(x.color || '').trim(),
+      };
       if (src === sourceName) current = x;
     }
     renderSourceChrome(current);
@@ -155,8 +167,18 @@ function controlBadges(controls) {
   const arr = Array.isArray(controls) ? controls : [];
   if (!arr.length) return '<span class="small-muted">—</span>';
   const shown = arr.slice(0, 5);
-  const more = arr.length > shown.length ? `<span class="badge text-bg-light">+${arr.length - shown.length}</span>` : '';
-  return shown.map((c) => `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`).join('') + more;
+  const more =
+    arr.length > shown.length
+      ? `<span class="badge text-bg-light">+${arr.length - shown.length}</span>`
+      : '';
+  return (
+    shown
+      .map(
+        (c) =>
+          `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`,
+      )
+      .join('') + more
+  );
 }
 
 function eventUuidLink(e) {
@@ -167,12 +189,16 @@ function eventUuidLink(e) {
 }
 
 function renderEvents(items) {
-  eventRows.innerHTML = (items || []).map((e) => {
-    const eventHref = withFramework(`/event.html?id=${encodeURIComponent(e.id)}`, framework);
-    const linksHtml = upstreamLinkHtml(e.source_url, {title: 'Open source event'});
-    const artifacts = e.artifact_count ? `<span class="badge badge-soft">${esc(e.artifact_count)}</span>` : '<span class="badge text-bg-light">0</span>';
-    const context = e.identifier ?? e.system ?? '';
-    return `<tr>
+  eventRows.innerHTML =
+    (items || [])
+      .map((e) => {
+        const eventHref = withFramework(`/event.html?id=${encodeURIComponent(e.id)}`, framework);
+        const linksHtml = upstreamLinkHtml(e.source_url, { title: 'Open source event' });
+        const artifacts = e.artifact_count
+          ? `<span class="badge badge-soft">${esc(e.artifact_count)}</span>`
+          : '<span class="badge text-bg-light">0</span>';
+        const context = e.identifier ?? e.system ?? '';
+        return `<tr>
       <td class="small-muted" data-sort="${esc(tsSortKey(e.timestamp))}">${esc(fmtTs(e.timestamp) || '—')}</td>
       <td data-sort="${esc(e.id || '')}">${eventUuidLink(e)}</td>
       <td class="small-muted" data-sort="${esc(context)}">${context ? esc(shorten(context, 90)) : '—'}</td>
@@ -181,7 +207,9 @@ function renderEvents(items) {
       <td class="text-center">${linksHtml}</td>
       <td data-sort="${esc(e.artifact_count || 0)}">${artifacts}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="7" class="p-4 small-muted">No events match this source and filter set.</td></tr>';
+      })
+      .join('') ||
+    '<tr><td colspan="7" class="p-4 small-muted">No events match this source and filter set.</td></tr>';
 }
 
 async function loadEvents() {
@@ -207,7 +235,8 @@ async function loadEvents() {
   } catch (e) {
     toast(status, `Failed to load source events: ${String(e)}`, 'danger');
     eventResultMeta.textContent = '—';
-    eventRows.innerHTML = '<tr><td colspan="7" class="p-4 text-danger">Failed to load source events.</td></tr>';
+    eventRows.innerHTML =
+      '<tr><td colspan="7" class="p-4 text-danger">Failed to load source events.</td></tr>';
   }
 }
 
@@ -230,19 +259,31 @@ function applyEventFilters(resetOffset = true) {
 }
 
 function measureHref(item) {
-  return withFramework(`/isms-effectiveness-measure.html?id=${encodeURIComponent(item?.id || '')}`, framework);
+  return withFramework(
+    `/isms-effectiveness-measure.html?id=${encodeURIComponent(item?.id || '')}`,
+    framework,
+  );
 }
 
 function controlsHtml(items) {
   const arr = Array.isArray(items) ? items : [];
   if (!arr.length) return '<span class="small-muted">—</span>';
-  return arr.map((c) => `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`).join('');
+  return arr
+    .map(
+      (c) =>
+        `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`,
+    )
+    .join('');
 }
 
 function latestEntryForSource(item) {
   const entries = Array.isArray(item?.metric_entries) ? item.metric_entries : [];
-  return entries.filter((entry) => String(entry?.source_type || '') === sourceName)
-      .sort((a, b) => String(b.recorded_at || '').localeCompare(String(a.recorded_at || '')))[0] || null;
+  return (
+    entries
+      .filter((entry) => String(entry?.source_type || '') === sourceName)
+      .sort((a, b) => String(b.recorded_at || '').localeCompare(String(a.recorded_at || '')))[0] ||
+    null
+  );
 }
 
 function entryValueHtml(entry, measure) {
@@ -253,7 +294,7 @@ function entryValueHtml(entry, measure) {
   const eventLink = entry.source_event_id
     ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>`
     : '';
-  const valueHtml = effectivenessMetricValueHtml(entry, measure, {fallback: 'Metric entry'});
+  const valueHtml = effectivenessMetricValueHtml(entry, measure, { fallback: 'Metric entry' });
   const thresholdHtml = effectivenessMetricThresholdBadgeHtml(measure, entry);
   return `<div>${valueHtml}${thresholdHtml}${entry.period ? `<span class="small-muted ms-2">${esc(entry.period)}</span>` : ''}</div><div class="small-muted">${source}${entry.source_reference ? ` · ${esc(entry.source_reference)}` : ''}${eventLink}</div>`;
 }
@@ -271,20 +312,26 @@ function renderEffectiveness(items) {
     </tr>`);
   }
   effectivenessMeta.textContent = `Measures with metric entries recorded against ${sourceName}.`;
-  effectivenessRows.innerHTML = rows.join('') || `<tr><td colspan="4" class="p-4 small-muted">No Effectiveness Measures have metric entries for ${esc(sourceName)}.</td></tr>`;
+  effectivenessRows.innerHTML =
+    rows.join('') ||
+    `<tr><td colspan="4" class="p-4 small-muted">No Effectiveness Measures have metric entries for ${esc(sourceName)}.</td></tr>`;
 }
 
-async function loadEffectiveness({force = false} = {}) {
+async function loadEffectiveness({ force = false } = {}) {
   if (!effectivenessRows || !canViewIsms || !sourceName) return;
   if (effectivenessLoaded && !force) return;
-  effectivenessRows.innerHTML = '<tr><td colspan="4" class="p-4 small-muted">Loading Effectiveness Measures…</td></tr>';
+  effectivenessRows.innerHTML =
+    '<tr><td colspan="4" class="p-4 small-muted">Loading Effectiveness Measures…</td></tr>';
   try {
-    const data = await apiGet(`/api/v1/sources/${encodeURIComponent(sourceName)}/effectiveness-measures?framework=${encodeURIComponent(framework)}`);
+    const data = await apiGet(
+      `/api/v1/sources/${encodeURIComponent(sourceName)}/effectiveness-measures?framework=${encodeURIComponent(framework)}`,
+    );
     renderEffectiveness(data.items || []);
     effectivenessLoaded = true;
   } catch (e) {
     effectivenessLoaded = false;
-    effectivenessRows.innerHTML = '<tr><td colspan="4" class="p-4 text-danger">Failed to load Effectiveness Measures.</td></tr>';
+    effectivenessRows.innerHTML =
+      '<tr><td colspan="4" class="p-4 text-danger">Failed to load Effectiveness Measures.</td></tr>';
   }
 }
 
@@ -297,9 +344,12 @@ function setActiveTabQuery(name) {
 
 function activateInitialTab() {
   const tab = String(new URLSearchParams(location.search || '').get('tab') || '').toLowerCase();
-  const target = tab === 'effectiveness' || tab === 'effectiveness-measures'
-    ? effectivenessTab
-    : (tab === 'visualisations' || tab === 'visualizations' ? visualisationsTab : null);
+  const target =
+    tab === 'effectiveness' || tab === 'effectiveness-measures'
+      ? effectivenessTab
+      : tab === 'visualisations' || tab === 'visualizations'
+        ? visualisationsTab
+        : null;
   if (target && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(target).show();
 }
 
@@ -339,11 +389,22 @@ wireOffsetPagerButtons(pagerButtons, (direction) => {
   loadEvents();
 });
 
-effectivenessTab?.addEventListener('shown.bs.tab', () => { setActiveTabQuery('effectiveness'); loadEffectiveness(); });
+effectivenessTab?.addEventListener('shown.bs.tab', () => {
+  setActiveTabQuery('effectiveness');
+  loadEffectiveness();
+});
 visualisationsTab?.addEventListener('shown.bs.tab', () => setActiveTabQuery('visualisations'));
-document.getElementById('sourceEventsTab')?.addEventListener('shown.bs.tab', () => setActiveTabQuery('events'));
+document
+  .getElementById('sourceEventsTab')
+  ?.addEventListener('shown.bs.tab', () => setActiveTabQuery('events'));
 
-const initialTabName = String(new URLSearchParams(location.search || '').get('tab') || '').toLowerCase();
-if (sourceName && canViewIsms && (initialTabName === 'effectiveness' || initialTabName === 'effectiveness-measures')) {
+const initialTabName = String(
+  new URLSearchParams(location.search || '').get('tab') || '',
+).toLowerCase();
+if (
+  sourceName &&
+  canViewIsms &&
+  (initialTabName === 'effectiveness' || initialTabName === 'effectiveness-measures')
+) {
   loadEffectiveness();
 }

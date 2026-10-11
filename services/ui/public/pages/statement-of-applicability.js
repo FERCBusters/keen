@@ -1,4 +1,4 @@
-import {safeExternalHref} from '/app.js';
+import { safeExternalHref } from '/app.js';
 import {
   initNavbar,
   apiGet,
@@ -40,7 +40,21 @@ const ismsObjectivesFilter = document.getElementById('ismsObjectivesFilter');
 const ismsDocumentsFilter = document.getElementById('ismsDocumentsFilter');
 const ismsEffectivenessFilter = document.getElementById('ismsEffectivenessFilter');
 
-let soa = {controls: [], clauses: [], risks: [], pestle_items: [], business_processes: [], interested_parties: [], isms_objectives: [], isms_documents: [], isms_effectiveness_measures: [], isms_org_nodes: [], isms_assets: [], isms_business_processes: [], counts: {}};
+let soa = {
+  controls: [],
+  clauses: [],
+  risks: [],
+  pestle_items: [],
+  business_processes: [],
+  interested_parties: [],
+  isms_objectives: [],
+  isms_documents: [],
+  isms_effectiveness_measures: [],
+  isms_org_nodes: [],
+  isms_assets: [],
+  isms_business_processes: [],
+  counts: {},
+};
 
 function applicabilityLabel(value) {
   if (value === 'applicable') return 'Applicable';
@@ -56,8 +70,10 @@ function applicabilityShort(value) {
 
 function applicabilityCell(value) {
   const label = applicabilityLabel(value);
-  if (value === 'applicable') return `<span class="badge badge-soft" title="${esc(label)}">A</span>`;
-  if (value === 'partially_applicable') return `<span class="badge text-bg-warning" title="${esc(label)}">P</span>`;
+  if (value === 'applicable')
+    return `<span class="badge badge-soft" title="${esc(label)}">A</span>`;
+  if (value === 'partially_applicable')
+    return `<span class="badge text-bg-warning" title="${esc(label)}">P</span>`;
   return `<span class="small-muted" title="${esc(label)}">—</span>`;
 }
 
@@ -68,53 +84,87 @@ function scopeBadge(control) {
 }
 
 function controlLink(control) {
-  const href = withFramework(`/control.html?id=${encodeURIComponent(control.id)}`, control.framework || framework);
+  const href = withFramework(
+    `/control.html?id=${encodeURIComponent(control.id)}`,
+    control.framework || framework,
+  );
   return `<a href="${esc(href)}">${esc(control.ref || '')}</a>`;
 }
 
 function clauseLink(clause) {
-  const href = withFramework(`/clause.html?id=${encodeURIComponent(clause.id)}`, clause.framework || framework);
+  const href = withFramework(
+    `/clause.html?id=${encodeURIComponent(clause.id)}`,
+    clause.framework || framework,
+  );
   return `<a href="${esc(href)}">${esc(clause.ref || '')}</a>`;
 }
 
 function riskLink(risk) {
   const href = withFramework(`/risk.html?id=${encodeURIComponent(risk.id)}`, framework);
-  const label = [risk.asset, shorten(risk.threat_summary || '', 60)].filter(Boolean).join(' – ') || 'Risk';
+  const label =
+    [risk.asset, shorten(risk.threat_summary || '', 60)].filter(Boolean).join(' – ') || 'Risk';
   return `<a href="${esc(href)}">${esc(label)}</a>`;
 }
 
 function pestleLink(item) {
-  const href = withFramework(`/pestle_item.html?id=${encodeURIComponent(item.id)}`, item.framework || framework);
+  const href = withFramework(
+    `/pestle_item.html?id=${encodeURIComponent(item.id)}`,
+    item.framework || framework,
+  );
   return `<a href="${esc(href)}">${esc(shorten(item.item || 'PESTLE(E) item', 90))}</a>`;
 }
 
 function interestedPartyLink(item) {
-  const href = withFramework(`/interested_party.html?id=${encodeURIComponent(item.id)}`, item.framework || framework);
+  const href = withFramework(
+    `/interested_party.html?id=${encodeURIComponent(item.id)}`,
+    item.framework || framework,
+  );
   return `<a href="${esc(href)}">${esc(item.name?.name || 'Interested Party')}</a>`;
 }
 
 function badgeList(items, labelKey = 'ref', urlFn = null) {
   const arr = Array.isArray(items) ? items : [];
   if (!arr.length) return '<span class="small-muted">—</span>';
-  return arr.map((it) => {
-    const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
-    const title = String(it?.title || it?.name || label);
-    const href = urlFn ? urlFn(it) : '';
-    if (href) return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(title)}">${esc(label)}</a>`;
-    return `<span class="badge badge-soft me-1 mb-1" title="${esc(title)}">${esc(label)}</span>`;
-  }).join('');
+  return arr
+    .map((it) => {
+      const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
+      const title = String(it?.title || it?.name || label);
+      const href = urlFn ? urlFn(it) : '';
+      if (href)
+        return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(title)}">${esc(label)}</a>`;
+      return `<span class="badge badge-soft me-1 mb-1" title="${esc(title)}">${esc(label)}</span>`;
+    })
+    .join('');
 }
-function ismsControlBadges(items) { return badgeList(items, 'ref', (c) => withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework)); }
-function ismsClauseBadges(items) { return badgeList(items, 'ref', (c) => withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework)); }
-function personBadges(items) { return userPillsHtml(items); }
+function ismsControlBadges(items) {
+  return badgeList(items, 'ref', (c) =>
+    withFramework(
+      `/control.html?id=${encodeURIComponent(c.id)}&tab=isms`,
+      c.framework || framework,
+    ),
+  );
+}
+function ismsClauseBadges(items) {
+  return badgeList(items, 'ref', (c) =>
+    withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework),
+  );
+}
+function personBadges(items) {
+  return userPillsHtml(items);
+}
 function documentLink(item) {
-  if (item?.external_url) return `<a href="${esc(safeExternalHref(item.external_url) || '#')}" target="_blank" rel="noopener noreferrer">External URL</a>`;
-  if (item?.has_file) return `<a href="/api/v1/isms/documents/${encodeURIComponent(item.id)}/file" target="_blank" rel="noopener noreferrer">${esc(item.filename || 'Uploaded file')}</a>`;
+  if (item?.external_url)
+    return `<a href="${esc(safeExternalHref(item.external_url) || '#')}" target="_blank" rel="noopener noreferrer">External URL</a>`;
+  if (item?.has_file)
+    return `<a href="/api/v1/isms/documents/${encodeURIComponent(item.id)}/file" target="_blank" rel="noopener noreferrer">${esc(item.filename || 'Uploaded file')}</a>`;
   return '<span class="small-muted">—</span>';
 }
 
 function effectivenessMeasureLink(item) {
-  const href = withFramework(`/isms-effectiveness-measure.html?id=${encodeURIComponent(item.id)}`, item.framework || framework);
+  const href = withFramework(
+    `/isms-effectiveness-measure.html?id=${encodeURIComponent(item.id)}`,
+    item.framework || framework,
+  );
   return `<a href="${esc(href)}">${esc(shorten(item.summary || item.effectiveness_measure || item.metric || 'Effectiveness measure', 120))}</a>`;
 }
 
@@ -122,7 +172,12 @@ function effectivenessLatestValue(item) {
   const entry = item?.latest_entry || null;
   if (!entry) return '<span class="small-muted">No metric entries yet.</span>';
   const value = entry.value_display || 'Metric entry';
-  const href = entry.id ? withFramework(`/isms-effectiveness-metric.html?id=${encodeURIComponent(entry.id)}`, item.framework || framework) : '';
+  const href = entry.id
+    ? withFramework(
+        `/isms-effectiveness-metric.html?id=${encodeURIComponent(entry.id)}`,
+        item.framework || framework,
+      )
+    : '';
   const valueHtml = href ? `<a href="${esc(href)}">${esc(value)}</a>` : esc(value);
   const bits = [];
   if (entry.period) bits.push(entry.period);
@@ -141,7 +196,9 @@ function relevanceBadge(rel) {
 }
 
 function filterText(el) {
-  return String(el?.value || '').trim().toLowerCase();
+  return String(el?.value || '')
+    .trim()
+    .toLowerCase();
 }
 
 function renderControls() {
@@ -162,16 +219,18 @@ function renderControls() {
     return `${c.ref || ''} ${c.title || ''} ${c.justification || ''}`.toLowerCase().includes(q);
   });
 
-  controlsRows.innerHTML = rows.map((c) => {
-    const links = c.clauses || {};
-    return `<tr>
+  controlsRows.innerHTML = rows
+    .map((c) => {
+      const links = c.clauses || {};
+      return `<tr>
       <td class="soa-sticky-col fw-semibold" data-sort="${esc(c.ref || '')}">${controlLink(c)}</td>
       <td class="wrap">${esc(c.title || '')}</td>
       <td>${scopeBadge(c)}</td>
       <td class="small-muted">${esc(c.justification || '—')}</td>
       ${clauses.map((clause) => `<td class="text-center" data-sort="${esc(applicabilityShort(links[clause.id]))}">${applicabilityCell(links[clause.id])}</td>`).join('')}
     </tr>`;
-  }).join('');
+    })
+    .join('');
 
   if (!rows.length) {
     controlsRows.innerHTML = `<tr><td colspan="${4 + clauses.length}" class="p-4 small-muted">No controls match.</td></tr>`;
@@ -192,19 +251,23 @@ function renderClauses() {
 
   const rows = clauses.filter((clause) => {
     if (!q) return true;
-    const evidence = (clause.evidence_mappings || []).map((m) => `${m.title || ''} ${m.url || ''}`).join(' ');
+    const evidence = (clause.evidence_mappings || [])
+      .map((m) => `${m.title || ''} ${m.url || ''}`)
+      .join(' ');
     return `${clause.ref || ''} ${clause.title || ''} ${evidence}`.toLowerCase().includes(q);
   });
 
-  clausesRows.innerHTML = rows.map((clause) => {
-    const links = clause.controls || {};
-    return `<tr>
+  clausesRows.innerHTML = rows
+    .map((clause) => {
+      const links = clause.controls || {};
+      return `<tr>
       <td class="soa-sticky-col fw-semibold">${clauseLink(clause)}</td>
       <td class="wrap">${esc(clause.title || '')}</td>
-      <td>${titledLinksHtml(clause.evidence_mappings || [], {title: 'Open evidence mapping', empty: '<span class="small-muted">—</span>'})}</td>
+      <td>${titledLinksHtml(clause.evidence_mappings || [], { title: 'Open evidence mapping', empty: '<span class="small-muted">—</span>' })}</td>
       ${controls.map((control) => `<td class="text-center" data-sort="${esc(applicabilityShort(links[control.id]))}">${applicabilityCell(links[control.id])}</td>`).join('')}
     </tr>`;
-  }).join('');
+    })
+    .join('');
 
   if (!rows.length) {
     clausesRows.innerHTML = `<tr><td colspan="${3 + controls.length}" class="p-4 small-muted">No clauses match.</td></tr>`;
@@ -224,19 +287,29 @@ function renderRisks() {
   const q = filterText(risksFilter);
 
   if (!soa.can_view_risks) {
-    risksRows.innerHTML = '<tr><td colspan="9" class="p-4 small-muted">You do not have permission to view risks.</td></tr>';
+    risksRows.innerHTML =
+      '<tr><td colspan="9" class="p-4 small-muted">You do not have permission to view risks.</td></tr>';
     return;
   }
 
   const rows = risks.filter((r) => {
     if (!q) return true;
     const controls = (r.controls || []).map((c) => `${c.ref || ''} ${c.title || ''}`).join(' ');
-    return `${r.asset || ''} ${r.category?.name || ''} ${r.subcategory?.name || ''} ${(r.risk_types || []).join(' ')} ${r.threat_summary || ''} ${controls}`.toLowerCase().includes(q);
+    return `${r.asset || ''} ${r.category?.name || ''} ${r.subcategory?.name || ''} ${(r.risk_types || []).join(' ')} ${r.threat_summary || ''} ${controls}`
+      .toLowerCase()
+      .includes(q);
   });
 
-  risksRows.innerHTML = rows.map((r) => {
-    const controls = (r.controls || []).map((c) => `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`).join('') || '<span class="small-muted">—</span>';
-    return `<tr>
+  risksRows.innerHTML = rows
+    .map((r) => {
+      const controls =
+        (r.controls || [])
+          .map(
+            (c) =>
+              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`,
+          )
+          .join('') || '<span class="small-muted">—</span>';
+      return `<tr>
       <td>${riskLink(r)}</td>
       <td>${esc(r.category?.name || '—')}</td>
       <td>${esc(r.subcategory?.name || '—')}</td>
@@ -247,7 +320,8 @@ function renderRisks() {
       <td>${userPillHtml(r.risk_owner)}</td>
       <td>${controls}</td>
     </tr>`;
-  }).join('');
+    })
+    .join('');
 
   if (!rows.length) {
     risksRows.innerHTML = '<tr><td colspan="9" class="p-4 small-muted">No risks match.</td></tr>';
@@ -261,25 +335,45 @@ function renderPestle() {
   if (!pestleRows) return;
 
   if (!soa.can_view_pestle) {
-    pestleRows.innerHTML = '<tr><td colspan="7" class="p-4 small-muted">You do not have permission to view PESTLE(E) items.</td></tr>';
+    pestleRows.innerHTML =
+      '<tr><td colspan="7" class="p-4 small-muted">You do not have permission to view PESTLE(E) items.</td></tr>';
     return;
   }
 
   const rows = items.filter((item) => {
     if (!q) return true;
-    const processes = (item.business_processes || []).map((x) => `${x.business_process?.name || ''} ${x.relevance?.label || ''}`).join(' ');
-    const clauses = (item.clauses || []).map((x) => `${x.clause?.ref || ''} ${x.clause?.title || ''} ${x.relevance?.label || ''}`).join(' ');
-    return `${item.type || ''} ${item.lens || ''} ${item.item || ''} ${item.rationale || ''} ${item.overall_relevance?.label || ''} ${processes} ${clauses}`.toLowerCase().includes(q);
+    const processes = (item.business_processes || [])
+      .map((x) => `${x.business_process?.name || ''} ${x.relevance?.label || ''}`)
+      .join(' ');
+    const clauses = (item.clauses || [])
+      .map((x) => `${x.clause?.ref || ''} ${x.clause?.title || ''} ${x.relevance?.label || ''}`)
+      .join(' ');
+    return `${item.type || ''} ${item.lens || ''} ${item.item || ''} ${item.rationale || ''} ${item.overall_relevance?.label || ''} ${processes} ${clauses}`
+      .toLowerCase()
+      .includes(q);
   });
 
-  pestleRows.innerHTML = rows.map((item) => {
-    const processes = (item.business_processes || []).map((x) => `<span class="badge badge-soft me-1 mb-1" title="${esc(x.relevance?.label || '—')}">${esc(x.business_process?.name || 'Business process')}</span>`).join('') || '<span class="small-muted">—</span>';
-    const clauses = (item.clauses || []).map((x) => {
-      const c = x.clause || {};
-      const href = withFramework(`/clause.html?id=${encodeURIComponent(c.id || '')}&tab=pestle`, c.framework || framework);
-      return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(`${c.title || ''} · ${x.relevance?.label || '—'}`)}">${esc(c.ref || 'Clause')}</a>`;
-    }).join('') || '<span class="small-muted">—</span>';
-    return `<tr>
+  pestleRows.innerHTML = rows
+    .map((item) => {
+      const processes =
+        (item.business_processes || [])
+          .map(
+            (x) =>
+              `<span class="badge badge-soft me-1 mb-1" title="${esc(x.relevance?.label || '—')}">${esc(x.business_process?.name || 'Business process')}</span>`,
+          )
+          .join('') || '<span class="small-muted">—</span>';
+      const clauses =
+        (item.clauses || [])
+          .map((x) => {
+            const c = x.clause || {};
+            const href = withFramework(
+              `/clause.html?id=${encodeURIComponent(c.id || '')}&tab=pestle`,
+              c.framework || framework,
+            );
+            return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(`${c.title || ''} · ${x.relevance?.label || '—'}`)}">${esc(c.ref || 'Clause')}</a>`;
+          })
+          .join('') || '<span class="small-muted">—</span>';
+      return `<tr>
       <td>${esc(item.type || '—')}</td>
       <td>${esc(item.lens || '—')}</td>
       <td class="wrap fw-semibold">${pestleLink(item)}</td>
@@ -288,10 +382,12 @@ function renderPestle() {
       <td>${processes}</td>
       <td>${clauses}</td>
     </tr>`;
-  }).join('');
+    })
+    .join('');
 
   if (!rows.length) {
-    pestleRows.innerHTML = '<tr><td colspan="7" class="p-4 small-muted">No PESTLE(E) items match.</td></tr>';
+    pestleRows.innerHTML =
+      '<tr><td colspan="7" class="p-4 small-muted">No PESTLE(E) items match.</td></tr>';
   }
 }
 
@@ -301,23 +397,46 @@ function renderInterestedParties() {
   const q = filterText(interestedPartiesFilter);
 
   if (!soa.can_view_interested_parties) {
-    interestedPartiesRows.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">You do not have permission to view Interested Parties.</td></tr>'; 
+    interestedPartiesRows.innerHTML =
+      '<tr><td colspan="6" class="p-4 small-muted">You do not have permission to view Interested Parties.</td></tr>';
     return;
   }
 
   const rows = items.filter((item) => {
     if (!q) return true;
     const controls = (item.controls || []).map((c) => `${c.ref || ''} ${c.title || ''}`).join(' ');
-    const comms = (item.communications || []).map((c) => `${c.event || ''} ${c.when || ''} ${c.with_whom || ''} ${(c.methods || []).join(' ')}`).join(' ');
-    return `${item.name?.name || ''} ${item.nature?.name || ''} ${item.note || ''} ${controls} ${comms}`.toLowerCase().includes(q);
+    const comms = (item.communications || [])
+      .map(
+        (c) =>
+          `${c.event || ''} ${c.when || ''} ${c.with_whom || ''} ${(c.methods || []).join(' ')}`,
+      )
+      .join(' ');
+    return `${item.name?.name || ''} ${item.nature?.name || ''} ${item.note || ''} ${controls} ${comms}`
+      .toLowerCase()
+      .includes(q);
   });
 
-  interestedPartiesRows.innerHTML = rows.map((item) => {
-    const controls = (item.controls || []).map((c) => `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=interested-parties`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`).join('') || '<span class="small-muted">—</span>';
-    const comms = (item.communications || []).map((c) => `${esc(c.event || '')} • ${esc(c.when || '')} • ${esc(c.with_whom || '')}`).join('<br>') || '<span class="small-muted">—</span>';
-    const methods = Array.from(new Set((item.communications || []).flatMap((c) => c.methods || []))).map((m) => `<span class="badge badge-soft me-1 mb-1">${esc(m)}</span>`).join('') || '<span class="small-muted">—</span>';
-    const note = (item.note || '').trim() ? esc(shorten(item.note, 180)) : '<span class="small-muted">—</span>';
-    return `<tr>
+  interestedPartiesRows.innerHTML = rows
+    .map((item) => {
+      const controls =
+        (item.controls || [])
+          .map(
+            (c) =>
+              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=interested-parties`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`,
+          )
+          .join('') || '<span class="small-muted">—</span>';
+      const comms =
+        (item.communications || [])
+          .map((c) => `${esc(c.event || '')} • ${esc(c.when || '')} • ${esc(c.with_whom || '')}`)
+          .join('<br>') || '<span class="small-muted">—</span>';
+      const methods =
+        Array.from(new Set((item.communications || []).flatMap((c) => c.methods || [])))
+          .map((m) => `<span class="badge badge-soft me-1 mb-1">${esc(m)}</span>`)
+          .join('') || '<span class="small-muted">—</span>';
+      const note = (item.note || '').trim()
+        ? esc(shorten(item.note, 180))
+        : '<span class="small-muted">—</span>';
+      return `<tr>
       <td class="fw-semibold">${interestedPartyLink(item)}</td>
       <td>${esc(item.nature?.name || '—')}</td>
       <td class="wrap small-muted">${note}</td>
@@ -325,34 +444,69 @@ function renderInterestedParties() {
       <td class="small">${comms}</td>
       <td>${methods}</td>
     </tr>`;
-  }).join('');
+    })
+    .join('');
 
   if (!rows.length) {
-    interestedPartiesRows.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">No Interested Parties match.</td></tr>'; 
+    interestedPartiesRows.innerHTML =
+      '<tr><td colspan="6" class="p-4 small-muted">No Interested Parties match.</td></tr>';
   }
 }
 
-
 function renderIsmsObjectives() {
   if (!ismsObjectivesRows) return;
-  if (!soa.can_view_isms) { ismsObjectivesRows.innerHTML = '<tr><td colspan="7" class="p-4 small-muted">You do not have permission to view ISMS objectives.</td></tr>'; return; }
+  if (!soa.can_view_isms) {
+    ismsObjectivesRows.innerHTML =
+      '<tr><td colspan="7" class="p-4 small-muted">You do not have permission to view ISMS objectives.</td></tr>';
+    return;
+  }
   const q = filterText(ismsObjectivesFilter);
-  const rows = (soa.isms_objectives || []).filter((o) => !q || `${o.goal || ''} ${o.requirement || ''} ${o.metric || ''} ${o.owner?.username || ''}`.toLowerCase().includes(q));
-  ismsObjectivesRows.innerHTML = rows.map((o) => `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement || '', 180))}</div></td><td>${esc(o.metric || '—')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(o.completion_target_date || '—')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${ismsControlBadges(o.controls)}</td><td>${ismsClauseBadges(o.clauses)}</td></tr>`).join('') || '<tr><td colspan="7" class="p-4 small-muted">No ISMS objectives match.</td></tr>';
+  const rows = (soa.isms_objectives || []).filter(
+    (o) =>
+      !q ||
+      `${o.goal || ''} ${o.requirement || ''} ${o.metric || ''} ${o.owner?.username || ''}`
+        .toLowerCase()
+        .includes(q),
+  );
+  ismsObjectivesRows.innerHTML =
+    rows
+      .map(
+        (o) =>
+          `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement || '', 180))}</div></td><td>${esc(o.metric || '—')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(o.completion_target_date || '—')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${ismsControlBadges(o.controls)}</td><td>${ismsClauseBadges(o.clauses)}</td></tr>`,
+      )
+      .join('') ||
+    '<tr><td colspan="7" class="p-4 small-muted">No ISMS objectives match.</td></tr>';
 }
 
 function renderIsmsDocuments() {
   if (!ismsDocumentsRows) return;
-  if (!soa.can_view_isms) { ismsDocumentsRows.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">You do not have permission to view ISMS documents.</td></tr>'; return; }
+  if (!soa.can_view_isms) {
+    ismsDocumentsRows.innerHTML =
+      '<tr><td colspan="6" class="p-4 small-muted">You do not have permission to view ISMS documents.</td></tr>';
+    return;
+  }
   const q = filterText(ismsDocumentsFilter);
-  const rows = (soa.isms_documents || []).filter((d) => !q || `${d.title || ''} ${d.document_type || ''} ${d.description || ''} ${d.external_url || ''}`.toLowerCase().includes(q));
-  ismsDocumentsRows.innerHTML = rows.map((d) => `<tr><td class="fw-semibold wrap">${esc(d.title || 'Document')}</td><td>${esc(d.document_type || '—')}</td><td>${documentLink(d)}</td><td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '—')}</td><td>${ismsControlBadges(d.controls)}</td><td>${ismsClauseBadges(d.clauses)}</td></tr>`).join('') || '<tr><td colspan="6" class="p-4 small-muted">No ISMS documents match.</td></tr>';
+  const rows = (soa.isms_documents || []).filter(
+    (d) =>
+      !q ||
+      `${d.title || ''} ${d.document_type || ''} ${d.description || ''} ${d.external_url || ''}`
+        .toLowerCase()
+        .includes(q),
+  );
+  ismsDocumentsRows.innerHTML =
+    rows
+      .map(
+        (d) =>
+          `<tr><td class="fw-semibold wrap">${esc(d.title || 'Document')}</td><td>${esc(d.document_type || '—')}</td><td>${documentLink(d)}</td><td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '—')}</td><td>${ismsControlBadges(d.controls)}</td><td>${ismsClauseBadges(d.clauses)}</td></tr>`,
+      )
+      .join('') || '<tr><td colspan="6" class="p-4 small-muted">No ISMS documents match.</td></tr>';
 }
 
 function renderIsmsEffectiveness() {
   if (!ismsEffectivenessRows) return;
   if (!soa.can_view_isms) {
-    ismsEffectivenessRows.innerHTML = '<tr><td colspan="8" class="p-4 small-muted">You do not have permission to view ISMS effectiveness measures.</td></tr>';
+    ismsEffectivenessRows.innerHTML =
+      '<tr><td colspan="8" class="p-4 small-muted">You do not have permission to view ISMS effectiveness measures.</td></tr>';
     return;
   }
   const q = filterText(ismsEffectivenessFilter);
@@ -360,9 +514,14 @@ function renderIsmsEffectiveness() {
     if (!q) return true;
     const controls = (item.controls || []).map((c) => `${c.ref || ''} ${c.title || ''}`).join(' ');
     const latest = item.latest_entry || {};
-    return `${item.summary || ''} ${item.description || ''} ${item.effectiveness_measure || ''} ${item.metric || ''} ${item.metric_key || ''} ${item.target_display || ''} ${item.frequency || ''} ${item.owner?.username || ''} ${item.notes || ''} ${latest.value_display || ''} ${latest.source_title || ''} ${latest.source_type || ''} ${controls}`.toLowerCase().includes(q);
+    return `${item.summary || ''} ${item.description || ''} ${item.effectiveness_measure || ''} ${item.metric || ''} ${item.metric_key || ''} ${item.target_display || ''} ${item.frequency || ''} ${item.owner?.username || ''} ${item.notes || ''} ${latest.value_display || ''} ${latest.source_title || ''} ${latest.source_type || ''} ${controls}`
+      .toLowerCase()
+      .includes(q);
   });
-  ismsEffectivenessRows.innerHTML = rows.map((item) => `<tr>
+  ismsEffectivenessRows.innerHTML =
+    rows
+      .map(
+        (item) => `<tr>
     <td class="wrap fw-semibold">${effectivenessMeasureLink(item)}${item.description ? `<div class="small-muted mt-1">${esc(shorten(item.description || '', 180))}</div>` : ''}${item.metric_key ? `<div class="small-muted mt-1"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
     <td class="wrap">${esc(shorten(item.effectiveness_measure || '', 180) || '—')}</td>
     <td class="wrap">${esc(shorten(item.metric || '', 140) || '—')}</td>
@@ -371,17 +530,34 @@ function renderIsmsEffectiveness() {
     <td>${esc(item.frequency || '—')}</td>
     <td>${userPillHtml(item.owner)}</td>
     <td>${ismsControlBadges(item.controls)}</td>
-  </tr>`).join('') || '<tr><td colspan="8" class="p-4 small-muted">No effectiveness measures match.</td></tr>';
+  </tr>`,
+      )
+      .join('') ||
+    '<tr><td colspan="8" class="p-4 small-muted">No effectiveness measures match.</td></tr>';
 }
 
 function renderIsmsOrgAssets() {
   if (ismsOrgRows) {
-    const orgs = soa.can_view_isms ? (soa.isms_org_nodes || []) : [];
-    ismsOrgRows.innerHTML = orgs.map((n) => `<tr><td class="fw-semibold">${esc(n.name || 'Org node')}</td><td>${esc(n.parent?.name || 'Root')}</td><td>${personBadges(n.people)}</td><td>${ismsControlBadges(n.controls)}</td><td>${ismsClauseBadges(n.clauses)}</td></tr>`).join('') || `<tr><td colspan="5" class="p-4 small-muted">${soa.can_view_isms ? 'No organisation chart nodes yet.' : 'You do not have permission to view ISMS.'}</td></tr>`;
+    const orgs = soa.can_view_isms ? soa.isms_org_nodes || [] : [];
+    ismsOrgRows.innerHTML =
+      orgs
+        .map(
+          (n) =>
+            `<tr><td class="fw-semibold">${esc(n.name || 'Org node')}</td><td>${esc(n.parent?.name || 'Root')}</td><td>${personBadges(n.people)}</td><td>${ismsControlBadges(n.controls)}</td><td>${ismsClauseBadges(n.clauses)}</td></tr>`,
+        )
+        .join('') ||
+      `<tr><td colspan="5" class="p-4 small-muted">${soa.can_view_isms ? 'No organisation chart nodes yet.' : 'You do not have permission to view ISMS.'}</td></tr>`;
   }
   if (ismsAssetsRows) {
-    const assets = soa.can_view_isms ? (soa.isms_assets || []) : [];
-    ismsAssetsRows.innerHTML = assets.map((a) => `<tr><td class="fw-semibold">${esc(a.asset || a.name || 'Asset')}</td><td>${esc(a.category?.name || a.category_name || '—')}</td><td>${esc(a.subcategory?.name || a.subcategory_name || '—')}</td><td>${esc(a.license || '—')}</td><td>${esc(a.owner_org_node?.name || '—')}</td><td>${esc(a.register_held_by_org_node?.name || '—')}</td><td>${ismsControlBadges(a.controls)}</td><td>${ismsClauseBadges(a.clauses)}</td></tr>`).join('') || `<tr><td colspan="8" class="p-4 small-muted">${soa.can_view_isms ? 'No ISMS assets yet.' : 'You do not have permission to view ISMS.'}</td></tr>`;
+    const assets = soa.can_view_isms ? soa.isms_assets || [] : [];
+    ismsAssetsRows.innerHTML =
+      assets
+        .map(
+          (a) =>
+            `<tr><td class="fw-semibold">${esc(a.asset || a.name || 'Asset')}</td><td>${esc(a.category?.name || a.category_name || '—')}</td><td>${esc(a.subcategory?.name || a.subcategory_name || '—')}</td><td>${esc(a.license || '—')}</td><td>${esc(a.owner_org_node?.name || '—')}</td><td>${esc(a.register_held_by_org_node?.name || '—')}</td><td>${ismsControlBadges(a.controls)}</td><td>${ismsClauseBadges(a.clauses)}</td></tr>`,
+        )
+        .join('') ||
+      `<tr><td colspan="8" class="p-4 small-muted">${soa.can_view_isms ? 'No ISMS assets yet.' : 'You do not have permission to view ISMS.'}</td></tr>`;
   }
 }
 
@@ -402,24 +578,40 @@ function renderAll() {
   renderIsmsOrgAssets();
 }
 
-
 async function load() {
   status.style.display = 'none';
   try {
-    soa = await apiGet(`/api/v1/statement-of-applicability?framework=${encodeURIComponent(framework)}`);
+    soa = await apiGet(
+      `/api/v1/statement-of-applicability?framework=${encodeURIComponent(framework)}`,
+    );
     renderAll();
   } catch (e) {
     toast(status, `Failed to load Statement of Applicability: ${String(e)}`, 'danger');
     controlsRows.innerHTML = '<tr><td class="p-4 small-muted">Failed to load controls.</td></tr>';
     clausesRows.innerHTML = '<tr><td class="p-4 small-muted">Failed to load clauses.</td></tr>';
-    risksRows.innerHTML = '<tr><td colspan="9" class="p-4 small-muted">Failed to load risks.</td></tr>';
-    if (pestleRows) pestleRows.innerHTML = '<tr><td colspan="7" class="p-4 small-muted">Failed to load PESTLE(E) items.</td></tr>';
-    if (interestedPartiesRows) interestedPartiesRows.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">Failed to load Interested Parties.</td></tr>'; 
-    if (ismsObjectivesRows) ismsObjectivesRows.innerHTML = '<tr><td colspan="7" class="p-4 small-muted">Failed to load ISMS objectives.</td></tr>';
-    if (ismsDocumentsRows) ismsDocumentsRows.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">Failed to load ISMS documents.</td></tr>';
-    if (ismsEffectivenessRows) ismsEffectivenessRows.innerHTML = '<tr><td colspan="8" class="p-4 small-muted">Failed to load effectiveness measures.</td></tr>';
-    if (ismsOrgRows) ismsOrgRows.innerHTML = '<tr><td colspan="5" class="p-4 small-muted">Failed to load organisation chart.</td></tr>';
-    if (ismsAssetsRows) ismsAssetsRows.innerHTML = '<tr><td colspan="8" class="p-4 small-muted">Failed to load assets.</td></tr>';
+    risksRows.innerHTML =
+      '<tr><td colspan="9" class="p-4 small-muted">Failed to load risks.</td></tr>';
+    if (pestleRows)
+      pestleRows.innerHTML =
+        '<tr><td colspan="7" class="p-4 small-muted">Failed to load PESTLE(E) items.</td></tr>';
+    if (interestedPartiesRows)
+      interestedPartiesRows.innerHTML =
+        '<tr><td colspan="6" class="p-4 small-muted">Failed to load Interested Parties.</td></tr>';
+    if (ismsObjectivesRows)
+      ismsObjectivesRows.innerHTML =
+        '<tr><td colspan="7" class="p-4 small-muted">Failed to load ISMS objectives.</td></tr>';
+    if (ismsDocumentsRows)
+      ismsDocumentsRows.innerHTML =
+        '<tr><td colspan="6" class="p-4 small-muted">Failed to load ISMS documents.</td></tr>';
+    if (ismsEffectivenessRows)
+      ismsEffectivenessRows.innerHTML =
+        '<tr><td colspan="8" class="p-4 small-muted">Failed to load effectiveness measures.</td></tr>';
+    if (ismsOrgRows)
+      ismsOrgRows.innerHTML =
+        '<tr><td colspan="5" class="p-4 small-muted">Failed to load organisation chart.</td></tr>';
+    if (ismsAssetsRows)
+      ismsAssetsRows.innerHTML =
+        '<tr><td colspan="8" class="p-4 small-muted">Failed to load assets.</td></tr>';
   }
 }
 
@@ -435,14 +627,28 @@ ismsEffectivenessFilter?.addEventListener('input', renderIsmsEffectiveness);
 function activateInitialTab() {
   const tab = new URLSearchParams(window.location.search || '').get('tab');
   if (!tab) return;
-  const mapped = {interestedparties: 'soaInterestedPartiesTab', isms: 'soaIsmsObjectivesTab', ismsobjectives: 'soaIsmsObjectivesTab', ismsdocuments: 'soaIsmsDocumentsTab', effectiveness: 'soaIsmsEffectivenessTab', ismseffectiveness: 'soaIsmsEffectivenessTab', ismseffectivenessmeasures: 'soaIsmsEffectivenessTab', orgassets: 'soaIsmsOrgAssetsTab'}[String(tab || '').toLowerCase()];
-  const target = document.getElementById(mapped || `soa${tab.charAt(0).toUpperCase()}${tab.slice(1)}Tab`);
+  const mapped = {
+    interestedparties: 'soaInterestedPartiesTab',
+    isms: 'soaIsmsObjectivesTab',
+    ismsobjectives: 'soaIsmsObjectivesTab',
+    ismsdocuments: 'soaIsmsDocumentsTab',
+    effectiveness: 'soaIsmsEffectivenessTab',
+    ismseffectiveness: 'soaIsmsEffectivenessTab',
+    ismseffectivenessmeasures: 'soaIsmsEffectivenessTab',
+    orgassets: 'soaIsmsOrgAssetsTab',
+  }[String(tab || '').toLowerCase()];
+  const target = document.getElementById(
+    mapped || `soa${tab.charAt(0).toUpperCase()}${tab.slice(1)}Tab`,
+  );
   if (target && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(target).show();
 }
 
 for (const btn of Array.from(document.querySelectorAll('#soaTabs [data-bs-toggle="tab"]'))) {
   btn.addEventListener('shown.bs.tab', () => {
-    const name = String(btn.id || '').replace(/^soa/, '').replace(/Tab$/, '').toLowerCase();
+    const name = String(btn.id || '')
+      .replace(/^soa/, '')
+      .replace(/Tab$/, '')
+      .toLowerCase();
     const url = new URL(window.location.href);
     url.searchParams.set('tab', name);
     window.history.replaceState({}, '', url.toString());

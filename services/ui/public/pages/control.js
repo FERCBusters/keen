@@ -1,4 +1,4 @@
-import {createRelatedControlsBrowser} from './related-controls.js';
+import { createRelatedControlsBrowser } from './related-controls.js';
 import {
   initNavbar,
   apiGet,
@@ -33,7 +33,6 @@ import {
 const me = await initNavbar();
 const framework = getCurrentFramework();
 enableTableSorting();
-
 
 const id = qs('id');
 const status = document.getElementById('status');
@@ -80,8 +79,20 @@ const interestedPartiesCard = document.getElementById('interestedPartiesCard');
 const interestedPartiesView = document.getElementById('interestedPartiesView');
 const interestedPartiesCount = document.getElementById('interestedPartiesCount');
 const canViewRisks = !!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks);
-const canViewInterestedParties = !!(me?.is_admin || me?.can_view_interested_parties || me?.can_manage_interested_parties || me?.can_view_risks || me?.can_manage_risks);
-const canViewIsms = !!(me?.is_admin || me?.can_view_isms || me?.can_manage_isms || me?.can_view_risks || me?.can_manage_risks);
+const canViewInterestedParties = !!(
+  me?.is_admin ||
+  me?.can_view_interested_parties ||
+  me?.can_manage_interested_parties ||
+  me?.can_view_risks ||
+  me?.can_manage_risks
+);
+const canViewIsms = !!(
+  me?.is_admin ||
+  me?.can_view_isms ||
+  me?.can_manage_isms ||
+  me?.can_view_risks ||
+  me?.can_manage_risks
+);
 
 // One shared offset-pager wiring path covers header buttons (#prev/#next)
 // and footer buttons ([data-pager]).
@@ -90,7 +101,7 @@ const pagerButtons = collectOffsetPagerButtons();
 let sourceMeta = {};
 let ctrl = null;
 let crossFrameworks = [];
-const relatedControls = createRelatedControlsBrowser(document, {isAdmin: !!me?.is_admin});
+const relatedControls = createRelatedControlsBrowser(document, { isAdmin: !!me?.is_admin });
 
 async function loadCrossFrameworkLinks() {
   if (!id) return;
@@ -99,7 +110,7 @@ async function loadCrossFrameworkLinks() {
     if (!crossFrameworks.length) {
       try {
         const frameworks = await apiGet('/api/v1/frameworks');
-        crossFrameworks = (frameworks.items || []).filter(f => f.slug !== ctrl?.framework);
+        crossFrameworks = (frameworks.items || []).filter((f) => f.slug !== ctrl?.framework);
       } catch {
         // Links remain browsable by framework slug when the catalogue is unavailable.
       }
@@ -108,10 +119,16 @@ async function loadCrossFrameworkLinks() {
     if (!me?.is_admin || !ctrl) return;
     crossForm.style.display = '';
     const previous = crossFrameworkSource.value;
-    crossFrameworkSource.innerHTML = '<option value="">Choose framework…</option>' + crossFrameworks.map(f => `<option value="${esc(f.slug)}">${esc(f.name || f.slug)}</option>`).join('');
-    if (crossFrameworks.some(f => f.slug === previous)) crossFrameworkSource.value = previous;
+    crossFrameworkSource.innerHTML =
+      '<option value="">Choose framework…</option>' +
+      crossFrameworks
+        .map((f) => `<option value="${esc(f.slug)}">${esc(f.name || f.slug)}</option>`)
+        .join('');
+    if (crossFrameworks.some((f) => f.slug === previous)) crossFrameworkSource.value = previous;
     if (crossFrameworkSource.value) await loadCrossSourceControls();
-  } catch (e) { relatedControls.showError(`Could not load control links: ${String(e)}`); }
+  } catch (e) {
+    relatedControls.showError(`Could not load control links: ${String(e)}`);
+  }
 }
 
 async function loadCrossSourceControls() {
@@ -119,13 +136,19 @@ async function loadCrossSourceControls() {
   crossFrameworkControl.innerHTML = '<option value="">Choose control…</option>';
   if (!source) return;
   try {
-    const data = await apiGet(`/api/v1/controls?framework=${encodeURIComponent(source)}&limit=5000`);
-    crossFrameworkControl.innerHTML += (data.items || []).map(c => `<option value="${esc(c.id)}">${esc(c.ref)} · ${esc(c.title || c.type)}</option>`).join('');
-  } catch (e) { toast(status, `Could not load source controls: ${String(e)}`, 'danger'); }
+    const data = await apiGet(
+      `/api/v1/controls?framework=${encodeURIComponent(source)}&limit=5000`,
+    );
+    crossFrameworkControl.innerHTML += (data.items || [])
+      .map((c) => `<option value="${esc(c.id)}">${esc(c.ref)} · ${esc(c.title || c.type)}</option>`)
+      .join('');
+  } catch (e) {
+    toast(status, `Could not load source controls: ${String(e)}`, 'danger');
+  }
 }
 
 crossFrameworkSource?.addEventListener('change', loadCrossSourceControls);
-crossForm?.addEventListener('submit', async event => {
+crossForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!me?.is_admin || !crossFrameworkControl.value) return;
   try {
@@ -135,17 +158,25 @@ crossForm?.addEventListener('submit', async event => {
     });
     document.getElementById('crossFrameworkRationale').value = '';
     toast(status, 'Control link saved. Existing evidence is now visible here.', 'success');
-    await loadCrossFrameworkLinks(); reload();
-  } catch (e) { toast(status, `Could not link controls: ${String(e)}`, 'danger'); }
+    await loadCrossFrameworkLinks();
+    reload();
+  } catch (e) {
+    toast(status, `Could not link controls: ${String(e)}`, 'danger');
+  }
 });
-crossList?.addEventListener('click', async event => {
+crossList?.addEventListener('click', async (event) => {
   const button = event.target.closest('[data-remove-cross-link]');
   if (!button || !me?.is_admin || !confirm('Remove inherited evidence relationship?')) return;
   try {
-    await apiDelete(`/api/v1/controls/${encodeURIComponent(id)}/cross-framework/${encodeURIComponent(button.dataset.removeCrossLink)}`);
+    await apiDelete(
+      `/api/v1/controls/${encodeURIComponent(id)}/cross-framework/${encodeURIComponent(button.dataset.removeCrossLink)}`,
+    );
     toast(status, 'Control link removed.', 'success');
-    await loadCrossFrameworkLinks(); reload();
-  } catch (e) { toast(status, `Could not remove control link: ${String(e)}`, 'danger'); }
+    await loadCrossFrameworkLinks();
+    reload();
+  } catch (e) {
+    toast(status, `Could not remove control link: ${String(e)}`, 'danger');
+  }
 });
 let clauseCatalog = [];
 let clauseApplicabilityEditMode = false;
@@ -164,7 +195,6 @@ let state = {
 if (![25, 50, 100, 200].includes(state.limit)) state.limit = 50;
 if (state.offset < 0) state.offset = 0;
 
-
 function renderControlChrome() {
   if (!ctrl) return;
   const titleEl = document.getElementById('ctrlTitle');
@@ -175,27 +205,37 @@ function renderControlChrome() {
   if (metaEl) metaEl.textContent = bits.filter(Boolean).join(' • ');
   let description = document.getElementById('osaControlDescription');
   if (!description && metaEl) {
-    description = document.createElement('div'); description.id = 'osaControlDescription';
-    description.className = 'mt-3'; metaEl.after(description);
+    description = document.createElement('div');
+    description.id = 'osaControlDescription';
+    description.className = 'mt-3';
+    metaEl.after(description);
   }
   if (description) {
     description.replaceChildren();
     if (ctrl.metadata?.description) {
-      const text = document.createElement('p'); text.style.whiteSpace = 'pre-wrap';
-      text.textContent = ctrl.metadata.description; description.append(text);
+      const text = document.createElement('p');
+      text.style.whiteSpace = 'pre-wrap';
+      text.textContent = ctrl.metadata.description;
+      description.append(text);
     }
-    if (ctrl.framework === 'KEEN-AF:1.0' || ctrl.metadata?.source_url === 'https://github.com/VantaInc/vanta-control-set') {
-      const credit = document.createElement('p'); credit.className = 'small-muted';
-      credit.innerHTML = 'KEEN Assurance Framework is based on <a href="https://github.com/VantaInc/vanta-control-set" target="_blank" rel="noopener">Vanta’s controls</a>, licensed under <a href="/licenses/VANTA-LICENSE.txt" target="_blank" rel="noopener">Apache 2.0</a>. Copyright 2021 Vanta Inc. Adapted by KEEN. KEEN is also licensed under Apache 2.0.';
+    if (
+      ctrl.framework === 'KEEN-AF:1.0' ||
+      ctrl.metadata?.source_url === 'https://github.com/VantaInc/vanta-control-set'
+    ) {
+      const credit = document.createElement('p');
+      credit.className = 'small-muted';
+      credit.innerHTML =
+        'KEEN Assurance Framework is based on <a href="https://github.com/VantaInc/vanta-control-set" target="_blank" rel="noopener">Vanta’s controls</a>, licensed under <a href="/licenses/VANTA-LICENSE.txt" target="_blank" rel="noopener">Apache 2.0</a>. Copyright 2021 Vanta Inc. Adapted by KEEN. KEEN is also licensed under Apache 2.0.';
       description.append(credit);
     }
     if (ctrl.metadata?.source === 'https://www.opensecurityarchitecture.org/') {
-      const credit = document.createElement('p'); credit.className = 'small-muted';
-      credit.innerHTML = 'Adapted from <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a> · <a href="/licenses/OSA-LICENSE.txt" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Copyright Open Security Architecture and contributors. <a href="/licenses/OSA-NOTICE.txt" target="_blank" rel="noopener">Attribution and KEEN adaptations</a>. Shared NIST controls identify related evidence; coverage estimates do not certify compliance.';
+      const credit = document.createElement('p');
+      credit.className = 'small-muted';
+      credit.innerHTML =
+        'Adapted from <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a> · <a href="/licenses/OSA-LICENSE.txt" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Copyright Open Security Architecture and contributors. <a href="/licenses/OSA-NOTICE.txt" target="_blank" rel="noopener">Attribution and KEEN adaptations</a>. Shared NIST controls identify related evidence; coverage estimates do not certify compliance.';
       description.append(credit);
     }
   }
-
 }
 
 function renderControlJustificationCard() {
@@ -219,19 +259,21 @@ function activateControlTab(tabName) {
   if (name === 'risks' && !canViewRisks) name = 'evidence';
   if (name === 'interested-parties' && !canViewInterestedParties) name = 'evidence';
   if (name === 'isms' && !canViewIsms) name = 'evidence';
-  if ((name === 'effectiveness' || name === 'effectiveness-measures') && !canViewIsms) name = 'evidence';
-  const tab = {
-    evidence: controlEvidenceTab,
-    clauses: controlClausesTab,
-    risks: controlRisksTab,
-    'interested-parties': controlInterestedPartiesTab,
-    isms: controlIsmsTab,
-    // Backwards-compatible: old links to the removed dedicated
-    // Effectiveness Measures tab now land on the combined ISMS tab.
-    effectiveness: controlIsmsTab,
-    'effectiveness-measures': controlIsmsTab,
-    changelog: controlChangelogTab,
-  }[name] || controlEvidenceTab;
+  if ((name === 'effectiveness' || name === 'effectiveness-measures') && !canViewIsms)
+    name = 'evidence';
+  const tab =
+    {
+      evidence: controlEvidenceTab,
+      clauses: controlClausesTab,
+      risks: controlRisksTab,
+      'interested-parties': controlInterestedPartiesTab,
+      isms: controlIsmsTab,
+      // Backwards-compatible: old links to the removed dedicated
+      // Effectiveness Measures tab now land on the combined ISMS tab.
+      effectiveness: controlIsmsTab,
+      'effectiveness-measures': controlIsmsTab,
+      changelog: controlChangelogTab,
+    }[name] || controlEvidenceTab;
   if (!tab || !window.bootstrap?.Tab) return;
   window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
@@ -271,7 +313,7 @@ async function loadControlChangelog() {
     await loadEntityChangelog(
       controlChangelogEl,
       `/api/v1/controls/${encodeURIComponent(id)}/changelog?limit=100`,
-      {empty: 'No control changes have been recorded yet.'}
+      { empty: 'No control changes have been recorded yet.' },
     );
   } catch (e) {
     controlChangelogEl.innerHTML = '<div class="text-danger p-3">Failed to load changelog.</div>';
@@ -280,32 +322,56 @@ async function loadControlChangelog() {
 
 function _ismsEntityRows(data) {
   const groups = [
-    ['Objectives', data.objectives, (x) => x.goal || x.requirement || 'Objective', () => '/isms.html?tab=objectives'],
+    [
+      'Objectives',
+      data.objectives,
+      (x) => x.goal || x.requirement || 'Objective',
+      () => '/isms.html?tab=objectives',
+    ],
     ['Documents', data.documents, (x) => x.title || 'Document', () => '/isms.html?tab=documents'],
     ['Organisation Chart', data.org_nodes, (x) => x.name || 'Org node', () => '/isms.html?tab=org'],
     ['Assets', data.assets, (x) => x.asset || 'Asset', () => '/isms.html?tab=assets'],
-    ['Effectiveness Measures', data.effectiveness_measures, (x) => x.summary || x.metric || x.effectiveness_measure || 'Effectiveness measure', (x) => `/isms-effectiveness-measure.html?id=${encodeURIComponent(x.id)}`],
-    ['Meetings', data.meetings, (x) => x.title || 'Meeting', (x) => x.id ? `/isms-meeting.html?id=${encodeURIComponent(x.id)}` : '/isms.html?tab=meetings'],
+    [
+      'Effectiveness Measures',
+      data.effectiveness_measures,
+      (x) => x.summary || x.metric || x.effectiveness_measure || 'Effectiveness measure',
+      (x) => `/isms-effectiveness-measure.html?id=${encodeURIComponent(x.id)}`,
+    ],
+    [
+      'Meetings',
+      data.meetings,
+      (x) => x.title || 'Meeting',
+      (x) =>
+        x.id ? `/isms-meeting.html?id=${encodeURIComponent(x.id)}` : '/isms.html?tab=meetings',
+    ],
   ];
   const rows = [];
   for (const [label, items, titleFn, hrefFn] of groups) {
     for (const item of items || []) {
       const href = typeof hrefFn === 'function' ? hrefFn(item) : hrefFn;
-      rows.push(`<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(href, ctrl?.framework || framework))}">${esc(shorten(titleFn(item), 180))}</a></td><td class="small-muted">${esc(fmtTs(item.updated_at) || '')}</td></tr>`);
+      rows.push(
+        `<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(href, ctrl?.framework || framework))}">${esc(shorten(titleFn(item), 180))}</a></td><td class="small-muted">${esc(fmtTs(item.updated_at) || '')}</td></tr>`,
+      );
     }
   }
-  if (!rows.length) return '<div class="small-muted">No ISMS entities are currently linked to this control.</div>';
+  if (!rows.length)
+    return '<div class="small-muted">No ISMS entities are currently linked to this control.</div>';
   return `<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th style="width:190px;">Type</th><th>Entity</th><th style="width:170px;">Updated</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 
-
-async function loadControlIsms({force = false} = {}) {
+async function loadControlIsms({ force = false } = {}) {
   if (!controlIsmsView || !id) return;
-  if (!canViewIsms) { controlIsmsView.innerHTML = '<span class="small-muted">You do not have permission to view ISMS references.</span>'; return; }
+  if (!canViewIsms) {
+    controlIsmsView.innerHTML =
+      '<span class="small-muted">You do not have permission to view ISMS references.</span>';
+    return;
+  }
   if (ismsLoaded && !force) return;
   controlIsmsView.innerHTML = '<span class="small-muted">Loading ISMS references…</span>';
   try {
-    const data = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}/isms?framework=${encodeURIComponent(ctrl?.framework || framework)}`);
+    const data = await apiGet(
+      `/api/v1/controls/${encodeURIComponent(id)}/isms?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
+    );
     ismsLoaded = true;
     controlIsmsView.innerHTML = _ismsEntityRows(data || {});
   } catch (e) {
@@ -327,7 +393,6 @@ function controlScopedSourceHref(src) {
   return `/source.html?${p.toString()}`;
 }
 
-
 function applicabilityLabel(v) {
   if (v === 'partially_applicable') return 'Partially applicable';
   if (v === 'applicable') return 'Applicable';
@@ -335,7 +400,8 @@ function applicabilityLabel(v) {
 }
 
 function applicabilityBadge(v) {
-  if (v === 'partially_applicable') return '<span class="badge text-bg-warning">Partially applicable</span>';
+  if (v === 'partially_applicable')
+    return '<span class="badge text-bg-warning">Partially applicable</span>';
   if (v === 'applicable') return '<span class="badge badge-soft">Applicable</span>';
   return '<span class="badge text-bg-light">Not applicable</span>';
 }
@@ -354,7 +420,9 @@ function renderLinkedClauses() {
     return;
   }
 
-  const rows = [...links].sort((a, b) => String(a.ref || '').localeCompare(String(b.ref || ''), undefined, {numeric: true}));
+  const rows = [...links].sort((a, b) =>
+    String(a.ref || '').localeCompare(String(b.ref || ''), undefined, { numeric: true }),
+  );
   clausesView.innerHTML = `
     <div class="table-responsive">
       <table class="table table-sm align-middle mb-0">
@@ -366,28 +434,32 @@ function renderLinkedClauses() {
           </tr>
         </thead>
         <tbody>
-          ${rows.map((c) => {
-            const clauseHref = c.clause_id
-              ? withFramework(`/clause.html?id=${encodeURIComponent(c.clause_id)}`, ctrl?.framework || framework)
-              : '';
-            const refHtml = clauseHref
-              ? `<a href="${esc(clauseHref)}">${esc(c.ref || '')}</a>`
-              : esc(c.ref || '');
-            return `<tr>
+          ${rows
+            .map((c) => {
+              const clauseHref = c.clause_id
+                ? withFramework(
+                    `/clause.html?id=${encodeURIComponent(c.clause_id)}`,
+                    ctrl?.framework || framework,
+                  )
+                : '';
+              const refHtml = clauseHref
+                ? `<a href="${esc(clauseHref)}">${esc(c.ref || '')}</a>`
+                : esc(c.ref || '');
+              return `<tr>
               <td class="fw-semibold">${refHtml}</td>
               <td class="wrap">${esc(c.title || '')}</td>
               <td>${applicabilityBadge(c.applicability)}</td>
             </tr>`;
-          }).join('')}
+            })
+            .join('')}
         </tbody>
       </table>
     </div>`;
 }
 
-
 function riskScoreBadge(score) {
   const n = Number(score || 0);
-  const cls = n < 5 ? 'text-bg-success' : (n <= 12 ? 'text-bg-warning' : 'text-bg-danger');
+  const cls = n < 5 ? 'text-bg-success' : n <= 12 ? 'text-bg-warning' : 'text-bg-danger';
   return `<span class="badge ${cls}">${esc(String(n))}</span>`;
 }
 
@@ -398,12 +470,15 @@ async function loadLinkedRisks() {
     return;
   }
   try {
-    const data = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}/risks?framework=${encodeURIComponent(ctrl?.framework || framework)}`);
+    const data = await apiGet(
+      `/api/v1/controls/${encodeURIComponent(id)}/risks?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
+    );
     const items = data?.items || [];
     risksCard.style.display = '';
     if (risksCount) risksCount.textContent = String(items.length);
     if (!items.length) {
-      risksView.innerHTML = '<span class="small-muted">No risks mapped to this control for this framework.</span>';
+      risksView.innerHTML =
+        '<span class="small-muted">No risks mapped to this control for this framework.</span>';
       return;
     }
     risksView.innerHTML = `
@@ -421,10 +496,16 @@ async function loadLinkedRisks() {
             </tr>
           </thead>
           <tbody>
-            ${items.map((r) => {
-              const href = withFramework(`/risk.html?id=${encodeURIComponent(r.id || '')}`, ctrl?.framework || framework);
-              const types = (r.risk_types || []).map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`).join('');
-              return `<tr>
+            ${items
+              .map((r) => {
+                const href = withFramework(
+                  `/risk.html?id=${encodeURIComponent(r.id || '')}`,
+                  ctrl?.framework || framework,
+                );
+                const types = (r.risk_types || [])
+                  .map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`)
+                  .join('');
+                return `<tr>
                 <td><a class="fw-semibold" href="${esc(href)}">${esc(r.asset || '')}</a><div class="small-muted text-truncate" style="max-width:360px;">${esc(r.threat_summary || '')}</div></td>
                 <td>${esc(r.category?.name || '')}</td>
                 <td>${esc(r.subcategory?.name || '')}</td>
@@ -433,7 +514,8 @@ async function loadLinkedRisks() {
                 <td class="text-end">${riskScoreBadge(r.residual_risk_score)}</td>
                 <td>${userPillHtml(r.risk_owner)}</td>
               </tr>`;
-            }).join('')}
+              })
+              .join('')}
           </tbody>
         </table>
       </div>`;
@@ -442,7 +524,7 @@ async function loadLinkedRisks() {
     risksCard.style.display = 'none';
   }
 }
-async function loadLinkedInterestedParties({force = false} = {}) {
+async function loadLinkedInterestedParties({ force = false } = {}) {
   if (!interestedPartiesCard || !interestedPartiesView) return;
   if (!canViewInterestedParties) {
     interestedPartiesCard.style.display = 'none';
@@ -452,12 +534,15 @@ async function loadLinkedInterestedParties({force = false} = {}) {
   interestedPartiesCard.style.display = '';
   interestedPartiesView.innerHTML = '<span class="small-muted">Loading Interested Parties…</span>';
   try {
-    const data = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}/interested-parties?framework=${encodeURIComponent(ctrl?.framework || framework)}`);
+    const data = await apiGet(
+      `/api/v1/controls/${encodeURIComponent(id)}/interested-parties?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
+    );
     const items = data?.items || [];
     interestedPartiesLoaded = true;
     if (interestedPartiesCount) interestedPartiesCount.textContent = String(items.length);
     if (!items.length) {
-      interestedPartiesView.innerHTML = '<span class="small-muted">No Interested Parties mapped to this control for this framework.</span>';
+      interestedPartiesView.innerHTML =
+        '<span class="small-muted">No Interested Parties mapped to this control for this framework.</span>';
       return;
     }
     interestedPartiesView.innerHTML = `
@@ -465,27 +550,40 @@ async function loadLinkedInterestedParties({force = false} = {}) {
         <table class="table table-sm align-middle mb-0">
           <thead><tr><th>Name</th><th>Nature of Interest</th><th>Note</th><th>Communications</th><th>Methods</th></tr></thead>
           <tbody>
-            ${items.map((it) => {
-              const href = withFramework(`/interested_party.html?id=${encodeURIComponent(it.id || '')}`, ctrl?.framework || framework);
-              const comms = (it.communications || []).map((c) => `${esc(c.event || '')} / ${esc(c.with_whom || '')}`).join('<br>') || '<span class="small-muted">—</span>';
-              const methods = Array.from(new Set((it.communications || []).flatMap((c) => c.methods || []))).map((m) => `<span class="badge badge-soft me-1 mb-1">${esc(m)}</span>`).join('') || '<span class="small-muted">—</span>';
-              const note = (it.note || '').trim() ? esc(shorten(it.note, 140)) : '<span class="small-muted">—</span>';
-              return `<tr><td><a class="fw-semibold" href="${esc(href)}">${esc(it.name?.name || '')}</a></td><td>${esc(it.nature?.name || '')}</td><td class="small text-wrap" style="min-width:220px;">${note}</td><td class="small">${comms}</td><td>${methods}</td></tr>`;
-            }).join('')}
+            ${items
+              .map((it) => {
+                const href = withFramework(
+                  `/interested_party.html?id=${encodeURIComponent(it.id || '')}`,
+                  ctrl?.framework || framework,
+                );
+                const comms =
+                  (it.communications || [])
+                    .map((c) => `${esc(c.event || '')} / ${esc(c.with_whom || '')}`)
+                    .join('<br>') || '<span class="small-muted">—</span>';
+                const methods =
+                  Array.from(new Set((it.communications || []).flatMap((c) => c.methods || [])))
+                    .map((m) => `<span class="badge badge-soft me-1 mb-1">${esc(m)}</span>`)
+                    .join('') || '<span class="small-muted">—</span>';
+                const note = (it.note || '').trim()
+                  ? esc(shorten(it.note, 140))
+                  : '<span class="small-muted">—</span>';
+                return `<tr><td><a class="fw-semibold" href="${esc(href)}">${esc(it.name?.name || '')}</a></td><td>${esc(it.nature?.name || '')}</td><td class="small text-wrap" style="min-width:220px;">${note}</td><td class="small">${comms}</td><td>${methods}</td></tr>`;
+              })
+              .join('')}
           </tbody>
         </table>
       </div>`;
   } catch (e) {
     interestedPartiesLoaded = false;
     if (interestedPartiesCount) interestedPartiesCount.textContent = '0';
-    interestedPartiesView.innerHTML = '<span class="text-danger">Failed to load Interested Parties for this control.</span>';
+    interestedPartiesView.innerHTML =
+      '<span class="text-danger">Failed to load Interested Parties for this control.</span>';
   }
 }
 
-
 function flattenClauseTree(nodes, depth = 0, out = []) {
   for (const n of nodes || []) {
-    out.push({...n, depth});
+    out.push({ ...n, depth });
     flattenClauseTree(n.children || [], depth + 1, out);
   }
   return out;
@@ -501,7 +599,9 @@ function selectedClauseMap() {
 
 function clauseSelect(id) {
   if (!adminClausesList || !id || !window.CSS?.escape) return null;
-  return adminClausesList.querySelector(`.clause-applicability[data-clause-id="${CSS.escape(String(id))}"]`);
+  return adminClausesList.querySelector(
+    `.clause-applicability[data-clause-id="${CSS.escape(String(id))}"]`,
+  );
 }
 
 function applyInferredParentClauseApplicability() {
@@ -534,7 +634,10 @@ function applyInferredParentClauseApplicability() {
     let inferred = '';
     if (selected.length === 0) {
       inferred = '';
-    } else if (selected.length === childValues.length && selected.every((v) => v === 'applicable')) {
+    } else if (
+      selected.length === childValues.length &&
+      selected.every((v) => v === 'applicable')
+    ) {
       inferred = 'applicable';
     } else {
       inferred = 'partially_applicable';
@@ -564,7 +667,8 @@ function renderAdminClauses() {
   const flat = flattenClauseTree(clauseCatalog?.tree || []);
   const selected = selectedClauseMap();
   if (!flat.length) {
-    adminClausesList.innerHTML = '<span class="small-muted">No clauses are loaded for this framework.</span>';
+    adminClausesList.innerHTML =
+      '<span class="small-muted">No clauses are loaded for this framework.</span>';
     return;
   }
 
@@ -578,14 +682,18 @@ function renderAdminClauses() {
           </tr>
         </thead>
         <tbody>
-          ${flat.map((c) => {
-            const cid = String(c.id || '');
-            const cur = selected.get(cid) || '';
-            const depth = Math.max(0, Number(c.depth || 0));
-            const indent = depth ? `style="padding-left:${Math.min(depth * 1.25, 4)}rem"` : '';
-            const parentClass = depth === 0 ? 'fw-bold' : '';
-            const clauseHref = withFramework(`/clause.html?id=${encodeURIComponent(cid)}`, ctrl?.framework || framework);
-            return `<tr>
+          ${flat
+            .map((c) => {
+              const cid = String(c.id || '');
+              const cur = selected.get(cid) || '';
+              const depth = Math.max(0, Number(c.depth || 0));
+              const indent = depth ? `style="padding-left:${Math.min(depth * 1.25, 4)}rem"` : '';
+              const parentClass = depth === 0 ? 'fw-bold' : '';
+              const clauseHref = withFramework(
+                `/clause.html?id=${encodeURIComponent(cid)}`,
+                ctrl?.framework || framework,
+              );
+              return `<tr>
               <td class="wrap ${parentClass}" ${indent}>
                 <a class="me-2" href="${esc(clauseHref)}">${esc(c.ref || '')}</a>
                 <span class="small-muted">${esc(c.title || '')}</span>
@@ -598,7 +706,8 @@ function renderAdminClauses() {
                 </select>
               </td>
             </tr>`;
-          }).join('')}
+            })
+            .join('')}
         </tbody>
       </table>
     </div>`;
@@ -610,8 +719,10 @@ function renderAdminClauses() {
 }
 
 async function loadClauseCatalog() {
-  const data = await apiGet(`/api/v1/clauses?framework=${encodeURIComponent(ctrl?.framework || framework)}`);
-  clauseCatalog = data || {items: [], tree: []};
+  const data = await apiGet(
+    `/api/v1/clauses?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
+  );
+  clauseCatalog = data || { items: [], tree: [] };
 }
 
 async function ensureClauseCatalogLoaded() {
@@ -623,13 +734,15 @@ async function ensureClauseCatalogLoaded() {
 }
 
 async function reloadControlOnly() {
-  ctrl = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`);
+  ctrl = await apiGet(
+    `/api/v1/controls/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
+  );
   renderControlChrome();
   renderControlJustificationCard();
   renderLinkedClauses();
   await loadLinkedRisks();
   interestedPartiesLoaded = false;
-  await loadLinkedInterestedParties({force: true});
+  await loadLinkedInterestedParties({ force: true });
   renderAdminClauses();
 }
 
@@ -637,19 +750,19 @@ function renderRows(items) {
   tbody.innerHTML = '';
 
   for (const e of items || []) {
-    const srcChip = e.source ?
-      sourceBadgeHtml(e.source, sourceMeta, controlScopedSourceHref(e.source)) :
-      '';
+    const srcChip = e.source
+      ? sourceBadgeHtml(e.source, sourceMeta, controlScopedSourceHref(e.source))
+      : '';
 
-    const ext = upstreamLinkHtml(e.source_url, {title: 'Open source event'});
+    const ext = upstreamLinkHtml(e.source_url, { title: 'Open source event' });
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="small-muted" data-sort="${esc(tsSortKey(e.timestamp))}">${esc(fmtTs(e.timestamp))}</td>
       <td data-sort="${esc(e.source || '')}">${srcChip}</td>
       <td class="wrap"><a href="${withFramework(`/event.html?id=${encodeURIComponent(e.event_id || e.id)}`, ctrl?.framework || framework)}" title="${esc(e.summary || '')}">${esc(
-    shorten(e.summary || '', 160)
-)}</a></td>
+        shorten(e.summary || '', 160),
+      )}</a></td>
       <td>${ext}</td>
     `;
     tbody.appendChild(tr);
@@ -699,12 +812,12 @@ function renderSourceOptions(facets) {
   const counts = new Map(rows.map((r) => [String(r.source), Number(r.count || 0)]));
 
   const items = rows
-      .filter((r) => r && r.source && Number(r.count || 0) > 0)
-      .map((r) => ({
-        source: String(r.source),
-        count: Number(r.count || 0),
-      }))
-      .sort((a, b) => (b.count - a.count) || a.source.localeCompare(b.source));
+    .filter((r) => r && r.source && Number(r.count || 0) > 0)
+    .map((r) => ({
+      source: String(r.source),
+      count: Number(r.count || 0),
+    }))
+    .sort((a, b) => b.count - a.count || a.source.localeCompare(b.source));
 
   let html = '<option value="">All sources</option>';
 
@@ -752,7 +865,8 @@ async function loadEvents() {
   } catch (e) {
     toast(status, `Failed to load evidence: ${String(e)}`, 'danger');
     if (meta) meta.textContent = '—';
-    tbody.innerHTML = '<tr><td colspan="4" class="small-muted p-4">Failed to load evidence.</td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="4" class="small-muted p-4">Failed to load evidence.</td></tr>';
   }
 }
 
@@ -771,17 +885,23 @@ async function load() {
   status.style.display = 'none';
 
   try {
-    ctrl = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`);
+    ctrl = await apiGet(
+      `/api/v1/controls/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
+    );
     renderControlChrome();
     await loadCrossFrameworkLinks();
     renderControlJustificationCard();
-    document.getElementById('viewAllEvents').href = withFramework(`/events.html?control=${encodeURIComponent(ctrl.ref)}`, ctrl.framework || framework);
-    if (controlsBreadcrumb) controlsBreadcrumb.href = withFramework('/controls.html', ctrl.framework || framework);
+    document.getElementById('viewAllEvents').href = withFramework(
+      `/events.html?control=${encodeURIComponent(ctrl.ref)}`,
+      ctrl.framework || framework,
+    );
+    if (controlsBreadcrumb)
+      controlsBreadcrumb.href = withFramework('/controls.html', ctrl.framework || framework);
 
     if (linksEl) {
       if (ctrl.upstream_url) {
         linksEl.innerHTML = `<a class="link-subtle" href="${esc(
-            ctrl.upstream_url
+          ctrl.upstream_url,
         )}" target="_blank" rel="noopener noreferrer"><i class="bi bi-info-circle"></i> Guidance</a>`;
       } else {
         linksEl.textContent = '';
@@ -790,10 +910,10 @@ async function load() {
 
     renderLinkedClauses();
     await loadLinkedRisks();
-    await loadLinkedInterestedParties({force: true});
+    await loadLinkedInterestedParties({ force: true });
     renderAdminClauses();
     if (qs('tab') === 'changelog') await loadControlChangelog();
-    if (qs('tab') === 'isms') await loadControlIsms({force: true});
+    if (qs('tab') === 'isms') await loadControlIsms({ force: true });
 
     sourceMeta = await getSourceMeta();
 
@@ -818,15 +938,14 @@ document.getElementById('clearFilters')?.addEventListener('click', (ev) => {
   if (localQ) localQ.value = '';
   if (sourceFilter) sourceFilter.value = '';
   if (selLimit) selLimit.value = '50';
-  state = {...state, q: '', source: '', limit: 50, offset: 0};
+  state = { ...state, q: '', source: '', limit: 50, offset: 0 };
   reload(true);
 });
 
 // Pager listeners (bind to BOTH top + bottom)
 wireOffsetPagerButtons(pagerButtons, (direction) => {
-  state.offset = direction === 'prev'
-    ? Math.max(0, state.offset - state.limit)
-    : state.offset + state.limit;
+  state.offset =
+    direction === 'prev' ? Math.max(0, state.offset - state.limit) : state.offset + state.limit;
   applyFromInputs(false);
   loadEvents();
 });
@@ -840,7 +959,7 @@ editClauseApplicabilityBtn?.addEventListener('click', async () => {
     try {
       await ensureClauseCatalogLoaded();
       renderAdminClauses();
-      adminClausesCard?.scrollIntoView({behavior: 'smooth', block: 'start'});
+      adminClausesCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       clauseApplicabilityEditMode = false;
       renderLinkedClauses();
@@ -861,8 +980,7 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
   if (state.q) parts.push(`q=${state.q}`);
   if (state.source) parts.push(`source=${state.source}`);
   if (state.limit && state.limit !== 50) parts.push(`limit=${state.limit}`);
-  const defName = (title + (parts.length ? ` (${parts.join(', ')})` : ''))
-      .slice(0, 128);
+  const defName = (title + (parts.length ? ` (${parts.join(', ')})` : '')).slice(0, 128);
 
   const name = (prompt('Name this saved search', defName) || '').trim();
   if (!name) return;
@@ -877,13 +995,12 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
   const url = `/control.html?${p.toString()}`;
 
   try {
-    await apiPost('/api/v1/me/saved-searches', {name, url});
+    await apiPost('/api/v1/me/saved-searches', { name, url });
     toast(status, 'Saved', 'success');
   } catch (e) {
     toast(status, `Failed to save: ${String(e)}`, 'danger');
   }
 });
-
 
 saveClauseLinksBtn?.addEventListener('click', async () => {
   if (!me?.is_admin) return;
@@ -892,11 +1009,11 @@ saveClauseLinksBtn?.addEventListener('click', async () => {
   for (const sel of adminClausesList?.querySelectorAll('.clause-applicability') || []) {
     const applicability = (sel.value || '').trim();
     if (!applicability) continue;
-    clauses.push({clause_id: sel.dataset.clauseId, applicability});
+    clauses.push({ clause_id: sel.dataset.clauseId, applicability });
   }
   saveClauseLinksBtn.disabled = true;
   try {
-    await apiPatch(`/api/v1/admin/controls/${encodeURIComponent(id)}/clauses`, {clauses});
+    await apiPatch(`/api/v1/admin/controls/${encodeURIComponent(id)}/clauses`, { clauses });
     toast(status, 'Clause applicability saved', 'success');
     await reloadControlOnly();
     await loadControlChangelog();
