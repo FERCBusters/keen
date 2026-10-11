@@ -164,3 +164,65 @@ test('existing multi-feed source retains all inputs', async (t) => {
   await dialog.querySelector('form').onsubmit({ preventDefault() {} });
   assert.equal(saved.inputs.feeds.length, 2);
 });
+
+test('RSS credentials and header fields have readable labels and adjacent groups', async (t) => {
+  const ui = await loadUi('pages/source-connection-editor.js', {
+    setup(w) {
+      w.HTMLDialogElement.prototype.showModal = function () {};
+    },
+  });
+  t.after(ui.close);
+  const dialog = ui.api.editSourceConnection({ types: [rssType], onSaved: async () => {} });
+  assert.deepEqual(
+    Array.from(dialog.querySelectorAll('[data-key]'), (input) => input.dataset.key),
+    ['username', 'password', 'header_name', 'header_value'],
+  );
+  const password = dialog.querySelector('[data-key="password"]');
+  assert.equal(password.type, 'password');
+  assert.equal(password.dataset.secret, 'true');
+  assert.equal(
+    password.closest('fieldset').querySelector('legend').textContent,
+    'Account credentials',
+  );
+  assert.equal(
+    dialog.querySelector('[data-key="header_name"]').closest('fieldset'),
+    dialog.querySelector('[data-key="header_value"]').closest('fieldset'),
+  );
+  assert.equal(
+    dialog.querySelector('[data-key="header_value"]').parentElement.firstChild.textContent,
+    'Header value',
+  );
+});
+
+test('related credentials stay together across source types without changing secret classification', async () => {
+  const { sourceFieldGroups, sourceFieldLabel } =
+    await import('../public/pages/source-connection-fields.js');
+  for (const [ordinary, secrets, expected] of [
+    [
+      ['base_url', 'username'],
+      ['token', 'password'],
+      ['username', 'password'],
+    ],
+    [['base_url', 'username'], ['api_token'], ['username', 'api_token']],
+    [['provider', 'secret_header'], ['secret'], ['secret_header', 'secret']],
+    [['base_url'], ['token_id', 'token_secret'], ['token_id', 'token_secret']],
+    [
+      ['region'],
+      ['aws_access_key_id', 'aws_secret_access_key', 'aws_session_token'],
+      ['aws_access_key_id', 'aws_secret_access_key', 'aws_session_token'],
+    ],
+  ]) {
+    const groups = sourceFieldGroups({ fields: ordinary, credential_fields: secrets });
+    assert.ok(
+      groups.some(
+        (group) =>
+          JSON.stringify(group.fields.map((field) => field.key)) === JSON.stringify(expected),
+      ),
+    );
+    for (const field of groups.flatMap((group) => group.fields))
+      assert.equal(field.secret, secrets.includes(field.key));
+  }
+  assert.equal(sourceFieldLabel('api_token'), 'API token');
+  assert.equal(sourceFieldLabel('sa_json'), 'Service account JSON');
+  assert.equal(sourceFieldLabel('future_field'), 'Future field');
+});

@@ -1,4 +1,5 @@
 import { apiPost, apiPut } from '/app.js';
+import { sourceFieldGroups, sourceFieldLabel } from './source-connection-fields.js';
 import { sourceSetupProfile } from './source-setup-profile.js';
 
 // The editor owns credentials; the hub owns navigation and input management.
@@ -55,28 +56,46 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
       inlineInput.dataset.feedUrl = 'true';
     }
     const spec = types.find((t) => t.source === source.value);
-    for (const [keys, secret] of [
-      [spec?.fields || [], false],
-      [spec?.credential_fields || [], true],
-    ]) {
-      for (const key of keys) {
-        if (profile?.hiddenFields.includes(key)) continue;
+    for (const group of sourceFieldGroups(spec, profile?.hiddenFields)) {
+      let parent = fields;
+      if (group.label) {
+        parent = document.createElement('fieldset');
+        parent.className = 'border rounded p-3 mb-3';
+        const legend = document.createElement('legend');
+        legend.className = 'float-none w-auto px-1 fs-6';
+        legend.textContent = group.label;
+        parent.append(legend);
+        fields.append(parent);
+      }
+      for (const { key, secret } of group.fields) {
         const input = field(
-          fields,
-          key.replaceAll('_', ' ') + (secret && connection ? ' (blank keeps saved value)' : ''),
+          parent,
+          sourceFieldLabel(key) + (secret && connection ? ' (blank keeps saved value)' : ''),
           key === 'auth_mode' ? 'select' : secret ? 'password' : 'text',
           secret ? '' : connection?.configuration[key] || '',
         );
         if (key === 'auth_mode') {
           for (const mode of ['token', 'bearer', 'basic', 'query', 'cookie', 'none'])
-            input.add(new Option(mode, mode));
+            input.add(
+              new Option(
+                {
+                  token: 'Token',
+                  bearer: 'Bearer token',
+                  basic: 'Basic authentication',
+                  query: 'Query parameter',
+                  cookie: 'Cookie',
+                  none: 'None',
+                }[mode],
+                mode,
+              ),
+            );
           input.value = connection?.configuration[key] || 'token';
         }
         input.autocomplete = 'off';
         input.dataset.key = key;
         input.dataset.secret = String(secret);
         if (secret && connection) {
-          const clear = field(fields, 'Remove saved ' + key.replaceAll('_', ' '), 'checkbox');
+          const clear = field(parent, 'Remove saved ' + sourceFieldLabel(key), 'checkbox');
           clear.dataset.clear = key;
         }
       }
