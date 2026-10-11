@@ -298,7 +298,10 @@ def me(*, context: ChangeContext, db: Session) -> dict:
         pass
     is_admin = (eff_role or "") == ROLE_ADMIN
     can_audit_trail = bool(is_admin or has_permission(db, user, "audittrail.read"))
-    can_manage_audits = bool(is_admin or has_permission(db, user, "audits.manage"))
+    can_admin_audits = has_permission(db, user, "audits.admin")
+    can_manage_audits = bool(
+        can_admin_audits or has_permission(db, user, "audits.manage")
+    )
     can_view_audits = bool(can_manage_audits or has_permission(db, user, "audits.read"))
     can_manage_risks = bool(is_admin or has_permission(db, user, "risk.manage"))
     can_view_risks = bool(can_manage_risks or has_permission(db, user, "risk.read"))
@@ -367,12 +370,15 @@ def me(*, context: ChangeContext, db: Session) -> dict:
 
     return {
         "user": user.username,
+        "user_id": str(user.id),
         "role": user.role,
         "effective_role": eff_role,
         "is_admin": is_admin,
         "can_audit_trail": can_audit_trail,
         "can_view_audits": can_view_audits,
         "can_manage_audits": can_manage_audits,
+        "can_admin_audits": can_admin_audits,
+        "can_sample_isms": has_permission(db, user, "isms.read"),
         "can_view_risks": can_view_risks,
         "can_manage_risks": can_manage_risks,
         "can_view_pestle": can_view_pestle,

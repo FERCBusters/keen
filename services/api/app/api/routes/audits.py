@@ -10,12 +10,13 @@ from app.api.routing import Router
 from app.db.models import User
 from app.db.session import get_db
 from app.security.auth import require_authenticated
-from app.security.roles import is_effective_admin
 from app.services.audits import operations, queries, reports, scheduling
 from app.services.audits.access import (
     audit_or_404,
+    can_admin_audits,
     can_manage_audits,
     can_read_audits,
+    editable_audit_or_404,
     require_audit_access,
 )
 from app.services.audits.schemas import (
@@ -54,8 +55,8 @@ def require_audit_manage(request: Request, db: Session = Depends(get_db)) -> Use
 
 def require_audit_admin(request: Request, db: Session = Depends(get_db)) -> User:
     user = require_authenticated(request)
-    if not is_effective_admin(db, user):
-        raise HTTPException(status_code=403, detail="Admin role required")
+    if not can_admin_audits(db, user):
+        raise HTTPException(status_code=403, detail="audits.admin permission required")
     return user
 
 
@@ -190,7 +191,7 @@ def delete_scheduled_audit(
     audit_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_audit_manage),
+    user: User = Depends(require_audit_admin),
 ):
     return scheduling.delete_scheduled_audit(audit_id=audit_id, db=db, user=user)
 
@@ -378,7 +379,7 @@ async def upload_final_report(
     user: User = Depends(require_audit_manage),
 ):
     # Check the audit before reading the upload; the service also enforces mutability.
-    require_mutable_audit(audit_or_404(db, audit_id))
+    require_mutable_audit(editable_audit_or_404(db, user, audit_id))
     return reports.save_final_report(
         audit_id=audit_id,
         db=db,

@@ -678,8 +678,25 @@ export function auditStatusLabel(auditOrStatus = null) {
   return v.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
 }
 
-export function canSampleIntoAudit(me = null) {
-  return Boolean(me?.can_manage_audits || me?.is_admin);
+export function canSampleIntoAudit(me = null, entityType = '') {
+  if (!(me?.can_manage_audits || me?.can_admin_audits || me?.is_admin)) return false;
+  if (me?.is_admin) return true;
+  const type = String(entityType || '')
+    .trim()
+    .toLowerCase();
+  if (type === 'event') return Boolean(me?.can_view_events);
+  if (type === 'bookstack_section' || type.startsWith('isms')) return Boolean(me?.can_sample_isms);
+  return true;
+}
+
+export function canEditAuditForUser(me = null, audit = null) {
+  if (!audit) return false;
+  if (me?.is_admin || me?.can_admin_audits) return true;
+  return Boolean(
+    me?.can_manage_audits &&
+    me?.user_id &&
+    String(me.user_id) === String(audit.created_by_user_id || ''),
+  );
 }
 
 function _sampleCurrentRelativeUrl() {
@@ -775,7 +792,7 @@ export async function openAuditSampleModal({
   notesPlaceholder = '',
   onSampled = null,
 } = {}) {
-  if (!canSampleIntoAudit(me)) {
+  if (!canSampleIntoAudit(me, entityType)) {
     toast(statusEl, 'audits.manage permission required.', 'danger');
     return;
   }
@@ -806,7 +823,9 @@ export async function openAuditSampleModal({
     els.select.innerHTML = '<option value="">Loading audits…</option>';
     try {
       const data = await apiGet(_sampleAuditsUrl(framework));
-      const items = (data?.items || []).filter((a) => isAuditActive(a));
+      const items = (data?.items || []).filter(
+        (a) => isAuditActive(a) && canEditAuditForUser(me, a),
+      );
       els.select.innerHTML =
         items
           .map((a) => {

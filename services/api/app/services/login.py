@@ -63,7 +63,8 @@ def complete_local_login(
     record_login(db, user, ip=client_ip)
     db.commit()
 
-    can_manage_audits = has_permission(db, user, "audits.manage")
+    can_admin_audits = has_permission(db, user, "audits.admin")
+    can_manage_audits = can_admin_audits or has_permission(db, user, "audits.manage")
     can_view_audits = can_manage_audits or has_permission(db, user, "audits.read")
     can_manage_risks = has_permission(db, user, "risk.manage")
     can_view_risks = can_manage_risks or has_permission(db, user, "risk.read")
@@ -92,11 +93,14 @@ def complete_local_login(
 
     return sid, {
         "user": user.username,
+        "user_id": str(user.id),
         "role": user.role,
         "effective_role": eff,
         "is_admin": (eff or "") == ROLE_ADMIN,
         "can_view_audits": can_view_audits,
         "can_manage_audits": can_manage_audits,
+        "can_admin_audits": can_admin_audits,
+        "can_sample_isms": has_permission(db, user, "isms.read"),
         "can_view_risks": can_view_risks,
         "can_manage_risks": can_manage_risks,
         "can_view_interested_parties": can_view_interested_parties,

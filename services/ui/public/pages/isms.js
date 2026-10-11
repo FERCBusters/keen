@@ -30,7 +30,7 @@ import {
 const me = await initNavbar();
 const framework = getCurrentFramework();
 const canManage = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);
-const canSampleAudits = canSampleIntoAudit(me);
+const canSampleAudits = canSampleIntoAudit(me, 'isms');
 enableTableSorting();
 const status = document.getElementById('status');
 const metaEl = document.getElementById('ismsMeta');

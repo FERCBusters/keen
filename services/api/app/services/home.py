@@ -60,7 +60,11 @@ def home_overview(
 
     risk = permitted("risk.read") or permitted("risk.manage")
     isms = risk or permitted("isms.read") or permitted("isms.manage")
-    audit = permitted("audits.read") or permitted("audits.manage")
+    audit = (
+        permitted("audits.read")
+        or permitted("audits.manage")
+        or permitted("audits.admin")
+    )
     events = permitted("events.read")
     controls = (
         db.query(ControlItem)

@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Audit, AuditAttendee, User
 from app.services.audit_schedules import FUZZY_MONTH_DATE_RULES, occurrences_between
-from app.services.audits.access import audit_or_404
+from app.services.audits.access import (
+    audit_or_404,
+    can_manage_audits,
+    editable_audit_or_404,
+    require_audit_admin,
+)
 from app.services.audits.schemas import (
     ScheduledAuditAttendeePayload,
     ScheduledAuditPayload,
@@ -168,6 +173,8 @@ def list_scheduled_audits(
 
 
 def create_scheduled_audit(*, payload: ScheduledAuditPayload, db: Session, user: User):
+    if not can_manage_audits(db, user):
+        raise DomainError(403, "audits.manage permission required")
     framework = clean_framework(payload.framework_slug)
     date_rule = clean_schedule_date_rule(payload.schedule_date_rule)
     anchor_month = clean_schedule_anchor_month(
@@ -228,7 +235,7 @@ def create_scheduled_audit(*, payload: ScheduledAuditPayload, db: Session, user:
 def update_scheduled_audit(
     *, audit_id: str, payload: ScheduledAuditUpdatePayload, db: Session, user: User
 ):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     if a.status != "template":
         raise DomainError(status_code=400, detail="Audit is not a scheduled template")
     fields = set(payload.model_fields_set or set())
@@ -344,6 +351,7 @@ def update_scheduled_audit(
 
 
 def delete_scheduled_audit(*, audit_id: str, db: Session, user: User):
+    require_audit_admin(db, user)
     a = audit_or_404(db, audit_id)
     if a.status != "template":
         raise DomainError(status_code=400, detail="Audit is not a scheduled template")

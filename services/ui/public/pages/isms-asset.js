@@ -23,7 +23,7 @@ const assetId = params.get('id') || params.get('asset') || '';
 const status = document.getElementById('status');
 const $ = (id) => document.getElementById(id);
 const canManageIsms = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);
-const canSampleAudits = canSampleIntoAudit(me);
+const canSampleAudits = canSampleIntoAudit(me, 'isms');
 let asset = null;
 
 function assetHref(id = assetId) {

@@ -26,6 +26,7 @@ async function fixture(t, options = {}) {
       }
       if (u.pathname === '/api/v1/events/e1/questions') return { threads: [] };
       if (u.pathname === '/api/v1/audits/by-event/e1') return { items: [] };
+      if (u.pathname === '/api/v1/audits') return { items: options.audits || [] };
       throw new Error('Unexpected GET ' + u);
     },
     post: async (u, b) => {
@@ -86,4 +87,23 @@ test('missing event IDs make no event request', async (t) => {
 test('event fetch failure is visible', async (t) => {
   const ui = await fixture(t, { fail: true });
   assert.match(ui.el('status').textContent, /Unavailable/);
+});
+
+test('event sampling offers only audits the auditor may edit', async (t) => {
+  const ui = await fixture(t, {
+    me: { can_manage_audits: true, can_view_events: true, user_id: 'one' },
+    audits: [
+      { id: 'own', title: 'Own audit', status: 'open', created_by_user_id: 'one' },
+      { id: 'other', title: 'Other audit', status: 'open', created_by_user_id: 'two' },
+    ],
+  });
+  ui.el('btnSampleAudit').click();
+  await settle(() => ui.el('auditSampleSelect').textContent.includes('Own audit'));
+  assert.equal(ui.el('auditSampleSelect').querySelectorAll('option').length, 1);
+  assert.equal(ui.el('auditSampleSelect').value, 'own');
+});
+
+test('audit management alone does not expose event sampling', async (t) => {
+  const ui = await fixture(t, { me: { can_manage_audits: true, user_id: 'one' } });
+  assert.equal(ui.el('btnSampleAudit').style.display, 'none');
 });

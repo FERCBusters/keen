@@ -21,7 +21,7 @@ const params = new URLSearchParams(window.location.search || '');
 const metricId = params.get('id') || params.get('metric') || '';
 const status = document.getElementById('status');
 const $ = (id) => document.getElementById(id);
-const canSampleAudits = canSampleIntoAudit(me);
+const canSampleAudits = canSampleIntoAudit(me, 'isms');
 let entry = null;
 let sourceMeta = {};
 

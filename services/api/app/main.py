@@ -296,9 +296,13 @@ async def auth_middleware(request: Request, call_next):
                         status_code=403,
                     )
             elif path.startswith("/v1/audits"):
-                if not has_permission(db, user, "audits.manage"):
+                if not (
+                    has_permission(db, user, "audits.manage")
+                    or has_permission(db, user, "audits.admin")
+                ):
                     return JSONResponse(
-                        {"detail": "audits.manage permission required"}, status_code=403
+                        {"detail": "audits.manage or audits.admin permission required"},
+                        status_code=403,
                     )
             elif path.startswith("/v1/risks"):
                 if not has_permission(db, user, "risk.manage"):

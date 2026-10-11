@@ -76,3 +76,15 @@ for (const state of ['empty', 'reader', 'error'])
     if (state === 'error') assert.match(ui.el('rows').textContent, /Offline/);
     if (state === 'reader') assert.equal(ui.document.querySelector('[data-delete-audit]'), null);
   });
+
+test('audit managers can create audits without seeing deletion controls', async (t) => {
+  const ui = await fixture(t, { me: { can_manage_audits: true, user_id: 'auditor' } });
+  assert.equal(ui.document.querySelector('[data-delete-audit]'), null);
+  assert.equal(ui.document.querySelector('[data-delete-schedule]'), null);
+});
+
+test('audit administrators can delete without the application admin role', async (t) => {
+  const ui = await fixture(t, { me: { can_admin_audits: true, can_manage_audits: true } });
+  ui.document.querySelector('[data-delete-audit="a1"]').click();
+  await settle(() => ui.calls.some((c) => c.method === 'DELETE'));
+});

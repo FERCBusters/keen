@@ -10,7 +10,15 @@ from app.db.models import (
     IsmsPerson,
     User,
 )
-from app.services.audits.access import audit_or_404, can_see_event
+from app.security.permissions import has_permission
+from app.services.audits.access import (
+    audit_or_404,
+    can_manage_audits,
+    can_see_event,
+    editable_audit_or_404,
+    require_audit_admin,
+    require_sample_source_access,
+)
 from app.services.audits.references import control_out
 from app.services.audits.samples import (
     audit_sample_entity_reference,
@@ -62,6 +70,8 @@ from app.services.errors import DomainError
 
 
 def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):
+    if not can_manage_audits(db, user):
+        raise DomainError(403, "audits.manage permission required")
     framework = clean_framework(payload.framework_slug)
     validate_dates(payload.start_date, payload.end_date)
     a = Audit(
@@ -97,6 +107,7 @@ def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):
 
 
 def delete_audit(*, audit_id: str, db: Session, user: User):
+    require_audit_admin(db, user)
     a = audit_or_404(db, audit_id)
     if a.status == "template":
         raise DomainError(
@@ -118,7 +129,7 @@ def delete_audit(*, audit_id: str, db: Session, user: User):
 def update_audit(
     *, audit_id: str, payload: AuditUpdatePayload, db: Session, user: User
 ):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     fields = set(payload.model_fields_set or set())
     if is_locked_audit(a):
         if fields != {"status"}:
@@ -180,7 +191,7 @@ def update_audit(
 def replace_audit_scope(
     *, audit_id: str, payload: AuditScopePayload, db: Session, user: User
 ):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a)
     controls, clauses, documents = set_audit_scope(
         db,
@@ -196,7 +207,7 @@ def replace_audit_scope(
 def replace_audit_controls(
     *, audit_id: str, payload: AuditControlsPayload, db: Session, user: User
 ):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a)
     controls, _, _ = set_audit_scope(
         db,
@@ -214,15 +225,19 @@ def replace_audit_controls(
 def add_audit_evidence(
     *, audit_id: str, payload: AuditEvidencePayload, db: Session, user: User
 ):
-    a = audit_or_404(db, audit_id)
+    entity_type = normalise_audit_sample_entity_type(payload.entity_type)
+    if not entity_type and not has_permission(db, user, "events.read"):
+        raise DomainError(403, "events.read permission required")
+    a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a, action="sampled into")
     evidence_url = clean_url(payload.evidence_url)
-    entity_type = normalise_audit_sample_entity_type(payload.entity_type)
     entity_id = clean_optional_entity_id(payload.entity_id)
     eid = payload.event_id
     if not eid and not (entity_type and entity_id):
         eid = event_id_from_url(evidence_url)
     ev = can_see_event(db, user, eid) if eid else None
+    if entity_type and entity_id:
+        require_sample_source_access(db, user, entity_type, entity_id)
 
     entity = audit_sample_entity_reference(
         db,
@@ -318,7 +333,7 @@ def update_audit_evidence(
     db: Session,
     user: User,
 ):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a)
     evid = try_uuid(evidence_id)
     if not evid:
@@ -346,7 +361,7 @@ def update_audit_evidence(
 
 
 def delete_audit_evidence(*, audit_id: str, evidence_id: str, db: Session, user: User):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a)
     evid = try_uuid(evidence_id)
     if not evid:
@@ -368,7 +383,7 @@ def delete_audit_evidence(*, audit_id: str, evidence_id: str, db: Session, user:
 def add_attendee(
     *, audit_id: str, payload: AuditAttendeePayload, db: Session, user: User
 ):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a)
     linked_user = None
     linked_person = None
@@ -423,7 +438,7 @@ def add_attendee(
 
 
 def delete_attendee(*, audit_id: str, attendee_id: str, db: Session, user: User):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a)
     tid = try_uuid(attendee_id)
     if not tid:
@@ -445,7 +460,7 @@ def delete_attendee(*, audit_id: str, attendee_id: str, db: Session, user: User)
 def add_finding(
     *, audit_id: str, payload: AuditFindingPayload, db: Session, user: User
 ):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a)
     kind = (payload.kind or "").strip().lower()
     if kind not in FINDING_KINDS:
@@ -484,7 +499,7 @@ def update_finding(
     db: Session,
     user: User,
 ):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a)
     fid = try_uuid(finding_id)
     if not fid:
@@ -529,7 +544,7 @@ def update_finding(
 
 
 def delete_finding(*, audit_id: str, finding_id: str, db: Session, user: User):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a)
     fid = try_uuid(finding_id)
     if not fid:

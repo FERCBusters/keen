@@ -28,7 +28,7 @@ const params = new URLSearchParams(window.location.search || '');
 const measureId = params.get('id') || params.get('measure') || '';
 const status = document.getElementById('status');
 const $ = (id) => document.getElementById(id);
-const canSampleAudits = canSampleIntoAudit(me);
+const canSampleAudits = canSampleIntoAudit(me, 'isms');
 const canManageIsms = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);
 let measure = null;
 let metrics = [];

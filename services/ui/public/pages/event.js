@@ -2,6 +2,8 @@ import { createEvidenceExporter } from './evidence-export/index.js';
 import { renderJson } from '/json-highlight.js';
 import {
   initNavbar,
+  canSampleIntoAudit,
+  canEditAuditForUser,
   apiGet,
   apiPatch,
   apiPost,
@@ -620,7 +622,7 @@ async function load() {
 
     // Show audit sampling button for users with audits.manage/admins.
     const auditBtn = document.getElementById('btnSampleAudit');
-    if (auditBtn && (me?.can_manage_audits || me?.is_admin)) {
+    if (auditBtn && canSampleIntoAudit(me, 'event')) {
       auditBtn.style.display = '';
     } else if (auditBtn) {
       auditBtn.style.display = 'none';
@@ -851,7 +853,7 @@ async function openAuditSampleModal() {
     toast(status, 'Event not loaded yet', 'warning');
     return;
   }
-  if (!(me?.can_manage_audits || me?.is_admin)) {
+  if (!canSampleIntoAudit(me, 'event')) {
     toast(status, 'audits.manage permission required.', 'danger');
     return;
   }
@@ -874,7 +876,9 @@ async function openAuditSampleModal() {
     try {
       const fw = pageFramework || getCurrentFramework();
       const data = await apiGet(`/api/v1/audits?framework=${encodeURIComponent(fw)}&limit=500`);
-      const items = (data?.items || []).filter((a) => isAuditActive(a));
+      const items = (data?.items || []).filter(
+        (a) => isAuditActive(a) && canEditAuditForUser(me, a),
+      );
       auditSampleSelect.innerHTML =
         items
           .map((a) => {

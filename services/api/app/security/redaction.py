@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Redaction utilities.
 
 These helpers aim to keep secrets (e.g. webhook secrets, API keys, feed tokens)
@@ -20,6 +18,8 @@ Configuration (environment variables):
       "extend" (default) to add to defaults, or "replace" to use ONLY
       KEEN_SENSITIVE_KEYS.
 """
+
+from __future__ import annotations
 
 import ipaddress
 import json
@@ -46,8 +46,10 @@ _IPV4_RE = re.compile(
 )
 # Conservative IPv6 candidate matcher; each candidate is validated with ipaddress
 # before replacement to avoid masking timestamps, ratios, or ordinary prose.
+# Bound both repetitions: overlapping colon runs must never trigger quadratic
+# backtracking on malformed evidence. Valid IPv6 addresses fit these bounds.
 _IPV6_CANDIDATE_RE = re.compile(
-    r"(?<![\w:])(?:[0-9A-Fa-f]{0,4}:){2,}[0-9A-Fa-f:.%]+(?![\w:])"
+    r"(?<![\w:])(?:[0-9A-Fa-f]{0,4}:){2,8}[0-9A-Fa-f:.%]{1,64}(?![\w:])"
 )
 
 # NOTE: Defaults are intentionally broad; users can tighten/override via env vars.

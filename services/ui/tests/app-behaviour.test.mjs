@@ -187,3 +187,27 @@ test('navbar native logout uses POST and stops the vendor GET handler', async ()
     u.close();
   }
 });
+
+for (const [user, audit, allowed] of [
+  [{ can_manage_audits: true, user_id: 'one' }, { created_by_user_id: 'one' }, true],
+  [{ can_manage_audits: true, user_id: 'one' }, { created_by_user_id: 'two' }, false],
+  [{ can_manage_audits: true }, {}, false],
+  [{ can_view_audits: true, user_id: 'one' }, { created_by_user_id: 'one' }, false],
+  [{ can_admin_audits: true }, { created_by_user_id: 'two' }, true],
+  [{ is_admin: true }, { created_by_user_id: null }, true],
+])
+  test(`audit editing ownership ${JSON.stringify(user)} ${JSON.stringify(audit)}`, () => {
+    assert.equal(a.canEditAuditForUser(user, audit), allowed);
+  });
+
+for (const [user, type, allowed] of [
+  [{ can_manage_audits: true }, 'event', false],
+  [{ can_manage_audits: true, can_view_events: true }, 'event', true],
+  [{ can_admin_audits: true }, 'event', false],
+  [{ can_manage_audits: true, can_view_isms: true }, 'bookstack_section', false],
+  [{ can_manage_audits: true, can_sample_isms: true }, 'isms_document', true],
+  [{ is_admin: true }, 'event', true],
+])
+  test(`audit sampling source ${type} ${JSON.stringify(user)}`, () => {
+    assert.equal(a.canSampleIntoAudit(user, type), allowed);
+  });

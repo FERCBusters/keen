@@ -116,11 +116,11 @@ function canViewAudits() {
 }
 
 function canManageAudits() {
-  return Boolean(me?.can_manage_audits || me?.is_admin);
+  return Boolean(me?.can_manage_audits || me?.can_admin_audits || me?.is_admin);
 }
 
 function canDeleteAudits() {
-  return Boolean(me?.is_admin);
+  return Boolean(me?.is_admin || me?.can_admin_audits);
 }
 
 function ensureAuditRead() {
@@ -1089,7 +1089,7 @@ function renderScheduledRows(items) {
       <td class="text-end">
         <div class="btn-group btn-group-sm">
           <a class="btn btn-outline-primary" href="${esc(url)}">Open template</a>
-          ${canManageAudits() ? `<button class="btn btn-outline-danger" type="button" data-delete-schedule="${esc(a.id)}">Delete</button>` : ''}
+          ${canDeleteAudits() ? `<button class="btn btn-outline-danger" type="button" data-delete-schedule="${esc(a.id)}">Delete</button>` : ''}
         </div>
       </td>
     </tr>`;
@@ -1098,6 +1098,7 @@ function renderScheduledRows(items) {
   scheduledRows.querySelectorAll('[data-delete-schedule]').forEach((btn) =>
     btn.addEventListener('click', async () => {
       if (!ensureAuditManage()) return;
+      if (!canDeleteAudits()) return;
       if (!confirm('Delete this scheduled audit template?')) return;
       try {
         await apiDelete(

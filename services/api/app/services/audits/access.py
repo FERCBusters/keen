@@ -4,13 +4,14 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Audit, AuditAttendee, Event, User
+from app.db.models import Audit, AuditAttendee, Event, Risk, User
 from app.security.diary_visibility import is_diary_event_visible
 from app.security.permissions import has_permission
 from app.services.audits.validation import try_uuid
 from app.services.errors import DomainError
 
 AUDIT_MANAGE_PERMISSION = "audits.manage"
+AUDIT_ADMIN_PERMISSION = "audits.admin"
 
 
 AUDIT_READ_PERMISSION = "audits.read"
@@ -19,8 +20,8 @@ AUDIT_READ_PERMISSION = "audits.read"
 def can_read_audits(db: Session, user: User | None) -> bool:
     if not isinstance(user, User) or not getattr(user, "is_active", False):
         return False
-    # audits.manage implies read access, and admins are granted implicitly by has_permission().
-    return has_permission(db, user, AUDIT_MANAGE_PERMISSION) or has_permission(
+    # Audit managers and administrators can read audits; application admins have all permissions.
+    return can_manage_audits(db, user) or has_permission(
         db, user, AUDIT_READ_PERMISSION
     )
 
@@ -28,7 +29,9 @@ def can_read_audits(db: Session, user: User | None) -> bool:
 def can_manage_audits(db: Session, user: User | None) -> bool:
     if not isinstance(user, User) or not getattr(user, "is_active", False):
         return False
-    return has_permission(db, user, AUDIT_MANAGE_PERMISSION)
+    return has_permission(db, user, AUDIT_MANAGE_PERMISSION) or can_admin_audits(
+        db, user
+    )
 
 
 def is_audit_attendee(db: Session, user: User | None, audit_id: uuid.UUID) -> bool:
@@ -61,9 +64,56 @@ def audit_or_404(db: Session, audit_id: str) -> Audit:
 
 
 def can_see_event(db: Session, user: User, event_id: uuid.UUID) -> Event:
+    if not has_permission(db, user, "events.read"):
+        raise DomainError(403, "events.read permission required")
     row = db.query(Event).filter(Event.id == event_id).one_or_none()
     if not row:
         raise DomainError(status_code=404, detail="Event not found")
     if row.source == "diary" and not is_diary_event_visible(db, user, event_id):
         raise DomainError(status_code=404, detail="Event not found")
     return row
+
+
+def require_sample_source_access(
+    db: Session, user: User, entity_type: str, entity_id: uuid.UUID
+) -> None:
+    """Adding a sample requires source access before audit sharing is established."""
+    if entity_type == "risk":
+        from app.services.risks import _can_read_specific_risk
+
+        allowed = _can_read_specific_risk(db, user, db.get(Risk, entity_id))
+    elif entity_type == "pestle_item":
+        from app.services.pestle import _can_read_pestle
+
+        allowed = _can_read_pestle(db, user)
+    elif entity_type == "interested_party":
+        from app.services.interested_parties import _can_read_interested_parties
+
+        allowed = _can_read_interested_parties(db, user)
+    elif entity_type == "bookstack_section" or entity_type.startswith("isms_"):
+        allowed = has_permission(db, user, "isms.read")
+    else:
+        allowed = False
+    if not allowed:
+        raise DomainError(403, "Read access to the sampled source is required")
+
+
+def can_admin_audits(db: Session, user: User | None) -> bool:
+    return has_permission(db, user, AUDIT_ADMIN_PERMISSION)
+
+
+def require_audit_admin(db: Session, user: User) -> None:
+    if not can_admin_audits(db, user):
+        raise DomainError(403, "audits.admin permission required")
+
+
+def editable_audit_or_404(db: Session, user: User, audit_id: str) -> Audit:
+    audit = audit_or_404(db, audit_id)
+    if not (
+        can_admin_audits(db, user)
+        or (can_manage_audits(db, user) and audit.created_by_user_id == user.id)
+    ):
+        raise DomainError(
+            403, "Only the audit creator or an audit administrator can edit this audit"
+        )
+    return audit

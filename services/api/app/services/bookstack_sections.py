@@ -21,6 +21,7 @@ from app.db.models import (
 )
 from app.ingest.bookstack import _client
 from app.security.permissions import has_permission
+from app.security.redaction import prepare_event_fields
 from app.services.errors import DomainError
 from app.storage.s3 import put_bytes
 
@@ -128,6 +129,7 @@ def capture_section(*, payload: SectionInput, user, db: Session):
         ) from exc
     if not isinstance(page, dict) or page.get("id") != payload.page_id:
         raise DomainError(502, "BookStack returned an unexpected page")
+    page = prepare_event_fields(page, mask=settings.event_data_masking == "true")
     base_url = settings.bookstack_base_url.rstrip("/")
     permalink = f"{base_url}/link/{payload.page_id}" + (f"#{anchor}" if anchor else "")
     captured = utc_now_naive()
@@ -205,6 +207,7 @@ def download_section(*, section_id: uuid.UUID, user, db: Session):
     can_read_audit = audit_sampled and (
         has_permission(db, user, "audits.read")
         or has_permission(db, user, "audits.manage")
+        or has_permission(db, user, "audits.admin")
     )
     if not can_read_isms and not can_read_audit:
         raise DomainError(403, "ISMS or sampled-audit read permission required")

@@ -84,7 +84,7 @@ export async function initBookstackDocuments(me, root) {
       <td>${esc(s.target_framework || 'Deleted framework')} · ${esc(s.target_ref || 'Deleted requirement')}</td><td>${esc(s.captured_at)}</td>
       <td>${s.revision_count ?? '—'} <small>${esc(s.page_updated_at || '')}</small></td>
       <td><a href="/api/v1/isms/bookstack-sections/${encodeURIComponent(s.id)}/snapshot">Download JSON</a><div class="small-muted" title="SHA-256 ${esc(s.sha256)}">SHA-256 ${esc(s.sha256.slice(0, 12))}…</div></td>
-      <td>${canSampleIntoAudit(me) ? `<button type="button" class="btn btn-sm btn-outline-primary" data-sample="${esc(s.id)}">Sample into audit</button>` : ''}
+      <td>${canSampleIntoAudit(me, 'isms') ? `<button type="button" class="btn btn-sm btn-outline-primary" data-sample="${esc(s.id)}">Sample into audit</button>` : ''}
       ${manage ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-archive="${esc(s.id)}" data-archived="${s.archived}">${s.archived ? 'Restore' : 'Archive'}</button>` : ''}</td></tr>`,
           )
           .join('') ||
@@ -117,7 +117,7 @@ export async function initBookstackDocuments(me, root) {
   });
   $('sectionRows').addEventListener('click', async (e) => {
     const sample = e.target.closest('[data-sample]');
-    if (sample && canSampleIntoAudit(me)) {
+    if (sample && canSampleIntoAudit(me, 'isms')) {
       const section = capturedSections.find((item) => item.id === sample.dataset.sample);
       openAuditSampleModal({
         me,

@@ -1,5 +1,7 @@
 import {
   initNavbar,
+  canEditAuditForUser,
+  canSampleIntoAudit,
   apiGet,
   apiPatch,
   apiPost,
@@ -272,11 +274,11 @@ function canViewAudits() {
 }
 
 function canManageAudits() {
-  return Boolean(me?.can_manage_audits || me?.is_admin);
+  return audit ? canEditAuditForUser(me, audit) : canSampleIntoAudit(me);
 }
 
 function canDeleteAudit() {
-  return Boolean(me?.is_admin && audit && !auditTemplate());
+  return Boolean((me?.is_admin || me?.can_admin_audits) && audit && !auditTemplate());
 }
 
 function auditLocked() {
@@ -302,7 +304,12 @@ function auditLockedMessage() {
 function ensureAuditEditable() {
   if (canEditAudit()) return true;
   if (auditLocked()) toast(status, auditLockedMessage(), 'warning');
-  else toast(status, 'audits.manage permission required.', 'danger');
+  else
+    toast(
+      status,
+      'Only the audit creator or an audit administrator can edit this audit.',
+      'danger',
+    );
   return false;
 }
 

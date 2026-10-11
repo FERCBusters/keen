@@ -6,7 +6,9 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.db.models import User
-from app.services.audits.access import audit_or_404
+from app.services.audits.access import (
+    editable_audit_or_404,
+)
 from app.services.audits.serializers import report_dict
 from app.services.audits.validation import require_mutable_audit, utcnow
 from app.services.errors import DomainError
@@ -22,7 +24,7 @@ def save_final_report(
     content_type: str | None,
     data: bytes,
 ):
-    a = audit_or_404(db, audit_id)
+    a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a)
     filename = os.path.basename(filename or "audit-report")[:255]
     content_type = content_type or "application/octet-stream"
