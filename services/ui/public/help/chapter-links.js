@@ -46,6 +46,7 @@ window.KEEN_DOC_LINKS = {
   'using.html#client-ip-evidence': 'using-structured-fields.html#client-ip-evidence',
   'using.html#review-evidence': 'using-events.html#review-evidence',
   'using.html#7-collect-and-inspect-evidence': 'using-events.html#7-collect-and-inspect-evidence',
+  'using.html#event-actions': 'using-events.html#event-actions',
   'using.html#evidence-review': 'using-events.html#evidence-review',
   'using.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
   'using.html#8-sources-questions-and-incidents':
@@ -58,6 +59,7 @@ window.KEEN_DOC_LINKS = {
   'using.html#use-the-reusable-risk-library': 'using-risks.html#use-the-reusable-risk-library',
   'using.html#risk-register-exchange-and-the-mitigator':
     'using-risks.html#risk-register-exchange-and-the-mitigator',
+  'using.html#risk-library-tab': 'using-risks.html#risk-library-tab',
   'using.html#risk-assessment': 'using-risks.html#risk-assessment',
   'using.html#library-reuse': 'using-risks.html#library-reuse',
   'using.html#mitigator': 'using-risks.html#mitigator',
@@ -101,6 +103,7 @@ window.KEEN_DOC_LINKS = {
   'using.html#scheduled-audits': 'using-audits.html#scheduled-audits',
   'using.html#read-evidence-visualisations': 'using-audits.html#read-evidence-visualisations',
   'using.html#review-and-preferences': 'using-operations.html#review-and-preferences',
+  'using.html#visualisation-tabs': 'using-operations.html#visualisation-tabs',
   'using.html#13-search-visualisations-and-personal-settings':
     'using-operations.html#13-search-visualisations-and-personal-settings',
   'using.html#14-review-changes-and-resolve-problems':
@@ -180,6 +183,15 @@ window.KEEN_DOC_LINKS = {
   'administrator.html#git-service-collection': 'administrator-git.html#git-service-collection',
   'administrator.html#source-jenkins': 'administrator-jenkins.html#source-jenkins',
   'administrator.html#source-loki': 'administrator-loki.html#source-loki',
+  'administrator.html#elasticsearch-ingestion':
+    'administrator-elasticsearch.html#elasticsearch-ingestion',
+  'administrator.html#elasticsearch-setup': 'administrator-elasticsearch.html#elasticsearch-setup',
+  'administrator.html#elasticsearch-windows':
+    'administrator-elasticsearch.html#elasticsearch-windows',
+  'administrator.html#elasticsearch-limits':
+    'administrator-elasticsearch.html#elasticsearch-limits',
+  'administrator.html#elasticsearch-environment':
+    'administrator-elasticsearch.html#elasticsearch-environment',
   'administrator.html#source-cloudwatch': 'administrator-cloudwatch.html#source-cloudwatch',
   'administrator.html#source-github': 'administrator-github.html#source-github',
   'administrator.html#source-forgejo': 'administrator-forgejo.html#source-forgejo',
@@ -236,6 +248,12 @@ window.KEEN_DOC_LINKS = {
     'administrator-agents.html#structured-agent-filtering',
   'administrator.html#evidence-storage': 'administrator-retention.html#evidence-storage',
   'administrator.html#evidence-retention': 'administrator-retention.html#evidence-retention',
+  'administrator.html#audit-trail': 'administrator-audit-trail.html#audit-trail',
+  'administrator.html#audit-trail-entity-changes':
+    'administrator-audit-trail.html#audit-trail-entity-changes',
+  'administrator.html#audit-trail-requests': 'administrator-audit-trail.html#audit-trail-requests',
+  'administrator.html#audit-trail-interpretation':
+    'administrator-audit-trail.html#audit-trail-interpretation',
   'administrator.html#9-upgrade-safely': 'administrator-maintenance.html#9-upgrade-safely',
   'administrator.html#10-backups-and-restore':
     'administrator-maintenance.html#10-backups-and-restore',
@@ -277,6 +295,8 @@ window.KEEN_DOC_LINKS = {
   'developer.html#10-develop-and-verify-a-change':
     'developer-development.html#10-develop-and-verify-a-change',
   'developer.html#help-generation': 'developer-development.html#help-generation',
+  'administrator-sources.html#elasticsearch-ingestion':
+    'administrator-elasticsearch.html#elasticsearch-ingestion',
   'adopter.html': 'using.html',
   'adopter.html#evidence-to-assurance': 'using-start.html#evidence-to-assurance',
   'adopter.html#getting-started': 'using-start.html#getting-started',
@@ -325,6 +345,7 @@ window.KEEN_DOC_LINKS = {
   'adopter.html#client-ip-evidence': 'using-structured-fields.html#client-ip-evidence',
   'adopter.html#review-evidence': 'using-events.html#review-evidence',
   'adopter.html#7-collect-and-inspect-evidence': 'using-events.html#7-collect-and-inspect-evidence',
+  'adopter.html#event-actions': 'using-events.html#event-actions',
   'adopter.html#evidence-review': 'using-events.html#evidence-review',
   'adopter.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
   'adopter.html#8-sources-questions-and-incidents':
@@ -337,6 +358,7 @@ window.KEEN_DOC_LINKS = {
   'adopter.html#use-the-reusable-risk-library': 'using-risks.html#use-the-reusable-risk-library',
   'adopter.html#risk-register-exchange-and-the-mitigator':
     'using-risks.html#risk-register-exchange-and-the-mitigator',
+  'adopter.html#risk-library-tab': 'using-risks.html#risk-library-tab',
   'adopter.html#risk-assessment': 'using-risks.html#risk-assessment',
   'adopter.html#library-reuse': 'using-risks.html#library-reuse',
   'adopter.html#mitigator': 'using-risks.html#mitigator',
@@ -380,6 +402,7 @@ window.KEEN_DOC_LINKS = {
   'adopter.html#scheduled-audits': 'using-audits.html#scheduled-audits',
   'adopter.html#read-evidence-visualisations': 'using-audits.html#read-evidence-visualisations',
   'adopter.html#review-and-preferences': 'using-operations.html#review-and-preferences',
+  'adopter.html#visualisation-tabs': 'using-operations.html#visualisation-tabs',
   'adopter.html#13-search-visualisations-and-personal-settings':
     'using-operations.html#13-search-visualisations-and-personal-settings',
   'adopter.html#14-review-changes-and-resolve-problems':
@@ -450,6 +473,7 @@ window.KEEN_DOC_LINKS = {
   'walkthroughs.html#review-evidence': 'using-events.html#review-evidence',
   'walkthroughs.html#7-collect-and-inspect-evidence':
     'using-events.html#7-collect-and-inspect-evidence',
+  'walkthroughs.html#event-actions': 'using-events.html#event-actions',
   'walkthroughs.html#evidence-review': 'using-events.html#evidence-review',
   'walkthroughs.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
   'walkthroughs.html#8-sources-questions-and-incidents':
@@ -463,6 +487,7 @@ window.KEEN_DOC_LINKS = {
     'using-risks.html#use-the-reusable-risk-library',
   'walkthroughs.html#risk-register-exchange-and-the-mitigator':
     'using-risks.html#risk-register-exchange-and-the-mitigator',
+  'walkthroughs.html#risk-library-tab': 'using-risks.html#risk-library-tab',
   'walkthroughs.html#risk-assessment': 'using-risks.html#risk-assessment',
   'walkthroughs.html#library-reuse': 'using-risks.html#library-reuse',
   'walkthroughs.html#mitigator': 'using-risks.html#mitigator',
@@ -507,6 +532,7 @@ window.KEEN_DOC_LINKS = {
   'walkthroughs.html#read-evidence-visualisations':
     'using-audits.html#read-evidence-visualisations',
   'walkthroughs.html#review-and-preferences': 'using-operations.html#review-and-preferences',
+  'walkthroughs.html#visualisation-tabs': 'using-operations.html#visualisation-tabs',
   'walkthroughs.html#13-search-visualisations-and-personal-settings':
     'using-operations.html#13-search-visualisations-and-personal-settings',
   'walkthroughs.html#14-review-changes-and-resolve-problems':
@@ -580,6 +606,7 @@ window.KEEN_DOC_LINKS = {
   'operations.html#review-evidence': 'using-events.html#review-evidence',
   'operations.html#7-collect-and-inspect-evidence':
     'using-events.html#7-collect-and-inspect-evidence',
+  'operations.html#event-actions': 'using-events.html#event-actions',
   'operations.html#evidence-review': 'using-events.html#evidence-review',
   'operations.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
   'operations.html#8-sources-questions-and-incidents':
@@ -592,6 +619,7 @@ window.KEEN_DOC_LINKS = {
   'operations.html#use-the-reusable-risk-library': 'using-risks.html#use-the-reusable-risk-library',
   'operations.html#risk-register-exchange-and-the-mitigator':
     'using-risks.html#risk-register-exchange-and-the-mitigator',
+  'operations.html#risk-library-tab': 'using-risks.html#risk-library-tab',
   'operations.html#risk-assessment': 'using-risks.html#risk-assessment',
   'operations.html#library-reuse': 'using-risks.html#library-reuse',
   'operations.html#mitigator': 'using-risks.html#mitigator',
@@ -635,6 +663,7 @@ window.KEEN_DOC_LINKS = {
   'operations.html#scheduled-audits': 'using-audits.html#scheduled-audits',
   'operations.html#read-evidence-visualisations': 'using-audits.html#read-evidence-visualisations',
   'operations.html#review-and-preferences': 'using-operations.html#review-and-preferences',
+  'operations.html#visualisation-tabs': 'using-operations.html#visualisation-tabs',
   'operations.html#13-search-visualisations-and-personal-settings':
     'using-operations.html#13-search-visualisations-and-personal-settings',
   'operations.html#14-review-changes-and-resolve-problems':
@@ -709,6 +738,12 @@ window.KEEN_DOC_LINKS = {
   'agents.html#git-service-collection': 'administrator-git.html#git-service-collection',
   'agents.html#source-jenkins': 'administrator-jenkins.html#source-jenkins',
   'agents.html#source-loki': 'administrator-loki.html#source-loki',
+  'agents.html#elasticsearch-ingestion': 'administrator-elasticsearch.html#elasticsearch-ingestion',
+  'agents.html#elasticsearch-setup': 'administrator-elasticsearch.html#elasticsearch-setup',
+  'agents.html#elasticsearch-windows': 'administrator-elasticsearch.html#elasticsearch-windows',
+  'agents.html#elasticsearch-limits': 'administrator-elasticsearch.html#elasticsearch-limits',
+  'agents.html#elasticsearch-environment':
+    'administrator-elasticsearch.html#elasticsearch-environment',
   'agents.html#source-cloudwatch': 'administrator-cloudwatch.html#source-cloudwatch',
   'agents.html#source-github': 'administrator-github.html#source-github',
   'agents.html#source-forgejo': 'administrator-forgejo.html#source-forgejo',
@@ -758,6 +793,12 @@ window.KEEN_DOC_LINKS = {
   'agents.html#structured-agent-filtering': 'administrator-agents.html#structured-agent-filtering',
   'agents.html#evidence-storage': 'administrator-retention.html#evidence-storage',
   'agents.html#evidence-retention': 'administrator-retention.html#evidence-retention',
+  'agents.html#audit-trail': 'administrator-audit-trail.html#audit-trail',
+  'agents.html#audit-trail-entity-changes':
+    'administrator-audit-trail.html#audit-trail-entity-changes',
+  'agents.html#audit-trail-requests': 'administrator-audit-trail.html#audit-trail-requests',
+  'agents.html#audit-trail-interpretation':
+    'administrator-audit-trail.html#audit-trail-interpretation',
   'agents.html#9-upgrade-safely': 'administrator-maintenance.html#9-upgrade-safely',
   'agents.html#10-backups-and-restore': 'administrator-maintenance.html#10-backups-and-restore',
   'agents.html#12-diagnose-problems-in-order':
@@ -818,6 +859,13 @@ window.KEEN_DOC_LINKS = {
   'redmine.html#git-service-collection': 'administrator-git.html#git-service-collection',
   'redmine.html#source-jenkins': 'administrator-jenkins.html#source-jenkins',
   'redmine.html#source-loki': 'administrator-loki.html#source-loki',
+  'redmine.html#elasticsearch-ingestion':
+    'administrator-elasticsearch.html#elasticsearch-ingestion',
+  'redmine.html#elasticsearch-setup': 'administrator-elasticsearch.html#elasticsearch-setup',
+  'redmine.html#elasticsearch-windows': 'administrator-elasticsearch.html#elasticsearch-windows',
+  'redmine.html#elasticsearch-limits': 'administrator-elasticsearch.html#elasticsearch-limits',
+  'redmine.html#elasticsearch-environment':
+    'administrator-elasticsearch.html#elasticsearch-environment',
   'redmine.html#source-cloudwatch': 'administrator-cloudwatch.html#source-cloudwatch',
   'redmine.html#source-github': 'administrator-github.html#source-github',
   'redmine.html#source-forgejo': 'administrator-forgejo.html#source-forgejo',
@@ -867,6 +915,12 @@ window.KEEN_DOC_LINKS = {
   'redmine.html#structured-agent-filtering': 'administrator-agents.html#structured-agent-filtering',
   'redmine.html#evidence-storage': 'administrator-retention.html#evidence-storage',
   'redmine.html#evidence-retention': 'administrator-retention.html#evidence-retention',
+  'redmine.html#audit-trail': 'administrator-audit-trail.html#audit-trail',
+  'redmine.html#audit-trail-entity-changes':
+    'administrator-audit-trail.html#audit-trail-entity-changes',
+  'redmine.html#audit-trail-requests': 'administrator-audit-trail.html#audit-trail-requests',
+  'redmine.html#audit-trail-interpretation':
+    'administrator-audit-trail.html#audit-trail-interpretation',
   'redmine.html#9-upgrade-safely': 'administrator-maintenance.html#9-upgrade-safely',
   'redmine.html#10-backups-and-restore': 'administrator-maintenance.html#10-backups-and-restore',
   'redmine.html#12-diagnose-problems-in-order':

@@ -280,6 +280,7 @@ async function editCollection(adapter, existing = null, connection = null) {
     ? { document: connection.inputs, version: connection.version }
     : await apiGet(root + '/managed-configurations/' + encodeURIComponent(adapter));
   const dialog = byId('collection');
+  dialog.dataset.helpSource = adapter;
   const type = byId('collection-type');
   type.replaceChildren();
   for (const key of Object.keys(layouts[adapter]))

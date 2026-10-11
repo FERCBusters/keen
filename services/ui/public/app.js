@@ -1,5 +1,6 @@
 // Re-export the MOSP design-system helpers.
 export * from '/vendor/mosp-design-system/app.js';
+import { initContextHelp } from './help-launcher.js';
 
 // Keen's UI pages historically imported a couple of helpers from /app.js.
 // Keep them here so older pages (e.g. account.js) continue to work.
@@ -223,6 +224,7 @@ export async function refreshFrameworkNavigation(savedCatalog = null, cfgOverrid
 }
 
 export async function initNavbar(...args) {
+  initContextHelp();
   const cfg = getUiConfig(args[0]);
   const me = await _mospInitNavbar({
     ...cfg,
@@ -236,6 +238,10 @@ export async function initNavbar(...args) {
     const link = document.createElement('a');
     link.href = '/help/';
     link.textContent = 'Help';
+    link.dataset.helpTopic = 'page';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.setAttribute('aria-haspopup', 'dialog');
     link.className = 'nav-link';
     link.dataset.keenDocumentation = '1';
     if (list) {

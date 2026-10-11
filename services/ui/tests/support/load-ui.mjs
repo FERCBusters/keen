@@ -78,23 +78,38 @@ export async function loadUi(
     { context },
   );
   async function moduleFor(url) {
-    if (cache.has(url.href)) return cache.get(url.href);
-    const module = new vm.SourceTextModule(await readFile(url, 'utf8'), {
-      context,
-      identifier: url.href,
-    });
-    cache.set(url.href, module);
-    await module.link(async (specifier, parent) => {
-      if (specifier === '/vendor/mosp-design-system/app.js') return vendorModule;
-      const next = specifier.startsWith('/')
-        ? new URL(specifier.slice(1), publicRoot)
-        : new URL(specifier, parent.identifier);
-      if (!next.href.startsWith(publicRoot.href)) throw new Error('Unexpected module ' + specifier);
-      return moduleFor(next);
-    });
-    return module;
+    if (!cache.has(url.href)) {
+      cache.set(
+        url.href,
+        readFile(url, 'utf8').then(
+          (source) =>
+            new vm.SourceTextModule(source, {
+              context,
+              identifier: url.href,
+              importModuleDynamically: async (specifier, parent) => {
+                const child = await linker(specifier, parent);
+                if (child.status === 'unlinked') await child.link(linker);
+                await child.evaluate();
+                return child;
+              },
+            }),
+        ),
+      );
+    }
+    return cache.get(url.href);
+  }
+  async function linker(specifier, parent) {
+    if (specifier === '/vendor/mosp-design-system/app.js') return vendorModule;
+    const next = specifier.startsWith('/')
+      ? new URL(specifier.slice(1), publicRoot)
+      : new URL(specifier, parent.identifier);
+    if (!next.href.startsWith(publicRoot.href)) throw new Error('Unexpected module ' + specifier);
+    return moduleFor(next);
   }
   const module = await moduleFor(new URL(path, publicRoot));
+  // Let VM link the whole graph; recursively linking dependencies races when
+  // sibling modules share an in-flight dependency.
+  await module.link(linker);
   await module.evaluate();
   return {
     api: module.namespace,

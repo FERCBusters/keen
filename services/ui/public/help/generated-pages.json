@@ -1,10 +1,12 @@
 [
   "administrator-agents.html",
   "administrator-api-ingesters.html",
+  "administrator-audit-trail.html",
   "administrator-bookstack.html",
   "administrator-cloudwatch.html",
   "administrator-deployment.html",
   "administrator-diary.html",
+  "administrator-elasticsearch.html",
   "administrator-forgejo.html",
   "administrator-frameworks.html",
   "administrator-git.html",

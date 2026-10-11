@@ -45,3 +45,22 @@ if (window.matchMedia('(max-width: 850px)').matches) {
   const chapters = document.querySelector('.chapter-menu');
   if (chapters) chapters.open = false;
 }
+
+const themeToggle = document.getElementById('docs-theme-toggle');
+function describeTheme() {
+  if (themeToggle)
+    themeToggle.textContent =
+      document.documentElement.dataset.bsTheme === 'dark' ? 'Light mode' : 'Dark mode';
+}
+themeToggle?.addEventListener('click', () => {
+  const root = document.documentElement;
+  root.dataset.bsTheme = root.dataset.bsTheme === 'dark' ? 'light' : 'dark';
+  try {
+    localStorage.setItem(
+      'keen_theme',
+      root.dataset.theme + (root.dataset.bsTheme === 'dark' ? '-dark' : ''),
+    );
+  } catch {}
+  describeTheme();
+});
+describeTheme();

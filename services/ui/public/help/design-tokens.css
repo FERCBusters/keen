@@ -1,0 +1,128 @@
+/* MOSP design system: Theme tokens, colour palettes, and global Bootstrap variable overrides.
+   Concatenated by scripts/build.mjs. */
+
+/* Keen UI – themeable (Bootstrap-friendly) */
+
+:root {
+  /* Accent palette (defaults to Purple) */
+  --keen-accent: #7e57c2;
+  --keen-accent-700: #6a3fb2;
+  --keen-accent-100: #f2ecfb;
+  --keen-accent-rgb: 126, 87, 194;
+  --keen-accent-contrast: #fff;
+  --keen-link-hover: #55308f;
+
+  /* Chart palette (defaults to accent) */
+  --keen-chart-rgb: var(--keen-accent-rgb);
+
+  /* Neutral palette */
+  --keen-ink: #1f1f2a;
+  --keen-muted: #5e5e75;
+
+  /* Backwards-compatible aliases */
+  --keen-purple: var(--keen-accent);
+  --keen-purple-700: var(--keen-accent-700);
+  --keen-purple-100: var(--keen-accent-100);
+
+  /* Additional aliases for legacy apps */
+  --mosp-accent: var(--keen-accent);
+  --mosp-accent-700: var(--keen-accent-700);
+  --mosp-accent-100: var(--keen-accent-100);
+  --mosp-accent-rgb: var(--keen-accent-rgb);
+
+  /* Override Bootstrap primary via CSS variables (Bootstrap v5) */
+  --bs-primary: var(--keen-accent);
+  --bs-primary-rgb: var(--keen-accent-rgb);
+  --bs-body-color: var(--keen-ink);
+  --bs-body-bg: #f7f4fb;
+  --bs-link-color: var(--keen-accent-700);
+  --bs-link-hover-color: var(--keen-link-hover);
+}
+
+/* Theme palettes (set on <html data-theme="...">) */
+:root[data-theme='purple'] {
+  --keen-accent: #7e57c2;
+  --keen-accent-700: #6a3fb2;
+  --keen-accent-100: #f2ecfb;
+  --keen-accent-rgb: 126, 87, 194;
+  --keen-accent-contrast: #fff;
+  --keen-link-hover: #55308f;
+  --bs-body-bg: #f7f4fb;
+}
+
+:root[data-theme='ocean'] {
+  --keen-accent: #2563eb;
+  --keen-accent-700: #1d4ed8;
+  --keen-accent-100: #e8f0ff;
+  --keen-accent-rgb: 37, 99, 235;
+  --keen-accent-contrast: #fff;
+  --keen-link-hover: #1e40af;
+  --bs-body-bg: #f4f8ff;
+}
+
+:root[data-theme='forest'] {
+  --keen-accent: #16a34a;
+  --keen-accent-700: #15803d;
+  --keen-accent-100: #eaf7ef;
+  --keen-accent-rgb: 22, 163, 74;
+  --keen-accent-contrast: #fff;
+  --keen-link-hover: #166534;
+  --bs-body-bg: #f3fbf6;
+}
+
+:root[data-theme='sunset'] {
+  --keen-accent: #f97316;
+  --keen-accent-700: #ea580c;
+  --keen-accent-100: #fff1e6;
+  --keen-accent-rgb: 249, 115, 22;
+  --keen-accent-contrast: #111827;
+  --keen-link-hover: #c2410c;
+  --bs-body-bg: #fff7f2;
+}
+
+:root[data-theme='rose'] {
+  --keen-accent: #db2777;
+  --keen-accent-700: #be185d;
+  --keen-accent-100: #ffeaf3;
+  --keen-accent-rgb: 219, 39, 119;
+  --keen-accent-contrast: #fff;
+  --keen-link-hover: #9d174d;
+  --bs-body-bg: #fff5fa;
+}
+
+:root[data-theme='slate'] {
+  --keen-accent: #475569;
+  --keen-accent-700: #334155;
+  --keen-accent-100: #eef2f6;
+  --keen-accent-rgb: 71, 85, 105;
+  --keen-accent-contrast: #fff;
+  --keen-link-hover: #1f2937;
+  --bs-body-bg: #f6f8fb;
+}
+
+:root[data-theme='teal'] {
+  --keen-accent: #0f766e;
+  --keen-accent-700: #0f5b55;
+  --keen-accent-100: #e6f6f4;
+  --keen-accent-rgb: 15, 118, 110;
+  --keen-accent-contrast: #fff;
+  --keen-link-hover: #134e4a;
+  --bs-body-bg: #f3fbfa;
+}
+
+:root[data-bs-theme='dark'] {
+  color-scheme: dark;
+  --keen-ink: #edf0f6;
+  --keen-muted: #b7bfce;
+  --bs-body-color: #edf0f6;
+  --bs-body-color-rgb: 237, 240, 246;
+  --bs-body-bg: #141820;
+  --bs-body-bg-rgb: 20, 24, 32;
+  --bs-secondary-bg: #202631;
+  --bs-tertiary-bg: #29313e;
+  --bs-border-color: #465061;
+  --bs-emphasis-color: #fff;
+  --keen-accent-100: color-mix(in srgb, var(--keen-accent) 20%, #202631);
+  --bs-link-color: color-mix(in srgb, var(--keen-accent) 55%, white);
+  --bs-link-hover-color: color-mix(in srgb, var(--keen-accent) 35%, white);
+}

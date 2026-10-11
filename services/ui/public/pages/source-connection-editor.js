@@ -14,7 +14,15 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
   const hint = document.createElement('p');
   hint.textContent =
     'Name the endpoint or account and enter its credentials, then add the inputs to collect. Credentials are encrypted on the server.';
-  form.append(heading, hint);
+  const help = document.createElement('a');
+  help.href = '/help/administrator-sources.html';
+  help.textContent = '? Source setup help';
+  help.className = 'd-inline-block mb-3';
+  help.dataset.helpTopic = 'connection';
+  help.target = '_blank';
+  help.rel = 'noopener noreferrer';
+  help.setAttribute('aria-haspopup', 'dialog');
+  form.append(heading, hint, help);
 
   function field(parent, title, type = 'text', value = '') {
     const label = document.createElement('label');
@@ -44,6 +52,7 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
 
   let profile, inlineInput;
   function paint() {
+    form.dataset.helpSource = source.value;
     fields.replaceChildren();
     profile = sourceSetupProfile(source.value, connection);
     inlineInput = null;
