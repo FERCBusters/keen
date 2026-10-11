@@ -29,7 +29,7 @@ export function editSourceConnection({types, connection = null, onSaved}) {
 
   const source = field(form, 'Source type', 'select');
   for (const type of types.filter(t => t.enabled || t.source === connection?.source)) {
-    source.add(new Option(type.source.replaceAll('_', ' '), type.source));
+    source.add(new Option(type.label || type.source.replaceAll('_', ' '), type.source));
   }
   if (connection) source.value = connection.source;
   source.disabled = !!connection;

@@ -789,6 +789,9 @@ class User(Base):
     mfa_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    session_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     mfa_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )

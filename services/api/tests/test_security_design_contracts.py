@@ -665,3 +665,116 @@ def test_enabled_metric_webhook_checks_secret(production_client, monkeypatch):
     )
     assert response.status_code == 403
     assert verify.call_args.args[0] == "isms_metrics"
+
+
+@pytest.mark.parametrize("method", ["local", "ldap", "google", "github", "oidc"])
+def test_deactivation_permanently_revokes_all_session_methods(
+    production_client, contract_db, method
+):
+    from app import main
+    from app.db.session import get_db
+
+    client, redis, admin, reader = production_client
+    admin_sid = sessions.create_session(redis, user_id=str(admin.id), ttl_seconds=300)
+    old_sid = sessions.create_session(
+        redis, user_id=str(reader.id), ttl_seconds=300, auth_method=method
+    )
+    untouched_sid = sessions.create_session(
+        redis, user_id=str(reader.id), ttl_seconds=300, auth_method=method
+    )
+    main.app.dependency_overrides[get_db] = lambda: contract_db
+    try:
+        client.cookies.set(settings.session_cookie_name, old_sid)
+        assert client.get("/v1/me").status_code == 200
+
+        def change(active):
+            client.cookies.clear()
+            client.cookies.set(settings.session_cookie_name, admin_sid)
+            client.cookies.set(csrf.csrf_cookie_name(), "test-token")
+            response = client.patch(
+                f"/v1/users/{reader.id}",
+                json={"is_active": active},
+                headers={
+                    csrf.csrf_header_name(): "test-token",
+                    "Origin": "https://keen.example",
+                },
+            )
+            assert response.status_code == 200, response.text
+
+        change(False)
+        client.cookies.set(settings.session_cookie_name, old_sid)
+        assert client.get("/v1/me").status_code == 401
+        assert sessions.get_session(redis, old_sid) is None
+        change(True)
+        client.cookies.set(settings.session_cookie_name, untouched_sid)
+        assert client.get("/v1/me").status_code == 401
+        assert sessions.get_session(redis, untouched_sid) is None
+        contract_db.refresh(reader)
+        fresh = sessions.create_session(
+            redis,
+            user_id=str(reader.id),
+            ttl_seconds=300,
+            auth_method=method,
+            session_version=reader.session_version,
+            mfa_version=reader.mfa_version,
+        )
+        client.cookies.set(settings.session_cookie_name, fresh)
+        assert client.get("/v1/me").status_code == 200
+    finally:
+        main.app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.parametrize("method", ["local", "google"])
+def test_login_issuers_capture_account_session_version(
+    production_client, contract_db, monkeypatch, method
+):
+    from app.api.routes import auth as routes
+    from app.services import security_notifications
+
+    _, redis, _, user = production_client
+    user.session_version = 7
+    contract_db.commit()
+    monkeypatch.setattr(routes, "get_valkey", lambda: redis)
+    monkeypatch.setattr(security_notifications, "record_login", lambda *args: None)
+    req = request("/v1/auth/login", "POST")
+    if method == "local":
+        response = routes.complete_local_login(contract_db, user, req)
+    else:
+        monkeypatch.setattr(
+            routes,
+            "handle_callback",
+            AsyncMock(return_value=(user, "/", None, SimpleNamespace(key=method))),
+        )
+        response = asyncio.run(
+            routes._complete_sso_callback(req, contract_db, provider_key=method)
+        )
+    from http.cookies import SimpleCookie
+
+    cookies = SimpleCookie()
+    for header in response.headers.getlist("set-cookie"):
+        cookies.load(header)
+    sid = cookies[settings.session_cookie_name].value
+    assert sessions.get_session(redis, sid)["session_version"] == 7
+
+
+def test_admin_source_types_expose_display_labels(
+    production_client, contract_db, monkeypatch
+):
+    from app import main
+    from app.core import source_meta
+    from app.db.session import get_db
+
+    client, redis, admin, _ = production_client
+    monkeypatch.setattr(source_meta, "_configured_source_meta", lambda _: {})
+    monkeypatch.delenv("KEEN_SOURCE_NAME_RSS", raising=False)
+    main.app.dependency_overrides[get_db] = lambda: contract_db
+    try:
+        sid = sessions.create_session(redis, user_id=str(admin.id), ttl_seconds=300)
+        client.cookies.set(settings.session_cookie_name, sid)
+        response = client.get("/v1/admin/source-connections")
+        assert response.status_code == 200, response.text
+        types = {item["source"]: item for item in response.json()["types"]}
+        assert types["rss"]["label"] == "RSS"
+        assert types["github"]["label"] == "GitHub"
+    finally:
+        main.app.dependency_overrides.pop(get_db, None)

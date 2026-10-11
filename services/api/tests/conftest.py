@@ -48,6 +48,9 @@ def contract_postgres_engine():
                 runpy.run_path(str(root / "alembic/versions/0005_agent_enrollment.py"))[
                     "upgrade"
                 ]()
+                runpy.run_path(
+                    str(root / "alembic/versions/0006_session_revocation.py")
+                )["upgrade"]()
         yield engine
     finally:
         try:

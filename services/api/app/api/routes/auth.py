@@ -151,6 +151,7 @@ def complete_local_login(
     db, user, request, *, mfa_verified=False, verified_version=None
 ):
     # Freeze the version proven by this ceremony before any commit expires ORM state.
+    account_session_version = user.session_version
     session_version = user.mfa_version if verified_version is None else verified_version
     # Delete any existing session for this user to prevent session fixation.
     existing_sid = request.cookies.get(settings.session_cookie_name)
@@ -180,6 +181,7 @@ def complete_local_login(
         ttl_seconds=int(settings.session_ttl_seconds),
         auth_method=user.auth_backend or "local",
         mfa_version=session_version,
+        session_version=account_session_version,
         mfa_verified=mfa_verified,
         effective_role=eff,
         permission_codes=permission_codes,
@@ -294,6 +296,7 @@ async def _complete_sso_callback(
     user, next_url, id_token, provider = await handle_callback(
         request, db, provider_key=provider_key
     )
+    account_session_version = user.session_version
     eff = attach_effective_role(db, user)
     permission_codes = get_effective_permission_codes(db, user, use_cache=False)
     authz_version = int(getattr(user, "authz_version", 0) or 0)
@@ -305,6 +308,7 @@ async def _complete_sso_callback(
         user_id=str(user.id),
         ttl_seconds=int(settings.session_ttl_seconds),
         auth_method=provider.key,
+        session_version=account_session_version,
         oidc_id_token=id_token,
         effective_role=eff,
         permission_codes=permission_codes,

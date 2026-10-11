@@ -1737,3 +1737,9 @@ button.keen-filter-pill-chip:focus-visible {
   #navbar .navbar-keen .nav-link { font-size: .875rem; padding-left: .4rem; padding-right: .4rem; }
   #navbar .navbar-keen .navbar-brand { margin-right: .45rem; }
 }
+
+/* JSON evidence uses the shared theme palette and remains selectable plain text. */
+.json-key { color: var(--bs-link-color); font-weight: 600; }
+.json-string { color: var(--bs-success-text-emphasis, #146c43); }
+.json-number { color: var(--bs-info-text-emphasis, #055160); }
+.json-literal { color: var(--bs-danger-text-emphasis, #842029); }

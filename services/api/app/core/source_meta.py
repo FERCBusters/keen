@@ -49,7 +49,29 @@ def normalize_hex_color(raw: str | None) -> str | None:
     return _normalize_hex_color(raw)
 
 
+SOURCE_LABELS = {
+    "rss": "RSS",
+    "github": "GitHub",
+    "gitlab": "GitLab",
+    "forgejo": "Forgejo",
+    "gitea": "Gitea",
+    "loki": "Loki",
+    "jenkins": "Jenkins",
+    "redmine": "Redmine",
+    "riskledger": "Risk Ledger",
+    "bookstack": "BookStack",
+    "taiga": "Taiga",
+    "google_workspace": "Google Workspace",
+    "cloudwatch_logs": "AWS CloudWatch Logs",
+    "keen-agent": "KEEN Agent",
+    "webhooks": "Webhooks",
+    "diary": "Diary",
+}
+
+
 def _humanize_source(source: str) -> str:
+    if source in SOURCE_LABELS:
+        return SOURCE_LABELS[source]
     # Keep colon semantics readable (e.g. webhook:something -> Webhook: Something)
     parts = [p for p in re.split(r"(:)", source) if p != ""]
     out: list[str] = []

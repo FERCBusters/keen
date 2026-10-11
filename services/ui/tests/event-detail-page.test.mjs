@@ -18,6 +18,7 @@ test('event detail renders structured payload and an event-scoped mapping shortc
  assert.match(ui.el('controls').textContent,/unmapped/);assert.equal(ui.el('btnCreateMapping').hidden,false);
  assert.match(ui.el('btnCreateMapping').href,/framework=A&from_event=e1#evidence-config/);
  assert.match(ui.el('normalized').textContent,/31101/);
+ assert.ok(ui.el('normalized').querySelector('.json-key'));
 });
 test('event severity zero remains visible',async t=>{
  const ui=await fixture(t);assert.equal(ui.el('severity').textContent,'0');

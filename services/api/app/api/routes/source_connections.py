@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
+from app.core.source_meta import get_source_meta
 from app.db.models import SourceConnection
 from app.db.session import get_db
 from app.ingest.connections import FIELDS, connections, deployment_settings
@@ -132,6 +133,7 @@ def listing(db=Depends(get_db)):
         "types": [
             {
                 "source": s,
+                "label": get_source_meta(s).label,
                 "enabled": bool(getattr(deployment_settings, s + "_enabled", False)),
                 "fields": public.split(),
                 "credential_fields": secret.split(),

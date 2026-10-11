@@ -208,6 +208,10 @@ def update_user_admin(
             )
         target.role = role
 
+    if payload.is_active is False:
+        # Atomic increments preserve revocation across concurrent admin changes.
+        target.session_version = User.session_version + 1
+        target.mfa_version = User.mfa_version + 1
     if payload.is_active is not None:
         target.is_active = bool(payload.is_active)
 

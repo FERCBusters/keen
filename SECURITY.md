@@ -31,7 +31,7 @@ Upstream identity providers and authorised integration servers are trusted for t
 
 ## Authentication, sessions and account linking
 
-Browser sessions use random, server-generated identifiers stored in Valkey. The browser receives an HttpOnly session cookie. Successful authentication issues a fresh identifier, and logout deletes the current server-side session. Permission snapshots are checked against a database-backed authorization version, and inactive accounts are rejected. Session expiry is rolling; operators configure its duration.
+Browser sessions use random, server-generated identifiers stored in Valkey. The browser receives an HttpOnly session cookie. Successful authentication issues a fresh identifier, and logout deletes the current server-side session. Permission snapshots are checked against a database-backed authorization version, and inactive accounts are rejected. Deactivating an account advances its database-backed session version, invalidating previously issued sessions across authentication methods even after reactivation. In-flight requests can finish; subsequent authentication checks reject the old sessions. Session expiry is rolling; operators configure its duration.
 
 Local passwords are stored as salted PBKDF2-HMAC-SHA256 hashes. Password login attempts are rate limited by client address and username. Authentication rate limits fail closed when their backing service is unavailable. Local password and MFA changes invalidate local/LDAP sessions through the account's security version.
 

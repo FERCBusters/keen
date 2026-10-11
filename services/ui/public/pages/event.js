@@ -1,3 +1,4 @@
+import {renderJson} from '/json-highlight.js';
 import {initNavbar, apiGet, apiPatch, apiPost, apiDelete, apiPostForm, esc, fmtTs, fmtTsFilename, toast, qs, getSourceMeta, sourceBadgeHtml, sourceLabel, safeExternalHref, getCurrentFramework, withFramework, isAuditActive} from '/app.js';
 
 const PRINT_MODE = (() => {
@@ -1915,8 +1916,8 @@ async function load() {
     await refreshQuestions(e.id);
 
     // JSON panes
-    document.getElementById('normalized').textContent = pretty(e.normalized_payload ?? {});
-    document.getElementById('raw').textContent = pretty(e.raw_pointer ?? {});
+    renderJson(document.getElementById('normalized'), pretty(e.normalized_payload ?? {}));
+    renderJson(document.getElementById('raw'), pretty(e.raw_pointer ?? {}));
 
     // If this is the dedicated print window, trigger the native print dialog
     // after the event + thumbnails are rendered.

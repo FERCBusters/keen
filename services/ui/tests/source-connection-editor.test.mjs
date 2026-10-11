@@ -22,12 +22,14 @@ test('connection editor separates endpoint and secrets and preserves inputs on e
   assert.equal(saved.body.version,3);
 });
 
-const rssType={source:'rss',enabled:true,fields:['base_url','username','header_name'],credential_fields:['password','header_value']};
+const rssType={source:'rss',label:'RSS',enabled:true,fields:['base_url','username','header_name'],credential_fields:['password','header_value']};
 test('RSS source saves one feed and credentials together with an origin restriction',async t=>{
  let saved;
  const ui=await loadUi('pages/source-connection-editor.js',{setup(w){w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};},vendor:{apiPost:async(url,body)=>{saved=body;return {...body,id:'rss-one'};}}});
  t.after(ui.close);
  const dialog=ui.api.editSourceConnection({types:[rssType],onSaved:async()=>{}});
+ assert.equal(dialog.querySelector('select').selectedOptions[0].textContent,'RSS');
+ assert.equal(dialog.querySelector('select').value,'rss');
  assert.equal(dialog.querySelector('[data-key="base_url"]'),null);
  dialog.querySelector('[data-feed-url]').value='https://news.example:8443/private/feed.xml?format=rss';
  dialog.querySelector('[data-key="password"]').value='secret';

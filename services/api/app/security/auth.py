@@ -113,7 +113,11 @@ def get_current_user_from_headers_cookies(
         return None
 
     user = db.query(User).filter(User.id == uid).one_or_none()
-    if not user or not user.is_active:
+    if (
+        not user
+        or not user.is_active
+        or sess.get("session_version", 0) != user.session_version
+    ):
         # Stale session; best effort delete
         delete_session(r, sid)
         return None

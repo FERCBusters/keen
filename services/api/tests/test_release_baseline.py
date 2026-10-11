@@ -136,6 +136,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0006_session_revocation",
         "0005_agent_enrollment",
         "0004_source_connections",
         "0002_release_seed",

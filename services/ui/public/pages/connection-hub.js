@@ -5,6 +5,7 @@ import {apiGet, apiPut, apiPost, apiDelete} from '/app.js';
 const root='/api/v1/admin', byId=id=>document.getElementById('hub-'+id);
 let connectionTypes=[];
 let entries=[], surface='source';
+const sourceTypeLabel = source => connectionTypes.find(t=>t.source===source)?.label || source;
 function button(text, action, danger=false){const b=document.createElement('button');b.type='button';b.className='btn btn-sm '+(danger?'btn-outline-danger':'btn-outline-primary');b.textContent=text;b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){showError(e);}finally{b.disabled=false;}};return b;}
 function showError(e){const el=byId('status');el.hidden=false;el.className='alert alert-danger';let text=e.message||String(e);try{text=JSON.parse(text).detail||text;}catch{}el.textContent=text;}
 function go(source, create=false, connection=null, input=null){showSurface('mapping');location.hash='evidence-config';window.dispatchEvent(new CustomEvent(create?'keen-collection-create':'keen-filter-source',{detail:{source,connection_id:connection?.id || (source.startsWith('integration:') ? null : 'env:'+source),input}}));}
@@ -25,10 +26,10 @@ function render(){
  for(const item of visible){
   const section=document.createElement('section');section.className='card mb-3';
   const heading=document.createElement('h3');heading.className='card-header h6';
-  heading.textContent=item.key.startsWith('builtin:')?item.source+' · Environment default':item.name;
+  heading.textContent=item.key.startsWith('builtin:')?sourceTypeLabel(item.source)+' · Environment default':item.name;
   const body=document.createElement('div');body.className='card-body';
   const meta=document.createElement('p');meta.className='small text-break';
-  meta.textContent=`${item.source} · ${item.type} · ${item.collectors.length} inputs`;
+  meta.textContent=`${sourceTypeLabel(item.source)} · ${item.type} · ${item.collectors.length} inputs`;
   body.append(meta);
   const editable=item.key.startsWith('builtin:')||item.connection?.managed_by==='database';
   const push=item.source==='webhooks';
@@ -153,7 +154,7 @@ showSurface('source');
 function showSavedInput(connection,source){
  showSurface('source');
  const status=byId('status');status.hidden=false;status.className='alert alert-success';
- const message=document.createElement('p');message.textContent=`Input saved for ${connection?.name || source}. Collect evidence now, or add a mapping rule.`;
+ const message=document.createElement('p');message.textContent=`Input saved for ${connection?.name || sourceTypeLabel(source)}. Collect evidence now, or add a mapping rule.`;
  const actions=document.createElement('div');actions.className='d-flex flex-wrap gap-2';
  status.replaceChildren(message,actions);
  if(connection)actions.append(button('Collect now',async()=>{
