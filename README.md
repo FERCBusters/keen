@@ -62,7 +62,7 @@ Open **Admin → Sources & Evidence Mapping**:
 3. **Collect evidence.** Run collection and inspect the resulting events.
 4. **Add mapping rules.** Select the source connection and input, choose matching conditions, and select the controls the evidence supports.
 
-Supported sources include GitHub, GitLab, Forgejo, Gitea, Jenkins, Loki, CloudWatch Logs, Google Workspace, Redmine, Taiga, BookStack, Risk Ledger, RSS/Atom and incoming webhooks. The custom API ingester builder supports declarative HTTP requests, field extraction, pagination and scheduling.
+Supported sources include GitHub, GitLab, Forgejo, Gitea, Jenkins, Loki, Elasticsearch, CloudWatch Logs, Google Workspace, Redmine, Taiga, BookStack, Risk Ledger, RSS/Atom and incoming webhooks. The custom API ingester builder supports declarative HTTP requests, field extraction, pagination and scheduling.
 
 You can configure several named connections of the same type. KEEN records the connection identity on collected events. Credentials entered in the UI are encrypted in PostgreSQL using `KEEN_INTEGRATION_SECRET_KEY`. Environment credentials and file-managed connections are also supported; see `.env.example` and the **Help** administrator handbook for their configuration.
 

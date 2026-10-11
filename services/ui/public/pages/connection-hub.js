@@ -252,6 +252,19 @@ const layouts = {
     repos: ['owner', 'repo', 'label'],
     feeds: ['url', 'label'],
   },
+  elasticsearch: {
+    queries: [
+      'name',
+      'index_pattern',
+      'query',
+      'timestamp_field',
+      'message_field',
+      'system_field',
+      'actor_field',
+      'action_field',
+      'outcome_field',
+    ],
+  },
   loki: { queries: ['name', 'logql'] },
   jenkins: { jobs: ['name', 'label', 'kind'] },
   rss: { feeds: ['name', 'url', 'label'] },
@@ -271,7 +284,11 @@ async function editCollection(adapter, existing = null, connection = null) {
   type.replaceChildren();
   for (const key of Object.keys(layouts[adapter]))
     type.add(
-      new Option({ users: 'User', organizations: 'Organisation', feeds: 'Feed' }[key] || key, key),
+      new Option(
+        { users: 'User', organizations: 'Organisation', feeds: 'Feed', queries: 'Query' }[key] ||
+          key,
+        key,
+      ),
     );
   type.value = existing?.section || Object.keys(layouts[adapter])[0];
   type.disabled = !!existing;
@@ -285,11 +302,33 @@ async function editCollection(adapter, existing = null, connection = null) {
           ? 'Organisation UUID (or * for the API key’s organisation)'
           : adapter === 'redmine' && name === 'project'
             ? 'Project ID / identifier (or * for all accessible projects)'
-            : name;
+            : {
+                name: 'Name',
+                index_pattern: 'Index pattern',
+                query: 'Message filter (optional)',
+                timestamp_field: 'Timestamp field',
+                message_field: 'Message field',
+                system_field: 'System field',
+                actor_field: 'Actor field',
+                action_field: 'Action field',
+                outcome_field: 'Outcome field',
+              }[name] || name.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
       const input = document.createElement('input');
       input.className = 'form-control';
       input.dataset.field = name;
-      input.value = existing?.entry?.[name] ?? '';
+      input.value =
+        existing?.entry?.[name] ??
+        (adapter === 'elasticsearch'
+          ? {
+              timestamp_field: '@timestamp',
+              message_field: 'message',
+              system_field: 'host.name',
+              actor_field: 'user.name',
+              action_field: 'event.action',
+              outcome_field: 'event.outcome',
+            }[name] || ''
+          : '');
+      if (adapter === 'elasticsearch' && name === 'index_pattern') input.placeholder = 'logs-*';
       label.append(input);
       byId('collection-fields').append(label);
     }
@@ -299,7 +338,7 @@ async function editCollection(adapter, existing = null, connection = null) {
   paint();
   byId('collection-title').textContent =
     (existing ? 'Edit ' : 'Add ') +
-    adapter +
+    sourceTypeLabel(adapter) +
     ' input · ' +
     (connection?.name || 'Environment default');
   byId('collection-error').textContent = '';

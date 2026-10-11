@@ -25,6 +25,7 @@ from app.integrations.transport import decrypt
 # Public endpoint/account fields and secret fields are deliberately enumerated.
 FIELDS = {
     "webhooks": ("provider secret_header", "secret"),
+    "elasticsearch": ("base_url username", "password api_key"),
     "loki": ("base_url username header_name", "password header_value"),
     "github": ("base_url username", "token"),
     "gitlab": ("base_url", "token"),
@@ -277,6 +278,7 @@ INPUT_SECTIONS = {
     "gitea": ("organizations", "users", "feeds"),
     "github": ("organizations", "orgs", "repos", "feeds"),
     "gitlab": ("groups", "users"),
+    "elasticsearch": ("queries",),
     "loki": ("queries",),
     "jenkins": ("jobs",),
     "rss": ("feeds",),

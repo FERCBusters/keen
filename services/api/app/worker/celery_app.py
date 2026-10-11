@@ -39,6 +39,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.worker.tasks.ingest_gitlab_all_task",
         "schedule": 5700.0,
     },
+    "ingest-elasticsearch-every-30m": {
+        "task": "app.worker.tasks.ingest_elasticsearch_all_task",
+        "schedule": crontab(minute="*/30"),
+    },
     "ingest-loki-every-30m": {
         "task": "app.worker.tasks.ingest_loki_all_task",
         "schedule": crontab(minute="*/30"),

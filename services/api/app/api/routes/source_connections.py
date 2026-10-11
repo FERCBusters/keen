@@ -80,6 +80,10 @@ def validate(payload):
                 422,
                 "Use an endpoint URL without embedded credentials, query or fragment",
             )
+    if payload.source == "elasticsearch" and (
+        not url or urlsplit(url).scheme != "https"
+    ):
+        raise HTTPException(422, "Elasticsearch requires an HTTPS endpoint")
     if payload.configuration.get("auth_mode", "token") not in (
         "",
         "token",

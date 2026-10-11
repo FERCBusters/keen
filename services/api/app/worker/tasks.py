@@ -25,6 +25,7 @@ from app.ingest.github import ingest_github_all
 from app.ingest.gitlab import ingest_gitlab_all
 from app.ingest.google_workspace import ingest_google_workspace_all
 from app.ingest.jenkins import ingest_jenkins_all
+from app.ingest.elasticsearch import ingest_elasticsearch_all
 from app.ingest.loki import ingest_loki_all
 from app.ingest.redmine import ingest_redmine_all
 from app.ingest.riskledger import ingest_riskledger_all
@@ -43,6 +44,12 @@ from app.services.effectiveness_metrics import materialize_missing_monthly_zero_
 from app.worker.celery_app import celery_app
 
 log = logging.getLogger(__name__)
+
+
+@celery_app.task(name="app.worker.tasks.ingest_elasticsearch_all_task")
+def ingest_elasticsearch_all_task():
+    with SessionLocal() as db:
+        return ingest_elasticsearch_all(db)
 
 
 @celery_app.task(name="app.worker.tasks.ingest_loki_all_task")

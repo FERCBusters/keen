@@ -951,6 +951,7 @@ def admin_ingest_status(user=Depends(require_admin)):
 
     return {
         "enabled": {
+            "elasticsearch": bool(settings.elasticsearch_enabled),
             "loki": bool(settings.loki_enabled),
             "cloudwatch_logs": bool(settings.cloudwatch_logs_enabled),
             "github": bool(settings.github_enabled),

@@ -1,0 +1,11 @@
+# Inputs can also be configured per named source in Admin → Sources.
+queries: []
+# Example:
+# - name: authentication
+#   index_pattern: logs-*
+#   query: '"authentication failed"'
+#   timestamp_field: '@timestamp'
+#   message_field: message
+#   initial_lookback_minutes: 1440
+#   overlap_minutes: 5
+#   window_minutes: 60

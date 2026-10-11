@@ -26,7 +26,7 @@ def event_collector(event: dict) -> str | None:
     if not isinstance(info, dict):
         return None
     section, key = None, None
-    if source == "loki":
+    if source in ("loki", "elasticsearch"):
         section, key = "queries", info.get("query_name")
     elif source == "cloudwatch_logs":
         section, key = "queries", info.get("name")
@@ -80,6 +80,7 @@ def collector_pointer_filter(identity: str) -> dict:
             return {"github": {"endpoint": "repo_events", "owner": owner, "repo": repo}}
         return {"github": {"feed" if section == "feeds" else "org": key}}
     field = {
+        "elasticsearch": "query_name",
         "loki": "query_name",
         "cloudwatch_logs": "name",
         "jenkins": "job",

@@ -77,3 +77,64 @@ test('mapping from an input carries its source identity and input', async (t) =>
   assert.equal(detail.input.collector, 'collector-alice');
   assert.equal(document.getElementById('evidence-mapping-view').hidden, false);
 });
+
+test('Elasticsearch input editor saves its pattern and field mappings on the named connection', async (t) => {
+  let saved;
+  const connection = {
+    id: 'elastic-one',
+    source: 'elasticsearch',
+    name: 'Production logs',
+    enabled: true,
+    configuration: { base_url: 'https://elastic.example' },
+    inputs: {},
+    version: 1,
+    managed_by: 'database',
+  };
+  const ui = await loadUi('pages/connection-hub.js', {
+    html,
+    globals: { structuredClone },
+    setup(w) {
+      w.HTMLDialogElement.prototype.showModal = function () {
+        this.open = true;
+      };
+      w.HTMLDialogElement.prototype.close = function () {
+        this.open = false;
+      };
+    },
+    vendor: {
+      apiGet: async (url) => {
+        if (url.endsWith('/evidence-definitions')) return { collectors: [], rules: [] };
+        if (url.endsWith('/integrations')) return { connections: [], collectors: [] };
+        if (url.endsWith('/managed-configurations')) return { items: [{ name: 'elasticsearch' }] };
+        if (url.endsWith('/source-connections'))
+          return {
+            types: [{ source: 'elasticsearch', label: 'Elasticsearch', enabled: true }],
+            connections: [connection],
+          };
+        throw new Error(url);
+      },
+      apiPut: async (url, payload) => {
+        saved = { url, payload };
+        return payload;
+      },
+    },
+  });
+  t.after(ui.close);
+  for (let i = 0; i < 50 && !ui.document.getElementById('hub-list').textContent; i++)
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  const add = [...ui.document.querySelectorAll('#hub-list button')].find(
+    (b) => b.textContent === 'Add input',
+  );
+  await add.onclick();
+  const fields = ui.document.getElementById('hub-collection-fields');
+  fields.querySelector('[data-field="name"]').value = 'Authentication';
+  fields.querySelector('[data-field="index_pattern"]').value = 'logs-*';
+  fields.querySelector('[data-field="query"]').value = '"login failed"';
+  assert.equal(fields.querySelector('[data-field="timestamp_field"]').value, '@timestamp');
+  await ui.document.getElementById('hub-collection-save').onclick();
+  assert.equal(saved.url, '/api/v1/admin/source-connections/elastic-one');
+  assert.equal(saved.payload.inputs.queries[0].index_pattern, 'logs-*');
+  assert.equal(saved.payload.inputs.queries[0].message_field, 'message');
+  assert.equal(saved.payload.inputs.queries[0].query, '"login failed"');
+  assert.equal(ui.document.getElementById('evidence-management-view').hidden, false);
+});

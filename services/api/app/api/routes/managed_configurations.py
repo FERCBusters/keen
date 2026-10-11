@@ -41,6 +41,7 @@ router = APIRouter(dependencies=[Depends(require_admin)])
 
 CONNECTORS = {
     "jenkins": ("jenkins_config_path", "jobs", "name"),
+    "elasticsearch": ("elasticsearch_config_path", "queries", "name"),
     "loki": ("loki_queries_path", "queries", "name"),
     "rss": ("rss_config_path", "feeds", "name"),
     "github": ("github_config_path", "organizations", "org"),
@@ -288,6 +289,7 @@ def _validate_connector(name: str, document: dict):
         raise HTTPException(400, f"{key} must be a list of up to 500 objects")
     id_fields = {
         "jenkins": "name",
+        "elasticsearch": "name",
         "loki": "name",
         "rss": "url",
         "github": "org",
@@ -346,6 +348,13 @@ def _validate_connector(name: str, document: dict):
                     400,
                     "RSS credentials and custom headers require administrator review outside the web editor",
                 )
+    if name == "elasticsearch":
+        from app.ingest.elasticsearch import ElasticsearchInputError, validate_config
+
+        try:
+            validate_config(document)
+        except ElasticsearchInputError as exc:
+            raise HTTPException(400, str(exc)) from None
     if name == "loki":
         for query in rows:
             if not query.get("name") or not query.get("logql"):
@@ -496,6 +505,7 @@ def _collector_key(
         "riskledger": "org",
         "redmine": "project",
         "jenkins": "name",
+        "elasticsearch": "name",
         "loki": "name",
         "rss": "url",
         "github": "org",
@@ -514,6 +524,7 @@ def _collector_key(
 def _editable_collector(adapter: str, section: str) -> bool:
     return adapter in CONNECTORS and section in {
         "jenkins": {"jobs"},
+        "elasticsearch": {"queries"},
         "loki": {"queries"},
         "rss": {"feeds"},
         "github": {"organizations", "repos", "feeds"},
@@ -572,6 +583,13 @@ def _check_linked_collectors(adapter: str, document: dict, db: Session):
 
 
 def _validate_collection_entry(adapter: str, section: str, entry: dict, key: str):
+    if adapter == "elasticsearch":
+        from app.ingest.elasticsearch import ElasticsearchInputError, validate_input
+
+        try:
+            validate_input(entry)
+        except ElasticsearchInputError as exc:
+            raise HTTPException(400, str(exc)) from None
     """Reject entries that cannot be ingested even if the generic JSON is valid."""
     if adapter == "riskledger":
         from app.ingest.riskledger import RiskLedgerError, validate_config
@@ -646,6 +664,7 @@ def get_evidence_definitions(db: Session = Depends(get_db)):
     warnings = []
     sections = {
         "jenkins": ["jobs"],
+        "elasticsearch": ["queries"],
         "loki": ["queries"],
         "rss": ["feeds"],
         "github": ["organizations", "repos", "feeds"],

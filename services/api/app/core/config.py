@@ -375,6 +375,13 @@ class Settings(BaseSettings):
     webhooks_enabled: bool = Field(default=True)
 
     # Loki
+    elasticsearch_enabled: bool = Field(default=False)
+    elasticsearch_base_url: str = Field(default="")
+    elasticsearch_username: str = Field(default="")
+    elasticsearch_password: str = Field(default="")
+    elasticsearch_api_key: str = Field(default="")
+    elasticsearch_config_path: str = Field(default="/app/config/elasticsearch.yml")
+
     loki_enabled: bool = Field(default=False)
     loki_base_url: str = Field(default="http://localhost:3100")
     loki_username: str = Field(default="")

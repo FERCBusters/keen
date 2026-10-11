@@ -55,6 +55,7 @@ SOURCE_LABELS = {
     "gitlab": "GitLab",
     "forgejo": "Forgejo",
     "gitea": "Gitea",
+    "elasticsearch": "Elasticsearch",
     "loki": "Loki",
     "jenkins": "Jenkins",
     "redmine": "Redmine",
@@ -149,6 +150,7 @@ def _configured_source_meta(refresh_bucket: int) -> dict[str, dict[str, str]]:
 
     # Plugin configs (poll + other ingestion providers)
     plugin_cfgs: dict[str, str] = {
+        "elasticsearch": settings.elasticsearch_config_path,
         "loki": settings.loki_queries_path,
         "cloudwatch_logs": settings.cloudwatch_logs_config_path,
         "github": settings.github_config_path,

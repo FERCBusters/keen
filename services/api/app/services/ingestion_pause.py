@@ -9,6 +9,7 @@ from app.db.models import SourceIngestionState
 
 POLLING_SOURCES = frozenset(
     (
+        "elasticsearch",
         "loki",
         "cloudwatch_logs",
         "github",
