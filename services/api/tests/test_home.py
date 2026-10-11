@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import app.services.home as home_operations
+from app.api.context import change_context
 from app.api.routes import home
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
@@ -34,7 +35,16 @@ from sqlalchemy.orm import sessionmaker
 from tests.db_helpers import schema_engine
 
 
+def home_request():
+    return Request({"type": "http", "method": "GET", "path": "/v1/home", "headers": []})
+
+
 class HomeLogicTests(unittest.TestCase):
+    def test_database_request_has_valid_http_context(self):
+        context = change_context(home_request())
+        self.assertEqual(context.method, "GET")
+        self.assertEqual(context.path, "/v1/home")
+
     def test_threshold_operators_and_incomparable_values(self):
         for op, value, target, failed in [
             ("lt", 5, 5, True),
@@ -145,7 +155,7 @@ class HomeDatabaseTests(unittest.TestCase):
         )
         self.addCleanup(patch.stopall)
         patch.object(settings, "enabled_frameworks", "").start()
-        self.request = Request({"type": "http", "headers": []})
+        self.request = home_request()
         self.user = SimpleNamespace()
         self.stats = patch.object(
             home_operations,

@@ -1,12 +1,19 @@
 """Test-only database setup; production metadata is never modified."""
 
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.compiler import compiles
 
 
 @compiles(JSONB, "sqlite")
 def sqlite_jsonb(_type, _compiler, **_kw):
     return "JSON"
+
+
+@compiles(UUID, "sqlite")
+def sqlite_uuid(_type, _compiler, **_kw):
+    # SQLite gives a column named UUID numeric affinity, which can turn valid
+    # hex identifiers into lossy floating-point values. Match Uuid emulation.
+    return "CHAR(32)"
 
 
 from sqlalchemy import DefaultClause, MetaData, create_engine, event, text

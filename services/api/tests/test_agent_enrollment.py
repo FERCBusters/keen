@@ -6,10 +6,12 @@ from datetime import timedelta
 import app.services.agent_enrollment as agent_enrollment_operations
 import pytest
 from app.agents.credentials import digest
+from app.api.context import change_context
 from app.api.routes import agent_enrollment as api
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import AgentEnrollmentProfile, AuditLog, KeenAgent
 from app.services.errors import DomainError
+from starlette.requests import Request
 
 from tests.test_keen_agent import record
 
@@ -262,6 +264,26 @@ def test_profile_and_nonce_validation(fleet):
     )
 
 
+def revocation_request(ident, token):
+    return Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": f"/v1/admin/agent-enrollment-profiles/{ident}/revoke",
+            "headers": [(b"authorization", ("Bearer " + token).encode())],
+            "client": ("192.0.2.1", 1),
+            "state": {},
+        }
+    )
+
+
+def test_postgres_revocation_request_has_valid_http_context():
+    context = change_context(revocation_request("profile-id", "synthetic-token"))
+    assert context.method == "POST"
+    assert context.path == "/v1/admin/agent-enrollment-profiles/profile-id/revoke"
+    assert context.client_ip == "192.0.2.1"
+
+
 def test_profile_locks_serialize_revocation_on_postgres(
     contract_postgres_engine, monkeypatch
 ):
@@ -274,7 +296,6 @@ def test_profile_locks_serialize_revocation_on_postgres(
     from sqlalchemy import text
     from sqlalchemy.exc import OperationalError
     from sqlalchemy.orm import Session
-    from starlette.requests import Request
     from starlette.responses import Response
 
     monkeypatch.setattr(settings, "demo_mode", False)
@@ -307,14 +328,7 @@ def test_profile_locks_serialize_revocation_on_postgres(
             )
         )
         db.commit()
-    request = Request(
-        {
-            "type": "http",
-            "headers": [(b"authorization", ("Bearer " + token).encode())],
-            "client": ("192.0.2.1", 1),
-            "state": {},
-        }
-    )
+    request = revocation_request(ident, token)
     with (
         Session(contract_postgres_engine) as first,
         Session(contract_postgres_engine) as second,
