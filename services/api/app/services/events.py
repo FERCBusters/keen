@@ -62,6 +62,9 @@ from app.services.presentation import extract_source_url as _extract_source_url
 INCIDENT_CREATE_PERMISSION = "incident.create"
 INCIDENT_DELETE_PERMISSION = "incident.delete"
 EVENTS_READ_PERMISSION = "events.read"
+# Question attachments are discussion material uploaded by KEEN users. They stay
+# with their question thread and never appear as the event's collected evidence.
+QUESTION_ATTACHMENT_KIND = "question_attachment"
 
 
 def _mask_event_data_for_sample_exports(sample_export: bool) -> bool:
@@ -474,6 +477,7 @@ def list_events(
             rows = (
                 db.query(Artifact.event_id, func.count(Artifact.id))
                 .filter(Artifact.event_id.in_(event_ids))
+                .filter(Artifact.kind != QUESTION_ATTACHMENT_KIND)
                 .group_by(Artifact.event_id)
                 .all()
             )
@@ -831,6 +835,7 @@ def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session
     arts = (
         db.query(Artifact)
         .filter(Artifact.event_id == eid)
+        .filter(Artifact.kind != QUESTION_ATTACHMENT_KIND)
         .order_by(desc(Artifact.captured_at))
         .all()
     )
@@ -1049,6 +1054,7 @@ def export_events(
                 rows = (
                     db.query(Artifact.event_id, func.count(Artifact.id))
                     .filter(Artifact.event_id.in_(event_ids))
+                    .filter(Artifact.kind != QUESTION_ATTACHMENT_KIND)
                     .group_by(Artifact.event_id)
                     .all()
                 )

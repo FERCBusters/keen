@@ -549,3 +549,82 @@ def test_withheld_aggregates_never_reuse_a_readers_cache(keen):
     plain = keen.client(keen.user())
     assert plain.get("/v1/stats/summary").json()["events"] is None
     assert plain.get("/v1/stats/summary").json()["stats_source"] == "evidence_withheld"
+
+
+# --- Question attachments stay out of collected evidence ---------------------
+
+
+def test_question_attachments_are_not_presented_as_event_evidence(
+    keen, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(settings, "artifact_storage_backend", "local")
+    monkeypatch.setattr(settings, "artifact_local_dir", str(tmp_path))
+    event = Event(
+        timestamp=utc_now_naive(),
+        source="synthetic",
+        summary="synthetic evidence",
+        external_id="q-" + uuid.uuid4().hex,
+    )
+    keen.db.add(event)
+    keen.db.commit()
+    asker = keen.client(keen.user("events.read", "question.create"))
+    png = b"\x89PNG\r\n\x1a\n" + b"synthetic-image"
+    created = asker.post(
+        f"/v1/events/{event.id}/questions",
+        data={"body": "Is this the right screenshot?"},
+        files={"attachments": ("screenshot.png", png, "image/png")},
+        headers=unsafe(asker),
+    )
+    assert created.status_code == 200, created.text
+
+    reader = keen.client(keen.user("events.read"))
+    detail = reader.get(f"/v1/events/{event.id}").json()
+    assert detail["artifacts"] == []
+    threads = reader.get(f"/v1/events/{event.id}/questions").json()["threads"]
+    attachment = threads[0]["posts"][0]["attachments"][0]
+    assert attachment["filename"] == "screenshot.png"
+    download = reader.get(attachment["download_url"].removeprefix("/api"))
+    assert download.status_code == 200 and download.content == png
+    if keen.postgres:
+        listed = reader.get("/v1/events", params={"source": "synthetic"}).json()
+        row = next(i for i in listed["items"] if i["id"] == str(event.id))
+        assert row["artifact_count"] == 0
+
+
+# --- Password confirmation attempts per account -----------------------------
+
+
+def test_password_change_attempts_are_limited_per_account(keen, monkeypatch):
+    monkeypatch.setattr(settings, "login_rate_limit_per_ip", 100)
+    monkeypatch.setattr(settings, "login_rate_limit_per_username", 2)
+    client = keen.client(keen.user())
+    wrong = {"current_password": "not-the-password", "new_password": "x" * 16}
+    for _ in range(2):
+        response = client.post("/v1/me/password", json=wrong, headers=unsafe(client))
+        assert response.status_code == 400, response.text
+    right = {"current_password": PASSWORD, "new_password": "y" * 16}
+    limited = client.post("/v1/me/password", json=right, headers=unsafe(client))
+    assert limited.status_code == 429, limited.text
+
+
+# --- Unauthenticated webhook callers learn nothing before verification --------
+
+
+def test_webhook_state_is_not_disclosed_before_secret_verification(keen, monkeypatch):
+    from app.ingest import webhooks
+    from app.services import ingestion_pause
+
+    monkeypatch.setattr(webhooks, "load_webhook_policies", lambda path: {})
+    monkeypatch.setattr(
+        ingestion_pause,
+        "require_receiving",
+        Mock(side_effect=DomainError(503, "Webhook ingestion is paused")),
+    )
+    client = keen.client()
+    for path in (
+        "/v1/webhooks/synthetic/alert",
+        f"/v1/webhooks/connections/{uuid.uuid4()}/synthetic/alert",
+    ):
+        response = client.post(path, content=b"{}", headers={"X-Webhook-Secret": "x"})
+        assert response.status_code == 403, (path, response.text)
+    ingestion_pause.require_receiving.assert_not_called()

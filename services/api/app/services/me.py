@@ -658,6 +658,17 @@ def change_my_password(
         ok, retry = fixed_window_allow(
             r, f"keen:rl:password_change:ip:{ip}", limit, window, fail_closed=True
         )
+        # A session holder must not be able to test many current passwords by
+        # spreading attempts across addresses.
+        per_user = int(getattr(settings, "login_rate_limit_per_username", 10))
+        if ok and per_user > 0:
+            ok, retry = fixed_window_allow(
+                r,
+                f"keen:rl:password_change:user:{user.id}",
+                per_user,
+                window,
+                fail_closed=True,
+            )
         if not ok:
             raise DomainError(
                 status_code=429,

@@ -87,18 +87,16 @@ async def webhook_ingest(
     from app.ingest.connections import connection_scope, connections, resolve
 
     _require_webhook_enabled()
-    from app.services.ingestion_pause import require_receiving
-
-    require_receiving(db, "webhooks")
+    # Throttle before any database work; an unauthenticated caller learns
+    # nothing about connections or ingestion state before its secret is verified.
+    _limit_webhook(request, provider)
     key = connection_id or "env:webhooks"
     connection = next(
         (c for c in connections(db, "webhooks") if c.id == key and c.enabled), None
     )
     if connection is None:
-        raise HTTPException(404, "Connection not found")
+        raise HTTPException(status_code=403, detail="Invalid webhook secret")
     with connection_scope(resolve(connection)):
-        _limit_webhook(request, provider)
-
         headers = {k: v for k, v in request.headers.items()}
         if not verify_secret(provider, headers):
             raise HTTPException(status_code=403, detail="Invalid webhook secret")

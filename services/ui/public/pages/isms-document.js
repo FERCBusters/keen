@@ -72,7 +72,7 @@ function renderDocument(row) {
 
   const open = $('openDocumentLink');
   if (open) {
-    const href = external || file;
+    const href = safeExternalHref(external) || file;
     open.href = href || documentHref(documentRow.id);
     open.style.display = href ? '' : 'none';
   }
