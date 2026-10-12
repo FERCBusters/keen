@@ -8,4 +8,4 @@ from dataclasses import dataclass
 class Upload:
     filename: str
     content_type: str
-    read: Callable[[], Awaitable[bytes]]
+    read: Callable[[int], Awaitable[bytes]]

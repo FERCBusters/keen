@@ -21,6 +21,7 @@ from app.security.rich_text import sanitize_rich_text_html
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.hierarchy import validate_parent
+from app.storage.filenames import safe_download_ext
 from app.storage.s3 import put_bytes
 
 from .common import (
@@ -357,7 +358,7 @@ def upload_document_file(
         raise DomainError(400, "Uploaded file is empty")
     if len(data) > 100 * 1024 * 1024:
         raise DomainError(413, "ISMS document is too large")
-    ext = os.path.splitext(filename)[1]
+    ext = safe_download_ext(os.path.splitext(filename)[1])
     stored = put_bytes(
         f"isms-documents/{row.id}/{uuid.uuid4()}{ext}", data, content_type
     )

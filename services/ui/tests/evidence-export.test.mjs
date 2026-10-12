@@ -17,6 +17,7 @@ async function exporter(t, preferences = {}, extra = {}) {
       fmtTsFilename: (v) => String(v || ''),
       toast: (_el, message) => notices.push(message),
     },
+    ...extra,
     globals: {
       TextEncoder,
       Blob,
@@ -24,7 +25,6 @@ async function exporter(t, preferences = {}, extra = {}) {
       NodeFilter: { SHOW_TEXT: 4, FILTER_REJECT: 2, FILTER_ACCEPT: 1 },
       ...extra.globals,
     },
-    ...extra,
   });
   t.after(ui.close);
   return {
@@ -133,4 +133,124 @@ with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as z:
     parseContentDispositionFilename("attachment; filename*=UTF-8''%E5%93%81%E8%B3%AA.json"),
     '品質.json',
   );
+});
+
+test('PDF capture masks visible attribute values and leaves live inputs unchanged', async (t) => {
+  const ui = await exporter(t, { event_data_masking: 'samples' });
+  const input = ui.document.createElement('input');
+  input.placeholder = 'alice@example.com';
+  input.title = '192.0.2.1';
+  input.value = '2001:db8::1';
+  ui.document.getElementById('evidenceCard').append(input);
+  ui.window.html2canvas = async (element) => {
+    const captured = element.querySelector('input');
+    assert.equal(captured.placeholder, '[MASKED_EMAIL]');
+    assert.equal(captured.title, '[MASKED_IP]');
+    assert.equal(captured.value, '[MASKED_IP]');
+    throw new Error('Stop capture');
+  };
+  await ui.exporter.downloadPdf(evidence);
+  assert.equal(input.placeholder, 'alice@example.com');
+  assert.equal(input.value, '2001:db8::1');
+  assert.match(ui.notices.at(-1), /Stop capture/);
+});
+
+test('ZIP streaming checks actual bytes, cancels oversize bodies and shares the remaining budget', async (t) => {
+  const ui = await exporter(t);
+  const read = ui.api.readBoundedExportResponse;
+  let cancelled = 0;
+  function response(chunks, declared = null) {
+    return {
+      headers: { get: () => declared },
+      body: new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(new Uint8Array(chunk));
+        },
+        cancel() {
+          cancelled++;
+        },
+      }),
+    };
+  }
+  await assert.rejects(
+    read(
+      response(
+        [
+          [1, 2, 3],
+          [4, 5, 6],
+        ],
+        '1',
+      ),
+      5,
+    ),
+    /100 MiB/,
+  );
+  assert.equal(cancelled, 1);
+  await assert.rejects(read(response([[1]], '500'), 5), /100 MiB/);
+  assert.equal(cancelled, 2);
+  const permitted = new Response(new Uint8Array([1, 2, 3]));
+  const first = await read(permitted, 5);
+  assert.deepEqual(Array.from(first), [1, 2, 3]);
+  await assert.rejects(read(response([[4, 5, 6]]), 5 - first.byteLength), /100 MiB/);
+  assert.equal(cancelled, 3);
+});
+
+test('ZIP export rejects excessive file counts before rendering or downloading', async (t) => {
+  const ui = await exporter(t);
+  ui.window.html2canvas = () => {
+    throw new Error('Should not render');
+  };
+  await ui.exporter.downloadArtifactsZip({
+    ...evidence,
+    artifacts: Array.from({ length: 101 }, (_, i) => ({ id: String(i) })),
+  });
+  assert.match(ui.notices.at(-1), /at most 100 artifacts/);
+});
+
+test('ZIP export includes the PDF and earlier artifacts in its cumulative byte budget', async (t) => {
+  let downloads = 0;
+  let cancelled = 0;
+  const ui = await exporter(
+    t,
+    {},
+    {
+      globals: {
+        fetch: async () => {
+          downloads++;
+          if (downloads === 1) return new Response(new Uint8Array([1, 2, 3]));
+          return {
+            ok: true,
+            headers: {
+              get: (name) => (name === 'Content-Length' ? String(100 * 1024 * 1024) : ''),
+            },
+            body: new ReadableStream({
+              cancel() {
+                cancelled++;
+              },
+            }),
+          };
+        },
+      },
+    },
+  );
+  ui.window.html2canvas = async () => ({ width: 900, height: 1 });
+  ui.window.HTMLCanvasElement.prototype.getContext = () =>
+    new Proxy(
+      {},
+      {
+        get: () => () => {},
+      },
+    );
+  ui.window.HTMLCanvasElement.prototype.toBlob = (callback) =>
+    callback(new Blob(['synthetic jpeg']));
+  const button = ui.document.createElement('button');
+  button.id = 'btnZip';
+  button.textContent = 'Download ZIP';
+  ui.document.body.append(button);
+  await ui.exporter.downloadArtifactsZip({ ...evidence, artifacts: [{ id: 'a1' }, { id: 'a2' }] });
+  assert.equal(downloads, 2);
+  assert.equal(cancelled, 1);
+  assert.match(ui.notices.at(-1), /100 MiB limit/);
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'Download ZIP');
 });

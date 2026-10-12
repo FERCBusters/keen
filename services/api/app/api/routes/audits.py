@@ -366,7 +366,7 @@ def delete_finding(
 
 
 async def _read_upload(file: UploadFile) -> bytes:
-    data = await file.read()
+    data = await file.read(reports.MAX_REPORT_BYTES + 1)
     return data or b""
 
 

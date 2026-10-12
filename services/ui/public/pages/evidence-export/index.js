@@ -6,6 +6,50 @@ import {
   sliceCanvasToFirstA4PreviewBlob,
 } from './pdf.js';
 
+// Bound actual downloaded bytes, including responses without trustworthy metadata.
+export const MAX_ZIP_EXPORT_BYTES = 100 * 1024 * 1024;
+export const MAX_ZIP_EXPORT_ARTIFACTS = 100;
+
+export async function readBoundedExportResponse(response, remainingBytes) {
+  const declared = Number(response.headers.get('Content-Length'));
+  if (Number.isFinite(declared) && declared > remainingBytes) {
+    await response.body?.cancel();
+    throw new Error('ZIP export exceeds the 100 MiB limit. Download artifacts individually.');
+  }
+  if (!response.body) throw new Error('Artifact response has no readable body');
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  let complete = false;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        complete = true;
+        break;
+      }
+      size += value.byteLength;
+      if (size > remainingBytes)
+        throw new Error('ZIP export exceeds the 100 MiB limit. Download artifacts individually.');
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
+  } finally {
+    if (!complete) {
+      try {
+        await reader.cancel();
+      } catch {}
+    }
+    reader.releaseLock();
+  }
+}
+
 // Export preferences and preview state belong to this page instance.
 export function createEvidenceExporter({ preferences: me, getSourceMeta, status }) {
   const _eventDataMaskingMode = String(me?.event_data_masking || 'false')
@@ -84,8 +128,8 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     root.querySelectorAll('input, textarea').forEach((el) => {
       if ('value' in el) el.value = maskEventDataString(el.value);
     });
-    root.querySelectorAll('[title], [alt], [aria-label]').forEach((el) => {
-      for (const attr of ['title', 'alt', 'aria-label']) {
+    root.querySelectorAll('[title], [alt], [aria-label], [placeholder]').forEach((el) => {
+      for (const attr of ['title', 'alt', 'aria-label', 'placeholder']) {
         if (el.hasAttribute(attr))
           el.setAttribute(attr, maskEventDataString(el.getAttribute(attr) || ''));
       }
@@ -655,6 +699,15 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       return;
     }
 
+    if (arts.length > MAX_ZIP_EXPORT_ARTIFACTS) {
+      toast(
+        status,
+        'ZIP export supports at most 100 artifacts. Download artifacts individually.',
+        'warning',
+      );
+      return;
+    }
+
     const prevLabel = btn ? btn.textContent : '';
     if (btn) {
       btn.disabled = true;
@@ -667,7 +720,10 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       // Include a PDF evidence report alongside the raw artifacts.
       toast(status, 'Rendering evidence PDF…', 'info');
       const pdfBlob = await buildEvidencePdfBlob(e, _lastPdfOrientation || 'portrait');
+      if (pdfBlob.size > MAX_ZIP_EXPORT_BYTES)
+        throw new Error('Evidence PDF exceeds the 100 MiB ZIP export limit.');
       const pdfBytes = new Uint8Array(await pdfBlob.arrayBuffer());
+      let totalBytes = pdfBytes.byteLength;
       files.push({
         name: `${zipStem}-evidence.pdf`,
         data: pdfBytes,
@@ -683,7 +739,10 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         toast(status, `Downloading ${i + 1}/${arts.length}…`, 'info');
 
         const res = await fetch(url, { credentials: 'include' });
-        if (!res.ok) throw new Error(`Failed to download artifact ${a.id} (HTTP ${res.status})`);
+        if (!res.ok) {
+          await res.body?.cancel();
+          throw new Error(`Failed to download artifact ${a.id} (HTTP ${res.status})`);
+        }
         const disp = res.headers.get('Content-Disposition') || '';
         // Prefer the server-provided filename extension (if any), otherwise
         // fall back to the artifact's content-type.
@@ -718,7 +777,8 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         }
         seenNames.set(base, n + 1);
 
-        const buf = new Uint8Array(await res.arrayBuffer());
+        const buf = await readBoundedExportResponse(res, MAX_ZIP_EXPORT_BYTES - totalBytes);
+        totalBytes += buf.byteLength;
         const mtime = a.captured_at ? new Date(a.captured_at) : new Date();
         files.push({ name, data: buf, mtime });
       }

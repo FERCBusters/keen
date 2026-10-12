@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import Depends, HTTPException, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.routing import Router
@@ -16,8 +14,8 @@ from app.services import artifacts as service
 router = Router()
 
 
-# A reader must not be able to multiply the renderer's per-process memory cap
-# by opening many uncached previews concurrently.
+# Renderer concurrency is bounded per API process by the service. Deployment
+# worker counts and container limits determine the aggregate resource budget.
 
 
 EVENTS_READ_PERMISSION = "events.read"
@@ -57,6 +55,4 @@ def preview_pdf_first_page(
     "Render a PNG preview (page 1) for PDF artifacts.\n\n    This enables the UI to show a thumbnail that can be captured in evidence PDFs.\n    Uses poppler's `pdftoppm`.\n"
     user = _require_events_read(db, request)
     result = service.preview_pdf_first_page(user=user, artifact_id=artifact_id, db=db)
-    if isinstance(result, Path):
-        return FileResponse(str(result), media_type="image/png")
     return Response(result, media_type="image/png")

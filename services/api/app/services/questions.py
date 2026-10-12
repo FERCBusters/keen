@@ -36,6 +36,7 @@ from app.storage.s3 import put_bytes
 
 QUESTION_CREATE_PERMISSION = "question.create"
 _NOTIFICATION_RECHECK_SECONDS = 30
+MAX_ATTACHMENT_BYTES = 40 * 1024 * 1024
 
 
 def _count_open_questions(db: Session) -> int:
@@ -490,7 +491,9 @@ async def _store_attachments(
                 getattr(f, "content_type", None) or "application/octet-stream"
             )
             ext = safe_download_ext(os.path.splitext(filename)[1])
-            data = await f.read()
+            data = await f.read(MAX_ATTACHMENT_BYTES + 1)
+            if len(data) > MAX_ATTACHMENT_BYTES:
+                raise DomainError(413, "Question attachment is too large")
             if not data:
                 continue
             if not _validate_file_magic(data, content_type, filename):
