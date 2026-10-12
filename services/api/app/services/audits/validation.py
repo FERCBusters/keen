@@ -269,6 +269,13 @@ def clean_url(raw: str | None) -> str | None:
         return None
     if len(v) > 2048:
         raise DomainError(status_code=400, detail="evidence_url is too long")
+    # Browsers read a backslash as "/" and drop tabs and newlines, so a path that
+    # starts with "/" followed by one of them can leave KEEN while looking local.
+    if "\\" in v or any(ord(c) < 32 or ord(c) == 127 for c in v):
+        raise DomainError(
+            status_code=400,
+            detail="evidence_url must not contain backslashes or control characters",
+        )
     if re.match(r"^(?:javascript|data|vbscript):", v, flags=re.I):
         raise DomainError(status_code=400, detail="Unsupported evidence_url scheme")
     if v.startswith("//"):

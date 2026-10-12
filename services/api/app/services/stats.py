@@ -17,6 +17,7 @@ from app.core.references import ref_sort_key as _ref_sort_key
 from app.core.source_meta import apply_user_source_overrides, get_source_meta
 from app.db.models import ControlItem, Event, Mapping, User
 from app.security.diary_visibility import diary_filter_condition
+from app.security.permissions import can_read_events
 from app.services.context import ChangeContext
 from app.services.control_evidence_stats import (
     get_control_evidence_stats_by_id,
@@ -27,6 +28,7 @@ from app.services.control_inheritance import (
     evidence_pairs,
     has_inherited_evidence,
 )
+from app.services.errors import DomainError
 
 
 def _event_visibility_cache_scope(user) -> str:
@@ -36,6 +38,40 @@ def _event_visibility_cache_scope(user) -> str:
     return "anonymous"
 
 
+_EVIDENCE_COVERAGE_KEYS = (
+    "with_evidence",
+    "without_evidence",
+    "with_evidence_in_scope",
+    "without_evidence_in_scope",
+    "with_evidence_all",
+    "without_evidence_all",
+)
+
+
+def _summary_without_evidence(*, framework: str, db: Session) -> dict:
+    """Control totals for callers who may not read evidence or its aggregates."""
+    total, in_scope = (
+        db.query(
+            func.count(ControlItem.id),
+            func.count(ControlItem.id).filter(ControlItem.in_scope.is_(True)),
+        )
+        .filter(ControlItem.framework_slug == framework)
+        .one()
+    )
+    controls = {
+        "total": int(total or 0),
+        "in_scope": int(in_scope or 0),
+        "out_of_scope": max(0, int(total or 0) - int(in_scope or 0)),
+    }
+    controls.update({key: None for key in _EVIDENCE_COVERAGE_KEYS})
+    return {
+        "framework": framework,
+        "events": None,
+        "controls": controls,
+        "stats_source": "evidence_withheld",
+    }
+
+
 def stats_summary(
     *,
     context: ChangeContext,
@@ -43,6 +79,8 @@ def stats_summary(
     db: Session,
 ):
     user = context.actor
+    if not can_read_events(db, user):
+        return _summary_without_evidence(framework=framework, db=db)
     cache_parts = {
         "framework": framework,
         "visibility": _event_visibility_cache_scope(user),
@@ -214,6 +252,55 @@ def stats_controls(
 ):
     user = context.actor
     limit = max(1, min(int(limit or 2000), 5000))
+    if not can_read_events(db, user):
+        return _controls_without_evidence(framework=framework, limit=limit, db=db)
+    try:
+        return _stats_controls(
+            user=user,
+            framework=framework,
+            limit=limit,
+            start_date=start_date,
+            end_date=end_date,
+            db=db,
+        )
+    except OverflowError:
+        raise DomainError(
+            status_code=400, detail="The requested date range is not supported"
+        ) from None
+
+
+def _controls_without_evidence(*, framework: str, limit: int, db: Session) -> dict:
+    """Control catalogue rows with evidence counts withheld."""
+    items = [
+        {
+            "id": str(c.id),
+            "framework": c.framework_slug,
+            "type": c.type,
+            "ref": c.ref,
+            "title": c.title,
+            "in_scope": c.in_scope,
+            "justification": _control_justification(c),
+            "upstream_url": _control_upstream_url(c),
+            "evidence_count": None,
+            "last_evidence": None,
+        }
+        for c in db.query(ControlItem)
+        .filter(ControlItem.framework_slug == framework)
+        .all()
+    ]
+    items.sort(key=lambda it: (it["type"], _ref_sort_key(it["ref"])))
+    return {"items": items[:limit], "stats_source": "evidence_withheld"}
+
+
+def _stats_controls(
+    *,
+    user,
+    framework: str,
+    limit: int,
+    start_date: Optional[date],
+    end_date: Optional[date],
+    db: Session,
+):
     cache_parts = {
         "framework": framework,
         "limit": limit,
@@ -338,7 +425,24 @@ def stats_controls(
     return cached_json("stats:controls", cache_parts, _load)
 
 
-def stats_events_timeseries(
+MAX_TIMESERIES_BUCKETS = 5000
+
+
+def stats_events_timeseries(**kwargs):
+    """Return event volume over time within the bucket budget.
+
+    Dates near the calendar limits cannot form bucket boundaries; reject them as
+    invalid input rather than failing with a server error.
+    """
+    try:
+        return _stats_events_timeseries(**kwargs)
+    except OverflowError:
+        raise DomainError(
+            status_code=400, detail="The requested date range is not supported"
+        ) from None
+
+
+def _stats_events_timeseries(
     *,
     context: ChangeContext,
     days: int = 120,
@@ -367,6 +471,8 @@ def stats_events_timeseries(
     """
 
     user = context.actor
+    if not can_read_events(db, user):
+        raise DomainError(status_code=403, detail="events.read permission required")
 
     def _iso_z(dt: datetime) -> str:
         """Format a naive datetime as UTC with a trailing Z."""
@@ -454,7 +560,7 @@ def stats_events_timeseries(
         start = _floor(start, interval_req)
 
     # Enforce a maximum number of buckets by coarsening the interval as needed.
-    MAX_BUCKETS = 5000
+    MAX_BUCKETS = MAX_TIMESERIES_BUCKETS
     interval_eff = interval_req
     start_bucket = _floor(start, interval_eff)
     if end_excl is None:
@@ -483,6 +589,16 @@ def stats_events_timeseries(
         end_bucket = _floor(end_excl - timedelta(microseconds=1), interval_eff)
         if end_bucket <= start_bucket:
             end_bucket = start_bucket + _step_for(interval_eff)
+    # Daily buckets are the coarsest interval; a wider window must be narrowed
+    # before any query runs or the dense series is generated.
+    if _bucket_count(interval_eff) > MAX_BUCKETS:
+        raise DomainError(
+            status_code=400,
+            detail=(
+                f"The requested window needs more than {MAX_BUCKETS} daily buckets; "
+                "narrow the date range"
+            ),
+        )
 
     bucket_expr = func.date_trunc(interval_eff, Event.timestamp).label("b")
 

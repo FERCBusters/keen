@@ -12,7 +12,7 @@ from app.db.models import (
     user_permissions,
 )
 from app.security.auth import ROLE_ADMIN
-from app.security.roles import compute_effective_role
+from app.security.roles import compute_effective_role, is_effective_admin
 from app.security.sessions import update_session_authz
 
 
@@ -208,6 +208,18 @@ def has_permission(db: Session, user: User, code: str) -> bool:
         .first()
     )
     return bool(hit2)
+
+
+EVENTS_READ_PERMISSION = "events.read"
+
+
+def can_read_events(db: Session, user: User | None) -> bool:
+    """Evidence records, and aggregates derived from them, require events.read."""
+    if not isinstance(user, User) or not getattr(user, "is_active", False):
+        return False
+    return is_effective_admin(db, user) or has_permission(
+        db, user, EVENTS_READ_PERMISSION
+    )
 
 
 def normalize_permission_codes(codes: list[str] | None) -> list[str]:

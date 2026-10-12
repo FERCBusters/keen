@@ -27,6 +27,7 @@ import {
   syncRichTextEditor,
   syncRichTextEditors,
   userPillHtml,
+  safeExternalHref,
 } from '/app.js';
 
 const me = await initNavbar();
@@ -2376,8 +2377,8 @@ function renderEvidence(items) {
       const ev = x.event;
       const entity = x.entity || null;
       const href =
-        x.evidence_url ||
-        entity?.href ||
+        safeExternalHref(x.evidence_url) ||
+        safeExternalHref(entity?.href) ||
         (ev?.id
           ? withFramework(`/event.html?id=${encodeURIComponent(ev.id)}`, audit?.framework_slug)
           : '#');

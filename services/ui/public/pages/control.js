@@ -19,6 +19,7 @@ import {
   sourceBadgeHtml,
   sourceLabel,
   upstreamLinkHtml,
+  safeAbsoluteHttpHref,
   getCurrentFramework,
   withFramework,
   showTableLoading,
@@ -899,9 +900,10 @@ async function load() {
       controlsBreadcrumb.href = withFramework('/controls.html', ctrl.framework || framework);
 
     if (linksEl) {
-      if (ctrl.upstream_url) {
+      const guidanceHref = safeAbsoluteHttpHref(ctrl.upstream_url);
+      if (guidanceHref) {
         linksEl.innerHTML = `<a class="link-subtle" href="${esc(
-          ctrl.upstream_url,
+          guidanceHref,
         )}" target="_blank" rel="noopener noreferrer"><i class="bi bi-info-circle"></i> Guidance</a>`;
       } else {
         linksEl.textContent = '';
@@ -1052,8 +1054,9 @@ saveControlUpstreamUrlBtn?.addEventListener('click', async () => {
     await reloadControlOnly();
     await loadControlChangelog();
     if (linksEl) {
-      if (ctrl.upstream_url) {
-        linksEl.innerHTML = `<a class="link-subtle" href="${esc(ctrl.upstream_url)}" target="_blank" rel="noopener noreferrer"><i class="bi bi-info-circle"></i> Guidance</a>`;
+      const guidanceHref = safeAbsoluteHttpHref(ctrl.upstream_url);
+      if (guidanceHref) {
+        linksEl.innerHTML = `<a class="link-subtle" href="${esc(guidanceHref)}" target="_blank" rel="noopener noreferrer"><i class="bi bi-info-circle"></i> Guidance</a>`;
       } else {
         linksEl.textContent = '';
       }

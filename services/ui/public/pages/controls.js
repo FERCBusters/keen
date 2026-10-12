@@ -66,7 +66,7 @@ function render() {
   tbody.innerHTML = '';
   const view = all.filter((c) => {
     if (onlyInScope && !c.in_scope) return false;
-    if (onlyGaps && (c.evidence_count || 0) > 0) return false;
+    if (onlyGaps && (c.evidence_count === null || (c.evidence_count || 0) > 0)) return false;
     if (!q) return true;
     return `${c.ref} ${c.title || ''} ${c.justification || ''}`.toLowerCase().includes(q);
   });
@@ -76,9 +76,12 @@ function render() {
       ? `<span class="badge badge-soft">in</span>`
       : `<span class="badge text-bg-light">out</span>`;
 
+    // Evidence counts are withheld (null) for accounts without events.read.
+    const withheld = c.evidence_count === null;
     const ev = c.evidence_count || 0;
-    const evHtml =
-      ev > 0
+    const evHtml = withheld
+      ? '<span class="small-muted">—</span>'
+      : ev > 0
         ? `<a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" class="badge badge-soft">${ev}</a>`
         : `<span class="badge text-bg-light">0</span>`;
 
@@ -113,11 +116,11 @@ function applySummary(summary) {
   setKpiText('kpiEventsUnmapped', summary?.events?.unmapped ?? '–');
   setKpiText(
     'kpiControlsWith',
-    summary ? all.filter((c) => c.in_scope && (c.evidence_count || 0) > 0).length : '–',
+    summary?.events ? all.filter((c) => c.in_scope && (c.evidence_count || 0) > 0).length : '–',
   );
   setKpiText(
     'kpiControlsWithout',
-    summary ? all.filter((c) => c.in_scope && !(c.evidence_count || 0)).length : '–',
+    summary?.events ? all.filter((c) => c.in_scope && !(c.evidence_count || 0)).length : '–',
   );
 }
 

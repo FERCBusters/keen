@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.cache import cache_delete_prefix
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
+from app.core.references import absolute_http_url
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     Artifact,
@@ -133,6 +134,8 @@ def admin_import_controls(*, payload: ControlImportPayload, user, db: Session):
         payload.framework or ""
     ).strip() or settings.default_framework_slug
 
+    if payload.framework_url:
+        payload.framework_url = _validate_upstream_url(payload.framework_url) or ""
     fw = db.query(Framework).filter(Framework.slug == framework_slug).one_or_none()
     if fw:
         if payload.framework_name and hasattr(fw, "name"):
@@ -283,7 +286,7 @@ def _validate_upstream_url(raw: str | None) -> str | None:
         return None
     if len(value) > 2048:
         raise DomainError(status_code=400, detail="upstream_url is too long")
-    if not value.startswith(("https://", "http://")):
+    if absolute_http_url(value) is None:
         raise DomainError(
             status_code=400, detail="upstream_url must start with http:// or https://"
         )
@@ -296,6 +299,13 @@ def _validate_clause_evidence_url(raw: str | None) -> str | None:
         return None
     if len(value) > 2048:
         raise DomainError(status_code=400, detail="evidence URL is too long")
+    # Browsers read a backslash as "/" and drop tabs and newlines, so such a path
+    # can resolve off-site while looking local.
+    if "\\" in value or any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise DomainError(
+            status_code=400,
+            detail="Evidence URLs must not contain backslashes or control characters",
+        )
     lowered = value.lower()
     if lowered.startswith(("javascript:", "data:", "vbscript:")) or value.startswith(
         "//"

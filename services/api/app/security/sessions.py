@@ -165,9 +165,21 @@ def update_session_authz(
 
 
 def delete_session(redis_client, session_id: str) -> None:
+    """Best-effort removal of a session already rejected by other checks."""
     if not session_id:
         return
     try:
         redis_client.delete(session_key(session_id))
     except Exception:
         pass
+
+
+def revoke_session(redis_client, session_id: str) -> None:
+    """Delete a session for an explicit sign-out; store failures propagate.
+
+    A caller must not report sign-out while the server-side session remains
+    valid, so unlike delete_session this never suppresses errors.
+    """
+    if not session_id:
+        return
+    redis_client.delete(session_key(session_id))

@@ -249,16 +249,27 @@ def _save_connection(key, body, db, new=False):
         parts = urlsplit(url or "")
         return parts.scheme, (parts.hostname or "").lower(), parts.port or 443
 
+    def presentation(base_url, auth_name, auth_options):
+        # Where the saved secret is sent and under which header or parameter.
+        return (
+            origin(base_url),
+            (auth_name or "").strip(),
+            (auth_options or {}).get("token_path", "/oauth/token"),
+        )
+
     if (
         not new
         and body.auth_kind != "none"
         and not body.secret
         and c.encrypted_secret
-        and origin(body.base_url) != origin(c.base_url)
+        and presentation(body.base_url, body.auth_name, body.auth_options)
+        != presentation(c.base_url, c.auth_name, c.auth_options)
     ):
         # Saved secrets are write-only; never let an edit redirect them elsewhere.
         raise DomainError(
-            422, "Supply a new credential when changing the connection origin"
+            422,
+            "Supply a new credential when changing the connection origin, "
+            "credential header or parameter, or OAuth token path",
         )
     for name in (
         "name",

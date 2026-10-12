@@ -1,0 +1,551 @@
+"""Authority, availability and redaction regressions through the assembled app.
+
+Requests pass through the production middleware, real password sign-in, CSRF,
+session storage and permission resolution. The session store is an in-memory
+Valkey substitute; PostgreSQL is used when KEEN_CONTRACT_TEST_DATABASE_URL is
+set (SQLite otherwise, which does not establish locking behaviour).
+"""
+
+import json
+import uuid
+from unittest.mock import MagicMock, Mock
+
+import fakeredis
+import pytest
+from app.core import valkey
+from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
+from app.db.models import (
+    AuditLog,
+    EntityChangelog,
+    Event,
+    IsmsEffectivenessMeasure,
+    IsmsEffectivenessMetricEntry,
+    Permission,
+    User,
+)
+from app.security.passwords import hash_password
+from app.services.errors import DomainError
+from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
+
+BASE = "https://keen.example"
+PASSWORD = "synthetic-password-for-tests"
+
+
+@pytest.fixture
+def keen(contract_db, monkeypatch):
+    from app import main
+    from app.db.session import get_db
+    from sqlalchemy.orm import sessionmaker
+
+    server = fakeredis.FakeServer()
+
+    class FakeValkey:
+        @staticmethod
+        def from_url(*args, **kwargs):
+            return fakeredis.FakeRedis(server=server, decode_responses=True)
+
+    valkey.get_valkey.cache_clear()
+    monkeypatch.setattr(valkey, "Redis", FakeValkey)
+    factory = sessionmaker(
+        bind=contract_db.get_bind(),
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
+
+    def database():
+        with factory() as session:
+            yield session
+
+    monkeypatch.setattr(main, "SessionLocal", factory)
+    main.app.dependency_overrides[get_db] = database
+    monkeypatch.setattr(settings, "public_base_url", BASE)
+    monkeypatch.setattr(settings, "trust_remote_user", False)
+    monkeypatch.setattr(settings, "mfa_policy", "optional")
+    monkeypatch.setattr(settings, "local_auth_enabled", True)
+    monkeypatch.setattr(settings, "hosted_mode", False)
+    monkeypatch.setattr(settings, "demo_mode", False)
+
+    class Keen:
+        db = contract_db
+        store = valkey.get_valkey()
+        # date_trunc aggregates run only on PostgreSQL; SQLite runs still cover
+        # every rejection, which happens before any aggregate query.
+        postgres = contract_db.get_bind().dialect.name == "postgresql"
+
+        def user(self, *codes, role="normal"):
+            row = User(
+                username="user-" + uuid.uuid4().hex[:10],
+                password_hash=hash_password(PASSWORD),
+                role=role,
+                is_active=True,
+            )
+            contract_db.add(row)
+            for code in codes:
+                permission = (
+                    contract_db.query(Permission).filter_by(code=code).one_or_none()
+                )
+                if permission is None:
+                    permission = Permission(code=code, description=code)
+                    contract_db.add(permission)
+                row.permissions.append(permission)
+            contract_db.add(row)
+            contract_db.commit()
+            return row
+
+        def client(self, user=None):
+            client = TestClient(main.app, base_url=BASE, raise_server_exceptions=False)
+            if user is not None:
+                response = client.post(
+                    "/v1/auth/login",
+                    json={"username": user.username, "password": PASSWORD},
+                    headers={"Origin": BASE},
+                )
+                assert response.status_code == 200, response.text
+            return client
+
+    yield Keen()
+    main.app.dependency_overrides.pop(get_db, None)
+    valkey.get_valkey.cache_clear()
+
+
+def unsafe(client):
+    return {"Origin": BASE, "X-CSRF-Token": client.cookies.get("keen_csrf")}
+
+
+# --- Bounded chart work -------------------------------------------------------
+
+
+def test_daily_bucket_budget_rejects_wide_windows_before_work(keen, monkeypatch):
+    from app.services import stats
+
+    client = keen.client(keen.user("events.read"))
+    path = "/v1/charts/event_volume_timeseries"
+    if keen.postgres:
+        within = client.get(
+            path, params={"start_date": "2016-01-01", "end_date": "2026-01-01"}
+        )
+        assert within.status_code == 200, within.text
+        assert len(within.json()["items"]) <= stats.MAX_TIMESERIES_BUCKETS
+
+    # Rejection happens before any aggregate query runs.
+    monkeypatch.setattr(
+        stats, "diary_filter_condition", Mock(side_effect=AssertionError)
+    )
+    for params in (
+        {"start_date": "1000-01-01", "end_date": "1999-12-31"},
+        {
+            "start_ts": "1000-01-01T00:00:00",
+            "end_ts": "2026-01-01T00:00:00",
+            "interval": "second",
+        },
+        {"start_date": "2026-01-01", "end_date": "9999-12-31"},
+    ):
+        response = client.get(path, params=params)
+        assert response.status_code == 400, (params, response.text)
+
+
+# --- Evidence aggregates follow events.read -----------------------------------
+
+
+def test_event_aggregates_require_events_read(keen):
+    plain = keen.client(keen.user())
+    assert plain.get("/v1/events").status_code == 403
+    for path in (
+        "/v1/charts/event_volume_timeseries",
+        "/v1/graph/control_source",
+        "/v1/graph/clause_source",
+    ):
+        assert plain.get(path).status_code == 403, path
+    summary = plain.get("/v1/stats/summary").json()
+    assert summary["events"] is None
+    assert summary["controls"]["with_evidence"] is None
+    assert all(
+        item["evidence_count"] is None and item["last_evidence"] is None
+        for item in plain.get("/v1/stats/controls").json()["items"]
+    )
+
+    reader = keen.client(keen.user("events.read"))
+    assert reader.get("/v1/stats/summary").json()["events"] is not None
+    if keen.postgres:
+        for path in (
+            "/v1/graph/control_source",
+            "/v1/charts/event_volume_timeseries",
+        ):
+            assert reader.get(path).status_code == 200, path
+
+
+# --- Organisation roles that own risks ----------------------------------------
+
+
+def _risk_owned_by_new_role(keen):
+    admin = keen.client(keen.user(role="admin"))
+    node = admin.post(
+        "/v1/isms/org-nodes",
+        json={"name": "Owner " + uuid.uuid4().hex[:6], "node_type": "role"},
+        headers=unsafe(admin),
+    )
+    assert node.status_code in (200, 201), node.text
+    risk = admin.post(
+        "/v1/risks",
+        json={
+            "asset_name": "Synthetic asset",
+            "category_name": "Synthetic category",
+            "subcategory_name": "Synthetic subcategory",
+            "risk_types": ["confidentiality"],
+            "threat_summary": "synthetic restricted risk",
+            "risk_owner_role_id": node.json()["id"],
+        },
+        headers=unsafe(admin),
+    )
+    assert risk.status_code in (200, 201), risk.text
+    return node.json()["id"], risk.json()["id"]
+
+
+def test_isms_manager_cannot_join_or_remove_a_risk_owning_role(keen):
+    node_id, risk_id = _risk_owned_by_new_role(keen)
+    manager = keen.user("isms.manage")
+    client = keen.client(manager)
+    assert client.get(f"/v1/risks/{risk_id}").status_code == 403
+
+    join = client.patch(
+        f"/v1/isms/org-nodes/{node_id}",
+        json={"user_ids": [str(manager.id)]},
+        headers=unsafe(client),
+    )
+    assert join.status_code == 403, join.text
+    assert client.get(f"/v1/risks/{risk_id}").status_code == 403
+    assert client.get("/v1/me/risks").json().get("items", []) == []
+    deleted = client.delete(f"/v1/isms/org-nodes/{node_id}", headers=unsafe(client))
+    assert deleted.status_code == 403
+
+    # Ordinary organisation chart edits remain available.
+    renamed = client.patch(
+        f"/v1/isms/org-nodes/{node_id}",
+        json={"name": "Renamed role", "user_ids": []},
+        headers=unsafe(client),
+    )
+    assert renamed.status_code == 200, renamed.text
+
+    risk_manager = keen.user("isms.manage", "risk.manage")
+    trusted = keen.client(risk_manager)
+    assigned = trusted.patch(
+        f"/v1/isms/org-nodes/{node_id}",
+        json={"user_ids": [str(manager.id)]},
+        headers=unsafe(trusted),
+    )
+    assert assigned.status_code == 200, assigned.text
+    assert client.get(f"/v1/risks/{risk_id}").status_code == 200
+
+
+def test_isms_manager_can_manage_members_of_roles_without_risks(keen):
+    manager = keen.user("isms.manage")
+    client = keen.client(manager)
+    node = client.post(
+        "/v1/isms/org-nodes",
+        json={"name": "Plain role", "node_type": "role"},
+        headers=unsafe(client),
+    )
+    assert node.status_code in (200, 201), node.text
+    updated = client.patch(
+        f"/v1/isms/org-nodes/{node.json()['id']}",
+        json={"user_ids": [str(manager.id)]},
+        headers=unsafe(client),
+    )
+    assert updated.status_code == 200, updated.text
+
+
+# --- Sign-out --------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", ["/v1/auth/logout", "/v1/auth/oidc/logout"])
+def test_sign_out_fails_closed_when_revocation_fails(keen, monkeypatch, path):
+    client = keen.client(keen.user())
+    sid = client.cookies.get(settings.session_cookie_name)
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            type(keen.store), "delete", Mock(side_effect=ConnectionError("store down"))
+        )
+        failed = client.post(path, headers=unsafe(client))
+    assert failed.status_code == 503, failed.text
+    assert settings.session_cookie_name not in failed.headers.get("set-cookie", "")
+    assert client.get("/v1/me").status_code == 200
+
+    done = client.post(path, headers=unsafe(client))
+    assert done.status_code in (200, 204), done.text
+    replay = keen.client()
+    replay.cookies.set(settings.session_cookie_name, sid)
+    assert replay.get("/v1/me").status_code == 401
+
+
+# --- Webhook persistence and replay claims -------------------------------------
+
+
+def test_failed_webhook_persistence_releases_replay_claim(keen, monkeypatch):
+    from app.ingest import webhooks
+
+    monkeypatch.setenv("SYNTHETIC_WEBHOOK_SECRET", "synthetic-webhook-secret")
+    monkeypatch.setattr(
+        webhooks,
+        "load_webhook_policies",
+        lambda path: {
+            "providers": {
+                "synthetic": {
+                    "secret_header": "X-Synthetic-Secret",
+                    "secret_env": "SYNTHETIC_WEBHOOK_SECRET",
+                }
+            }
+        },
+    )
+    calls = []
+
+    def store(db, **kwargs):
+        calls.append(kwargs["external_id"])
+        if len(calls) == 1:
+            raise OSError("artifact storage unavailable")
+        return {"ok": True, "event_id": str(uuid.uuid4())}
+
+    monkeypatch.setattr(webhooks, "store_event_with_artifact", store)
+    client = keen.client()
+    body = json.dumps({"delivery": uuid.uuid4().hex}).encode()
+    headers = {
+        "X-Synthetic-Secret": "synthetic-webhook-secret",
+        "Content-Type": "application/json",
+    }
+    path = "/v1/webhooks/synthetic/alert"
+    assert client.post(path, content=body, headers=headers).status_code == 500
+    retried = client.post(path, content=body, headers=headers)
+    assert retried.status_code == 200, retried.text
+    assert len(calls) == 2
+    # A delivery that did persist is still rejected as a replay.
+    assert client.post(path, content=body, headers=headers).status_code == 400
+    assert len(calls) == 2
+
+
+# --- Metric webhook redaction ---------------------------------------------------
+
+
+def test_metric_webhook_redacts_extracted_fields_and_history(keen, monkeypatch):
+    from app.api.routes import webhooks as webhook_routes
+
+    monkeypatch.setattr(
+        webhook_routes,
+        "verify_secret",
+        lambda provider, headers: headers.get("x-keen-metrics-secret") == "synthetic",
+    )
+    key = "metric-" + uuid.uuid4().hex[:8]
+    keen.db.add(
+        IsmsEffectivenessMeasure(
+            framework_slug=settings.default_framework_slug, metric_key=key
+        )
+    )
+    keen.db.commit()
+    secrets = ["SYNTH-QUERY-SECRET", "SYNTH-FRAGMENT-TOKEN", "SYNTH-NOTE-PASSWORD"]
+    secrets += ["SYNTH-BEARER", "SYNTH-TITLE-SECRET", "SYNTH-REF-TOKEN"]
+    response = keen.client().post(
+        f"/v1/webhooks/isms/effectiveness-metrics/{key}",
+        json={
+            "value": 1,
+            "source_url": "https://grafana.example/d?api_key=SYNTH-QUERY-SECRET"
+            "#access_token=SYNTH-FRAGMENT-TOKEN",
+            "notes": "rotated password=SYNTH-NOTE-PASSWORD",
+            "text": "Authorization: Bearer SYNTH-BEARER",
+            "source_title": "secret=SYNTH-TITLE-SECRET",
+            "source_reference": "token=SYNTH-REF-TOKEN",
+        },
+        headers={"X-Keen-Metrics-Secret": "synthetic"},
+    )
+    assert response.status_code == 200, response.text
+    entry_id = uuid.UUID(response.json()["metric_entry"]["id"])
+    row = keen.db.get(IsmsEffectivenessMetricEntry, entry_id)
+    stored = json.dumps(
+        [
+            row.source_url,
+            row.notes,
+            row.qualitative_value,
+            row.source_title,
+            row.source_reference,
+            row.raw_payload,
+            response.json(),
+        ]
+    )
+    history = json.dumps(
+        [
+            [c.before_state, c.after_state, c.changes]
+            for c in keen.db.query(EntityChangelog).filter_by(
+                entity_type="isms_effectiveness_metric"
+            )
+        ],
+        default=str,
+    )
+    for value in secrets:
+        assert value not in stored and value not in history, value
+    assert row.source_url.startswith("https://grafana.example/d?")
+
+
+# --- Write-only integration credentials -----------------------------------------
+
+
+def test_integration_secret_presentation_changes_require_reentry(keen, monkeypatch):
+    monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
+    client = keen.client(keen.user(role="admin"))
+    body = {
+        "name": "Synthetic API",
+        "base_url": "https://api.example.test",
+        "auth_kind": "header",
+        "auth_name": "X-API-Key",
+        "secret": "synthetic-saved-secret",
+    }
+    created = client.post(
+        "/v1/admin/integrations/connections", json=body, headers=unsafe(client)
+    )
+    assert created.status_code == 200, created.text
+    key, version = created.json()["id"], created.json()["version"]
+    path = f"/v1/admin/integrations/connections/{key}"
+
+    def save(**changes):
+        payload = {**body, "secret": None, "version": version, **changes}
+        return client.put(path, json=payload, headers=unsafe(client))
+
+    for changes in (
+        {"auth_name": "X-Reflected-Header"},
+        {"base_url": "https://other.example.test"},
+        {"auth_kind": "query", "auth_name": "api_key"},
+    ):
+        rejected = save(**changes)
+        assert rejected.status_code == 422, (changes, rejected.text)
+
+    renamed = save(name="Renamed API")
+    assert renamed.status_code == 200, renamed.text
+    version = renamed.json()["version"]
+    resupplied = save(auth_name="X-Other-Key", secret="synthetic-new-secret")
+    assert resupplied.status_code == 200, resupplied.text
+
+
+def test_oauth_token_path_change_requires_reentry(keen, monkeypatch):
+    monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
+    client = keen.client(keen.user(role="admin"))
+    body = {
+        "name": "Synthetic OAuth",
+        "base_url": "https://api.example.test",
+        "auth_kind": "oauth_client_credentials",
+        "username": "synthetic-client",
+        "auth_options": {"token_path": "/oauth/token"},
+        "secret": "synthetic-client-secret",
+    }
+    created = client.post(
+        "/v1/admin/integrations/connections", json=body, headers=unsafe(client)
+    )
+    assert created.status_code == 200, created.text
+    response = client.put(
+        f"/v1/admin/integrations/connections/{created.json()['id']}",
+        json={
+            **body,
+            "secret": None,
+            "version": created.json()["version"],
+            "auth_options": {"token_path": "/echo"},
+        },
+        headers=unsafe(client),
+    )
+    assert response.status_code == 422, response.text
+
+
+# --- Audit trail -----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path", ["/v1/auth/oidc/callback", "/v1/auth/sso/google/callback"]
+)
+def test_audit_trail_omits_authorisation_codes(keen, path):
+    keen.client().get(path, params={"code": "SYNTH-AUTH-CODE", "state": "SYNTH-STATE"})
+    rows = keen.db.query(AuditLog).filter(AuditLog.path == path).all()
+    assert rows
+    assert all(
+        "SYNTH-AUTH-CODE" not in (r.query_string or "")
+        and "SYNTH-STATE" not in (r.query_string or "")
+        for r in rows
+    )
+
+
+# --- Link validation -------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url", ["/\\outside.example/login", "/\t/outside.example", "/\n/outside.example"]
+)
+def test_evidence_paths_cannot_leave_the_origin(url):
+    from app.services.admin import _validate_clause_evidence_url
+    from app.services.audits.validation import clean_url
+
+    for validate in (clean_url, _validate_clause_evidence_url):
+        with pytest.raises(DomainError):
+            validate(url)
+    assert clean_url("/event.html?id=1") == "/event.html?id=1"
+    assert _validate_clause_evidence_url("/clause.html?id=1") == "/clause.html?id=1"
+
+
+@pytest.mark.parametrize(
+    "value", ["javascript:alert(1)", "data:text/html,x", "/relative", "https://a\\b"]
+)
+def test_imported_upstream_urls_must_be_web_links(value):
+    from types import SimpleNamespace
+
+    from app.core.references import control_upstream_url
+    from app.services.admin import _validate_upstream_url
+
+    control = SimpleNamespace(meta={"upstream_url": value}, ref="", framework_slug="")
+    assert control_upstream_url(control) is None
+    with pytest.raises(DomainError):
+        _validate_upstream_url(value)
+    control.meta["upstream_url"] = "https://guidance.example/a"
+    assert control_upstream_url(control) == "https://guidance.example/a"
+
+
+# --- SMTP credentials --------------------------------------------------------------
+
+
+def test_smtp_credentials_are_never_sent_without_tls(monkeypatch):
+    from app.services import mailer
+
+    for name, value in {
+        "smtp_host": "smtp.example.test",
+        "smtp_from_email": "keen@example.test",
+        "smtp_username": "synthetic-user",
+        "smtp_password": "synthetic-password",
+        "smtp_use_tls": False,
+        "smtp_use_ssl": False,
+    }.items():
+        monkeypatch.setattr(settings, name, value)
+    plain, secure = MagicMock(), MagicMock()
+    monkeypatch.setattr(mailer.smtplib, "SMTP", plain)
+    monkeypatch.setattr(mailer.smtplib, "SMTP_SSL", secure)
+    with pytest.raises(RuntimeError, match="TLS"):
+        mailer.send_email(to_email="person@example.test", subject="s", body="b")
+    plain.assert_not_called()
+    secure.assert_not_called()
+
+    # Unauthenticated relays may still be used without TLS.
+    monkeypatch.setattr(settings, "smtp_username", "")
+    monkeypatch.setattr(settings, "smtp_password", "")
+    mailer.send_email(to_email="person@example.test", subject="s", body="b")
+    plain.return_value.__enter__.return_value.login.assert_not_called()
+
+
+def test_withheld_aggregates_never_reuse_a_readers_cache(keen):
+    """A permitted reader's cached aggregates must not reach an unpermitted caller."""
+    keen.db.add(
+        Event(
+            timestamp=utc_now_naive(),
+            source="synthetic",
+            summary="synthetic",
+            external_id="x-" + uuid.uuid4().hex,
+        )
+    )
+    keen.db.commit()
+    reader = keen.client(keen.user("events.read"))
+    assert reader.get("/v1/stats/summary").json()["events"] is not None
+    assert reader.get("/v1/stats/controls").status_code == 200
+    plain = keen.client(keen.user())
+    assert plain.get("/v1/stats/summary").json()["events"] is None
+    assert plain.get("/v1/stats/summary").json()["stats_source"] == "evidence_withheld"

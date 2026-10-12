@@ -19,7 +19,7 @@ from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import Connection as SourceOrigin
 from app.ingest.connections import connection_scope
 from app.mapping.rules import evaluate_by_framework, load_rules
-from app.security.redaction import redact_obj
+from app.security.redaction import redact_obj, redact_url
 from app.services.ingestion_pause import is_paused
 from cryptography.fernet import InvalidToken
 from sqlalchemy import select, update
@@ -216,7 +216,7 @@ def run_job(run_id):
                             source_type="event",
                             source_reference=ref,
                             source_event_id=uuid.UUID(result["event_id"]),
-                            source_url=f.get("url"),
+                            source_url=redact_url(f["url"]) if f.get("url") else None,
                             raw_payload=redact_obj(item["record"]),
                             notes=f"Collected by {c.name}; revision {run.revision}; run {run.id}",
                         )

@@ -6,6 +6,7 @@ import re
 import uuid
 from functools import lru_cache
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -320,14 +321,38 @@ def load_control_links(path: str) -> dict[str, dict[str, str]]:
     return out
 
 
+def absolute_http_url(value: Any) -> str | None:
+    """Return an absolute http(s) link suitable for display, otherwise None."""
+    if not isinstance(value, str):
+        return None
+    url = value.strip()
+    if (
+        not url
+        or len(url) > 2048
+        or "\\" in url
+        or any(ord(c) < 32 or ord(c) == 127 for c in url)
+    ):
+        return None
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return None
+    if parts.scheme.lower() not in {"http", "https"} or not parts.hostname:
+        return None
+    return url
+
+
 def control_upstream_url(control: Any) -> str | None:
-    """Compute the upstream URL for a control (metadata overrides YAML)."""
+    """Compute the upstream URL for a control (metadata overrides YAML).
+
+    Imported catalogue metadata is not trusted to contain only web links.
+    """
     try:
         meta = getattr(control, "meta", None) or {}
         if isinstance(meta, dict):
-            u = meta.get("upstream_url") or meta.get("upstreamUrl")
-            if isinstance(u, str) and u.strip():
-                return u.strip()
+            u = absolute_http_url(meta.get("upstream_url") or meta.get("upstreamUrl"))
+            if u:
+                return u
     except Exception:
         pass
 

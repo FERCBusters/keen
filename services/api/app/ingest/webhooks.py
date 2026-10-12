@@ -103,15 +103,29 @@ def _check_replay_protection(
         except (ValueError, TypeError):
             pass
 
-    payload_hash = hashlib.sha256(body).hexdigest()
-    replay_key = f"keen:webhook:replay:{provider}:{event_type}:{payload_hash}"
-
-    replay_key = namespace(replay_key)
     existing = r.set(
-        replay_key, "1", nx=True, ex=_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS + 60
+        _replay_key(provider, event_type, body),
+        "1",
+        nx=True,
+        ex=_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS + 60,
     )
     # redis-py returns None when SET NX loses to an existing key.
     return not bool(existing)
+
+
+def _replay_key(provider: str, event_type: str, body: bytes) -> str:
+    payload_hash = hashlib.sha256(body).hexdigest()
+    return namespace(f"keen:webhook:replay:{provider}:{event_type}:{payload_hash}")
+
+
+def _release_replay_claim(provider: str, event_type: str, body: bytes) -> None:
+    """Let the sender retry a delivery that this request failed to persist."""
+    try:
+        get_valkey().delete(_replay_key(provider, event_type, body))
+    except Exception:
+        # Without the store the claim expires with the replay window; the event
+        # fingerprint still de-duplicates any delivery that did persist.
+        pass
 
 
 def ingest_webhook(
@@ -124,6 +138,24 @@ def ingest_webhook(
     if _check_replay_protection(provider, event_type, body, headers):
         raise ValueError("Potential replay attack detected: duplicate webhook payload")
 
+    try:
+        return _store_webhook_event(
+            db,
+            provider=provider,
+            event_type=event_type,
+            body=body,
+            headers=headers,
+        )
+    except BaseException:
+        # The delivery was claimed before persistence; a failed attempt must not
+        # turn the sender's legitimate retry into a rejected replay.
+        _release_replay_claim(provider, event_type, body)
+        raise
+
+
+def _store_webhook_event(
+    db: Session, *, provider: str, event_type: str, body: bytes, headers: dict[str, str]
+) -> dict[str, Any]:
     summary = f"webhook:{provider}/{event_type}"
     try:
         parsed = json.loads(body.decode("utf-8"))

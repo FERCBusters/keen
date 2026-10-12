@@ -144,14 +144,20 @@ def is_sensitive_key(k: str) -> bool:
     return any(n in nk for n in needles)
 
 
-def redact_query_string(qs: str | None) -> str | None:
+def redact_query_string(
+    qs: str | None, extra_keys: frozenset[str] = frozenset()
+) -> str | None:
     if not qs:
         return None
     try:
         parts: list[tuple[str, str]] = []
         changed = False
         for k, v in parse_qsl(qs, keep_blank_values=True):
-            if isinstance(k, str) and is_sensitive_key(k) and v:
+            if (
+                isinstance(k, str)
+                and (is_sensitive_key(k) or _normalize_key(k) in extra_keys)
+                and v
+            ):
                 parts.append((k, REDACTED))
                 changed = True
             else:

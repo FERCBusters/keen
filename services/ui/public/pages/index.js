@@ -86,7 +86,7 @@ function render() {
   tbody.innerHTML = '';
   const view = all.filter((c) => {
     if (onlyInScope && !c.in_scope) return false;
-    if (onlyGaps && (c.evidence_count || 0) > 0) return false;
+    if (onlyGaps && (c.evidence_count === null || (c.evidence_count || 0) > 0)) return false;
     if (!q) return true;
     return `${c.ref} ${c.title || ''}`.toLowerCase().includes(q);
   });
@@ -96,9 +96,12 @@ function render() {
       ? `<span class="badge badge-soft">in</span>`
       : `<span class="badge text-bg-light">out</span>`;
 
+    // Evidence counts are withheld (null) for accounts without events.read.
+    const withheld = c.evidence_count === null;
     const ev = c.evidence_count || 0;
-    const evHtml =
-      ev > 0
+    const evHtml = withheld
+      ? '<span class="small-muted">—</span>'
+      : ev > 0
         ? `<a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" class="badge badge-soft">${ev}</a>`
         : `<span class="badge text-bg-light">0</span>`;
 
@@ -129,10 +132,12 @@ async function load() {
     const summary = await apiGet(
       `/api/v1/stats/summary?framework=${encodeURIComponent(framework)}`,
     );
-    document.getElementById('kpiEventsMapped').textContent = summary.events.mapped;
-    document.getElementById('kpiEventsUnmapped').textContent = summary.events.unmapped;
-    document.getElementById('kpiControlsWith').textContent = summary.controls.with_evidence;
-    document.getElementById('kpiControlsWithout').textContent = summary.controls.without_evidence;
+    // Evidence aggregates are null for accounts without events.read.
+    document.getElementById('kpiEventsMapped').textContent = summary.events?.mapped ?? '–';
+    document.getElementById('kpiEventsUnmapped').textContent = summary.events?.unmapped ?? '–';
+    document.getElementById('kpiControlsWith').textContent = summary.controls?.with_evidence ?? '–';
+    document.getElementById('kpiControlsWithout').textContent =
+      summary.controls?.without_evidence ?? '–';
 
     const data = await apiGet(
       `/api/v1/stats/controls?limit=5000&framework=${encodeURIComponent(framework)}`,

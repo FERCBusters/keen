@@ -4,14 +4,36 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.db.models import IsmsOrgNode, User
+from app.db.models import IsmsOrgNode, IsmsOrgNodeUser, Risk, User
+from app.security.permissions import has_permission
 from app.services.context import ChangeContext
+from app.services.errors import DomainError
 from app.services.hierarchy import validate_parent
 
 from .common import _by_id_or_404, _clean_framework, _clean_text, _record, _utcnow
 from .mutations import _apply_links, _delete_entity_links, _replace_org_node_users
 from .schemas import OrgNodePayload
 from .serializers import _entity_out
+
+RISK_MANAGE_PERMISSION = "risk.manage"
+
+
+def _require_risk_authority_for_owner_role(
+    db: Session, user: User, node: IsmsOrgNode, action: str
+) -> None:
+    """Membership of a risk-owning role grants read access to those risks.
+
+    Organisation chart management therefore cannot change who belongs to, or
+    remove, such a role without the authority to manage risks.
+    """
+    owns_risks = (
+        db.query(Risk.id).filter(Risk.risk_owner_role_id == node.id).first() is not None
+    )
+    if owns_risks and not has_permission(db, user, RISK_MANAGE_PERMISSION):
+        raise DomainError(
+            status_code=403,
+            detail=f"risk.manage permission is required to {action} a role that owns risks",
+        )
 
 
 def create_org_node(
@@ -90,6 +112,16 @@ def update_org_node(
     db.add(row)
     db.flush()
     if "user_ids" in fields:
+        current = {
+            uid
+            for (uid,) in db.query(IsmsOrgNodeUser.user_id).filter(
+                IsmsOrgNodeUser.org_node_id == row.id
+            )
+        }
+        if current != set(payload.user_ids or []):
+            _require_risk_authority_for_owner_role(
+                db, user, row, "change the members of"
+            )
         _replace_org_node_users(
             db, row, payload.user_ids or [], payload.relationship_type
         )
@@ -106,6 +138,7 @@ def delete_org_node(
 ):
     fw = _clean_framework(framework)
     row = _by_id_or_404(db, IsmsOrgNode, node_id, "Organisation chart node")
+    _require_risk_authority_for_owner_role(db, user, row, "delete")
     before = _entity_out(db, "org_node", row, fw)
     _record(db, "org_node", row, "deleted", before, None, user, context)
     _delete_entity_links(db, "org_node", row.id, fw)

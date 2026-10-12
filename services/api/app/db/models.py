@@ -2933,7 +2933,7 @@ class IntegrationConnection(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     base_url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    auth_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
+    auth_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="none")
     auth_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     username: Mapped[str] = mapped_column(String(256), nullable=False, default="")
     auth_options: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)

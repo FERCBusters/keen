@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from contextlib import asynccontextmanager
 
@@ -324,6 +325,12 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+# Authorisation codes and state are single-use, but are still credentials
+# while a sign-in is in progress; keep them out of the audit trail.
+_OAUTH_CALLBACK_PATH = re.compile(r"/v1/auth/(?:oidc|sso/[^/]+)/callback")
+_OAUTH_CALLBACK_QUERY_KEYS = frozenset({"code", "state"})
+
+
 @app.middleware("http")
 async def audit_trail_middleware(request: Request, call_next):
     """Persist an internal audit trail of UI->API actions.
@@ -357,7 +364,12 @@ async def audit_trail_middleware(request: Request, call_next):
             user = getattr(request.state, "user", None)
             username = getattr(user, "username", None) if user else None
 
-            qs = redact_query_string(request.url.query)
+            qs = redact_query_string(
+                request.url.query,
+                _OAUTH_CALLBACK_QUERY_KEYS
+                if _OAUTH_CALLBACK_PATH.fullmatch(path)
+                else frozenset(),
+            )
             if qs and len(qs) > 4096:
                 qs = qs[:4096]
 

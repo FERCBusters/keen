@@ -11,7 +11,13 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import Event, IsmsEffectivenessMeasure, IsmsEffectivenessMetricEntry
-from app.security.redaction import redact_obj
+from app.security.redaction import (
+    mask_event_data_obj,
+    mask_event_data_str,
+    redact_obj,
+    redact_str,
+    redact_url,
+)
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
@@ -170,6 +176,21 @@ def record_metric(*, db, metric_key, payload, context: ChangeContext):
         source_url = external_url(payload.get("source_url") or payload.get("url"))
     except (ValueError, TypeError, AttributeError):
         raise DomainError(400, "Use an HTTP or HTTPS source URL") from None
+    if source_url:
+        # Validation rejects embedded credentials; recognised secret query and
+        # fragment parameters are removed like other ingested URLs.
+        source_url = redact_url(source_url)
+    # Extracted columns, the payload copy and the changelog receive the same
+    # protection as the shared ingestion path.
+    mask = (settings.event_data_masking or "false") == "true"
+
+    def protect(value: str) -> str:
+        value = redact_str(value) or ""
+        return (mask_event_data_str(value) or "") if mask else value
+
+    raw_payload = redact_obj(payload) or {}
+    if mask:
+        raw_payload = mask_event_data_obj(raw_payload) or {}
     row = IsmsEffectivenessMetricEntry(
         measure_id=measure.id,
         recorded_at=_webhook_parse_datetime(payload.get("recorded_at"))
@@ -177,25 +198,31 @@ def record_metric(*, db, metric_key, payload, context: ChangeContext):
         period_start=period_start,
         period_end=period_end,
         metric_value=metric_value,
-        metric_unit=_webhook_clean_text(
-            payload.get(
-                "metric_unit", payload.get("unit") or measure.target_unit or ""
-            ),
-            64,
+        metric_unit=protect(
+            _webhook_clean_text(
+                payload.get(
+                    "metric_unit", payload.get("unit") or measure.target_unit or ""
+                ),
+                64,
+            )
         ),
-        qualitative_value=qualitative_value,
+        qualitative_value=protect(qualitative_value),
         source_type=source_type,
-        source_title=_webhook_clean_text(
-            payload.get("source_title") or payload.get("title") or "", 256
+        source_title=protect(
+            _webhook_clean_text(
+                payload.get("source_title") or payload.get("title") or "", 256
+            )
         ),
         source_url=source_url,
-        source_reference=_webhook_clean_text(
-            payload.get("source_reference") or payload.get("reference") or "", 256
+        source_reference=protect(
+            _webhook_clean_text(
+                payload.get("source_reference") or payload.get("reference") or "",
+                256,
+            )
         ),
         source_event_id=source_event_id,
-        notes=_webhook_clean_text(payload.get("notes"), 12000),
-        # Match the shared ingestion path: recognised secret keys never persist.
-        raw_payload=redact_obj(payload) or {},
+        notes=protect(_webhook_clean_text(payload.get("notes"), 12000)),
+        raw_payload=raw_payload,
         created_at=utc_now_naive(),
         updated_at=utc_now_naive(),
     )

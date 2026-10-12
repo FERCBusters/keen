@@ -69,6 +69,12 @@ def send_email(
     use_ssl = bool(getattr(settings, "smtp_use_ssl", False))
     timeout = int(getattr(settings, "smtp_timeout_seconds", 20) or 20)
 
+    if user and pwd and not (use_ssl or use_tls):
+        # SMTP credentials are only sent after TLS verification succeeds.
+        raise RuntimeError(
+            "SMTP credentials require KEEN_SMTP_USE_TLS or KEEN_SMTP_USE_SSL"
+        )
+
     from_email = (settings.smtp_from_email or "").strip()
     from_name = (settings.smtp_from_name or "Keen").strip() or "Keen"
 

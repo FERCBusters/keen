@@ -26,7 +26,7 @@ from app.db.models import (
     User,
 )
 from app.security.diary_visibility import diary_filter_condition
-from app.security.permissions import has_permission
+from app.security.permissions import can_read_events, has_permission
 from app.services.context import ChangeContext
 from app.services.control_inheritance import evidence_pairs
 from app.services.errors import DomainError
@@ -105,6 +105,8 @@ def graph_control_source(
     """
 
     user = context.actor
+    if not can_read_events(db, user):
+        raise DomainError(status_code=403, detail="events.read permission required")
     cache_parts = {
         "framework": framework,
         "start_date": start_date.isoformat() if start_date else None,
@@ -223,6 +225,8 @@ def graph_clause_source(
     """
 
     user = context.actor
+    if not can_read_events(db, user):
+        raise DomainError(status_code=403, detail="events.read permission required")
     cache_parts = {
         "framework": framework,
         "start_date": start_date.isoformat() if start_date else None,

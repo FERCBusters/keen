@@ -11,7 +11,6 @@ import {
   esc,
   fmtTs,
   getUiConfig,
-  safeExternalHref,
   toast,
   sourceBadgeHtml as _mospSourceBadgeHtml,
   initNavbar as _mospInitNavbar,
@@ -946,6 +945,27 @@ export function arrowLinkHtml(
   if (!safe) return '';
   const label = title || 'Open link';
   return `<a class="${esc(className)}" href="${esc(safe)}" target="_blank" rel="noopener noreferrer" title="${esc(label)}" aria-label="${esc(label)}"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>`;
+}
+
+/**
+ * Validate a link before placing it into an href.
+ *
+ * Same-origin paths are allowed, but browsers read a backslash as "/" and drop
+ * tabs and newlines while parsing, so "/" followed by either can leave KEEN.
+ * HTML escaping does not make a URL safe; use this before esc().
+ */
+export function safeExternalHref(url) {
+  const raw = String(url ?? '').trim();
+  if (!raw || raw.length > 2048) return '';
+  if (/[\\\u0000-\u001f\u007f]/.test(raw)) return '';
+  if (raw.startsWith('/')) return raw.startsWith('//') ? '' : raw;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+  } catch {
+    // Fall through to blank.
+  }
+  return '';
 }
 
 export function safeAbsoluteHttpHref(url) {

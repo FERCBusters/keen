@@ -17,6 +17,7 @@ import {
   sourceBadgeHtml,
   sourceLabel,
   safeExternalHref,
+  safeAbsoluteHttpHref,
   getCurrentFramework,
   withFramework,
   isAuditActive,
@@ -570,7 +571,7 @@ async function load() {
       controlsEl.innerHTML = controls
         .map((c) => {
           const titleAttr = c.title ? ` title="${esc(c.title)}"` : '';
-          const upstream = (c.upstream_url || '').trim();
+          const upstream = safeAbsoluteHttpHref(c.upstream_url);
           const titleHtml = c.title
             ? upstream
               ? `<a class="link-subtle small-muted" href="${esc(upstream)}" target="_blank" rel="noopener noreferrer"><i class="bi bi-info-circle ms-1" aria-hidden="true"></i> ${esc(c.title)}</a>`

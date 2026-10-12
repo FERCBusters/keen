@@ -37,7 +37,7 @@ from app.security.oidc import (
 from app.security.permissions import has_permission
 from app.security.rate_limit import client_ip as _client_ip
 from app.security.rate_limit import fixed_window_allow
-from app.security.sessions import delete_session, get_session
+from app.security.sessions import get_session, revoke_session
 from app.services import login as login_service
 
 router = Router()
@@ -240,12 +240,29 @@ def _require_logout_intent(request):
         raise HTTPException(403, "CSRF token missing or invalid")
 
 
+def _revoke_or_fail(sid: str) -> None:
+    """Revoke the server-side session before reporting sign-out.
+
+    The browser keeps its cookies when revocation fails so the user can retry;
+    clearing them would hide a session that remains valid on the server.
+    """
+    if not sid:
+        return
+    try:
+        revoke_session(get_valkey(), sid)
+    except Exception:
+        raise HTTPException(
+            503,
+            "Sign-out could not be completed; try again",
+            headers={"Retry-After": "5", "Cache-Control": "no-store"},
+        ) from None
+
+
 @router.post("/v1/auth/logout")
 def logout(request: Request, db: Session = Depends(get_db)) -> Response:
     _require_logout_intent(request)
-    sid = request.cookies.get(settings.session_cookie_name) or ""
-    if sid:
-        delete_session(get_valkey(), sid)
+    sid = (request.cookies.get(settings.session_cookie_name) or "").strip()
+    _revoke_or_fail(sid)
     resp = Response(status_code=204)
     from app.security import mfa
 
@@ -258,12 +275,18 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
 def _browser_logout_response(request: Request, db: Session) -> Response:
     _require_logout_intent(request)
     sid = (request.cookies.get(settings.session_cookie_name) or "").strip()
-    session_row = get_session(get_valkey(), sid) if sid else None
+    try:
+        session_row = get_session(get_valkey(), sid) if sid else None
+    except Exception:
+        raise HTTPException(
+            503,
+            "Sign-out could not be completed; try again",
+            headers={"Retry-After": "5", "Cache-Control": "no-store"},
+        ) from None
     id_token = str((session_row or {}).get("oidc_id_token") or "").strip()
     provider = get_sso_provider(str((session_row or {}).get("auth_method") or "oidc"))
 
-    if sid:
-        delete_session(get_valkey(), sid)
+    _revoke_or_fail(sid)
 
     end_session = (provider.end_session_endpoint if provider else "").strip()
     post_logout = (provider.post_logout_redirect_uri if provider else "").strip()

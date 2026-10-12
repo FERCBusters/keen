@@ -129,6 +129,32 @@ for (const url of [
 for (const url of ['https://example.test/a?x=1', 'http://example.test', 'HTTPS://example.test/a'])
   test('upstream permits ' + url, () => assert.equal(a.safeAbsoluteHttpHref(url), url));
 
+// Browsers read "\\" as "/" and drop tabs and newlines, so these leave the origin.
+for (const url of [
+  '/\\outside.test/login',
+  '/\t/outside.test/login',
+  '/\n/outside.test',
+  '//outside.test',
+  'javascript:alert(1)',
+  ' javascript:alert(1)',
+  'data:text/html,x',
+  'https://a.test/' + 'x'.repeat(2049),
+])
+  test('link rejects ' + JSON.stringify(url.slice(0, 40)), () =>
+    assert.equal(a.safeExternalHref(url), ''),
+  );
+for (const [url, expected] of [
+  ['/event.html?id=1#questions', '/event.html?id=1#questions'],
+  ['https://example.test/a?x=1', 'https://example.test/a?x=1'],
+  ['http://example.test', 'http://example.test/'],
+])
+  test('link permits ' + url, () => assert.equal(a.safeExternalHref(url), expected));
+
+test('arrow links use the hardened link check', () => {
+  assert.equal(a.arrowLinkHtml('/\\outside.test/login'), '');
+  assert.match(a.arrowLinkHtml('https://example.test/a'), /href="https:\/\/example\.test\/a"/);
+});
+
 for (const color of ['#fff', '#ffffff'])
   test('light badge ' + color, () => assert.equal(a.idealTextColor(color), '#111827'));
 for (const color of ['#000', '#000000'])
