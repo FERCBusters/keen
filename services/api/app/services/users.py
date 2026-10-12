@@ -24,6 +24,7 @@ from app.security.permissions import (
 from app.security.roles import (
     compute_effective_role,
     count_effective_admins,
+    lock_admin_changes,
     normalize_role,
 )
 from app.services.context import ChangeContext
@@ -160,6 +161,8 @@ def update_user_admin(
     if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
         raise DomainError(status_code=403, detail="Admin role required")
 
+    lock_admin_changes(db)
+
     target = db.query(User).filter(User.id == user_id).one_or_none()
     if not target:
         raise DomainError(status_code=404, detail="User not found")
@@ -243,6 +246,8 @@ def delete_user_admin(
     if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
         raise DomainError(status_code=403, detail="Admin role required")
 
+    lock_admin_changes(db)
+
     target = db.query(User).filter(User.id == user_id).one_or_none()
     if not target:
         raise DomainError(status_code=404, detail="User not found")
@@ -315,6 +320,8 @@ def set_user_access_admin(
     eff = getattr(u, "effective_role", None) if isinstance(u, User) else None
     if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
         raise DomainError(status_code=403, detail="Admin role required")
+
+    lock_admin_changes(db)
 
     target = db.query(User).filter(User.id == user_id).one_or_none()
     if not target:

@@ -38,6 +38,9 @@ def save_final_report(
     ext = safe_download_ext(os.path.splitext(filename)[1])
     key = f"audit-reports/{a.id}/{uuid.uuid4()}{ext}"
     stored = put_bytes(key, data, content_type)
+    from app.services.evidence_retention import queue_object
+
+    queue_object(db, a.final_report_storage_uri)  # replaced report is unreachable
     now = utcnow()
     a.final_report_storage_uri = stored.uri
     a.final_report_filename = filename or "audit-report"

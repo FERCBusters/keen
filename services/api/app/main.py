@@ -148,7 +148,12 @@ def bootstrap_initial_admin():
 # -----------------------------------------------------------------------------
 
 
-from app.security.route_policy import is_permission_checked_write, is_public_request
+from app.security.route_policy import (
+    gated_write_permission,
+    is_permission_checked_write,
+    is_public_request,
+    policy_path,
+)
 
 
 @app.middleware("http")
@@ -194,7 +199,7 @@ async def auth_middleware(request: Request, call_next):
     declared middleware runs first). Therefore auth_middleware is declared
     *after* csrf_middleware to ensure it executes earlier on the request path.
     """
-    path = request.url.path or ""
+    path = policy_path(request)
 
     if is_public_request(request):
         return await call_next(request)
@@ -267,43 +272,10 @@ async def auth_middleware(request: Request, call_next):
                 }
             ):
                 pass  # self-service
-            elif (
-                request.method.upper() == "POST"
-                and path.startswith("/v1/events/")
-                and path.endswith("/questions")
-            ):
-                pass  # event questions (permission-checked in route)
-            elif (
-                request.method.upper() == "POST"
-                and path.startswith("/v1/questions/")
-                and path.endswith("/posts")
-            ):
-                pass  # event query replies (permission-checked in route)
-            elif (
-                request.method.upper() == "POST"
-                and path.startswith("/v1/events/")
-                and path.endswith("/questions/mark-seen")
-            ):
-                pass  # mark questions seen (thread author)
-            elif (
-                request.method.upper() == "POST"
-                and path.startswith("/v1/events/")
-                and path.endswith("/incident")
-            ):
-                if not has_permission(db, user, "incident.create"):
+            elif code := gated_write_permission(request):
+                if not has_permission(db, user, code):
                     return JSONResponse(
-                        {"detail": "incident.create permission required"},
-                        status_code=403,
-                    )
-            elif (
-                request.method.upper() == "DELETE"
-                and path.startswith("/v1/events/")
-                and "/incidents/" in path
-            ):
-                if not has_permission(db, user, "incident.delete"):
-                    return JSONResponse(
-                        {"detail": "incident.delete permission required"},
-                        status_code=403,
+                        {"detail": f"{code} permission required"}, status_code=403
                     )
             elif path.startswith("/v1/audits"):
                 if not (
@@ -359,7 +331,7 @@ async def audit_trail_middleware(request: Request, call_next):
     Records are written after the response completes so we can capture status
     codes and timings.
     """
-    path = request.url.path or ""
+    path = policy_path(request)
     # Keep noise down by skipping obvious non-UI endpoints.
     if not path.startswith("/v1") or path in {
         "/health",

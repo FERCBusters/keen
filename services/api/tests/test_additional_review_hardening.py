@@ -79,7 +79,9 @@ def test_later_oversized_question_attachment_prevents_all_storage_writes(monkeyp
 )
 @pytest.mark.parametrize("kind", ["audit", "isms"])
 def test_upload_object_extensions_are_safe(monkeypatch, kind, filename, extension):
-    row = SimpleNamespace(id=uuid.uuid4())
+    row = SimpleNamespace(
+        id=uuid.uuid4(), storage_uri=None, final_report_storage_uri=None
+    )
     user = SimpleNamespace(id=uuid.uuid4())
     store = Mock(
         return_value=SimpleNamespace(

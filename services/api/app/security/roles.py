@@ -15,7 +15,7 @@ If a user inherits, 'admin' wins over 'normal' when multiple group roles
 are present.
 """
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, select, text
 from sqlalchemy.orm import Session
 
 from app.db.models import Group, User, user_groups
@@ -77,6 +77,22 @@ def is_effective_admin(db: Session, user: User) -> bool:
     if eff:
         return (eff or "") == ROLE_ADMIN
     return compute_effective_role(db, user) == ROLE_ADMIN
+
+
+_ADMIN_CHANGE_LOCK = 75431010
+
+
+def lock_admin_changes(db: Session) -> None:
+    """Serialise changes that can remove effective administrators.
+
+    Call before reading the state a lockout guard depends on. The transaction
+    lock is released on commit or rollback, so concurrent demotions are counted
+    one after another and cannot jointly remove the last administrator.
+    """
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ADMIN_CHANGE_LOCK}
+        )
 
 
 def count_effective_admins(db: Session, *, excluding_user_id=None) -> int:

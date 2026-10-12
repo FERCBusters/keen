@@ -22,6 +22,16 @@ def load_webhook_policies(path: str) -> dict[str, Any]:
     return load_document("webhooks", path)
 
 
+def _secret_matches(got, expected) -> bool:
+    # compare_digest raises TypeError for non-ASCII str; compare UTF-8 bytes.
+    if not got or not expected:
+        return False
+    return hmac.compare_digest(
+        str(got).encode("utf-8", "surrogatepass"),
+        str(expected).encode("utf-8", "surrogatepass"),
+    )
+
+
 def verify_secret(provider: str, headers: dict[str, str]) -> bool:
     connection = current_connection()
     if connection and connection.managed_by != "environment":
@@ -32,7 +42,7 @@ def verify_secret(provider: str, headers: dict[str, str]) -> bool:
             "secret_header", "X-Webhook-Secret"
         ).lower()
         got = {k.lower(): v for k, v in headers.items()}.get(header)
-        return bool(expected and got and hmac.compare_digest(got, expected))
+        return _secret_matches(got, expected)
     pol = (
         load_webhook_policies(settings.webhooks_path)
         .get("providers", {})
@@ -59,7 +69,7 @@ def verify_secret(provider: str, headers: dict[str, str]) -> bool:
         return False
 
     # Constant-time compare.
-    return hmac.compare_digest(str(got), str(expected))
+    return _secret_matches(got, expected)
 
 
 def _fingerprint(provider: str, event_type: str, body: bytes) -> str:

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import Event, IsmsEffectivenessMeasure, IsmsEffectivenessMetricEntry
+from app.security.redaction import redact_obj
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
@@ -193,7 +194,8 @@ def record_metric(*, db, metric_key, payload, context: ChangeContext):
         ),
         source_event_id=source_event_id,
         notes=_webhook_clean_text(payload.get("notes"), 12000),
-        raw_payload=payload,
+        # Match the shared ingestion path: recognised secret keys never persist.
+        raw_payload=redact_obj(payload) or {},
         created_at=utc_now_naive(),
         updated_at=utc_now_naive(),
     )

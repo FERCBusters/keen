@@ -866,7 +866,11 @@ async def delete_question_thread(
             artifact_by_id[art.id] = art
     if attachment_rows:
         db.flush()
+    from app.services.evidence_retention import queue_object
+
     for art in artifact_by_id.values():
+        # Remove the stored bytes as well; the cleanup worker skips shared objects.
+        queue_object(db, art.storage_uri)
         db.delete(art)
 
     _audit_action(

@@ -69,7 +69,11 @@ from app.security.permissions import (
     normalize_group_name,
     normalize_permission_codes,
 )
-from app.security.roles import count_effective_admins, normalize_role
+from app.security.roles import (
+    count_effective_admins,
+    lock_admin_changes,
+    normalize_role,
+)
 from app.services.context import ChangeContext
 from app.services.control_evidence_stats import (
     clear_stats_caches,
@@ -1044,6 +1048,8 @@ def admin_update_group(
     if not gid:
         raise DomainError(status_code=400, detail="group_id must be a UUID")
 
+    lock_admin_changes(db)
+
     g = db.query(Group).filter(Group.id == gid).one_or_none()
     if not g:
         raise DomainError(status_code=404, detail="Group not found")
@@ -1098,6 +1104,8 @@ def admin_delete_group(*, group_id: str, user, db: Session) -> dict:
     if not gid:
         raise DomainError(status_code=400, detail="group_id must be a UUID")
 
+    lock_admin_changes(db)
+
     g = db.query(Group).filter(Group.id == gid).one_or_none()
     if not g:
         raise DomainError(status_code=404, detail="Group not found")
@@ -1121,6 +1129,8 @@ def admin_set_group_members(
     gid = _try_uuid(group_id)
     if not gid:
         raise DomainError(status_code=400, detail="group_id must be a UUID")
+
+    lock_admin_changes(db)
 
     g = db.query(Group).filter(Group.id == gid).one_or_none()
     if not g:

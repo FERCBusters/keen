@@ -59,16 +59,28 @@ _COMPILED = {
 }
 
 
+def policy_path(request):
+    """Return the decoded path the router dispatches on.
+
+    ``request.url.path`` is re-parsed from a URL string, so an encoded ``?`` or
+    ``#`` inside a path parameter truncates it. Policy must use the routed path.
+    """
+    return request.scope.get("path") or ""
+
+
 def is_public_request(request):
+    path = policy_path(request)
     return any(
-        pattern.fullmatch(request.url.path)
-        for pattern in _COMPILED.get(request.method.upper(), ())
+        pattern.fullmatch(path) for pattern in _COMPILED.get(request.method.upper(), ())
     )
 
 
 _PERMISSION_WRITES = {
     "POST": (
         "/v1/me/shortcuts",
+        "/v1/events/{event_id}/questions",
+        "/v1/events/{event_id}/questions/mark-seen",
+        "/v1/questions/{thread_id}/posts",
         "/v1/questions/entities/{entity_type}/{entity_id}",
         "/v1/questions/entities/{entity_type}/{entity_id}/mark-seen",
         "/v1/pestle/items",
@@ -82,6 +94,7 @@ _PERMISSION_WRITES = {
     ),
     "DELETE": (
         "/v1/me/shortcuts/{shortcut_id}",
+        "/v1/questions/{thread_id}",
         "/v1/pestle/items/{item_id}",
         "/v1/pestle/business-processes/{process_id}",
     ),
@@ -93,7 +106,28 @@ _PERMISSION_WRITE_PATTERNS = {
 
 
 def is_permission_checked_write(request):
+    path = policy_path(request)
     return any(
-        pattern.fullmatch(request.url.path)
+        pattern.fullmatch(path)
         for pattern in _PERMISSION_WRITE_PATTERNS.get(request.method.upper(), ())
     )
+
+
+# Writes the middleware gates on one permission before the adapter runs.
+_GATED_WRITES = {
+    ("POST", "/v1/events/{event_id}/incident"): "incident.create",
+    ("DELETE", "/v1/events/{event_id}/incidents/{incident_id}"): "incident.delete",
+}
+_GATED_WRITE_PATTERNS = tuple(
+    (method, compile_path(path)[0], code)
+    for (method, path), code in _GATED_WRITES.items()
+)
+
+
+def gated_write_permission(request):
+    """Return the permission the middleware requires for this write, if any."""
+    method, path = request.method.upper(), policy_path(request)
+    for allowed, pattern, code in _GATED_WRITE_PATTERNS:
+        if method == allowed and pattern.fullmatch(path):
+            return code
+    return None

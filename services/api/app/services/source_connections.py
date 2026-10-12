@@ -144,6 +144,18 @@ def create(*, payload: ConnectionInput, db):
     return save(row, payload, db)
 
 
+# Fields that decide where, or how, stored credentials are presented upstream.
+DESTINATION_FIELDS = ("base_url", "auth_mode", "header_name")
+
+
+def _destination(configuration):
+    values = dict(configuration or {})
+    values["auth_mode"] = values.get("auth_mode") or "token"  # blank means token
+    return tuple(
+        str(values.get(name) or "").strip().rstrip("/") for name in DESTINATION_FIELDS
+    )
+
+
 def save(row, payload, db):
     try:
         secret = decrypt(row.encrypted_credentials)
@@ -154,6 +166,18 @@ def save(row, payload, db):
         ) from None
     for key in payload.clear_credentials:
         secret.pop(key, None)
+    supplied = {k for k, v in payload.credentials.items() if v}
+    if (
+        row.configuration is not None
+        and _destination(row.configuration) != _destination(payload.configuration)
+        and set(secret) - supplied
+    ):
+        # Saved secrets are write-only; never let an edit redirect them elsewhere.
+        raise DomainError(
+            422,
+            "Re-enter or clear the saved credentials when changing the endpoint, "
+            "authentication mode or credential header",
+        )
     secret.update({k: v for k, v in payload.credentials.items() if v})
     row.name = payload.name.strip()
     row.enabled = payload.enabled

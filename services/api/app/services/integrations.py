@@ -244,6 +244,22 @@ def _save_connection(key, body, db, new=False):
         raise DomainError(
             422, "Supply a new credential when changing authentication type"
         )
+
+    def origin(url):
+        parts = urlsplit(url or "")
+        return parts.scheme, (parts.hostname or "").lower(), parts.port or 443
+
+    if (
+        not new
+        and body.auth_kind != "none"
+        and not body.secret
+        and c.encrypted_secret
+        and origin(body.base_url) != origin(c.base_url)
+    ):
+        # Saved secrets are write-only; never let an edit redirect them elsewhere.
+        raise DomainError(
+            422, "Supply a new credential when changing the connection origin"
+        )
     for name in (
         "name",
         "base_url",

@@ -362,6 +362,9 @@ def upload_document_file(
     stored = put_bytes(
         f"isms-documents/{row.id}/{uuid.uuid4()}{ext}", data, content_type
     )
+    from app.services.evidence_retention import queue_object
+
+    queue_object(db, row.storage_uri)  # the replaced file is no longer reachable
     now = _utcnow()
     row.storage_uri = stored.uri
     row.filename = filename
@@ -408,6 +411,9 @@ def delete_document(
     before = _document_out(db, row, fw)
     _record(db, "document", row, "deleted", before, None, user, context)
     _delete_entity_links(db, "document", row.id, fw)
+    from app.services.evidence_retention import queue_object
+
+    queue_object(db, row.storage_uri)
     db.delete(row)
     db.commit()
     return {"ok": True}

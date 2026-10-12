@@ -20,6 +20,7 @@ from app.api.routing import Router
 from app.core.valkey import get_valkey
 from app.db.session import get_db
 from app.security.auth import require_admin
+from app.security.client_ip import request_ip
 from app.security.rate_limit import fixed_window_allow
 from app.services import agents as service
 from app.services.agents import Registration, Rotation
@@ -102,13 +103,7 @@ def revoke(agent_id: str, db: Session = Depends(get_db)):
 @router.post("/v1/otlp/logs")
 async def ingest(request: Request, response: Response, db: Session = Depends(get_db)):
     live_only()
-    ip = request.client.host if request.client else "unknown"
-    ok, retry = fixed_window_allow(
-        get_valkey(), "keen:agent:ip:" + ip, 120, 60, fail_closed=True
-    )
-    if not ok:
-        raise HTTPException(429, "Rate limited", headers={"Retry-After": str(retry)})
-    a = authenticate(request, db, lock=False)
+    a = authenticate_agent(request, db, "keen:agent:auth-failure:ip:")
     from app.services.ingestion_pause import require_receiving
 
     require_receiving(db, "keen-agent")
@@ -157,6 +152,32 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
     return result
 
 
+def authenticate_agent(request, db, failure_key):
+    """Authenticate before applying address limits.
+
+    Agents commonly share one proxy address. Counting only rejected credentials
+    per address stops unauthenticated traffic from exhausting a shared bucket;
+    accepted agents are bounded by their own per-agent limits.
+    """
+    try:
+        return authenticate(request, db, lock=False)
+    except HTTPException as exc:
+        if exc.status_code != 401:
+            raise
+        ok, retry = fixed_window_allow(
+            get_valkey(),
+            failure_key + (request_ip(request) or "unknown"),
+            120,
+            60,
+            fail_closed=True,
+        )
+        if not ok:
+            raise HTTPException(
+                429, "Rate limited", headers={"Retry-After": str(retry)}
+            ) from None
+        raise
+
+
 async def bounded_body(request, limit):
     body = bytearray()
     try:
@@ -175,13 +196,7 @@ async def heartbeat(
     request: Request, response: Response, db: Session = Depends(get_db)
 ):
     live_only()
-    ip = request.client.host if request.client else "unknown"
-    ok, retry = fixed_window_allow(
-        get_valkey(), "keen:agent:health:ip:" + ip, 120, 60, fail_closed=True
-    )
-    if not ok:
-        raise HTTPException(429, "Rate limited", headers={"Retry-After": str(retry)})
-    a = authenticate(request, db, lock=False)
+    a = authenticate_agent(request, db, "keen:agent:health:auth-failure:ip:")
     agent_id = a.id
     db.rollback()
     ok, retry = fixed_window_allow(
