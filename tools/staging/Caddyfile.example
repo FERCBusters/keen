@@ -1,0 +1,10 @@
+# TLS front for the staging instance. Caddy obtains a public certificate and
+# replaces any client-supplied X-Forwarded-For with the connecting address.
+keen-staging.example.org {
+	# Optional: admit only the machines that run the suite. Certificate
+	# challenges are answered before this matcher applies.
+	# @outsiders not remote_ip 203.0.113.10/32
+	# respond @outsiders 403
+
+	reverse_proxy 127.0.0.1:8081
+}

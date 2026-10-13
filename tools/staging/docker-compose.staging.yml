@@ -1,0 +1,21 @@
+# Staging override for docker-compose.yml; keen-staging adds it automatically.
+#
+# Pins the network so KEEN_SECURITY_TRUSTED_PROXY_CIDRS can name exactly two
+# forwarding hops: the UI nginx container and the network gateway, where
+# connections from the TLS front through the host's 127.0.0.1:8081 port arrive.
+networks:
+  keen:
+    ipam:
+      config:
+        - subnet: 172.30.65.0/24
+          gateway: 172.30.65.1
+
+services:
+  keen-ui:
+    networks:
+      keen:
+        ipv4_address: 172.30.65.10
+
+  keen-worker:
+    # One worker process keeps a small (2 GB) staging host within memory.
+    command: ["bash", "-c", "celery -A app.worker.celery_app worker -l INFO --concurrency=1"]

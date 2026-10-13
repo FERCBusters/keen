@@ -5,6 +5,7 @@ node_modules
 .venv/
 .pytest_cache/
 test-results/
+staging-results/
 
 # Test coverage and local DOM test dependencies
 .coverage

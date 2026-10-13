@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+# Manage a disposable KEEN staging instance for security testing.
+#
+# Runs on the staging host, from a KEEN checkout whose .env carries the marker
+# STAGING_DESTROYABLE=yes. Commands:
+#
+#   generate-env URL        Write .env from staging.env.example with new secrets
+#   init-golden             Build the golden dataset from an empty installation
+#   snapshot                Save the current database and files as the golden state
+#   restore                 Replace everything with the golden state and start KEEN
+#   teardown                Stop KEEN and delete its containers, volumes and network
+#   status                  Show services, golden snapshot and schema revision
+#   logs                    Print all service logs (for saving after a run)
+#   admin-password          Print the suite administrator's password
+#
+# Environment:
+#   KEEN_STAGING_GOLDEN     Golden snapshot directory (default /var/lib/keen-staging/golden)
+#   KEEN_STAGING_BUILD=1    Build images from this checkout instead of pulling them
+#   KEEN_STAGING_HOOKS      Directory of extra *.py golden-data scripts run by init-golden
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+KEEN_DIR="$(cd "$HERE/../.." && pwd)"
+ENV_FILE="$KEEN_DIR/.env"
+GOLDEN="${KEEN_STAGING_GOLDEN:-/var/lib/keen-staging/golden}"
+PROJECT="keen-staging"
+API_LOCAL="http://127.0.0.1:8181/health"
+UI_LOCAL="http://127.0.0.1:8081/login.html"
+
+say() { printf 'keen-staging: %s\n' "$*" >&2; }
+die() { say "$*"; exit 1; }
+
+compose() {
+	local files=(-f "$KEEN_DIR/docker-compose.yml" -f "$HERE/docker-compose.staging.yml")
+	if [ "${KEEN_STAGING_BUILD:-0}" = "1" ]; then
+		files+=(-f "$KEEN_DIR/docker-compose.build.yml")
+	fi
+	if docker compose version >/dev/null 2>&1; then
+		docker compose -p "$PROJECT" --project-directory "$KEEN_DIR" "${files[@]}" "$@"
+	else
+		docker-compose -p "$PROJECT" --project-directory "$KEEN_DIR" "${files[@]}" "$@"
+	fi
+}
+
+require_marker() {
+	[ -f "$ENV_FILE" ] || die "no .env in $KEEN_DIR; run: $0 generate-env https://staging.example.org"
+	grep -qx 'STAGING_DESTROYABLE=yes' "$ENV_FILE" ||
+		die "$ENV_FILE lacks STAGING_DESTROYABLE=yes; refusing to replace or delete this installation's data"
+}
+
+env_value() {
+	sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1
+}
+
+wait_for() {
+	local url="$1" label="$2" seconds="${3:-300}" waited=0
+	until curl -fsS -o /dev/null "$url"; do
+		waited=$((waited + 3))
+		[ "$waited" -lt "$seconds" ] || die "$label did not become ready within ${seconds}s; see: $0 logs"
+		sleep 3
+	done
+}
+
+wait_for_postgres() {
+	local tries=0
+	# TCP only: the image's first-run initialisation server listens on a socket,
+	# so this waits for the real server instead of the temporary one.
+	until compose exec -T postgres pg_isready -h 127.0.0.1 -U keen -d keen >/dev/null 2>&1; do
+		tries=$((tries + 1))
+		[ "$tries" -lt 60 ] || die "PostgreSQL did not become ready"
+		sleep 2
+	done
+}
+
+schema_revision() {
+	compose exec -T postgres psql -U keen -d keen -tAc 'SELECT version_num FROM alembic_version' 2>/dev/null || true
+}
+
+wipe() {
+	# Containers, the network and every named volume of this project: database,
+	# Valkey state (sessions, rate limits), artifacts and the beat schedule.
+	compose down --volumes --remove-orphans --timeout 20 >/dev/null 2>&1 || true
+	local leftovers
+	leftovers="$(docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT")"
+	if [ -n "$leftovers" ]; then
+		# shellcheck disable=SC2086
+		docker volume rm $leftovers >/dev/null
+	fi
+}
+
+start_all() {
+	if [ "${KEEN_STAGING_BUILD:-0}" = "1" ]; then
+		compose build >/dev/null
+	fi
+	compose up -d >/dev/null
+	wait_for "$API_LOCAL" "The API"
+	wait_for "$UI_LOCAL" "The UI proxy"
+}
+
+cmd_generate_env() {
+	local url="${1:-}"
+	[ -n "$url" ] || die "usage: $0 generate-env https://keen-staging.example.org"
+	case "$url" in https://*) ;; *) die "the URL must start with https://" ;; esac
+	url="${url%/}"
+	local host="${url#https://}"
+	host="${host%%/*}"
+	[ ! -e "$ENV_FILE" ] || die "$ENV_FILE already exists; move it aside first"
+	command -v openssl >/dev/null || die "openssl is required to generate secrets"
+	fernet() { openssl rand -base64 32 | tr '+/' '-_'; }
+	hex() { openssl rand -hex "$1"; }
+	umask 077
+	sed -e "s|@URL@|$url|g" \
+		-e "s|@HOST@|$host|g" \
+		-e "s|@POSTGRES_PASSWORD@|$(hex 24)|" \
+		-e "s|@REDIS_PASSWORD@|$(hex 24)|" \
+		-e "s|@ADMIN_PASSWORD@|$(hex 18)|" \
+		-e "s|@MFA_KEY@|$(fernet)|" \
+		-e "s|@INTEGRATION_KEY@|$(fernet)|" \
+		-e "s|@WEBHOOK_SECRET@|$(hex 32)|" \
+		-e "s|@METRICS_SECRET@|$(hex 32)|" \
+		"$HERE/staging.env.example" >"$ENV_FILE"
+	say "wrote $ENV_FILE (mode 600) for $url"
+	say "next: $0 init-golden"
+}
+
+cmd_init_golden() {
+	require_marker
+	say "removing any existing staging containers and data"
+	wipe
+	say "starting an empty installation (migrations and the suite administrator)"
+	start_all
+	say "seeding demonstration ISMS data across all frameworks"
+	compose exec -T keen-api python scripts/seed_demo_data.py --all-frameworks --allow-non-demo >/dev/null
+	say "adding stored evidence files"
+	compose exec -T keen-api python - <"$HERE/golden_extras.py"
+	if [ -n "${KEEN_STAGING_HOOKS:-}" ]; then
+		local hook
+		for hook in "$KEEN_STAGING_HOOKS"/*.py; do
+			[ -e "$hook" ] || continue
+			say "running golden hook $(basename "$hook")"
+			compose exec -T keen-api python - <"$hook"
+		done
+	fi
+	cmd_snapshot
+}
+
+cmd_snapshot() {
+	require_marker
+	compose exec -T postgres true >/dev/null 2>&1 || die "KEEN is not running"
+	local staging="$GOLDEN.new"
+	rm -rf "$staging"
+	mkdir -p "$staging"
+	chmod 700 "$(dirname "$GOLDEN")" "$staging" 2>/dev/null || true
+	say "pausing the application for a consistent snapshot"
+	(
+		# The application restarts however this subshell ends.
+		trap 'compose start keen-api keen-worker keen-beat >/dev/null 2>&1 || true' EXIT
+		compose stop keen-api keen-worker keen-beat >/dev/null
+		compose exec -T postgres pg_dump -U keen -d keen -Fc >"$staging/db.dump"
+		compose run --rm --no-deps -T --user 0 --entrypoint tar keen-api \
+			-C /app/data/artifacts -czf - . >"$staging/artifacts.tar.gz"
+	)
+	local revision
+	revision="$(schema_revision)"
+	cat >"$staging/manifest.json" <<-JSON
+		{
+		  "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+		  "schema_revision": "$revision",
+		  "keen_commit": "$(git -C "$KEEN_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)",
+		  "public_url": "$(env_value KEEN_PUBLIC_BASE_URL)",
+		  "admin_username": "$(env_value KEEN_BOOTSTRAP_ADMIN_USERNAME)"
+		}
+	JSON
+	(cd "$staging" && sha256sum db.dump artifacts.tar.gz manifest.json >SHA256SUMS)
+	chmod 600 "$staging"/*
+	rm -rf "$GOLDEN.previous"
+	if [ -d "$GOLDEN" ]; then mv "$GOLDEN" "$GOLDEN.previous"; fi
+	mv "$staging" "$GOLDEN"
+	wait_for "$API_LOCAL" "The API"
+	say "golden snapshot saved to $GOLDEN (schema $revision)"
+}
+
+cmd_restore() {
+	require_marker
+	[ -f "$GOLDEN/SHA256SUMS" ] || die "no golden snapshot in $GOLDEN; run: $0 init-golden"
+	(cd "$GOLDEN" && sha256sum --quiet -c SHA256SUMS) || die "golden snapshot failed its checksum; rebuild it"
+	say "removing the previous run's containers and data"
+	wipe
+	compose up -d postgres valkey >/dev/null
+	wait_for_postgres
+	say "restoring the golden database"
+	compose exec -T postgres pg_restore -U keen -d keen --no-owner --exit-on-error <"$GOLDEN/db.dump"
+	say "restoring golden evidence files"
+	compose run --rm --no-deps -T --user 0 --entrypoint sh keen-api -c \
+		'tar -C /app/data/artifacts -xzf - && chown -R keen:keen /app/data/artifacts' \
+		<"$GOLDEN/artifacts.tar.gz"
+	say "starting KEEN (pending migrations run on start)"
+	start_all
+	local golden_revision current
+	golden_revision="$(sed -n 's/.*"schema_revision": "\(.*\)".*/\1/p' "$GOLDEN/manifest.json")"
+	current="$(schema_revision)"
+	if [ "$golden_revision" != "$current" ]; then
+		say "note: the golden snapshot was migrated from $golden_revision to $current; run init-golden to refresh it"
+	fi
+	say "restored the golden state; KEEN is ready at $(env_value KEEN_PUBLIC_BASE_URL)"
+}
+
+cmd_teardown() {
+	require_marker
+	wipe
+	say "removed all staging containers, volumes and the network; the golden snapshot remains in $GOLDEN"
+}
+
+cmd_status() {
+	compose ps 2>/dev/null || true
+	if [ -f "$GOLDEN/manifest.json" ]; then
+		say "golden snapshot:"
+		cat "$GOLDEN/manifest.json" >&2
+	else
+		say "no golden snapshot in $GOLDEN"
+	fi
+	local revision
+	revision="$(schema_revision)"
+	[ -z "$revision" ] || say "running schema revision: $revision"
+}
+
+cmd_logs() {
+	compose logs --no-color --timestamps 2>&1 || true
+}
+
+cmd_admin_password() {
+	require_marker
+	env_value KEEN_BOOTSTRAP_ADMIN_PASSWORD
+}
+
+command="${1:-}"
+[ $# -eq 0 ] || shift
+case "$command" in
+generate-env) cmd_generate_env "$@" ;;
+init-golden) cmd_init_golden ;;
+snapshot) cmd_snapshot ;;
+restore) cmd_restore ;;
+teardown) cmd_teardown ;;
+status) cmd_status ;;
+logs) cmd_logs ;;
+admin-password) cmd_admin_password ;;
+*) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+esac

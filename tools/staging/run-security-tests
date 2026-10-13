@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Restore the staging instance to its golden state, run the security suite
+# against it, save the logs, then delete everything the run created.
+#
+# Usage: tools/staging/run-security-tests [options] [-- pytest arguments]
+#
+#   --keep              Leave the instance running afterwards, whatever the result
+#   --keep-on-failure   Leave it running only when tests fail, for investigation
+#   --no-restore        Test the instance as it is (after a --keep run, say)
+#   --results DIR       Where to write the report and logs (default ./staging-results/<time>)
+#
+# Configuration comes from ~/.config/keen-staging/config (or KEEN_STAGING_CONFIG),
+# a shell file setting:
+#
+#   KEEN_STAGING_URL=https://keen-staging.example.org
+#   KEEN_STAGING_SSH=deploy@keen-staging.example.org   # empty to run on the host itself
+#   KEEN_STAGING_REMOTE_DIR=/opt/keen                  # the KEEN checkout on the host
+#   KEEN_E2E_PYTHON=~/venvs/keen-e2e/bin/python        # optional; has requirements.txt
+#
+# Anything else the suite reads (KEEN_E2E_FUZZ_CASES, KEEN_E2E_SEED, ...) can be
+# set there or in the environment.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SUITE="$(cd "$HERE/../security_e2e" && pwd)"
+CONFIG="${KEEN_STAGING_CONFIG:-$HOME/.config/keen-staging/config}"
+
+keep=never
+restore=1
+results=""
+pytest_args=()
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--keep) keep=always ;;
+	--keep-on-failure) keep=failure ;;
+	--no-restore) restore=0 ;;
+	--results) results="$2"; shift ;;
+	--) shift; pytest_args=("$@"); break ;;
+	-h | --help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	*) echo "unknown option: $1" >&2; exit 2 ;;
+	esac
+	shift
+done
+
+# shellcheck source=/dev/null
+[ ! -f "$CONFIG" ] || . "$CONFIG"
+: "${KEEN_STAGING_URL:?Set KEEN_STAGING_URL in $CONFIG}"
+KEEN_STAGING_URL="${KEEN_STAGING_URL%/}"
+host="${KEEN_STAGING_URL#https://}"
+host="${host%%[:/]*}"
+results="${results:-$PWD/staging-results/$(date +%Y%m%d-%H%M%S)}"
+mkdir -p "$results"
+
+say() { printf 'run-security-tests: %s\n' "$*" >&2; }
+
+staging() {
+	# Run keen-staging on the host, over SSH unless this is the host.
+	if [ -n "${KEEN_STAGING_SSH:-}" ]; then
+		local remote_dir="${KEEN_STAGING_REMOTE_DIR:?Set KEEN_STAGING_REMOTE_DIR in $CONFIG}"
+		# shellcheck disable=SC2029
+		ssh -o BatchMode=yes "$KEEN_STAGING_SSH" "cd '$remote_dir' && tools/staging/keen-staging $*"
+	else
+		"$HERE/keen-staging" "$@"
+	fi
+}
+
+finish() {
+	local status="$1"
+	trap - EXIT INT TERM
+	say "saving service logs to $results/services.log"
+	staging logs >"$results/services.log" 2>/dev/null || say "could not collect service logs"
+	local tracebacks
+	tracebacks="$(grep -c 'Traceback (most recent call last)' "$results/services.log" 2>/dev/null || true)"
+	if [ "${tracebacks:-0}" -gt 0 ]; then
+		say "the services logged $tracebacks Python tracebacks; review $results/services.log"
+	fi
+	if [ "$keep" = always ] || { [ "$keep" = failure ] && [ "$status" -ne 0 ]; }; then
+		say "leaving $KEEN_STAGING_URL running for investigation"
+		say "rerun against it with --no-restore; remove it with: keen-staging teardown"
+	else
+		say "tearing down the staging instance"
+		staging teardown || say "teardown failed; run keen-staging teardown on the host"
+	fi
+	exit "$status"
+}
+
+# From here on, any exit (including a failed restore or Ctrl-C) saves logs and
+# tears down unless asked to keep the instance.
+trap 'finish 130' INT TERM
+trap 'finish $?' EXIT
+if [ "$restore" = 1 ]; then
+	say "restoring $host to its golden state"
+	staging restore
+fi
+
+say "waiting for $KEEN_STAGING_URL"
+for _ in $(seq 1 60); do
+	curl -fsS -o /dev/null "$KEEN_STAGING_URL/api/health" && break
+	sleep 3
+done
+curl -fsS -o /dev/null "$KEEN_STAGING_URL/api/health" || { say "$KEEN_STAGING_URL is not answering"; exit 1; }
+
+export KEEN_E2E_BASE_URL="$KEEN_STAGING_URL"
+export KEEN_E2E_CONFIRM_HOST="$host"
+export KEEN_E2E_ALLOW_WRITES=1
+export KEEN_E2E_ALLOW_EVIDENCE_WRITES=1
+export KEEN_E2E_ADMIN_USERNAME="${KEEN_E2E_ADMIN_USERNAME:-e2e-admin}"
+if [ -z "${KEEN_E2E_ADMIN_PASSWORD:-}" ]; then
+	KEEN_E2E_ADMIN_PASSWORD="$(staging admin-password)"
+	export KEEN_E2E_ADMIN_PASSWORD
+fi
+
+python="${KEEN_E2E_PYTHON:-}"
+if [ -z "$python" ]; then
+	if [ -x "$SUITE/.venv/bin/python" ]; then python="$SUITE/.venv/bin/python"; else python=python3; fi
+fi
+say "running the security suite (report: $results/junit.xml)"
+set +e
+(cd "$SUITE" && "$python" -m pytest --junitxml="$results/junit.xml" ${pytest_args[@]+"${pytest_args[@]}"})
+status=$?
+set -e
+finish "$status"

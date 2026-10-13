@@ -269,8 +269,8 @@ def page_as(browser, target):
                     {
                         "name": cookie.name,
                         "value": cookie.value,
-                        "domain": target.host,
-                        "path": cookie.path or "/",
+                        # A URL makes host-only cookies, which __Host- names require.
+                        "url": target.origin + "/",
                         "secure": target.origin.startswith("https"),
                         "httpOnly": cookie.name == session.session_cookie,
                         "sameSite": "Lax",

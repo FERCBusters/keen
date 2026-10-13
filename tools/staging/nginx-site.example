@@ -1,0 +1,53 @@
+# TLS front for the staging instance when the host already runs nginx.
+# Install as a site, add a certificate (certbot or similar) and reload nginx.
+
+server {
+	listen 443 ssl;
+	listen [::]:443 ssl;
+	server_name keen-staging.example.org;
+
+	ssl_certificate     /etc/letsencrypt/live/keen-staging.example.org/fullchain.pem;
+	ssl_certificate_key /etc/letsencrypt/live/keen-staging.example.org/privkey.pem;
+
+	# Admit only the machines that run the suite. Uses the real socket address,
+	# so request headers cannot get around it. Do not enable the real_ip module.
+	allow 203.0.113.10;
+	deny all;
+
+	# KEEN's own nginx sets the security headers; this front adds none, so they
+	# are not duplicated. The suite also checks that no version is advertised.
+	server_tokens off;
+
+	# Match KEEN's own limit so KEEN, not this front, enforces body sizes.
+	client_max_body_size 41m;
+
+	location / {
+		proxy_pass http://127.0.0.1:8081;
+		proxy_http_version 1.1;
+		proxy_set_header Host $host;
+		# Replace any client-supplied value: KEEN trusts the hops behind this one.
+		proxy_set_header X-Forwarded-For $remote_addr;
+		proxy_set_header X-Forwarded-Proto https;
+		# Notification WebSockets.
+		proxy_set_header Upgrade $http_upgrade;
+		proxy_set_header Connection $connection_upgrade;
+		proxy_read_timeout 3600s;
+		proxy_buffering off;
+	}
+}
+
+# Needed once per nginx configuration for the Connection header above; omit it
+# if another site already defines $connection_upgrade.
+map $http_upgrade $connection_upgrade {
+	default upgrade;
+	"" close;
+}
+
+server {
+	listen 80;
+	listen [::]:80;
+	server_name keen-staging.example.org;
+	# Certificate renewals answer here; everything else goes to HTTPS.
+	location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
+	location / { return 301 https://$host$request_uri; }
+}

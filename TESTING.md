@@ -107,4 +107,5 @@ the authorisation matrix, browser rendering under the supplied CSP, redirects,
 uploads, parameter fuzzing and concurrent use of single-use state. It is not part
 of `tests.sh`. Run it only against an installation you control, preferably a
 disposable one; its README lists the interlocks, configuration and the records
-it leaves behind.
+it leaves behind. `tools/staging` restores a staging host to a golden dataset
+before each run and removes everything the run created afterwards.

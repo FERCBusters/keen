@@ -16,9 +16,19 @@ security model in SECURITY.md:
 | `test_06_fuzz.py` | Query and path parameter fuzzing from the OpenAPI schema, malformed and deeply nested JSON, wrong JSON types on create operations, chart window budgets. A server error or a slow response is a finding |
 | `test_07_uploads_downloads.py` | Hostile uploads (HTML, SVG, spoofed images, header-injection and traversal names) come back as sanitised attachments; question attachments are validated and kept out of evidence; control characters in form text |
 | `test_08_concurrency.py` | Simultaneous requests against single-use TOTP codes, MFA completion and enrolment limits; concurrent sign-ins and per-session logout |
+| `test_09_access_policy.py` | Every API operation has a rule in `access_policy.py`; one probe account, whose permissions change between groups of requests, checks that each rule's permitted sets can read and that the largest refused sets cannot read or write. An account without permissions must see no seeded record anywhere |
 
 A finding is reported with the route, role and status only. Response bodies,
 cookies and credentials are not printed.
+
+## Adding or changing an API route
+
+Give every new route a rule in `access_policy.py` (public, signed in,
+administrator, or the permissions that grant it). The backend test
+`services/api/tests/test_access_policy_inventory.py` fails until you do, and
+`test_09_access_policy.py` then checks the deployment enforces it. Record
+ownership or object-visibility rules in `OBJECT_RULES` and test them in the
+backend or in `test_03_authorisation.py`.
 
 ## Use an installation you control
 
@@ -31,6 +41,13 @@ Two interlocks prevent accidental targets:
 
 - `KEEN_E2E_CONFIRM_HOST` must repeat the hostname in `KEEN_E2E_BASE_URL`.
 - Without `KEEN_E2E_ALLOW_WRITES=1` the suite only reads; most modules skip.
+
+## Staging instance
+
+`tools/staging` provides a disposable staging host for this suite: a golden
+dataset with realistic records and stored files, a one-command restore, and a
+runner that restores the host, runs the suite, saves the service logs and tears
+everything down. See its README.
 
 ## Install
 

@@ -7,4 +7,6 @@
 **/.pytest_cache
 **/.ruff_cache
 **/*.tar.gz
+staging-results
 test-results
+tools

@@ -126,7 +126,7 @@ Treat reads and transformations as security boundaries as well as mutations. Sea
 
 ### Define and exercise authorisation rules
 
-Maintain a review matrix for each resource and operation. Distinguish read, create, edit, delete, share, sample, export, administer and ownership transfer where supported. Include anonymous callers, permitted non-administrators, users without the required permission, owners, other users, delegated administrators, inactive users, pending authentication ceremonies and machine identities as applicable.
+Maintain a review matrix for each resource and operation. `tools/security_e2e/access_policy.py` records the permission rule for every served route; the backend tests fail when a route has no rule, and the security suite checks a deployment against the rules. Distinguish read, create, edit, delete, share, sample, export, administer and ownership transfer where supported. Include anonymous callers, permitted non-administrators, users without the required permission, owners, other users, delegated administrators, inactive users, pending authentication ceremonies and machine identities as applicable.
 
 Define permission implications explicitly. Read access does not establish write access; permission to edit one resource does not establish permission to read or share another. Application-wide administrators, delegated administrators and resource owners have distinct authority. Establish trusted ownership from server-side records, including records created by workers, and reject attempts to choose identity, ownership or permissions through client data.
 
