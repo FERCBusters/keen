@@ -6,7 +6,7 @@ import csv
 import io
 import json
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import desc, exists, false, func, or_, select, text
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, aliased, joinedload, load_only
 
 from app.core.cache import cached_json, user_cache_scope
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import after_inclusive_date, utc_now_naive
 from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
@@ -149,8 +149,7 @@ def _event_time_filters(
     if end_ts is not None:
         filters.append(Event.timestamp < _norm_ts(end_ts))
     elif end_date:
-        end_excl = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
-        filters.append(Event.timestamp < end_excl)
+        filters.append(Event.timestamp < after_inclusive_date(end_date))
     return filters
 
 

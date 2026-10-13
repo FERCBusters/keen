@@ -180,12 +180,12 @@ def archive_section(*, section_id: uuid.UUID, archived: bool, user, db: Session)
 
 
 def document_catalog(
-    *, kind: str = "books", book_id: int | None = None, offset: int = 0, user
+    *, kind: str = "books", book_id: int | None = None, offset: int = 0, user, db
 ):
     """Allow authorised document managers to select BookStack material."""
     from app.services.managed_configurations import bookstack_catalog
 
-    return bookstack_catalog(kind=kind, book_id=book_id, offset=offset)
+    return bookstack_catalog(kind=kind, book_id=book_id, offset=offset, db=db)
 
 
 def download_section(*, section_id: uuid.UUID, user, db: Session):

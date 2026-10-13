@@ -18,6 +18,7 @@ from app.security.redaction import (
     redact_bytes,
     redact_obj,
     redact_str,
+    storable,
 )
 from app.storage.s3 import put_bytes
 
@@ -185,6 +186,15 @@ def store_event_with_artifact(
             artifact_bytes, artifact_content_type
         )
         redaction_status = combine_redaction_status(redaction_status, masking_status)
+
+    system, actor, action, outcome, summary, external_id = (
+        storable(value)
+        for value in (system, actor, action, outcome, summary, external_id)
+    )
+    raw_pointer, normalized_payload = (
+        storable(raw_pointer),
+        storable(normalized_payload),
+    )
 
     # Fast de-dupe check (avoids triggering a rollback that would also undo
     # ingestion cursor updates that may be pending in the same session).

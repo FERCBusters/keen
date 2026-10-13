@@ -9,16 +9,9 @@ ceremony and Origin. Keep the contract tests aligned with this small inventory.
 from starlette.routing import compile_path
 
 PUBLIC_HTTP_ROUTES = {
+    # API documentation and the OpenAPI schema require a signed-in session.
     "GET": (
         "/health",
-        "/openapi.json",
-        "/docs",
-        "/docs/oauth2-redirect",
-        "/redoc",
-        "/v1/openapi.json",
-        "/v1/docs",
-        "/v1/docs/oauth2-redirect",
-        "/v1/redoc",
         "/v1/auth/methods",
         "/v1/auth/logout",
         "/v1/auth/oidc/start",

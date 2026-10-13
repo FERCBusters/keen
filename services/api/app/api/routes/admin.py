@@ -7,6 +7,7 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.context import change_context
+from app.api.errors import json_object
 from app.api.routing import Router
 from app.api.uploads import upload_inputs
 from app.core.config import settings
@@ -330,7 +331,7 @@ async def admin_diary(
     uploads: list[Any] = []
 
     if "application/json" in ctype:
-        body = await request.json()
+        body = await json_object(request)
         summary = (body.get("summary") or "").strip()
         details_obj = _normalize_diary_details(body.get("details"))
 
@@ -422,7 +423,7 @@ async def admin_update_diary(
     db: Session = Depends(get_db),
 ):
     'Edit an existing diary entry (admin-only).\n\n    Supports JSON PATCH-like semantics (only fields present are updated).\n\n    Payload supports:\n      - summary: str\n      - details: str | dict\n      - links: list[{url,text}] | JSON string\n      - timestamp: ISO8601 string\n      - controls: list[str] | comma-separated string\n\n    Note: This endpoint is intentionally restricted to events where source=="diary".\n'
-    body = await request.json()
+    body = await json_object(request)
     return service.admin_update_diary(
         event_id=event_id, context=change_context(request), user=user, db=db, body=body
     )

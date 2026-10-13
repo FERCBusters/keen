@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, Request, WebSocket
 from sqlalchemy.orm import Session
 
 from app.api.context import change_context
+from app.api.errors import json_object
 from app.api.routing import Router
 from app.api.uploads import upload_inputs
 from app.db.models import (
@@ -14,6 +15,7 @@ from app.db.models import (
 from app.db.session import get_db
 from app.realtime.notifications import notification_hub
 from app.security.auth import require_admin
+from app.security.redaction import storable
 from app.services import questions as service
 from app.services.questions import (
     _count_unread_replies_for_user,
@@ -161,7 +163,7 @@ def admin_list_questions(status: str | None = None, db: Session = Depends(get_db
 async def admin_set_question_status(
     thread_id: str, request: Request, db: Session = Depends(get_db)
 ):
-    payload = await request.json()
+    payload = await json_object(request)
     return await service.admin_set_question_status(
         thread_id=thread_id, context=change_context(request), db=db, payload=payload
     )
@@ -230,10 +232,11 @@ async def ws_notifications(websocket: WebSocket):
 async def question_input(request: Request):
     files = []
     if request.headers.get("content-type", "").startswith("application/json"):
-        data = await request.json()
-        body = str((data or {}).get("body") or "").strip()
+        data = await json_object(request)
+        body = str(data.get("body") or "").strip()
     else:
         form = await request.form()
-        body = str(form.get("body") or "").strip()
+        # Decoded JSON bodies receive the same NUL replacement.
+        body = storable(str(form.get("body") or "")).strip()
         files = list(form.getlist("attachments") or [])
     return body, upload_inputs(files)

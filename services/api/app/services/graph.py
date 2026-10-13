@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any, Optional
 
 from sqlalchemy import func
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.cache import cached_json, user_cache_scope
 from app.core.config import settings
+from app.core.datetime_utils import after_inclusive_date
 from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import try_uuid as _try_uuid
 from app.core.source_meta import apply_user_source_overrides, get_source_meta
@@ -39,10 +40,7 @@ def _event_filters(start_date: Optional[date], end_date: Optional[date]):
             Event.timestamp >= datetime.combine(start_date, datetime.min.time())
         )
     if end_date:
-        filters.append(
-            Event.timestamp
-            < datetime.combine(end_date + timedelta(days=1), datetime.min.time())
-        )
+        filters.append(Event.timestamp < after_inclusive_date(end_date))
     return filters
 
 

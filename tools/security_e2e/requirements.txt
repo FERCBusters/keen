@@ -1,0 +1,7 @@
+# Pinned dependencies for the KEEN security end-to-end suite.
+cryptography==50.0.1
+httpx==0.28.1
+playwright==1.63.0
+pyotp==2.10.0
+pytest==9.1.1
+websockets==17.1

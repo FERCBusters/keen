@@ -222,17 +222,6 @@ def test_public_policy_matches_real_routes():
     paths = main.app.openapi()["paths"]
     for method, patterns in PUBLIC_HTTP_ROUTES.items():
         for path in patterns:
-            if path in {
-                "/openapi.json",
-                "/docs",
-                "/docs/oauth2-redirect",
-                "/redoc",
-                "/v1/openapi.json",
-                "/v1/docs",
-                "/v1/docs/oauth2-redirect",
-                "/v1/redoc",
-            }:
-                continue
             assert method.lower() in paths[path], (method, path)
 
 

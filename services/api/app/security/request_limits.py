@@ -1,4 +1,4 @@
-"""Bound request bodies before parsers or handlers consume untrusted input."""
+"""Bound request bodies and screen request targets before handlers see them."""
 
 import tempfile
 
@@ -22,6 +22,12 @@ def body_limit(path):
     return MAX_BODY
 
 
+def target_has_nul(scope) -> bool:
+    """PostgreSQL text cannot hold NUL, so no path or query value may carry one."""
+    query = scope.get("query_string") or b""
+    return "\x00" in scope.get("path", "") or b"%00" in query or b"\x00" in query
+
+
 class RequestBodyLimitMiddleware:
     def __init__(self, app):
         self.app = app
@@ -37,6 +43,9 @@ class RequestBodyLimitMiddleware:
                 status_code=status,
                 headers={"Cache-Control": "no-store"},
             )(scope, receive, send)
+
+        if target_has_nul(scope):
+            return await reject(400, "Invalid request target")
 
         for key, value in scope.get("headers", []):
             if key.lower() == b"content-length":

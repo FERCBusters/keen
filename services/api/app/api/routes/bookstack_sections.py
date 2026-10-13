@@ -77,8 +77,9 @@ def document_catalog(
     book_id: int | None = None,
     offset: int = 0,
     user=Depends(require_isms_manage),
+    db: Session = Depends(get_db),
 ):
     "Allow authorised document managers to select BookStack material."
     return service.document_catalog(
-        kind=kind, book_id=book_id, offset=offset, user=user
+        kind=kind, book_id=book_id, offset=offset, user=user, db=db
     )

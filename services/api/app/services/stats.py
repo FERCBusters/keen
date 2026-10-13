@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.cache import cached_json
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import after_inclusive_date, utc_now_naive
 from app.core.references import control_justification as _control_justification
 from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
@@ -367,10 +367,7 @@ def _stats_controls(
                 Event.timestamp >= datetime.combine(start_date, datetime.min.time())
             )
         if end_date:
-            end_excl = datetime.combine(
-                end_date + timedelta(days=1), datetime.min.time()
-            )
-            event_filters.append(Event.timestamp < end_excl)
+            event_filters.append(Event.timestamp < after_inclusive_date(end_date))
 
         # Aggregate evidence by control first, then left-join to the comparatively
         # small controls table. This remains the exact path for date-filtered
@@ -516,17 +513,17 @@ def _stats_events_timeseries(
     # If a timestamp window is provided, it takes precedence.
     # Note: end_ts is treated as an exclusive bound.
     if start_ts is not None or end_ts is not None:
+        # Convert any timezone-aware inputs to naive UTC timestamps first, so a
+        # supplied bound is comparable with a defaulted one.
         if end_ts is None:
             end_ts = utc_now_naive()
+        end_ts = _naive_utc(end_ts)
         if start_ts is None:
             days = max(1, min(int(days or 120), 3650))
             start_ts = end_ts - timedelta(days=days)
+        start_ts = _naive_utc(start_ts)
         if start_ts > end_ts:
             start_ts, end_ts = end_ts, start_ts
-
-        # Convert any timezone-aware inputs to naive UTC timestamps.
-        start_ts = _naive_utc(start_ts)
-        end_ts = _naive_utc(end_ts)
 
         # Keep the filter bounds as provided (so callers can context partial buckets),
         # but we will floor bucket generation boundaries later.

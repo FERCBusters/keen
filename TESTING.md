@@ -96,3 +96,15 @@ Generated files, dependencies and vendored code are excluded.
 The UI build writes minified JavaScript and CSS into `services/ui/dist/`.
 The files under `services/ui/public/` remain readable source. The Docker image
 serves the generated `dist/` directory.
+
+## Security tests against a running installation
+
+`tools/security_e2e` is a pytest and Playwright suite that tests a running KEEN
+installation through its nginx front end, API, PostgreSQL database and a real
+Chromium browser. It creates synthetic accounts with single permissions, seeds
+hostile text, and checks authentication coverage, CSRF and Origin enforcement,
+the authorisation matrix, browser rendering under the supplied CSP, redirects,
+uploads, parameter fuzzing and concurrent use of single-use state. It is not part
+of `tests.sh`. Run it only against an installation you control, preferably a
+disposable one; its README lists the interlocks, configuration and the records
+it leaves behind.

@@ -35,14 +35,15 @@ def request_ip(request):
     if not trusted(peer):
         return peer
     chain = request.headers.get("x-forwarded-for", "")
-    if not chain or len(chain) > 2048:
-        return peer
-    addresses = [normalise_ip(x.strip()) for x in chain.split(",")]
-    if not all(addresses):
-        return peer
     current = peer
-    for address in reversed(addresses):
+    # Walk back from the nearest hop while each hop is a trusted proxy. Entries
+    # beyond the first untrusted hop are client-supplied, so their length or
+    # format cannot change the result; an unparseable hop ends the walk.
+    for raw in reversed(chain.split(",")[-64:] if chain else []):
         if not trusted(current):
+            break
+        address = normalise_ip(raw.strip()[:64])
+        if not address:
             break
         current = address
     return current

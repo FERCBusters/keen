@@ -5,6 +5,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import (
     get_redoc_html,
     get_swagger_ui_html,
@@ -13,7 +14,7 @@ from fastapi.openapi.docs import (
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
-from app.api.errors import domain_error_response
+from app.api.errors import domain_error_response, validation_error_response
 from app.api.routes import OPENAPI_TAGS
 from app.api.routes import router as api_router
 from app.core.config import settings
@@ -68,6 +69,7 @@ app = FastAPI(
 
 
 app.add_exception_handler(DomainError, domain_error_response)
+app.add_exception_handler(RequestValidationError, validation_error_response)
 
 
 def custom_openapi():

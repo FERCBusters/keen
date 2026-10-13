@@ -628,3 +628,187 @@ def test_webhook_state_is_not_disclosed_before_secret_verification(keen, monkeyp
         response = client.post(path, content=b"{}", headers={"X-Webhook-Secret": "x"})
         assert response.status_code == 403, (path, response.text)
     ingestion_pause.require_receiving.assert_not_called()
+
+
+# --- API documentation requires a session ------------------------------------
+
+API_DOCUMENTATION = (
+    "/openapi.json",
+    "/v1/openapi.json",
+    "/docs",
+    "/v1/docs",
+    "/redoc",
+    "/v1/redoc",
+    "/docs/oauth2-redirect",
+    "/v1/docs/oauth2-redirect",
+)
+
+
+def test_api_documentation_requires_a_signed_in_session(keen):
+    anonymous = keen.client()
+    for path in API_DOCUMENTATION:
+        response = anonymous.get(path)
+        assert response.status_code == 401, (path, response.status_code)
+        assert "paths" not in response.text
+    signed_in = keen.client(keen.user())
+    schema = signed_in.get("/openapi.json")
+    assert schema.status_code == 200 and "/v1/me" in schema.json()["paths"]
+    assert signed_in.get("/v1/docs").status_code == 200
+
+
+# --- Evidence containing NUL characters ------------------------------------------
+
+
+def test_collected_evidence_with_nul_characters_is_stored(contract_db, monkeypatch):
+    """An upstream NUL must not make every collection run fail before its cursor moves."""
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from app.ingest import common
+    from app.security.redaction import prepare_event_fields
+
+    monkeypatch.setattr(
+        common,
+        "put_bytes",
+        lambda **kwargs: SimpleNamespace(
+            uri="test://artifact", sha256="0" * 64, size_bytes=len(kwargs["data"])
+        ),
+    )
+    monkeypatch.setattr(common, "apply_rules", lambda *args: 0)
+    result = common.store_event_with_artifact(
+        contract_db,
+        timestamp=datetime(2026, 1, 1),
+        source="synthetic",
+        system="host\x00name",
+        actor="user\x00",
+        action="login",
+        outcome="ok",
+        severity=3,
+        summary="line \x00 with NUL",
+        raw_pointer={"query\x00": "x\x00"},
+        normalized_payload={"line": ["a\x00b"], "key\x00": {"nested": "\x00"}},
+        external_id="synthetic-\x00-1",
+        artifact_kind="log_line",
+        artifact_bytes=b"line \x00 with NUL",
+        artifact_content_type="text/plain",
+        artifact_key="synthetic/nul-1.log",
+        captured_by="test",
+    )
+    stored = contract_db.get(Event, uuid.UUID(result["event_id"]))
+    assert stored.summary == "line � with NUL"
+    assert stored.actor == "user�" and stored.system == "host�name"
+    assert stored.normalized_payload == {
+        "line": ["a�b"],
+        "key�": {"nested": "�"},
+    }
+    assert "\x00" not in json.dumps(stored.raw_pointer)
+    bulk = prepare_event_fields(
+        {"summary": "x\x00", "normalized_payload": {"k": "\x00"}}
+    )
+    assert bulk == {"summary": "x�", "normalized_payload": {"k": "�"}}
+
+
+# --- Request decoding and value ranges -------------------------------------------
+
+
+def test_invalid_json_and_validation_errors_fail_cleanly_without_echo(keen):
+    client = keen.client()
+    login = "/v1/auth/login"
+    headers = {"Origin": BASE, "Content-Type": "application/json"}
+    for body in (
+        b"NaN",
+        b"1e999999",
+        b'{"username": Infinity}',
+        b"[" * 5000 + b"]" * 5000,
+    ):
+        response = client.post(login, content=body, headers=headers)
+        assert response.status_code == 400, (body[:20], response.status_code)
+    echoed = client.post(
+        login,
+        json={"username": "synthetic", "password": ["synthetic-secret-value"]},
+        headers={"Origin": BASE},
+    )
+    assert echoed.status_code == 422
+    assert "synthetic-secret-value" not in echoed.text
+    assert echoed.json()["detail"][0]["loc"] == ["body", "password"]
+
+    user = keen.user()
+    signed_in = keen.client(user)
+    nested = (
+        b'{"name":"n","url":"/events.html","x":' + b'{"x":' * 200 + b"1" + b"}" * 201
+    )
+    response = signed_in.post(
+        "/v1/me/saved-searches",
+        content=nested,
+        headers={**unsafe(signed_in), "Content-Type": "application/json"},
+    )
+    assert response.status_code == 400
+
+
+def test_nul_characters_in_requests_are_refused_or_stored_safely(keen):
+    user = keen.user("events.read")
+    client = keen.client(user)
+    assert client.get("/v1/events", params={"q": "a\x00b"}).status_code == 400
+    assert client.get("/v1/events/a%00b").status_code == 400
+    saved = client.post(
+        "/v1/me/saved-searches",
+        content=b'{"name": "synthetic\\u0000name", "url": "/events.html"}',
+        headers={**unsafe(client), "Content-Type": "application/json"},
+    )
+    assert saved.status_code in (200, 201), saved.text
+    assert "synthetic�name" in json.dumps(
+        client.get("/v1/me/saved-searches").json(), ensure_ascii=False
+    )
+
+
+def test_out_of_range_request_values_are_client_errors(keen):
+    client = keen.client(keen.user("events.read", "isms.read", "audits.read"))
+    huge = "9" * 30
+    assert client.get("/v1/isms/assets", params={"offset": huge}).status_code == 400
+    assert (
+        client.get(
+            "/v1/audits/scope-coverage", params={"end": "0001-01-01"}
+        ).status_code
+        == 400
+    )
+    if keen.postgres:
+        export = client.get(
+            "/v1/events/export",
+            params={"start_date": "9999-12-01", "end_date": "9999-12-31"},
+        )
+        assert export.status_code == 200, export.status_code
+        chart = client.get(
+            "/v1/charts/event_volume_timeseries", params={"start_ts": "-1"}
+        )
+        assert chart.status_code in (200, 400), chart.status_code
+
+
+def test_document_managers_reach_the_bookstack_catalogue(keen, monkeypatch):
+    monkeypatch.setattr(settings, "bookstack_enabled", False)
+    manager = keen.client(keen.user("isms.manage"))
+    response = manager.get("/v1/isms/bookstack-catalog", params={"kind": "books"})
+    assert response.status_code == 409, response.text
+    reader = keen.client(keen.user("isms.read"))
+    assert reader.get("/v1/isms/bookstack-catalog").status_code == 403
+
+
+def test_hand_parsed_bodies_must_be_json_objects(keen, contract_db):
+    asker = keen.user("events.read", "question.create")
+    client = keen.client(asker)
+    event = Event(
+        timestamp=utc_now_naive(),
+        source="synthetic",
+        summary="synthetic event",
+        raw_pointer={},
+        normalized_payload={},
+        external_id="synthetic-" + uuid.uuid4().hex,
+    )
+    contract_db.add(event)
+    contract_db.commit()
+    path = f"/v1/events/{event.id}/questions"
+    listed = client.post(path, json=["not", "an", "object"], headers=unsafe(client))
+    assert listed.status_code == 400, listed.text
+    form = client.post(
+        path, data={"body": "synthetic \x00 question"}, headers=unsafe(client)
+    )
+    assert form.status_code < 500, form.text

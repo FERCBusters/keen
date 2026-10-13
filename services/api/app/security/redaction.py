@@ -375,10 +375,28 @@ def redact_bytes(data: bytes, content_type: str | None) -> tuple[bytes, str]:
     return new_txt.encode("utf-8"), "redacted"
 
 
+def storable(value: Any) -> Any:
+    """Replace NUL characters, which PostgreSQL text and JSON values cannot hold.
+
+    Collected evidence can contain NUL characters from upstream systems. The
+    replacement character keeps the position visible, and the record is stored
+    instead of failing the whole collection batch.
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "\ufffd") if "\x00" in value else value
+    if isinstance(value, list):
+        return [storable(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(storable(item) for item in value)
+    if isinstance(value, dict):
+        return {storable(key): storable(item) for key, item in value.items()}
+    return value
+
+
 def prepare_event_fields(fields: dict, *, mask: bool = False) -> dict:
     """Protect event columns and payloads equally in ORM and bulk insert paths."""
     result = redact_obj(fields)
-    return mask_event_data_obj(result) if mask else result
+    return storable(mask_event_data_obj(result) if mask else result)
 
 
 def prepare_artifact_bytes(
