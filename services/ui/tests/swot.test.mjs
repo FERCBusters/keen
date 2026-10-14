@@ -460,3 +460,46 @@ test('legacy objective planning URL forwards to the unified Objectives board in 
   assert.equal(url.searchParams.get('view'), 'kanban');
   assert.equal(url.searchParams.get('framework'), 'A');
 });
+
+test('compact quadrant cards expose a five-bar rating and optional date beside an accessible status', async (t) => {
+  const ui = await loadUi('pages/planning-views.js', {
+    html: '<main id="host"></main>',
+    vendor: { withFramework: (url) => url },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  const rows = [
+    {
+      id: 's1',
+      title: '<img src=x> Independent team',
+      kind: 'strength',
+      significance: 4,
+      status: 'planned',
+      target_date: '2026-12-31',
+    },
+  ];
+  const changes = [];
+  ui.api.renderBoard(host, rows, { view: 'quadrant', onMove: (...args) => changes.push(args) });
+  const card = host.querySelector('.planning-card-compact');
+  assert.equal(card.querySelectorAll('.planning-significance-bar').length, 5);
+  assert.equal(card.querySelectorAll('.planning-significance-bar.is-filled').length, 4);
+  assert.equal(
+    card.querySelector('[role="img"]').getAttribute('aria-label'),
+    'Significance: 4 out of 5',
+  );
+  assert.equal(card.querySelector('time').dateTime, '2026-12-31');
+  assert.equal(card.querySelectorAll('img').length, 0);
+  assert.equal(
+    card.querySelector('select').getAttribute('aria-label'),
+    'Status for <img src=x> Independent team',
+  );
+  assert.equal(card.querySelectorAll('.planning-compact-row > .planning-compact-meta').length, 1);
+  const select = card.querySelector('select');
+  select.value = 'completed';
+  select.dispatchEvent(new ui.window.Event('change'));
+  assert.deepEqual(changes, [['s1', 'completed']]);
+  ui.api.renderBoard(host, [{ ...rows[0], target_date: null }], { view: 'quadrant' });
+  assert.equal(host.querySelectorAll('time, select, [draggable]').length, 0);
+  assert.equal(host.querySelector('.planning-compact-status-text').textContent, 'Planned');
+  assert.ok(!host.textContent.includes('No target date'));
+});

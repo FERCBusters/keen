@@ -120,3 +120,60 @@
     border-color: var(--bs-success);
   }
 }
+
+.planning-card-compact .planning-compact-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.65rem 0.75rem;
+}
+.planning-compact-title {
+  flex: 1 1 12rem;
+  min-width: 0;
+  line-height: 1.35;
+}
+.planning-compact-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+}
+.planning-compact-date,
+.planning-compact-status-text {
+  white-space: nowrap;
+}
+.planning-compact-status {
+  width: 9.5rem;
+  max-width: 100%;
+}
+.planning-significance {
+  display: inline-flex;
+  align-items: end;
+  gap: 2px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+.planning-significance-bar {
+  width: 5px;
+  height: 20%;
+  border: 1px solid var(--bs-secondary-color);
+  border-radius: 1px;
+}
+.planning-significance-bar:nth-child(2) {
+  height: 40%;
+}
+.planning-significance-bar:nth-child(3) {
+  height: 60%;
+}
+.planning-significance-bar:nth-child(4) {
+  height: 80%;
+}
+.planning-significance-bar:nth-child(5) {
+  height: 100%;
+}
+.planning-significance-bar.is-filled {
+  background: var(--bs-primary);
+  border-color: var(--bs-primary);
+}

@@ -37,6 +37,23 @@ function card(row, framework, editable) {
     ${editable ? `<label class="small mt-2">Status<select class="form-select form-select-sm" data-status-id="${esc(row.id)}">${statuses.map((s) => `<option value="${s}" ${s === row.status ? 'selected' : ''}>${label(s)}</option>`).join('')}</select></label>` : `<div class="small">${esc(label(row.status))}</div>`}
     </div></article>`;
 }
+function compactQuadrantCard(row, framework, editable) {
+  const significance =
+    Number.isInteger(row.significance) && row.significance >= 1 && row.significance <= 5
+      ? row.significance
+      : null;
+  const meter =
+    significance === null
+      ? ''
+      : `<span class="planning-significance" role="img" aria-label="Significance: ${significance} out of 5" title="Significance: ${significance} out of 5">${[1, 2, 3, 4, 5].map((level) => `<span aria-hidden="true" class="planning-significance-bar${level <= significance ? ' is-filled' : ''}"></span>`).join('')}</span>`;
+  const statusControl = editable
+    ? `<select class="form-select form-select-sm planning-compact-status" aria-label="Status for ${esc(row.title)}" data-status-id="${esc(row.id)}">${statuses.map((value) => `<option value="${value}" ${value === row.status ? 'selected' : ''}>${label(value)}</option>`).join('')}</select>`
+    : `<span class="badge text-bg-light planning-compact-status-text">${esc(label(row.status))}</span>`;
+  return `<article class="card planning-card planning-card-compact mb-2"><div class="card-body planning-compact-row">
+    <a class="fw-bold planning-compact-title" href="${esc(href(row, framework))}">${esc(row.title)}</a>
+    <div class="planning-compact-meta">${meter}${row.target_date ? `<time class="small-muted planning-compact-date" datetime="${esc(row.target_date)}" title="Target completion: ${esc(row.target_date)}"><span class="visually-hidden">Target completion: </span>${esc(row.target_date)}</time>` : ''}${statusControl}</div>
+  </div></article>`;
+}
 function quadrantCards(items, framework, editable) {
   const ids = new Set(items.map((row) => row.id));
   const children = new Map();
@@ -57,7 +74,7 @@ function quadrantCards(items, framework, editable) {
       row.parent_id && !ids.has(row.parent_id)
         ? `<p class="small-muted mb-1"><a href="${esc(withFramework(`/swot.html?id=${encodeURIComponent(row.parent_id)}`, framework))}">View parent outside these results</a></p>`
         : '';
-    return `<li>${parentHint}${card(row, framework, editable)}${descendants ? `<ul aria-label="Child SWOT items">${descendants}</ul>` : ''}</li>`;
+    return `<li>${parentHint}${compactQuadrantCard(row, framework, editable)}${descendants ? `<ul aria-label="Child SWOT items">${descendants}</ul>` : ''}</li>`;
   }
   let content = (children.get('') || []).map((row) => branch(row)).join('');
   // Keep all supplied items visible even if malformed legacy data contains a cycle.
