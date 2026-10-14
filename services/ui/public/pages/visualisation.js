@@ -1,3 +1,4 @@
+import { applyFeatures } from '/pages/feature-availability.js';
 import { csvEscape } from '../csv.js';
 import { ensureEmbeddedVisualisationMarkup } from './visualisation/embedded-markup.js';
 import {
@@ -35,6 +36,7 @@ ensureEmbeddedVisualisationMarkup();
 initCollapsibleFilterSections();
 
 const me = window.keenMe || window.mospMe || (await initNavbar());
+applyFeatures(me);
 const framework = getCurrentFramework();
 const visualisationMount = document.querySelector('[data-keen-visualisation-mount]');
 function scopedSourceFilter() {

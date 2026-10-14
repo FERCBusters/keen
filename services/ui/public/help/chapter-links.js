@@ -145,6 +145,7 @@ window.KEEN_DOC_LINKS = {
     'administrator-deployment.html#core-and-authentication-settings',
   'administrator.html#storage-mail-and-privacy-settings':
     'administrator-deployment.html#storage-mail-and-privacy-settings',
+  'administrator.html#installation-features': 'administrator-deployment.html#installation-features',
   'administrator.html#local-mfa-administration':
     'administrator-identity.html#local-mfa-administration',
   'administrator.html#mfa-operator-recovery': 'administrator-identity.html#mfa-operator-recovery',
@@ -307,6 +308,7 @@ window.KEEN_DOC_LINKS = {
   'developer.html#10-develop-and-verify-a-change':
     'developer-development.html#10-develop-and-verify-a-change',
   'developer.html#help-generation': 'developer-development.html#help-generation',
+  'developer.html#feature-availability': 'developer-development.html#feature-availability',
   'administrator-sources.html#elasticsearch-ingestion':
     'administrator-elasticsearch.html#elasticsearch-ingestion',
   'using-isms.html#swot': 'using-swot.html#swot',
@@ -741,6 +743,7 @@ window.KEEN_DOC_LINKS = {
     'administrator-deployment.html#core-and-authentication-settings',
   'agents.html#storage-mail-and-privacy-settings':
     'administrator-deployment.html#storage-mail-and-privacy-settings',
+  'agents.html#installation-features': 'administrator-deployment.html#installation-features',
   'agents.html#local-mfa-administration': 'administrator-identity.html#local-mfa-administration',
   'agents.html#mfa-operator-recovery': 'administrator-identity.html#mfa-operator-recovery',
   'agents.html#security-notification-delivery':
@@ -862,6 +865,7 @@ window.KEEN_DOC_LINKS = {
     'administrator-deployment.html#core-and-authentication-settings',
   'redmine.html#storage-mail-and-privacy-settings':
     'administrator-deployment.html#storage-mail-and-privacy-settings',
+  'redmine.html#installation-features': 'administrator-deployment.html#installation-features',
   'redmine.html#local-mfa-administration': 'administrator-identity.html#local-mfa-administration',
   'redmine.html#mfa-operator-recovery': 'administrator-identity.html#mfa-operator-recovery',
   'redmine.html#security-notification-delivery':

@@ -189,6 +189,10 @@ def materialize_missing_monthly_zero_metrics(
     prevents an auto-zero entry.
     """
 
+    from app.services.features import state
+
+    if not state(db, refresh=True).enabled("effectiveness"):
+        return {"enabled": False, "created": 0}
     today = today or _today_for_effectiveness_metrics()
     current_month = _month_start(today)
     last_closed_month = _add_months(current_month, -1)

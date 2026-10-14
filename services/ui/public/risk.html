@@ -34,7 +34,7 @@
         <button class="nav-link active" id="riskDetailsTab" data-bs-toggle="tab" data-bs-target="#riskDetailsPane" type="button" role="tab" aria-controls="riskDetailsPane" aria-selected="true">Details</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="riskQuestionsTab" data-bs-toggle="tab" data-bs-target="#riskQuestionsPane" type="button" role="tab" aria-controls="riskQuestionsPane" aria-selected="false">Questions</button>
+        <button class="nav-link" id="riskQuestionsTab" data-feature="questions" data-bs-toggle="tab" data-bs-target="#riskQuestionsPane" type="button" role="tab" aria-controls="riskQuestionsPane" aria-selected="false">Questions</button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="riskChangelogTab" data-bs-toggle="tab" data-bs-target="#riskChangelogPane" type="button" role="tab" aria-controls="riskChangelogPane" aria-selected="false">Changelog</button>
@@ -110,7 +110,7 @@
       </section>
 
       <section class="tab-pane fade" id="riskQuestionsPane" role="tabpanel" aria-labelledby="riskQuestionsTab" tabindex="0">
-        <div id="questions" class="card mb-3">
+        <div id="questions" data-feature="questions" class="card mb-3">
           <div class="card-header">
             <div class="fw-bold">Questions</div>
             <div class="small-muted">Ask auditors or owners questions about this CIA Triad risk scenario.</div>

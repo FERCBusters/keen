@@ -446,6 +446,10 @@ def _email_attendees(db: Session, *, audit: Audit) -> int:
 def materialize_due_scheduled_audits(
     db: Session, *, today: date | None = None
 ) -> dict[str, Any]:
+    from app.services.features import state
+
+    if not state(db, refresh=True).enabled("audit_scheduling"):
+        return {"enabled": False, "created": [], "skipped_past": []}
     run_today = today or _today_for_schedule()
     days_ahead = max(0, int(settings.scheduled_audit_create_days_ahead or 0))
     latest_create_date = run_today + timedelta(days=days_ahead)

@@ -1,3 +1,4 @@
+import { mountFeatures } from '/pages/admin-features.js';
 import {
   initNavbar,
   apiGet,
@@ -18,6 +19,7 @@ import {
 } from '/app.js';
 
 const me = await initNavbar();
+mountFeatures(me);
 const currentFramework = getCurrentFramework();
 
 const autoApplyFilters = !!me?.preferences?.auto_apply_filters;
@@ -198,6 +200,7 @@ if (isAdmin) {
 // ------------------------------------------------------------------
 
 const TAB_HASH_TO_ID = {
+  '#features': 'tab-features',
   '#overview': 'tab-overview',
   '#agents': 'tab-agents',
   '#integrations': 'tab-integrations',

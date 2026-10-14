@@ -251,6 +251,8 @@ POLICY = {
     "POST /v1/admin/mapping-rules/{rule_id}/backfill": ADMIN,
     "GET /v1/admin/mapping-rules/{rule_id}/revisions": ADMIN,
     "POST /v1/admin/mapping-rules/{rule_id}/revisions/{revision}/restore": ADMIN,
+    "GET /v1/admin/features": ADMIN,
+    "PUT /v1/admin/features": ADMIN,
     "GET /v1/admin/permissions": ADMIN,
     "POST /v1/admin/permissions": ADMIN,
     "GET /v1/admin/questions": ADMIN,

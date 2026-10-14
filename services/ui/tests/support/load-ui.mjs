@@ -34,6 +34,7 @@ export async function loadUi(
   const external = {
     esc,
     getCurrentFramework: () => 'F1',
+    getLoadedFrameworkCatalog: () => null,
     getUiConfig: () => ({}),
     apiGet: unsupported,
     apiPost: unsupported,

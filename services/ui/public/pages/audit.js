@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 let selectedSwotIds = new Set(),
   swotScopeLoaded = false;
 import {
@@ -1514,10 +1515,18 @@ function renderDocuments() {
 async function loadScopeItems() {
   const fw = audit?.framework_slug || getCurrentFramework();
   const [controlsData, clausesData, graphData, documentsData] = await Promise.all([
-    apiGet(`/api/v1/controls?framework=${encodeURIComponent(fw)}&limit=5000`),
-    apiGet(`/api/v1/clauses?framework=${encodeURIComponent(fw)}`),
-    apiGet(`/api/v1/graph/clause_control?framework=${encodeURIComponent(fw)}`),
-    apiGet(`/api/v1/isms/documents?framework=${encodeURIComponent(fw)}&limit=1000`),
+    featureEnabled(me, 'controls')
+      ? apiGet(`/api/v1/controls?framework=${encodeURIComponent(fw)}&limit=5000`)
+      : { items: audit?.scoped_controls || [] },
+    featureEnabled(me, 'clauses')
+      ? apiGet(`/api/v1/clauses?framework=${encodeURIComponent(fw)}`)
+      : { items: audit?.scoped_clauses || [] },
+    featureEnabled(me, 'visualisations')
+      ? apiGet(`/api/v1/graph/clause_control?framework=${encodeURIComponent(fw)}`)
+      : {},
+    featureEnabled(me, 'documents')
+      ? apiGet(`/api/v1/isms/documents?framework=${encodeURIComponent(fw)}&limit=1000`)
+      : { items: audit?.scoped_documents || [] },
   ]);
   allDocuments = documentsData?.items || [];
   allControls = (controlsData?.items || []).filter((c) => String(c.type || '') !== 'clause');
@@ -2159,6 +2168,7 @@ function renderAttendeePersonOptions() {
 }
 
 async function loadAttendeePeople() {
+  if (!featureEnabled(me, 'people')) return;
   try {
     attendeePeople = (await apiGet('/api/v1/isms/people')).items || [];
     renderAttendeePersonOptions();
@@ -2630,7 +2640,7 @@ document.getElementById('saveScope')?.addEventListener('click', async () => {
     _normaliseSelectedClausesToChildren();
     await apiPut(`/api/v1/audits/${encodeURIComponent(auditId)}/scope`, {
       ...(swotScopeLoaded ? { swot_ids: Array.from(selectedSwotIds) } : {}),
-      documents: Array.from(selectedDocumentIds),
+      ...(featureEnabled(me, 'documents') ? { documents: Array.from(selectedDocumentIds) } : {}),
       clauses: Array.from(selectedClauseIds),
       controls: Array.from(selectedControlIds),
     });
@@ -2769,6 +2779,7 @@ await loadAttendeePeople();
 await loadAudit();
 
 async function loadSwotScope() {
+  if (!featureEnabled(me, 'swot')) return;
   let host = document.getElementById('swotScope');
   if (!host) {
     host = document.createElement('section');

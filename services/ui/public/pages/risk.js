@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import {
   initNavbar,
   apiGet,
@@ -167,6 +168,7 @@ function _renderRiskQuestions(threads) {
 }
 
 async function refreshRiskQuestions() {
+  if (!featureEnabled(me, 'questions')) return;
   if (!riskQuestionsEl || !id) return;
   try {
     const res = await apiGet(`/api/v1/questions/entities/risk/${encodeURIComponent(id)}`);

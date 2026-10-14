@@ -368,33 +368,42 @@ def me(*, context: ChangeContext, db: Session) -> dict:
     elif trust_remote and upstream_logout_url:
         logout_url = upstream_logout_url
 
+    from app.services.features import state
+
+    features = state(db)
+    enabled = features.enabled
     return {
+        "features": features.public(),
         "user": user.username,
         "user_id": str(user.id),
         "role": user.role,
         "effective_role": eff_role,
         "is_admin": is_admin,
         "can_audit_trail": can_audit_trail,
-        "can_view_audits": can_view_audits,
-        "can_manage_audits": can_manage_audits,
-        "can_admin_audits": can_admin_audits,
+        "can_view_audits": can_view_audits and enabled("audits"),
+        "can_manage_audits": can_manage_audits and enabled("audits"),
+        "can_admin_audits": can_admin_audits and enabled("audits"),
         "can_sample_isms": has_permission(db, user, "isms.read"),
-        "can_view_risks": can_view_risks,
-        "can_manage_risks": can_manage_risks,
-        "can_view_pestle": can_view_pestle,
-        "can_manage_pestle": can_manage_pestle,
-        "can_view_interested_parties": can_view_interested_parties,
-        "can_manage_interested_parties": can_manage_interested_parties,
-        "can_view_isms": can_view_isms,
-        "can_manage_isms": can_manage_isms,
-        "can_view_events": can_view_events,
-        "can_create_questions": can_create_questions,
-        "can_question_events": can_question_events,
-        "can_delete_questions": can_delete_questions,
+        "can_view_risks": can_view_risks and enabled("risks"),
+        "can_manage_risks": can_manage_risks and enabled("risks"),
+        "can_view_pestle": can_view_pestle and enabled("pestle"),
+        "can_manage_pestle": can_manage_pestle and enabled("pestle"),
+        "can_view_interested_parties": can_view_interested_parties
+        and enabled("interested_parties"),
+        "can_manage_interested_parties": can_manage_interested_parties
+        and enabled("interested_parties"),
+        "can_view_isms": can_view_isms and enabled("isms"),
+        "can_manage_isms": can_manage_isms and enabled("isms"),
+        "can_view_events": can_view_events and enabled("evidence"),
+        "can_create_questions": can_create_questions and enabled("questions"),
+        "can_question_events": can_question_events and enabled("questions"),
+        "can_delete_questions": can_delete_questions and enabled("questions"),
         "incident_webhook_enabled": incident_webhook_enabled,
-        "can_create_incidents": can_create_incidents,
-        "can_delete_incidents": can_delete_incidents,
-        "unread_question_replies_count": unread_question_replies_count,
+        "can_create_incidents": can_create_incidents and enabled("incidents"),
+        "can_delete_incidents": can_delete_incidents and enabled("incidents"),
+        "unread_question_replies_count": unread_question_replies_count
+        if enabled("questions")
+        else 0,
         "password_change_enabled": bool(
             local_auth_enabled
             and user.auth_backend != "ldap"

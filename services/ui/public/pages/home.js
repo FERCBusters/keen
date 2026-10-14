@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import {
   initNavbar,
   apiGet,
@@ -1100,7 +1101,14 @@ if (ensureHomeLayout()) {
       sources: me?.can_view_events,
     };
     entryCards.innerHTML = defs
-      .filter((d) => allowed[d.kind] || (me?.is_admin && !['controls', 'clauses'].includes(d.kind)))
+      .filter(
+        (d) =>
+          featureEnabled(
+            me,
+            { risks: 'risk_cia', effectiveness_measures: 'effectiveness' }[d.kind] || d.kind,
+          ) &&
+          (allowed[d.kind] || (me?.is_admin && !['controls', 'clauses'].includes(d.kind))),
+      )
       .map((d) => {
         const cfg = collectionConfig(d.kind);
         return `<div class="col-12 col-md-6 col-xl-4">

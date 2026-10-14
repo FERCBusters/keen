@@ -149,7 +149,7 @@
       </div>
       <div id="templateScheduleBody" class="collapse show">
         <div class="card-body">
-          <form id="templateScheduleForm" class="row g-2">
+          <form id="templateScheduleForm" data-feature="audit_scheduling" class="row g-2">
             <div class="col-12 col-lg-4">
               <label class="form-label small-muted mb-1" for="tmplDateRule">Date selector</label>
               <select id="tmplDateRule" class="form-select">
@@ -327,7 +327,7 @@
                 </div>
                 <div class="col-12"><input id="attendeeName" class="form-control" placeholder="Name (or override selected user's display name)" /></div>
                 <div class="col-12 col-md-6"><input id="attendeeEmail" class="form-control" placeholder="Email (optional)" /></div>
-                <div class="col-12"><button id="attendeeCreatePerson" class="btn btn-sm btn-outline-secondary rounded-pill" type="button" hidden>Add this as a Person in KEEN for the future?</button></div>
+                <div class="col-12"><button id="attendeeCreatePerson" data-feature="people" class="btn btn-sm btn-outline-secondary rounded-pill" type="button" hidden>Add this as a Person in KEEN for the future?</button></div>
                 <div class="col-12 col-md-6"><input id="attendeeRole" class="form-control" placeholder="Role / organisation" /></div>
                 <div class="col-12"><button class="btn btn-outline-primary" type="submit">Add person</button></div>
               </form>
@@ -390,7 +390,7 @@
       </div>
       <div id="evidenceBody" class="collapse show">
         <div class="card-body">
-          <form id="urlEvidenceForm" class="d-flex flex-wrap gap-2 mb-3">
+          <form id="urlEvidenceForm" data-feature="sampling" class="d-flex flex-wrap gap-2 mb-3">
             <input id="urlEvidence" class="form-control form-control-sm flex-grow-1" style="min-width:280px" placeholder="Paste an event URL or external evidence URL…" />
             <button class="btn btn-sm btn-outline-primary" type="submit">Add URL</button>
           </form>

@@ -236,6 +236,12 @@ def replace_audit_controls(
 def add_audit_evidence(
     *, audit_id: str, payload: AuditEvidencePayload, db: Session, user: User
 ):
+    from app.services.features import state
+
+    features = state(db)
+    features.require("sampling")
+    if payload.event_id:
+        features.require("event_sampling")
     entity_type = normalise_audit_sample_entity_type(payload.entity_type)
     if not entity_type and not has_permission(db, user, "events.read"):
         raise DomainError(403, "events.read permission required")

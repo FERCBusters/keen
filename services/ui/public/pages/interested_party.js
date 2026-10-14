@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import {
   initNavbar,
   apiGet,
@@ -198,7 +199,9 @@ async function loadLookupsAndControls() {
     apiGet(`/api/v1/interested-parties/meta?framework=${encodeURIComponent(framework)}`),
     apiGet('/api/v1/interested-parties/names'),
     apiGet('/api/v1/interested-parties/natures'),
-    apiGet(`/api/v1/controls?framework=${encodeURIComponent(framework)}&limit=5000`),
+    featureEnabled(me, 'controls')
+      ? apiGet(`/api/v1/controls?framework=${encodeURIComponent(framework)}&limit=5000`)
+      : { items: [] },
   ]);
   meta = m;
   names = nameData.items || [];

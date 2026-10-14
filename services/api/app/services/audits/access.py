@@ -78,6 +78,9 @@ def require_sample_source_access(
     db: Session, user: User, entity_type: str, entity_id: uuid.UUID
 ) -> None:
     """Adding a sample requires source access before audit sharing is established."""
+    from app.services.features import require_entity
+
+    require_entity(db, entity_type)
     if entity_type == "risk":
         from app.services.risks import _can_read_specific_risk
 

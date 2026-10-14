@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import { createEvidenceExporter } from './evidence-export/index.js';
 import { renderJson } from '/json-highlight.js';
 import {
@@ -839,6 +840,7 @@ function renderAuditSamples(items) {
 }
 
 async function refreshAuditSamples(eventId) {
+  if (!featureEnabled(me, 'audits')) return;
   const card = document.getElementById('auditSamplesCard');
   if (!canViewAuditEngagements()) {
     if (card) card.style.display = 'none';
@@ -1177,6 +1179,7 @@ function _renderThreads(threads) {
 }
 
 async function refreshQuestions(eventId) {
+  if (!featureEnabled(me, 'questions')) return;
   if (!questionsEl) return;
   try {
     const res = await apiGet(`/api/v1/events/${encodeURIComponent(eventId)}/questions`);

@@ -132,6 +132,9 @@ def _webhook_measure_by_key(
 
 
 def record_metric(*, db, metric_key, payload, context: ChangeContext):
+    from app.services.features import state
+
+    state(db).require("effectiveness")
     if not isinstance(payload, dict):
         raise DomainError(status_code=400, detail="Expected JSON object payload")
     framework = _webhook_clean_text(

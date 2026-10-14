@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import {
   initNavbar,
   apiGet,
@@ -96,6 +97,7 @@ function pestleRelevanceBadge(rel) {
 }
 
 async function loadClausePestle() {
+  if (!featureEnabled(me, 'pestle')) return;
   if (!clausePestleRows || !id) return;
   clausePestleRows.innerHTML =
     '<tr><td colspan="6" class="p-4 small-muted">Loading PESTLE(E) relevance…</td></tr>';
@@ -168,6 +170,7 @@ function _ismsEntityRows(data) {
 }
 
 async function loadClauseIsms({ force = false } = {}) {
+  if (!featureEnabled(me, 'isms')) return;
   if (!clauseIsmsView || !id) return;
   if (!canViewIsms) {
     clauseIsmsView.innerHTML =

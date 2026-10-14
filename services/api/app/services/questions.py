@@ -133,7 +133,10 @@ def _pestle_question_target(
 def _ensure_question_target_visible(
     db: Session, user: User, entity_type: str, entity_id: uuid.UUID
 ) -> tuple[str, str, str, uuid.UUID | None]:
+    from app.services.features import require_entity
+
     typ = (entity_type or "").strip().lower().replace("-", "_")
+    require_entity(db, typ)
     if typ == "isms_swot":
         from app.services.isms.swot import require_access
 
@@ -431,6 +434,10 @@ def _notification_snapshot(headers, cookies, *, counts=False, peer=None):
         from app.security.permissions import ensure_session_authorization_current
 
         ensure_session_authorization_current(db, user)
+        from app.services.features import state
+
+        if not state(db).enabled("questions"):
+            return None
         admin = is_effective_admin(db, user)
         snapshot = (str(user.id), admin, user.authz_version, user.mfa_version)
         payloads = []

@@ -19,11 +19,6 @@ COPY services/ui/package.json services/ui/package-lock.json ./
 RUN npm ci \
  && node --input-type=module -e "import { transformSync } from 'esbuild'; transformSync('let x = 1');"
 
-# Preserve KEEN's existing dark-theme/statistics helpers until upstream includes them.
-COPY services/ui/patches ./patches
-RUN git -C node_modules/@fercbusters/mosp-design-system apply --check /build/patches/mosp-design-system.patch \
- && git -C node_modules/@fercbusters/mosp-design-system apply /build/patches/mosp-design-system.patch
-
 # Build the pinned npm package's assets (uses only its included source/scripts).
 RUN npm --prefix node_modules/@fercbusters/mosp-design-system run build
 

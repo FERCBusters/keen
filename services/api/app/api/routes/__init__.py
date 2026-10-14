@@ -12,6 +12,7 @@ from .clauses import router as clauses_router
 from .control_links import router as control_links_router
 from .controls import router as controls_router
 from .events import router as events_router
+from .features import router as features_router
 from .frameworks import router as frameworks_router
 from .graph import router as graph_router
 from .interested_parties import router as interested_parties_router
@@ -137,3 +138,6 @@ router.include_router(sso_emails_router, tags=["Me"])
 from .source_connections import router as source_connections_router
 
 router.include_router(source_connections_router, tags=["Admin"])
+
+
+router.include_router(features_router, tags=["Admin"])

@@ -1,7 +1,12 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import { safeExternalHref } from '/app.js';
 import { initNavbar, apiGet, apiPost, apiPatch, apiDelete, esc, toast } from '/app.js';
 
 const me = await initNavbar();
+if (!featureEnabled(me, 'people') && featureEnabled(me, 'vendors')) {
+  document.getElementById('peoplePane')?.classList.remove('show', 'active');
+  document.getElementById('vendorsPane')?.classList.add('show', 'active');
+}
 const manage = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);
 const $ = (id) => document.getElementById(id);
 const base = '/api/v1/isms';
@@ -48,8 +53,8 @@ async function reload() {
   try {
     const [metadata, personData, vendorData] = await Promise.all([
       apiGet(`${base}/assurance/meta`),
-      apiGet(`${base}/people`),
-      apiGet(`${base}/vendors`),
+      featureEnabled(me, 'people') ? apiGet(`${base}/people`) : { items: [] },
+      featureEnabled(me, 'vendors') ? apiGet(`${base}/vendors`) : { items: [] },
     ]);
     meta = metadata;
     people = personData.items;

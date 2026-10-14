@@ -96,7 +96,11 @@ async function fixture(t, options = {}) {
   await settle(() =>
     options.fail
       ? ui.el('status').textContent.includes('Offline')
-      : ui.el('ismsMeta').textContent.includes('1 objectives'),
+      : ui
+          .el('ismsMeta')
+          .textContent.includes(
+            options.me?.features?.enabled?.objectives === false ? 'A' : '1 objectives',
+          ),
   );
   return ui;
 }
@@ -280,3 +284,13 @@ for (const editable of [true, false]) {
     );
   });
 }
+
+test('a disabled Objectives deep link loads Overview without requesting objective data', async (t) => {
+  const ui = await fixture(t, {
+    query: '&tab=objectives',
+    me: { is_admin: true, features: { enabled: { objectives: false } } },
+  });
+  assert.ok(ui.el('objectivesTab').closest('li').hasAttribute('data-feature-hidden'));
+  assert.ok(!ui.calls.some((call) => call.url.includes('section=objectives')));
+  assert.ok(ui.calls.some((call) => call.url.includes('section=overview')));
+});

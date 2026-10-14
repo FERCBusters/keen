@@ -8,6 +8,7 @@ KEEN brings operational evidence, assurance frameworks, risk management and ISMS
 - **Map across frameworks:** define rules that associate events with controls in multiple frameworks, preview their matches, and apply saved rules to past evidence.
 - **Manage assurance:** set framework scope, maintain a Statement of Applicability, review related controls, and inspect the evidence behind coverage counts.
 - **Plan SWOT responses and objectives:** rate strengths, weaknesses, opportunities and threats, organise them in hierarchies, link organisational records and framework requirements, and use quadrant, status-board, timeline and relationship views. Include SWOT in audit scope, sampling, questions and changelogs.
+- **Choose available tools:** administrators enable or disable workspaces, ISMS subsections, questions and audit sampling under Administration → Features. Parent settings preserve child preferences and existing records.
 - **Manage risks and ISMS records:** maintain risk registers and treatments, use the reusable risk library and KEEN Mitigator, and link policies, assets, objectives, interested parties, measurements and meetings.
 - **Conduct audits:** plan and schedule audits, sample evidence, record findings, discuss evidence through questions, and retain reports and document revisions.
 

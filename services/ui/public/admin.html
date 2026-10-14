@@ -43,11 +43,20 @@
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-users" data-bs-toggle="tab" data-bs-target="#pane-users" type="button" role="tab" aria-controls="pane-users" aria-selected="false"><i class="bi bi-people" aria-hidden="true"></i> Users</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-groups" data-bs-toggle="tab" data-bs-target="#pane-groups" type="button" role="tab" aria-controls="pane-groups" aria-selected="false"><i class="bi bi-shield-lock" aria-hidden="true"></i> Groups & permissions</button></li>
 <li class="admin-nav-label" role="presentation">System</li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-features" data-bs-toggle="tab" data-bs-target="#pane-features" type="button" role="tab" aria-controls="pane-features" aria-selected="false"><i class="bi bi-sliders" aria-hidden="true"></i> Features</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-audit" data-bs-toggle="tab" data-bs-target="#pane-audit" type="button" role="tab" aria-controls="pane-audit" aria-selected="false"><i class="bi bi-clock-history" aria-hidden="true"></i> Audit trail</button></li>
 <li hidden><button id="tab-remap" class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-remap" role="tab">Historical remapping</button></li>
       </ul>
 
       <div class="tab-content flex-grow-1" id="adminTabContent">
+<section class="tab-pane fade" id="pane-features" role="tabpanel" aria-labelledby="tab-features" tabindex="0">
+<h2 class="h4">Features</h2>
+<p>Choose the tools available across this KEEN installation. Changes save immediately and apply to every user, including administrators. Existing records and audit evidence are retained.</p>
+<p class="small-muted">Parent switches control their subsections. User permissions still apply. Account security, administration, framework catalogues and evidence collection remain available.</p>
+<div id="feature-status" role="status" aria-live="polite" hidden></div>
+<div class="d-flex gap-3 align-items-center"><button id="features-reload" type="button" class="btn btn-outline-secondary btn-sm">Reload settings</button><span id="feature-version" class="small-muted"></span></div>
+<div id="feature-settings"></div>
+</section>
 
 
 <section class="tab-pane fade" id="pane-retention" role="tabpanel" aria-labelledby="tab-retention" tabindex="0">

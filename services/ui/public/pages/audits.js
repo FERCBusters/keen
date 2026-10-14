@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import {
   initNavbar,
   apiGet,
@@ -1160,6 +1161,7 @@ function renderScheduleCalendar(occurrences) {
 }
 
 async function loadScheduledAudits() {
+  if (!featureEnabled(me, 'audit_scheduling')) return;
   if (!canViewAudits()) return;
   if (!scheduledRows) return;
   scheduledRows.innerHTML = '<tr><td colspan="5" class="p-4 small-muted">Loading…</td></tr>';
@@ -1179,6 +1181,7 @@ async function loadScheduledAudits() {
 }
 
 async function loadScheduledDocuments() {
+  if (!featureEnabled(me, 'documents')) return;
   if (!schedDocuments) return;
   const fw = (
     document.getElementById('schedFramework')?.value ||

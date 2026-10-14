@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import {
   initNavbar,
   apiGet,
@@ -1407,6 +1408,7 @@ async function loadUsers() {
 }
 
 async function loadControls() {
+  if (!featureEnabled(me, 'controls')) return;
   if (!canViewRisks) return;
   const u = new URL('/api/v1/controls', location.origin);
   if (framework) u.searchParams.set('framework', framework);

@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import {
   initNavbar,
   initCollapsibleFilterSections,
@@ -40,7 +41,19 @@ let row = null,
   total = 0,
   loading = false;
 initCollapsibleFilterSections();
-const types = ['objective', 'document', 'asset', 'risk', 'person', 'vendor'];
+const types = ['objective', 'document', 'asset', 'risk', 'person', 'vendor'].filter((type) =>
+  featureEnabled(
+    me,
+    {
+      objective: 'objectives',
+      document: 'documents',
+      asset: 'assets',
+      risk: 'risk_cia',
+      person: 'people',
+      vendor: 'vendors',
+    }[type],
+  ),
+);
 function options(id, values, first = '') {
   $(id).innerHTML =
     first + values.map((v) => `<option value="${esc(v)}">${esc(label(v))}</option>`).join('');
@@ -173,6 +186,7 @@ function renderRelations() {
   renderGraph($('graph'), row, framework);
 }
 async function questions() {
+  if (!featureEnabled(me, 'questions')) return;
   const data = await apiGet(`/api/v1/questions/entities/isms_swot/${encodeURIComponent(itemId)}`);
   $('questionList').innerHTML =
     data.threads

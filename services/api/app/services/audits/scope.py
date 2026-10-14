@@ -184,6 +184,10 @@ def set_audit_scope(
     replace_clauses: bool = True,
     replace_documents: bool = True,
 ) -> tuple[list[ControlItem], list[FrameworkClause], list[IsmsDocument]]:
+    from app.services.features import state
+
+    if document_values:
+        state(db).require("documents")
     documents: list[IsmsDocument] = []
     if replace_documents:
         document_refs = dedupe_scope_values(document_values, label="documents")

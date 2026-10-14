@@ -1,3 +1,4 @@
+import { applyFeatures, featureEnabled } from '/pages/feature-availability.js';
 // Re-export the MOSP design-system helpers.
 export * from '/vendor/mosp-design-system/app.js';
 import { initContextHelp } from './help-launcher.js';
@@ -6,6 +7,7 @@ import { initContextHelp } from './help-launcher.js';
 // Keep them here so older pages (e.g. account.js) continue to work.
 import {
   getCurrentFramework,
+  getLoadedFrameworkCatalog,
   apiGet,
   apiPost,
   esc,
@@ -67,6 +69,7 @@ function _patchRiskNavDropdown() {
       Risks
     </a>
     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="riskAssessmentsDropdown">
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risks.html'))}">CIA risk assessments</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risk-register.html'))}">Risk register &amp; heatmap</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/pestle.html'))}">PESTLE(E) Impact Assessment</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/interested_parties.html'))}">Interested Parties</a></li>
@@ -223,11 +226,34 @@ export async function refreshFrameworkNavigation(savedCatalog = null, cfgOverrid
   return catalog;
 }
 
-export async function initNavbar(...args) {
+let navbarInitialisation;
+// A document can load several page modules. Share its complete shell setup,
+// including notification polling, without persisting account data across loads.
+export function initNavbar(...args) {
+  if (!navbarInitialisation) {
+    navbarInitialisation = initialiseNavbar(...args).catch((error) => {
+      navbarInitialisation = null;
+      throw error;
+    });
+  }
+  return navbarInitialisation;
+}
+
+async function initialiseNavbar(...args) {
   initContextHelp();
   const cfg = getUiConfig(args[0]);
   const me = await _mospInitNavbar({
     ...cfg,
+    auth: { ...cfg.auth, meCacheMs: 0 },
+    bell: {
+      ...cfg.bell,
+      summaryEndpoint: (me) =>
+        featureEnabled(me, 'questions')
+          ? me?.is_admin
+            ? '/api/v1/admin/questions/summary'
+            : '/api/v1/me/questions/summary'
+          : '',
+    },
     brandIcon: '/keen-mitigator.png',
     nav: { ...cfg.nav, expandClass: 'navbar-expand-lg' },
     framework: { ...cfg.framework, selectMaxChars: 19, selectMinChars: 14 },
@@ -274,7 +300,7 @@ export async function initNavbar(...args) {
     } else navRoot.append(link);
   }
   try {
-    await refreshFrameworkNavigation(null, cfg);
+    await refreshFrameworkNavigation(getLoadedFrameworkCatalog(), cfg);
   } catch {
     // Keep optional navigation hidden when the catalogue cannot be checked.
     for (const link of navRoot?.querySelectorAll('a[href]') || []) {
@@ -287,6 +313,7 @@ export async function initNavbar(...args) {
   _patchIsmsNavDropdown();
   _collapseFilterSectionsByDefault();
   setTimeout(_collapseFilterSectionsByDefault, 0);
+  applyFeatures(me);
   return me;
 }
 
@@ -679,6 +706,9 @@ export function auditStatusLabel(auditOrStatus = null) {
 }
 
 export function canSampleIntoAudit(me = null, entityType = '') {
+  if (!featureEnabled(me, 'sampling')) return false;
+  if ((!entityType || entityType === 'event') && !featureEnabled(me, 'event_sampling'))
+    return false;
   if (!(me?.can_manage_audits || me?.can_admin_audits || me?.is_admin)) return false;
   if (me?.is_admin) return true;
   const type = String(entityType || '')

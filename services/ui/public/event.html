@@ -23,9 +23,9 @@
       <div class="d-flex flex-wrap gap-2 no-print">
         <a id="btnCreateMapping" class="btn btn-outline-primary" hidden>Create mapping from this event</a>
         <button id="btnEditDiary" class="btn btn-outline-primary" style="display:none;">Edit diary entry</button>
-        <button id="btnCreateIncident" class="btn btn-warning" style="display:none;"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Create Incident</button>
-        <button id="btnSampleAudit" class="btn btn-success" style="display:none;"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Sample into audit</button>
-        <button id="btnPdf" class="btn btn-primary">Sample as PDF evidence</button>
+        <button id="btnCreateIncident" data-feature="incidents" class="btn btn-warning" style="display:none;"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Create Incident</button>
+        <button id="btnSampleAudit" data-feature="event_sampling" class="btn btn-success" style="display:none;"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Sample into audit</button>
+        <button id="btnPdf" data-feature="event_sampling" class="btn btn-primary">Sample as PDF evidence</button>
         <button id="btnZip" class="btn btn-outline-primary" style="display:none;">Download all artifacts as evidence</button>
       </div>
     </div>
@@ -42,7 +42,7 @@
       <div class="card-body" id="incidents">—</div>
     </div>
 
-    <div id="auditSamplesCard" class="card mb-3 no-print" style="display:none;">
+    <div id="auditSamplesCard" data-feature="audits" class="card mb-3 no-print" style="display:none;">
       <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
         <div>
           <div class="fw-bold">Audit sampling</div>
@@ -105,10 +105,10 @@
             <div class="small-muted">Auditor questions and responses associated with this evidence.</div>
           </div>
           <div class="no-print">
-            <button id="btnAskQuestion" class="btn btn-sm btn-outline-primary" type="button" style="display:none;"><i class="bi bi-chat-left-text me-1" aria-hidden="true"></i>Ask a question about this event</button>
+            <button id="btnAskQuestion" data-feature="questions" class="btn btn-sm btn-outline-primary" type="button" style="display:none;"><i class="bi bi-chat-left-text me-1" aria-hidden="true"></i>Ask a question about this event</button>
           </div>
         </div>
-        <div id="questions" class="small-muted">—</div>
+        <div id="questions" data-feature="questions" class="small-muted">—</div>
       </div>
     </div>
 
@@ -311,7 +311,7 @@
   </div>
 
   <!-- Question event (auditor question) -->
-  <div class="modal fade" id="questionModal" tabindex="-1" aria-hidden="true">
+  <div class="modal fade" id="questionModal" data-feature="questions" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
@@ -320,7 +320,7 @@
         </div>
         <div class="modal-body">
           <div id="questionStatus" class="alert alert-info" style="display:none;"></div>
-          <form id="questionForm">
+          <form id="questionForm" data-feature="questions">
             <div class="mb-3">
               <label class="form-label small-muted mb-1">Question</label>
               <textarea id="questionBody" class="form-control" rows="4" placeholder="E.g. What was this about?" required></textarea>

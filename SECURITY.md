@@ -73,6 +73,10 @@ Expensive reports, broad collection jobs and large authorised datasets consume r
 
 Artifacts have recorded SHA-256 checksums and backend-specific storage controls. Files attached to questions stay with their question threads; event views and evidence exports present only collected evidence artifacts. Checksums support integrity verification. Immutability and retention guarantees depend on storage permissions, versioning and retention configuration. Someone controlling both records and storage can alter the evidence and its recorded checksum. Evidence review should account for source trust and provenance.
 
+## Installation feature availability
+
+Administrator-only feature settings supplement existing permissions. Disabled features reject their operational API routes, including for administrators. Settings use revision-checked database writes; guarded requests check the authoritative revision before reusing a cached configuration. Feature caches contain no user authority or credentials. Existing records, historical audit material and retention protections remain intact. Availability settings are not per-user confidentiality boundaries; shared references can remain visible through other enabled features. Authentication, account security and administration remain available. Requests and jobs already admitted can finish.
+
 ## Deployment responsibilities
 
 Use HTTPS for browser, agent and credential-bearing traffic; configure `KEEN_PUBLIC_BASE_URL`, Secure cookies and trusted proxies correctly. The provided Compose port bindings are local to the host. Keep PostgreSQL, Valkey, worker control interfaces and artifact storage inaccessible to untrusted clients. Use separate strong secrets, restrict upstream account permissions, preserve encryption keys securely, and test backup restoration.

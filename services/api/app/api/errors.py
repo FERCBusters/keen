@@ -104,6 +104,16 @@ async def _strict_json(request: Request):
 class DomainRoute(APIRoute):
     """Also support routers mounted independently in adapter tests."""
 
+    def __init__(self, *args, **kwargs):
+        from fastapi import Depends
+
+        from app.api.dependencies.features import enforce_features
+
+        dependencies = list(kwargs.pop("dependencies", None) or ())
+        if not any(dep.dependency is enforce_features for dep in dependencies):
+            dependencies.append(Depends(enforce_features))
+        super().__init__(*args, dependencies=dependencies, **kwargs)
+
     def get_route_handler(self):
         handler = super().get_route_handler()
 

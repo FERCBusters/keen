@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import { createRelatedControlsBrowser } from './related-controls.js';
 import {
   initNavbar,
@@ -362,6 +363,7 @@ function _ismsEntityRows(data) {
 }
 
 async function loadControlIsms({ force = false } = {}) {
+  if (!featureEnabled(me, 'isms')) return;
   if (!controlIsmsView || !id) return;
   if (!canViewIsms) {
     controlIsmsView.innerHTML =
@@ -466,6 +468,7 @@ function riskScoreBadge(score) {
 }
 
 async function loadLinkedRisks() {
+  if (!featureEnabled(me, 'risk_cia')) return;
   if (!risksCard || !risksView) return;
   if (!canViewRisks) {
     risksCard.style.display = 'none';
@@ -527,6 +530,7 @@ async function loadLinkedRisks() {
   }
 }
 async function loadLinkedInterestedParties({ force = false } = {}) {
+  if (!featureEnabled(me, 'interested_parties')) return;
   if (!interestedPartiesCard || !interestedPartiesView) return;
   if (!canViewInterestedParties) {
     interestedPartiesCard.style.display = 'none';

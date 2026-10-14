@@ -37,7 +37,7 @@
         <button class="nav-link" id="pestleRelevanceTab" data-bs-toggle="tab" data-bs-target="#pestleRelevancePane" type="button" role="tab" aria-controls="pestleRelevancePane" aria-selected="false">Relevance mappings</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="pestleQuestionsTab" data-bs-toggle="tab" data-bs-target="#pestleQuestionsPane" type="button" role="tab" aria-controls="pestleQuestionsPane" aria-selected="false">Questions</button>
+        <button class="nav-link" id="pestleQuestionsTab" data-feature="questions" data-bs-toggle="tab" data-bs-target="#pestleQuestionsPane" type="button" role="tab" aria-controls="pestleQuestionsPane" aria-selected="false">Questions</button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="pestleChangelogTab" data-bs-toggle="tab" data-bs-target="#pestleChangelogPane" type="button" role="tab" aria-controls="pestleChangelogPane" aria-selected="false">Changelog</button>
@@ -140,7 +140,7 @@
       </section>
 
       <section class="tab-pane fade" id="pestleQuestionsPane" role="tabpanel" aria-labelledby="pestleQuestionsTab" tabindex="0">
-        <div id="questions" class="card mb-3">
+        <div id="questions" data-feature="questions" class="card mb-3">
           <div class="card-header">
             <div class="fw-bold">Questions</div>
             <div class="small-muted">Ask auditors or owners questions about this PESTLE(E) item.</div>

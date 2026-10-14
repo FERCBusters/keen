@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import {
   initNavbar,
   apiGet,
@@ -704,6 +705,7 @@ function myQuestionRow(it) {
 }
 
 async function loadMyQuestions() {
+  if (!featureEnabled(me, 'questions')) return;
   if (!myQuestionsTbody) return;
   try {
     if (myQuestionsStatus) myQuestionsStatus.style.display = 'none';
@@ -801,6 +803,7 @@ function myAuditRow(a) {
 }
 
 async function loadMyAudits() {
+  if (!featureEnabled(me, 'audits')) return;
   if (!myAuditsTbody) return;
   try {
     if (myAuditsStatus) myAuditsStatus.style.display = 'none';
@@ -894,6 +897,7 @@ function myRiskRow(r) {
 }
 
 async function loadMyRisks() {
+  if (!featureEnabled(me, 'risk_cia')) return;
   if (!myRisksTbody) return;
   try {
     if (myRisksStatus) myRisksStatus.style.display = 'none';
@@ -998,6 +1002,7 @@ function myMeetingRow(item) {
 }
 
 async function loadMyMeetings() {
+  if (!featureEnabled(me, 'meetings')) return;
   if (!myMeetingsTbody) return;
   try {
     if (myMeetingsStatus) myMeetingsStatus.style.display = 'none';
@@ -1055,6 +1060,7 @@ function myIsmsObjectiveRow(item) {
 }
 
 async function loadMyIsmsObjectives() {
+  if (!featureEnabled(me, 'objectives')) return;
   if (!myIsmsObjectivesTbody) return;
   try {
     if (myIsmsObjectivesStatus) myIsmsObjectivesStatus.style.display = 'none';
@@ -1112,6 +1118,7 @@ function myIsmsRoleRow(item) {
 }
 
 async function loadMyIsmsRole() {
+  if (!featureEnabled(me, 'organisation')) return;
   if (!myIsmsRoleTbody) return;
   try {
     if (myIsmsRoleStatus) myIsmsRoleStatus.style.display = 'none';
@@ -1178,6 +1185,7 @@ function myIsmsAssetRow(item) {
 }
 
 async function loadMyIsmsAssets() {
+  if (!featureEnabled(me, 'assets')) return;
   if (!myIsmsAssetsTbody) return;
   try {
     if (myIsmsAssetsStatus) myIsmsAssetsStatus.style.display = 'none';

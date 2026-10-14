@@ -66,6 +66,13 @@ def home_overview(
         or permitted("audits.admin")
     )
     events = permitted("events.read")
+    from app.services.features import state
+
+    features = state(db)
+    risk = risk and features.enabled("risk_cia")
+    isms = isms and features.enabled("effectiveness")
+    audit = audit and features.enabled("audits")
+    events = events and features.enabled("evidence")
     controls = (
         db.query(ControlItem)
         .filter(ControlItem.framework_slug == framework, ControlItem.type != "clause")

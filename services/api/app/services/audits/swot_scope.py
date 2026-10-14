@@ -30,6 +30,10 @@ def scope_items(db, audit_id):
 def set_scope(db, audit, ids, user):
     if ids is None:
         return
+    from app.services.features import state
+
+    if ids:
+        state(db).require("swot")
     require_access(db, user)
     _lock(db)
     ids = set(ids)

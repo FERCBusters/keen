@@ -1,3 +1,4 @@
+import { featureEnabled } from '/pages/feature-availability.js';
 import {
   initNavbar,
   apiGet,
@@ -458,6 +459,7 @@ function _renderPestleQuestions(threads) {
 }
 
 async function refreshPestleQuestions() {
+  if (!featureEnabled(me, 'questions')) return;
   if (!pestleQuestionsEl) return;
   if (!itemId) {
     pestleQuestionsEl.innerHTML = '<div class="small-muted">Save the item first.</div>';

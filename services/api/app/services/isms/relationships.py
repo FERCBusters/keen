@@ -74,8 +74,13 @@ def _reverse_refs_for(
         "effectiveness_measures": [],
         "meetings": [],
     }
+    from app.services.features import ENTITY_FEATURES, state
+
+    features = state(db)
     for link in links:
         et = link.entity_type
+        if et in ENTITY_FEATURES and not features.enabled(ENTITY_FEATURES[et]):
+            continue
         if et not in ENTITY_TYPES:
             continue
         row = (

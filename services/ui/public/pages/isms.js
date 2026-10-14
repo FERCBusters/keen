@@ -1,3 +1,4 @@
+import { featureEnabled, sectionFeatures } from '/pages/feature-availability.js';
 import { renderBoard, renderTimeline, normalise, statuses, label } from '/pages/planning-views.js';
 import { safeExternalHref } from '/app.js';
 import { mountMeasurementExamples } from '/pages/measurement-examples.js';
@@ -135,6 +136,7 @@ async function loadDocumentFolders() {
 }
 
 async function loadMeetingPeople() {
+  if (!featureEnabled(me, 'people')) return;
   try {
     meetingPeople = (await apiGet('/api/v1/isms/people')).items || [];
   } catch (err) {
@@ -2099,7 +2101,10 @@ function normaliseIsmsSection(value) {
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, '_');
-  return sectionAliases[key] || sectionAliases[key.replace(/_/g, '')] || null;
+  const section = sectionAliases[key] || sectionAliases[key.replace(/_/g, '')] || null;
+  return sectionFeatures[section] && !featureEnabled(me, sectionFeatures[section])
+    ? 'overview'
+    : section;
 }
 
 function sectionFromTabId(id) {
@@ -2126,7 +2131,20 @@ function mergePayload(target, payload) {
 function renderMetaSummary() {
   const c = data.counts || {};
   if (!metaEl) return;
-  metaEl.textContent = `${data.framework || meta.framework || framework} • ${c.objectives || 0} objectives • ${c.documents || 0} documents • ${c.org_nodes || 0} org nodes • ${c.assets || 0} assets • ${c.licenses || 0} licenses • ${c.access_control_matrix || 0} access rows • ${c.effectiveness_measures || 0} effectiveness measures • ${c.effectiveness_metric_entries || 0} metric entries • ${c.meetings || 0} meetings`;
+  const counts = [
+    ['objectives', 'objectives', 'objectives'],
+    ['documents', 'documents', 'documents'],
+    ['org_nodes', 'org nodes', 'organisation'],
+    ['assets', 'assets', 'assets'],
+    ['licenses', 'licences', 'assets'],
+    ['access_control_matrix', 'access rows', 'access_control'],
+    ['effectiveness_measures', 'effectiveness measures', 'effectiveness'],
+    ['effectiveness_metric_entries', 'metric entries', 'effectiveness'],
+    ['meetings', 'meetings', 'meetings'],
+  ]
+    .filter(([, , feature]) => featureEnabled(me, feature))
+    .map(([key, label]) => `${c[key] || 0} ${label}`);
+  metaEl.textContent = [data.framework || meta.framework || framework, ...counts].join(' • ');
 }
 
 function setSectionLoading(section) {

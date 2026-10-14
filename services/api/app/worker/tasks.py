@@ -19,13 +19,13 @@ from app.db.models import (
 from app.db.session import SessionLocal
 from app.ingest.bookstack import ingest_bookstack_all
 from app.ingest.cloudwatch_logs import ingest_cloudwatch_logs_all
+from app.ingest.elasticsearch import ingest_elasticsearch_all
 from app.ingest.forgejo import ingest_forgejo_all
 from app.ingest.gitea import ingest_gitea_all
 from app.ingest.github import ingest_github_all
 from app.ingest.gitlab import ingest_gitlab_all
 from app.ingest.google_workspace import ingest_google_workspace_all
 from app.ingest.jenkins import ingest_jenkins_all
-from app.ingest.elasticsearch import ingest_elasticsearch_all
 from app.ingest.loki import ingest_loki_all
 from app.ingest.redmine import ingest_redmine_all
 from app.ingest.riskledger import ingest_riskledger_all
@@ -181,6 +181,10 @@ def send_question_webhooks_task(thread_id: str, post_id: str) -> dict:
 
     db: Session = SessionLocal()
     try:
+        from app.services.features import state
+
+        if not state(db).enabled("questions"):
+            return {"enabled": False}
         thread = (
             db.query(EventQuestionThread).filter(EventQuestionThread.id == tid).first()
         )
@@ -331,6 +335,10 @@ def send_question_reply_webhooks_task(thread_id: str, post_id: str) -> dict:
 
     db: Session = SessionLocal()
     try:
+        from app.services.features import state
+
+        if not state(db).enabled("questions"):
+            return {"enabled": False}
         thread = (
             db.query(EventQuestionThread).filter(EventQuestionThread.id == tid).first()
         )

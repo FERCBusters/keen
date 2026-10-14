@@ -237,3 +237,59 @@ for (const [user, type, allowed] of [
   test(`audit sampling source ${type} ${JSON.stringify(user)}`, () => {
     assert.equal(a.canSampleIntoAudit(user, type), allowed);
   });
+
+test('page modules share navbar setup and its initial framework response', async () => {
+  let starts = 0;
+  let release;
+  const ready = new Promise((resolve) => {
+    release = resolve;
+  });
+  const me = { is_admin: true };
+  const u = await loadUi('app.js', {
+    html: '<div id="navbar"></div>',
+    vendor: {
+      getUiConfig: () => ({ nav: {}, framework: {} }),
+      initCollapsibleFilterSections: () => {},
+      initNavbar: async () => {
+        starts++;
+        await ready;
+        return me;
+      },
+      getLoadedFrameworkCatalog: () => ({ items: [] }),
+      // Any additional catalogue request fails this test.
+    },
+  });
+  try {
+    const first = u.api.initNavbar();
+    const second = u.api.initNavbar();
+    assert.equal(first, second);
+    release();
+    assert.equal(await first, me);
+    assert.equal(await u.api.initNavbar(), me);
+    assert.equal(starts, 1);
+  } finally {
+    u.close();
+  }
+});
+
+test('failed navbar account requests can be retried', async () => {
+  let starts = 0;
+  const u = await loadUi('app.js', {
+    vendor: {
+      getUiConfig: () => ({ nav: {}, framework: {} }),
+      initCollapsibleFilterSections: () => {},
+      initNavbar: async () => {
+        if (++starts === 1) throw new Error('Account unavailable');
+        return { is_admin: true };
+      },
+      getLoadedFrameworkCatalog: () => ({ items: [] }),
+    },
+  });
+  try {
+    await assert.rejects(u.api.initNavbar(), /Account unavailable/);
+    assert.equal((await u.api.initNavbar()).is_admin, true);
+    assert.equal(starts, 2);
+  } finally {
+    u.close();
+  }
+});

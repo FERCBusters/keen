@@ -52,8 +52,18 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
     section_key = _clean_isms_section(section)
     include_all = section_key is None
 
+    from app.services.features import SECTION_FEATURES, state
+
+    features = state(db)
+    if section_key in SECTION_FEATURES:
+        features.require(SECTION_FEATURES[section_key])
+
     def wants(*keys: str) -> bool:
-        return include_all or section_key in keys
+        return any(
+            (include_all or section_key == key)
+            and features.enabled(SECTION_FEATURES[key])
+            for key in keys
+        )
 
     payload: dict[str, Any] = {
         "framework": fw,
@@ -145,6 +155,25 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
             item["id"] for item in effectiveness_metric_sources
         ]
 
+    hidden = {
+        "business_processes": "business_processes",
+        "objectives": "objectives",
+        "documents": "documents",
+        "org_nodes": "organisation",
+        "assets": "assets",
+        "asset_categories": "assets",
+        "licenses": "assets",
+        "aws_accounts": "access_control",
+        "access_control_matrix": "access_control",
+        "effectiveness_measures": "effectiveness",
+        "effectiveness_metric_entries": "effectiveness",
+        "meetings": "meetings",
+    }
+    for key, feature in hidden.items():
+        if not features.enabled(feature):
+            payload.pop(key, None)
+            if "counts" in payload:
+                payload["counts"].pop(key, None)
     return payload
 
 
@@ -153,8 +182,18 @@ def isms_summary(*, framework: str, section: str | None, user: User, db: Session
     section_key = _clean_isms_section(section)
     include_all = section_key is None
 
+    from app.services.features import SECTION_FEATURES, state
+
+    features = state(db)
+    if section_key in SECTION_FEATURES:
+        features.require(SECTION_FEATURES[section_key])
+
     def wants(*keys: str) -> bool:
-        return include_all or section_key in keys
+        return any(
+            (include_all or section_key == key)
+            and features.enabled(SECTION_FEATURES[key])
+            for key in keys
+        )
 
     counts = {
         "objectives": int(db.query(IsmsObjective.id).count() or 0),
@@ -262,4 +301,23 @@ def isms_summary(*, framework: str, section: str | None, user: User, db: Session
         )
         payload["meetings"] = [_meeting_out(db, row, fw) for row in meetings]
 
+    hidden = {
+        "business_processes": "business_processes",
+        "objectives": "objectives",
+        "documents": "documents",
+        "org_nodes": "organisation",
+        "assets": "assets",
+        "asset_categories": "assets",
+        "licenses": "assets",
+        "aws_accounts": "access_control",
+        "access_control_matrix": "access_control",
+        "effectiveness_measures": "effectiveness",
+        "effectiveness_metric_entries": "effectiveness",
+        "meetings": "meetings",
+    }
+    for key, feature in hidden.items():
+        if not features.enabled(feature):
+            payload.pop(key, None)
+            if "counts" in payload:
+                payload["counts"].pop(key, None)
     return payload

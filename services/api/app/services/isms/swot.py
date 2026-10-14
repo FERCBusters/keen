@@ -133,6 +133,12 @@ def summary(row):
 def _target(db, user, kind, target_id, *, required=True):
     if kind not in TARGETS:
         raise DomainError(400, "Unknown relationship type")
+    from app.services.features import ENTITY_FEATURES, state
+
+    if not state(db).enabled(ENTITY_FEATURES[kind]):
+        if required:
+            raise DomainError(404, "Related feature is disabled")
+        return None
     row = db.get(TARGETS[kind], target_id)
     allowed = _can_read_isms(db, user)
     if kind == "risk":
