@@ -157,6 +157,16 @@ def test_links_require_target_access_and_do_not_leak_in_history(keen):
     risk = Risk(asset_id=asset.id, threat_summary="Restricted risk title")
     keen.db.add(risk)
     keen.db.commit()
+    rejected = manager.post(
+        "/v1/isms/swot",
+        json={
+            "title": "Restricted draft",
+            "links": [{"target_type": "risk", "target_id": str(risk.id)}],
+        },
+        headers=unsafe(manager),
+    )
+    assert rejected.status_code == 404
+    assert keen.db.query(IsmsSwot).count() == 1
     body = {"target_type": "risk", "target_id": str(risk.id), "expected_version": 1}
     path = "/v1/isms/swot/" + root["id"]
     assert (
@@ -412,3 +422,72 @@ def test_swot_mapping_ids_are_framework_scoped_and_preserve_other_frameworks(kee
         client.get(path + "?framework=swot-a").json()["controls"][0]["id"]
         == records["swot-a"]["controls"][0]
     )
+
+
+def test_draft_relationships_create_atomically_and_deduplicate(keen):
+    from uuid import uuid4
+
+    from app.db.models import IsmsObjective
+
+    client = keen.client(keen.user("isms.manage"))
+    objective = IsmsObjective(goal="Measurable response")
+    keen.db.add(objective)
+    keen.db.commit()
+    link = {"target_type": "objective", "target_id": str(objective.id)}
+    invalid = {"target_type": "risk", "target_id": str(uuid4())}
+    before_history = keen.db.query(EntityChangelog).count()
+    for extra in [
+        {"links": [link, invalid]},
+        {"links": [link], "controls": ["missing-control"]},
+    ]:
+        response = client.post(
+            "/v1/isms/swot",
+            json={"title": "Atomic draft", **extra},
+            headers=unsafe(client),
+        )
+        assert response.status_code in (400, 404), response.text
+        keen.db.expire_all()
+        assert keen.db.query(IsmsSwot).count() == 0
+        assert keen.db.query(IsmsSwotLink).count() == 0
+        assert keen.db.query(EntityChangelog).count() == before_history
+    created = create(client, links=[link, link])
+    assert len(created["links"]) == 1
+    assert created["links"][0]["target_id"] == str(objective.id)
+    assert keen.db.query(IsmsSwotLink).count() == 1
+    response = client.patch(
+        f"/v1/isms/swot/{created['id']}",
+        json={"expected_version": 1, "links": []},
+        headers=unsafe(client),
+    )
+    assert response.status_code == 400
+    assert keen.db.query(IsmsSwotLink).count() == 1
+    history = client.get(f"/v1/isms/swot/{created['id']}/changelog").text
+    assert str(objective.id) not in history
+    assert objective.goal not in history
+
+
+def test_draft_relationships_obey_disabled_features_and_payload_bound(keen):
+    from app.db.models import IsmsObjective
+    from app.services.features import update
+
+    admin = keen.user(role="admin")
+    client = keen.client(admin)
+    objective = IsmsObjective(goal="Disabled objective")
+    keen.db.add(objective)
+    keen.db.commit()
+    link = {"target_type": "objective", "target_id": str(objective.id)}
+    response = client.post(
+        "/v1/isms/swot",
+        json={"title": "Too many", "links": [link] * 201},
+        headers=unsafe(client),
+    )
+    assert response.status_code == 422
+    update(keen.db, admin, 0, {"objectives": False})
+    response = client.post(
+        "/v1/isms/swot",
+        json={"title": "Disabled", "links": [link]},
+        headers=unsafe(client),
+    )
+    assert response.status_code == 404
+    assert keen.db.query(IsmsSwot).count() == 0
+    assert keen.db.query(IsmsSwotLink).count() == 0

@@ -64,6 +64,10 @@ options('itemStatus', statuses);
 options('statusFilter', statuses, '<option value="">All statuses</option>');
 options('relatedType', types, '<option value="">Any relationship</option>');
 options('linkType', types);
+const draftLinks = [];
+let draftDirty = false;
+let mappingCatalog = { controls: [], clauses: [] };
+const choiceRecords = new Map();
 function fail(error) {
   toast($('status'), String(error), 'danger');
 }
@@ -81,6 +85,7 @@ async function choices(typeId, itemSelect, query = '') {
       )
     : { items: [] };
   if (choiceRequests.get(itemSelect) !== request) return;
+  choiceRecords.set(itemSelect, data.items);
   $(itemSelect).disabled = !kind || !data.items.length;
   if (itemSelect === 'relatedItem') $('relatedItemField').hidden = !kind || !data.items.length;
   $(itemSelect).innerHTML =
@@ -139,7 +144,15 @@ let listRequest = 0;
 async function loadList() {
   const request = ++listRequest;
   const requestedOffset = offset;
-  const p = new URLSearchParams({ q: $('search').value, limit: '100', offset: String(offset) });
+  const p = filterQuery();
+  p.set('limit', '100');
+  p.set('offset', String(offset));
+  const data = await apiGet(`${base}?${p}`);
+  if (request !== listRequest) return;
+  showList(data, requestedOffset);
+}
+function filterQuery() {
+  const p = new URLSearchParams({ q: $('search').value });
   for (const [key, id] of [
     ['kind', 'kindFilter'],
     ['status', 'statusFilter'],
@@ -151,8 +164,9 @@ async function loadList() {
   p.set('framework', framework);
   if ($('controlFilter').value) p.set('control', $('controlFilter').value);
   if ($('clauseFilter').value) p.set('clause', $('clauseFilter').value);
-  const data = await apiGet(`${base}?${p}`);
-  if (request !== listRequest) return;
+  return p;
+}
+function showList(data, requestedOffset) {
   total = data.total;
   rows = data.items.map((r) => normalise(r));
 
@@ -177,13 +191,28 @@ async function parents() {
   $('parent').value = row?.parent_id || '';
 }
 function renderRelations() {
+  const current = isNew
+    ? {
+        title: $('title').value || 'New SWOT item',
+        links: draftLinks,
+        ...Object.fromEntries(
+          ['controls', 'clauses'].map((key) => {
+            const selected = new Set(Array.from($(key).selectedOptions, (option) => option.value));
+            return [
+              key,
+              (mappingCatalog[key] || []).filter((item) => selected.has(String(item.id))),
+            ];
+          }),
+        ),
+      }
+    : row;
   $('relatedList').innerHTML = types
     .map((type) => {
-      const links = (row.links || []).filter((l) => l.target_type === type);
-      return `<section class="mb-3"><h3 class="h6">${esc(label(type))}</h3>${links.map((l) => `<div class="d-flex gap-3 mb-2"><a href="${esc(withFramework(l.url, framework))}">${esc(l.title)}</a>${manage ? `<button type="button" class="btn btn-sm btn-outline-danger" data-unlink-type="${type}" data-unlink-id="${esc(l.target_id)}">Unlink</button>` : ''}</div>`).join('') || '<span class="small-muted">No visible links.</span>'}</section>`;
+      const links = (current.links || []).filter((link) => link.target_type === type);
+      return `<section class="col-12 col-md-6 col-xl-4"><div class="card h-100"><div class="card-body p-3"><h3 class="h6 d-flex justify-content-between">${esc(label(type))}<span class="badge text-bg-secondary">${links.length}</span></h3><div class="d-grid gap-2">${links.map((link) => `<div class="border rounded p-2 d-flex align-items-center gap-2"><a class="text-break flex-grow-1" href="${esc(withFramework(link.url, framework))}"${isNew ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(link.title)}</a>${manage ? `<button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" data-unlink-type="${type}" data-unlink-id="${esc(link.target_id)}" aria-label="Remove ${esc(link.title)}">Unlink</button>` : ''}</div>`).join('') || '<span class="small-muted">No linked items.</span>'}</div></div></div></section>`;
     })
     .join('');
-  renderGraph($('graph'), row, framework);
+  renderGraph($('graph'), current, framework);
 }
 async function questions() {
   if (!featureEnabled(me, 'questions')) return;
@@ -235,6 +264,7 @@ async function loadDetail() {
       .join('');
   $('owner').value = row?.owner_user_id || '';
   await parents();
+  mappingCatalog = meta;
   mappingOptions('controls', meta.controls, row?.controls);
   mappingOptions('clauses', meta.clauses, row?.clauses);
   $('controlLinks').innerHTML = controlBadges(row?.controls || [], framework);
@@ -242,7 +272,13 @@ async function loadDetail() {
   $('editor').disabled = !manage;
   $('deleteItem').hidden = !manage || isNew;
   $('sample').hidden = isNew || !canSampleIntoAudit(me, 'isms_swot');
-  $('linkForm').hidden = !manage || isNew;
+  $('linkForm').hidden = !manage;
+  $('draftNotice').hidden = !isNew;
+  $('saveDraft').hidden = !isNew || !manage;
+  $('questionsTab').disabled = isNew;
+  $('changelogTab').disabled = isNew;
+  renderRelations();
+  await choices('linkType', 'linkItem');
   $('questionForm').hidden = isNew || !(me?.is_admin || me?.can_question_events);
   if (row) {
     renderRelations();
@@ -252,7 +288,6 @@ async function loadDetail() {
       `/api/v1/isms/swot/${encodeURIComponent(itemId)}/changelog?limit=100`,
       { empty: 'No changes recorded.' },
     );
-    await choices('linkType', 'linkItem');
   }
 }
 let filterTimer;
@@ -315,13 +350,17 @@ $('itemForm').addEventListener('submit', async (e) => {
       controls: Array.from($('controls').selectedOptions, (option) => option.value),
       clauses: Array.from($('clauses').selectedOptions, (option) => option.value),
       expected_version: row?.version,
+      ...(isNew
+        ? { links: draftLinks.map(({ target_type, target_id }) => ({ target_type, target_id })) }
+        : {}),
     };
     const result = isNew
       ? await apiPost(`${base}?${fw}`, payload)
       : await apiPatch(`${base}/${encodeURIComponent(itemId)}?${fw}`, payload);
-    if (isNew)
+    if (isNew) {
+      draftDirty = false;
       location.assign(withFramework(`/swot.html?id=${encodeURIComponent(result.id)}`, framework));
-    else {
+    } else {
       await loadDetail();
       toast($('status'), 'SWOT item saved.', 'success');
     }
@@ -333,6 +372,24 @@ $('itemForm').addEventListener('submit', async (e) => {
 });
 $('linkForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (loading) return;
+  if (isNew) {
+    const type = $('linkType').value;
+    const item = (choiceRecords.get('linkItem') || []).find(
+      (item) => item.target_id === $('linkItem').value,
+    );
+    if (!item) return;
+    if (
+      !draftLinks.some((link) => link.target_type === type && link.target_id === item.target_id)
+    ) {
+      if (draftLinks.length >= 200) return fail('A SWOT item supports up to 200 relationships.');
+      draftLinks.push({ ...item, target_type: type });
+      draftDirty = true;
+    }
+    renderRelations();
+    toast($('status'), 'Added to draft. Save the SWOT item to keep this relationship.', 'info');
+    return;
+  }
   try {
     await apiPost(`${base}/${encodeURIComponent(itemId)}/links`, {
       target_type: $('linkType').value,
@@ -346,7 +403,15 @@ $('linkForm').addEventListener('submit', async (e) => {
 });
 $('relatedList').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-unlink-id]');
-  if (!b) return;
+  if (!b || loading) return;
+  if (isNew) {
+    const index = draftLinks.findIndex(
+      (link) => link.target_type === b.dataset.unlinkType && link.target_id === b.dataset.unlinkId,
+    );
+    if (index >= 0) draftLinks.splice(index, 1);
+    renderRelations();
+    return;
+  }
   try {
     await apiDelete(
       `${base}/${encodeURIComponent(itemId)}/links/${b.dataset.unlinkType}/${encodeURIComponent(b.dataset.unlinkId)}?expected_version=${row.version}`,
@@ -437,4 +502,81 @@ $('questionList').addEventListener('submit', async (event) => {
   } catch (error) {
     fail(error);
   }
+});
+
+$('itemForm').addEventListener(
+  'invalid',
+  () => {
+    window.bootstrap?.Tab.getOrCreateInstance($('detailsTab')).show();
+  },
+  true,
+);
+
+let exportCancelled = false;
+let exporting = false;
+$('cancelExport').addEventListener('click', () => {
+  exportCancelled = true;
+});
+window.addEventListener('pagehide', () => {
+  exportCancelled = true;
+});
+async function exportSwot(format) {
+  if (exporting) return;
+  exporting = true;
+  exportCancelled = false;
+  for (const id of ['exportExcel', 'exportPdf']) $(id).disabled = true;
+  $('cancelExport').hidden = false;
+  try {
+    const { collectExport, buildWorkbook, buildSwotPdf } = await import('/pages/swot-export.js');
+    const filters = filterQuery();
+    toast($('status'), 'Preparing all matching SWOT items…', 'info');
+    const items = await collectExport(
+      apiGet,
+      base,
+      filters,
+      () => exportCancelled,
+      (done, count) => toast($('status'), `Preparing export: ${done} of ${count} items…`, 'info'),
+    );
+    const meta = await apiGet(`/api/v1/isms/meta?${fw}`);
+    const owners = new Map(
+      (meta.users || []).map((user) => [user.id, user.display_name || user.username || user.name]),
+    );
+    if (exportCancelled) throw new Error('Export cancelled.');
+    const blob =
+      format === 'xlsx'
+        ? buildWorkbook(items, framework, owners)
+        : await buildSwotPdf(items, framework, owners, () => exportCancelled);
+    if (exportCancelled) throw new Error('Export cancelled.');
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `swot-${new Date().toISOString().slice(0, 10)}.${format}`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast($('status'), `Exported ${items.length} matching SWOT items.`, 'success');
+  } catch (error) {
+    fail(error);
+  } finally {
+    exporting = false;
+    for (const id of ['exportExcel', 'exportPdf']) $(id).disabled = false;
+    $('cancelExport').hidden = true;
+  }
+}
+$('exportExcel').addEventListener('click', () => exportSwot('xlsx'));
+$('exportPdf').addEventListener('click', () => exportSwot('pdf'));
+
+$('itemForm').addEventListener('input', () => {
+  if (isNew) draftDirty = true;
+});
+window.addEventListener('beforeunload', (event) => {
+  if (isNew && draftDirty) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+});
+
+$('visualisationTab').addEventListener('shown.bs.tab', () => {
+  if (isNew) renderRelations();
 });

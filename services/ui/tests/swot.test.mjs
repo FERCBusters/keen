@@ -189,6 +189,7 @@ for (const kind of ['strength', 'weakness', 'opportunity', 'threat', '<img src=x
             clauses: [{ id: 'cl1', ref: '6.1', title: 'Planning' }],
           };
         }
+        if (url.pathname === '/api/v1/isms/swot-choices/objective') return { items: [] };
         if (url.pathname === '/api/v1/isms/swot') return { items: [], total: 0 };
         throw Error('Unexpected GET ' + url);
       },
@@ -502,4 +503,53 @@ test('compact quadrant cards expose a five-bar rating and optional date beside a
   assert.equal(host.querySelectorAll('time, select, [draggable]').length, 0);
   assert.equal(host.querySelector('.planning-compact-status-text').textContent, 'Planned');
   assert.ok(!host.textContent.includes('No target date'));
+});
+
+test('new SWOT relationships remain local, deduplicate and travel in the final create payload', async (t) => {
+  let sent;
+  const target = {
+    target_type: 'objective',
+    target_id: 'o1',
+    title: '<img src=x onerror=alert(1)>',
+    url: '/isms-objective.html?id=o1',
+  };
+  const ui = await page(t, 'isms-swot', {
+    htmlName: 'swot',
+    query: '&new=1',
+    get(url) {
+      if (url.pathname === '/api/v1/isms/meta') return { users: [], controls: [], clauses: [] };
+      if (url.pathname === '/api/v1/isms/swot') return { items: [], total: 0 };
+      if (url.pathname === '/api/v1/isms/swot-choices/objective') return { items: [target] };
+      throw Error('Unexpected GET ' + url);
+    },
+    post(url, body) {
+      assert.equal(url.pathname, '/api/v1/isms/swot');
+      sent = body;
+      throw Error('Save rejected');
+    },
+  });
+  await settle(() => ui.el('linkItem').options.length === 2);
+  assert.equal(ui.el('linkForm').hidden, false);
+  assert.equal(ui.el('saveDraft').hidden, false);
+  ui.el('title').value = 'Draft';
+  ui.el('linkItem').value = 'o1';
+  const submit = () =>
+    ui.el('linkForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  submit();
+  submit();
+  assert.equal(ui.el('relatedList').querySelectorAll('[data-unlink-id]').length, 1);
+  assert.equal(ui.el('relatedList').querySelector('img'), null);
+  assert.equal(ui.calls.filter((call) => call.method === 'POST').length, 0);
+  ui.el('relatedList').querySelector('[data-unlink-id]').click();
+  assert.equal(ui.el('relatedList').querySelectorAll('[data-unlink-id]').length, 0);
+  submit();
+  ui.el('itemForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => sent);
+  assert.equal(sent.links.length, 1);
+  assert.equal(sent.links[0].target_type, 'objective');
+  assert.equal(sent.links[0].target_id, 'o1');
+  assert.deepEqual(Object.keys(sent.links[0]).sort(), ['target_id', 'target_type']);
+  await settle(() => ui.el('status').textContent.includes('Save rejected'));
+  assert.equal(ui.el('title').value, 'Draft');
+  assert.equal(ui.el('relatedList').querySelectorAll('[data-unlink-id]').length, 1);
 });

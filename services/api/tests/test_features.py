@@ -131,7 +131,12 @@ def test_revision_cache_invalidates_between_sessions(contract_db):
         with Session(engine) as other:
             assert not features.state(other).enabled("questions")
             assert not features.state(other).enabled("questions")
-        assert len(statements) == 1
+        locks = [sql for sql in statements if "pg_advisory_xact_lock_shared" in sql]
+        queries = [sql for sql in statements if sql not in locks]
+        assert len(locks) == (1 if engine.dialect.name == "postgresql" else 0)
+        assert len(queries) == 1
+        assert "managed_configurations.version" in queries[0]
+        assert "managed_configurations.document" not in queries[0]
     finally:
         event.remove(engine, "before_cursor_execute", count)
     row.document = {"questions": True}

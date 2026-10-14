@@ -49,6 +49,12 @@ TARGETS = {
 Reference = Annotated[str, Field(min_length=1, max_length=128)]
 
 
+class DraftLink(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target_type: Literal["objective", "document", "asset", "person", "vendor", "risk"]
+    target_id: UUID
+
+
 class SwotPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str | None = Field(None, min_length=1, max_length=256)
@@ -74,6 +80,7 @@ class SwotPayload(BaseModel):
     target_date: date | None = None
     controls: list[Reference] | None = Field(None, max_length=100)
     clauses: list[Reference] | None = Field(None, max_length=100)
+    links: list[DraftLink] | None = Field(None, max_length=200)
     expected_version: int | None = Field(None, ge=1)
 
 
@@ -297,6 +304,13 @@ def list_items(
 def save_item(*, payload, framework, user, db, context, item_id=None):
     require_access(db, user, write=True)
     fw = _clean_framework(framework)
+    if item_id and "links" in payload.model_fields_set:
+        raise DomainError(400, "Use relationship actions for an existing SWOT item")
+    # Validate every draft target before adding the item or any mappings/history.
+    # The session dependency rolls back the complete transaction on any failure.
+    draft_links = {(link.target_type, link.target_id) for link in payload.links or []}
+    for kind, target_id in draft_links:
+        _target(db, user, kind, target_id)
     _lock(db)
     row = (
         _by_id_or_404(db, IsmsSwot, item_id, "SWOT")
@@ -319,7 +333,12 @@ def save_item(*, payload, framework, user, db, context, item_id=None):
     )
     if item_id:
         _version(row, payload.expected_version)
-    for key in payload.model_fields_set - {"controls", "clauses", "expected_version"}:
+    for key in payload.model_fields_set - {
+        "controls",
+        "clauses",
+        "expected_version",
+        "links",
+    }:
         value = getattr(payload, key)
         if (
             key
@@ -383,9 +402,15 @@ def save_item(*, payload, framework, user, db, context, item_id=None):
     db.add(row)
     db.flush()
     _apply_links(db, "swot", row.id, fw, payload, user)
+    for kind, target_id in sorted(
+        draft_links, key=lambda pair: (pair[0], str(pair[1]))
+    ):
+        db.add(IsmsSwotLink(swot_id=row.id, target_type=kind, target_id=target_id))
     # Record framework mapping changes without copying restricted targets.
     after = _attach_links(db, summary(row), "swot", row.id, fw, True)
     after["framework"] = fw
+    if draft_links:
+        after["relationship_types"] = sorted({kind for kind, _ in draft_links})
     _record(
         db,
         "swot",
