@@ -1066,3 +1066,47 @@ def test_assembled_remote_user_uses_direct_peer_and_rejects_duplicates(
         assert client.get("/v1/auth/check", headers=headers).status_code == expected
     finally:
         client.close()
+
+
+def test_retention_overrides_keep_admin_and_csrf_boundary(
+    production_client, contract_db, monkeypatch
+):
+    from app import main
+    from app.db.session import get_db
+    from app.services import retention_management
+
+    client, redis, admin, reader = production_client
+    writes = []
+    monkeypatch.setattr(
+        retention_management,
+        "set_policy",
+        lambda **kw: writes.append(kw["payload"].model_dump()) or {"mode": "disabled"},
+    )
+    main.app.dependency_overrides[get_db] = lambda: contract_db
+    payload = {
+        "mode": "disabled",
+        "overrides": [
+            {"scope": "rule", "key": "example", "mode": "count", "value": 10}
+        ],
+    }
+    path = "/v1/admin/evidence-retention"
+    try:
+        assert client.put(path, json=payload).status_code == 401
+        client.cookies.set(csrf.csrf_cookie_name(), "retention-token")
+        headers = {
+            csrf.csrf_header_name(): "retention-token",
+            "Origin": "https://keen.example",
+        }
+        for user in (reader, admin):
+            sid = sessions.create_session(redis, user_id=str(user.id), ttl_seconds=300)
+            client.cookies.set(settings.session_cookie_name, sid)
+            assert client.put(path, json=payload).status_code == 403
+            assert not writes
+            response = client.put(path, json=payload, headers=headers)
+            assert response.status_code == (200 if user is admin else 403), (
+                response.text
+            )
+        assert len(writes) == 1
+        assert writes[0]["overrides"] == payload["overrides"]
+    finally:
+        main.app.dependency_overrides.pop(get_db, None)

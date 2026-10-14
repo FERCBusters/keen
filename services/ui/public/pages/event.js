@@ -595,16 +595,20 @@ async function load() {
           if (!r) continue;
           if (seen.has(r)) continue;
           seen.add(r);
-          uniq.push(r);
+          uniq.push(
+            me?.is_admin && !PRINT_MODE && c.rule_id
+              ? `<a href="/admin.html?rule=${encodeURIComponent(c.rule_id)}#evidence-config">${esc(r)}</a>`
+              : esc(r),
+          );
         }
 
         if (uniq.length === 0) {
           rationaleEl.innerHTML = `<span class="badge text-bg-light">none</span>`;
         } else if (uniq.length === 1) {
-          rationaleEl.innerHTML = `<div class="mapping-rationale">${esc(uniq[0])}</div>`;
+          rationaleEl.innerHTML = `<div class="mapping-rationale">${uniq[0]}</div>`;
         } else {
           rationaleEl.innerHTML = `<ul class="mb-0 ps-3">
-                ${uniq.map((r) => `<li class="mapping-rationale">${esc(r)}</li>`).join('')}
+                ${uniq.map((r) => `<li class="mapping-rationale">${r}</li>`).join('')}
               </ul>`;
         }
       }

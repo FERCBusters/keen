@@ -782,6 +782,7 @@ function readRule() {
   };
 }
 async function newRule() {
+  $('rule-retention').hidden = true;
   draftEventFields = [];
   sourceChoices();
   $('draft-notice').hidden = true;
@@ -833,6 +834,9 @@ function showSelectedInput() {
 async function editRule(rule) {
   await newRule();
   selectedRule = rule.id;
+  $('rule-retention').hidden = false;
+  $('rule-retention').href =
+    '/admin.html?retention_rule=' + encodeURIComponent(rule.id) + '#retention';
   for (const item of rule.when?.fields || []) addFieldCondition(item);
   $('rule-id').value = rule.id;
   $('rule-id').disabled = true;
@@ -1462,6 +1466,16 @@ async function init() {
   for (const item of frameworks) $('framework').add(new Option(item.name || item.slug, item.slug));
   await loadFrameworkControls();
   await draftFromEvent();
+  const requestedRule = new URLSearchParams(location.search).get('rule');
+  if (requestedRule) {
+    const rule = rules.find((item) => item.id === requestedRule);
+    if (!rule)
+      throw new Error(
+        'This mapping rule no longer exists. Its recorded rationale remains on the event.',
+      );
+    await editRule(rule);
+    showEditor(1);
+  }
 }
 init().catch((error) => status(error.message));
 

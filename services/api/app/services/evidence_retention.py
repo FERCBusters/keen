@@ -4,6 +4,7 @@ Database deletion and the storage outbox commit together. Storage is removed onl
 when no retained record references it. Object Lock is never bypassed.
 """
 
+import json
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -50,36 +51,77 @@ def policy(db):
     )
 
 
-def candidates(mode, value, cutoff):
-    params = {"cutoff": cutoff}
+def candidates(mode, value, cutoff, overrides=None):
+    params = {"cutoff": cutoff, "global_mode": mode, "global_value": value}
     predicate = f"e.created_at <= :cutoff AND {UNPROTECTED}"
-    if mode == "age":
-        params["oldest"] = cutoff - timedelta(days=value)
-        predicate += " AND e.timestamp < :oldest"
-    if mode == "count":
-        params["keep"] = value
-        # Count all unsampled events, even those additionally held by lineage.
-        # Audit-held events are additional to the count allowance.
-        predicate += """ AND e.id NOT IN (
+    if mode == "all":
+        return predicate, {"cutoff": cutoff}
+    # Keep the common global-only path index-friendly and skip disabled scans.
+    if overrides == []:
+        if mode == "disabled":
+            return predicate + " AND false", {"cutoff": cutoff}
+        if mode == "age":
+            return predicate + " AND e.timestamp < :oldest", {
+                "cutoff": cutoff,
+                "oldest": cutoff - timedelta(days=value),
+            }
+        return (
+            predicate
+            + """ AND e.id NOT IN (
             SELECT newest.id FROM events newest
-            WHERE newest.created_at <= :cutoff AND NOT EXISTS (
+            WHERE newest.created_at<=:cutoff AND NOT EXISTS (
                 SELECT 1 FROM audit_event_retention_holds h WHERE h.event_id=newest.id)
-            ORDER BY newest.timestamp DESC, newest.id DESC LIMIT :keep)"""
+            ORDER BY newest.timestamp DESC,newest.id DESC LIMIT :keep)""",
+            {"cutoff": cutoff, "keep": value},
+        )
+    override_table = "evidence_retention_overrides"
+    if overrides is not None:
+        override_table = "jsonb_to_recordset(CAST(:overrides AS jsonb)) AS supplied(scope text, key text, mode text, value bigint)"
+        params["overrides"] = json.dumps(overrides)
+    # Only recorded automatic mappings establish rule ownership. DISTINCT keeps
+    # multiple controls/frameworks from counting the same event twice per rule.
+    # Each explicit rule allowance must expire before an overlapping event goes.
+    predicate += f""" AND e.id IN (
+        WITH policies AS (SELECT * FROM {override_table}), rule_events AS (
+            SELECT DISTINCT m.event_id, p.scope, p.key, p.mode, p.value
+            FROM policies p
+            JOIN mappings m ON m.method='rule' AND m.mapped_by='system'
+            JOIN control_items c ON c.id=m.control_item_id
+            WHERE p.scope='rule'
+              AND m.rationale='auto by rule ' || p.key || ' (' || c.framework_slug || ')'
+        ), assignments AS (
+            SELECT event_id, scope, key, mode, value FROM rule_events
+            UNION ALL
+            SELECT ev.id, COALESCE(p.scope,'global'), COALESCE(p.key,''),
+                   COALESCE(p.mode,:global_mode),
+                   CASE WHEN p.scope IS NULL THEN CAST(:global_value AS bigint) ELSE p.value END
+            FROM events ev
+            LEFT JOIN policies p ON p.scope='source' AND p.key=ev.source
+            WHERE NOT EXISTS (SELECT 1 FROM rule_events r WHERE r.event_id=ev.id)
+        ), ranked AS (
+            SELECT a.*, ev.timestamp,
+                   row_number() OVER (PARTITION BY a.scope,a.key ORDER BY ev.timestamp DESC,ev.id DESC) AS position
+            FROM assignments a JOIN events ev ON ev.id=a.event_id
+            WHERE ev.created_at<=:cutoff AND NOT EXISTS (
+                SELECT 1 FROM audit_event_retention_holds h WHERE h.event_id=ev.id)
+        )
+        SELECT event_id FROM ranked GROUP BY event_id HAVING bool_and(
+            CASE mode WHEN 'age' THEN timestamp < CAST(:cutoff AS timestamp) - value * INTERVAL '1 day'
+                      WHEN 'count' THEN position > value ELSE false END)
+    )"""
     return predicate, params
 
 
-def preview(db, mode, value, cutoff=None):
+def preview(db, mode, value, cutoff=None, overrides=None):
     cutoff = cutoff or now()
     total = db.execute(text("SELECT count(*) FROM events")).scalar_one()
     held = db.execute(
         text("SELECT count(DISTINCT event_id) FROM audit_event_retention_holds")
     ).scalar_one()
-    count = 0
-    if mode != "disabled":
-        where, params = candidates(mode, value, cutoff)
-        count = db.execute(
-            text(f"SELECT count(*) FROM events e WHERE {where}"), params
-        ).scalar_one()
+    where, params = candidates(mode, value, cutoff, overrides)
+    count = db.execute(
+        text(f"SELECT count(*) FROM events e WHERE {where}"), params
+    ).scalar_one()
     return {
         "total_events": total,
         "audit_protected_events": held,
@@ -98,7 +140,10 @@ def enqueue(db, mode, value, automatic, username):
     job_id = uuid.uuid4()
     db.execute(
         text("""INSERT INTO evidence_purge_jobs
-        (id,mode,value,automatic,cutoff,requested_by) VALUES (:id,:mode,:value,:automatic,:cutoff,:user)"""),
+        (id,mode,value,automatic,cutoff,requested_by,policy_overrides)
+        VALUES (:id,:mode,:value,:automatic,:cutoff,:user,
+        (SELECT COALESCE(jsonb_agg(jsonb_build_object('scope',scope,'key',key,'mode',mode,'value',value)), '[]'::jsonb)
+         FROM evidence_retention_overrides))"""),
         {
             "id": job_id,
             "mode": mode,
@@ -136,7 +181,14 @@ def database_batch():
         )
         if not job:
             p = policy(db)
-            if p["mode"] == "disabled":
+            if (
+                p["mode"] == "disabled"
+                and not db.execute(
+                    text(
+                        "SELECT 1 FROM evidence_retention_overrides WHERE mode <> 'disabled' LIMIT 1"
+                    )
+                ).scalar()
+            ):
                 return False
             enqueue(db, p["mode"], p["value"], True, "automatic retention")
             job = (
@@ -147,7 +199,9 @@ def database_batch():
                 .one()
             )
         job = dict(job)
-        where, params = candidates(job["mode"], job["value"], job["cutoff"])
+        where, params = candidates(
+            job["mode"], job["value"], job["cutoff"], job["policy_overrides"]
+        )
         # Lock rows before collecting storage URIs. FK insertion by audit holds
         # conflicts with this lock; a second protection check uses a fresh snapshot.
         ids = list(

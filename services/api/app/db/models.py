@@ -3096,7 +3096,8 @@ _evidence_purge_jobs = Table(
         server_default=sql_text("now() AT TIME ZONE 'UTC'"),
     ),
     Column("last_error", Text),
-    CheckConstraint("mode IN ('age','count','all')"),
+    Column("policy_overrides", JSONB),
+    CheckConstraint("mode IN ('disabled','age','count','all')"),
 )
 Index(
     "evidence_purge_one_active",
@@ -3293,3 +3294,18 @@ class SourceConnection(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
     )
+
+
+_evidence_retention_overrides = Table(
+    "evidence_retention_overrides",
+    Base.metadata,
+    Column("scope", Text, primary_key=True),
+    Column("key", Text, primary_key=True),
+    Column("mode", Text, nullable=False),
+    Column("value", BigInteger),
+    CheckConstraint("scope IN ('source','rule')"),
+    CheckConstraint("length(key) BETWEEN 1 AND 128"),
+    CheckConstraint(
+        "(mode='disabled' AND value IS NULL) OR (mode='age' AND value IS NOT NULL AND value BETWEEN 1 AND 36500) OR (mode='count' AND value IS NOT NULL AND value BETWEEN 1 AND 1000000000)"
+    ),
+)

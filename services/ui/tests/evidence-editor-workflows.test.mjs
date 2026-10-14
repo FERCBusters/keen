@@ -34,7 +34,7 @@ async function until(check) {
   }
   assert.fail('Editor did not reach expected state');
 }
-async function fixture(t, { fail = false } = {}) {
+async function fixture(t, { fail = false, rule = null, requestedRule = null } = {}) {
   const calls = [];
   async function apiGet(raw) {
     calls.push(raw);
@@ -47,25 +47,37 @@ async function fixture(t, { fail = false } = {}) {
     if (url.pathname === '/api/v1/admin/integrations') return { collectors: [] };
     if (url.pathname === '/api/v1/admin/source-connections') return { connections: [], types: [] };
     if (url.pathname === '/api/v1/admin/evidence-definitions')
-      return { rules: [], collectors: [], rules_version: 1 };
+      return { rules: rule ? [rule] : [], collectors: [], rules_version: 1 };
     if (url.pathname.startsWith('/api/v1/admin/adapter-settings/'))
       return { settings: {}, version: 1 };
     if (url.pathname === '/api/v1/frameworks')
       return { items: [{ slug: 'A', name: 'Framework A' }] };
     if (url.pathname === '/api/v1/controls') return { items: [{ ref: 'A1', title: 'Control A' }] };
+    if (url.pathname.includes('/mapping-rules/') && url.pathname.endsWith('/revisions'))
+      return { revisions: [] };
+    if (url.pathname === '/api/v1/admin/rule-backfills') return { jobs: [] };
     if (url.pathname === '/api/v1/events/' + id) return event;
     throw new Error('Unexpected GET ' + raw);
   }
   const ui = await loadUi('pages/evidence-config.js', {
     html,
-    url: 'https://keen.example/admin.html?from_event=' + id,
+    url: requestedRule
+      ? 'https://keen.example/admin.html?rule=' +
+        encodeURIComponent(requestedRule) +
+        '#evidence-config'
+      : 'https://keen.example/admin.html?from_event=' + id,
     vendor: { apiGet },
   });
   t.after(() => ui.close());
   await until(() =>
     fail
       ? ui.document.getElementById('ec-status').textContent.includes('onerror')
-      : !ui.document.getElementById('ec-draft-notice').hidden,
+      : requestedRule
+        ? rule
+          ? ui.document.getElementById('ec-rule-id').value === requestedRule &&
+            !ui.document.getElementById('ec-rule-retention').hidden
+          : ui.document.getElementById('ec-status').textContent.includes('no longer exists')
+        : !ui.document.getElementById('ec-draft-notice').hidden,
   );
   return { ...ui, calls };
 }
@@ -190,4 +202,25 @@ test('background source refresh does not navigate to mappings or erase an open d
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(navigations, 0);
   assert.equal(description.value, 'Keep my draft');
+});
+
+test('a rule deep link opens the saved rule and its retention shortcut', async (t) => {
+  const rule = {
+    id: 'saved-rule',
+    description: 'Saved rule',
+    when: { source: 'keen-agent' },
+    map_to: [],
+  };
+  const ui = await fixture(t, { rule, requestedRule: rule.id });
+  assert.equal(ui.document.getElementById('ec-description').value, 'Saved rule');
+  assert.equal(
+    new URL(ui.document.getElementById('ec-rule-retention').href).searchParams.get(
+      'retention_rule',
+    ),
+    rule.id,
+  );
+});
+test('a deleted rule deep link reports that the rule is unavailable', async (t) => {
+  const ui = await fixture(t, { requestedRule: 'deleted-rule' });
+  assert.match(ui.document.getElementById('ec-status').textContent, /no longer exists/);
 });

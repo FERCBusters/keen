@@ -107,3 +107,19 @@ test('audit management alone does not expose event sampling', async (t) => {
   const ui = await fixture(t, { me: { can_manage_audits: true, user_id: 'one' } });
   assert.equal(ui.el('btnSampleAudit').style.display, 'none');
 });
+
+test('rule rationale links use escaped text and encoded IDs for administrators only', async (t) => {
+  const rule = 'rule"><img src=x>';
+  const data = {
+    controls: [{ id: 'c1', ref: 'A.1', rationale: 'auto by rule ' + rule + ' (A)', rule_id: rule }],
+  };
+  const ui = await fixture(t, { event: data });
+  const link = ui.el('rationale').querySelector('a');
+  assert.ok(link);
+  assert.equal(new URL(link.href).searchParams.get('rule'), rule);
+  assert.equal(new URL(link.href).hash, '#evidence-config');
+  assert.equal(ui.el('rationale').querySelector('img'), null);
+  const reader = await fixture(t, { event: data, me: { is_admin: false } });
+  assert.equal(reader.el('rationale').querySelector('a'), null);
+  assert.match(reader.el('rationale').textContent, /auto by rule/);
+});

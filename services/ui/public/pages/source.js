@@ -27,6 +27,13 @@ enableTableSorting();
 const framework = getCurrentFramework();
 const params = new URLSearchParams(window.location.search || '');
 const sourceName = String(params.get('source') || params.get('type') || '').trim();
+if (me?.is_admin && sourceName) {
+  const link = document.createElement('a');
+  link.className = 'btn btn-outline-secondary';
+  link.textContent = 'Evidence retention';
+  link.href = '/admin.html?retention_source=' + encodeURIComponent(sourceName) + '#retention';
+  document.getElementById('openEventsLink')?.parentElement.appendChild(link);
+}
 const canViewIsms = !!(
   me?.is_admin ||
   me?.can_view_isms ||

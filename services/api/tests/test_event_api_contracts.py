@@ -353,3 +353,26 @@ def test_event_artifact_presentation_omits_storage_location(api):
     assert shown["id"] == str(artifact.id)
     assert "storage_uri" not in shown
     assert "private-bucket" not in response.text
+
+
+@pytest.mark.parametrize(
+    "method,author,rationale,expected",
+    [
+        ("rule", "system", "auto by rule my-rule (A)", "my-rule"),
+        ("rule", "system", "auto by rule strange (id) (A)", "strange (id)"),
+        ("manual", "system", "auto by rule my-rule (A)", None),
+        ("rule", "person", "auto by rule my-rule (A)", None),
+        ("rule", "system", "auto by rule my-rule (B)", None),
+    ],
+)
+def test_event_rationale_rule_identity_requires_recorded_provenance(
+    api, method, author, rationale, expected
+):
+    mapping = api.db.query(Mapping).filter_by(event_id=api.rows[0].id).one()
+    mapping.method = method
+    mapping.mapped_by = author
+    mapping.rationale = rationale
+    api.db.commit()
+    response = api.client.get(f"/api/v1/events/{api.rows[0].id}?framework=A")
+    assert response.status_code == 200, response.text
+    assert response.json()["controls"][0]["rule_id"] == expected

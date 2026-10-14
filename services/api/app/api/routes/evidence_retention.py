@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.security.auth import require_admin
 from app.services import retention_management as service
 from app.services.retention_management import (
-    PolicyPayload,
+    SettingsPayload,
     PreviewPayload,
     PurgePayload,
 )
@@ -38,7 +38,7 @@ def preview_all(db: Session = Depends(get_db)):
 
 @router.put("")
 def set_policy(
-    payload: PolicyPayload, db: Session = Depends(get_db), user=Depends(require_admin)
+    payload: SettingsPayload, db: Session = Depends(get_db), user=Depends(require_admin)
 ):
     return service.set_policy(payload=payload, db=db, user=user)
 

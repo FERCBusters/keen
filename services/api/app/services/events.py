@@ -780,6 +780,14 @@ def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session
             "confidence": mp.confidence,
             "method": mp.method,
             "rationale": mp.rationale,
+            "rule_id": (
+                mp.rationale[len("auto by rule ") : -len(f" ({ci.framework_slug})")]
+                if mp.method == "rule"
+                and mp.mapped_by == "system"
+                and mp.rationale.startswith("auto by rule ")
+                and mp.rationale.endswith(f" ({ci.framework_slug})")
+                else None
+            ),
             "mapped_at": mp.mapped_at.isoformat() if mp.mapped_at else None,
         }
         for mp, ci in mapped

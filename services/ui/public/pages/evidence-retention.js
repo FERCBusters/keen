@@ -4,6 +4,10 @@ export function initEvidenceRetention(isAdmin) {
   if (!isAdmin) return;
   const $ = (id) => document.getElementById(`retention-${id}`);
   const endpoint = '/api/v1/admin/evidence-retention';
+  let policyUpdatedAt = null;
+  let choices = { source: [], rule: [] };
+  let savedOverrides = [];
+  $('add').disabled = true;
   let loaded = false,
     fetching = false,
     busy = false,
@@ -20,11 +24,67 @@ export function initEvidenceRetention(isAdmin) {
         ? 'Age is measured from the event timestamp in UTC. Late-arriving old events are eligible at the next cleanup. Audit-protected events are always kept.'
         : mode === 'count'
           ? 'Keeps the newest N unsampled events by event timestamp, plus all audit-protected events. Retained artifact references can also temporarily keep older events.'
-          : 'No automatic event deletion. Pending stored-file cleanup from earlier purges continues.';
+          : 'The global group keeps everything. Source and rule overrides can still delete events. Pending stored-file cleanup continues.';
     $('preview-result').textContent = '';
   }
+  function addOverride(item = { scope: 'source', key: '', mode: 'disabled', value: null }) {
+    const row = document.createElement('div');
+    row.className = 'row g-2 mb-2';
+    row.innerHTML = `<div class="col-md-2"><select class="form-select" aria-label="Override scope"><option value="source">Source type</option><option value="rule">Rule ID</option></select></div>
+      <div class="col-md-3"><select class="form-select" aria-label="Source type or rule" required></select></div>
+      <div class="col-md-3"><select class="form-select" aria-label="Retention policy"><option value="disabled">Keep everything</option><option value="age">Maximum age (days)</option><option value="count">Newest events to keep</option></select></div>
+      <div class="col-md-2"><input class="form-control" type="number" min="1" step="1" aria-label="Retention limit"></div>
+      <div class="col-md-2"><button type="button" class="btn btn-outline-danger">Remove</button></div>`;
+    const [scope, key, mode] = row.querySelectorAll('select');
+    const value = row.querySelector('input');
+    scope.value = item.scope;
+    function populate(selected = '') {
+      key.replaceChildren(
+        new Option('Choose ' + (scope.value === 'rule' ? 'a rule' : 'a source type'), ''),
+      );
+      const options = new Map(
+        (choices[scope.value] || []).map((option) => [option.key, option.label]),
+      );
+      for (const saved of savedOverrides)
+        if (saved.scope === scope.value && !options.has(saved.key))
+          options.set(saved.key, 'Unavailable — saved override');
+      for (const [id, label] of options)
+        key.add(new Option(label === id ? id : `${label} (${id})`, id));
+      key.value = selected;
+      $('preview-result').textContent = '';
+    }
+    populate(item.key);
+    scope.addEventListener('change', () => populate());
+    key.addEventListener('change', () => {
+      $('preview-result').textContent = '';
+    });
+    mode.value = item.mode;
+    value.value = item.value ?? '';
+    function update() {
+      value.hidden = mode.value === 'disabled';
+      value.required = !value.hidden;
+      value.max = mode.value === 'age' ? '36500' : '1000000000';
+      $('preview-result').textContent = '';
+    }
+    mode.addEventListener('change', update);
+    row.querySelector('button').addEventListener('click', () => {
+      row.remove();
+      $('preview-result').textContent = '';
+    });
+    row.readPolicy = () => ({
+      scope: scope.value,
+      key: key.value,
+      mode: mode.value,
+      value: mode.value === 'disabled' ? null : Number(value.value),
+    });
+    $('overrides').appendChild(row);
+    update();
+  }
+  $('add').addEventListener('click', () => addOverride());
   function payload() {
     return {
+      expected_updated_at: policyUpdatedAt,
+      overrides: [...$('overrides').children].map((row) => row.readPolicy()),
       mode: $('mode').value,
       value: $('mode').value === 'disabled' ? null : Number($('value').value),
     };
@@ -38,9 +98,27 @@ export function initEvidenceRetention(isAdmin) {
     try {
       const data = await apiGet(endpoint);
       if (!loaded || reset) {
+        choices = data.choices || { source: [], rule: [] };
+        savedOverrides = data.overrides || [];
+        $('add').disabled = false;
+        policyUpdatedAt = data.policy.updated_at;
         $('mode').value = data.policy.mode;
         $('value').value = data.policy.value ?? '';
         explain();
+        $('overrides').replaceChildren();
+        for (const item of data.overrides || []) addOverride(item);
+        const params = new URLSearchParams(location.search);
+        const rule = params.get('retention_rule'),
+          source = params.get('retention_source');
+        const key = rule || source,
+          scope = rule ? 'rule' : 'source';
+        if (
+          !loaded &&
+          key &&
+          (choices[scope] || []).some((item) => item.key === key) &&
+          !(data.overrides || []).some((item) => item.scope === scope && item.key === key)
+        )
+          addOverride({ scope, key, mode: 'disabled', value: null });
         loaded = true;
       }
       const active = data.jobs.find((j) => ['queued', 'running'].includes(j.status));
@@ -95,16 +173,18 @@ export function initEvidenceRetention(isAdmin) {
   $('form').addEventListener('submit', (e) => {
     e.preventDefault();
     act(async () => {
+      if (!loaded || !$('form').reportValidity()) return;
       const p = payload();
       const result = await apiPost(`${endpoint}/preview`, p);
       if (
-        p.mode !== 'disabled' &&
+        (p.mode !== 'disabled' || p.overrides.some((item) => item.mode !== 'disabled')) &&
         !confirm(
           `${summary(result)}\nEnable automatic deletion across all frameworks? Deletion is permanent. Eligibility changes as events arrive and audits are deleted.`,
         )
       )
         return;
-      await apiPut(endpoint, p);
+      const saved = await apiPut(endpoint, p);
+      policyUpdatedAt = saved.updated_at;
       toast($('status'), 'Retention policy saved. The worker checks it every minute.', 'success');
     });
   });
@@ -127,7 +207,7 @@ export function initEvidenceRetention(isAdmin) {
     act(async () => {
       if (
         !confirm(
-          'Cancel the active purge? Completed deletions cannot be undone. Stored-file cleanup continues. To stop automatic retention, also save Keep everything.',
+          'Cancel the active purge? Completed deletions cannot be undone. Stored-file cleanup continues. To stop automatic retention, set the global policy and every override to Keep everything.',
         )
       )
         return;

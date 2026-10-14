@@ -112,6 +112,7 @@ class RetentionDatabaseTests(unittest.TestCase):
                         "evidence_purge_jobs",
                         "evidence_object_cleanup",
                         "audit_event_retention_holds",
+                        "evidence_retention_overrides",
                     }
                 ],
             )
@@ -120,6 +121,19 @@ class RetentionDatabaseTests(unittest.TestCase):
                 / "alembic/legacy_versions/0083_evidence_retention.py"
             )
             spec = importlib.util.spec_from_file_location("retention_migration", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            with (
+                cls.engine.begin() as c,
+                patch.object(
+                    module, "op", SimpleNamespace(execute=lambda q: c.execute(text(q)))
+                ),
+            ):
+                module.upgrade()
+            spec = importlib.util.spec_from_file_location(
+                "override_migration",
+                path.parent.parent / "versions/0009_retention_overrides.py",
+            )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             with (
@@ -180,6 +194,7 @@ class RetentionDatabaseTests(unittest.TestCase):
             db.execute(
                 text("UPDATE evidence_retention_policy SET mode='disabled',value=NULL")
             )
+            db.execute(text("DELETE FROM evidence_retention_overrides"))
             db.execute(text("UPDATE global_event_stats SET total_events=0"))
             db.execute(text("DELETE FROM framework_event_stats"))
             db.commit()
@@ -250,6 +265,152 @@ class RetentionDatabaseTests(unittest.TestCase):
 
     def left(self):
         return {str(x["id"]) for x in self.sql("SELECT id FROM events")}
+
+    def override(self, scope, key, mode, value=None):
+        self.sql(
+            "INSERT INTO evidence_retention_overrides (scope,key,mode,value) VALUES (:scope,:key,:mode,:value)",
+            scope=scope,
+            key=key,
+            mode=mode,
+            value=value,
+        )
+
+    def rule_mapping(self, event, rule, *, method="rule", mapped_by="system"):
+        control = self.insert(
+            models.ControlItem,
+            framework_slug="TEST",
+            type="custom",
+            ref=uuid.uuid4().hex,
+        )
+        self.insert(
+            models.Mapping,
+            event_id=event,
+            control_item_id=control,
+            method=method,
+            mapped_by=mapped_by,
+            rationale=f"auto by rule {rule} (TEST)",
+        )
+
+    def test_source_override_with_disabled_global_and_audit_hold(self):
+        old, held, recent = self.event(90), self.event(90), self.event(1)
+        self.sample(self.audit(), held)
+        self.override("source", "test", "age", 30)
+        with self.session() as db:
+            self.assertEqual(r.preview(db, "disabled", None)["eligible_events"], 1)
+        r.database_batch()
+        self.assertEqual(self.left(), {str(held), str(recent)})
+
+    def test_rule_beats_source_and_overlapping_rules_all_must_expire(self):
+        keep, delete, ordinary = self.event(90), self.event(90), self.event(90)
+        for event in (keep, delete):
+            self.rule_mapping(event, "short")
+        self.rule_mapping(keep, "forever")
+        self.override("source", "test", "disabled")
+        self.override("rule", "short", "age", 30)
+        self.override("rule", "forever", "disabled")
+        self.job("age", 1)
+        r.database_batch()
+        self.assertEqual(self.left(), {str(keep), str(ordinary)})
+
+    def test_rule_count_deduplicates_controls_and_excludes_audit_holds(self):
+        old, new, held, other = (
+            self.event(90),
+            self.event(1),
+            self.event(),
+            self.event(90),
+        )
+        for event in (old, new, held):
+            self.rule_mapping(event, "counted")
+            self.rule_mapping(event, "counted")
+        self.sample(self.audit(), held)
+        self.override("rule", "counted", "count", 1)
+        self.override("source", "test", "disabled")
+        self.job("age", 1)
+        r.database_batch()
+        self.assertEqual(self.left(), {str(new), str(held), str(other)})
+
+    def test_global_count_excludes_overridden_groups(self):
+        old, new, special = self.event(90), self.event(1), self.event()
+        self.rule_mapping(special, "saved")
+        self.override("rule", "saved", "disabled")
+        self.job("count", 1)
+        r.database_batch()
+        self.assertEqual(self.left(), {str(new), str(special)})
+
+    def test_manual_rationale_does_not_claim_rule_retention(self):
+        event = self.event(90)
+        self.rule_mapping(event, "saved", method="manual")
+        self.override("rule", "saved", "disabled")
+        self.job("age", 30)
+        r.database_batch()
+        self.assertEqual(self.left(), set())
+
+    def test_proposed_preview_and_purge_all(self):
+        self.event(90)
+        self.override("source", "test", "disabled")
+        with self.session() as db:
+            self.assertEqual(r.preview(db, "age", 30)["eligible_events"], 0)
+            self.assertEqual(
+                r.preview(db, "age", 30, overrides=[])["eligible_events"], 1
+            )
+        self.job()
+        r.database_batch()
+        self.assertEqual(self.left(), set())
+
+    def test_job_snapshots_overrides(self):
+        event = self.event(90)
+        self.override("source", "test", "disabled")
+        self.job("age", 30)
+        self.sql("DELETE FROM evidence_retention_overrides")
+        r.database_batch()
+        self.assertEqual(self.left(), {str(event)})
+
+    def test_save_cancels_previous_policy_job_and_rejects_stale_editor(self):
+        from app.services.retention_management import SettingsPayload, set_policy
+        from app.services.errors import DomainError
+
+        self.override("source", "test", "disabled")
+        self.job("age", 30)
+        with self.session() as db:
+            previous = r.policy(db)["updated_at"]
+            set_policy(
+                payload=SettingsPayload(
+                    mode="count", value=2, overrides=[], expected_updated_at=previous
+                ),
+                db=db,
+                user=SimpleNamespace(username="admin"),
+            )
+        self.assertEqual(
+            self.sql("SELECT status FROM evidence_purge_jobs")[0]["status"], "cancelled"
+        )
+        self.assertEqual(self.sql("SELECT * FROM evidence_retention_overrides"), [])
+        with self.session() as db:
+            with self.assertRaises(DomainError):
+                set_policy(
+                    payload=SettingsPayload(
+                        mode="disabled", expected_updated_at=previous
+                    ),
+                    db=db,
+                    user=SimpleNamespace(username="admin"),
+                )
+        self.assertEqual(
+            self.sql("SELECT mode FROM evidence_retention_policy")[0]["mode"], "count"
+        )
+
+    def test_source_count_is_separate_from_global_and_rule_counts(self):
+        old, new, special = self.event(90), self.event(1), self.event()
+        other_old, other_new = self.event(90), self.event()
+        self.sql(
+            "UPDATE events SET source='other' WHERE id IN (:a,:b)",
+            a=other_old,
+            b=other_new,
+        )
+        self.rule_mapping(special, "saved")
+        self.override("source", "test", "count", 1)
+        self.override("rule", "saved", "disabled")
+        self.job("count", 1)
+        r.database_batch()
+        self.assertEqual(self.left(), {str(new), str(special), str(other_new)})
 
     def test_disabled_default(self):
         e = self.event(90)
@@ -491,6 +652,24 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(PolicyPayload(mode="count", value=100).value, 100)
         with self.assertRaises(ValidationError):
             PurgePayload(mode="all", confirmation="yes")
+
+    def test_override_validation(self):
+        from app.services.retention_management import SettingsPayload
+        from pydantic import ValidationError
+
+        for override in [
+            {"scope": "connection", "key": "test", "mode": "disabled"},
+            {"scope": "source", "key": "", "mode": "disabled"},
+            {"scope": "rule", "key": " test ", "mode": "disabled"},
+            {"scope": "rule", "key": "test", "mode": "age", "value": 36501},
+        ]:
+            with self.assertRaises(ValidationError):
+                SettingsPayload(overrides=[override])
+        entry = {"scope": "rule", "key": "test", "mode": "disabled"}
+        with self.assertRaises(ValidationError):
+            SettingsPayload(overrides=[entry, entry])
+        self.assertIsNone(SettingsPayload().overrides)
+        self.assertEqual(SettingsPayload(overrides=[]).overrides, [])
 
     def test_routes_require_administrator(self):
         from app.api.routes.evidence_retention import router

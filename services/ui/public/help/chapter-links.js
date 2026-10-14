@@ -248,6 +248,7 @@ window.KEEN_DOC_LINKS = {
     'administrator-agents.html#structured-agent-filtering',
   'administrator.html#evidence-storage': 'administrator-retention.html#evidence-storage',
   'administrator.html#evidence-retention': 'administrator-retention.html#evidence-retention',
+  'administrator.html#retention-overrides': 'administrator-retention.html#retention-overrides',
   'administrator.html#audit-trail': 'administrator-audit-trail.html#audit-trail',
   'administrator.html#audit-trail-entity-changes':
     'administrator-audit-trail.html#audit-trail-entity-changes',
@@ -793,6 +794,7 @@ window.KEEN_DOC_LINKS = {
   'agents.html#structured-agent-filtering': 'administrator-agents.html#structured-agent-filtering',
   'agents.html#evidence-storage': 'administrator-retention.html#evidence-storage',
   'agents.html#evidence-retention': 'administrator-retention.html#evidence-retention',
+  'agents.html#retention-overrides': 'administrator-retention.html#retention-overrides',
   'agents.html#audit-trail': 'administrator-audit-trail.html#audit-trail',
   'agents.html#audit-trail-entity-changes':
     'administrator-audit-trail.html#audit-trail-entity-changes',
@@ -915,6 +917,7 @@ window.KEEN_DOC_LINKS = {
   'redmine.html#structured-agent-filtering': 'administrator-agents.html#structured-agent-filtering',
   'redmine.html#evidence-storage': 'administrator-retention.html#evidence-storage',
   'redmine.html#evidence-retention': 'administrator-retention.html#evidence-retention',
+  'redmine.html#retention-overrides': 'administrator-retention.html#retention-overrides',
   'redmine.html#audit-trail': 'administrator-audit-trail.html#audit-trail',
   'redmine.html#audit-trail-entity-changes':
     'administrator-audit-trail.html#audit-trail-entity-changes',
