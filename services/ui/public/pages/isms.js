@@ -2232,7 +2232,7 @@ async function loadSwotOverview() {
     );
     renderBoard($('swotQuadrants'), result.items, { view: 'quadrant', framework });
     $('swotSummary').textContent =
-      `${result.total ? swotOffset + 1 : 0}–${swotOffset + result.items.length} of ${result.total} items. Quadrants show this page.`;
+      `${result.total ? swotOffset + 1 : 0}–${swotOffset + result.items.length} of ${result.total} items.`;
     $('swotPrevious').disabled = swotOffset === 0;
     $('swotNext').disabled = swotOffset + result.items.length >= result.total;
   } catch (error) {
