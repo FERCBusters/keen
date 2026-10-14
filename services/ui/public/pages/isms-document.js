@@ -130,3 +130,6 @@ window.addEventListener('hashchange', () =>
   activateTabFromHashOrQuery(params, { changelog: $('documentChangelogTab') }),
 );
 load();
+
+import { mountSwotRelated } from '/pages/swot-related.js';
+mountSwotRelated('document', new URLSearchParams(location.search).get('id'));

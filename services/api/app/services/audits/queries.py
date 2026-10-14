@@ -44,6 +44,7 @@ from app.services.audits.serializers import (
     iso_dt,
     usernames,
 )
+from app.services.audits.swot_scope import scope_items as swot_scope_items
 from app.services.audits.validation import (
     AUDIT_STATUSES,
     clean_framework,
@@ -527,6 +528,7 @@ def get_audit_scope_map(*, audit_id: str, db: Session, user: User):
         "clauses": [clause_out(c) for c in scoped_clauses],
         "controls": [control_out(c) for c in scoped_controls],
         "documents": [document_out(d) for d in scoped_documents],
+        "swot": swot_scope_items(db, a.id),
         "links": links,
         "summary": {
             "clause_count": len(scoped_clauses),
@@ -598,6 +600,7 @@ def get_audit(*, audit_id: str, db: Session, user: User):
     out = audit_summary(db, a, authors)
     out["scoped_controls"] = [control_out(c) for c in scoped_controls]
     out["scoped_clauses"] = [clause_out(c) for c in scoped_clauses]
+    out["scoped_swot"] = swot_scope_items(db, a.id)
     out["scoped_documents"] = [document_out(d) for d in scoped_documents]
     out["evidence"] = [evidence_dict(db, x, authors) for x in evidence]
     out["attendees"] = [attendee_dict(x) for x in attendees]

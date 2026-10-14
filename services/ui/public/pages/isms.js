@@ -1,3 +1,4 @@
+import { renderBoard, renderTimeline, normalise, statuses, label } from '/pages/planning-views.js';
 import { safeExternalHref } from '/app.js';
 import { mountMeasurementExamples } from '/pages/measurement-examples.js';
 import {
@@ -183,6 +184,7 @@ const sectionByKind = {
   meeting: 'meetings',
 };
 const tabIdBySection = {
+  swot: 'swotTab',
   overview: 'overviewTab',
   objectives: 'objectivesTab',
   documents: 'documentsTab',
@@ -194,6 +196,7 @@ const tabIdBySection = {
   soa: 'soaTab',
 };
 const sectionAliases = {
+  swot: 'swot',
   overview: 'overview',
   summary: 'overview',
   objective: 'objectives',
@@ -539,12 +542,22 @@ function installIsmsSectionChrome() {
       filter.setAttribute('data-mosp-filter-section', `${cfg.key}-isms-filters`);
       filter.setAttribute('data-mosp-filter-title', cfg.title);
       filter.innerHTML = `<div class="card-body" data-mosp-filter-body>
-        <label class="form-label small-muted mb-1" for="${esc(filterId)}">Filter table</label>
+        <label class="form-label small-muted mb-1" for="${esc(filterId)}">${cfg.key === 'objectives' ? 'Search objectives' : 'Filter table'}</label>
         <div class="input-group input-group-sm">
           <input id="${esc(filterId)}" class="form-control" type="search" data-isms-table-filter="${esc(cfg.rowsId)}" placeholder="${esc(cfg.placeholder)}">
           <button class="btn btn-outline-secondary" type="button" data-isms-filter-clear="${esc(filterId)}">Reset</button>
         </div>
       </div>`;
+      if (cfg.key === 'objectives') {
+        const body = filter.querySelector('[data-mosp-filter-body]');
+        body.insertAdjacentHTML(
+          'beforeend',
+          `<label class="form-label mt-2" for="objectivesStatus">Status</label><select class="form-select" id="objectivesStatus"><option value="">All statuses</option>${statuses.map((value) => `<option value="${value}">${label(value)}</option>`).join('')}</select>`,
+        );
+        body
+          .querySelector('#objectivesStatus')
+          .addEventListener('change', () => applyIsmsTableFilter($(filterId)));
+      }
       card.insertAdjacentElement('beforebegin', filter);
     }
   }
@@ -568,8 +581,13 @@ function applyIsmsTableFilter(input) {
     const text = String(
       tr.getAttribute('data-isms-filter-text') || tr.textContent || '',
     ).toLowerCase();
-    tr.style.display = !q || text.includes(q) ? '' : 'none';
+    const statusMatches =
+      rowsId !== 'objectivesRows' ||
+      !$('objectivesStatus')?.value ||
+      tr.dataset.objectiveStatus === $('objectivesStatus').value;
+    tr.style.display = (!q || text.includes(q)) && statusMatches ? '' : 'none';
   }
+  if (rowsId === 'objectivesRows') renderObjectivePlanning();
 }
 
 function showNewIsmsForm(kind) {
@@ -996,7 +1014,9 @@ function populateEditForm(kind, item) {
     $('objGoal').value = item.goal || '';
     $('objMetric').value = item.metric || '';
     $('objOwner').value = item.owner_user_id || '';
-    setSelectValue($('objTarget'), item.completion_target_date || '');
+    $('objTarget').value = item.completion_target_date || '';
+    $('objStart').value = item.start_date || '';
+    $('objStatus').value = item.status === 'not_started' ? 'defined' : item.status || 'defined';
     $('objCompletion').value = item.completion_method || '';
     $('objEvaluation').value = item.evaluation_method || '';
     $('objResourceText').value = item.resource_requirements_text || '';
@@ -1232,13 +1252,76 @@ function renderOverview() {
     </div>
   </div>`;
 }
+let objectiveMovePending = false;
+function renderObjectivePlanning() {
+  const view = $('objectivesView').value;
+  $('objectivesTable').hidden = view !== 'table';
+  $('objectivesPlanning').hidden = view === 'table';
+  $('objectivesPlanningHint').hidden = view !== 'kanban' || !canManage;
+  if (view === 'table') return;
+  const visible = new Set(
+    [...rows.objectives.querySelectorAll('tr[data-isms-id]')]
+      .filter((row) => row.style.display !== 'none')
+      .map((row) => row.dataset.ismsId),
+  );
+  const items = (data.objectives || [])
+    .filter((row) => visible.has(String(row.id)))
+    .map((row) => normalise(row, true));
+  if (view === 'timeline') renderTimeline($('objectivesPlanningView'), items, framework);
+  else
+    renderBoard($('objectivesPlanningView'), items, {
+      view: 'kanban',
+      framework,
+      onMove: canManage ? moveObjective : null,
+    });
+}
+async function moveObjective(id, nextStatus) {
+  if (objectiveMovePending) {
+    renderObjectivePlanning();
+    return;
+  }
+  objectiveMovePending = true;
+  $('objectivesPlanningView').setAttribute('aria-busy', 'true');
+  try {
+    await apiPatch(
+      `/api/v1/isms/objectives/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
+      { status: nextStatus },
+    );
+    await ensureSection('objectives', { force: true });
+    const card = [...$('objectivesPlanningView').querySelectorAll('[data-drag-id]')].find(
+      (node) => node.dataset.dragId === id,
+    );
+    card?.classList.add('planning-saved');
+    toast(status, `Status changed to ${label(nextStatus)}.`, 'success');
+  } catch (error) {
+    renderObjectivePlanning();
+    let message = String(error);
+    try {
+      await ensureSection('objectives', { force: true });
+    } catch {
+      message += ' Unable to refresh objectives; reload before trying again.';
+    }
+    toast(status, message, 'danger');
+  } finally {
+    objectiveMovePending = false;
+    $('objectivesPlanningView').removeAttribute('aria-busy');
+  }
+}
+$('objectivesView').addEventListener('change', () => {
+  renderObjectivePlanning();
+  const url = new URL(location.href);
+  url.searchParams.set('view', $('objectivesView').value);
+  history.replaceState(null, '', url.pathname + url.search + url.hash);
+});
 function renderObjectives() {
   const items = data.objectives || [];
   setCount('objectivesCount', items.length);
   rows.objectives.innerHTML =
     items
       .map(
-        (o) => `<tr data-isms-row="objective" data-isms-id="${esc(o.id)}">
+        (
+          o,
+        ) => `<tr data-isms-row="objective" data-isms-id="${esc(o.id)}" data-objective-status="${esc(normalise(o, true).status)}">
     <td class="wrap"><div class="fw-semibold"><a href="${esc(objectiveHref(o))}">${esc(shorten(o.goal || o.requirement || 'Objective', 150))}</a></div><div class="small-muted">${esc(shorten(o.requirement || '', 160))}</div></td>
     <td class="wrap">${esc(shorten(o.metric || '—', 180))}</td>
     <td class="isms-objectives-owner-cell">${objectiveUserPill(o.owner)}</td>
@@ -1248,6 +1331,7 @@ function renderObjectives() {
   </tr>`,
       )
       .join('') || emptyRow(8, 'No ISMS objectives yet.');
+  applyIsmsTableFilter($('objectivesTableFilter'));
 }
 
 function renderDocuments() {
@@ -2134,8 +2218,46 @@ async function loadSummarySection(section, { force = false } = {}) {
   return true;
 }
 
+let swotOffset = 0;
+let swotLoading = false;
+async function loadSwotOverview() {
+  if (swotLoading) return;
+  swotLoading = true;
+  $('swotEdit').hidden = !canManage;
+  $('swotPrevious').disabled = true;
+  $('swotNext').disabled = true;
+  try {
+    const result = await apiGet(
+      `/api/v1/isms/swot?framework=${encodeURIComponent(framework)}&limit=100&offset=${swotOffset}`,
+    );
+    renderBoard($('swotQuadrants'), result.items, { view: 'quadrant', framework });
+    $('swotSummary').textContent =
+      `${result.total ? swotOffset + 1 : 0}–${swotOffset + result.items.length} of ${result.total} items. Quadrants show this page.`;
+    $('swotPrevious').disabled = swotOffset === 0;
+    $('swotNext').disabled = swotOffset + result.items.length >= result.total;
+  } catch (error) {
+    $('swotQuadrants').replaceChildren();
+    $('swotSummary').textContent = `Unable to load SWOT: ${String(error)}`;
+    $('swotPrevious').disabled = swotOffset === 0;
+  } finally {
+    swotLoading = false;
+  }
+}
+$('swotPrevious').addEventListener('click', () => {
+  if (!swotLoading) {
+    swotOffset = Math.max(0, swotOffset - 100);
+    loadSwotOverview();
+  }
+});
+$('swotNext').addEventListener('click', () => {
+  if (!swotLoading) {
+    swotOffset += 100;
+    loadSwotOverview();
+  }
+});
 async function ensureSection(section, { force = false } = {}) {
   const target = normaliseIsmsSection(section) || 'overview';
+  if (target === 'swot') return loadSwotOverview();
   if (target === 'soa') {
     renderMetaSummary();
     return;
@@ -2200,6 +2322,8 @@ $('objectiveForm')?.addEventListener('submit', async (ev) => {
       metric: $('objMetric').value,
       owner_user_id: $('objOwner').value || null,
       completion_target_date: $('objTarget').value || null,
+      start_date: $('objStart').value || null,
+      status: $('objStatus').value,
       completion_method: $('objCompletion').value,
       evaluation_method: $('objEvaluation').value,
       resource_requirements_text: $('objResourceText').value,
@@ -2490,6 +2614,7 @@ document.addEventListener('click', async (ev) => {
       const input = $(filterClearBtn.getAttribute('data-isms-filter-clear'));
       if (input) {
         input.value = '';
+        if (input.id === 'objectivesTableFilter') $('objectivesStatus').value = '';
         applyIsmsTableFilter(input);
         input.focus();
       }
@@ -2581,6 +2706,8 @@ document.addEventListener('click', async (ev) => {
 async function activateInitialTab() {
   const params = new URLSearchParams(window.location.search || '');
   const edit = params.get('edit');
+  if (['table', 'kanban', 'timeline'].includes(params.get('view')))
+    $('objectivesView').value = params.get('view');
   let section = normaliseIsmsSection(params.get('tab')) || 'overview';
   if (edit && !params.get('tab')) {
     const [kind] = String(edit).split(':', 2);

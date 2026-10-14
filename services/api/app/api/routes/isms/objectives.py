@@ -36,6 +36,7 @@ def create_objective(
 @router.get("/v1/isms/objectives")
 def list_objectives(
     q: str = "",
+    status: str = "",
     framework: str = settings.default_framework_slug,
     limit: int = 200,
     offset: int = 0,
@@ -43,7 +44,13 @@ def list_objectives(
     db: Session = Depends(get_db),
 ):
     return service.list_objectives(
-        q=q, framework=framework, limit=limit, offset=offset, user=user, db=db
+        q=q,
+        status=status,
+        framework=framework,
+        limit=limit,
+        offset=offset,
+        user=user,
+        db=db,
     )
 
 

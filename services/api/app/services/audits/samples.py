@@ -22,6 +22,7 @@ from app.db.models import (
     IsmsMeeting,
     IsmsObjective,
     IsmsOrgNode,
+    IsmsSwot,
     PestleClauseRelevance,
     PestleItem,
     PestleRelevanceLevel,
@@ -74,6 +75,8 @@ def entity_href(entity_type: str, entity_id: uuid.UUID, framework: str) -> str:
         return f"/pestle_item.html?id={eid}{fwq}"
     if entity_type == "interested_party":
         return f"/interested_party.html?id={eid}{fwq}"
+    if entity_type == "isms_swot":
+        return f"/isms-swot.html?id={eid}{fwq}"
     if entity_type == "isms_objective":
         return (
             f"/isms.html{fwfirst}&tab=objectives" if fw else "/isms.html?tab=objectives"
@@ -250,6 +253,12 @@ def audit_sample_entity_reference(
             title = f"Interested party: {name} — {nature}"
             subtitle = short_text(row.note, 220)
             controls = interested_party_sample_controls(db, row.id, framework)
+    elif entity_type == "isms_swot":
+        row = db.get(IsmsSwot, entity_id)
+        if row:
+            title = f"SWOT {row.kind}: {short_text(row.title, 180)}"
+            subtitle = short_text(row.description, 220)
+            controls = isms_sample_controls(db, entity_type, row.id, framework)
     elif entity_type == "isms_objective":
         row = (
             db.query(IsmsObjective).filter(IsmsObjective.id == entity_id).one_or_none()

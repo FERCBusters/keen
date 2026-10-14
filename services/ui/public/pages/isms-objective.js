@@ -123,3 +123,6 @@ window.addEventListener('hashchange', () =>
   activateTabFromHashOrQuery(params, { changelog: $('objectiveChangelogTab') }),
 );
 load();
+
+import { mountSwotRelated } from '/pages/swot-related.js';
+mountSwotRelated('objective', new URLSearchParams(location.search).get('id'));

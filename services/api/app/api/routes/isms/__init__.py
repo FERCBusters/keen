@@ -14,11 +14,13 @@ from . import (
     overview,
     personal,
     relationships,
+    swot,
 )
 
 router = Router()
 router.include_router(overview.router)
 router.include_router(objectives.router)
+router.include_router(swot.router)
 router.include_router(documents.router)
 router.include_router(organisation.router)
 router.include_router(assets.router)

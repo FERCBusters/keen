@@ -323,6 +323,7 @@ async function loadControlChangelog() {
 
 function _ismsEntityRows(data) {
   const groups = [
+    ['SWOT', data.swot, (x) => x.title, (x) => `/swot.html?id=${encodeURIComponent(x.id)}`],
     [
       'Objectives',
       data.objectives,

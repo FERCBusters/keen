@@ -454,3 +454,6 @@ async function loadRisk() {
 }
 
 await loadRisk();
+
+import { mountSwotRelated } from '/pages/swot-related.js';
+mountSwotRelated('risk', new URLSearchParams(location.search).get('id'));

@@ -87,7 +87,7 @@ function render() {
       <div><strong>${esc(p.name)}</strong> ${p.username ? `<span class="badge text-bg-light">${esc(p.username)}</span>` : ''}
         <div class="small-muted">${esc(p.position || p.org_node || 'No role recorded')} · ${esc(assetNames(p.asset_ids))} · ${p.assurances.length} assurance records</div></div>
       <div class="d-flex gap-1">${manage ? `<button type="button" class="btn btn-sm btn-outline-primary" data-edit-person="${esc(p.id)}">Edit</button><button type="button" class="btn btn-sm btn-outline-danger" data-delete-person="${esc(p.id)}">Delete</button>` : ''}
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-view-person="${esc(p.id)}">Assurance</button></div>
+        <a class="btn btn-sm btn-outline-secondary" href="/swot.html?target_type=person&target_id=${encodeURIComponent(p.id)}">SWOT</a><button type="button" class="btn btn-sm btn-outline-secondary" data-view-person="${esc(p.id)}">Assurance</button></div>
     </div>`,
         )
         .join('')
@@ -98,7 +98,7 @@ function render() {
           (v) => `
     <div class="list-group-item d-flex justify-content-between gap-2"><div><strong>${esc(v.name)}</strong>
       <div class="small-muted">${esc(v.description || '')}</div><div class="small-muted">${esc(assetNames(v.asset_ids))}</div></div>
-      ${manage ? `<div class="d-flex gap-1"><button type="button" class="btn btn-sm btn-outline-primary align-self-start" data-edit-vendor="${esc(v.id)}">Edit</button><button type="button" class="btn btn-sm btn-outline-danger align-self-start" data-delete-vendor="${esc(v.id)}">Delete</button></div>` : ''}</div>`,
+      <a class="btn btn-sm btn-outline-secondary" href="/swot.html?target_type=vendor&target_id=${encodeURIComponent(v.id)}">SWOT</a>${manage ? `<div class="d-flex gap-1"><button type="button" class="btn btn-sm btn-outline-primary align-self-start" data-edit-vendor="${esc(v.id)}">Edit</button><button type="button" class="btn btn-sm btn-outline-danger align-self-start" data-delete-vendor="${esc(v.id)}">Delete</button></div>` : ''}</div>`,
         )
         .join('')
     : '<p class="small-muted mb-0">No vendors yet.</p>';
@@ -130,6 +130,7 @@ function clearPerson() {
   renderAssurances();
 }
 function fillPerson(person) {
+  showSwot('person', person.id);
   selectedPerson = person;
   $('personFormTitle').textContent = `Edit ${person.name}`;
   $('personName').value = person.name;
@@ -148,6 +149,7 @@ function clearVendor() {
   $('vendorFormTitle').textContent = 'Add a vendor';
 }
 function fillVendor(v) {
+  showSwot('vendor', v.id);
   selectedVendor = v;
   $('vendorFormTitle').textContent = `Edit ${v.name}`;
   $('vendorName').value = v.name;
@@ -325,3 +327,30 @@ if (!manage) {
     form.style.display = 'none';
 }
 await reload();
+
+import { mountSwotRelated } from '/pages/swot-related.js';
+function showSwot(type, id) {
+  let host = document.getElementById('assuranceSwot');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'assuranceSwot';
+    document.querySelector('main').append(host);
+  }
+  host.replaceChildren();
+  mountSwotRelated(type, id, host);
+}
+
+const swotLinkParams = new URLSearchParams(location.search);
+const swotLinkedId = swotLinkParams.get('edit');
+if (swotLinkedId) {
+  const vendor = vendors.find((v) => v.id === swotLinkedId),
+    person = people.find((p) => p.id === swotLinkedId);
+  if (vendor) {
+    fillVendor(vendor);
+    const tab = document.querySelector('[data-bs-target="#vendorsPane"]');
+    if (tab && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(tab).show();
+  }
+  if (person) {
+    fillPerson(person);
+  }
+}

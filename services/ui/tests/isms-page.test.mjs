@@ -1,4 +1,5 @@
 import test from 'node:test';
+import * as d3 from 'd3';
 import assert from 'node:assert/strict';
 import { page, settle } from './support/page-fixture.mjs';
 const records = {
@@ -164,5 +165,118 @@ for (const [tab, id] of [
     await settle(() => ui.el(id).querySelector('a[href="#"]'));
     for (const link of ui.el(id).querySelectorAll('a[href]'))
       assert.doesNotMatch(link.href, /^(javascript|data|vbscript):/i);
+  });
+}
+
+test('SWOT overview is paginated and read only even for managers', async (t) => {
+  const ui = await page(t, 'isms', {
+    get(url) {
+      if (url.pathname === '/api/v1/isms/meta') return { users: [] };
+      if (url.pathname === '/api/v1/isms/summary') return { counts: {} };
+      if (url.pathname === '/api/v1/isms/document-folders') return [];
+      if (url.pathname === '/api/v1/isms/swot') {
+        assert.equal(url.searchParams.get('framework'), 'A');
+        assert.equal(url.searchParams.get('limit'), '100');
+        return {
+          items: [{ id: 's1', title: 'Stable team', kind: 'strength', status: 'defined' }],
+          total: 101,
+        };
+      }
+      throw Error('Unexpected GET ' + url);
+    },
+  });
+  ui.el('swotTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('swotQuadrants').textContent.includes('Stable team'));
+  assert.equal(
+    ui.el('swotQuadrants').querySelectorAll('select, button, [draggable], .btn').length,
+    0,
+  );
+  assert.equal(ui.el('swotEdit').hidden, false);
+  assert.equal(new URL(ui.el('swotEdit').href).pathname, '/swot.html');
+  ui.el('swotNext').click();
+  await settle(() => ui.calls.some((call) => call.url.includes('offset=100')));
+  assert.equal(
+    ui.calls.some((call) => call.method !== 'GET'),
+    false,
+  );
+});
+
+for (const editable of [true, false]) {
+  test(`Objectives share table, board, timeline and filters (${editable ? 'manager' : 'reader'})`, async (t) => {
+    let state = 'defined';
+    const ui = await page(t, 'isms', {
+      query: '&tab=objectives&view=kanban',
+      me: editable ? { is_admin: true } : { can_read_isms: true },
+      setup(window) {
+        window.d3 = d3;
+      },
+      get(url) {
+        if (url.pathname === '/api/v1/isms/meta') return { users: [] };
+        if (url.pathname === '/api/v1/isms/summary')
+          return {
+            counts: {},
+            objectives: [
+              {
+                id: 'o1',
+                goal: 'Train operators',
+                status: state,
+                start_date: '2026-10-01',
+                completion_target_date: '2026-12-01',
+                resource_users: [],
+                controls: [],
+                clauses: [],
+              },
+              {
+                id: 'o2',
+                goal: 'Review suppliers',
+                status: 'completed',
+                resource_users: [],
+                controls: [],
+                clauses: [],
+              },
+            ],
+          };
+        if (url.pathname === '/api/v1/isms/document-folders') return [];
+        throw Error('Unexpected GET ' + url);
+      },
+      patch(url, body) {
+        assert.equal(url.pathname, '/api/v1/isms/objectives/o1');
+        state = body.status;
+        return {};
+      },
+    });
+    await settle(() => ui.el('objectivesPlanningView').textContent.includes('Train operators'));
+    assert.equal(ui.el('objectivesTable').hidden, true);
+    assert.equal(ui.el('objectivesPlanningView').querySelectorAll('.planning-card').length, 2);
+    const select = ui.el('objectivesPlanningView').querySelector('[data-status-id="o1"]');
+    if (editable) {
+      select.value = 'planned';
+      select.dispatchEvent(new ui.window.Event('change'));
+      await settle(
+        () => state === 'planned' && !ui.el('objectivesPlanningView').hasAttribute('aria-busy'),
+      );
+      assert.equal(
+        ui.el('objectivesRows').querySelector('[data-isms-id="o1"]').dataset.objectiveStatus,
+        'planned',
+      );
+    } else assert.equal(select, null);
+    ui.el('objectivesTableFilter').value = 'Train';
+    ui.el('objectivesTableFilter').dispatchEvent(new ui.window.Event('input', { bubbles: true }));
+    assert.equal(ui.el('objectivesPlanningView').querySelectorAll('.planning-card').length, 1);
+    ui.el('objectivesView').value = 'timeline';
+    ui.el('objectivesView').dispatchEvent(new ui.window.Event('change'));
+    assert.equal(ui.el('objectivesPlanningView').querySelectorAll('rect').length, 1);
+    ui.el('objectivesView').value = 'table';
+    ui.el('objectivesView').dispatchEvent(new ui.window.Event('change'));
+    assert.equal(ui.el('objectivesTable').hidden, false);
+    assert.equal(ui.el('objectivesPlanning').hidden, true);
+    assert.equal(
+      ui.el('objectivesRows').querySelector('[data-isms-id="o2"]').style.display,
+      'none',
+    );
+    assert.equal(
+      ui.calls.some((call) => call.url.includes('/api/v1/isms/swot')),
+      false,
+    );
   });
 }

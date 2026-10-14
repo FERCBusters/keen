@@ -66,6 +66,7 @@ def _reverse_refs_for(
             .all()
         )
     grouped = {
+        "swot": [],
         "objectives": [],
         "documents": [],
         "org_nodes": [],
@@ -95,6 +96,7 @@ def _reverse_refs_for(
             # direct clause links, but they should not surface on clause pages.
             continue
         key = {
+            "swot": "swot",
             "objective": "objectives",
             "document": "documents",
             "org_node": "org_nodes",

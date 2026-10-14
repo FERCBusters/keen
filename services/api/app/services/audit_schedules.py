@@ -17,6 +17,7 @@ from app.db.models import (
     AuditScopedClause,
     AuditScopedControl,
     AuditScopedIsmsDocument,
+    AuditSwotScope,
     User,
 )
 from app.services.mailer import send_scheduled_audit_created_email, smtp_configured
@@ -351,6 +352,13 @@ def _copy_template_scope_and_attendees(
                 created_at=now,
             )
         )
+
+    for (swot_id,) in (
+        db.query(AuditSwotScope.swot_id)
+        .filter(AuditSwotScope.audit_id == template.id)
+        .all()
+    ):
+        db.add(AuditSwotScope(audit_id=audit.id, swot_id=swot_id))
 
     documents = (
         db.query(AuditScopedIsmsDocument.document_id)

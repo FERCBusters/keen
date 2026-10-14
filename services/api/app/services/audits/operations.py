@@ -46,6 +46,12 @@ from app.services.audits.serializers import (
     scope_response,
     usernames,
 )
+from app.services.audits.swot_scope import (
+    scope_items as swot_scope_items,
+)
+from app.services.audits.swot_scope import (
+    set_scope as set_swot_scope,
+)
 from app.services.audits.validation import (
     AUDIT_STATUSES,
     FINDING_KINDS,
@@ -94,6 +100,7 @@ def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):
     )
     db.add(a)
     db.flush()
+    set_swot_scope(db, a, payload.swot_ids, user)
     set_audit_scope(
         db,
         a,
@@ -193,6 +200,7 @@ def replace_audit_scope(
 ):
     a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a)
+    set_swot_scope(db, a, payload.swot_ids, user)
     controls, clauses, documents = set_audit_scope(
         db,
         a,
@@ -201,7 +209,10 @@ def replace_audit_scope(
         document_values=payload.documents,
     )
     db.commit()
-    return scope_response(controls, clauses, documents)
+    return {
+        **scope_response(controls, clauses, documents),
+        "scoped_swot": swot_scope_items(db, a.id),
+    }
 
 
 def replace_audit_controls(

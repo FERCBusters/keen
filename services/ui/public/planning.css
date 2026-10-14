@@ -1,0 +1,122 @@
+.planning-quadrants {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.planning-column {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: var(--bs-tertiary-bg);
+  min-width: 0;
+}
+.quadrant-strength {
+  border-top: 4px solid #198754;
+}
+.quadrant-weakness {
+  border-top: 4px solid #d39e00;
+}
+.quadrant-opportunity {
+  border-top: 4px solid #0d6efd;
+}
+.quadrant-threat {
+  border-top: 4px solid #dc3545;
+}
+.planning-kanban {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(230px, 1fr));
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 1rem;
+}
+.planning-card a {
+  overflow-wrap: anywhere;
+}
+.planning-timeline {
+  overflow-x: auto;
+}
+.planning-timeline svg {
+  min-width: 850px;
+  width: 100%;
+}
+.planning-tree li {
+  padding: 0.6rem 0;
+}
+.planning-tree {
+  border-left: 2px solid var(--bs-border-color);
+  margin-left: 1rem;
+}
+.planning-visual svg {
+  width: 100%;
+  min-width: 850px;
+}
+.planning-visual text,
+.planning-timeline text {
+  fill: var(--bs-body-color);
+  font-size: 13px;
+}
+@media (max-width: 700px) {
+  .planning-quadrants {
+    grid-template-columns: 1fr;
+  }
+}
+
+.planning-visual {
+  overflow-x: auto;
+}
+.planning-question-form {
+  width: 100%;
+  max-width: 48rem;
+}
+.planning-question-form textarea {
+  width: 100%;
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.planning-quadrant-tree,
+.planning-quadrant-tree ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.planning-quadrant-tree ul {
+  margin: 0 0 1rem 0.65rem;
+  padding-left: 0.65rem;
+  border-left: 2px solid var(--bs-border-color);
+}
+
+.planning-kanban .planning-card[draggable='true'] {
+  cursor: grab;
+}
+.planning-kanban .planning-dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+.planning-kanban .planning-drop-target {
+  outline: 3px solid var(--bs-primary);
+  outline-offset: -3px;
+}
+.planning-kanban[aria-busy='true'] {
+  opacity: 0.75;
+}
+
+.planning-saved {
+  animation: planning-save-feedback 1.6s ease-out;
+}
+@keyframes planning-save-feedback {
+  from {
+    outline: 3px solid var(--bs-success);
+    outline-offset: 2px;
+  }
+  to {
+    outline: 3px solid transparent;
+    outline-offset: 2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planning-saved {
+    animation: none;
+    border-color: var(--bs-success);
+  }
+}

@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Table,
@@ -1612,6 +1613,87 @@ class IsmsLicense(Base):
     assets = relationship("RiskAsset", back_populates="license_entity")
 
 
+class IsmsSwot(Base):
+    __tablename__ = "isms_swot"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    response: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    significance: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=3, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="defined", index=True
+    )
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isms_swot.id", ondelete="RESTRICT"), index=True
+    )
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    start_date: Mapped[date | None] = mapped_column(Date)
+    target_date: Mapped[date | None] = mapped_column(Date, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "kind in ('strength','weakness','opportunity','threat')",
+            name="ck_swot_kind",
+        ),
+        CheckConstraint("significance between 1 and 5", name="ck_swot_significance"),
+        CheckConstraint(
+            "status in ('defined','planned','in_progress','under_review','completed','deferred','superseded')",
+            name="ck_swot_status",
+        ),
+        CheckConstraint("parent_id <> id", name="ck_swot_parent"),
+        CheckConstraint("target_date >= start_date", name="ck_swot_dates"),
+    )
+
+
+class IsmsSwotLink(Base):
+    __tablename__ = "isms_swot_links"
+    swot_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_swot.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    target_type: Mapped[str] = mapped_column(String(24), primary_key=True)
+    target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    __table_args__ = (
+        Index("ix_swot_link_target", "target_type", "target_id"),
+        CheckConstraint(
+            "target_type in ('objective','document','asset','person','vendor','risk')",
+            name="ck_swot_link_type",
+        ),
+    )
+
+
+class AuditSwotScope(Base):
+    __tablename__ = "audit_swot_scope"
+    audit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("audits.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    swot_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_swot.id", ondelete="RESTRICT"),
+        primary_key=True,
+        index=True,
+    )
+
+
 class IsmsObjective(Base):
     __tablename__ = "isms_objectives"
 
@@ -1631,6 +1713,7 @@ class IsmsObjective(Base):
         nullable=True,
         index=True,
     )
+    start_date: Mapped[date | None] = mapped_column(Date)
     completion_target_date: Mapped[str | None] = mapped_column(
         String(64), nullable=True, index=True
     )
@@ -1658,7 +1741,7 @@ class IsmsObjective(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status in ('not_started','in_progress','completed','deferred','superseded')",
+            "status in ('not_started','defined','planned','in_progress','under_review','completed','deferred','superseded')",
             name="ck_isms_objectives_status",
         ),
     )
@@ -3049,7 +3132,7 @@ class KeenAgent(Base):
 # Retention is managed with explicit SQL so database row locks, the storage
 # outbox and deletion are one transaction. Register its tables for metadata and
 # migration tooling as well (there are deliberately no ORM cascade relationships).
-from sqlalchemy import BigInteger, Index
+from sqlalchemy import BigInteger
 from sqlalchemy import text as sql_text
 
 _evidence_retention_policy = Table(

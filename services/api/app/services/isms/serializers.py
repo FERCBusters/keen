@@ -185,6 +185,7 @@ def _objective_out(
         "resource_user_ids": [u["id"] for u in resource_users if u],
         "owner": _user_summary(row.owner),
         "owner_user_id": str(row.owner_user_id) if row.owner_user_id else None,
+        "start_date": row.start_date.isoformat() if row.start_date else None,
         "completion_target_date": row.completion_target_date or None,
         "evaluation_method": row.evaluation_method or "",
         "status": row.status or "not_started",
@@ -658,6 +659,10 @@ def _entity_out(
     *,
     include_links: bool = True,
 ) -> dict[str, Any]:
+    if entity_type == "swot":
+        from .swot import summary
+
+        return _attach_links(db, summary(row), "swot", row.id, framework, include_links)
     if entity_type == "objective":
         return _objective_out(db, row, framework, include_links=include_links)
     if entity_type == "document":

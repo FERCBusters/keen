@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class AuditCreatePayload(BaseModel):
+    swot_ids: list[uuid.UUID] | None = Field(None, max_length=200)
     title: str = Field(..., min_length=1, max_length=256)
     framework_slug: str | None = Field(default=None, max_length=64)
     audit_type: str | None = Field(default="internal", max_length=16)
@@ -52,6 +53,7 @@ class AuditControlsPayload(BaseModel):
 
 
 class AuditScopePayload(BaseModel):
+    swot_ids: list[uuid.UUID] | None = Field(None, max_length=200)
     controls: list[str] = Field(default_factory=list)
     clauses: list[str] = Field(default_factory=list)
     documents: list[str] = Field(default_factory=list)

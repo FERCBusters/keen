@@ -132,6 +132,7 @@ _CHANGE_FIELD_LABELS = {
 }
 
 _ENTITY_LABELS = {
+    "isms_swot": "SWOT item",
     "isms_objective": "ISMS Objective",
     "isms_document": "ISMS Document",
     "isms_org_node": "ISMS Organisation Chart node",

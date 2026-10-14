@@ -18,6 +18,7 @@ from app.db.models import (
     EventQuestionPost,
     EventQuestionPostAttachment,
     EventQuestionThread,
+    IsmsSwot,
     PestleItem,
     Risk,
     User,
@@ -133,6 +134,14 @@ def _ensure_question_target_visible(
     db: Session, user: User, entity_type: str, entity_id: uuid.UUID
 ) -> tuple[str, str, str, uuid.UUID | None]:
     typ = (entity_type or "").strip().lower().replace("-", "_")
+    if typ == "isms_swot":
+        from app.services.isms.swot import require_access
+
+        require_access(db, user)
+        row = db.get(IsmsSwot, entity_id)
+        if not row:
+            raise DomainError(404, "SWOT item not found")
+        return (row.kind, row.title, f"/isms-swot.html?id={row.id}&tab=questions", None)
     if typ in {"event", "evidence"}:
         ev = _ensure_event_visible(db, user, entity_id)
         return (
@@ -154,7 +163,9 @@ def _question_target_label(thread: EventQuestionThread) -> str:
     typ = (thread.target_type or "event").strip().lower()
     ref = (thread.target_ref or "").strip()
     title = (thread.target_title or "").strip()
-    if typ == "risk":
+    if typ == "isms_swot":
+        prefix = "SWOT item"
+    elif typ == "risk":
         prefix = "CIA Triad risk"
     elif typ in {"pestle", "pestle_item"}:
         prefix = "PESTLE(E) item"
@@ -173,6 +184,8 @@ def _question_target_url(thread: EventQuestionThread) -> str:
     tid = str(thread.id)
     typ = (thread.target_type or "event").strip().lower()
     target_id = str(thread.target_id or thread.event_id or "")
+    if typ == "isms_swot" and target_id:
+        return f"/isms-swot.html?id={target_id}&tab=questions&thread={tid}"
     if typ == "risk" and target_id:
         return f"/risk.html?id={target_id}&thread={tid}#questions"
     if typ in {"pestle", "pestle_item"} and target_id:

@@ -143,6 +143,7 @@ async function loadClauseChangelog() {
 
 function _ismsEntityRows(data) {
   const groups = [
+    ['SWOT', data.swot, (x) => x.title, '/swot.html'],
     [
       'Objectives',
       data.objectives,
@@ -158,7 +159,7 @@ function _ismsEntityRows(data) {
   for (const [label, items, titleFn, href] of groups) {
     for (const item of items || [])
       rows.push(
-        `<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(href, clause?.framework || framework))}">${esc(titleFn(item))}</a></td><td class="small-muted">${esc(item.updated_at || '')}</td></tr>`,
+        `<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(label === 'SWOT' ? `/swot.html?id=${encodeURIComponent(item.id)}` : href, clause?.framework || framework))}">${esc(titleFn(item))}</a></td><td class="small-muted">${esc(item.updated_at || '')}</td></tr>`,
       );
   }
   if (!rows.length)

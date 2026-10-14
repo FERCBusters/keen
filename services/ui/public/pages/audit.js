@@ -1,3 +1,5 @@
+let selectedSwotIds = new Set(),
+  swotScopeLoaded = false;
 import {
   initNavbar,
   canEditAuditForUser,
@@ -338,6 +340,9 @@ function applyAuditEditability() {
   const locked = auditLocked();
   const canManage = canManageAudits();
   const canEdit = canEditAudit();
+  document.querySelectorAll('[data-swot-scope]').forEach((box) => {
+    box.disabled = !canEdit || !swotScopeLoaded;
+  });
   const notice = document.getElementById('auditLockNotice');
   if (notice) {
     notice.style.display = locked ? '' : 'none';
@@ -528,6 +533,7 @@ function captureUnsavedPageState() {
       findingControl: fieldValue('findingControl'),
       findingDesc: fieldValue('findingDesc'),
     },
+    selectedSwotIds: new Set(selectedSwotIds),
     selectedDocumentIds: new Set(selectedDocumentIds),
     selectedControlIds: new Set(selectedControlIds),
     selectedClauseIds: new Set(selectedClauseIds),
@@ -547,6 +553,10 @@ function restoreUnsavedPageState(state) {
   tmplUntilWire?.syncTextFromHidden?.();
   updateTemplateScheduleDateMode();
 
+  selectedSwotIds = new Set(state.selectedSwotIds || []);
+  document.querySelectorAll('[data-swot-scope]').forEach((box) => {
+    box.checked = selectedSwotIds.has(box.dataset.swotScope);
+  });
   selectedDocumentIds = new Set(state.selectedDocumentIds || []);
   selectedControlIds = new Set(state.selectedControlIds || []);
   selectedClauseIds = new Set(state.selectedClauseIds || []);
@@ -756,6 +766,9 @@ function _scopeExportList(items, emptyText) {
 }
 
 function _replaceAuditScopeListsForExport(clone) {
+  const swotList = clone.querySelector('#swotScope');
+  if (swotList)
+    swotList.replaceWith(_scopeExportList(audit?.scoped_swot || [], 'No SWOT items selected.'));
   const documentsList = clone.querySelector('#documentsList');
   const clausesList = clone.querySelector('#clausesList');
   const controlsList = clone.querySelector('#controlsList');
@@ -1511,6 +1524,7 @@ async function loadScopeItems() {
   allClauses = clausesData?.items || [];
   _rebuildClauseHierarchy();
   clauseControlMap = _buildClauseControlMap(graphData);
+  await loadSwotScope();
   selectedDocumentIds = new Set((audit?.scoped_documents || []).map((d) => String(d.id)));
   selectedControlIds = new Set((audit?.scoped_controls || []).map((c) => String(c.id)));
   selectedClauseIds = new Set((audit?.scoped_clauses || []).map((c) => String(c.id)));
@@ -2615,6 +2629,7 @@ document.getElementById('saveScope')?.addEventListener('click', async () => {
     if (!ensureAuditEditable()) return;
     _normaliseSelectedClausesToChildren();
     await apiPut(`/api/v1/audits/${encodeURIComponent(auditId)}/scope`, {
+      ...(swotScopeLoaded ? { swot_ids: Array.from(selectedSwotIds) } : {}),
       documents: Array.from(selectedDocumentIds),
       clauses: Array.from(selectedClauseIds),
       controls: Array.from(selectedControlIds),
@@ -2752,3 +2767,37 @@ document.getElementById('deleteAudit')?.addEventListener('click', async () => {
 await loadAttendeeUsers();
 await loadAttendeePeople();
 await loadAudit();
+
+async function loadSwotScope() {
+  let host = document.getElementById('swotScope');
+  if (!host) {
+    host = document.createElement('section');
+    host.id = 'swotScope';
+    host.className = 'card card-body my-3';
+    document.getElementById('scopeBody')?.prepend(host);
+  }
+  selectedSwotIds = new Set((audit?.scoped_swot || []).map((r) => r.id));
+  let rows = audit?.scoped_swot || [];
+  try {
+    const data = await apiGet('/api/v1/isms/swot?limit=200');
+    const byId = new Map([...data.items, ...rows].map((r) => [r.id, r]));
+    rows = [...byId.values()];
+    swotScopeLoaded = true;
+  } catch {
+    swotScopeLoaded = false;
+  }
+  host.innerHTML =
+    '<h3 class="h5">SWOT scope</h3><p class="small-muted">Selected titles and quadrants are shared with audit readers. Save scope to apply. Up to 200 candidates are shown.</p>' +
+    rows
+      .map(
+        (r) =>
+          `<label class="d-block mb-2"><input type="checkbox" data-swot-scope="${esc(r.id)}" ${selectedSwotIds.has(r.id) ? 'checked' : ''} ${swotScopeLoaded ? '' : 'disabled'}> ${esc(r.title)} <span class="small-muted">${esc(r.kind)}</span></label>`,
+      )
+      .join('');
+  host.querySelectorAll('[data-swot-scope]').forEach((box) =>
+    box.addEventListener('change', () => {
+      if (box.checked) selectedSwotIds.add(box.dataset.swotScope);
+      else selectedSwotIds.delete(box.dataset.swotScope);
+    }),
+  );
+}

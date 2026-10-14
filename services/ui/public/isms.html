@@ -8,7 +8,7 @@
 <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet"/>
 <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet"/>
 <link href="/vendor/wysi/wysi.min.css" rel="stylesheet"/>
-<link href="/styles.css" rel="stylesheet"/>
+<link href="/styles.css" rel="stylesheet"/><link href="/planning.css" rel="stylesheet"/>
 <link href="/favicon.svg" rel="icon" type="image/svg+xml"/>
 <script defer="" src="/demo-notice.js"></script>
 </head>
@@ -28,6 +28,7 @@
 <div class="alert alert-info" id="status" style="display:none;"></div>
 <ul class="nav nav-tabs mb-3" id="ismsTabs" role="tablist">
 <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-target="#overviewPane" data-bs-toggle="tab" id="overviewTab" role="tab" type="button">Overview</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#swotPane" data-bs-toggle="tab" id="swotTab" role="tab" type="button">SWOT analysis</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#objectivesPane" data-bs-toggle="tab" id="objectivesTab" role="tab" type="button">Objectives</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#documentsPane" data-bs-toggle="tab" id="documentsTab" role="tab" type="button">Policies &amp; Processes</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#orgPane" data-bs-toggle="tab" id="orgTab" role="tab" type="button">Organisation Chart</button></li>
@@ -41,16 +42,20 @@
 <section class="tab-pane fade show active" id="overviewPane" role="tabpanel" tabindex="0">
 <div class="row g-3" id="overviewCards"></div>
 </section>
-<section class="tab-pane fade" id="objectivesPane" role="tabpanel" tabindex="0">
+<section class="tab-pane fade" id="swotPane" role="tabpanel" tabindex="0">
+<div class="d-flex justify-content-between align-items-center mb-3"><p class="mb-0">SWOT quadrants — read-only overview</p><a id="swotEdit" class="btn btn-outline-primary" href="/swot.html" data-nav-fw="1" hidden>Edit SWOT analysis</a></div>
+<p id="swotSummary" role="status"></p><div id="swotQuadrants"></div>
+<div class="d-flex gap-2 mt-3"><button id="swotPrevious" class="btn btn-outline-secondary" type="button" disabled>Previous</button><button id="swotNext" class="btn btn-outline-secondary" type="button" disabled>Next</button></div></section>
+<section class="tab-pane fade" id="objectivesPane" role="tabpanel" tabindex="0"><div class="mb-3"><label class="form-label" for="objectivesView">Objectives view</label><select class="form-select w-auto" id="objectivesView"><option value="table">Table</option><option value="kanban">Status board</option><option value="timeline">Timeline</option></select><p class="small-muted mt-2">Three views of the same objectives. Changes appear in every view.</p></div>
 <div class="card mb-3 no-print" id="objectiveFormCard" style="display:none;">
 <div class="card-header fw-bold">New ISMS Objective</div>
 <div class="card-body">
-<form class="row g-3" id="objectiveForm">
+<form class="row g-3" id="objectiveForm"><div class="col-md-6"><label for="objStart" class="form-label">Planned start</label><input type="date" class="form-control" id="objStart"></div><div class="col-md-6"><label for="objStatus" class="form-label">Status</label><select id="objStatus" class="form-select"><option value="defined">Defined</option><option value="planned">Planned</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Completed</option><option value="deferred">Deferred</option><option value="superseded">Superseded</option></select></div>
 <div class="col-12 col-lg-6"><label class="form-label">Requirement</label><textarea class="form-control" id="objRequirement" required="" rows="2"></textarea></div>
 <div class="col-12 col-lg-6"><label class="form-label">Goal</label><textarea class="form-control" id="objGoal" required="" rows="2"></textarea></div>
 <div class="col-12 col-lg-4"><label class="form-label">Metric</label><input class="form-control" id="objMetric"/></div>
 <div class="col-12 col-lg-4"><label class="form-label">Owner</label><select class="form-select" id="objOwner"><option value="">—</option></select></div>
-<div class="col-12 col-lg-4"><label class="form-label">Completion target date</label><select class="form-select" id="objTarget"><option value="">—</option><option>Daily</option><option>Weekly</option><option>Monthly</option><option>Quarterly</option><option>Annually</option><option>As Required</option></select></div>
+<div class="col-12 col-lg-4"><label class="form-label">Completion target date</label><input class="form-control" id="objTarget" type="date"></div>
 <div class="col-12 col-lg-6"><label class="form-label">Completion Method</label><textarea class="form-control" id="objCompletion" rows="2"></textarea></div>
 <div class="col-12 col-lg-6"><label class="form-label">Evaluation Method</label><textarea class="form-control" id="objEvaluation" rows="2"></textarea></div>
 <div class="col-12 col-lg-6"><label class="form-label">Resource users</label><select class="form-select" id="objResources" multiple="" size="5"></select></div>
@@ -61,7 +66,7 @@
 </form>
 </div>
 </div>
-<div class="card"><div class="card-header d-flex justify-content-between"><div><div class="fw-bold">ISMS Objectives</div><div class="small-muted">Owned and resourced objectives with linked controls/clauses.</div></div><span class="badge text-bg-light" id="objectivesCount">0</span></div><div class="card-body p-0"><div class="table-responsive isms-fit-table-wrap"><table class="table table-sm table-hover align-middle mb-0 sortable isms-fit-table isms-objectives-table" data-sortable="1"><thead><tr><th class="isms-objectives-goal-col">Goal</th><th class="isms-objectives-metric-col">Metric</th><th class="isms-objectives-owner-col">Owner</th><th class="isms-objectives-target-col">Target</th><th class="isms-objectives-resources-col">Resources</th><th class="isms-objectives-controls-col">Controls</th><th class="isms-objectives-clauses-col">Clauses</th><th class="text-center no-print isms-objectives-actions-col">Actions</th></tr></thead><tbody id="objectivesRows"></tbody></table></div></div></div>
+<div class="card"><div class="card-header d-flex justify-content-between"><div><div class="fw-bold">ISMS Objectives</div><div class="small-muted">Owned and resourced objectives with linked controls/clauses.</div></div><span class="badge text-bg-light" id="objectivesCount">0</span></div><div class="card-body p-0"><div class="table-responsive isms-fit-table-wrap" id="objectivesTable"><table class="table table-sm table-hover align-middle mb-0 sortable isms-fit-table isms-objectives-table" data-sortable="1"><thead><tr><th class="isms-objectives-goal-col">Goal</th><th class="isms-objectives-metric-col">Metric</th><th class="isms-objectives-owner-col">Owner</th><th class="isms-objectives-target-col">Target</th><th class="isms-objectives-resources-col">Resources</th><th class="isms-objectives-controls-col">Controls</th><th class="isms-objectives-clauses-col">Clauses</th><th class="text-center no-print isms-objectives-actions-col">Actions</th></tr></thead><tbody id="objectivesRows"></tbody></table></div><div id="objectivesPlanning" class="p-3" hidden><p id="objectivesPlanningHint" class="small-muted" hidden>Drag a card to another column to save its status. You can also use the Status menu.</p><div id="objectivesPlanningView"></div></div></div></div>
 </section>
 <section class="tab-pane fade" id="documentsPane" role="tabpanel" tabindex="0">
 <div class="card mb-3 no-print" id="documentFormCard" style="display:none;">

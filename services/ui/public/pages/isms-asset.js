@@ -108,3 +108,6 @@ window.addEventListener('hashchange', () =>
   activateTabFromHashOrQuery(params, { changelog: $('assetChangelogTab') }),
 );
 load();
+
+import { mountSwotRelated } from '/pages/swot-related.js';
+mountSwotRelated('asset', new URLSearchParams(location.search).get('id'));

@@ -82,6 +82,10 @@ def require_sample_source_access(
         from app.services.risks import _can_read_specific_risk
 
         allowed = _can_read_specific_risk(db, user, db.get(Risk, entity_id))
+    elif entity_type == "isms_swot":
+        from app.services.isms.access import _can_read_isms
+
+        allowed = _can_read_isms(db, user)
     elif entity_type == "pestle_item":
         from app.services.pestle import _can_read_pestle
 

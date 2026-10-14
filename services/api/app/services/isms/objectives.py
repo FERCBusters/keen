@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -43,6 +45,7 @@ def create_objective(
     ):
         raise DomainError(status_code=400, detail="Unknown owner user")
     row = IsmsObjective(
+        start_date=payload.start_date,
         requirement=_clean_text(
             payload.requirement, max_len=20000, required=True, label="requirement"
         ),
@@ -60,6 +63,7 @@ def create_objective(
         created_at=_utcnow(),
         updated_at=_utcnow(),
     )
+    _validate_dates(row)
     db.add(row)
     db.flush()
     _replace_objective_resources(db, row, payload.resource_user_ids or [])
@@ -72,12 +76,27 @@ def create_objective(
 
 
 def list_objectives(
-    *, q: str, framework: str, limit: int, offset: int, user: User, db: Session
+    *,
+    q: str,
+    framework: str,
+    limit: int,
+    offset: int,
+    user: User,
+    db: Session,
+    status: str = "",
 ):
     fw = _clean_framework(framework)
     limit = max(1, min(int(limit or 200), 1000))
     offset = max(0, int(offset or 0))
     qry = db.query(IsmsObjective)
+    if status:
+        if status not in OBJECTIVE_STATUSES:
+            raise DomainError(400, "Invalid objective status")
+        qry = qry.filter(
+            IsmsObjective.status.in_(["defined", "not_started"])
+            if status == "defined"
+            else IsmsObjective.status == status
+        )
     if q.strip():
         needle = f"%{q.strip()}%"
         qry = qry.filter(
@@ -117,6 +136,8 @@ def update_objective(
     row = _by_id_or_404(db, IsmsObjective, objective_id, "Objective")
     before = _objective_out(db, row, fw)
     fields = set(payload.model_fields_set or set())
+    if "start_date" in fields:
+        row.start_date = payload.start_date
     for attr, max_len in [
         ("requirement", 20000),
         ("goal", 20000),
@@ -152,6 +173,7 @@ def update_objective(
     db.flush()
     if "resource_user_ids" in fields:
         _replace_objective_resources(db, row, payload.resource_user_ids or [])
+    _validate_dates(row)
     _apply_links(db, "objective", row.id, fw, payload, user)
     after = _objective_out(db, row, fw)
     _record(db, "objective", row, "updated", before, after, user, context)
@@ -176,3 +198,18 @@ def delete_objective(
     db.delete(row)
     db.commit()
     return {"ok": True}
+
+
+def _validate_dates(row):
+    try:
+        target = (
+            date.fromisoformat(row.completion_target_date)
+            if row.completion_target_date
+            else None
+        )
+    except ValueError:
+        raise DomainError(400, "Target date must use YYYY-MM-DD") from None
+    if target and target.isoformat() != row.completion_target_date:
+        raise DomainError(400, "Target date must use YYYY-MM-DD")
+    if target and row.start_date and target < row.start_date:
+        raise DomainError(400, "Target date must be on or after start date")

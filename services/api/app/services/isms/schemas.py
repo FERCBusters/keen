@@ -19,6 +19,7 @@ class IsmsLinksPayload(BaseModel):
 
 
 class ObjectivePayload(IsmsLinksPayload):
+    start_date: date_type | None = None
     requirement: str | None = Field(default=None, max_length=20000)
     goal: str | None = Field(default=None, max_length=20000)
     metric: str | None = Field(default=None, max_length=20000)

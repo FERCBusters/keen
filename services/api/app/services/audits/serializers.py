@@ -15,6 +15,7 @@ from app.db.models import (
     AuditScopedClause,
     AuditScopedControl,
     AuditScopedIsmsDocument,
+    AuditSwotScope,
     ControlItem,
     FrameworkClause,
     IsmsDocument,
@@ -58,6 +59,7 @@ def audit_summary(
     db: Session, a: Audit, authors: dict[uuid.UUID, str] | None = None
 ) -> dict[str, Any]:
     authors = authors or {}
+    swot_scope_count = db.query(AuditSwotScope).filter_by(audit_id=a.id).count()
     control_scope_count = int(
         db.query(func.count(AuditScopedControl.control_item_id))
         .filter(AuditScopedControl.audit_id == a.id)
@@ -83,7 +85,11 @@ def audit_summary(
             .scalar()
             or 0
         ),
-        "scope_count": control_scope_count + clause_scope_count + document_scope_count,
+        "scope_count": control_scope_count
+        + clause_scope_count
+        + document_scope_count
+        + swot_scope_count,
+        "swot_scope_count": swot_scope_count,
         "control_scope_count": control_scope_count,
         "clause_scope_count": clause_scope_count,
         "document_scope_count": document_scope_count,

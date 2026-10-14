@@ -66,6 +66,12 @@ const topics = {
     'Record the risk, its owner, assessment and treatment. The Reusable Risk Library tab offers scenarios to adapt into your register. Associated controls connect treatments to evidence.',
     'Saving records your assessment. Review the selected controls and ownership as part of the treatment decision.',
   ],
+  swot: [
+    'SWOT analysis and objective planning',
+    'using-swot.html',
+    'Record context, significance and responses, then link framework controls, clauses and related records.',
+    'Use quadrants, status boards and timelines to review the work. The guide explains hierarchy, questions and audit sampling.',
+  ],
   isms: [
     'ISMS records',
     'using-isms.html',
@@ -172,7 +178,9 @@ export function resolveHelp(trigger) {
     key =
       page === 'admin'
         ? own(panes, pane?.id) || 'sources'
-        : own(pages, page) || (page.startsWith('isms') ? 'isms' : 'start');
+        : (['/swot.html', '/isms-swot.html'].includes(location.pathname)
+            ? 'swot'
+            : own(pages, page)) || (page.startsWith('isms') ? 'isms' : 'start');
   }
   if (key === 'sources' && document.querySelector('#hub-mapping[aria-selected="true"]'))
     key = 'mapping';

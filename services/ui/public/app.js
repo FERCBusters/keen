@@ -112,6 +112,7 @@ function _patchIsmsNavDropdown() {
     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="ismsDropdown">
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html'))}">ISMS Overview</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=objectives'))}">Objectives</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/swot.html'))}">SWOT analysis</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=effectiveness'))}">Effectiveness Measures</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=documents'))}">Policies &amp; Processes</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=org'))}">Organisation Chart</a></li>
@@ -683,6 +684,7 @@ export function canSampleIntoAudit(me = null, entityType = '') {
   const type = String(entityType || '')
     .trim()
     .toLowerCase();
+  if (type === 'isms_swot') return Boolean(me?.can_view_isms);
   if (type === 'event') return Boolean(me?.can_view_events);
   if (type === 'bookstack_section' || type.startsWith('isms')) return Boolean(me?.can_sample_isms);
   return true;

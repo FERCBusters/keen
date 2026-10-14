@@ -11,6 +11,7 @@ from app.db.models import (
     IsmsMeeting,
     IsmsObjective,
     IsmsOrgNode,
+    IsmsSwot,
     RiskAsset,
 )
 
@@ -38,6 +39,9 @@ DOCUMENT_TYPES = {
 
 
 OBJECTIVE_STATUSES = {
+    "defined",
+    "planned",
+    "under_review",
     "not_started",
     "in_progress",
     "completed",
@@ -98,6 +102,7 @@ ISMS_SECTION_ALIASES = {
 
 
 ENTITY_TYPES = {
+    "swot": (IsmsSwot, "isms_swot"),
     "objective": (IsmsObjective, "isms_objective"),
     "document": (IsmsDocument, "isms_document"),
     "org_node": (IsmsOrgNode, "isms_org_node"),
