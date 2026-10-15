@@ -15,6 +15,7 @@
 #   KEEN_STAGING_URL=https://keen-staging.example.org
 #   KEEN_STAGING_SSH=deploy@keen-staging.example.org   # empty to run on the host itself
 #   KEEN_STAGING_REMOTE_DIR=/opt/keen                  # the KEEN checkout on the host
+#   KEEN_STAGING_QUBES_TARGET=keen-staging           # optional managed HTTPS tunnel
 #   KEEN_E2E_PYTHON=~/venvs/keen-e2e/bin/python        # optional; has requirements.txt
 #
 # Anything else the suite reads (KEEN_E2E_FUZZ_CASES, KEEN_E2E_SEED, ...) can be
@@ -51,6 +52,9 @@ host="${host%%[:/]*}"
 results="${results:-$PWD/staging-results/$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$results"
 
+tunnel_unit=""
+staging_started=0
+
 say() { printf 'run-security-tests: %s\n' "$*" >&2; }
 
 staging() {
@@ -65,9 +69,72 @@ staging() {
 	fi
 }
 
+start_tunnel() {
+	local target="${KEEN_STAGING_QUBES_TARGET:-}"
+	[ -n "$target" ] || return 0
+	[[ "$target" =~ ^[A-Za-z][A-Za-z0-9_-]{0,30}$ ]] || {
+		say "invalid KEEN_STAGING_QUBES_TARGET"; return 1;
+	}
+	[ "$KEEN_STAGING_URL" = "https://$host" ] || {
+		say "Qubes tunnel requires an HTTPS hostname URL without a port or path"; return 1;
+	}
+	local dependency
+	for dependency in python3 socat qrexec-client-vm sudo systemd-run systemctl; do
+		command -v "$dependency" >/dev/null || { say "missing dependency: $dependency"; return 1; }
+	done
+	# Check both address families, and refuse an existing listener rather than
+	# borrowing or stopping a tunnel owned by someone else.
+	python3 - "$host" <<'CHECK'
+import socket
+import sys
+addresses = {entry[4][0] for entry in socket.getaddrinfo(sys.argv[1], 443, type=socket.SOCK_STREAM)}
+if addresses != {"127.0.0.1"}:
+    sys.exit("Qubes tunnel: hostname must resolve only to 127.0.0.1; check /etc/hosts")
+with socket.socket() as probe:
+    probe.settimeout(1)
+    if probe.connect_ex(("127.0.0.1", 443)) == 0:
+        sys.exit("Qubes tunnel: port 443 is occupied; stop your manual tunnel first")
+CHECK
+	local unit="keen-staging-tunnel-$$-$RANDOM.service"
+	sudo -v
+	tunnel_unit="$unit"
+	say "opening HTTPS tunnel to $target (sudo may be needed again at cleanup)"
+	sudo -n systemd-run --quiet --collect --unit="$unit" \
+		--property=Type=exec --property=KillMode=control-group \
+		--property=TimeoutStopSec=5s --property=RuntimeMaxSec=12h \
+		--property="User=$(id -un)" \
+		--property=AmbientCapabilities=CAP_NET_BIND_SERVICE \
+		--property=CapabilityBoundingSet=CAP_NET_BIND_SERVICE \
+		--property=NoNewPrivileges=yes \
+		/usr/bin/socat TCP4-LISTEN:443,bind=127.0.0.1,reuseaddr,fork,max-children=128 \
+		"EXEC:/usr/bin/qrexec-client-vm $target qubes.ConnectTCP+443"
+	local attempt
+	for attempt in {1..20}; do
+		if python3 -c 'import socket; s=socket.create_connection(("127.0.0.1",443),0.2); s.close()' 2>/dev/null; then
+			sudo -n systemctl is-active --quiet "$unit" && return 0
+		fi
+		sleep 0.1
+	done
+	say "HTTPS tunnel failed to start; inspect: sudo journalctl -u $unit"
+	return 1
+}
+
+stop_tunnel() {
+	[ -n "$tunnel_unit" ] || return 0
+	if ! sudo systemctl stop "$tunnel_unit"; then
+		say "could not stop tunnel; run: sudo systemctl stop $tunnel_unit"
+		return 1
+	fi
+	tunnel_unit=""
+}
+
 finish() {
 	local status="$1"
 	trap - EXIT INT TERM
+	if [ "$staging_started" = 0 ]; then
+		stop_tunnel || true
+		exit "$status"
+	fi
 	say "saving service logs to $results/services.log"
 	staging logs >"$results/services.log" 2>/dev/null || say "could not collect service logs"
 	local tracebacks
@@ -82,6 +149,7 @@ finish() {
 		say "tearing down the staging instance"
 		staging teardown || say "teardown failed; run keen-staging teardown on the host"
 	fi
+	stop_tunnel || status=1
 	exit "$status"
 }
 
@@ -89,6 +157,8 @@ finish() {
 # tears down unless asked to keep the instance.
 trap 'finish 130' INT TERM
 trap 'finish $?' EXIT
+start_tunnel
+staging_started=1
 if [ "$restore" = 1 ]; then
 	say "restoring $host to its golden state"
 	staging restore
