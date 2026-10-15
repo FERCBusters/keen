@@ -294,3 +294,15 @@ test('a disabled Objectives deep link loads Overview without requesting objectiv
   assert.ok(!ui.calls.some((call) => call.url.includes('section=objectives')));
   assert.ok(ui.calls.some((call) => call.url.includes('section=overview')));
 });
+
+test('ISMS flow places SWOT beside measures and respects feature availability', async (t) => {
+  const ui = await fixture(t);
+  const link = ui.el('overviewCards').querySelector('a[aria-label="Open SWOT"]');
+  assert.match(link.getAttribute('href'), /tab=swot/);
+  assert.match(link.getAttribute('href'), /framework=A/);
+  assert.equal(link.querySelector('rect').getAttribute('y'), '238');
+});
+test('ISMS flow omits disabled SWOT', async (t) => {
+  const ui = await fixture(t, { me: { is_admin: true, features: { enabled: { swot: false } } } });
+  assert.equal(ui.el('overviewCards').querySelector('a[aria-label="Open SWOT"]'), null);
+});

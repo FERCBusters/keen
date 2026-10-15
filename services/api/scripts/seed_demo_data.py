@@ -801,6 +801,46 @@ class DemoSeeder:
                 "controls": ["A.5.4", "A.5.24", "A.6.3"],
             },
         ]
+        specs.extend(
+            [
+                dict(
+                    task="Revoke a departing contractor's access",
+                    asset="platform",
+                    status="Pending Approval",
+                    accounts=["prod", "stage"],
+                    roles=["security_lead", "service_desk"],
+                    notes="Fictional leaver checklist: disable identity, revoke tokens, confirm removal and retain reviewer evidence. No real account is changed.",
+                    controls=["A.5.18", "A.6.5"],
+                ),
+                dict(
+                    task="Review temporary supplier support access",
+                    asset="web_app",
+                    status="Pending Approval",
+                    accounts=["prod"],
+                    roles=["security_lead", "platform_engineer"],
+                    notes="Fictional time-limited support request. Require sponsor approval, MFA, an expiry and post-session review before enabling access.",
+                    controls=["A.5.19", "A.5.22", "A.8.2"],
+                ),
+                dict(
+                    task="Exercise emergency recovery access",
+                    asset="data_store",
+                    status="Approved",
+                    accounts=["backup"],
+                    roles=["security_lead", "platform_engineer"],
+                    notes="Fictional break-glass exercise with dual approval and subsequent credential rotation. This matrix is documentation only; it grants no KEEN permissions.",
+                    controls=["A.5.30", "A.8.13"],
+                ),
+                dict(
+                    task="Export a synthetic audit evidence package",
+                    asset="service_desk",
+                    status="Pending Approval",
+                    accounts=["stage"],
+                    roles=["isms_owner", "dpo"],
+                    notes="Review recipient, scope and redaction before exporting fictional evidence; record retention and approval decisions.",
+                    controls=["A.5.12", "A.5.14"],
+                ),
+            ]
+        )
         for spec in specs:
             entry = self.upsert(
                 IsmsAccessControlMatrixEntry,

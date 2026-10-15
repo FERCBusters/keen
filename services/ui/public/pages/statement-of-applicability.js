@@ -561,12 +561,28 @@ function renderIsmsOrgAssets() {
   }
 }
 
+function renderSwot() {
+  const body = document.getElementById('swotRows');
+  const tab = document.getElementById('soaSwotTab');
+  tab.closest('li').hidden = !soa.can_view_swot;
+  body.innerHTML =
+    (soa.swot_items || [])
+      .map((item) => {
+        const href = withFramework(`/swot.html?id=${encodeURIComponent(item.id)}`, framework);
+        const refs = (items, link) => (items || []).map(link).join(', ') || '—';
+        return `<tr><td><a href="${esc(href)}">${esc(item.title)}</a></td><td>${esc(item.kind)}</td><td>${esc(item.significance)}/5</td><td>${esc(String(item.status).replaceAll('_', ' '))}</td><td>${refs(item.controls, controlLink)}</td><td>${refs(item.clauses, clauseLink)}</td></tr>`;
+      })
+      .join('') ||
+    '<tr><td colspan="6" class="p-4 small-muted">No SWOT items mapped to this framework.</td></tr>';
+}
+
 function renderAll() {
   const counts = soa.counts || {};
   if (meta) {
     const businessProcessCount = counts.isms_business_processes ?? counts.business_processes ?? 0;
     meta.textContent = `${soa.framework || framework} • ${counts.controls || 0} controls • ${counts.clauses || 0} clauses • ${counts.risks || 0} CIA risks • ${counts.pestle || 0} PESTLE(E) items • ${businessProcessCount || 0} business processes • ${counts.interested_parties || 0} Interested Parties • ${counts.isms_objectives || 0} ISMS objectives • ${counts.isms_documents || 0} ISMS documents • ${counts.isms_effectiveness_measures || 0} effectiveness measures • ${counts.isms_assets || 0} assets`;
   }
+  renderSwot();
   renderControls();
   renderClauses();
   renderRisks();

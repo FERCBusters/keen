@@ -491,3 +491,43 @@ def test_draft_relationships_obey_disabled_features_and_payload_bound(keen):
     assert response.status_code == 404
     assert keen.db.query(IsmsSwot).count() == 0
     assert keen.db.query(IsmsSwotLink).count() == 0
+
+
+def test_soa_swot_framework_scope_permissions_and_feature_gate(keen):
+    from app.db.models import ControlItem, Framework, FrameworkClause
+
+    admin = keen.client(keen.user(role="admin"))
+    reader = keen.client(keen.user("isms.read"))
+    denied = keen.client(keen.user())
+    keen.db.add(Framework(slug="soa-test", name="SoA test"))
+    keen.db.flush()
+    control = ControlItem(
+        framework_slug="soa-test", ref="C1", title="Control", type="annex_control"
+    )
+    clause = FrameworkClause(framework_slug="soa-test", ref="6.2", title="Planning")
+    keen.db.add_all([control, clause])
+    keen.db.commit()
+    for field, target in (("controls", control), ("clauses", clause)):
+        response = admin.post(
+            "/v1/isms/swot?framework=soa-test",
+            json={"title": field, field: [str(target.id)]},
+            headers=unsafe(admin),
+        )
+        assert response.status_code == 200, response.text
+    path = "/v1/statement-of-applicability?framework=soa-test"
+    assert keen.client().get(path).status_code == 401
+    assert len(reader.get(path).json()["swot_items"]) == 2
+    assert (
+        reader.get("/v1/statement-of-applicability?framework=other").json()[
+            "swot_items"
+        ]
+        == []
+    )
+    assert denied.get(path).json()["swot_items"] == []
+    response = admin.put(
+        "/v1/admin/features",
+        json={"version": 0, "changes": {"swot": False}},
+        headers=unsafe(admin),
+    )
+    assert response.status_code == 200, response.text
+    assert reader.get(path).json()["swot_items"] == []

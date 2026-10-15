@@ -43,14 +43,55 @@ SPECS = {
         action="Breach: restore exceeded the objective; improve recovery automation and repeat the measured exercise.",
     ),
 }
+SPECS.update(
+    {
+        "access_review": dict(
+            title="Privileged access reviews completed on time",
+            target=100,
+            unit="%",
+            operator="gte",
+            values=[70, 80, 90, 100, 95, 100],
+            method="20 fictional privileged accounts due for review each month; reviewed on time divided by 20, multiplied by 100. Exceptions remain in the denominator.",
+            action="Breach: two owners missed review deadlines; escalate and remove unnecessary access.",
+        ),
+        "supplier_review": dict(
+            title="Critical supplier assurance reviews completed",
+            target=100,
+            unit="%",
+            operator="gte",
+            values=[60, 70, 80, 90, 100, 95],
+            method="20 fictional supplier review obligations per reporting period; completed reviews divided by 20, multiplied by 100. Outstanding evidence is counted as incomplete.",
+            action="Breach: supplier evidence is outstanding; assign a follow-up owner before renewal.",
+        ),
+        "evidence_coverage": dict(
+            title="Priority controls with current reviewed evidence",
+            target=95,
+            unit="%",
+            operator="gte",
+            values=[65, 75, 85, 90, 95, 100],
+            method="20 fictional priority controls; controls with evidence reviewed within 90 days divided by 20, multiplied by 100. Unmapped evidence does not count.",
+            action="Breach: manual collection left evidence gaps; validate automated collection and reviewer ownership.",
+        ),
+    }
+)
 LINKS = {
     "iso_27001_2022": {
         "availability": "A.8.14",
         "patch_sla": "A.8.8",
         "recovery": "A.8.13",
+        "access_review": "A.5.18",
+        "supplier_review": "A.5.19",
+        "evidence_coverage": "A.5.35",
     },
-    "KEEN-AF:1.0": {"availability": "TPM-2", "patch_sla": "VPM-2", "recovery": "BCD-2"},
-    "CYBER-ESSENTIALS:2026": {"patch_sla": "A6.4"},
+    "KEEN-AF:1.0": {
+        "availability": "TPM-2",
+        "patch_sla": "VPM-2",
+        "recovery": "BCD-2",
+        "access_review": "IAC-7",
+        "supplier_review": "TPM-2",
+        "evidence_coverage": "GOV-11",
+    },
+    "CYBER-ESSENTIALS:2026": {"patch_sla": "A6.4", "access_review": "A7.3"},
 }
 
 
@@ -150,13 +191,15 @@ def seed_metrics(seeder, frameworks):
                     )
                 elif key == "patch_sla":
                     raw.update(due_obligations=100, installed_within_14_days=value)
-                else:
+                elif key == "recovery":
                     raw.update(
                         scheduled_tests=1,
                         completed_tests=1,
                         integrity_check="passed",
                         application_check="passed",
                     )
+                else:
+                    raw.update(due_obligations=20, completed_on_time=round(value / 5))
                 note = (
                     "Target met; reviewer checked the synthetic source report."
                     if passed

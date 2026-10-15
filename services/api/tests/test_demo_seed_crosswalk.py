@@ -218,7 +218,7 @@ def test_measured_assurance_has_thresholds_sources_and_chronological_results(db)
         )
         .all()
     )
-    assert len(measures) == sum(map(len, LINKS.values())) == 7
+    assert len(measures) == sum(map(len, LINKS.values())) == 14
     for measure in measures:
         rows = (
             db.query(IsmsEffectivenessMetricEntry)
@@ -273,3 +273,54 @@ def test_live_rss_preset_is_idempotent_and_preserves_rules(db, monkeypatch):
     count = db.query(ManagedConfigurationRevision).count()
     seed_preset(db)
     assert db.query(ManagedConfigurationRevision).count() == count
+
+
+def test_swot_demo_relationships_frameworks_and_soa_visibility(db, monkeypatch):
+    from app.db.models import IsmsEntityControlLink, IsmsSwot, IsmsSwotLink
+    from app.services import soa
+    from app.services.features import update
+
+    config = DemoConfig("iso_27001_2022", "Demo", None, False, True)
+    DemoSeeder(db, config).run()
+    rows = db.query(IsmsSwot).all()
+    assert len(rows) == 9
+    assert {r.kind for r in rows} == {"strength", "weakness", "opportunity", "threat"}
+    assert sum(r.parent_id is not None for r in rows) == 3
+    assert {r.target_type for r in db.query(IsmsSwotLink)} == {
+        "risk",
+        "asset",
+        "person",
+        "vendor",
+        "objective",
+        "document",
+    }
+    ids = {r.id for r in rows}
+    rows[0].title = "Locally edited SWOT"
+    rows[0].status = "deferred"
+    DemoSeeder(db, config).run()
+    assert {r.id for r in db.query(IsmsSwot)} == ids
+    assert rows[0].title == "Locally edited SWOT"
+    assert rows[0].status == "deferred"
+    user = db.query(User).filter_by(username="demo").one()
+    for framework in ("iso_27001_2022", "KEEN-AF:1.0", "CYBER-ESSENTIALS:2026"):
+        result = soa.statement_of_applicability(framework=framework, user=user, db=db)
+        expected = {
+            r.entity_id
+            for r in db.query(IsmsEntityControlLink).filter_by(
+                entity_type="swot", framework_slug=framework
+            )
+        }
+        assert {r["id"] for r in result["swot_items"]} == {str(i) for i in expected}
+        assert all(
+            c["framework"] == framework
+            for r in result["swot_items"]
+            for c in r["controls"]
+        )
+    monkeypatch.setattr(soa, "_can_read_isms", lambda *args: False)
+    assert soa.statement_of_applicability(user=user, db=db)["swot_items"] == []
+    monkeypatch.undo()
+    from app.services.features import state
+
+    update(db, user, state(db).version, {"swot": False})
+    result = soa.statement_of_applicability(user=user, db=db)
+    assert result["swot_items"] == [] and not result["can_view_swot"]

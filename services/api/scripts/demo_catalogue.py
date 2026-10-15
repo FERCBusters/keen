@@ -340,3 +340,7 @@ def seed_catalogue(seeder, frameworks):
                         added_by_user_id=seeder.user.id,
                     ),
                 )
+
+    from demo_swot import seed_swot
+
+    seed_swot(seeder, frameworks)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -23,9 +24,12 @@ from app.db.models import (
     IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
+    IsmsEntityClauseLink,
+    IsmsEntityControlLink,
     IsmsMeeting,
     IsmsObjective,
     IsmsOrgNode,
+    IsmsSwot,
     PestleBusinessProcess,
     PestleItem,
     PestleRelevanceLevel,
@@ -38,9 +42,11 @@ from app.db.models import (
 )
 from app.security.permissions import has_permission
 from app.services.clauses import _clause_evidence_mappings
+from app.services.features import state
 from app.services.isms.access import _can_read_isms
 from app.services.isms.serializers import (
     _asset_out,
+    _attach_links,
     _business_process_out,
     _document_out,
     _effectiveness_measure_out,
@@ -48,6 +54,7 @@ from app.services.isms.serializers import (
     _meeting_out,
     _objective_out,
 )
+from app.services.isms.swot import summary as swot_summary
 from app.services.risks import risk_owner_out
 
 RISK_READ_PERMISSION = "risk.read"
@@ -381,6 +388,30 @@ def statement_of_applicability(
             _interested_party_summary(db, row, fw) for row in interested_parties
         ]
 
+    can_view_swot = can_view_isms and state(db).enabled("swot")
+    swot_rows = []
+    if can_view_swot:
+        mapped = []
+        for model in (IsmsEntityControlLink, IsmsEntityClauseLink):
+            mapped.append(
+                IsmsSwot.id.in_(
+                    db.query(model.entity_id).filter(
+                        model.entity_type == "swot", model.framework_slug == fw
+                    )
+                )
+            )
+        rows = (
+            db.query(IsmsSwot)
+            .filter(or_(*mapped))
+            .order_by(IsmsSwot.significance.desc(), IsmsSwot.title, IsmsSwot.id)
+            .limit(500)
+            .all()
+        )
+        swot_rows = [
+            _attach_links(db, swot_summary(row), "swot", row.id, fw, True)
+            for row in rows
+        ]
+
     isms_objectives: list[dict[str, Any]] = []
     isms_documents: list[dict[str, Any]] = []
     isms_org_nodes: list[dict[str, Any]] = []
@@ -448,7 +479,10 @@ def statement_of_applicability(
         "can_view_pestle": can_view_pestle,
         "can_view_interested_parties": can_view_interested_parties,
         "can_view_isms": can_view_isms,
+        "can_view_swot": can_view_swot,
+        "swot_items": swot_rows,
         "counts": {
+            "swot": len(swot_rows),
             "controls": len(control_rows),
             "clauses": len(clause_rows),
             "risks": len(risk_rows),

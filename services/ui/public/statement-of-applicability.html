@@ -60,9 +60,17 @@
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="soaIsmsOrgAssetsTab" data-bs-toggle="tab" data-bs-target="#soaIsmsOrgAssetsPane" type="button" role="tab" aria-controls="soaIsmsOrgAssetsPane" aria-selected="false">Org & Assets</button>
       </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="soaSwotTab" data-feature="swot" data-bs-toggle="tab" data-bs-target="#soaSwotPane" type="button" role="tab" aria-controls="soaSwotPane" aria-selected="false">SWOT</button>
+      </li>
     </ul>
 
     <div class="tab-content" id="soaTabContent">
+      <section class="tab-pane fade" id="soaSwotPane" role="tabpanel" aria-labelledby="soaSwotTab" tabindex="0">
+        <div class="card"><div class="card-header"><div class="fw-bold">SWOT analysis</div><div class="small-muted">Up to 500 SWOT items mapped to controls or clauses in the selected framework, ordered by significance. Open an item to review its relationships and history.</div></div>
+          <div class="card-body p-0 table-responsive"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Item</th><th>Type</th><th>Significance</th><th>Status</th><th>Controls</th><th>Clauses</th></tr></thead><tbody id="swotRows"></tbody></table></div>
+        </div>
+      </section>
       <section class="tab-pane fade show active" id="soaControlsPane" role="tabpanel" aria-labelledby="soaControlsTab" tabindex="0">
         <div class="card">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
