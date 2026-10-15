@@ -52,6 +52,9 @@ test('sources start with named enabled configurations and require inputs before 
   const { document } = await fixture(t);
   assert.equal(document.getElementById('hub-connection'), null);
   assert.equal(document.getElementById('evidence-management-view').hidden, false);
+  const health = document.getElementById('evidence-source-health');
+  assert.equal(health.closest('section').id, 'evidence-management-view');
+  assert.equal(health.open, false);
   const list = document.getElementById('hub-list');
   assert.match(list.textContent, /My Forgejo/);
   assert.doesNotMatch(list.textContent, /Environment default|Hidden logs|Add mapping rule/);

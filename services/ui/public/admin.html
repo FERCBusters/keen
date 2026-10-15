@@ -407,11 +407,7 @@
 <button id="hub-source" class="nav-link active" type="button" role="tab" aria-selected="true" aria-controls="evidence-management-view">Sources</button>
 <button id="hub-mapping" class="nav-link" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="evidence-mapping-view">Evidence Mapping</button>
 </div>
-<section id="evidence-mapping-view" hidden role="tabpanel" aria-labelledby="hub-mapping">        <details data-ec-overview id="evidence-source-health" class="card mb-3"><summary class="card-header fw-bold">Source catalogue and collection health</summary><div class="card-body">
-          <p class="small-muted">Review the available sources and their collected events. Built-in adapters use their configured credentials; Custom API connections are managed in API ingester builder. Agent identities and credentials are managed in KEEN Agents.</p>
-          <p class="small text-secondary">Pause or resume collection across all connections of a source type. Evidence, mappings and cursors are retained. Runs already in progress may finish; resume uses the next scheduled run.</p>
-          <div id="source-catalogue" class="row g-2"><div class="col-12 small-muted">Loading source catalogue…</div></div>
-        </div></details>
+<section id="evidence-mapping-view" hidden role="tabpanel" aria-labelledby="hub-mapping">        
         <h2 data-ec-overview class="h5">Evidence mapping</h2><p data-ec-overview><a href="#remap" class="btn btn-outline-secondary btn-sm">Review historical remapping</a></p>
         <p data-ec-overview class="small-muted">Collections choose remote inputs to fetch. Evidence definitions match the resulting events and link them to framework controls or clauses. A collection can support several definitions.</p>
         <div id="ec-status" role="status" hidden></div>
@@ -477,7 +473,13 @@
           </div>
         </div></div>
 </section>
-<section id="evidence-management-view" role="tabpanel" aria-labelledby="hub-source">  <details id="hub-panel" class="mb-4" open><summary class="h4">Your sources</summary>
+<section id="evidence-management-view" role="tabpanel" aria-labelledby="hub-source">
+<details data-ec-overview id="evidence-source-health" class="card mb-3"><summary class="card-header fw-bold">Source catalogue and collection health</summary><div class="card-body">
+          <p class="small-muted">Review the available sources and their collected events. Built-in adapters use their configured credentials; Custom API connections are managed in API ingester builder. Agent identities and credentials are managed in KEEN Agents.</p>
+          <p class="small text-secondary">Pause or resume collection across all connections of a source type. Evidence, mappings and cursors are retained. Runs already in progress may finish; resume uses the next scheduled run.</p>
+          <div id="source-catalogue" class="row g-2"><div class="col-12 small-muted">Loading source catalogue…</div></div>
+        </div></details>
+  <details id="hub-panel" class="mb-4" open><summary class="h4">Your sources</summary>
 <p class="small-muted">Each source is a named server or account. Add inputs to choose what it collects, then add mapping rules for that evidence.</p>
     <div class="d-flex flex-wrap gap-2 mb-3"><button id="hub-refresh" class="btn btn-outline-secondary">Refresh</button><input id="hub-search" class="form-control w-auto flex-grow-1" placeholder="Find a source" aria-label="Find a source"></div>
     <p><a href="#integrations">Build a custom API ingester</a> · <a href="#ingest">Run built-in adapters</a></p>

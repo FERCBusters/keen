@@ -811,7 +811,7 @@ function readRule() {
     enabled: $('enabled').checked,
   };
 }
-async function newRule() {
+async function newRule({ openEditor = true } = {}) {
   pollingJobId = null;
   $('rule-retention').hidden = true;
   draftEventFields = [];
@@ -848,7 +848,7 @@ async function newRule() {
   $('sample-details').textContent =
     'Choose a recent event to inspect its fields. You can also define a rule before evidence arrives.';
   await selectDefinitionAdapter();
-  showEditor(1);
+  if (openEditor) showEditor(1);
 }
 function showSelectedInput() {
   const adapter = $('definition-adapter').value,
@@ -1128,7 +1128,7 @@ async function loadRules({ resetEditor = true } = {}) {
   $('source-filter').value = selectedSource;
   renderRules();
   if (resetEditor) {
-    await newRule();
+    await newRule({ openEditor: false });
     showLibrary();
   }
   if (data.warnings?.length) status(data.warnings.join(' · '), 'warning');

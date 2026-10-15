@@ -81,8 +81,15 @@ export function hrefFeature(href) {
   return pages[url.pathname];
 }
 let observer;
+let tabGuardInstalled = false;
 export function applyFeatures(me) {
   observer?.disconnect();
+  if (!tabGuardInstalled) {
+    document.addEventListener('show.bs.tab', (event) => {
+      if (event.target.closest('[data-feature-hidden]')) event.preventDefault();
+    });
+    tabGuardInstalled = true;
+  }
   const apply = (root) => {
     const nodes = [...root.querySelectorAll('[data-feature], a[href]')];
     if (root.matches?.('[data-feature], a[href]')) nodes.unshift(root);
@@ -112,6 +119,21 @@ export function applyFeatures(me) {
   const bell = document.getElementById('navBell');
   if (bell) bell.dataset.feature = 'questions';
   apply(document);
+  if (!featureEnabled(me, 'visualisations')) {
+    const url = new URL(window.location.href);
+    if (['visualisations', 'visualizations'].includes(url.searchParams.get('tab'))) {
+      url.searchParams.delete('tab');
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    }
+    for (const tab of document.querySelectorAll('[data-feature="visualisations"].active')) {
+      const fallback = [
+        ...(tab
+          .closest('[role="tablist"], .nav-tabs')
+          ?.querySelectorAll('[data-bs-toggle="tab"]') || []),
+      ].find((candidate) => !candidate.closest('[data-feature-hidden]'));
+      if (fallback) window.bootstrap?.Tab.getOrCreateInstance(fallback).show();
+    }
+  }
   observer = new window.MutationObserver((records) => {
     for (const record of records)
       for (const node of record.addedNodes) if (node.nodeType === 1) apply(node);

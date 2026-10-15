@@ -34,7 +34,10 @@ async function until(check) {
   }
   assert.fail('Editor did not reach expected state');
 }
-async function fixture(t, { fail = false, rule = null, requestedRule = null } = {}) {
+async function fixture(
+  t,
+  { fail = false, rule = null, requestedRule = null, defaultView = false } = {},
+) {
   const calls = [];
   async function apiGet(raw) {
     calls.push(raw);
@@ -65,7 +68,13 @@ async function fixture(t, { fail = false, rule = null, requestedRule = null } = 
       ? 'https://keen.example/admin.html?rule=' +
         encodeURIComponent(requestedRule) +
         '#evidence-config'
-      : 'https://keen.example/admin.html?from_event=' + id,
+      : defaultView
+        ? 'https://keen.example/admin.html#evidence-config'
+        : 'https://keen.example/admin.html?from_event=' + id,
+    setup(window) {
+      window.mappingSwitches = 0;
+      window.addEventListener('keen-show-evidence-mapping', () => window.mappingSwitches++);
+    },
     vendor: { apiGet },
   });
   t.after(() => ui.close());
@@ -77,7 +86,10 @@ async function fixture(t, { fail = false, rule = null, requestedRule = null } = 
           ? ui.document.getElementById('ec-rule-id').value === requestedRule &&
             !ui.document.getElementById('ec-rule-retention').hidden
           : ui.document.getElementById('ec-status').textContent.includes('no longer exists')
-        : !ui.document.getElementById('ec-draft-notice').hidden,
+        : defaultView
+          ? ui.document.querySelector('#ec-definition-adapter option') &&
+            !ui.document.getElementById('ec-library').hidden
+          : !ui.document.getElementById('ec-draft-notice').hidden,
   );
   return { ...ui, calls };
 }
@@ -296,4 +308,14 @@ test('regex guide only appears on the matching step', async (t) => {
   assert.equal(guide.hidden, true);
   document.getElementById('ec-prev-step').click();
   assert.equal(guide.hidden, false);
+});
+
+test('initial rule loading preserves Sources until an editor is requested', async (t) => {
+  const { window, document } = await fixture(t, { defaultView: true });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(window.mappingSwitches, 0);
+  assert.equal(document.getElementById('ec-editor').hidden, true);
+  document.getElementById('ec-new-rule').click();
+  await until(() => window.mappingSwitches === 1);
+  assert.equal(document.getElementById('ec-editor').hidden, false);
 });

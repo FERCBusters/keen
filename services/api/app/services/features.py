@@ -18,7 +18,7 @@ DEFINITIONS = (
     ("clauses", "Clauses workspace", None),
     ("evidence", "Evidence browsing and downloads", None),
     ("sources", "Sources workspace", None),
-    ("visualisations", "Framework visualisations", None),
+    ("visualisations", "Visualisations", None),
     ("explorer", "Connections explorer", None),
     ("risks", "Risk management", None),
     ("risk_cia", "CIA risk assessments", "risks"),

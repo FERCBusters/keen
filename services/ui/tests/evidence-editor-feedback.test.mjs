@@ -115,7 +115,7 @@ test('unchanged legacy Summary regex saves without consuming a structured condit
     targets: [],
     structuredClone,
   });
-  vm.runInContext(segment('function readRule()', 'async function newRule()'), context);
+  vm.runInContext(segment('function readRule()', 'async function newRule('), context);
   const when = JSON.parse(vm.runInContext('JSON.stringify(readRule().when)', context));
   assert.deepEqual(when, { summary_regex: '^$', source: 'source' });
   row.fieldInputs.op.value = 'contains';

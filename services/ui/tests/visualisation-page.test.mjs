@@ -91,3 +91,26 @@ test('switching graph to heatmap reuses the existing dataset', async (t) => {
   await settle(() => ui.el('viz').querySelector('rect'));
   assert.equal(ui.calls.length, before);
 });
+
+test('disabled embedded charts neither activate from saved URLs nor fetch chart data', async (t) => {
+  const ui = await page(t, 'visualisation', {
+    htmlName: 'events',
+    scripts: [d3],
+    query: '&tab=visualisations',
+    setup(window) {
+      window.history.replaceState(null, '', '/events.html?framework=A&tab=visualisations');
+    },
+    me: { is_admin: true, features: { enabled: { visualisations: false } } },
+    get: async (url) => {
+      throw new Error('Unexpected GET ' + url);
+    },
+  });
+  assert.ok(ui.el('eventsVisualisationsTab').parentElement.hasAttribute('data-feature-hidden'));
+  assert.ok(ui.el('embeddedVisualisationsPane').hasAttribute('data-feature-hidden'));
+  ui.el('eventsVisualisationsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(
+    ui.calls.filter((call) => call.url.includes('/graph/') || call.url.includes('/stats/')).length,
+    0,
+  );
+});

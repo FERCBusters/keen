@@ -1,4 +1,4 @@
-import { applyFeatures } from '/pages/feature-availability.js';
+import { applyFeatures, featureEnabled } from '/pages/feature-availability.js';
 import { csvEscape } from '../csv.js';
 import { ensureEmbeddedVisualisationMarkup } from './visualisation/embedded-markup.js';
 import {
@@ -3837,6 +3837,7 @@ window.addEventListener('resize', () => {
 });
 
 async function load() {
+  if (!featureEnabled(me, 'visualisations')) return;
   // Persist current range (if present) so Reload / refresh keeps it.
   if (normalizeRangeInputs());
 
@@ -3907,6 +3908,7 @@ function embeddedVisualisationTabButton(pane = embeddedVisualisationPane()) {
 }
 
 function activateEmbeddedVisualisationTabFromQuery() {
+  if (!featureEnabled(me, 'visualisations')) return;
   try {
     const requested = new URLSearchParams(location.search || '').get('tab');
     if (requested !== 'visualisations') return;
@@ -3936,7 +3938,7 @@ function setEmbeddedVisualisationTabQuery(active) {
 
 let visualisationStarted = false;
 function startVisualisation() {
-  if (visualisationStarted) return;
+  if (visualisationStarted || !featureEnabled(me, 'visualisations')) return;
   visualisationStarted = true;
   load();
 }

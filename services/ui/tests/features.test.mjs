@@ -221,3 +221,32 @@ test('returning to Features refreshes once and keeps switches during loading', a
     ui.close();
   }
 });
+
+test('disabled visualisation tabs hide their panes and reject saved-link activation', async () => {
+  const ui = await loadUi('pages/feature-availability.js', {
+    url: 'https://keen.example/events.html?tab=visualisations&framework=A',
+    html: '<ul role="tablist"><li><button id="events" data-bs-toggle="tab">Events</button></li><li><button id="charts" data-feature="visualisations" data-bs-toggle="tab" data-bs-target="#pane">Visualisations</button></li></ul><section id="pane"></section>',
+  });
+  try {
+    ui.api.applyFeatures({ features: { enabled: { visualisations: false } } });
+    const doc = ui.document;
+    const tab = doc.getElementById('charts');
+    assert.ok(tab.parentElement.hasAttribute('data-feature-hidden'));
+    assert.ok(doc.getElementById('pane').hasAttribute('data-feature-hidden'));
+    assert.ok(!doc.getElementById('events').parentElement.hasAttribute('data-feature-hidden'));
+    assert.equal(new URL(ui.window.location.href).searchParams.get('tab'), null);
+    assert.equal(new URL(ui.window.location.href).searchParams.get('framework'), 'A');
+    assert.equal(
+      tab.dispatchEvent(new ui.window.Event('show.bs.tab', { bubbles: true, cancelable: true })),
+      false,
+    );
+    ui.api.applyFeatures({ features: { enabled: { visualisations: true } } });
+    assert.ok(!tab.parentElement.hasAttribute('data-feature-hidden'));
+    assert.equal(
+      tab.dispatchEvent(new ui.window.Event('show.bs.tab', { bubbles: true, cancelable: true })),
+      true,
+    );
+  } finally {
+    ui.close();
+  }
+});
