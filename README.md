@@ -1,5 +1,8 @@
 # KEEN — Key Evidence ENgine
 
+[![Backend coverage](https://github.com/FERCBusters/keen/raw/badges/coverage-api.svg)](https://github.com/FERCBusters/keen/actions/workflows/tests.yml?query=branch%3Amain)
+[![Frontend coverage](https://github.com/FERCBusters/keen/raw/badges/coverage-ui.svg)](https://github.com/FERCBusters/keen/actions/workflows/tests.yml?query=branch%3Amain)
+
 KEEN brings operational evidence, assurance frameworks, risk management and ISMS records into one workspace. It collects activity from your systems, maps evidence to controls, and helps people review that evidence during audits.
 
 ## What you can do
