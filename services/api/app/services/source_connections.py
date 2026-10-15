@@ -170,13 +170,16 @@ DESTINATION_FIELDS = ("base_url", "auth_mode", "header_name")
 
 def _destination(configuration, source=None):
     values = dict(configuration or {})
+    if source == "imap":
+        from app.ingest.imap_support.config import configuration as imap_configuration
+
+        # Use exactly the account identity sent on the wire. Whitespace and a
+        # trailing slash are significant inside a quoted IMAP username.
+        parsed = imap_configuration(values)
+        return parsed["host"], parsed["port"], parsed["username"]
     values["auth_mode"] = values.get("auth_mode") or "token"  # blank means token
     return tuple(
-        str(values.get(name) or "").strip().rstrip("/")
-        for name in (
-            DESTINATION_FIELDS
-            + (("host", "port", "username") if source == "imap" else ())
-        )
+        str(values.get(name) or "").strip().rstrip("/") for name in DESTINATION_FIELDS
     )
 
 

@@ -24,7 +24,10 @@ from app.integrations.transport import decrypt
 
 # Public endpoint/account fields and secret fields are deliberately enumerated.
 FIELDS = {
-    "imap": ("host port username folder fetch_body body_max_chars", "password"),
+    "imap": (
+        "host port username folder fetch_body body_max_chars poll_interval_minutes",
+        "password",
+    ),
     "webhooks": ("provider secret_header", "secret"),
     "elasticsearch": ("base_url username", "password api_key"),
     "loki": ("base_url username header_name", "password header_value"),

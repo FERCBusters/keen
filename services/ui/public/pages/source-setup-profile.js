@@ -5,7 +5,7 @@ export function sourceSetupProfile(source, connection = null) {
     return {
       inlineInput: true,
       hiddenFields: [],
-      hint: 'Read-only IMAPS. The first poll starts with new mail only. Body collection is optional; HTML is stored only as inert JSON text. No attachments are fetched.',
+      hint: 'Read-only IMAPS. The first poll starts with new mail only. Collection intervals apply to scheduled and manual runs (minimum five minutes). Body collection is optional; HTML is stored only as inert JSON text. No attachments are fetched.',
       prepare: () => ({}),
     };
   if (source !== 'rss' || (connection?.inputs?.feeds?.length || 0) > 1) return null;

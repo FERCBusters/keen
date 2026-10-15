@@ -14,6 +14,8 @@ from app.security.redaction import redact_str
 from .mime import body_part, decode_body, structure
 from .transport import Client
 
+COLLECTION_TIMEOUT = 45
+
 
 def checked(result):
     status, rows = result
@@ -37,25 +39,66 @@ def literal(client, uid, section, limit):
     rows = checked(
         client.uid("FETCH", str(uid), f"(UID BODY.PEEK[{section}]<0.{limit}>)")
     )
-    values = [row[1] for row in rows if isinstance(row, tuple)]
-    headers = b" ".join(
-        row[0] if isinstance(row, tuple) else row or b"" for row in rows
-    )
-    if (
-        not re.search(rb"\bUID " + str(uid).encode() + rb"\b", headers)
-        or len(values) != 1
-    ):
+    positions = [i for i, row in enumerate(rows) if isinstance(row, tuple)]
+    if len(positions) != 1:
         raise ValueError("Unexpected IMAP FETCH response")
-    if len(values[0]) > limit:
-        raise ValueError("Oversized IMAP body")
-    return values[0]
+    pos = positions[0]
+    prefix, value = rows[pos]
+    # UID may appear before or after the literal, but must be in this FETCH.
+    # Never accept an unrelated FLAGS response or a quoted MIME value as its UID.
+    before = re.fullmatch(
+        rb"[1-9][0-9]* \((?:UID ([0-9]+) )?BODY\["
+        + re.escape(section.encode("ascii"))
+        + rb"\](?:<0>)? \{([0-9]+)\}",
+        prefix,
+        re.IGNORECASE,
+    )
+    after = (
+        re.fullmatch(rb"(?: UID ([0-9]+))?\)", rows[pos + 1], re.IGNORECASE)
+        if pos + 1 < len(rows) and isinstance(rows[pos + 1], bytes)
+        else None
+    )
+    if not before or not after or not isinstance(value, bytes):
+        raise ValueError("Unexpected IMAP literal metadata")
+    identifiers = [v for v in (before[1], after[1]) if v is not None]
+    if (
+        identifiers != [str(uid).encode()]
+        or int(before[2]) != len(value)
+        or len(value) > limit
+    ):
+        raise ValueError("IMAP literal identity or size mismatch")
+    return value
+
+
+def metadata(data, uid, *, include_body=True):
+    match = re.fullmatch(rb"[1-9][0-9]* (\(.*\))", data, re.DOTALL)
+    if not match:
+        raise ValueError("Invalid IMAP metadata response")
+    fields = structure(match[1])
+    if (
+        not isinstance(fields, list)
+        or len(fields) != (6 if include_body else 4)
+        or any(not isinstance(k, str) for k in fields[::2])
+    ):
+        raise ValueError("Invalid IMAP metadata fields")
+    values = dict(zip((k.upper() for k in fields[::2]), fields[1::2]))
+    expected = {"UID", "RFC822.SIZE"} | ({"BODYSTRUCTURE"} if include_body else set())
+    if set(values) != expected or values["UID"] != str(uid):
+        raise ValueError("IMAP metadata UID mismatch")
+    size = values["RFC822.SIZE"]
+    if not isinstance(size, str) or not re.fullmatch(r"[0-9]{1,20}", size):
+        raise ValueError("Invalid IMAP message size")
+    return int(size), values.get("BODYSTRUCTURE")
 
 
 def collect(config, cursor, allowed_cidrs):
     client = None
     try:
         client = Client(
-            config["host"], config["port"], allowed_cidrs, time.monotonic() + 45
+            config["host"],
+            config["port"],
+            allowed_cidrs,
+            time.monotonic() + COLLECTION_TIMEOUT,
         )
         username = (
             '"' + config["username"].replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -105,19 +148,16 @@ def collect(config, cursor, allowed_cidrs):
             if client.received + reserve + 131072 > 4 * 1024 * 1024:
                 break
             client.literal_limit = 16384
-            meta = checked(
-                client.uid("FETCH", str(uid), "(UID RFC822.SIZE BODYSTRUCTURE)")
+            attributes = (
+                "(UID RFC822.SIZE BODYSTRUCTURE)"
+                if config["fetch_body"]
+                else "(UID RFC822.SIZE)"
             )
+            meta = checked(client.uid("FETCH", str(uid), attributes))
             if len(meta) != 1 or not isinstance(meta[0], bytes):
                 raise ValueError("Unsupported IMAP metadata response")
-            data = meta[0]
-            if not re.search(rb"\bUID " + str(uid).encode() + rb"\b", data):
-                raise ValueError("IMAP UID mismatch")
-            size = re.search(rb"\bRFC822.SIZE ([0-9]{1,20})\b", data)
-            pos = data.find(b"BODYSTRUCTURE ")
-            if not size or pos < 0:
-                raise ValueError("Missing IMAP structure")
-            part = body_part(structure(data[pos + 14 :]))
+            size, tree = metadata(meta[0], uid, include_body=config["fetch_body"])
+            part = body_part(tree) if config["fetch_body"] else None
             header = literal(
                 client, uid, "HEADER.FIELDS (SUBJECT FROM TO DATE MESSAGE-ID)", 16384
             )
@@ -126,7 +166,7 @@ def collect(config, cursor, allowed_cidrs):
             parsed = BytesHeaderParser(policy=policy.default).parsebytes(header)
             item = {
                 "uid": uid,
-                "message_size": int(size[1]),
+                "message_size": size,
                 "headers": {
                     name: redact_str(str(parsed.get(name, "")))[:2048]
                     for name in ("subject", "from", "to", "date", "message-id")
@@ -142,9 +182,18 @@ def collect(config, cursor, allowed_cidrs):
                     # Wire bound independent of server size, with enough bytes for common encodings.
                     limit = min(1024 * 1024, config["body_max_chars"] * 12 + 16)
                     raw_body = literal(client, uid, part["section"], limit)
-                    text, truncated, fallback = decode_body(
-                        raw_body, part, config["body_max_chars"]
-                    )
+                    try:
+                        text, truncated, fallback = decode_body(
+                            raw_body, part, config["body_max_chars"]
+                        )
+                    except ValueError:
+                        # Identity/transport checks above remain fatal. Bad content
+                        # cannot trap every later message behind the same UID.
+                        item["body_omitted_reason"] = (
+                            "invalid_or_unsupported_body_encoding"
+                        )
+                        items.append(item)
+                        continue
                     item.update(
                         body=text,
                         body_content_type=part["content_type"],
@@ -179,9 +228,13 @@ def main():
         if len(raw) > 32768:
             raise ValueError("Worker input exceeds limit")
         request = json.loads(raw)
+        # A buffered read can keep receiving small chunks and reset the socket
+        # timeout. Enforce wall time independently of progress in the read loop.
+        signal.alarm(COLLECTION_TIMEOUT)
         result = collect(
             request["configuration"], request["cursor"], request["allowed_cidrs"]
         )
+        signal.alarm(5)  # Bound serialisation/output after the network phase.
         output = json.dumps(result, ensure_ascii=True).encode()
         if len(output) > 5 * 1024 * 1024:
             raise ValueError("Worker output exceeds limit")

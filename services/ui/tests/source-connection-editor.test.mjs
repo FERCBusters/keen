@@ -248,7 +248,15 @@ test('IMAP defaults to headers only and reveals a 4000 character body limit on r
         source: 'imap',
         label: 'IMAP mail',
         enabled: true,
-        fields: ['host', 'port', 'username', 'folder', 'fetch_body', 'body_max_chars'],
+        fields: [
+          'host',
+          'port',
+          'username',
+          'folder',
+          'fetch_body',
+          'body_max_chars',
+          'poll_interval_minutes',
+        ],
         credential_fields: ['password'],
       },
     ],
@@ -256,6 +264,12 @@ test('IMAP defaults to headers only and reveals a 4000 character body limit on r
   });
   const choice = dialog.querySelector('[data-key="fetch_body"]');
   const limit = dialog.querySelector('[data-key="body_max_chars"]');
+  const interval = dialog.querySelector('[data-key="poll_interval_minutes"]');
+  assert.equal(interval.min, '5');
+  assert.equal(interval.max, '1440');
+  assert.equal(interval.step, '5');
+  assert.equal(interval.value, '5');
+  interval.value = '30';
   assert.equal(choice.value, 'false');
   assert.equal(limit.value, '4000');
   assert.equal(limit.closest('label').hidden, true);
@@ -267,6 +281,7 @@ test('IMAP defaults to headers only and reveals a 4000 character body limit on r
   await dialog.querySelector('form').onsubmit({ preventDefault() {} });
   assert.equal(saved.configuration.fetch_body, 'true');
   assert.equal(saved.configuration.body_max_chars, '4000');
+  assert.equal(saved.configuration.poll_interval_minutes, '30');
   assert.equal(saved.configuration.folder, 'INBOX');
   assert.equal(saved.configuration.port, '993');
   assert.deepEqual(JSON.parse(JSON.stringify(saved.inputs)), {});

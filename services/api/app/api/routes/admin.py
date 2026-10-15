@@ -190,6 +190,14 @@ def admin_run_bookstack_ingest(
     return service.admin_run_bookstack_ingest(user=user, db=db)
 
 
+@router.post("/v1/admin/ingest/imap/run", status_code=202)
+def admin_run_imap_ingest(
+    user=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return service.admin_run_imap_ingest(user=user, db=db)
+
+
 @router.post("/v1/admin/ingest/rss/run")
 def admin_run_rss_ingest(
     user=Depends(require_admin),

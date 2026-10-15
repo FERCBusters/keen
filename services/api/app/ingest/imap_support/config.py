@@ -15,6 +15,7 @@ def configuration(values):
         "folder",
         "fetch_body",
         "body_max_chars",
+        "poll_interval_minutes",
     }:
         raise ValueError("Unsupported IMAP configuration field")
     host = values.get("host", "")
@@ -48,6 +49,14 @@ def configuration(values):
         raise ValueError(
             "IMAP port must be 1–65535; body character limit must be 1–65536"
         )
+    interval = values.get("poll_interval_minutes", "5")
+    if not isinstance(interval, str) or not re.fullmatch(r"[0-9]{1,4}", interval):
+        raise ValueError("IMAP collection interval must be whole minutes")
+    interval = int(interval)
+    if not 5 <= interval <= 1440 or interval % 5:
+        raise ValueError(
+            "IMAP collection interval must be 5–1440 minutes in steps of 5"
+        )
     body = values.get("fetch_body") or "false"
     if body not in ("true", "false"):
         raise ValueError("IMAP fetch body must be true or false")
@@ -58,4 +67,5 @@ def configuration(values):
         folder=folder,
         fetch_body=body == "true",
         body_max_chars=chars,
+        poll_interval_minutes=interval,
     )

@@ -228,6 +228,7 @@ POLICY = {
     "POST /v1/admin/ingest/loki/run": ADMIN,
     "POST /v1/admin/ingest/redmine/run": ADMIN,
     "POST /v1/admin/ingest/riskledger/run": ADMIN,
+    "POST /v1/admin/ingest/imap/run": ADMIN,
     "POST /v1/admin/ingest/rss/run": ADMIN,
     "GET /v1/admin/ingest/status": ADMIN,
     "POST /v1/admin/ingest/taiga/run": ADMIN,

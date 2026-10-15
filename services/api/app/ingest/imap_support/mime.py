@@ -53,17 +53,40 @@ def structure(raw):
         while position < len(raw) and raw[position : position + 1] not in (b" ", b")"):
             position += 1
         atom = raw[start:position]
-        if not atom or atom.startswith(b"{"):
+        if not atom or atom.startswith((b"{", b")")):
             raise ValueError("Unsupported IMAP structure literal")
         return None if atom.upper() == b"NIL" else atom.decode("ascii", "replace")
 
-    return parse()
+    result = parse()
+    if raw[position:].strip():
+        raise ValueError("Trailing IMAP structure data")
+    return result
 
 
 def parameters(value):
-    if not isinstance(value, list) or len(value) % 2:
+    if value is None:
         return {}
+    if (
+        not isinstance(value, list)
+        or len(value) % 2
+        or any(not isinstance(v, str) for v in value)
+    ):
+        raise ValueError("Invalid MIME parameters")
     return {str(value[i]).lower(): str(value[i + 1]) for i in range(0, len(value), 2)}
+
+
+def attached(disposition):
+    if disposition is None:
+        return False
+    if (
+        not isinstance(disposition, list)
+        or len(disposition) != 2
+        or not isinstance(disposition[0], str)
+    ):
+        raise ValueError("Invalid MIME disposition")
+    return disposition[0].lower() != "inline" or any(
+        k.startswith("filename") for k in parameters(disposition[1])
+    )
 
 
 def body_part(tree):
@@ -88,17 +111,30 @@ def body_part(tree):
             if any(k == "name" or k.startswith("name*") for k in params):
                 return
             disposition = node[children + 2] if len(node) > children + 2 else None
-            if (
-                isinstance(disposition, list)
-                and len(disposition) > 1
-                and any(k.startswith("filename") for k in parameters(disposition[1]))
-            ):
+            if attached(disposition):
                 return
-            if (
-                isinstance(disposition, list)
-                and disposition
-                and str(disposition[0]).lower() == "attachment"
-            ):
+            if children >= len(node) or not isinstance(node[children], str):
+                raise ValueError("Missing MIME multipart subtype")
+            if node[children].lower() == "related":
+                # Related siblings are resources for the root (e.g. text files
+                # linked by HTML), not alternative message bodies.
+                root = 0
+                if "start" in params:
+                    matches = [
+                        i
+                        for i, child in enumerate(node[:children])
+                        if len(child) > 3
+                        and isinstance(child[0], str)
+                        and child[3] == params["start"]
+                    ]
+                    if len(matches) != 1:
+                        return  # Root identity cannot be established safely.
+                    root = matches[0]
+                visit(
+                    node[root],
+                    f"{path}.{root + 1}" if path else str(root + 1),
+                    depth + 1,
+                )
                 return
             for i, child in enumerate(node[:children], 1):
                 visit(child, f"{path}.{i}" if path else str(i), depth + 1)
@@ -113,13 +149,8 @@ def body_part(tree):
         disposition = node[9] if len(node) > 9 else None
         if "name" in params or any(k.startswith("name*") for k in params):
             return
-        if isinstance(disposition, list):
-            if disposition and str(disposition[0]).lower() == "attachment":
-                return
-            if len(disposition) > 1 and any(
-                k.startswith("filename") for k in parameters(disposition[1])
-            ):
-                return
+        if attached(disposition):
+            return
         try:
             size = int(node[6])
         except (ValueError, TypeError):
@@ -167,7 +198,9 @@ def decode_body(raw, part, max_chars):
     }
     charset = aliases.get(charset, charset)
     fallback = charset not in {"utf-8", "ascii", "latin-1", "cp1252"}
-    text = raw.decode("utf-8" if fallback else charset, "replace")
+    if fallback:
+        raise ValueError("Unsupported body charset")
+    text = raw.decode(charset, "replace")
     # Redact the bounded decoded input before a display limit can split a value.
     text = redact_str(text)
     return text[:max_chars], len(text) > max_chars, fallback

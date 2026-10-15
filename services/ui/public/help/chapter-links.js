@@ -178,7 +178,6 @@ window.KEEN_DOC_LINKS = {
     'administrator-sources.html#loki-and-cloudwatch-logs',
   'administrator.html#named-source-connections':
     'administrator-sources.html#named-source-connections',
-  'administrator.html#imap-mail': 'administrator-sources.html#imap-mail',
   'administrator.html#5-operate-evidence-definitions':
     'administrator-rules.html#5-operate-evidence-definitions',
   'administrator.html#configuration-storage-and-concurrency':
@@ -211,6 +210,7 @@ window.KEEN_DOC_LINKS = {
   'administrator.html#source-gitlab': 'administrator-gitlab.html#source-gitlab',
   'administrator.html#source-rss': 'administrator-rss.html#source-rss',
   'administrator.html#rss-source-setup': 'administrator-rss.html#rss-source-setup',
+  'administrator.html#imap-mail': 'administrator-imap.html#imap-mail',
   'administrator.html#source-taiga': 'administrator-taiga.html#source-taiga',
   'administrator.html#source-bookstack': 'administrator-bookstack.html#source-bookstack',
   'administrator.html#source-google-workspace':
@@ -312,6 +312,7 @@ window.KEEN_DOC_LINKS = {
   'developer.html#feature-availability': 'developer-development.html#feature-availability',
   'administrator-sources.html#elasticsearch-ingestion':
     'administrator-elasticsearch.html#elasticsearch-ingestion',
+  'administrator-sources.html#imap-mail': 'administrator-imap.html#imap-mail',
   'using-isms.html#swot': 'using-swot.html#swot',
   'using-isms.html#objective-planning': 'using-swot.html#objective-planning',
   'adopter.html': 'using.html',
@@ -771,7 +772,6 @@ window.KEEN_DOC_LINKS = {
   'agents.html#github-forgejo-and-jenkins': 'administrator-sources.html#github-forgejo-and-jenkins',
   'agents.html#loki-and-cloudwatch-logs': 'administrator-sources.html#loki-and-cloudwatch-logs',
   'agents.html#named-source-connections': 'administrator-sources.html#named-source-connections',
-  'agents.html#imap-mail': 'administrator-sources.html#imap-mail',
   'agents.html#5-operate-evidence-definitions':
     'administrator-rules.html#5-operate-evidence-definitions',
   'agents.html#configuration-storage-and-concurrency':
@@ -800,6 +800,7 @@ window.KEEN_DOC_LINKS = {
   'agents.html#source-gitlab': 'administrator-gitlab.html#source-gitlab',
   'agents.html#source-rss': 'administrator-rss.html#source-rss',
   'agents.html#rss-source-setup': 'administrator-rss.html#rss-source-setup',
+  'agents.html#imap-mail': 'administrator-imap.html#imap-mail',
   'agents.html#source-taiga': 'administrator-taiga.html#source-taiga',
   'agents.html#source-bookstack': 'administrator-bookstack.html#source-bookstack',
   'agents.html#source-google-workspace':
@@ -895,7 +896,6 @@ window.KEEN_DOC_LINKS = {
     'administrator-sources.html#github-forgejo-and-jenkins',
   'redmine.html#loki-and-cloudwatch-logs': 'administrator-sources.html#loki-and-cloudwatch-logs',
   'redmine.html#named-source-connections': 'administrator-sources.html#named-source-connections',
-  'redmine.html#imap-mail': 'administrator-sources.html#imap-mail',
   'redmine.html#5-operate-evidence-definitions':
     'administrator-rules.html#5-operate-evidence-definitions',
   'redmine.html#configuration-storage-and-concurrency':
@@ -925,6 +925,7 @@ window.KEEN_DOC_LINKS = {
   'redmine.html#source-gitlab': 'administrator-gitlab.html#source-gitlab',
   'redmine.html#source-rss': 'administrator-rss.html#source-rss',
   'redmine.html#rss-source-setup': 'administrator-rss.html#rss-source-setup',
+  'redmine.html#imap-mail': 'administrator-imap.html#imap-mail',
   'redmine.html#source-taiga': 'administrator-taiga.html#source-taiga',
   'redmine.html#source-bookstack': 'administrator-bookstack.html#source-bookstack',
   'redmine.html#source-google-workspace':

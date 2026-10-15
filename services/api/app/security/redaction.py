@@ -129,9 +129,10 @@ def _sensitive_cfg() -> tuple[set[str], tuple[str, ...], re.Pattern, re.Pattern]
     else:
         line_re = re.compile(r"(?!x)x")
 
-    # Quoted values may contain whitespace; consume the whole quoted value.
+    # A partial fetch can end inside a quoted secret. Consume to end-of-input
+    # when its closing quote is absent, including a final escape character.
     kv_re = re.compile(
-        rf"""(?i)\b({alts})\b["']?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^&\s]+)"""
+        rf"""(?i)\b({alts})\b["']?\s*[:=]\s*(?:"(?:\\[\s\S]|[^"\\])*(?:"|\\?\Z)|'(?:\\[\s\S]|[^'\\])*(?:'|\\?\Z)|[^&\s]+)"""
     )
     return keys, substring_needles, line_re, kv_re
 

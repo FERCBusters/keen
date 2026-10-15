@@ -5,7 +5,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from app.core.datetime_utils import utc_now_naive
@@ -102,13 +102,31 @@ def ingest_imap_all(db):
         ]
     if meta.get("retry_after") and now.isoformat() < meta["retry_after"]:
         return [{"skipped": True, "reason": "IMAP retry backoff"}]
+    if meta.get("last_poll_at"):
+        due = datetime.fromisoformat(meta["last_poll_at"]) + timedelta(
+            minutes=config["poll_interval_minutes"]
+        )
+        if now < due:
+            return [
+                {
+                    "skipped": True,
+                    "reason": "IMAP collection interval",
+                    "next_poll_at": due.isoformat(),
+                }
+            ]
     state = (
         {"uidvalidity": meta["uidvalidity"], "last_uid": meta["last_uid"]}
         if "uidvalidity" in meta
         else None
     )
-    # Release the caller's database transaction before waiting for the remote server.
-    db.commit()
+    # Persist admission under the connection run lock before any network work.
+    # Failures in collection or storage must not bypass the polling interval.
+    meta["last_poll_at"] = now.isoformat()
+    if cursor is None:
+        cursor = IngestionCursor(name=name, meta={})
+        db.add(cursor)
+    cursor.meta = dict(meta)
+    db.commit()  # No database transaction spans the remote wait.
     try:
         result = fetch({**config, "password": password}, state)
     except Exception:
@@ -187,6 +205,7 @@ def ingest_imap_all(db):
         "uidvalidity": result["uidvalidity"],
         "last_uid": result["last_uid"],
         "failures": 0,
+        "last_poll_at": meta["last_poll_at"],
     }
     cursor.last_ts = now
     db.commit()

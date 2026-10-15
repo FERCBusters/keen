@@ -89,6 +89,14 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
             input.add(new Option('Yes — prefer plaintext, otherwise raw HTML', 'true'));
             input.value = connection?.configuration[key] || 'false';
           }
+          if (key === 'poll_interval_minutes') {
+            input.type = 'number';
+            input.min = '5';
+            input.max = '1440';
+            input.step = '5';
+            input.required = true;
+            input.value = connection?.configuration[key] || '5';
+          }
           if (key === 'body_max_chars' || key === 'port') {
             input.type = 'number';
             input.min = '1';

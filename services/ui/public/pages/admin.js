@@ -296,7 +296,7 @@ async function runJsonPost(path, body) {
   try {
     const res = await apiPost(path, body);
     setOut(typeof res === 'string' ? res : JSON.stringify(res, null, 2));
-    toast(status, 'OK', 'success');
+    toast(status, res?.queued ? res.note || 'Collection queued.' : 'OK', 'success');
   } catch (e) {
     setOut(String(e));
     toast(status, `Failed: ${String(e)}`, 'danger');
@@ -891,7 +891,13 @@ if (permissionCreateForm) {
 
 document.querySelectorAll('[data-run]').forEach((btn) => {
   btn.addEventListener('click', async () => {
-    await runJsonPost(btn.getAttribute('data-run'), {});
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+      await runJsonPost(btn.getAttribute('data-run'), {});
+    } finally {
+      btn.disabled = false;
+    }
   });
 });
 

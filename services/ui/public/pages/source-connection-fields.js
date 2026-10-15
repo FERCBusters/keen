@@ -5,6 +5,7 @@ const labels = {
   port: 'TLS port',
   folder: 'Mailbox folder',
   fetch_body: 'Fetch message body',
+  poll_interval_minutes: 'Collection interval (minutes, 5–1,440 in steps of 5)',
   body_max_chars: 'Maximum body characters (1–65,536)',
   base_url: 'Base URL',
   username: 'Username',

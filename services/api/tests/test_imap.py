@@ -124,6 +124,8 @@ class Peer:
         if command == "SEARCH":
             return "OK", [b"2"]
         uid = args[0]
+        if args[1] == "(UID RFC822.SIZE)":
+            return "OK", [b"1 (UID 2 RFC822.SIZE 100)"]
         if "BODYSTRUCTURE" in args[1]:
             return "OK", [
                 b"1 (UID 2 RFC822.SIZE 100 BODYSTRUCTURE ("
@@ -137,7 +139,11 @@ class Peer:
             if "HEADER.FIELDS" in args[1]
             else b"plain secret"
         )
-        return "OK", [(f"1 (UID {uid} BODY[] {{{len(data)}}}".encode(), data), b")"]
+        section = args[1].split("BODY.PEEK[", 1)[1].split("]", 1)[0]
+        return "OK", [
+            (f"1 (UID {uid} BODY[{section}]<0> {{{len(data)}}}".encode(), data),
+            b")",
+        ]
 
     def shutdown(self):
         self.closed = True
@@ -246,12 +252,17 @@ def test_collection_isolation_redaction_and_uid_reset(contract_db, monkeypatch):
         "DO-NOT-LEAK" not in r.summary + json.dumps(r.normalized_payload) for r in rows
     )
     assert "DO-NOT-LEAK" not in str(blobs)
+    from datetime import timedelta
+
+    now = imap.utc_now_naive()
+    monkeypatch.setattr(imap, "utc_now_naive", lambda: now + timedelta(minutes=5))
     imap.ingest_imap_all(contract_db, connection_id="one")
     assert contract_db.query(Event).filter_by(source="imap").count() == 2
     assert responses[-1][1] == {"uidvalidity": 7, "last_uid": 2}
     monkeypatch.setattr(
         imap, "fetch", lambda *a: {"reset_required": True, "uidvalidity": 8}
     )
+    monkeypatch.setattr(imap, "utc_now_naive", lambda: now + timedelta(minutes=10))
     assert not imap.ingest_imap_all(contract_db, connection_id="one")[0]["ok"]
     monkeypatch.setattr(imap, "fetch", lambda *a: pytest.fail("reset must stay paused"))
     assert not imap.ingest_imap_all(contract_db, connection_id="one")[0]["ok"]
@@ -409,6 +420,10 @@ def test_failure_preserves_checkpoint_and_enforces_backoff(contract_db, monkeypa
     def failed(*a):
         raise ValueError("upstream synthetic-secret")
 
+    from datetime import timedelta
+
+    now = imap.utc_now_naive()
+    monkeypatch.setattr(imap, "utc_now_naive", lambda: now + timedelta(minutes=5))
     monkeypatch.setattr(imap, "fetch", failed)
     result = imap.ingest_imap_all(contract_db)
     assert not result[0]["ok"] and "synthetic-secret" not in str(result)

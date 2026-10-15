@@ -754,6 +754,23 @@ def admin_update_clause_controls(
     return {"ok": True, "count": len(selected)}
 
 
+def admin_run_imap_ingest(*, user, db: Session):
+    from app.services.ingestion_pause import is_paused
+    from app.worker.tasks import dispatch_imap_task
+
+    if not settings.imap_enabled or settings.demo_mode:
+        raise DomainError(409, "IMAP collection is disabled")
+    if is_paused(db, "imap"):
+        raise DomainError(409, "IMAP ingestion is paused")
+    # Only dispatch on the request path; mail is collected by the isolated worker.
+    task = dispatch_imap_task.apply_async(expires=240)
+    return {
+        "queued": True,
+        "task_id": task.id,
+        "note": "IMAP polling queued for enabled named connections. Check each connection's collection health for results.",
+    }
+
+
 def admin_run_loki_ingest(*, user, db: Session):
     return {"runs": ingest_loki_all(db)}
 

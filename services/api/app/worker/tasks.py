@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 
 from sqlalchemy.orm import Session
@@ -591,15 +592,23 @@ def ingest_source_connection_task(source: str, connection_id: str):
 @celery_app.task(name="keen.dispatch_imap")
 def dispatch_imap_task():
     from app.ingest.connections import connections
+    from app.services.ingestion_pause import is_paused
 
     if not settings.imap_enabled or settings.demo_mode:
         return {"queued": 0}
     with SessionLocal() as db:
-        ids = [
+        if is_paused(db, "imap"):
+            return {"queued": 0, "paused": True}
+        ids = sorted(
             c.id
             for c in connections(db, "imap")
             if c.enabled and c.managed_by != "environment"
-        ]
+        )
+    if ids:
+        # With a single worker and expiring jobs, a fixed ordering can starve
+        # the same later mailboxes under sustained load. Rotate each beat period.
+        offset = int(time.time() // 300) % len(ids)
+        ids = ids[offset:] + ids[:offset]
     for key in ids:
         ingest_imap_connection_task.delay(key)
     return {"queued": len(ids)}
