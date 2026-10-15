@@ -196,6 +196,14 @@ def store_event_with_artifact(
         storable(normalized_payload),
     )
 
+    # Upstream display labels can exceed PostgreSQL's indexed column widths.
+    # Apply bounds after redaction/masking, which can expand the text. Keep full
+    # evidence in the normalised payload/artifact and never truncate dedupe IDs.
+    if system is not None:
+        system = system[: Event.__table__.c.system.type.length]
+    if actor is not None:
+        actor = actor[: Event.__table__.c.actor.type.length]
+
     # Fast de-dupe check (avoids triggering a rollback that would also undo
     # ingestion cursor updates that may be pending in the same session).
     existing = (

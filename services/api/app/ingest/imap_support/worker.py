@@ -15,6 +15,7 @@ from .mime import body_part, decode_body, structure
 from .transport import Client
 
 COLLECTION_TIMEOUT = 45
+MAX_OUTPUT_BYTES = 5 * 1024 * 1024
 
 
 def checked(result):
@@ -28,6 +29,8 @@ def number(client, key):
     _, values = client.response(key)
     if not values or not values[0] or not re.fullmatch(rb"[0-9]{1,10}", values[0]):
         raise ValueError("IMAP UID metadata missing")
+    if any(value != values[0] for value in values[1:]):
+        raise ValueError("Conflicting IMAP UID metadata")
     value = int(values[0])
     if not 1 <= value <= 2**32 - 1:
         raise ValueError("Invalid IMAP UID metadata")
@@ -36,9 +39,14 @@ def number(client, key):
 
 def literal(client, uid, section, limit):
     client.literal_limit = limit
-    rows = checked(
-        client.uid("FETCH", str(uid), f"(UID BODY.PEEK[{section}]<0.{limit}>)")
-    )
+    try:
+        rows = checked(
+            client.uid("FETCH", str(uid), f"(UID BODY.PEEK[{section}]<0.{limit}>)")
+        )
+    finally:
+        # A missing literal or rejected command must not leave permission to
+        # receive unsolicited data during a subsequent metadata command.
+        client.literal_limit = 0
     positions = [i for i, row in enumerate(rows) if isinstance(row, tuple)]
     if len(positions) != 1:
         raise ValueError("Unexpected IMAP FETCH response")
@@ -138,6 +146,7 @@ def collect(config, cursor, allowed_cidrs):
         if any(not last < uid <= end for uid in uids):
             raise ValueError("IMAP returned UID outside requested window")
         items = []
+        output_bytes = 4096  # Reserve the small result envelope and separators.
         # At most ten messages per run; remaining identifiers are picked up next run.
         for uid in uids[:10]:
             reserve = (
@@ -147,7 +156,7 @@ def collect(config, cursor, allowed_cidrs):
             )
             if client.received + reserve + 131072 > 4 * 1024 * 1024:
                 break
-            client.literal_limit = 16384
+            client.literal_limit = 0
             attributes = (
                 "(UID RFC822.SIZE BODYSTRUCTURE)"
                 if config["fetch_body"]
@@ -192,17 +201,22 @@ def collect(config, cursor, allowed_cidrs):
                         item["body_omitted_reason"] = (
                             "invalid_or_unsupported_body_encoding"
                         )
-                        items.append(item)
-                        continue
-                    item.update(
-                        body=text,
-                        body_content_type=part["content_type"],
-                        body_truncated=truncated
-                        or len(raw_body) >= limit
-                        or part["size"] > len(raw_body),
-                        charset_fallback=fallback,
-                        body_omitted_reason=None,
-                    )
+                    else:
+                        item.update(
+                            body=text,
+                            body_content_type=part["content_type"],
+                            body_truncated=truncated
+                            or len(raw_body) >= limit
+                            or part["size"] > len(raw_body),
+                            charset_fallback=fallback,
+                            body_omitted_reason=None,
+                        )
+            # JSON escaping can expand a valid bounded Unicode body considerably.
+            # Keep a resumable batch rather than rejecting all its messages later.
+            item_bytes = len(json.dumps(item, ensure_ascii=True).encode()) + 2
+            if output_bytes + item_bytes > MAX_OUTPUT_BYTES:
+                break
+            output_bytes += item_bytes
             items.append(item)
         return {
             "uidvalidity": validity,
@@ -236,7 +250,7 @@ def main():
         )
         signal.alarm(5)  # Bound serialisation/output after the network phase.
         output = json.dumps(result, ensure_ascii=True).encode()
-        if len(output) > 5 * 1024 * 1024:
+        if len(output) > MAX_OUTPUT_BYTES:
             raise ValueError("Worker output exceeds limit")
         sys.stdout.buffer.write(output)
     except Exception:

@@ -44,7 +44,7 @@ class Client(imaplib.IMAP4_SSL):
         self.deadline = deadline
         self.received = 0
         self.lines = 0
-        self.literal_limit = 16384
+        self.literal_limit = 0  # Only an explicit BODY.PEEK request permits a literal.
         self.pinned = addresses(host, port, allowed_cidrs)[0]
         super().__init__(
             host, port, ssl_context=ssl.create_default_context(), timeout=10
@@ -73,9 +73,12 @@ class Client(imaplib.IMAP4_SSL):
 
     def read(self, size):
         # imaplib calls this BEFORE allocating a server-declared literal.
-        if size > min(self.literal_limit, MAX_LITERAL):
+        if self.literal_limit <= 0 or size > min(self.literal_limit, MAX_LITERAL):
             raise ValueError("IMAP literal exceeds requested limit")
         self.budget(size)
+        # Consume the allowance even for an empty literal; extra literals in
+        # this command must be rejected before their payload is read.
+        self.literal_limit = 0
         result = self.file.read(size)
         self.received += len(result)
         return result
