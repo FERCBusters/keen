@@ -58,7 +58,8 @@ staging() {
 	if [ -n "${KEEN_STAGING_SSH:-}" ]; then
 		local remote_dir="${KEEN_STAGING_REMOTE_DIR:?Set KEEN_STAGING_REMOTE_DIR in $CONFIG}"
 		# shellcheck disable=SC2029
-		ssh -o BatchMode=yes "$KEEN_STAGING_SSH" "cd '$remote_dir' && tools/staging/keen-staging $*"
+                ssh -o BatchMode=yes "$KEEN_STAGING_SSH" \
+                  "cd '$remote_dir' && KEEN_STAGING_BUILD=1 COMPOSE_PROFILES=imap tools/staging/keen-staging $*"
 	else
 		"$HERE/keen-staging" "$@"
 	fi

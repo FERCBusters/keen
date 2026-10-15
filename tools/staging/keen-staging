@@ -197,6 +197,10 @@ cmd_restore() {
 	wait_for_postgres
 	say "restoring the golden database"
 	compose exec -T postgres pg_restore -U keen -d keen --no-owner --exit-on-error <"$GOLDEN/db.dump"
+        if [ "${KEEN_STAGING_BUILD:-0}" = "1" ]; then
+            say "building the API image before restoring evidence"
+            compose build keen-api
+        fi	
 	say "restoring golden evidence files"
 	compose run --rm --no-deps -T --entrypoint tar keen-api \
 		--no-same-owner -C /app/data/artifacts -xzf - \
