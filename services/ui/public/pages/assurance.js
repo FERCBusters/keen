@@ -101,9 +101,9 @@ function render() {
     ? vendors
         .map(
           (v) => `
-    <div class="list-group-item d-flex justify-content-between gap-2"><div><strong>${esc(v.name)}</strong>
+    <div class="list-group-item d-flex justify-content-between align-items-start gap-2"><div><strong>${esc(v.name)}</strong>
       <div class="small-muted">${esc(v.description || '')}</div><div class="small-muted">${esc(assetNames(v.asset_ids))}</div></div>
-      <a class="btn btn-sm btn-outline-secondary" href="/swot.html?target_type=vendor&target_id=${encodeURIComponent(v.id)}">SWOT</a>${manage ? `<div class="d-flex gap-1"><button type="button" class="btn btn-sm btn-outline-primary align-self-start" data-edit-vendor="${esc(v.id)}">Edit</button><button type="button" class="btn btn-sm btn-outline-danger align-self-start" data-delete-vendor="${esc(v.id)}">Delete</button></div>` : ''}</div>`,
+      <div class="d-flex gap-1 align-self-start">${manage ? `<button type="button" class="btn btn-sm btn-outline-primary" data-edit-vendor="${esc(v.id)}">Edit</button><button type="button" class="btn btn-sm btn-outline-danger" data-delete-vendor="${esc(v.id)}">Delete</button>` : ''}<a class="btn btn-sm btn-outline-secondary" href="/swot.html?target_type=vendor&target_id=${encodeURIComponent(v.id)}">SWOT</a></div></div>`,
         )
         .join('')
     : '<p class="small-muted mb-0">No vendors yet.</p>';
