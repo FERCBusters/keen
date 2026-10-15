@@ -21,7 +21,33 @@ celery_app = Celery(
     include=["app.worker.tasks"],
 )
 
-celery_app.conf.task_routes = {"keen.ingest_imap_connection": {"queue": "imap"}}
+# Keep the existing default queue for internal work and queued-job compatibility.
+# HTTP polling is explicitly routed for scheduled, per-connection and manual runs.
+HTTP_INGEST_SOURCES = (
+    "elasticsearch",
+    "loki",
+    "cloudwatch_logs",
+    "github",
+    "forgejo",
+    "gitea",
+    "gitlab",
+    "redmine",
+    "riskledger",
+    "jenkins",
+    "taiga",
+    "bookstack",
+    "rss",
+    "google_workspace",
+)
+celery_app.conf.task_routes = {
+    **{
+        f"app.worker.tasks.ingest_{source}_all_task": {"queue": "ingest-http"}
+        for source in HTTP_INGEST_SOURCES
+    },
+    "keen.ingest_source_connection": {"queue": "ingest-http"},
+    "app.worker.tasks.integration_run_task": {"queue": "ingest-http"},
+    "keen.ingest_imap_connection": {"queue": "imap"},
+}
 
 # Beat schedules
 celery_app.conf.beat_schedule = {

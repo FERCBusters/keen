@@ -32,21 +32,10 @@ from app.db.models import (
     group_permissions,
     user_groups,
 )
-from app.ingest.bookstack import apply_bookstack_config_mappings, ingest_bookstack_all
-from app.ingest.cloudwatch_logs import ingest_cloudwatch_logs_all
+from app.ingest.bookstack import apply_bookstack_config_mappings
 from app.ingest.common import apply_rules
 from app.ingest.diary import add_diary_entry
-from app.ingest.forgejo import ingest_forgejo_all
-from app.ingest.gitea import ingest_gitea_all
-from app.ingest.github import ingest_github_all
-from app.ingest.gitlab import ingest_gitlab_all
-from app.ingest.google_workspace import ingest_google_workspace_all
-from app.ingest.jenkins import ingest_jenkins_all
-from app.ingest.loki import ingest_loki_all, load_loki_queries
-from app.ingest.redmine import ingest_redmine_all
-from app.ingest.riskledger import ingest_riskledger_all
-from app.ingest.rss import ingest_rss_all
-from app.ingest.taiga import ingest_taiga_all
+from app.ingest.loki import load_loki_queries
 from app.schemas import (
     ClauseControlLinksPayload,
     ClauseEvidenceUrlsPayload,
@@ -771,8 +760,26 @@ def admin_run_imap_ingest(*, user, db: Session):
     }
 
 
+def _queue_http_ingest(source, db):
+    from app.services.ingestion_pause import is_paused
+    from app.worker import tasks
+
+    if not getattr(settings, source + "_enabled", False):
+        raise DomainError(409, "Source type is disabled")
+    if source in ("redmine", "riskledger") and settings.demo_mode:
+        raise DomainError(409, "Source type is unavailable in demo mode")
+    if is_paused(db, source):
+        raise DomainError(409, "Ingestion is paused")
+    task = getattr(tasks, f"ingest_{source}_all_task").apply_async(expires=300)
+    return {
+        "queued": True,
+        "task_id": task.id,
+        "note": "Collection queued on the HTTP ingestion worker; completion is asynchronous.",
+    }
+
+
 def admin_run_loki_ingest(*, user, db: Session):
-    return {"runs": ingest_loki_all(db)}
+    return _queue_http_ingest("loki", db)
 
 
 def admin_reset_loki_cursors(
@@ -861,35 +868,35 @@ def admin_reset_loki_cursors(
 
 
 def admin_run_cloudwatch_logs_ingest(*, user, db: Session):
-    return {"runs": ingest_cloudwatch_logs_all(db)}
+    return _queue_http_ingest("cloudwatch_logs", db)
 
 
 def admin_run_github_ingest(*, user, db: Session):
-    return {"runs": ingest_github_all(db)}
+    return _queue_http_ingest("github", db)
 
 
 def admin_run_forgejo_ingest(*, user, db: Session):
-    return {"runs": ingest_forgejo_all(db)}
+    return _queue_http_ingest("forgejo", db)
 
 
 def admin_run_jenkins_ingest(*, user, db: Session):
-    return {"runs": ingest_jenkins_all(db)}
+    return _queue_http_ingest("jenkins", db)
 
 
 def admin_run_taiga_ingest(*, user, db: Session):
-    return {"runs": ingest_taiga_all(db)}
+    return _queue_http_ingest("taiga", db)
 
 
 def admin_run_bookstack_ingest(*, user, db: Session):
-    return {"runs": ingest_bookstack_all(db)}
+    return _queue_http_ingest("bookstack", db)
 
 
 def admin_run_rss_ingest(*, user, db: Session):
-    return {"runs": ingest_rss_all(db)}
+    return _queue_http_ingest("rss", db)
 
 
 def admin_run_google_workspace_ingest(*, user, db: Session):
-    return {"runs": ingest_google_workspace_all(db)}
+    return _queue_http_ingest("google_workspace", db)
 
 
 def admin_ingest_status(*, user):
@@ -1468,19 +1475,19 @@ def admin_entity_changelog(
 
 
 def admin_run_gitea_ingest(*, user, db: Session):
-    return {"runs": ingest_gitea_all(db)}
+    return _queue_http_ingest("gitea", db)
 
 
 def admin_run_gitlab_ingest(*, user, db: Session):
-    return {"runs": ingest_gitlab_all(db)}
+    return _queue_http_ingest("gitlab", db)
 
 
 def admin_run_redmine_ingest(*, user, db: Session):
-    return {"runs": ingest_redmine_all(db)}
+    return _queue_http_ingest("redmine", db)
 
 
 def admin_run_riskledger_ingest(*, user, db: Session):
-    return {"runs": ingest_riskledger_all(db)}
+    return _queue_http_ingest("riskledger", db)
 
 
 async def admin_diary(

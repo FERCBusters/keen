@@ -18,4 +18,4 @@ services:
 
   keen-worker:
     # One worker process keeps a small (2 GB) staging host within memory.
-    command: ["bash", "-c", "celery -A app.worker.celery_app worker -l INFO --concurrency=1"]
+    command: ["bash", "-c", "celery -A app.worker.celery_app worker -l INFO -Q celery --concurrency=1"]

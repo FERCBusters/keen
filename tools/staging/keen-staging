@@ -154,10 +154,17 @@ cmd_snapshot() {
 	say "pausing the application for a consistent snapshot"
 	(
 		# The application restarts however this subshell ends.
-		trap 'compose start keen-api keen-worker keen-beat >/dev/null 2>&1 || true' EXIT
-		compose stop keen-api keen-worker keen-beat >/dev/null
+		local snapshot_services=() running_services
+		running_services="$(compose ps --status running --services)"
+		while read -r service; do
+			case "$service" in
+				keen-api|keen-worker|keen-http-worker|keen-imap-worker|keen-beat) snapshot_services+=("$service") ;;
+			esac
+		done <<<"$running_services"
+		trap 'if ((${#snapshot_services[@]})); then compose start "${snapshot_services[@]}" >/dev/null 2>&1 || true; fi' EXIT
+		if ((${#snapshot_services[@]})); then compose stop "${snapshot_services[@]}" >/dev/null; fi
 		compose exec -T postgres pg_dump -U keen -d keen -Fc >"$staging/db.dump"
-		compose run --rm --no-deps -T --user 0 --entrypoint tar keen-api \
+		compose run --rm --no-deps -T --entrypoint tar keen-api \
 			-C /app/data/artifacts -czf - . >"$staging/artifacts.tar.gz"
 	)
 	local revision
@@ -191,8 +198,8 @@ cmd_restore() {
 	say "restoring the golden database"
 	compose exec -T postgres pg_restore -U keen -d keen --no-owner --exit-on-error <"$GOLDEN/db.dump"
 	say "restoring golden evidence files"
-	compose run --rm --no-deps -T --user 0 --entrypoint sh keen-api -c \
-		'tar -C /app/data/artifacts -xzf - && chown -R keen:keen /app/data/artifacts' \
+	compose run --rm --no-deps -T --entrypoint tar keen-api \
+		--no-same-owner -C /app/data/artifacts -xzf - \
 		<"$GOLDEN/artifacts.tar.gz"
 	say "starting KEEN (pending migrations run on start)"
 	start_all

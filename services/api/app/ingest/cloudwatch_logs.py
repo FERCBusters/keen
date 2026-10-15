@@ -6,6 +6,7 @@ import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 import boto3
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -56,7 +57,22 @@ def _cloudwatch_client(region: str | None = None):
     from app.ingest.connections import aws_credentials
 
     kwargs.update(aws_credentials())
-    return boto3.client("logs", **kwargs)
+    client = boto3.client("logs", **kwargs)
+    # SDK environment/shared-config endpoint overrides must not send signed
+    # requests or session tokens over HTTP. Certificate verification stays on.
+    endpoint = urlsplit(client.meta.endpoint_url)
+    if (
+        endpoint.scheme != "https"
+        or not endpoint.hostname
+        or endpoint.username
+        or endpoint.password
+        or endpoint.fragment
+    ):
+        client.close()
+        raise ValueError(
+            "CloudWatch endpoint must use HTTPS without embedded credentials or a fragment"
+        )
+    return client
 
 
 def load_cloudwatch_logs_config(path: str) -> dict[str, Any]:

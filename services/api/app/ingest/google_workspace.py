@@ -24,9 +24,13 @@ import hashlib
 import json
 import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Iterable
+from urllib.parse import urlsplit
 
+import httplib2
 from google.oauth2 import service_account
+from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
@@ -111,34 +115,65 @@ def _load_credentials(impersonate: str) -> service_account.Credentials:
     """Build service-account creds for Reports API, using DWD impersonation."""
 
     if settings.google_workspace_sa_keyfile:
-        creds = service_account.Credentials.from_service_account_file(
-            settings.google_workspace_sa_keyfile, scopes=SCOPES
-        )
+        info = json.loads(Path(settings.google_workspace_sa_keyfile).read_text())
     elif settings.google_workspace_sa_json_b64:
         raw = base64.b64decode(settings.google_workspace_sa_json_b64.encode("utf-8"))
         info = json.loads(raw.decode("utf-8"))
-        creds = service_account.Credentials.from_service_account_info(
-            info, scopes=SCOPES
-        )
     elif settings.google_workspace_sa_json:
         info = json.loads(settings.google_workspace_sa_json)
-        creds = service_account.Credentials.from_service_account_info(
-            info, scopes=SCOPES
-        )
     else:
-        raise RuntimeError(
-            "Google Workspace credentials missing. Set one of "
-            "GOOGLE_WORKSPACE_SA_JSON_B64 / GOOGLE_WORKSPACE_SA_JSON / GOOGLE_WORKSPACE_SA_KEYFILE"
+        raise RuntimeError("Google Workspace service-account credentials are missing")
+    endpoint = urlsplit(str(info.get("token_uri", "")))
+    if (
+        endpoint.scheme != "https"
+        or not endpoint.hostname
+        or endpoint.username
+        or endpoint.password
+        or endpoint.fragment
+    ):
+        raise ValueError(
+            "Google Workspace token endpoint must use HTTPS without embedded credentials or a fragment"
         )
+    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
 
     if impersonate:
         creds = creds.with_subject(impersonate)
     return creds
 
 
+class _HTTPSOnlyHttp(httplib2.Http):
+    def __init__(self, *, ca_certs=None):
+        super().__init__(
+            timeout=30,
+            ca_certs=ca_certs,
+            disable_ssl_certificate_validation=False,
+            proxy_info=None,
+        )
+        self.follow_redirects = False
+        self.follow_all_redirects = False
+
+    def request(self, uri, *args, **kwargs):
+        endpoint = urlsplit(uri)
+        if (
+            endpoint.scheme != "https"
+            or not endpoint.hostname
+            or endpoint.username
+            or endpoint.password
+            or endpoint.fragment
+        ):
+            raise ValueError("Google Workspace requests require HTTPS")
+        return super().request(uri, *args, **kwargs)
+
+
 def _reports_service(impersonate: str):
     creds = _load_credentials(impersonate)
-    return build("admin", "reports_v1", credentials=creds, cache_discovery=False)
+    # The same verified transport covers token refresh and Reports API requests.
+    return build(
+        "admin",
+        "reports_v1",
+        http=AuthorizedHttp(creds, http=_HTTPSOnlyHttp()),
+        cache_discovery=False,
+    )
 
 
 def _iter_activities(

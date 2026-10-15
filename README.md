@@ -38,7 +38,11 @@ docker compose pull
 docker compose up -d
 ```
 
-The API runs database migrations during startup. The worker and scheduler wait for it to become healthy.
+The API runs database migrations during startup. Workers and the scheduler wait for it to become healthy. `keen-worker` consumes `celery` for internal jobs, including notifications, caches, mapping backfills and scheduling. `keen-http-worker` consumes `ingest-http` for built-in HTTP polling, named-connection collection and custom API ingester runs. The optional `keen-imap-worker` consumes `imap`. Webhook/agent intake and interactive catalogue requests remain API operations.
+
+Both ordinary workers default to one child process. The HTTP worker has a 768 MiB memory limit, one CPU, a 128-PID limit, prefetch multiplier one and recycling after 100 tasks. Tune aggregate worker memory and concurrency to host capacity. The Python API, workers and scheduler run as the image's non-root user with all Linux capabilities dropped and `no-new-privileges`; outbound TCP does not require added capabilities. Preserve writable artifact and scheduler volumes and correct UID 10001 ownership.
+
+When upgrading an existing deployment, stop scheduling/manual submissions and let old collection jobs in `celery` finish before switching workers. Queue routing affects newly published jobs; it does not relocate jobs already queued. Do not purge jobs. Deploy matching API, worker and beat images and start `keen-http-worker` together. If it is stopped, newly queued HTTP collection waits while internal jobs continue. Admin Ingest runners return HTTP 202 and a queued task ID, not completed collection results. Inspect worker results/logs for completion; event counts alone do not prove poll health.
 
 Open <http://localhost:8081> for local access, or your configured HTTPS address, and sign in with the bootstrap account. The Compose configuration binds published ports to loopback. Route browser and agent traffic through the UI reverse proxy; the browser-facing API prefix is `/api/v1/`.
 
@@ -46,7 +50,7 @@ Check startup with:
 
 ```sh
 docker compose ps
-docker compose logs --tail=100 keen-api keen-worker
+docker compose logs --tail=100 keen-api keen-worker keen-http-worker
 ```
 
 For a local source build:
