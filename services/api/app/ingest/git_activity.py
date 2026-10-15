@@ -53,12 +53,9 @@ def _response_status_error(resp: httpx.Response) -> str | None:
     if 200 <= resp.status_code < 300:
         return None
 
-    status = f"{resp.status_code} {resp.reason_phrase}".strip()
-    msg = f"HTTP {status} for url '{_redacted_url(resp.url)}'"
-    location = (resp.headers.get("location") or "").strip()
-    if location:
-        msg += f"; redirect location: '{redact_url(location)}'"
-    return msg
+    # Reason phrases and Location are controlled by the upstream, which knows
+    # our credential and can echo it under an innocuous key or in a URL path.
+    return f"Collection failed: upstream returned HTTP {int(resp.status_code)}"
 
 
 def _infer_owner_repo_from_feed_url(feed_url: str) -> tuple[str | None, str | None]:

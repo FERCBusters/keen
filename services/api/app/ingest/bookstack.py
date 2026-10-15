@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import httpx
+import regex
 from sqlalchemy.orm import Session
 
 from app.db.models import ControlItem, Event, IngestionCursor, Mapping
@@ -21,7 +22,12 @@ from app.ingest.connections import (
 )
 from app.ingest.http import client as ingestion_client
 from app.security.errors import collection_error
-from app.security.regex import BoundedPattern, compile_pattern
+from app.security.regex import (
+    MATCH_TIMEOUT_SECONDS,
+    MAX_INPUT_CHARS,
+    BoundedPattern,
+    compile_pattern,
+)
 from app.services.ingestion_pause import pausable
 
 
@@ -589,7 +595,8 @@ def _read_page(client: httpx.Client, page_id: int) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-_TAG_RE = re.compile(r"<[^>]+>")
+_TAG_RE = regex.compile(r"<[^>]+>")
+_SCRIPT_STYLE_RE = regex.compile(r"(?is)<\s*(script|style)[^>]*>.*?<\s*/\s*\1\s*>")
 
 
 def _strip_html_to_text(html_text: str) -> str:
@@ -600,11 +607,14 @@ def _strip_html_to_text(html_text: str) -> str:
     """
     if not html_text:
         return ""
-    # Remove script/style blocks crudely.
-    html_text = re.sub(
-        r"(?is)<\s*(script|style)[^>]*>.*?<\s*/\s*\1\s*>", " ", html_text
-    )
-    txt = _TAG_RE.sub(" ", html_text)
+    # Preview generation is optional. Bound fixed patterns too: hostile HTML
+    # with repeated opening tags can otherwise cause quadratic backtracking.
+    html_text = html_text[:MAX_INPUT_CHARS]
+    try:
+        html_text = _SCRIPT_STYLE_RE.sub(" ", html_text, timeout=MATCH_TIMEOUT_SECONDS)
+        txt = _TAG_RE.sub(" ", html_text, timeout=MATCH_TIMEOUT_SECONDS)
+    except TimeoutError:
+        return ""
     txt = _html.unescape(txt)
     # Collapse whitespace.
     return " ".join(txt.split()).strip()

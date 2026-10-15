@@ -1,9 +1,3 @@
-from __future__ import annotations
-
-from app.core.datetime_utils import utc_now_naive
-from app.security.errors import collection_error
-from app.services.ingestion_pause import pausable
-
 """Google Workspace audit ingester.
 
 This ingester polls the Admin SDK Reports API Activities feed.
@@ -23,6 +17,8 @@ Configuration:
       GOOGLE_WORKSPACE_SA_KEYFILE (path inside container)
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import json
@@ -35,9 +31,16 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
+from app.security.errors import collection_error
+from app.security.provider_logging import suppress_provider_logs
+from app.services.ingestion_pause import pausable
+
+# The SDK logs response bodies on malformed 403s and URLs during retries.
+suppress_provider_logs("googleapiclient.http", "googleapiclient.discovery")
 
 SCOPES = ["https://www.googleapis.com/auth/admin.reports.audit.readonly"]
 

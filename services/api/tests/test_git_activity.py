@@ -52,7 +52,7 @@ def test_redirect_diagnostics_redact_both_urls(collector):
         headers={"location": "https://git.example/login?access_token=private-redirect"},
     )
     error = collector._response_status_error(response)
-    assert "302" in error and "redirect location" in error
+    assert error == "Collection failed: upstream returned HTTP 302"
     assert "private-token" not in error and "private-redirect" not in error
     assert collector._response_status_error(httpx.Response(200)) is None
 

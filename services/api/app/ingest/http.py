@@ -13,6 +13,10 @@ from urllib.parse import urlsplit
 import httpx
 
 from app.core.config import settings
+from app.security.provider_logging import suppress_provider_logs
+
+suppress_provider_logs("httpx")
+
 
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_RESPONSE_SECONDS = 120
