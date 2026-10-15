@@ -178,6 +178,7 @@ window.KEEN_DOC_LINKS = {
     'administrator-sources.html#loki-and-cloudwatch-logs',
   'administrator.html#named-source-connections':
     'administrator-sources.html#named-source-connections',
+  'administrator.html#imap-mail': 'administrator-sources.html#imap-mail',
   'administrator.html#5-operate-evidence-definitions':
     'administrator-rules.html#5-operate-evidence-definitions',
   'administrator.html#configuration-storage-and-concurrency':
@@ -770,6 +771,7 @@ window.KEEN_DOC_LINKS = {
   'agents.html#github-forgejo-and-jenkins': 'administrator-sources.html#github-forgejo-and-jenkins',
   'agents.html#loki-and-cloudwatch-logs': 'administrator-sources.html#loki-and-cloudwatch-logs',
   'agents.html#named-source-connections': 'administrator-sources.html#named-source-connections',
+  'agents.html#imap-mail': 'administrator-sources.html#imap-mail',
   'agents.html#5-operate-evidence-definitions':
     'administrator-rules.html#5-operate-evidence-definitions',
   'agents.html#configuration-storage-and-concurrency':
@@ -893,6 +895,7 @@ window.KEEN_DOC_LINKS = {
     'administrator-sources.html#github-forgejo-and-jenkins',
   'redmine.html#loki-and-cloudwatch-logs': 'administrator-sources.html#loki-and-cloudwatch-logs',
   'redmine.html#named-source-connections': 'administrator-sources.html#named-source-connections',
+  'redmine.html#imap-mail': 'administrator-sources.html#imap-mail',
   'redmine.html#5-operate-evidence-definitions':
     'administrator-rules.html#5-operate-evidence-definitions',
   'redmine.html#configuration-storage-and-concurrency':

@@ -138,3 +138,42 @@ test('Elasticsearch input editor saves its pattern and field mappings on the nam
   assert.equal(saved.payload.inputs.queries[0].query, '"login failed"');
   assert.equal(ui.document.getElementById('evidence-management-view').hidden, false);
 });
+
+test('IMAP folder connection offers collection and mapping without an extra input', async (t) => {
+  const ui = await loadUi('pages/connection-hub.js', {
+    html,
+    globals: { structuredClone },
+    vendor: {
+      apiGet: async (url) => {
+        if (url.endsWith('/evidence-definitions')) return { collectors: [], rules: [] };
+        if (url.endsWith('/integrations')) return { connections: [], collectors: [] };
+        if (url.endsWith('/managed-configurations')) return { items: [] };
+        if (url.endsWith('/source-connections'))
+          return {
+            types: [{ source: 'imap', enabled: true }],
+            connections: [
+              {
+                id: 'mail',
+                source: 'imap',
+                name: 'Mail evidence',
+                enabled: true,
+                configuration: { folder: '<img src=x>' },
+                inputs: {},
+                managed_by: 'database',
+              },
+            ],
+          };
+        throw Error(url);
+      },
+    },
+  });
+  t.after(ui.close);
+  const list = ui.document.getElementById('hub-list');
+  for (let i = 0; i < 50 && !list.textContent; i++) await new Promise((r) => setTimeout(r, 5));
+  const buttons = [...list.querySelectorAll('button')].map((b) => b.textContent);
+  assert.ok(buttons.includes('Collect now'));
+  assert.ok(buttons.includes('Add mapping rule'));
+  assert.ok(!buttons.includes('Add input'));
+  assert.match(list.textContent, /Folder: <img src=x>/);
+  assert.equal(list.querySelector('img'), null);
+});

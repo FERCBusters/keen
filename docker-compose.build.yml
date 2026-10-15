@@ -8,6 +8,10 @@ services:
     image: keen-api:local
     build:
       context: ./services/api
+  keen-imap-worker:
+    image: keen-api:local
+    build:
+      context: ./services/api
   keen-beat:
     image: keen-api:local
     build:

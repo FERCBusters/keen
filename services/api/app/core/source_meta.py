@@ -50,6 +50,7 @@ def normalize_hex_color(raw: str | None) -> str | None:
 
 
 SOURCE_LABELS = {
+    "imap": "IMAP mail",
     "rss": "RSS",
     "github": "GitHub",
     "gitlab": "GitLab",

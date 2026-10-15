@@ -56,7 +56,26 @@ def validate(payload):
         raise DomainError(422, "Unsupported connection field")
     from app.services.managed_configurations import _safe_document, _validate_connector
 
-    _validate_connector(payload.source, payload.inputs)
+    if payload.source == "imap":
+        from app.ingest.imap_support.config import configuration
+
+        try:
+            configuration(payload.configuration)
+            password = payload.credentials.get("password", "")
+            if len(password) > 4096 or any(
+                ord(c) < 32 or ord(c) > 126 for c in password
+            ):
+                raise ValueError(
+                    "IMAP password must use printable ASCII characters, up to 4096"
+                )
+            if payload.inputs:
+                raise ValueError(
+                    "IMAP uses one folder per connection; extra inputs are unsupported"
+                )
+        except ValueError as exc:
+            raise DomainError(422, str(exc)) from None
+    else:
+        _validate_connector(payload.source, payload.inputs)
     _safe_document(payload.inputs)
     url = payload.configuration.get("base_url")
     if url:
@@ -129,7 +148,8 @@ def listing(*, db):
             {
                 "source": s,
                 "label": get_source_meta(s).label,
-                "enabled": bool(getattr(deployment_settings, s + "_enabled", False)),
+                "enabled": bool(getattr(deployment_settings, s + "_enabled", False))
+                and not (s == "imap" and deployment_settings.demo_mode),
                 "fields": public.split(),
                 "credential_fields": secret.split(),
             }
@@ -148,11 +168,15 @@ def create(*, payload: ConnectionInput, db):
 DESTINATION_FIELDS = ("base_url", "auth_mode", "header_name")
 
 
-def _destination(configuration):
+def _destination(configuration, source=None):
     values = dict(configuration or {})
     values["auth_mode"] = values.get("auth_mode") or "token"  # blank means token
     return tuple(
-        str(values.get(name) or "").strip().rstrip("/") for name in DESTINATION_FIELDS
+        str(values.get(name) or "").strip().rstrip("/")
+        for name in (
+            DESTINATION_FIELDS
+            + (("host", "port", "username") if source == "imap" else ())
+        )
     )
 
 
@@ -169,7 +193,8 @@ def save(row, payload, db):
     supplied = {k for k, v in payload.credentials.items() if v}
     if (
         row.configuration is not None
-        and _destination(row.configuration) != _destination(payload.configuration)
+        and _destination(row.configuration, row.source)
+        != _destination(payload.configuration, payload.source)
         and set(secret) - supplied
     ):
         # Saved secrets are write-only; never let an edit redirect them elsewhere.
@@ -234,5 +259,10 @@ def run(*, key: str, db):
         raise DomainError(409, "Connection or source type is disabled")
     from app.worker.tasks import ingest_source_connection_task
 
-    task = ingest_source_connection_task.delay(connection.source, key)
+    if connection.source == "imap":
+        from app.worker.tasks import ingest_imap_connection_task
+
+        task = ingest_imap_connection_task.delay(key)
+    else:
+        task = ingest_source_connection_task.delay(connection.source, key)
     return {"task_id": task.id}

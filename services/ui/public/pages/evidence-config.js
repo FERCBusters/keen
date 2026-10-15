@@ -7,7 +7,9 @@ import {
 import { apiGet, apiPost, apiPut, apiDelete } from '/app.js';
 
 const $ = (suffix) => document.getElementById(`ec-${suffix}`);
+let statusTimer = null;
 function status(message, tone = 'danger') {
+  clearTimeout(statusTimer);
   const element = $('status');
   let readable = String(message || '');
   if (readable.startsWith('{')) {
@@ -24,6 +26,10 @@ function status(message, tone = 'danger') {
   element.hidden = !readable;
   element.className = readable ? `alert alert-${tone} mb-3` : '';
   element.setAttribute('role', readable && tone === 'danger' ? 'alert' : 'status');
+  if (readable && tone === 'success')
+    statusTimer = setTimeout(() => {
+      element.hidden = true;
+    }, 6000);
 }
 const conditions = ['source', 'system', 'actor', 'action', 'outcome', 'severity', 'label'];
 const regexConditions = [
@@ -33,7 +39,6 @@ const regexConditions = [
   'action_regex',
   'outcome_regex',
   'label_regex',
-  'summary_regex',
 ];
 const bookstackConditions = [
   'bookstack_book_id',
@@ -258,11 +263,10 @@ function paintDefinitionEntry() {
   $('source-scope-help').hidden = section !== 'source';
   $('manage-collections').hidden = !layouts[adapter];
   const needsCollection = layouts[adapter] && !collectors.some((item) => item.adapter === adapter);
-  $('source-scope-description').textContent =
-    'This matches events already collected from this source, including events from any configured collection. It does not discover or start collecting from users, organisations, repositories or other remote inputs.' +
-    (needsCollection
-      ? ` No collections are configured for ${adapter}. Set up a collection first so the ingester has something to fetch.`
-      : '');
+  $('source-scope-help').hidden = section !== 'source' || !needsCollection;
+  $('source-scope-description').textContent = needsCollection
+    ? `No collections are configured for ${adapter}.`
+    : '';
   if (section !== 'source') $('input-options').open = true;
   if (section === 'source') {
     definitionEntryKey = null;
@@ -502,6 +506,7 @@ function ruleSentence() {
 const stepTitles = ['Choose matching events', 'Name and choose controls', 'Check and publish'];
 function showStep(number) {
   step = Math.max(1, Math.min(3, number));
+  $('regex-help').hidden = step !== 1;
   for (const section of document.querySelectorAll('[data-ec-step]'))
     section.hidden = Number(section.dataset.ecStep) !== step;
   $('step-number').textContent = step;
@@ -519,12 +524,22 @@ function showEditor(number = 1) {
   window.dispatchEvent(new Event('keen-show-evidence-mapping'));
   $('library').hidden = true;
   $('editor').hidden = false;
+  document.querySelectorAll('[data-ec-overview]').forEach((node) => {
+    node.hidden = true;
+    node.classList.add('d-none');
+  });
   showStep(number);
+  $('editor-heading').setAttribute('tabindex', '-1');
+  $('editor-heading').focus();
 }
 function showLibrary() {
   pollingJobId = null;
   $('editor').hidden = true;
   $('library').hidden = false;
+  document.querySelectorAll('[data-ec-overview]').forEach((node) => {
+    node.hidden = false;
+    node.classList.remove('d-none');
+  });
   renderRules();
 }
 function nextStep() {
@@ -740,6 +755,21 @@ function readRule() {
   if (!$('description').value.trim()) throw new Error('Give the mapping a name.');
   const when = {};
   const fieldConditions = readFieldConditions();
+  const legacySummary = [...$('field-rows').children].find(
+    (row) =>
+      row.legacySummary &&
+      row.fieldInputs.path.value === 'event:summary' &&
+      row.fieldInputs.op.value === 'regex',
+  );
+  if (legacySummary) {
+    when.summary_regex = legacySummary.fieldInputs.value.value;
+    const index = fieldConditions.findLastIndex(
+      (item) =>
+        item.scope === 'event' && item.operator === 'regex' && item.value === when.summary_regex,
+    );
+    if (index >= 0) fieldConditions.splice(index, 1);
+    if (!when.summary_regex) delete when.summary_regex;
+  }
   if (fieldConditions.length) when.fields = fieldConditions;
   for (const field of [...conditions, ...regexConditions, ...bookstackConditions]) {
     const value = $(`when-${field}`).value.trim();
@@ -782,11 +812,19 @@ function readRule() {
   };
 }
 async function newRule() {
+  pollingJobId = null;
   $('rule-retention').hidden = true;
   draftEventFields = [];
   sourceChoices();
   $('draft-notice').hidden = true;
   $('field-rows').replaceChildren();
+  addFieldCondition({
+    scope: 'event',
+    path: ['summary'],
+    operator: 'contains',
+    value: '',
+    optional: true,
+  });
   selectedRule = null;
   previewedRule = null;
   previewCount = 0;
@@ -837,7 +875,24 @@ async function editRule(rule) {
   $('rule-retention').hidden = false;
   $('rule-retention').href =
     '/admin.html?retention_rule=' + encodeURIComponent(rule.id) + '#retention';
+  $('field-rows').replaceChildren();
   for (const item of rule.when?.fields || []) addFieldCondition(item);
+  if (rule.when?.summary_regex)
+    addFieldCondition({
+      scope: 'event',
+      path: ['summary'],
+      operator: 'regex',
+      value: rule.when.summary_regex,
+      legacySummary: true,
+    });
+  if (!$('field-rows').children.length)
+    addFieldCondition({
+      scope: 'event',
+      path: ['summary'],
+      operator: 'contains',
+      value: '',
+      optional: true,
+    });
   $('rule-id').value = rule.id;
   $('rule-id').disabled = true;
   $('description').value = rule.description || '';
@@ -1313,6 +1368,8 @@ $('preview').addEventListener('click', async () => {
   }
 });
 let pollingJobId = null;
+const notifiedJobs = new Set();
+const activeJobs = new Set();
 function showBackfill(data) {
   const element = $('backfill');
   element.replaceChildren();
@@ -1338,11 +1395,21 @@ function showBackfill(data) {
     element.append(cancel);
   }
 }
-async function pollBackfill(id) {
+async function pollBackfill(id, newlyStarted = false) {
+  if (newlyStarted) activeJobs.add(id);
   pollingJobId = id;
   const data = await apiGet(`${apiRoot}/rule-backfills/${encodeURIComponent(id)}`);
   if (pollingJobId !== id) return;
   showBackfill(data);
+  if (['queued', 'running'].includes(data.status)) activeJobs.add(id);
+  if (data.status === 'completed' && activeJobs.has(id) && !notifiedJobs.has(id)) {
+    notifiedJobs.add(id);
+    activeJobs.delete(id);
+    status(
+      `Historical mapping complete: checked ${data.examined || 0} events; ${data.matched || 0} matched, ${data.created_mappings || 0} new mappings.`,
+      'success',
+    );
+  }
   if (['queued', 'running'].includes(data.status))
     setTimeout(() => {
       if (pollingJobId === id) pollBackfill(id).catch((error) => status(error.message));
@@ -1350,7 +1417,7 @@ async function pollBackfill(id) {
 }
 async function loadRecentBackfill(ruleId) {
   const result = await apiGet(`${apiRoot}/rule-backfills?rule_id=${encodeURIComponent(ruleId)}`);
-  if (result.items.length) await pollBackfill(result.items[0].id);
+  if (selectedRule === ruleId && result.items.length) await pollBackfill(result.items[0].id);
 }
 $('save-rule').addEventListener('click', async () => {
   try {
@@ -1381,12 +1448,9 @@ $('save-rule').addEventListener('click', async () => {
     await loadRules();
     await editRule(rules.find((item) => item.id === rule.id));
     showStep(3);
-    if (saved.backfill?.id) await pollBackfill(saved.backfill.id);
+    status('Mapping saved. Future evidence uses it immediately.', 'success');
+    if (saved.backfill?.id) await pollBackfill(saved.backfill.id, true);
     else if (saved.backfill) showBackfill(saved.backfill);
-    status(
-      'Evidence definition saved. Future evidence uses it immediately; historical evaluation runs in the background when selected.',
-      'success',
-    );
   } catch (error) {
     status(error.message);
   }
@@ -1407,7 +1471,7 @@ $('backfill-start').addEventListener('click', async () => {
       `${apiRoot}/mapping-rules/${encodeURIComponent(selectedRule)}/backfill`,
       {},
     );
-    if (result.backfill?.id) await pollBackfill(result.backfill.id);
+    if (result.backfill?.id) await pollBackfill(result.backfill.id, true);
     else showBackfill(result.backfill);
   } catch (error) {
     status(error.message);
@@ -1546,7 +1610,7 @@ function populateFieldChoices(select, selectedPath = null) {
   for (const group of fieldChoiceGroups(
     currentEventFields(),
     availableEventFields(),
-    selectedPath,
+    selectedPath === 'event:summary' ? null : selectedPath,
   )) {
     const optgroup = document.createElement('optgroup');
     optgroup.label = group.label;
@@ -1554,7 +1618,13 @@ function populateFieldChoices(select, selectedPath = null) {
       optgroup.append(new Option(item.label, JSON.stringify(item.path)));
     select.append(optgroup);
   }
-  select.value = selectedPath ? JSON.stringify(selectedPath) : '';
+  select.append(new Option('Summary', 'event:summary'));
+  select.value =
+    selectedPath === 'event:summary'
+      ? selectedPath
+      : selectedPath
+        ? JSON.stringify(selectedPath)
+        : '';
 }
 function refreshFieldChoices() {
   const list = $('field-paths');
@@ -1569,7 +1639,14 @@ function refreshFieldChoices() {
   // Regroup rows as the inspected sample changes, preserving all conditions.
   for (const row of $('field-rows').children) {
     const select = row.fieldInputs.path;
-    populateFieldChoices(select, select.value ? JSON.parse(select.value) : null);
+    populateFieldChoices(
+      select,
+      select.value === 'event:summary'
+        ? select.value
+        : select.value
+          ? JSON.parse(select.value)
+          : null,
+    );
   }
 }
 function addFieldCondition(item = {}) {
@@ -1581,7 +1658,9 @@ function addFieldCondition(item = {}) {
   path.style.width = 'auto';
   path.setAttribute('aria-label', 'Event field');
   path.add(new Option('Choose an event field…', ''));
-  populateFieldChoices(path, item.path || null);
+  populateFieldChoices(path, item.scope === 'event' ? 'event:summary' : item.path || null);
+  row.optional = !!item.optional;
+  row.legacySummary = !!item.legacySummary;
   const op = document.createElement('select');
   op.className = 'form-select w-auto';
   op.setAttribute('aria-label', 'Field operator');
@@ -1589,6 +1668,8 @@ function addFieldCondition(item = {}) {
     ['equals', 'equals'],
     ['starts_with', 'starts with'],
     ['contains', 'contains'],
+    ['not_contains', 'does not contain'],
+    ['regex', 'matches regex'],
     ['exists', 'exists'],
     ['in_cidr', 'is in IP network (CIDR)'],
   ])
@@ -1608,6 +1689,9 @@ function addFieldCondition(item = {}) {
   remove.onclick = () => row.remove();
   op.onchange = () => {
     value.hidden = op.value === 'exists';
+    value.placeholder =
+      op.value === 'regex' ? 'Regex pattern, e.g. ^(?:gills|systemd)$' : 'Match value';
+    value.maxLength = op.value === 'regex' ? 512 : 4096;
   };
   op.onchange();
   path.onchange = () => {
@@ -1620,22 +1704,34 @@ function addFieldCondition(item = {}) {
   $('field-rows').append(row);
 }
 function readFieldConditions() {
-  return [...$('field-rows').children].map((row) => {
-    const { path, op, value } = row.fieldInputs;
-    let keys;
-    try {
-      keys = JSON.parse(path.value);
-    } catch {
-      throw new Error('Choose an event field.');
-    }
-    if (!Array.isArray(keys) || !keys.length || keys.some((k) => typeof k !== 'string' || !k))
-      throw new Error('Field paths must be arrays of non-empty keys.');
-    return {
-      path: keys,
-      operator: op.value,
-      ...(op.value === 'exists' ? {} : { value: value.value }),
-    };
-  });
+  return [...$('field-rows').children]
+    .filter(
+      (row) =>
+        !(
+          row.optional &&
+          row.fieldInputs.path.value === 'event:summary' &&
+          row.fieldInputs.op.value !== 'exists' &&
+          !row.fieldInputs.value.value
+        ),
+    )
+    .map((row) => {
+      const { path, op, value } = row.fieldInputs;
+      let keys;
+      try {
+        keys = path.value === 'event:summary' ? ['summary'] : JSON.parse(path.value);
+      } catch {
+        throw new Error('Choose an event field.');
+      }
+      if (!Array.isArray(keys) || !keys.length || keys.some((k) => typeof k !== 'string' || !k))
+        throw new Error('Field paths must be arrays of non-empty keys.');
+      return {
+        ...(path.value === 'event:summary'
+          ? { scope: 'event', path: ['summary'] }
+          : { path: keys }),
+        operator: op.value,
+        ...(op.value === 'exists' ? {} : { value: value.value }),
+      };
+    });
 }
 $('field-add').onclick = () => addFieldCondition();
 
@@ -1683,6 +1779,7 @@ $('description').addEventListener('input', () => {
 });
 
 $('manage-collections').addEventListener('click', () => {
+  showLibrary();
   window.dispatchEvent(
     new CustomEvent('keen-manage-source', { detail: { source: $('definition-adapter').value } }),
   );

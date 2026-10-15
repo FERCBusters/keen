@@ -579,8 +579,37 @@ def ingest_source_connection_task(source: str, connection_id: str):
 
     from app.services.ingestion_pause import POLLING_SOURCES
 
+    if source == "imap":
+        return {"task_id": ingest_imap_connection_task.delay(connection_id).id}
     if source not in POLLING_SOURCES:
         raise ValueError("Unknown polling source")
     ingest = getattr(import_module("app.ingest." + source), "ingest_" + source + "_all")
     with SessionLocal() as db:
         return ingest(db, connection_id=connection_id)
+
+
+@celery_app.task(name="keen.dispatch_imap")
+def dispatch_imap_task():
+    from app.ingest.connections import connections
+
+    if not settings.imap_enabled or settings.demo_mode:
+        return {"queued": 0}
+    with SessionLocal() as db:
+        ids = [
+            c.id
+            for c in connections(db, "imap")
+            if c.enabled and c.managed_by != "environment"
+        ]
+    for key in ids:
+        ingest_imap_connection_task.delay(key)
+    return {"queued": len(ids)}
+
+
+@celery_app.task(
+    name="keen.ingest_imap_connection", soft_time_limit=65, time_limit=75, expires=240
+)
+def ingest_imap_connection_task(connection_id):
+    from app.ingest.imap import ingest_imap_all
+
+    with SessionLocal() as db:
+        return ingest_imap_all(db, connection_id=connection_id)

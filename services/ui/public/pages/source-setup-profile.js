@@ -1,6 +1,13 @@
 // Presentation-only setup profiles. Adapters keep their existing input schema.
 // Preserve imported multi-feed sources until an administrator splits them.
 export function sourceSetupProfile(source, connection = null) {
+  if (source === 'imap')
+    return {
+      inlineInput: true,
+      hiddenFields: [],
+      hint: 'Read-only IMAPS. The first poll starts with new mail only. Body collection is optional; HTML is stored only as inert JSON text. No attachments are fetched.',
+      prepare: () => ({}),
+    };
   if (source !== 'rss' || (connection?.inputs?.feeds?.length || 0) > 1) return null;
   return {
     inlineInput: true,

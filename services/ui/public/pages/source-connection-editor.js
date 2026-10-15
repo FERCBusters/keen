@@ -59,7 +59,7 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
     hint.textContent =
       profile?.hint ||
       'Name the endpoint or account and enter its credentials, then add the inputs to collect. Credentials are encrypted on the server.';
-    if (profile) {
+    if (profile?.input) {
       inlineInput = field(fields, profile.input.label, 'url', profile.input.value);
       inlineInput.required = true;
       inlineInput.dataset.feedUrl = 'true';
@@ -80,9 +80,23 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
         const input = field(
           parent,
           sourceFieldLabel(key) + (secret && connection ? ' (blank keeps saved value)' : ''),
-          key === 'auth_mode' ? 'select' : secret ? 'password' : 'text',
+          ['auth_mode', 'fetch_body'].includes(key) ? 'select' : secret ? 'password' : 'text',
           secret ? '' : connection?.configuration[key] || '',
         );
+        if (source.value === 'imap') {
+          if (key === 'fetch_body') {
+            input.add(new Option('No — headers only', 'false'));
+            input.add(new Option('Yes — prefer plaintext, otherwise raw HTML', 'true'));
+            input.value = connection?.configuration[key] || 'false';
+          }
+          if (key === 'body_max_chars' || key === 'port') {
+            input.type = 'number';
+            input.min = '1';
+            input.max = key === 'port' ? '65535' : '65536';
+            input.value = connection?.configuration[key] || (key === 'port' ? '993' : '4000');
+          }
+          if (key === 'folder') input.value = connection?.configuration[key] || 'INBOX';
+        }
         if (key === 'auth_mode') {
           for (const mode of ['token', 'bearer', 'basic', 'query', 'cookie', 'none'])
             input.add(
@@ -109,7 +123,15 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
         }
       }
     }
+    const choice = fields.querySelector('[data-key="fetch_body"]');
+    const limit = fields.querySelector('[data-key="body_max_chars"]');
+    if (choice && limit) limit.closest('label').hidden = choice.value !== 'true';
   }
+  fields.addEventListener('change', () => {
+    const choice = fields.querySelector('[data-key="fetch_body"]');
+    const limit = fields.querySelector('[data-key="body_max_chars"]');
+    if (choice && limit) limit.closest('label').hidden = choice.value !== 'true';
+  });
   source.onchange = paint;
   paint();
   const error = document.createElement('p');
@@ -142,7 +164,7 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
       for (const input of fields.querySelectorAll('[data-clear]'))
         if (input.checked) clear_credentials.push(input.dataset.clear);
       const inputs = profile
-        ? profile.prepare(inlineInput.value, configuration, connection?.inputs || {})
+        ? profile.prepare(inlineInput?.value || '', configuration, connection?.inputs || {})
         : connection?.inputs || {};
       const payload = {
         source: source.value,

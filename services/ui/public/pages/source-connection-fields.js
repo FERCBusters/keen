@@ -1,6 +1,11 @@
 // Presentation metadata only. The server's field lists remain authoritative for
 // which values are configuration and which values are encrypted credentials.
 const labels = {
+  host: 'IMAP server hostname',
+  port: 'TLS port',
+  folder: 'Mailbox folder',
+  fetch_body: 'Fetch message body',
+  body_max_chars: 'Maximum body characters (1–65,536)',
   base_url: 'Base URL',
   username: 'Username',
   password: 'Password',

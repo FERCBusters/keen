@@ -24,6 +24,7 @@ from app.integrations.transport import decrypt
 
 # Public endpoint/account fields and secret fields are deliberately enumerated.
 FIELDS = {
+    "imap": ("host port username folder fetch_body body_max_chars", "password"),
     "webhooks": ("provider secret_header", "secret"),
     "elasticsearch": ("base_url username", "password api_key"),
     "loki": ("base_url username header_name", "password header_value"),
@@ -307,6 +308,8 @@ def environment_has_inputs(source, db):
         for key in ("base_url", "token_id", "token_secret")
     ):
         return True
+    if source == "imap":
+        return False  # IMAP requires explicit named connections.
     sections = INPUT_SECTIONS.get(source)
     if sections is None:
         return True

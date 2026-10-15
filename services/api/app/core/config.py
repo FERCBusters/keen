@@ -463,6 +463,7 @@ class Settings(BaseSettings):
     # --- RSS / Atom (polling)
     # Note: TLS verification is ALWAYS enforced for RSS feeds (verify=True in all clients).
     # The rss_verify_tls field is retained for backwards compatibility but ignored.
+    imap_enabled: bool = Field(default=False)
     rss_enabled: bool = Field(default=False)
     rss_config_path: str = Field(default="/app/config/rss.yml")
     rss_verify_tls: bool = Field(default=True)  # Deprecated: always True

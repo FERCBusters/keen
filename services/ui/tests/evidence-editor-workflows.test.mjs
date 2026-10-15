@@ -121,7 +121,7 @@ test('starting a new rule clears draft-only observations and conditions', async 
   await new Promise((r) => setTimeout(r, 10));
   document.getElementById('ec-field-add').click();
   const rows = document.getElementById('ec-field-rows');
-  assert.equal(rows.children.length, 1);
+  assert.equal(rows.children.length, 2);
   assert.ok(
     ![...rows.querySelector('select').options].some(
       (o) => o.value === '["fields","ossec.rule.id"]',
@@ -147,7 +147,7 @@ test('source-wide rules explain collection scope and offer a setup shortcut', as
   document.getElementById('ec-definition-section').dispatchEvent(new window.Event('change'));
   const help = document.getElementById('ec-source-scope-help');
   assert.equal(help.hidden, false);
-  assert.match(help.textContent, /does not discover or start collecting/);
+  assert.doesNotMatch(help.textContent, /does not discover or start collecting/);
   assert.match(help.textContent, /No collections are configured for forgejo/);
   let requested;
   window.addEventListener('keen-manage-source', (event) => {
@@ -208,11 +208,25 @@ test('a rule deep link opens the saved rule and its retention shortcut', async (
   const rule = {
     id: 'saved-rule',
     description: 'Saved rule',
-    when: { source: 'keen-agent' },
+    when: {
+      source: 'keen-agent',
+      summary_regex: 'gills',
+      fields: [{ path: ['fields', 'process.name'], operator: 'regex', value: 'gills|systemd' }],
+    },
     map_to: [],
   };
   const ui = await fixture(t, { rule, requestedRule: rule.id });
   assert.equal(ui.document.getElementById('ec-description').value, 'Saved rule');
+  const summaryRow = [...ui.document.getElementById('ec-field-rows').children].find(
+    (row) => row.querySelector('select').value === 'event:summary',
+  );
+  assert.equal(summaryRow.querySelector('input').value, 'gills');
+  assert.equal(summaryRow.querySelector('[aria-label="Field operator"]').value, 'regex');
+  assert.equal(
+    ui.document.querySelector('#ec-field-rows [aria-label="Field operator"]').value,
+    'regex',
+  );
+  assert.equal(ui.document.querySelector('#ec-field-rows input').value, 'gills|systemd');
   assert.equal(
     new URL(ui.document.getElementById('ec-rule-retention').href).searchParams.get(
       'retention_rule',
@@ -223,4 +237,63 @@ test('a rule deep link opens the saved rule and its retention shortcut', async (
 test('a deleted rule deep link reports that the rule is unavailable', async (t) => {
   const ui = await fixture(t, { requestedRule: 'deleted-rule' });
   assert.match(ui.document.getElementById('ec-status').textContent, /no longer exists/);
+});
+
+test('summary regex is prominent and structured conditions offer bounded regex', async (t) => {
+  const { document, window } = await fixture(t);
+  const summary = document.getElementById('ec-field-rows').firstElementChild;
+  assert.equal(summary.querySelector('select').value, 'event:summary');
+  assert.equal(summary.querySelector('[aria-label="Field operator"]').value, 'contains');
+  assert.equal(summary.closest('details'), null);
+  document.getElementById('ec-field-add').click();
+  const row = document.getElementById('ec-field-rows').lastElementChild;
+  const op = row.querySelector('[aria-label="Field operator"]');
+  assert.ok([...op.options].some((o) => o.value === 'regex'));
+  assert.ok(
+    [...op.options].some((o) => o.value === 'not_contains' && o.textContent === 'does not contain'),
+  );
+  op.value = 'not_contains';
+  op.dispatchEvent(new window.Event('change'));
+  assert.equal(row.querySelector('input').hidden, false);
+  op.value = 'regex';
+  op.dispatchEvent(new window.Event('change'));
+  assert.equal(row.querySelector('input').maxLength, 512);
+  op.value = 'contains';
+  op.dispatchEvent(new window.Event('change'));
+  assert.equal(row.querySelector('input').maxLength, 4096);
+});
+
+test('mapping editor hides overview and restores it on return', async (t) => {
+  const { document } = await fixture(t);
+  const context = [...document.querySelectorAll('[data-ec-overview]')];
+  assert.ok(context.length >= 6);
+  assert.ok(context.every((node) => node.hidden && node.classList.contains('d-none')));
+  assert.equal(
+    document.getElementById('ec-more-filters').querySelector('summary').textContent,
+    'More filters',
+  );
+  assert.ok(document.getElementById('ec-regex-conditions').closest('#ec-more-filters'));
+  assert.equal(document.getElementById('ec-regex-help').closest('[data-ec-step]'), null);
+  assert.equal(document.getElementById('ec-regex-help').open, false);
+  document.getElementById('ec-close-editor').click();
+  assert.ok(context.every((node) => !node.hidden && !node.classList.contains('d-none')));
+});
+
+test('regex guide only appears on the matching step', async (t) => {
+  const { document } = await fixture(t);
+  const guide = document.getElementById('ec-regex-help');
+  assert.equal(guide.hidden, false);
+  document.getElementById('ec-next-step').click();
+  assert.equal(guide.hidden, true);
+  document.getElementById('ec-description').value = 'Mail evidence';
+  await until(() => document.getElementById('ec-control').options.length > 0);
+  document.getElementById('ec-control').value = 'A1';
+  document.getElementById('ec-add-target').click();
+  document.getElementById('ec-next-step').click();
+  assert.equal(document.getElementById('ec-step-number').textContent, '3');
+  assert.equal(guide.hidden, true);
+  document.getElementById('ec-prev-step').click();
+  assert.equal(guide.hidden, true);
+  document.getElementById('ec-prev-step').click();
+  assert.equal(guide.hidden, false);
 });

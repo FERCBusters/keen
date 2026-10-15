@@ -746,9 +746,9 @@ def source_catalogue(*, db: Session):
         .all()
     }
     items = []
-    for name in CONNECTORS:
+    for name in [*CONNECTORS, "imap"]:
         enabled = bool(getattr(settings, f"{name}_enabled", False))
-        if name in ("redmine", "riskledger") and settings.demo_mode:
+        if name in ("redmine", "riskledger", "imap") and settings.demo_mode:
             enabled = False
         count = sum(1 for item in collectors if item["adapter"] == name)
         matching_rules = sum(

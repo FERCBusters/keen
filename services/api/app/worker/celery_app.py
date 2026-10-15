@@ -21,8 +21,11 @@ celery_app = Celery(
     include=["app.worker.tasks"],
 )
 
+celery_app.conf.task_routes = {"keen.ingest_imap_connection": {"queue": "imap"}}
+
 # Beat schedules
 celery_app.conf.beat_schedule = {
+    "dispatch-imap": {"task": "keen.dispatch_imap", "schedule": 300.0},
     "ingest-gitea": {
         "task": "app.worker.tasks.ingest_gitea_all_task",
         "schedule": 5700.0,

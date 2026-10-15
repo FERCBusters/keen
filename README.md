@@ -64,11 +64,13 @@ Open **Admin → Sources & Evidence Mapping**:
 3. **Collect evidence.** Run collection and inspect the resulting events.
 4. **Add mapping rules.** Select the source connection and input, choose matching conditions, and select the controls the evidence supports.
 
-Supported sources include GitHub, GitLab, Forgejo, Gitea, Jenkins, Loki, Elasticsearch, CloudWatch Logs, Google Workspace, Redmine, Taiga, BookStack, Risk Ledger, RSS/Atom and incoming webhooks. The custom API ingester builder supports declarative HTTP requests, field extraction, pagination and scheduling.
+Supported sources include GitHub, GitLab, Forgejo, Gitea, Jenkins, Loki, Elasticsearch, CloudWatch Logs, Google Workspace, Redmine, Taiga, BookStack, Risk Ledger, IMAP mail, RSS/Atom and incoming webhooks. The custom API ingester builder supports declarative HTTP requests, field extraction, pagination and scheduling.
 
 You can configure several named connections of the same type. KEEN records the connection identity on collected events. Credentials entered in the UI are encrypted in PostgreSQL using `KEEN_INTEGRATION_SECRET_KEY`. Environment credentials and file-managed connections are also supported; see `.env.example` and the **Help** administrator handbook for their configuration.
 
 Built-in HTTP collectors require HTTPS, restrict authenticated Git feeds to their connection’s server, and limit individual responses to 16 MiB. They request uncompressed responses and ignore ambient proxy settings. Set `KEEN_INGESTION_ALLOWED_CIDRS` to restrict access to private networks; an empty value permits private networks except prohibited addresses such as loopback and link-local.
+
+IMAP uses one named connection per mailbox folder, verified implicit TLS (normally port 993), read-only access and new-mail polling every five minutes. Enable `KEEN_IMAP_ENABLED=true` and start the isolated worker with `docker compose --profile imap up -d`. For local builds, include `-f docker-compose.yml -f docker-compose.build.yml` and `--build`. Body collection is off by default; when enabled it retains up to **4,000 characters** by default, preferring plaintext and storing HTML-only bodies as inert JSON text. Attachments are excluded. Private IMAP addresses require explicit `KEEN_INGESTION_ALLOWED_CIDRS` entries. See **Help → Administering KEEN → Sources → IMAP mail** for limits, initial baselines and recovery.
 
 Custom API destinations require `KEEN_INTEGRATION_ALLOWED_HOSTS` (`host` for HTTPS port 443 or `host:port` for an explicit port); approved private destinations also require `KEEN_INTEGRATION_PRIVATE_CIDRS`. Configure upstream credentials with the access needed for collection.
 

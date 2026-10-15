@@ -896,6 +896,7 @@ def admin_ingest_status(*, user):
             "jenkins": bool(settings.jenkins_enabled),
             "taiga": bool(settings.taiga_enabled),
             "bookstack": bool(settings.bookstack_enabled),
+            "imap": bool(settings.imap_enabled) and not settings.demo_mode,
             "rss": bool(settings.rss_enabled),
         }
     }

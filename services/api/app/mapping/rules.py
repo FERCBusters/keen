@@ -551,7 +551,12 @@ def evaluate_by_framework(
     for r in rules:
         c = r.when
         if not all(
-            field_matches(event.get("normalized_payload") or {}, item)
+            field_matches(
+                event
+                if item.get("scope") == "event"
+                else event.get("normalized_payload") or {},
+                item,
+            )
             for item in (c.fields or [])
         ):
             continue

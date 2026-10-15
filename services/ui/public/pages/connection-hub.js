@@ -127,12 +127,16 @@ function render() {
     const meta = document.createElement('p');
     meta.className = 'small text-break';
     meta.textContent = `${sourceTypeLabel(item.source)} · ${item.type} · ${item.collectors.length} inputs`;
+    if (item.source === 'imap')
+      meta.textContent = `${sourceTypeLabel(item.source)} · ${item.type} · Folder: ${item.connection?.configuration?.folder || 'INBOX'}`;
     body.append(meta);
     const editable = item.key.startsWith('builtin:') || item.connection?.managed_by === 'database';
     const push = item.source === 'webhooks';
     const inline = !!item.connection && !!sourceSetupProfile(item.source, item.connection);
     const ready =
-      item.collectors.length || push || (inline && item.connection.inputs?.feeds?.length);
+      item.collectors.length ||
+      push ||
+      (inline && (item.source === 'imap' || item.connection.inputs?.feeds?.length));
     if (push && item.connection) {
       const url = document.createElement('p');
       url.className = 'text-break';

@@ -21,6 +21,7 @@ POLLING_SOURCES = frozenset(
         "jenkins",
         "taiga",
         "bookstack",
+        "imap",
         "rss",
         "google_workspace",
     )

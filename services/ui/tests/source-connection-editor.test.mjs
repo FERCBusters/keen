@@ -226,3 +226,48 @@ test('related credentials stay together across source types without changing sec
   assert.equal(sourceFieldLabel('sa_json'), 'Service account JSON');
   assert.equal(sourceFieldLabel('future_field'), 'Future field');
 });
+
+test('IMAP defaults to headers only and reveals a 4000 character body limit on request', async (t) => {
+  let saved;
+  const ui = await loadUi('pages/source-connection-editor.js', {
+    setup(w) {
+      w.HTMLDialogElement.prototype.showModal = function () {};
+      w.HTMLDialogElement.prototype.close = function () {};
+    },
+    vendor: {
+      apiPost: async (url, body) => {
+        saved = body;
+        return { ...body, id: 'mail' };
+      },
+    },
+  });
+  t.after(ui.close);
+  const dialog = ui.api.editSourceConnection({
+    types: [
+      {
+        source: 'imap',
+        label: 'IMAP mail',
+        enabled: true,
+        fields: ['host', 'port', 'username', 'folder', 'fetch_body', 'body_max_chars'],
+        credential_fields: ['password'],
+      },
+    ],
+    onSaved: async () => {},
+  });
+  const choice = dialog.querySelector('[data-key="fetch_body"]');
+  const limit = dialog.querySelector('[data-key="body_max_chars"]');
+  assert.equal(choice.value, 'false');
+  assert.equal(limit.value, '4000');
+  assert.equal(limit.closest('label').hidden, true);
+  choice.value = 'true';
+  choice.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  assert.equal(limit.closest('label').hidden, false);
+  dialog.querySelector('[data-key="host"]').value = 'mail.example';
+  dialog.querySelector('[data-key="username"]').value = 'reader';
+  await dialog.querySelector('form').onsubmit({ preventDefault() {} });
+  assert.equal(saved.configuration.fetch_body, 'true');
+  assert.equal(saved.configuration.body_max_chars, '4000');
+  assert.equal(saved.configuration.folder, 'INBOX');
+  assert.equal(saved.configuration.port, '993');
+  assert.deepEqual(JSON.parse(JSON.stringify(saved.inputs)), {});
+});
