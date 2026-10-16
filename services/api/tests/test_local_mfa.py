@@ -204,7 +204,9 @@ class LocalMfaTests(unittest.TestCase):
         response = self.post("totp/start")
         self.assertEqual(response.status_code, 200, response.text)
         self.secret = response.json()["secret"]
-        result = self.post("totp/confirm", {"code": pyotp.TOTP(self.secret).now()})
+        # Kept so a test can replay the exact code that enrolment consumed.
+        self.enrol_code = pyotp.TOTP(self.secret).now()
+        result = self.post("totp/confirm", {"code": self.enrol_code})
         self.assertEqual(result.status_code, 200, result.text)
         self.codes = result.json()["recovery_codes"]
         self.redis.flushall()
@@ -247,11 +249,11 @@ class LocalMfaTests(unittest.TestCase):
         self.assertTrue(self.login().json()["mfa_required"])
         self.assertFalse(self.client.get("/protected").json()["authenticated"])
         self.assertEqual(self.post("finish").status_code, 403)
+        # The code that enrolment consumed is refused, whether or not the
+        # 30-second window has rolled over since. A code from a later window is
+        # fresh, so the test replays that exact code.
         self.assertEqual(
-            self.post(
-                "verify-code", {"code": pyotp.TOTP(self.secret).now()}
-            ).status_code,
-            400,
+            self.post("verify-code", {"code": self.enrol_code}).status_code, 400
         )
         self.allow_next_totp()
         self.assertEqual(
