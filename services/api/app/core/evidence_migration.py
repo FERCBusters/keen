@@ -109,6 +109,7 @@ def unify(
                     {
                         "framework": target.framework_slug,
                         "ref": target.ref,
+                        **({"kind": target.kind} if target.kind else {}),
                         **(
                             {"roles_any": sorted(target.roles_any)}
                             if target.roles_any

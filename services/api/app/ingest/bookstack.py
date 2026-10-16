@@ -21,6 +21,7 @@ from app.ingest.connections import (
     settings,
 )
 from app.ingest.http import client as ingestion_client
+from app.mapping.targets import resolve_targets
 from app.security.errors import collection_error
 from app.security.regex import (
     MATCH_TIMEOUT_SECONDS,
@@ -685,19 +686,14 @@ def _ensure_and_add_mappings(
     if not refs:
         return 0
 
-    # Ensure control items exist
-    found = (
-        db.query(ControlItem)
-        .filter(
-            ControlItem.framework_slug == settings.default_framework_slug,
-            ControlItem.ref.in_(refs),
-        )
-        .all()
+    # Page mappings name references only: each uses the control with that
+    # reference, or the clause when no control has it. A reference several
+    # controls share attaches nothing. Missing references are added.
+    found, absent = resolve_targets(
+        db, settings.default_framework_slug, [(ref, None) for ref in refs]
     )
-    by_ref = {ci.ref: ci for ci in found}
-    for ref in refs:
-        if ref in by_ref:
-            continue
+    by_ref = {ref: ci for (ref, _), ci in found.items()}
+    for ref, _ in absent:
         ci_type = "annex_control" if ref.upper().startswith("A.") else "clause"
         ci = ControlItem(
             framework_slug=settings.default_framework_slug,

@@ -497,7 +497,7 @@ function ruleSentence() {
     parts.join(', ') +
     '. ' +
     (targets.length
-      ? 'Matching events link to ' + targets.length + ' selected control(s).'
+      ? 'Matching events link to ' + targets.length + ' selected control(s) or clause(s).'
       : 'Next: choose the controls this evidence supports.');
   const more = $('more-filters');
   if (more && ['actor', 'severity', 'label'].some((x) => $('when-' + x)?.value.trim()))
@@ -1090,6 +1090,20 @@ async function removeCollection(origin) {
     status(error.message);
   }
 }
+// Framework clauses are also catalogue rows (type "clause"), so a clause and a
+// control can share a reference. Each target records which one it names.
+function targetKind(item) {
+  return item?.type === 'clause' ? 'clause' : 'control';
+}
+function targetLabel(kind, ref) {
+  return `${kind === 'clause' ? 'Clause ' : ''}${ref}`;
+}
+function addTarget(target) {
+  const same = (t) =>
+    t.framework === target.framework && t.ref === target.ref && t.kind === target.kind;
+  if (!targets.some(same)) targets.push(target);
+  renderTargets();
+}
 function renderTargets() {
   ruleSentence();
   const list = $('targets');
@@ -1098,7 +1112,7 @@ function renderTargets() {
     const row = document.createElement('div');
     row.className = 'list-group-item d-flex justify-content-between align-items-center';
     const text = document.createElement('span');
-    text.textContent = `${target.framework} / ${target.ref}${target.roles_any?.length ? ` · roles: ${target.roles_any.join(', ')}` : ''}`;
+    text.textContent = `${target.framework} / ${targetLabel(target.kind, target.ref)}${target.roles_any?.length ? ` · roles: ${target.roles_any.join(', ')}` : ''}`;
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'btn btn-sm btn-outline-danger';
@@ -1138,8 +1152,15 @@ async function loadFrameworkControls() {
     `/api/v1/controls?framework=${encodeURIComponent($('framework').value)}&limit=5000`,
   );
   $('control').replaceChildren(new Option('Choose a control or clause', ''));
-  for (const control of data.items)
-    $('control').add(new Option(`${control.ref} — ${control.title || control.type}`, control.ref));
+  for (const control of data.items) {
+    const kind = targetKind(control);
+    const option = new Option(
+      `${targetLabel(kind, control.ref)} — ${control.title || control.type}`,
+      control.ref,
+    );
+    option.dataset.kind = kind;
+    $('control').add(option);
+  }
 }
 $('framework').addEventListener('change', () =>
   loadFrameworkControls().catch((error) => status(error.message)),
@@ -1284,12 +1305,13 @@ $('prev-step').addEventListener('click', () => showStep(step - 1));
 $('next-step').addEventListener('click', nextStep);
 $('new-rule').addEventListener('click', () => newRule().catch((error) => status(error.message)));
 function addSelectedTarget() {
-  const framework = $('framework').value,
-    ref = $('control').value;
+  const select = $('control'),
+    framework = $('framework').value,
+    ref = select.value,
+    kind = select.options[select.selectedIndex]?.dataset.kind;
   if (!framework || !ref) return;
-  if (!targets.some((t) => t.framework === framework && t.ref === ref))
-    targets.push({ framework, ref });
-  renderTargets();
+  // Without a recorded kind, the server uses the only row with that reference.
+  addTarget(kind ? { framework, ref, kind } : { framework, ref });
 }
 $('add-target').addEventListener('click', addSelectedTarget);
 $('suggest-controls').addEventListener('click', async () => {
@@ -1317,17 +1339,15 @@ $('suggest-controls').addEventListener('click', async () => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'list-group-item list-group-item-action text-start';
+      const kind = targetKind(suggestion);
       const title = document.createElement('strong');
-      title.textContent = `${suggestion.ref} · ${suggestion.title || 'Control'}`;
+      title.textContent = `${targetLabel(kind, suggestion.ref)} · ${suggestion.title || 'Control'}`;
       const reason = document.createElement('div');
       reason.className = 'small-muted';
       reason.textContent = `${suggestion.reason || `Matched: ${(suggestion.matched_terms || []).join(', ')}.`} Click to add; review suitability before publishing.`;
       button.append(title, reason);
       button.addEventListener('click', () => {
-        if (!targets.some((t) => t.framework === framework && t.ref === suggestion.ref)) {
-          targets.push({ framework, ref: suggestion.ref });
-          renderTargets();
-        }
+        addTarget({ framework, ref: suggestion.ref, kind });
         button.disabled = true;
         button.classList.add('opacity-50');
       });

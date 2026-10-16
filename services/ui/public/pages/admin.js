@@ -909,7 +909,13 @@ document.getElementById('remapBtn')?.addEventListener('click', async () => {
 // ------------------------------------------------------------------
 
 let allControls = [];
-let selectedRefs = [];
+// Chosen catalogue rows ({ id, ref, type }). A clause and a control can share a
+// reference, so choices are sent by id.
+let selectedControls = [];
+
+function diaryControlLabel(item) {
+  return `${item?.type === 'clause' ? 'Clause ' : ''}${item?.ref || ''}`;
+}
 
 // Diary link rows (optional)
 const diaryLinksWrap = document.getElementById('diaryLinks');
@@ -958,12 +964,12 @@ function renderSelected() {
   const wrap = document.getElementById('controlSelected');
   if (!wrap) return;
 
-  wrap.innerHTML = selectedRefs
-    .map((ref) => {
+  wrap.innerHTML = selectedControls
+    .map((item) => {
       return `
       <span class="badge badge-soft">
-        ${esc(ref)}
-        <button type="button" class="btn btn-sm btn-link link-danger p-0 ms-1" data-remove="${esc(ref)}" aria-label="Remove">×</button>
+        ${esc(diaryControlLabel(item))}
+        <button type="button" class="btn btn-sm btn-link link-danger p-0 ms-1" data-remove="${esc(item.id)}" aria-label="Remove">×</button>
       </span>
     `;
     })
@@ -971,8 +977,8 @@ function renderSelected() {
 
   wrap.querySelectorAll('[data-remove]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const ref = btn.getAttribute('data-remove');
-      selectedRefs = selectedRefs.filter((r) => r !== ref);
+      const id = btn.getAttribute('data-remove');
+      selectedControls = selectedControls.filter((item) => item.id !== id);
       renderSelected();
     });
   });
@@ -990,21 +996,24 @@ function renderResults(items) {
   resEl.innerHTML = items
     .map((it) => {
       const title = it.title ? ` <span class="small-muted">${esc(it.title)}</span>` : '';
-      const disabled = selectedRefs.includes(it.ref) ? 'disabled' : '';
+      const disabled = selectedControls.some((item) => item.id === it.id) ? 'disabled' : '';
       return (
-        `<button type="button" class="list-group-item list-group-item-action ${disabled}" data-ref="${esc(it.ref)}">` +
-        `<span class="badge badge-chip me-2">${esc(it.ref)}</span>${title}` +
+        `<button type="button" class="list-group-item list-group-item-action ${disabled}" data-id="${esc(it.id)}">` +
+        `<span class="badge badge-chip me-2">${esc(diaryControlLabel(it))}</span>${title}` +
         `</button>`
       );
     })
     .join('');
 
-  resEl.querySelectorAll('[data-ref]').forEach((btn) => {
+  resEl.querySelectorAll('[data-id]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const ref = btn.getAttribute('data-ref');
-      if (!ref || selectedRefs.includes(ref)) return;
-      selectedRefs.push(ref);
-      selectedRefs.sort();
+      const id = btn.getAttribute('data-id');
+      const chosen = allControls.find((item) => item.id === id);
+      if (!chosen || selectedControls.some((item) => item.id === id)) return;
+      selectedControls.push(chosen);
+      selectedControls.sort((a, b) =>
+        diaryControlLabel(a).localeCompare(diaryControlLabel(b), undefined, { numeric: true }),
+      );
       renderSelected();
       document.getElementById('controlSearch').value = '';
       renderResults([]);
@@ -1017,7 +1026,7 @@ async function loadControls() {
     const res = await apiGet(
       `/api/v1/controls?framework=${encodeURIComponent(selectedFrameworkFallback())}&limit=5000`,
     );
-    allControls = (res.items || []).filter((it) => it.ref);
+    allControls = (res.items || []).filter((it) => it.id && it.ref);
   } catch {
     allControls = [];
   }
@@ -1065,7 +1074,7 @@ document.getElementById('diaryForm')?.addEventListener('submit', async (ev) => {
       if (!Number.isNaN(dt.getTime())) fd.append('timestamp', dt.toISOString());
     }
 
-    for (const ref of selectedRefs) fd.append('controls', ref);
+    for (const item of selectedControls) fd.append('controls', item.id);
 
     const files = document.getElementById('diaryImages').files;
     if (files && files.length) {

@@ -29,6 +29,7 @@ def seed_controls(slug="ISO27001:2022"):
             framework_slug=slug,
             title=c["title"],
             ref=c["ref"],
+            type=c["type"],
             tags=c.get("tags", {}),
             meta=c.get("metadata", {}),
         )
@@ -108,6 +109,7 @@ def test_custom_framework_uses_live_descriptions_and_no_urls():
         framework_slug="CUSTOM",
         title="Protect the perimeter",
         ref="NET",
+        type="custom",
         tags={},
         meta={"description": "Network security including packet filtering"},
     )

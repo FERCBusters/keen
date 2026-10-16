@@ -29,10 +29,14 @@ from app.mapping.collector import collector_id, collector_pointer_filter
 from app.mapping.fields import observed_fields, validate_fields
 from app.mapping.rules import (
     _KNOWN_WHEN_KEYS,
+    CLAUSE,
+    CONTROL,
+    TARGET_KINDS,
     _as_rule_entries,
     evaluate_by_framework,
     parse_rules,
 )
+from app.mapping.targets import resolve_targets
 from app.security.redaction import redact_url
 from app.services.errors import DomainError
 
@@ -457,6 +461,7 @@ def _normalize_rule_document(raw: dict) -> list[dict]:
                     {
                         "framework": t.framework_slug,
                         "ref": t.ref,
+                        **({"kind": t.kind} if t.kind else {}),
                         **({"roles_any": sorted(t.roles_any)} if t.roles_any else {}),
                     }
                     for t in rule.targets
@@ -1137,6 +1142,37 @@ def _validate_regex(pattern: str, key: str):
         raise DomainError(400, f"{key}: {exc}") from exc
 
 
+def _target_kind(db: Session, framework: str, ref: str, kind: Any) -> str:
+    """Return the kind a saved target records: the control or clause it names."""
+    if kind is not None and kind not in TARGET_KINDS:
+        raise DomainError(400, "A target's kind must be control or clause")
+    kinds = [
+        CLAUSE if item_type == CLAUSE else CONTROL
+        for (item_type,) in db.query(ControlItem.type)
+        .filter_by(framework_slug=framework, ref=ref)
+        .all()
+    ]
+    if kind is None:
+        if CONTROL in kinds and CLAUSE in kinds:
+            raise DomainError(
+                400,
+                f"{framework} / {ref} is both a control and a clause; "
+                "choose which one the rule targets",
+            )
+        if not kinds:
+            raise DomainError(400, f"Unknown target: {framework} / {ref}")
+        kind = kinds[0]
+    if kind not in kinds:
+        raise DomainError(400, f"Unknown {kind}: {framework} / {ref}")
+    if kinds.count(kind) > 1:
+        raise DomainError(
+            400,
+            f"More than one control in {framework} has the reference {ref}; "
+            "rename one before mapping evidence to it",
+        )
+    return kind
+
+
 def _validate_rule(rule: dict, db: Session):
     if not isinstance(rule.get("id"), str) or not re.fullmatch(
         r"[a-zA-Z0-9_-]{1,96}", rule["id"]
@@ -1209,14 +1245,16 @@ def _validate_rule(rule: dict, db: Session):
             or len(target["ref"]) > 64
         ):
             raise DomainError(400, "Each target needs a framework and reference")
-        if (
-            not db.query(ControlItem.id)
-            .filter_by(framework_slug=target["framework"], ref=target["ref"])
-            .first()
-        ):
-            raise DomainError(
-                400, f"Unknown target: {target['framework']} / {target['ref']}"
-            )
+        # Saved targets record whether they name a control or a clause, so
+        # evidence attaches only to the row the rule was mapped to.
+        target["kind"] = _target_kind(
+            db, target["framework"], target["ref"], target.get("kind")
+        )
+    unique = []
+    for target in targets:
+        if target not in unique:
+            unique.append(target)
+    rule["map_to"] = targets = unique
     try:
         confidence = float(rule.get("confidence", 0.8))
     except (TypeError, ValueError):
@@ -1623,9 +1661,18 @@ def _event_for_rules(event: Event) -> dict[str, Any]:
     }
 
 
-def _stale(mapping, event, control, rules) -> bool:
-    matched = evaluate_by_framework(_event_for_rules(event), rules)
-    return control.ref not in matched.get(control.framework_slug, [])
+def _stale(db: Session, event, control, rules, cache: dict) -> bool:
+    """Return True when no current rule attaches this event to this row."""
+    hits = evaluate_by_framework(_event_for_rules(event), rules, details=True)
+    for hit in hits.get(control.framework_slug, []):
+        key = (control.framework_slug, hit["ref"], hit["kind"])
+        if key not in cache:
+            found, _ = resolve_targets(db, key[0], [(key[1], key[2])])
+            row = found.get((key[1], key[2]))
+            cache[key] = row.id if row else None
+        if cache[key] == control.id:
+            return False
+    return True
 
 
 def preview_stale_rule_mappings(*, source: str, offset: int = 0, db: Session):
@@ -1648,9 +1695,10 @@ def preview_stale_rule_mappings(*, source: str, offset: int = 0, db: Session):
     )
     stale = []
     count = 0
+    targets: dict = {}
     for mapping, event, control in query:
         count += 1
-        if _stale(mapping, event, control, rules):
+        if _stale(db, event, control, rules, targets):
             stale.append(
                 {
                     "mapping_id": str(mapping.id),
@@ -1705,8 +1753,9 @@ def prune_stale_rule_mappings(*, payload: PruneInput, db: Session):
     )
     if len(rows) != len(ids):
         raise DomainError(409, "Mappings changed since the review. Preview again.")
+    targets: dict = {}
     for mapping, event, control in rows:
-        if not _stale(mapping, event, control, rules):
+        if not _stale(db, event, control, rules, targets):
             raise DomainError(409, "At least one mapping is now valid. Preview again.")
     for mapping, _, _ in rows:
         db.delete(mapping)

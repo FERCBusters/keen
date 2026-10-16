@@ -145,10 +145,15 @@ async function admin(t, options = {}) {
         if (path === '/api/v1/controls')
           return {
             items: [
-              { ref: 'A.5.1', title: 'Policies' },
-              { ref: 'A.5.2', title: HOSTILE },
-              { title: 'No ref' },
-              ...Array.from({ length: 30 }, (_, i) => ({ ref: `B.${i}`, title: 'Bulk' })),
+              { id: 'c-a51', ref: 'A.5.1', title: 'Policies', type: 'annex_control' },
+              { id: 'c-a52', ref: 'A.5.2', title: HOSTILE, type: 'annex_control' },
+              { id: 'k-a51', ref: 'A.5.1', title: 'Policy clause', type: 'clause' },
+              { id: 'no-ref', title: 'No ref' },
+              ...Array.from({ length: 30 }, (_, i) => ({
+                id: `b-${i}`,
+                ref: `B.${i}`,
+                title: 'Bulk',
+              })),
             ],
           };
         if (path === '/api/v1/admin/entity-changelog') {
@@ -645,29 +650,42 @@ test('diary evidence collects controls, links, timestamp and attachments', async
     el('controlSearch').dispatchEvent(new ui.window.Event('input'));
   };
   search('a.5');
-  const results = [...el('controlResults').querySelectorAll('[data-ref]')];
+  // A clause and a control can share a reference, so results are chosen by id.
+  const results = [...el('controlResults').querySelectorAll('[data-id]')];
   assert.deepEqual(
-    results.map((r) => r.dataset.ref),
-    ['A.5.1', 'A.5.2'],
+    results.map((r) => [r.dataset.id, r.querySelector('.badge').textContent]),
+    [
+      ['c-a51', 'A.5.1'],
+      ['c-a52', 'A.5.2'],
+      ['k-a51', 'Clause A.5.1'],
+    ],
   );
   assert.equal(el('controlResults').querySelector('img'), null);
   search('bulk');
-  assert.equal(el('controlResults').querySelectorAll('[data-ref]').length, 25);
+  assert.equal(el('controlResults').querySelectorAll('[data-id]').length, 25);
   search('a.5');
-  el('controlResults').querySelector('[data-ref="A.5.2"]').click();
+  el('controlResults').querySelector('[data-id="c-a52"]').click();
   assert.equal(el('controlSearch').value, '');
   assert.equal(el('controlResults').innerHTML, '');
   search('a.5');
   assert.equal(
-    el('controlResults').querySelector('[data-ref="A.5.2"]').classList.contains('disabled'),
+    el('controlResults').querySelector('[data-id="c-a52"]').classList.contains('disabled'),
     true,
   );
-  el('controlResults').querySelector('[data-ref="A.5.1"]').click();
+  el('controlResults').querySelector('[data-id="k-a51"]').click();
+  search('a.5');
+  el('controlResults').querySelector('[data-id="c-a51"]').click();
   assert.deepEqual(
     [...el('controlSelected').querySelectorAll('[data-remove]')].map((b) => b.dataset.remove),
-    ['A.5.1', 'A.5.2'],
+    ['c-a51', 'c-a52', 'k-a51'],
   );
-  el('controlSelected').querySelector('[data-remove="A.5.2"]').click();
+  assert.deepEqual(
+    [...el('controlSelected').querySelectorAll('.badge')].map((b) =>
+      b.textContent.replace('×', '').trim(),
+    ),
+    ['A.5.1', 'A.5.2', 'Clause A.5.1'],
+  );
+  el('controlSelected').querySelector('[data-remove="c-a52"]').click();
   search('');
   assert.equal(el('controlResults').innerHTML, '');
 
@@ -705,7 +723,7 @@ test('diary evidence collects controls, links, timestamp and attachments', async
   ]);
   assert.equal(field('timestamp').length, 1);
   assert.equal(new Date(field('timestamp')[0]).toISOString(), field('timestamp')[0]);
-  assert.deepEqual(field('controls'), ['A.5.1']);
+  assert.deepEqual(field('controls'), ['c-a51', 'k-a51']);
   // At most ten attachments are sent.
   assert.equal(field('attachments').length, 10);
   assert.match(
@@ -715,7 +733,8 @@ test('diary evidence collects controls, links, timestamp and attachments', async
   assert.equal(el('diarySummary').value, '');
   assert.equal(el('diaryLinks').querySelectorAll('[data-link-row]').length, 1);
   // The control selection is kept for the next entry.
-  assert.ok(el('controlSelected').querySelector('[data-remove="A.5.1"]'));
+  assert.ok(el('controlSelected').querySelector('[data-remove="c-a51"]'));
+  assert.ok(el('controlSelected').querySelector('[data-remove="k-a51"]'));
 });
 
 test('a rejected diary entry is reported', async (t) => {

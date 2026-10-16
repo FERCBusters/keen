@@ -1060,6 +1060,69 @@ def test_diary_entries_map_controls_and_store_attachments(admin):
     admin.call("POST", "/v1/admin/diary", {"summary": "  "}, status=400)
 
 
+def test_diary_choices_name_the_exact_control_or_clause(admin):
+    db = admin.db
+
+    def row(ref, kind, framework="A"):
+        item = ControlItem(framework_slug=framework, ref=ref, title=HOSTILE, type=kind)
+        db.add(item)
+        db.commit()
+        return item
+
+    clause, control = row("5.1", "clause"), row("5.1", "annex_control")
+    row("7.1", "annex_control"), row("7.1", "custom")
+    elsewhere = row("5.1", "annex_control", framework="B")
+
+    def mapped(event_id):
+        db.expire_all()
+        return {
+            m.control_item_id
+            for m in db.query(Mapping).filter_by(event_id=uuid.UUID(event_id))
+        }
+
+    def post(controls, summary="Policy approved", status=200):
+        body = {"summary": summary, "controls": controls, "framework": "A"}
+        return admin.call("POST", "/v1/admin/diary", body, status=status)
+
+    # A clause and a control sharing a reference are separate choices by id.
+    by_id = post([str(clause.id), str(control.id)])
+    assert mapped(by_id["event_id"]) == {clause.id, control.id}
+    # A reference names the control when a clause shares it.
+    assert mapped(post(["5.1"], summary="By reference")["event_id"]) == {control.id}
+    edited = admin.call(
+        "PATCH",
+        f"/v1/admin/diary/{by_id['event_id']}",
+        {"controls": [str(clause.id)], "framework": "A"},
+    )
+    assert edited["manual_mappings_set"] == 1
+    assert mapped(by_id["event_id"]) == {clause.id}
+
+    # Refused choices are reported before anything is written.
+    events = db.query(Event).count()
+    for controls, detail in (
+        ([str(uuid.uuid4())], "Unknown control or clause for A"),
+        ([str(elsewhere.id)], "Unknown control or clause for A"),
+        (
+            ["7.1"],
+            "More than one control in A has the reference 7.1; use the control id",
+        ),
+    ):
+        assert post(controls, summary="Refused", status=400)["detail"] == detail
+        response = admin.call(
+            "PATCH",
+            f"/v1/admin/diary/{by_id['event_id']}",
+            {"summary": "Changed", "controls": controls, "framework": "A"},
+            status=400,
+        )
+        assert response["detail"] == detail
+    db.expire_all()
+    assert db.query(Event).count() == events
+    assert (
+        db.get(Event, uuid.UUID(by_id["event_id"])).summary == "diary: Policy approved"
+    )
+    assert mapped(by_id["event_id"]) == {clause.id}
+
+
 def test_diary_edits_replace_fields_mappings_and_keep_history(admin):
     db = admin.db
     _control(db, "A.5.1")

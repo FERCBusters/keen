@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import Artifact, ControlItem, Event, IngestionCursor, Mapping
+from app.ingest.common import ensure_controls
 from app.ingest.connections import (
     artifact_key,
     connection_runs,
@@ -22,7 +23,7 @@ from app.ingest.connections import (
     namespace,
     settings,
 )
-from app.mapping.rules import evaluate_by_framework, load_rules
+from app.mapping.rules import TARGET_KINDS, evaluate_by_framework, load_rules
 from app.security.errors import collection_error
 from app.security.redaction import (
     prepare_artifact_bytes,
@@ -207,23 +208,9 @@ def _summarize_json(parsed: Any, line: str) -> tuple[str, dict[str, Any]]:
 
 
 def _ensure_control_items(
-    db: Session, framework_slug: str, refs: list[str]
-) -> dict[str, ControlItem]:
-    found = (
-        db.query(ControlItem)
-        .filter(ControlItem.framework_slug == framework_slug, ControlItem.ref.in_(refs))
-        .all()
-    )
-    by_ref = {c.ref: c for c in found}
-    for ref in refs:
-        if ref not in by_ref:
-            c = ControlItem(
-                framework_slug=framework_slug, type="annex_control", ref=ref, title=None
-            )
-            db.add(c)
-            db.flush()
-            by_ref[ref] = c
-    return by_ref
+    db: Session, framework_slug: str, targets: list[tuple[str, str | None]]
+) -> dict[tuple[str, str | None], ControlItem]:
+    return ensure_controls(db, framework_slug, targets, require_framework=False)
 
 
 def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
@@ -255,6 +242,7 @@ def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
                 normalized.append(
                     {
                         "ref": ref,
+                        "kind": None,
                         "confidence": 0.8,
                         "rationale": f"auto by rules ({framework_slug})",
                     }
@@ -263,7 +251,8 @@ def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
 
             if isinstance(it, dict):
                 ref = str(it.get("ref") or "").strip()
-                if not ref:
+                kind = it.get("kind")
+                if not ref or (kind is not None and kind not in TARGET_KINDS):
                     continue
                 conf_raw = it.get("confidence")
                 try:
@@ -275,18 +264,22 @@ def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
                     f"auto by rules ({framework_slug})"
                 )
                 normalized.append(
-                    {"ref": ref, "confidence": conf, "rationale": rationale}
+                    {
+                        "ref": ref,
+                        "kind": kind,
+                        "confidence": conf,
+                        "rationale": rationale,
+                    }
                 )
 
         if not normalized:
             continue
 
-        refs = [x["ref"] for x in normalized]
-        controls = _ensure_control_items(db, framework_slug=framework_slug, refs=refs)
+        targets = [(x["ref"], x["kind"]) for x in normalized]
+        controls = _ensure_control_items(db, framework_slug, targets)
 
         for item in normalized:
-            ref = item["ref"]
-            ci = controls.get(ref)
+            ci = controls.get((item["ref"], item["kind"]))
             if not ci:
                 continue
             stmt = (

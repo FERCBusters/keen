@@ -37,6 +37,7 @@ from app.ingest.bookstack import apply_bookstack_config_mappings
 from app.ingest.common import apply_rules
 from app.ingest.diary import add_diary_entry
 from app.ingest.loki import load_loki_queries
+from app.mapping.targets import resolve_targets
 from app.schemas import (
     ClauseControlLinksPayload,
     ClauseEvidenceUrlsPayload,
@@ -1508,11 +1509,63 @@ def admin_run_riskledger_ingest(*, user, db: Session):
     return _queue_http_ingest("riskledger", db)
 
 
+def _diary_controls(
+    db: Session, framework: str, values: list[str]
+) -> tuple[list[ControlItem], list[str]]:
+    """Resolve diary control choices before anything is written.
+
+    An id names the exact control or clause the user picked. A reference names
+    the control with that reference, or the clause when no control has it; the
+    references the catalogue lacks are returned so placeholders can be added.
+    """
+    ids = [uid for uid in map(_try_uuid, values) if uid]
+    refs = sorted({v for v in values if not _try_uuid(v)})
+    rows: list[ControlItem] = []
+    if ids:
+        by_id = {
+            row.id: row
+            for row in db.query(ControlItem)
+            .filter(ControlItem.framework_slug == framework, ControlItem.id.in_(ids))
+            .all()
+        }
+        if set(ids) - set(by_id):
+            raise DomainError(
+                status_code=400, detail=f"Unknown control or clause for {framework}"
+            )
+        rows.extend(by_id[uid] for uid in dict.fromkeys(ids))
+    found, absent = resolve_targets(db, framework, [(ref, None) for ref in refs])
+    for ref in refs:
+        if (ref, None) in found:
+            rows.append(found[(ref, None)])
+        elif (ref, None) not in absent:
+            raise DomainError(
+                status_code=400,
+                detail=(
+                    f"More than one control in {framework} has the reference {ref}; "
+                    "use the control id"
+                ),
+            )
+    unique = list({row.id: row for row in rows}.values())
+    return unique, [ref for ref, _ in absent]
+
+
+def _diary_placeholder(db: Session, framework: str, ref: str) -> ControlItem:
+    # A reference the catalogue lacks gets a stub so the entry can map to it.
+    item_type = "annex_control" if ref.upper().startswith("A.") else "clause"
+    item = ControlItem(framework_slug=framework, type=item_type, ref=ref, title=None)
+    db.add(item)
+    db.flush()
+    return item
+
+
 async def admin_diary(
     *, db, author, summary, details_obj, links, controls, framework, ts, uploads
 ):
     if not summary:
         raise DomainError(status_code=400, detail="Missing summary")
+    chosen, missing = _diary_controls(
+        db, framework, sorted({c for c in controls or [] if c and len(c) < 128})
+    )
 
     # Insert the diary entry event (also stores the JSON artifact)
     res = add_diary_entry(
@@ -1529,33 +1582,8 @@ async def admin_diary(
 
     # Manual control mappings (chosen explicitly in the UI)
     created_mappings = 0
-    if controls:
-        # Normalize refs and de-dupe
-        refs = sorted({c for c in controls if c and len(c) < 128})
-        controls_by_ref: dict[str, ControlItem] = {}
-        if refs:
-            found = (
-                db.query(ControlItem)
-                .filter(
-                    ControlItem.framework_slug == framework,
-                    ControlItem.ref.in_(refs),
-                )
-                .all()
-            )
-            controls_by_ref = {ci.ref: ci for ci in found}
-
-        for ref in refs:
-            ci = controls_by_ref.get(ref)
-            if not ci:
-                # If the control isn't present yet, create a stub so we can map to it.
-                ci_type = "annex_control" if ref.upper().startswith("A.") else "clause"
-                ci = ControlItem(
-                    framework_slug=framework, type=ci_type, ref=ref, title=None
-                )
-                db.add(ci)
-                db.flush()
-                controls_by_ref[ref] = ci
-
+    if chosen or missing:
+        for ci in chosen + [_diary_placeholder(db, framework, r) for r in missing]:
             # Avoid duplicates (unique constraint on event_id + control_item_id)
             exists = (
                 db.query(Mapping.id)
@@ -1653,6 +1681,22 @@ def admin_update_diary(
 
     editor = getattr(context.actor, "username", None)
 
+    # Resolve control choices first, so a refused choice changes nothing.
+    chosen = missing = None
+    if "controls" in body or "control_refs" in body:
+        framework = (
+            str(body.get("framework") or "").strip() or settings.default_framework_slug
+        )
+        raw_controls = body.get("controls") or body.get("control_refs") or []
+        controls: list[str] = []
+        if isinstance(raw_controls, str):
+            controls = [c.strip() for c in raw_controls.split(",") if c.strip()]
+        elif isinstance(raw_controls, list):
+            controls = [str(c).strip() for c in raw_controls if str(c).strip()]
+        chosen, missing = _diary_controls(
+            db, framework, sorted({c for c in controls if c and len(c) < 128})
+        )
+
     # Start from current normalized payload
     np = dict(e.normalized_payload or {})
 
@@ -1725,49 +1769,14 @@ def admin_update_diary(
 
     # Control mappings (replace semantics when provided)
     mappings_set = None
-    if "controls" in body or "control_refs" in body:
-        framework = (
-            str(body.get("framework") or "").strip() or settings.default_framework_slug
-        )
-
-        raw_controls = body.get("controls") or body.get("control_refs") or []
-        controls: list[str] = []
-        if isinstance(raw_controls, str):
-            controls = [c.strip() for c in raw_controls.split(",") if c.strip()]
-        elif isinstance(raw_controls, list):
-            controls = [str(c).strip() for c in raw_controls if str(c).strip()]
-
-        refs = sorted({c for c in controls if c and len(c) < 128})
-
+    if chosen is not None:
         # For diary entries we treat mappings as fully user-managed.
         db.query(Mapping).filter(Mapping.event_id == eid).delete(
             synchronize_session=False
         )
 
         created = 0
-        controls_by_ref: dict[str, ControlItem] = {}
-        if refs:
-            found = (
-                db.query(ControlItem)
-                .filter(
-                    ControlItem.framework_slug == framework,
-                    ControlItem.ref.in_(refs),
-                )
-                .all()
-            )
-            controls_by_ref = {ci.ref: ci for ci in found}
-
-        for ref in refs:
-            ci = controls_by_ref.get(ref)
-            if not ci:
-                ci_type = "annex_control" if ref.upper().startswith("A.") else "clause"
-                ci = ControlItem(
-                    framework_slug=framework, type=ci_type, ref=ref, title=None
-                )
-                db.add(ci)
-                db.flush()
-                controls_by_ref[ref] = ci
-
+        for ci in chosen + [_diary_placeholder(db, framework, r) for r in missing]:
             mp = Mapping(
                 event_id=eid,
                 control_item_id=ci.id,

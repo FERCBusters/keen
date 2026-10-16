@@ -199,6 +199,7 @@ def rank_controls(
                 "id": str(control.id),
                 "framework": control.framework_slug,
                 "ref": control.ref,
+                "type": control.type,
                 "title": control.title,
                 "score": round(score, 3),
                 "matched_terms": terms,

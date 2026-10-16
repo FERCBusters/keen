@@ -11,6 +11,13 @@ from app.mapping.fields import field_matches, validate_fields
 
 log = logging.getLogger(__name__)
 
+# A rule target names a control or a clause. Framework clauses are also kept in
+# the control catalogue, as rows of type "clause", so a clause and a control can
+# share a reference.
+CONTROL = "control"
+CLAUSE = "clause"
+TARGET_KINDS = (CONTROL, CLAUSE)
+
 
 @dataclass
 class Condition:
@@ -45,6 +52,8 @@ class RuleTarget:
     framework_slug: str
     ref: str
     roles_any: set[str] | None = None
+    # "control" or "clause". None for targets written before rules recorded it.
+    kind: str | None = None
 
 
 @dataclass
@@ -351,6 +360,10 @@ def _targets_from_list_objects(
       - {framework: "UK-DVSTF:1.0", refs: ["11.8.1.a", "11.8.2.b"]}
       - {ref: "A.8.16"}  # uses inherited/default framework(s)
       - {ref: "11.8.1.a", framework: "UK-DVSTF:1.0", roles_any: ["admin","ops"]}
+      - {framework: "iso_27001_2022", ref: "9.2", kind: "clause"}
+
+    ``kind`` says whether the reference names a control or a clause. A target
+    with any other kind is ignored, so evidence never attaches to a guess.
     """
 
     out: list[RuleTarget] = []
@@ -376,12 +389,20 @@ def _targets_from_list_objects(
             refs_raw = [refs_raw]
 
         roles_any = _clean_roles(item.get("roles_any"))
+        kind = str(item.get("kind") or "").strip().lower() or None
+        if kind is not None and kind not in TARGET_KINDS:
+            log.warning("Ignoring a rules.yml target with unsupported kind %r", kind)
+            continue
 
         refs = [_clean_ref(r) for r in refs_raw]
         refs = [r for r in refs if r]
         for fw in fw_list:
             for ref in refs:
-                out.append(RuleTarget(framework_slug=fw, ref=ref, roles_any=roles_any))
+                out.append(
+                    RuleTarget(
+                        framework_slug=fw, ref=ref, roles_any=roles_any, kind=kind
+                    )
+                )
 
     return out
 
@@ -498,11 +519,11 @@ def parse_rules(raw: Any) -> list[Rule]:
             continue
 
         # Deduplicate targets while preserving order.
-        seen: set[tuple[str, str, tuple[str, ...] | None]] = set()
+        seen: set[tuple[str, str, tuple[str, ...] | None, str | None]] = set()
         uniq: list[RuleTarget] = []
         for t in targets:
             roles_key = tuple(sorted(t.roles_any)) if t.roles_any else None
-            k = (t.framework_slug, t.ref, roles_key)
+            k = (t.framework_slug, t.ref, roles_key, t.kind)
             if k in seen:
                 continue
             seen.add(k)
@@ -661,6 +682,7 @@ def evaluate_by_framework(
             bucket.append(
                 {
                     "ref": t.ref,
+                    "kind": t.kind,
                     "confidence": r.confidence,
                     "rationale": f"auto by rule {r.id} ({t.framework_slug})",
                 }
@@ -669,17 +691,17 @@ def evaluate_by_framework(
             )
 
     # De-duplicate refs while preserving order; with details, keep the most
-    # confident matching rule for each framework/ref pair.
+    # confident matching rule for each framework, reference and kind.
     out: dict[str, list[Any]] = {}
     for fw, entries in hits.items():
-        by_ref: dict[str, Any] = {}
+        chosen: dict[Any, Any] = {}
         for entry in entries:
-            ref = entry["ref"] if details else entry
-            if ref not in by_ref or (
-                details and entry["confidence"] > by_ref[ref]["confidence"]
+            key = (entry["ref"], entry["kind"]) if details else entry
+            if key not in chosen or (
+                details and entry["confidence"] > chosen[key]["confidence"]
             ):
-                by_ref[ref] = entry
-        out[fw] = list(by_ref.values())
+                chosen[key] = entry
+        out[fw] = list(chosen.values())
     return out
 
 

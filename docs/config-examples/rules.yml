@@ -20,6 +20,13 @@
 #        refs: ["11.8.1.a", "11.8.1.b"]
 #        roles_any: ["ops", "security"]
 #
+#    A target object may also say whether its reference names a control or a
+#    clause. Evidence then attaches only to that item, which matters where a
+#    clause and a control share a reference:
+#      - framework: "iso_27001_2022"
+#        ref: "9.2"
+#        kind: "clause"   # or "control"
+#
 rules:
   - id: "ossec_ssh_failed"
     description: "OSSEC: Failed SSH login attempts"

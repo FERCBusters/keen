@@ -36,9 +36,25 @@ async function until(check) {
 }
 async function fixture(
   t,
-  { fail = false, rule = null, requestedRule = null, defaultView = false } = {},
+  {
+    fail = false,
+    rule = null,
+    requestedRule = null,
+    defaultView = false,
+    controls = [{ ref: 'A1', title: 'Control A' }],
+    suggestions = [],
+  } = {},
 ) {
   const calls = [];
+  const posts = [];
+  async function apiPost(raw, body) {
+    const path = new URL(raw, 'https://keen.example').pathname;
+    posts.push({ path, body });
+    if (path === '/api/v1/admin/mapping-rules/preview')
+      return { examined: 0, matched: 0, examples: [], nonmatches: [] };
+    if (path === '/api/v1/admin/control-suggestions') return { items: suggestions };
+    throw new Error('Unexpected POST ' + raw);
+  }
   async function apiGet(raw) {
     calls.push(raw);
     const url = new URL(raw, 'https://keen.example');
@@ -55,7 +71,7 @@ async function fixture(
       return { settings: {}, version: 1 };
     if (url.pathname === '/api/v1/frameworks')
       return { items: [{ slug: 'A', name: 'Framework A' }] };
-    if (url.pathname === '/api/v1/controls') return { items: [{ ref: 'A1', title: 'Control A' }] };
+    if (url.pathname === '/api/v1/controls') return { items: controls };
     if (url.pathname.includes('/mapping-rules/') && url.pathname.endsWith('/revisions'))
       return { revisions: [] };
     if (url.pathname === '/api/v1/admin/rule-backfills') return { jobs: [] };
@@ -75,7 +91,7 @@ async function fixture(
       window.mappingSwitches = 0;
       window.addEventListener('keen-show-evidence-mapping', () => window.mappingSwitches++);
     },
-    vendor: { apiGet },
+    vendor: { apiGet, apiPost },
   });
   t.after(() => ui.close());
   await until(() =>
@@ -91,7 +107,7 @@ async function fixture(
             !ui.document.getElementById('ec-library').hidden
           : !ui.document.getElementById('ec-draft-notice').hidden,
   );
-  return { ...ui, calls };
+  return { ...ui, calls, posts };
 }
 test('draft from an OSSEC event exposes its fields before other samples', async (t) => {
   const { document, window } = await fixture(t);
@@ -318,4 +334,54 @@ test('initial rule loading preserves Sources until an editor is requested', asyn
   document.getElementById('ec-new-rule').click();
   await until(() => window.mappingSwitches === 1);
   assert.equal(document.getElementById('ec-editor').hidden, false);
+});
+
+test('a clause and a control sharing a reference become separate targets', async (t) => {
+  const { document, posts } = await fixture(t, {
+    controls: [
+      { ref: '5.1', title: 'Leadership', type: 'clause' },
+      { ref: '5.1', title: '<b>Policies</b>', type: 'annex_control' },
+    ],
+    suggestions: [
+      { ref: '5.1', title: 'Leadership', type: 'clause', reason: 'Matched leadership.' },
+      { ref: '6.1', title: 'Planning', type: 'clause', reason: 'Matched planning.' },
+    ],
+  });
+  document.getElementById('ec-next-step').click();
+  document.getElementById('ec-description').value = 'Policy evidence';
+  const control = document.getElementById('ec-control');
+  await until(() => control.options.length === 3);
+  assert.deepEqual(
+    [...control.options].map((option) => [option.textContent, option.dataset.kind ?? null]),
+    [
+      ['Choose a control or clause', null],
+      ['Clause 5.1 — Leadership', 'clause'],
+      ['5.1 — <b>Policies</b>', 'control'],
+    ],
+  );
+  // Both options carry the reference; the chosen option decides the kind.
+  for (const index of [1, 2, 1]) {
+    control.selectedIndex = index;
+    document.getElementById('ec-add-target').click();
+  }
+  const targets = document.getElementById('ec-targets');
+  const labels = () => [...targets.children].map((row) => row.querySelector('span').textContent);
+  assert.deepEqual(labels(), ['A / Clause 5.1', 'A / 5.1']);
+  assert.equal(targets.querySelector('b'), null);
+
+  document.getElementById('ec-suggest-controls').click();
+  const list = document.getElementById('ec-control-suggestions');
+  await until(() => list.children.length === 2);
+  assert.match(list.children[1].textContent, /^Clause 6\.1 · Planning/);
+  for (const button of list.children) button.click();
+  assert.deepEqual(labels(), ['A / Clause 5.1', 'A / 5.1', 'A / Clause 6.1']);
+
+  document.getElementById('ec-preview').click();
+  await until(() => posts.some((post) => post.path.endsWith('/mapping-rules/preview')));
+  const { rule } = posts.find((post) => post.path.endsWith('/mapping-rules/preview')).body;
+  assert.deepEqual(rule.map_to, [
+    { framework: 'A', ref: '5.1', kind: 'clause' },
+    { framework: 'A', ref: '5.1', kind: 'control' },
+    { framework: 'A', ref: '6.1', kind: 'clause' },
+  ]);
 });

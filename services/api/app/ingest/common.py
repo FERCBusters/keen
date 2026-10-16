@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import Artifact, ControlItem, Event, Mapping
-from app.mapping.rules import evaluate_by_framework, load_rules
+from app.mapping.rules import CLAUSE, evaluate_by_framework, load_rules
+from app.mapping.targets import Target, resolve_targets
 from app.security.redaction import (
     combine_redaction_status,
     mask_event_data_bytes,
@@ -43,29 +44,39 @@ def fingerprint(parts: list[str], payload: bytes) -> str:
 
 
 def ensure_controls(
-    db: Session, framework_slug: str, refs: list[str]
-) -> dict[str, ControlItem]:
-    if not refs:
-        return {}
-    from app.db.models import Framework
+    db: Session,
+    framework_slug: str,
+    targets: list[Target],
+    *,
+    require_framework: bool = True,
+) -> dict[Target, ControlItem]:
+    """Return the catalogue row each (reference, kind) rule target names.
 
-    if not db.query(Framework.id).filter_by(slug=framework_slug).first():
-        return {}  # A stale rule must not resurrect a removed catalogue.
-    found = (
-        db.query(ControlItem)
-        .filter(ControlItem.framework_slug == framework_slug, ControlItem.ref.in_(refs))
-        .all()
-    )
-    by_ref = {c.ref: c for c in found}
-    for ref in refs:
-        if ref not in by_ref:
-            ci = ControlItem(
+    A control reference the catalogue lacks gets a placeholder control, whose
+    title and details come later from a catalogue or SoA import. Clause targets
+    name existing catalogue clauses only, so a missing clause attaches nothing.
+    """
+    if not targets:
+        return {}
+    if require_framework:
+        from app.db.models import Framework
+
+        if not db.query(Framework.id).filter_by(slug=framework_slug).first():
+            return {}  # A stale rule must not resurrect a removed catalogue.
+    found, absent = resolve_targets(db, framework_slug, targets)
+    placeholders: dict[str, ControlItem] = {}
+    for ref, kind in absent:
+        if kind == CLAUSE:
+            continue
+        if ref not in placeholders:
+            item = ControlItem(
                 framework_slug=framework_slug, type="annex_control", ref=ref, title=None
             )
-            db.add(ci)
+            db.add(item)
             db.flush()
-            by_ref[ref] = ci
-    return by_ref
+            placeholders[ref] = item
+        found[(ref, kind)] = placeholders[ref]
+    return found
 
 
 def apply_rules(db: Session, ev: Event) -> int:
@@ -103,16 +114,21 @@ def apply_rules(db: Session, ev: Event) -> int:
 
     created = 0
     for framework_slug, entries in matched.items():
-        controls = ensure_controls(
-            db, framework_slug=framework_slug, refs=[item["ref"] for item in entries]
+        rows = ensure_controls(
+            db,
+            framework_slug,
+            [(item["ref"], item["kind"]) for item in entries],
         )
 
         for item in entries:
-            ci = controls.get(item["ref"])
+            ci = rows.get((item["ref"], item["kind"]))
             if not ci:
                 continue
             if ci.id in existing_control_ids:
                 continue
+            # Two targets, such as a control and an older kind-less target, can
+            # name the same row; it is mapped once.
+            existing_control_ids.add(ci.id)
             mp = Mapping(
                 event_id=ev.id,
                 control_item_id=ci.id,

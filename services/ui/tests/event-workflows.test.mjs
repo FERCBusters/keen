@@ -174,6 +174,7 @@ async function eventPage(t, options = {}) {
           items: [
             { id: 'c1', ref: 'A1', title: 'Access' },
             { id: 'c5', ref: 'B5', title: 'Logging <b>' },
+            { id: 'k1', ref: 'A1', title: 'Access clause', type: 'clause' },
             { id: 'x', title: 'no ref' },
           ],
         };
@@ -272,19 +273,39 @@ test('administrators edit diary entries, including links, controls, details and 
   assert.equal(ui.el('editDiaryDetails').value, 'Line one\n<script>alert(1)</script>');
   assert.equal(ui.el('editDiaryTs').placeholder, '2026-02-01T10:00:00Z');
   assert.equal(ui.el('editDiaryLinks').querySelectorAll('[data-link-row]').length, 4);
+  // Choices are kept by id: a clause and a control can share a reference.
   assert.deepEqual(
     [...ui.el('editControlSelected').querySelectorAll('[data-remove]')].map(
       (b) => b.dataset.remove,
     ),
-    ['A1', 'A2', 'A3'],
+    ['c1', 'c2', 'c3'],
   );
-  // Remove a link row and a control; add a new control from search.
+  // Remove a link row and a control; add a new control and a clause from search.
   ui.el('editDiaryLinks').querySelectorAll('[data-link-remove]')[1].click();
-  ui.el('editControlSelected').querySelector('[data-remove="A2"]').click();
+  ui.el('editControlSelected').querySelector('[data-remove="c2"]').click();
   ui.el('editControlSearch').value = 'logg';
   ui.el('editControlSearch').dispatchEvent(new ui.window.Event('input'));
   assert.equal(ui.el('editControlResults').querySelector('b'), null);
-  ui.el('editControlResults').querySelector('[data-add="B5"]').click();
+  ui.el('editControlResults').querySelector('[data-add="c5"]').click();
+  ui.el('editControlSearch').value = 'access';
+  ui.el('editControlSearch').dispatchEvent(new ui.window.Event('input'));
+  assert.deepEqual(
+    [...ui.el('editControlResults').querySelectorAll('[data-add]')].map((b) => [
+      b.dataset.add,
+      b.querySelector('.mono').textContent,
+    ]),
+    [
+      ['c1', 'A1'],
+      ['k1', 'Clause A1'],
+    ],
+  );
+  ui.el('editControlResults').querySelector('[data-add="k1"]').click();
+  assert.deepEqual(
+    [...ui.el('editControlSelected').querySelectorAll('.badge')].map((b) =>
+      b.textContent.replace('×', '').trim(),
+    ),
+    ['A1', 'A3', 'B5', 'Clause A1'],
+  );
   ui.el('editControlSearch').value = '';
   ui.el('editControlSearch').dispatchEvent(new ui.window.Event('input'));
   assert.equal(ui.el('editControlResults').innerHTML, '');
@@ -304,7 +325,7 @@ test('administrators edit diary entries, including links, controls, details and 
     { url: '/event.html?id=e2', text: '' },
     { url: 'https://new.example', text: '' },
   ]);
-  assert.deepEqual(body.controls, ['A1', 'A3', 'B5']);
+  assert.deepEqual(body.controls, ['c1', 'c3', 'c5', 'k1']);
   assert.equal(body.framework, 'A');
   assert.equal(body.timestamp, new Date('2026-02-05T09:30').toISOString());
   await settle(() => ui.el('status').textContent === 'Diary entry updated');

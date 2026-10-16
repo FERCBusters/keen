@@ -20,10 +20,28 @@ from app.db.models import (
 from app.db.session import SessionLocal
 from app.mapping.collector import collector_pointer_filter
 from app.mapping.rules import evaluate_by_framework, parse_rules
+from app.mapping.targets import resolve_targets
 from app.services.control_evidence_stats import clear_stats_caches
 
 log = logging.getLogger(__name__)
 BATCH_SIZE = 200
+
+
+def _target_rows(db, rules) -> dict[tuple[str, str, str | None], uuid.UUID]:
+    """Map each (framework, reference, kind) rule target to its catalogue row."""
+    by_framework: dict[str, list[tuple[str, str | None]]] = {}
+    for rule in rules:
+        for target in rule.targets:
+            by_framework.setdefault(target.framework_slug, []).append(
+                (target.ref, target.kind)
+            )
+    rows = {}
+    for framework, targets in by_framework.items():
+        found, _ = resolve_targets(db, framework, targets)
+        rows.update(
+            {(framework, ref, kind): row.id for (ref, kind), row in found.items()}
+        )
+    return rows
 
 
 def rule_owned_event_ids(rule_id: str):
@@ -121,25 +139,18 @@ def process_batch(job_id: uuid.UUID) -> bool:
             job.status = "completed"
             db.commit()
             return False
-        targets = {
-            (row.framework_slug, row.ref): row.id
-            for row in db.query(ControlItem)
-            .filter(
-                or_(
-                    *[
-                        and_(
-                            ControlItem.framework_slug == t.framework_slug,
-                            ControlItem.ref == t.ref,
-                        )
-                        for t in rule[0].targets
-                    ]
-                )
-            )
-            .all()
+        # Each target attaches evidence only to the control or clause it names.
+        targets = _target_rows(db, rule)
+        missing = {
+            (t.framework_slug, t.ref)
+            for t in rule[0].targets
+            if (t.framework_slug, t.ref, t.kind) not in targets
         }
-        missing = {(t.framework_slug, t.ref) for t in rule[0].targets} - set(targets)
         if missing:
-            raise ValueError(f"Framework targets were removed: {sorted(missing)}")
+            raise ValueError(
+                f"Framework targets were removed or are ambiguous: {sorted(missing)}"
+            )
+        supporting_targets = _target_rows(db, active_rules)
         event_ids = [event.id for event in events]
         mappings = (
             db.query(Mapping, ControlItem.framework_slug, ControlItem.ref)
@@ -181,15 +192,22 @@ def process_batch(job_id: uuid.UUID) -> bool:
             if result:
                 matched += 1
             if event.id in owned:
-                supported = {
-                    (framework, hit["ref"]): hit
-                    for framework, hits in evaluate_by_framework(
-                        event_data, active_rules, details=True
-                    ).items()
-                    for hit in hits
-                }
+                # The rows the active rules still attach this event to.
+                supported = {}
+                for framework, hits in evaluate_by_framework(
+                    event_data, active_rules, details=True
+                ).items():
+                    for hit in hits:
+                        row_id = supporting_targets.get(
+                            (framework, hit["ref"], hit["kind"])
+                        )
+                        if row_id is not None and (
+                            row_id not in supported
+                            or hit["confidence"] > supported[row_id]["confidence"]
+                        ):
+                            supported[row_id] = hit
                 for mapping, framework, ref in owned[event.id]:
-                    hit = supported.get((framework, ref))
+                    hit = supported.get(mapping.control_item_id)
                     if hit is None:
                         db.delete(mapping)
                         existing.discard((event.id, mapping.control_item_id))
@@ -204,7 +222,7 @@ def process_batch(job_id: uuid.UUID) -> bool:
                         changed = True
             for framework, hits in result.items():
                 for hit in hits:
-                    control_id = targets[(framework, hit["ref"])]
+                    control_id = targets[(framework, hit["ref"], hit["kind"])]
                     key = (event.id, control_id)
                     if key in existing:
                         continue

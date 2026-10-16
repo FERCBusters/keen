@@ -154,7 +154,19 @@ function renderDiaryEvidence(e) {
 
 let editAllControls = null;
 let editAllControlsFramework = null;
-let editSelectedRefs = [];
+// Chosen catalogue rows ({ id, ref, type }). A clause and a control can share a
+// reference, so choices are sent by id.
+let editSelected = [];
+
+function editControlLabel(item) {
+  return `${item?.type === 'clause' ? 'Clause ' : ''}${item?.ref || ''}`;
+}
+
+function editSortSelected() {
+  editSelected.sort((a, b) =>
+    editControlLabel(a).localeCompare(editControlLabel(b), undefined, { numeric: true }),
+  );
+}
 
 async function loadAllControlsOnce(frameworkSlug = null) {
   const fw =
@@ -163,7 +175,7 @@ async function loadAllControlsOnce(frameworkSlug = null) {
   if (editAllControls && editAllControlsFramework === fw) return editAllControls;
   try {
     const res = await apiGet(`/api/v1/controls?framework=${encodeURIComponent(fw)}&limit=5000`);
-    editAllControls = (res.items || []).filter((it) => it.ref);
+    editAllControls = (res.items || []).filter((it) => it.id && it.ref);
     editAllControlsFramework = fw;
   } catch {
     editAllControls = [];
@@ -210,12 +222,12 @@ function editReadLinks() {
 function editRenderSelected() {
   const wrap = document.getElementById('editControlSelected');
   if (!wrap) return;
-  wrap.innerHTML = editSelectedRefs
+  wrap.innerHTML = editSelected
     .map(
-      (ref) => `
+      (item) => `
         <span class="badge badge-soft">
-          ${esc(ref)}
-          <button type="button" class="btn btn-sm btn-link link-danger p-0 ms-1" data-remove="${esc(ref)}" aria-label="Remove">×</button>
+          ${esc(editControlLabel(item))}
+          <button type="button" class="btn btn-sm btn-link link-danger p-0 ms-1" data-remove="${esc(item.id)}" aria-label="Remove">×</button>
         </span>
       `,
     )
@@ -223,8 +235,8 @@ function editRenderSelected() {
 
   wrap.querySelectorAll('[data-remove]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const ref = btn.getAttribute('data-remove');
-      editSelectedRefs = editSelectedRefs.filter((r) => r !== ref);
+      const id = btn.getAttribute('data-remove');
+      editSelected = editSelected.filter((item) => item.id !== id);
       editRenderSelected();
     });
   });
@@ -241,8 +253,8 @@ function editRenderResults(items) {
     .map((it) => {
       const title = it.title ? ` <span class="small-muted">${esc(it.title)}</span>` : '';
       return `
-          <button type="button" class="list-group-item list-group-item-action" data-add="${esc(it.ref)}">
-            <span class="mono">${esc(it.ref)}</span>${title}
+          <button type="button" class="list-group-item list-group-item-action" data-add="${esc(it.id)}">
+            <span class="mono">${esc(editControlLabel(it))}</span>${title}
           </button>
         `;
     })
@@ -250,10 +262,11 @@ function editRenderResults(items) {
 
   resEl.querySelectorAll('[data-add]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const ref = btn.getAttribute('data-add');
-      if (!ref) return;
-      if (!editSelectedRefs.includes(ref)) editSelectedRefs.push(ref);
-      editSelectedRefs.sort();
+      const id = btn.getAttribute('data-add');
+      const chosen = (editAllControls || []).find((item) => item.id === id);
+      if (!chosen) return;
+      if (!editSelected.some((item) => item.id === id)) editSelected.push(chosen);
+      editSortSelected();
       editRenderSelected();
     });
   });
@@ -313,8 +326,14 @@ async function openEditDiaryModal() {
   }
 
   // Controls selection
-  editSelectedRefs = (e.controls || []).map((c) => c.ref).filter(Boolean);
-  editSelectedRefs = Array.from(new Set(editSelectedRefs)).sort();
+  editSelected = [
+    ...new Map(
+      (e.controls || [])
+        .filter((c) => c.id && c.ref)
+        .map((c) => [c.id, { id: c.id, ref: c.ref, type: c.type }]),
+    ).values(),
+  ];
+  editSortSelected();
   editRenderSelected();
 
   // Wire up control search
@@ -375,7 +394,7 @@ async function openEditDiaryModal() {
           summary,
           details: detailsPayload,
           links: editReadLinks(),
-          controls: editSelectedRefs.slice(),
+          controls: editSelected.map((item) => item.id),
           framework: pageFramework,
         };
 
