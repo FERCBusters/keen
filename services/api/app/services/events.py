@@ -54,6 +54,7 @@ from app.services.control_inheritance import (
     page_controls,
     source_ids_for_control,
 )
+from app.services.control_refs import control_by_ref
 from app.services.errors import DomainError
 from app.services.exports import Export
 from app.services.presentation import event_identifier as _event_identifier
@@ -292,13 +293,7 @@ def _build_event_id_query(
             )
             qry = qry.filter(event_has_control(cid, Event.id, db) if valid else false())
         else:
-            c = (
-                db.query(ControlItem)
-                .filter(
-                    ControlItem.framework_slug == framework, ControlItem.ref == control
-                )
-                .one_or_none()
-            )
+            c = control_by_ref(db, framework, control)
             if not c:
                 qry = qry.filter(false())
             else:
@@ -396,13 +391,7 @@ def list_events(
             )
             qry = qry.filter(event_has_control(cid, Event.id, db) if valid else false())
         else:
-            c = (
-                db.query(ControlItem)
-                .filter(
-                    ControlItem.framework_slug == framework, ControlItem.ref == control
-                )
-                .one_or_none()
-            )
+            c = control_by_ref(db, framework, control)
             if not c:
                 return {"total": 0, "limit": limit, "offset": offset, "items": []}
             qry = qry.filter(event_has_control(c.id, Event.id, db))
@@ -949,13 +938,7 @@ def export_events(
             )
             qry = qry.filter(event_has_control(cid, Event.id, db) if valid else false())
         else:
-            c = (
-                db.query(ControlItem)
-                .filter(
-                    ControlItem.framework_slug == framework, ControlItem.ref == control
-                )
-                .one_or_none()
-            )
+            c = control_by_ref(db, framework, control)
             if not c:
                 # Empty export
                 if fmt == "csv":

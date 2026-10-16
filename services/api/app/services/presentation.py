@@ -214,6 +214,10 @@ def normalize_saved_search_url(url: str | None) -> str:
 
     if re.match(r"^(?:javascript|data):", raw, flags=re.IGNORECASE):
         raise DomainError(status_code=400, detail="Invalid saved search URL")
+    # Browsers read a backslash as "/" and drop tabs and newlines, so such a
+    # path can resolve off-site when the navbar search jumps to it.
+    if "\\" in raw or any(ord(c) < 32 or ord(c) == 127 for c in raw):
+        raise DomainError(status_code=400, detail="Invalid saved search URL")
 
     parts = urlsplit(raw)
     if parts.scheme or parts.netloc:

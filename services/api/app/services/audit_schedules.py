@@ -42,6 +42,7 @@ FIRST_NAMED_WEEKDAY_RULES = {
     "first_friday_of_month": 4,
 }
 FUZZY_MONTH_DATE_RULES = SCHEDULE_DATE_RULES - {"exact"}
+_MONTHS_PER_STEP = {"monthly": 1, "quarterly": 3, "yearly": 12}
 
 
 def utcnow() -> datetime:
@@ -73,6 +74,35 @@ def _add_months(d: date, months: int) -> date:
     month = month_idx % 12 + 1
     day = min(d.day, monthrange(year, month)[1])
     return date(year, month, day)
+
+
+def _weekday_within_month(d: date) -> date:
+    """Move a weekend date to the Friday before it, staying inside its month.
+
+    A Saturday or Sunday at the start of a month has no Friday in that month, so
+    it moves to the following Monday instead.
+    """
+
+    if d.weekday() < 5:
+        return d
+    friday = d - timedelta(days=d.weekday() - 4)
+    if friday.month == d.month:
+        return friday
+    return d + timedelta(days=7 - d.weekday())
+
+
+def anchored_month_date(year: int, month: int, anchor_day: int) -> date:
+    """Return the run date for an exact monthly, quarterly or yearly schedule.
+
+    The schedule keeps the day of the month it started on. A month too short for
+    that day uses its last day, so a schedule that started on the 31st runs on the
+    last day of every month. Weekend dates move to the Friday before, or to the
+    Monday after when that Friday falls in the previous month.
+    """
+
+    last = monthrange(year, month)[1]
+    day = max(1, min(int(anchor_day), last))
+    return _weekday_within_month(date(year, month, day))
 
 
 def _first_matching_weekday_of_month(
@@ -144,7 +174,15 @@ def next_occurrence_after(
     until: date | None = None,
     date_rule: str = "exact",
     anchor_month: int | None = None,
+    anchor_day: int | None = None,
 ) -> date | None:
+    """Return the run after ``current``, or None when the schedule has ended.
+
+    Exact monthly, quarterly and yearly runs are placed on ``anchor_day`` (the
+    day the schedule started on; ``current``'s day when omitted) in the month
+    they fall in, so an earlier short month or weekend move never shifts them.
+    """
+
     recur = str(recurrence or "once").strip().lower()
     step = max(1, int(interval or 1))
     rule = str(date_rule or "exact").strip().lower()
@@ -162,17 +200,23 @@ def next_occurrence_after(
         return None
     elif recur == "weekly":
         nxt = current + timedelta(days=7 * step)
-    elif recur == "monthly":
-        nxt = _add_months(current, step)
-    elif recur == "quarterly":
-        nxt = _add_months(current, 3 * step)
-    elif recur == "yearly":
-        nxt = _add_months(current, 12 * step)
+    elif recur in _MONTHS_PER_STEP:
+        month = _add_months(
+            date(current.year, current.month, 1), _MONTHS_PER_STEP[recur] * step
+        )
+        nxt = anchored_month_date(month.year, month.month, anchor_day or current.day)
     else:
         return None
     if until and nxt > until:
         return None
     return nxt
+
+
+def _anchor_day(template: Audit) -> int | None:
+    """Return the day of the month a template's exact schedule keeps."""
+
+    start = getattr(template, "start_date", None)
+    return start.day if start else None
 
 
 def occurrences_between(
@@ -193,6 +237,7 @@ def occurrences_between(
     if date_rule not in SCHEDULE_DATE_RULES:
         date_rule = "exact"
     anchor_month = getattr(template, "schedule_anchor_month", None)
+    anchor_day = _anchor_day(template)
 
     cur = getattr(template, "schedule_next_run_date", None) or getattr(
         template, "start_date", None
@@ -211,6 +256,7 @@ def occurrences_between(
             until=until,
             date_rule=date_rule,
             anchor_month=anchor_month,
+            anchor_day=anchor_day,
         )
         guard += 1
     while cur and cur <= end and len(out) < limit:
@@ -223,6 +269,7 @@ def occurrences_between(
             until=until,
             date_rule=date_rule,
             anchor_month=anchor_month,
+            anchor_day=anchor_day,
         )
         if recur == "once":
             break
@@ -289,6 +336,7 @@ def _next_template_occurrence(template: Audit, run_date: date) -> date | None:
         until=template.schedule_until_date,
         date_rule=template.schedule_date_rule or "exact",
         anchor_month=template.schedule_anchor_month,
+        anchor_day=_anchor_day(template),
     )
 
 

@@ -24,10 +24,15 @@ const status = (message, kind = 'success') => toast($('status'), message, kind);
 const folderLabel = (folder) => (folder ? `${folder.name}` : 'Unfiled');
 
 function draw() {
+  // Rebuilding the options resets both selects; keep the choices made in the
+  // forms (or the open document's folder) across redraws.
+  const folderValue = selected ? selected.folder_id || '' : $('folder').value;
+  const parentValue = $('folderParent').value;
   $('folderParent').innerHTML = $('folder').innerHTML =
     '<option value="">Top level / unfiled</option>' +
     folders.map((f) => `<option value="${esc(f.id)}">${esc(folderLabel(f))}</option>`).join('');
-  if (selected) $('folder').value = selected.folder_id || '';
+  $('folder').value = folderValue;
+  $('folderParent').value = parentValue;
   $('folderList').innerHTML =
     `<button class="list-group-item list-group-item-action ${activeFolder === '' ? 'active' : ''}" data-folder="">All folders</button>` +
     folders

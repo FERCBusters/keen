@@ -10,6 +10,7 @@ import {
   sourceBadgeHtml,
   sourceLabel,
   upstreamLinkHtml,
+  safeExternalHref,
   getCurrentFramework,
   withFramework,
   showTableLoading,
@@ -296,7 +297,7 @@ function latestEntryForSource(item) {
 function entryValueHtml(entry, measure) {
   if (!entry) return '<span class="small-muted">—</span>';
   const source = entry.source_url
-    ? `<a href="${esc(entry.source_url)}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type || 'source')}</a>`
+    ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type || 'source')}</a>`
     : esc(entry.source_title || entry.source_type || 'source');
   const eventLink = entry.source_event_id
     ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>`

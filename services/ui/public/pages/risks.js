@@ -39,7 +39,7 @@ const canManageInterestedParties = !!(
   me?.can_manage_interested_parties ||
   me?.can_manage_risks
 );
-const canSampleAudits = canSampleIntoAudit(me);
+const canSampleAudits = canSampleIntoAudit(me, 'risk');
 
 const params = new URLSearchParams(location.search);
 const requestedRiskId = params.get('id') || '';
@@ -149,14 +149,6 @@ const note = document.getElementById('note');
 const deleteRisk = document.getElementById('deleteRisk');
 const saveRisk = document.getElementById('saveRisk');
 
-const categoryCard = document.getElementById('categoryCard');
-const categoryList = document.getElementById('categoryList');
-const manageCategoryName = document.getElementById('manageCategoryName');
-const manageAddCategory = document.getElementById('manageAddCategory');
-const manageSubcategoryCategory = document.getElementById('manageSubcategoryCategory');
-const manageSubcategoryName = document.getElementById('manageSubcategoryName');
-const manageAddSubcategory = document.getElementById('manageAddSubcategory');
-
 const risksListTab = document.getElementById('risksListTab');
 const riskVisualisationsTab = document.getElementById('riskVisualisationsTab');
 const riskVisualisationsTabItem = document.getElementById('riskVisualisationsTabItem');
@@ -176,7 +168,6 @@ const riskControlsGraphMeta = document.getElementById('riskControlsGraphMeta');
 const riskControlsHeatmapMeta = document.getElementById('riskControlsHeatmapMeta');
 const newRiskScenarioTab = document.getElementById('newRiskScenarioTab');
 const newRiskScenarioTabItem = document.getElementById('newRiskScenarioTabItem');
-const riskCategoriesTabItem = document.getElementById('riskCategoriesTabItem');
 
 const mitigatorForm = document.getElementById('mitigatorForm');
 const mitigatorIssue = document.getElementById('mitigatorIssue');
@@ -379,8 +370,9 @@ function splitRiskVizLabel(value, maxChars = 34, maxLines = 2) {
   if (lines.length < maxLines && current) lines.push(current);
   if (!lines.length) lines.push(text.slice(0, maxChars));
   if (lines.join(' ').length < text.length) {
+    // Words were dropped: always mark the cut, even when the last line is short.
     const last = lines.length - 1;
-    lines[last] = truncateRiskVizText(lines[last], Math.max(8, maxChars - 1));
+    lines[last] = `${lines[last].slice(0, Math.max(8, maxChars - 1)).trimEnd()}…`;
   }
   return lines.slice(0, maxLines);
 }
@@ -1057,7 +1049,7 @@ function showEditor(risk = null) {
     if (residualImpact) residualImpact.value = scoreFieldValue(risk.register_residual_impact);
     if (note) note.value = risk.note || '';
     setSelectedControls(risk.controls || []);
-    if (deleteRisk) deleteRisk.style.display = '';
+    if (deleteRisk) deleteRisk.style.display = canManageRisks ? '' : 'none';
     const threat = (risk.threat_summary || '').trim();
     const title = threat ? `${risk.asset || 'Asset'} — ${threat}` : risk.asset || 'Risk';
     if (editorTitle)
@@ -1102,83 +1094,9 @@ function renderCategories() {
       { selectedValues: cur, dispatchChange: false },
     );
   }
-  if (manageSubcategoryCategory) {
-    const cur = manageSubcategoryCategory.value || category?.value || categories[0]?.id || '';
-    manageSubcategoryCategory.innerHTML = opts || '<option value="">Add a category first</option>';
-    manageSubcategoryCategory.value = categories.some((c) => String(c.id) === String(cur))
-      ? cur
-      : categories[0]?.id || '';
-    manageSubcategoryCategory.disabled = !categories.length;
-  }
-  if (manageAddSubcategory) manageAddSubcategory.disabled = !categories.length;
-  if (manageSubcategoryName) manageSubcategoryName.disabled = !categories.length;
   renderFilterSubcategories();
   renderMitigatorCategories();
   syncAssetEditorState();
-  if (!categoryList) return;
-  if (!categories.length) {
-    categoryList.innerHTML = '<span class="small-muted">No categories yet.</span>';
-    return;
-  }
-  categoryList.innerHTML = `<div class="vstack gap-2">${categories
-    .map(
-      (c) => `
-    <div class="border rounded-3 p-2">
-      <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
-        <div class="fw-semibold">${esc(c.name)}</div>
-        ${canManageRisks ? `<button class="btn btn-sm btn-link p-0 text-danger" type="button" title="Delete category" data-del-category="${esc(c.id)}">Delete</button>` : ''}
-      </div>
-      <div class="small-muted mt-1">Subcategories</div>
-      <div class="d-flex flex-wrap gap-2 mt-1">${
-        (c.subcategories || [])
-          .map(
-            (s) => `
-        <span class="badge text-bg-light d-inline-flex align-items-center gap-2">
-          <span>${esc(s.name)}</span>
-          ${canManageRisks ? `<button class="btn btn-sm btn-link p-0 text-danger" type="button" title="Delete subcategory" data-del-subcategory="${esc(s.id)}">×</button>` : ''}
-        </span>`,
-          )
-          .join('') || '<span class="small-muted">No subcategories</span>'
-      }</div>
-    </div>`,
-    )
-    .join('')}</div>`;
-  categoryList.querySelectorAll('[data-del-category]').forEach((btn) =>
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.delCategory || '';
-      const cat = categories.find((c) => c.id === id);
-      if (
-        !id ||
-        !confirm(`Delete category “${cat?.name || id}”? Categories in use cannot be deleted.`)
-      )
-        return;
-      try {
-        await apiDelete(`/api/v1/risks/categories/${encodeURIComponent(id)}`);
-        await loadCategories();
-        toast(status, 'Category deleted', 'success');
-      } catch (e) {
-        toast(status, `Failed to delete category: ${String(e)}`, 'danger');
-      }
-    }),
-  );
-  categoryList.querySelectorAll('[data-del-subcategory]').forEach((btn) =>
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.delSubcategory || '';
-      const sub = categories.flatMap((c) => c.subcategories || []).find((s) => s.id === id);
-      if (
-        !id ||
-        !confirm(`Delete subcategory “${sub?.name || id}”? Subcategories in use cannot be deleted.`)
-      )
-        return;
-      try {
-        await apiDelete(`/api/v1/risks/subcategories/${encodeURIComponent(id)}`);
-        await loadCategories();
-        toast(status, 'Subcategory deleted', 'success');
-      } catch (e) {
-        toast(status, `Failed to delete subcategory: ${String(e)}`, 'danger');
-      }
-    }),
-  );
 }
 
 function renderUsers() {
@@ -1531,57 +1449,6 @@ async function deleteCurrentRisk() {
     toast(status, `Failed to delete risk: ${String(e)}`, 'danger');
   } finally {
     deleteRisk.disabled = false;
-  }
-}
-
-async function createCategoryFromInput(inputEl, buttonEl, { syncEditor = false } = {}) {
-  if (!canManageRisks) return;
-  const name = (inputEl?.value || '').trim();
-  if (!name) return;
-  if (buttonEl) buttonEl.disabled = true;
-  try {
-    const row = await apiPost('/api/v1/risks/categories', { name });
-    if (inputEl) inputEl.value = '';
-    await loadCategories();
-    if (row?.id) {
-      if (manageSubcategoryCategory) manageSubcategoryCategory.value = row.id;
-      if (syncEditor && category) {
-        category.value = row.id;
-        renderSubcategories();
-      }
-    }
-    toast(status, 'Category added', 'success');
-  } catch (e) {
-    toast(status, `Failed to add category: ${String(e)}`, 'danger');
-  } finally {
-    if (buttonEl) buttonEl.disabled = false;
-  }
-}
-
-async function createSubcategoryFromInput(
-  inputEl,
-  categoryEl,
-  buttonEl,
-  { syncEditor = false } = {},
-) {
-  if (!canManageRisks) return;
-  const name = (inputEl?.value || '').trim();
-  const categoryId = categoryEl?.value || '';
-  if (!name || !categoryId) return;
-  if (buttonEl) buttonEl.disabled = true;
-  try {
-    const row = await apiPost('/api/v1/risks/subcategories', { name, category_id: categoryId });
-    if (inputEl) inputEl.value = '';
-    await loadCategories();
-    if (syncEditor) {
-      if (category) category.value = categoryId;
-      renderSubcategories(row?.id || '');
-    }
-    toast(status, 'Subcategory added', 'success');
-  } catch (e) {
-    toast(status, `Failed to add subcategory: ${String(e)}`, 'danger');
-  } finally {
-    if (buttonEl) buttonEl.disabled = false;
   }
 }
 
@@ -2169,43 +2036,12 @@ controlsWithoutRisksTab?.addEventListener('shown.bs.tab', () => {
   if (!controlsWithoutRisksLoaded) loadControlsWithoutRisks();
 });
 newRiskScenarioTab?.addEventListener('shown.bs.tab', () => setRiskPageTabQuery('new'));
-document
-  .getElementById('riskCategoriesTab')
-  ?.addEventListener('shown.bs.tab', () => setRiskPageTabQuery('categories'));
 newRiskBtn?.addEventListener('click', () => showEditor());
 newRiskScenarioTab?.addEventListener('click', () => {
   if (canViewRisks && !riskId?.value && editorCard?.style.display === 'none') showEditor();
 });
 riskForm?.addEventListener('submit', saveCurrentRisk);
 deleteRisk?.addEventListener('click', deleteCurrentRisk);
-manageAddCategory?.addEventListener('click', () =>
-  createCategoryFromInput(manageCategoryName, manageAddCategory, { syncEditor: false }),
-);
-manageAddSubcategory?.addEventListener('click', () =>
-  createSubcategoryFromInput(
-    manageSubcategoryName,
-    manageSubcategoryCategory,
-    manageAddSubcategory,
-    { syncEditor: false },
-  ),
-);
-manageCategoryName?.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Enter') {
-    ev.preventDefault();
-    createCategoryFromInput(manageCategoryName, manageAddCategory, { syncEditor: false });
-  }
-});
-manageSubcategoryName?.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Enter') {
-    ev.preventDefault();
-    createSubcategoryFromInput(
-      manageSubcategoryName,
-      manageSubcategoryCategory,
-      manageAddSubcategory,
-      { syncEditor: false },
-    );
-  }
-});
 
 if (!canViewRisks) {
   toast(
@@ -2225,7 +2061,6 @@ if (!canViewRisks) {
   }
   if (newRiskBtn) newRiskBtn.style.display = 'none';
   if (newRiskScenarioTabItem) newRiskScenarioTabItem.style.display = 'none';
-  if (riskCategoriesTabItem) riskCategoriesTabItem.style.display = 'none';
   if (controlsWithoutRisksTabItem) controlsWithoutRisksTabItem.style.display = 'none';
   if (riskVisualisationsTabItem) riskVisualisationsTabItem.style.display = 'none';
 } else {
@@ -2234,10 +2069,6 @@ if (!canViewRisks) {
   if (!canManageRisks) {
     if (newRiskBtn) newRiskBtn.style.display = 'none';
     if (mitigatorCreateRisk) mitigatorCreateRisk.style.display = 'none';
-    if (riskCategoriesTabItem) riskCategoriesTabItem.style.display = 'none';
-    if (categoryCard) categoryCard.style.display = 'none';
-  } else if (categoryCard) {
-    categoryCard.style.display = '';
   }
   if (!canManagePestle && mitigatorCreatePestle) mitigatorCreatePestle.style.display = 'none';
   if (!canManageInterestedParties && mitigatorCreateInterested)
@@ -2339,7 +2170,5 @@ if (!canViewRisks) {
   } else if (!isMitigatorPage && requestedTab === 'controls-without-risks') {
     showTab(controlsWithoutRisksTab);
     await loadControlsWithoutRisks();
-  } else if (!isMitigatorPage && requestedTab === 'categories' && canManageRisks) {
-    showTab(document.getElementById('riskCategoriesTab'));
   }
 }

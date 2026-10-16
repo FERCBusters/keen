@@ -245,10 +245,17 @@ def _fts_scores(db: Session, *, framework: str, terms: list[str]) -> dict[str, f
         # Keep the DB FTS query compact and word-like. Phrase/substring matching is
         # still handled in Python below so operators are not needed here.
         q_terms.extend(sorted(_tokens(term)))
-    query = " ".join(_unique_strs(q_terms)[:32])
-    if not query:
+    words = _unique_strs(q_terms)[:32]
+    if not words:
         return {}
-    sql = text("""
+    # A control matches when any of the words does, and ts_rank_cd rises with
+    # each matching word. Every word is parsed on its own and the parsed queries
+    # are joined with the tsquery OR operator; the words travel only as bound
+    # parameters. The document expression matches ix_control_items_mitigator_fts.
+    any_word = " || ".join(
+        f"plainto_tsquery('simple', :w{index})" for index in range(len(words))
+    )
+    sql = text(f"""
         SELECT id::text AS id,
                ts_rank_cd(
                  to_tsvector('simple',
@@ -258,7 +265,7 @@ def _fts_scores(db: Session, *, framework: str, terms: list[str]) -> dict[str, f
                    coalesce(tags::text, '') || ' ' ||
                    coalesce("metadata"::text, '')
                  ),
-                 plainto_tsquery('simple', :q)
+                 ({any_word})
                ) AS rank
         FROM control_items
         WHERE framework_slug = :framework
@@ -269,16 +276,16 @@ def _fts_scores(db: Session, *, framework: str, terms: list[str]) -> dict[str, f
             coalesce(type, '') || ' ' ||
             coalesce(tags::text, '') || ' ' ||
             coalesce("metadata"::text, '')
-          ) @@ plainto_tsquery('simple', :q)
+          ) @@ ({any_word})
         """)
+    params = {"framework": framework}
+    params.update({f"w{index}": word for index, word in enumerate(words)})
     if db.get_bind().dialect.name != "postgresql":
         return {}
     try:
         # A failed optional search must not poison the surrounding transaction.
         with db.begin_nested():
-            rows = (
-                db.execute(sql, {"framework": framework, "q": query}).mappings().all()
-            )
+            rows = db.execute(sql, params).mappings().all()
     except Exception:
         # Keep the wizard usable on non-Postgres dev/test databases. The Python
         # scorer still works; the migration provides the production FTS index.
@@ -1050,7 +1057,9 @@ def analyse_risk_mitigation(
 
         fts_rank = fts.get(str(control.id), 0.0)
         if fts_rank:
-            score += min(20.0, 200.0 * fts_rank)
+            # Each matching word adds about 0.1 to the rank, so the boost grows
+            # by 4 per match up to its cap of 20.
+            score += min(20.0, 40.0 * fts_rank)
             reasons.append(
                 "The control catalog text matched the questionnaire terms via PostgreSQL full-text search."
             )

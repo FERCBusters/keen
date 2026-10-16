@@ -28,6 +28,7 @@ from app.db.models import (
 )
 from app.security.permissions import has_permission
 from app.services.context import ChangeContext
+from app.services.control_refs import control_by_id_or_ref
 from app.services.entity_changelog import (
     list_entity_changelogs,
     record_entity_changelog,
@@ -513,12 +514,7 @@ def _control_by_ref_or_id(db: Session, raw: str, framework: str) -> ControlItem:
     value = (raw or "").strip()
     if not value:
         raise DomainError(status_code=400, detail="control id/ref cannot be blank")
-    cid = _try_uuid(value)
-    qry = db.query(ControlItem).filter(ControlItem.framework_slug == framework)
-    if cid:
-        control = qry.filter(ControlItem.id == cid).one_or_none()
-    else:
-        control = qry.filter(func.lower(ControlItem.ref) == value.lower()).one_or_none()
+    control = control_by_id_or_ref(db, framework, value, ignore_case=True)
     if not control:
         raise DomainError(status_code=400, detail=f"Unknown control: {value}")
     return control

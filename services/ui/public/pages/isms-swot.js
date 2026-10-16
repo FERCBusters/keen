@@ -221,7 +221,7 @@ async function questions() {
     data.threads
       .map(
         (t) =>
-          `<article class="card card-body mb-3"><div class="small-muted">${esc(t.status)}</div>${(t.posts || []).map((p) => `<p class="mb-1"><strong>${esc(p.author_username)}</strong></p><p class="text-break">${esc(p.body)}</p>`).join('')}${me?.is_admin || String(t.created_by_user_id) === String(me?.id || me?.user?.id || '') ? `<form class="planning-question-form" data-reply-thread="${esc(t.id)}"><label class="form-label d-block">Reply<textarea class="form-control" name="body" rows="3" maxlength="5000" required></textarea></label><button class="btn btn-primary mt-2" type="submit">Send reply</button></form>` : ''}</article>`,
+          `<article class="card card-body mb-3"><div class="small-muted">${esc(t.status)}</div>${(t.posts || []).map((p) => `<p class="mb-1"><strong>${esc(p.author_username)}</strong></p><p class="text-break">${esc(p.body)}</p>`).join('')}${me?.is_admin || (t.created_by_user_id && String(t.created_by_user_id) === String(me?.user_id || '')) ? `<form class="planning-question-form" data-reply-thread="${esc(t.id)}"><label class="form-label d-block">Reply<textarea class="form-control" name="body" rows="3" maxlength="5000" required></textarea></label><button class="btn btn-primary mt-2" type="submit">Send reply</button></form>` : ''}</article>`,
       )
       .join('') || '<p class="small-muted">No questions yet.</p>';
 }

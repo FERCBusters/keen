@@ -1000,13 +1000,25 @@ function openIncidentModal() {
   }
 }
 
+// Incident titles and text are plain text: normalise newlines, drop control
+// characters and cap the length before sending them to the API.
+function sanitizePlainText(value, maxChars) {
+  let txt = String(value || '');
+  txt = txt.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  txt = txt.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+  txt = txt.trim();
+  const max = Number(maxChars || 0);
+  if (max > 0 && txt.length > max) txt = txt.slice(0, max);
+  return txt;
+}
+
 async function submitIncident() {
   if (!currentEvent) {
     toast(incidentStatusEl || status, 'Event not loaded yet.', 'warning');
     return;
   }
-  const title = _sanitizePlainText(incidentTitleEl?.value || '', 256);
-  const text = _sanitizePlainText(incidentTextEl?.value || '', 5000);
+  const title = sanitizePlainText(incidentTitleEl?.value || '', 256);
+  const text = sanitizePlainText(incidentTextEl?.value || '', 5000);
   if (!title) {
     toast(incidentStatusEl || status, 'Title is required.', 'warning');
     return;

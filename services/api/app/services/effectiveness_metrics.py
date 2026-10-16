@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from calendar import monthrange
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -21,6 +22,8 @@ AUTO_ZERO_SOURCE_TITLE = "Automatically recorded zero"
 AUTO_ZERO_REFERENCE_PREFIX = "auto-zero:monthly"
 AUTO_ZERO_MAX_BACKFILL_MONTHS = 120
 ZERO_TARGET_OPERATORS = {"", "eq", "lte"}
+# "Not required", "No longer required", "Never required" and similar.
+_NEGATED_REQUIRED = re.compile(r"\b(?:not|no|never)\b.*\brequired\b")
 
 
 def utcnow() -> datetime:
@@ -74,7 +77,10 @@ def _is_monthly_zero_target(measure: IsmsEffectivenessMeasure) -> bool:
     # Treat "as required"/"when required" style measures as eligible too.
     # These still materialise as calendar-month zero entries because the purpose is
     # to make silent closed months explicit in metrics tables and visualisations.
-    if frequency not in monthly_values and "required" not in frequency:
+    # A negated frequency such as "Not required" means nobody is measuring, so its
+    # months stay blank: a recorded zero would claim a measurement was taken.
+    event_driven = "required" in frequency and not _NEGATED_REQUIRED.search(frequency)
+    if frequency not in monthly_values and not event_driven:
         return False
     if measure.target_value is None or float(measure.target_value) != 0.0:
         return False

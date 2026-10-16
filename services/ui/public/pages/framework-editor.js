@@ -66,7 +66,11 @@ function updateChoices() {
 function editNode(item) {
   selected = item;
   $('kind').value = item.kind;
-  if ($('kind').value !== item.kind) $('kind').add(new Option(item.kind, item.kind));
+  if ($('kind').value !== item.kind) {
+    // Catalogues may use categories beyond the defaults; offer and select them.
+    $('kind').add(new Option(item.kind, item.kind));
+    $('kind').value = item.kind;
+  }
   $('ref').value = item.ref;
   $('title').value = item.title;
   $('node-description').value = item.description || '';

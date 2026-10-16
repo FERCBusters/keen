@@ -553,3 +553,67 @@ test('new SWOT relationships remain local, deduplicate and travel in the final c
   assert.equal(ui.el('title').value, 'Draft');
   assert.equal(ui.el('relatedList').querySelectorAll('[data-unlink-id]').length, 1);
 });
+
+test('SWOT question authors can reply to their own threads only', async (t) => {
+  const posted = [];
+  const ui = await page(t, 'isms-swot', {
+    htmlName: 'swot',
+    query: '&id=s1',
+    // /me identifies the user by user_id; `user` is the username string.
+    me: { user: 'erin', user_id: 'u7', can_view_isms: true, can_create_questions: true },
+    get(url) {
+      if (url.pathname === '/api/v1/isms/swot/s1')
+        return {
+          id: 's1',
+          title: 'Team',
+          kind: 'strength',
+          status: 'defined',
+          significance: 3,
+          version: 1,
+          links: [],
+        };
+      if (url.pathname === '/api/v1/isms/meta') return { users: [] };
+      if (url.pathname === '/api/v1/isms/swot') return { items: [], total: 0 };
+      if (url.pathname.includes('/changelog') || url.pathname.includes('swot-choices'))
+        return { items: [] };
+      if (url.pathname.includes('/questions/entities/'))
+        return {
+          threads: [
+            {
+              id: 'q1',
+              status: 'answered',
+              created_by_user_id: 'u7',
+              posts: [{ author_username: 'erin', body: '<b>Why?</b>' }],
+            },
+            {
+              id: 'q2',
+              status: 'unanswered',
+              created_by_user_id: 'u9',
+              posts: [{ author_username: 'sam', body: 'Other' }],
+            },
+            { id: 'q3', status: 'unanswered', created_by_user_id: null, posts: [] },
+          ],
+        };
+      throw Error('Unexpected GET ' + url);
+    },
+    post(url, body) {
+      posted.push({ path: url.pathname, body: JSON.parse(JSON.stringify(body)) });
+      return {};
+    },
+  });
+  await settle(() => ui.el('questionList').querySelector('article'));
+  const forms = [...ui.el('questionList').querySelectorAll('[data-reply-thread]')];
+  assert.deepEqual(
+    forms.map((f) => f.dataset.replyThread),
+    ['q1'],
+  );
+  assert.equal(ui.el('questionList').querySelector('b'), null);
+  assert.match(ui.el('questionList').textContent, /<b>Why\?<\/b>/);
+  forms[0].elements.body.value = 'Thanks, resolved';
+  forms[0].dispatchEvent(new ui.window.Event('submit', { cancelable: true, bubbles: true }));
+  await settle(() => posted.length === 1);
+  assert.deepEqual(posted[0], {
+    path: '/api/v1/questions/q1/posts',
+    body: { body: 'Thanks, resolved' },
+  });
+});

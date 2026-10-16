@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from urllib.parse import urlsplit
 
@@ -19,6 +20,21 @@ from app.db.models import (
 from app.schemas import FrameworkUpsert
 from app.services.errors import DomainError
 from app.services.framework_catalogue import _framework_selection
+
+_SLUG_RE = re.compile(r"[A-Za-z0-9._:-]{1,64}")
+
+
+def validate_framework_slug(slug: str) -> str:
+    """Return the slug when it has the form every framework parameter accepts.
+
+    A framework created with any other slug could never be selected or used.
+    """
+    if not _SLUG_RE.fullmatch(slug):
+        raise DomainError(
+            status_code=400,
+            detail="Framework slugs use up to 64 letters, digits, '.', '_', ':' or '-'",
+        )
+    return slug
 
 
 def list_frameworks(*, db: Session):
@@ -87,6 +103,7 @@ def upsert_framework(*, payload: FrameworkUpsert, db: Session):
     slug = (payload.slug or "").strip()
     if not slug:
         raise DomainError(status_code=400, detail="slug is required")
+    validate_framework_slug(slug)
 
     row = db.query(Framework).filter(Framework.slug == slug).one_or_none()
     created = False

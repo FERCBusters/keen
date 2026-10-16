@@ -32,6 +32,7 @@ from app.db.models import (
 )
 from app.security.permissions import has_permission
 from app.services.context import ChangeContext
+from app.services.control_refs import CLAUSE_ROW_TYPE, control_by_id_or_ref
 from app.services.entity_changelog import (
     list_entity_changelogs,
     record_entity_changelog,
@@ -558,12 +559,7 @@ def _owner_or_none(
 
 def _control_or_404(db: Session, framework: str, value: str) -> ControlItem:
     val = (value or "").strip()
-    cid = _try_uuid(val)
-    q = db.query(ControlItem).filter(ControlItem.framework_slug == framework)
-    if cid:
-        row = q.filter(ControlItem.id == cid).one_or_none()
-    else:
-        row = q.filter(ControlItem.ref == val).one_or_none()
+    row = control_by_id_or_ref(db, framework, val)
     if not row:
         raise DomainError(
             status_code=400, detail=f"Unknown control for {framework}: {val}"
@@ -1063,13 +1059,25 @@ def create_risk_subcategory(*, payload: RiskSubcategoryPayload, user, db: Sessio
     return {"id": str(row.id), "name": row.name, "category_id": str(row.category_id)}
 
 
-def update_risk_subcategory(
-    *, subcategory_id: str, payload: RiskSubcategoryPayload, user, db: Session
-):
+def _subcategory_or_404(db: Session, subcategory_id: str) -> RiskAssetSubcategory:
+    """Return the subcategory a request path names, or answer 404."""
     sid = _try_uuid(subcategory_id)
     if not sid:
         raise DomainError(status_code=400, detail="subcategory_id must be a UUID")
-    row = _subcategory_by_id(db, sid)
+    row = (
+        db.query(RiskAssetSubcategory)
+        .filter(RiskAssetSubcategory.id == sid)
+        .one_or_none()
+    )
+    if not row:
+        raise DomainError(status_code=404, detail="Asset subcategory not found")
+    return row
+
+
+def update_risk_subcategory(
+    *, subcategory_id: str, payload: RiskSubcategoryPayload, user, db: Session
+):
+    row = _subcategory_or_404(db, subcategory_id)
     category = row.category
     if payload.category_id and payload.category_id != row.category_id:
         category = _category_by_id(db, payload.category_id)
@@ -1094,16 +1102,7 @@ def update_risk_subcategory(
 
 
 def delete_risk_subcategory(*, subcategory_id: str, user, db: Session):
-    sid = _try_uuid(subcategory_id)
-    if not sid:
-        raise DomainError(status_code=400, detail="subcategory_id must be a UUID")
-    row = (
-        db.query(RiskAssetSubcategory)
-        .filter(RiskAssetSubcategory.id == sid)
-        .one_or_none()
-    )
-    if not row:
-        raise DomainError(status_code=404, detail="Asset subcategory not found")
+    row = _subcategory_or_404(db, subcategory_id)
     in_use = db.query(RiskAsset.id).filter(RiskAsset.subcategory_id == row.id).first()
     if in_use:
         raise DomainError(
@@ -1494,6 +1493,7 @@ def create_risk(
                 for (ref,) in db.query(ControlItem.ref)
                 .filter(
                     ControlItem.framework_slug == "KEEN-AF:1.0",
+                    ControlItem.type != CLAUSE_ROW_TYPE,
                     ControlItem.ref.in_(template_refs),
                 )
                 .all()
@@ -1560,7 +1560,7 @@ def risk_changelog(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    _clean_framework(framework)  # validates the parameter
     risk = _risk_or_404(db, risk_id)
     _require_risk_read_or_owner(db, user, risk)
     return list_entity_changelogs(

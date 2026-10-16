@@ -19,6 +19,7 @@ export async function page(
     get,
     post,
     patch,
+    put,
     remove,
     me = { is_admin: true },
     query = '',
@@ -26,6 +27,7 @@ export async function page(
     setup,
     scripts = [],
     htmlName = name,
+    frameworks = [{ slug: 'A', name: 'Framework A', control_count: 2, has_clauses: true }],
   } = {},
 ) {
   const calls = [],
@@ -36,10 +38,7 @@ export async function page(
     const parsed = new URL(url, 'https://keen.example');
     // Shared navbar catalog, independent of the page's API fixture.
     if (method === 'GET' && parsed.pathname === '/api/v1/frameworks')
-      return {
-        items: [{ slug: 'A', name: 'Framework A', control_count: 2, has_clauses: true }],
-        default_framework: 'A',
-      };
+      return { items: frameworks, default: 'A' };
     try {
       return await handler(parsed, body);
     } catch (error) {
@@ -88,6 +87,7 @@ export async function page(
       apiGet: route('GET', get),
       apiPost: route('POST', post),
       apiPatch: route('PATCH', patch),
+      apiPut: route('PUT', put),
       apiDelete: route('DELETE', remove),
       fmtTsFilename: (s) => s,
       getSourceMeta: async () => ({}),
@@ -108,7 +108,7 @@ export async function page(
       withFramework: (path, fw) => {
         const u = new URL(path, 'https://keen.example');
         u.searchParams.set('framework', fw);
-        return u.pathname + u.search;
+        return u.pathname + u.search + u.hash;
       },
       qs: (key, fallback) => new URL(win.location.href).searchParams.get(key) ?? fallback,
       qbool: (key, fallback) =>

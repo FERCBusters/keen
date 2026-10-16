@@ -315,7 +315,7 @@ function renderRisk(risk) {
       '/risks.html?tab=visualisations',
       risk?.framework || framework,
     );
-  if (sampleRiskAudit) sampleRiskAudit.style.display = canSampleIntoAudit(me) ? '' : 'none';
+  if (sampleRiskAudit) sampleRiskAudit.style.display = canSampleIntoAudit(me, 'risk') ? '' : 'none';
   if (editRisk) {
     editRisk.href = withFramework(
       `/risks.html?edit=${encodeURIComponent(risk?.id || id)}`,

@@ -33,7 +33,7 @@ const canView = !!(
   me?.can_manage_risks
 );
 const canManage = !!(me?.is_admin || me?.can_manage_interested_parties || me?.can_manage_risks);
-const canSampleAudits = canSampleIntoAudit(me);
+const canSampleAudits = canSampleIntoAudit(me, 'interested_party');
 const params = new URLSearchParams(location.search);
 const requestedTab = params.get('tab') || 'items';
 
@@ -273,8 +273,9 @@ function splitLabelLines(value, maxChars = 34, maxLines = 2) {
   if (!lines.length) lines.push(text.slice(0, maxChars));
   const joinedLength = lines.join(' ').length;
   if (joinedLength < text.length) {
+    // Words were dropped: always mark the cut, even when the last line is short.
     const last = lines.length - 1;
-    lines[last] = shorten(lines[last], Math.max(8, maxChars - 1));
+    lines[last] = `${lines[last].slice(0, Math.max(8, maxChars - 1)).trimEnd()}…`;
   }
   return lines.slice(0, maxLines);
 }

@@ -17,17 +17,13 @@ from app.db.models import (
     IsmsEntityControlLink,
 )
 from app.services.audits.validation import try_uuid, utcnow
+from app.services.control_refs import control_by_id_or_ref
 from app.services.errors import DomainError
 
 
 def control_or_404(db: Session, framework: str, control_id_or_ref: str) -> ControlItem:
     val = (control_id_or_ref or "").strip()
-    cid = try_uuid(val)
-    q = db.query(ControlItem).filter(ControlItem.framework_slug == framework)
-    if cid:
-        row = q.filter(ControlItem.id == cid).one_or_none()
-    else:
-        row = q.filter(ControlItem.ref == val).one_or_none()
+    row = control_by_id_or_ref(db, framework, val)
     if not row:
         raise DomainError(status_code=404, detail=f"Control not found: {val}")
     return row

@@ -115,7 +115,8 @@ function renderChrome() {
   if (partyId) partyId.value = itemId || '';
   if (partyNote) partyNote.value = currentItem?.note || '';
   if (samplePartyAudit)
-    samplePartyAudit.style.display = canSampleIntoAudit(me) && itemId ? '' : 'none';
+    samplePartyAudit.style.display =
+      canSampleIntoAudit(me, 'interested_party') && itemId ? '' : 'none';
   if (deleteParty) deleteParty.style.display = canManage && itemId ? '' : 'none';
   if (saveParty) saveParty.style.display = canManage ? '' : 'none';
 }

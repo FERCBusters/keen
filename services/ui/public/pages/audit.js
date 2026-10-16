@@ -78,18 +78,20 @@ function maskEventDataString(value) {
   if (value == null) return value;
   let txt = String(value);
   txt = txt.replace(
-    /(^|[^A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{1,128})@([A-Za-z0-9.-]+\.[A-Za-z]{2,63})(?![A-Za-z0-9._%+-])/g,
+    /(^|[^A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{1,128})@([A-Za-z0-9.-]+\.[A-Za-z]{2,63})(?![A-Za-z0-9_%+-]|\.[A-Za-z0-9])/g,
     '$1[MASKED_EMAIL]',
   );
   txt = txt.replace(
     /(^|[^\w:.])([A-Fa-f0-9:.]+(?::[A-Fa-f0-9:.]*)+(?:%[A-Za-z0-9_.-]+)?)(?![\w:])/g,
-    (match, prefix, raw) => {
+    (match, prefix, candidate) => {
+      // Keep sentence punctuation outside the address.
+      const raw = candidate.replace(/\.+$/, '');
       if (!_isMaskableIpv6Candidate(raw)) return match;
-      return `${prefix}[MASKED_IP]`;
+      return `${prefix}[MASKED_IP]${candidate.slice(raw.length)}`;
     },
   );
   txt = txt.replace(
-    /(^|[^\w.])((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})(?![\w.])/g,
+    /(^|[^\w.])((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})(?!\w|\.\d)/g,
     '$1[MASKED_IP]',
   );
   return txt;
@@ -661,14 +663,20 @@ function _parseContentDispositionFilename(header) {
 }
 
 function _uniqueZipName(name, seen) {
-  let n = String(name || 'file')
+  // ZIP entry names are relative paths: drop empty segments (a leading "/")
+  // and replace "." or ".." so no entry can address a parent directory.
+  const segments = String(name || 'file')
     .replace(/\\+/g, '/')
-    .replace(/\/+/g, '/');
-  n = n
     .split('/')
-    .map((p, idx) => _safeZipPathSegment(p, idx === 0 ? 'folder' : 'file'))
+    .filter((p) => p !== '');
+  let n = segments
+    .map((p, idx) => {
+      const fallback = idx === segments.length - 1 ? 'file' : 'folder';
+      const safe = _safeZipPathSegment(p, fallback);
+      return /^\.+$/.test(safe) ? fallback : safe;
+    })
     .join('/');
-  if (!n || n === '/') n = 'file';
+  if (!n) n = 'file';
   const key = n.toLowerCase();
   const count = seen.get(key) || 0;
   seen.set(key, count + 1);

@@ -1,13 +1,4 @@
 // Canvas pagination and PDF encoding; caller supplies content and labels.
-function _sanitizePlainText(value, maxChars) {
-  let txt = String(value || '');
-  txt = txt.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  txt = txt.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
-  txt = txt.trim();
-  const max = Number(maxChars || 0);
-  if (max > 0 && txt.length > max) txt = txt.slice(0, max);
-  return txt;
-}
 
 // ------------------------------------------------------------------
 // Client-side evidence PDF generation

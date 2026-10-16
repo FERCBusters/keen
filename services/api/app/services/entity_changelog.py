@@ -95,10 +95,7 @@ _CHANGE_FIELD_LABELS = {
     "target_unit": "Target unit",
     "threshold_operator": "Threshold operator",
     "frequency": "Frequency",
-    "asset": "Asset",
     "category": "Category",
-    "clauses": "Linked clauses",
-    "controls": "Linked controls",
     "evidence_mappings": "Evidence mappings",
     "framework": "Framework",
     "impact_score": "Impact score",
@@ -284,11 +281,13 @@ def record_entity_changelog(
     user: User | None = None,
     request_method: str | None = None,
     request_path: str | None = None,
+    changed_at: datetime | None = None,
 ) -> EntityChangelog | None:
     """Record an immutable semantic change for KEEN relationship entities.
 
     The regular AuditLog captures request metadata; this captures the before/after
-    values users need for ISO-style evidence of what actually changed.
+    values users need for ISO-style evidence of what actually changed. Pass
+    ``changed_at`` when one operation records several entries at a single time.
     """
     entity_type = str(entity_type or "").strip().lower()
     if entity_type not in _ENTITY_LABELS:
@@ -326,7 +325,7 @@ def record_entity_changelog(
         changed_by_username=getattr(user, "username", None),
         request_method=(request_method or None),
         request_path=(request_path or None),
-        changed_at=utc_now_naive(),
+        changed_at=changed_at or utc_now_naive(),
     )
     db.add(entry)
     db.flush()

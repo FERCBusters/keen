@@ -37,12 +37,14 @@ MASKED_IP = "[MASKED_IP]"
 _EMAIL_RE = re.compile(
     r"(?<![A-Z0-9._%+-])"
     r"([A-Z0-9._%+-]{1,128})@([A-Z0-9.-]+\.[A-Z]{2,63})"
-    r"(?![A-Z0-9._%+-])",
+    # A trailing full stop ends a sentence; only ".<alnum>" continues the domain.
+    r"(?![A-Z0-9_%+-]|\.[A-Z0-9])",
     re.IGNORECASE,
 )
 _IPV4_RE = re.compile(
     r"(?<![\w.])(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
-    r"(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}(?![\w.])"
+    # Reject a fifth octet or a longer token, but allow sentence punctuation.
+    r"(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}(?!\w|\.\d)"
 )
 # Conservative IPv6 candidate matcher; each candidate is validated with ipaddress
 # before replacement to avoid masking timestamps, ratios, or ordinary prose.
@@ -235,20 +237,24 @@ def mask_event_data_str(s: str | None) -> str | None:
     txt = _EMAIL_RE.sub(MASKED_EMAIL, txt)
 
     def _ipv6_sub(m: re.Match) -> str:
-        raw = m.group(0)
+        whole = m.group(0)
+        # Sentence punctuation is part of the candidate match; keep it outside
+        # the address so "from fe80::1." is still masked.
+        raw = whole.rstrip(".")
+        suffix = whole[len(raw) :]
         # Strip a zone id for validation only (e.g. fe80::1%eth0).
         val = raw.split("%", 1)[0]
         # Do not even try to treat short colon-delimited strings as IPv6.
         # Times such as 13:40:19 contain two colons but are not addresses.
         if "::" not in val and val.count(":") < 3:
-            return raw
+            return whole
         try:
             parsed = ipaddress.ip_address(val)
         except ValueError:
-            return raw
+            return whole
         if parsed.version != 6:
-            return raw
-        return MASKED_IP
+            return whole
+        return MASKED_IP + suffix
 
     txt = _IPV6_CANDIDATE_RE.sub(_ipv6_sub, txt)
     txt = _IPV4_RE.sub(MASKED_IP, txt)

@@ -48,9 +48,11 @@ def keen(contract_db, monkeypatch):
 
     valkey.get_valkey.cache_clear()
     monkeypatch.setattr(valkey, "Redis", FakeValkey)
+    # Match the application's SessionLocal (no autoflush, expire on commit) so
+    # requests behave as they do in production.
     factory = sessionmaker(
         bind=contract_db.get_bind(),
-        expire_on_commit=False,
+        autoflush=False,
         join_transaction_mode="create_savepoint",
     )
 

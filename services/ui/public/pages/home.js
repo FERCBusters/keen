@@ -155,14 +155,6 @@ if (ensureHomeLayout()) {
   };
 
   const LEAF_KIND_CONFIGS = {
-    artifact: { singular: 'artifact', label: 'Artifact', icon: 'bi-paperclip', tone: 'secondary' },
-    incident: {
-      singular: 'incident',
-      label: 'Incident',
-      icon: 'bi-exclamation-octagon',
-      tone: 'warning',
-    },
-    question: { singular: 'question', label: 'Question', icon: 'bi-chat-left-text', tone: 'info' },
     business_process: {
       singular: 'business_process',
       label: 'Business process',
@@ -574,28 +566,6 @@ if (ensureHomeLayout()) {
       const src = item?.id || item?.source || item?.label || '';
       return withFramework(`/sources.html?source=${encodeURIComponent(src)}`, fw);
     }
-    if (kind === 'artifact') {
-      if (item?.download_url) return item.download_url;
-      return id
-        ? `/api/v1/artifacts/${encodeURIComponent(id)}/download`
-        : withFramework('/events.html', fw);
-    }
-    if (kind === 'incident') {
-      const eventId = item?.event_id || item?.eventId || '';
-      return eventId
-        ? withFramework(`/event.html?id=${encodeURIComponent(eventId)}#incidentsCard`, fw)
-        : withFramework('/events.html', fw);
-    }
-    if (kind === 'question') {
-      const eventId = item?.event_id || item?.eventId || '';
-      const threadId = item?.id || item?.thread_id || '';
-      const base = eventId ? `/event.html?id=${encodeURIComponent(eventId)}` : '/questions.html';
-      const withThread =
-        threadId && eventId
-          ? `${base}&thread=${encodeURIComponent(threadId)}#questions`
-          : `${base}#questions`;
-      return withFramework(withThread, fw);
-    }
     return withFramework('/', fw);
   }
 
@@ -629,10 +599,6 @@ if (ensureHomeLayout()) {
       return item.summary || item.metric || item.effectiveness_measure || 'Effectiveness measure';
     if (kind === 'metric_entry') return item.value_display || item.source_title || 'Metric entry';
     if (kind === 'source') return item.label || item.source || item.id || 'Source';
-    if (kind === 'artifact') return item.filename || item.kind || item.content_type || 'Artifact';
-    if (kind === 'incident') return item.title || 'Incident';
-    if (kind === 'question')
-      return item.title || `Question thread${item.status ? ` · ${item.status}` : ''}`;
     return item.summary || item.title || item.identifier || 'Evidence';
   }
 
@@ -662,29 +628,6 @@ if (ensureHomeLayout()) {
     if (kind === 'control')
       return item.in_scope === true ? 'In scope' : item.in_scope === false ? 'Out of scope' : '';
     if (kind === 'clause') return item.parent_ref ? `Under ${item.parent_ref}` : '';
-    if (kind === 'artifact')
-      return [
-        item.content_type || '',
-        item.size_bytes ? `${Number(item.size_bytes).toLocaleString()} bytes` : '',
-        item.captured_at ? fmtTs(item.captured_at) : '',
-      ]
-        .filter(Boolean)
-        .join(' · ');
-    if (kind === 'incident')
-      return [
-        item.created_at ? fmtTs(item.created_at) : '',
-        item.created_by ? `by ${item.created_by}` : '',
-      ]
-        .filter(Boolean)
-        .join(' · ');
-    if (kind === 'question')
-      return [
-        item.status || '',
-        item.created_at ? fmtTs(item.created_at) : '',
-        item.created_by_username ? `by ${item.created_by_username}` : '',
-      ]
-        .filter(Boolean)
-        .join(' · ');
     return '';
   }
 
@@ -861,19 +804,9 @@ if (ensureHomeLayout()) {
     )
       return Boolean(id);
 
-    // These are leaf cards on the homepage: they are best opened on their
-    // owning event/download page rather than replacing the layer again.
-    if (
-      [
-        'artifact',
-        'incident',
-        'question',
-        'business_process',
-        'communication',
-        'metric_entry',
-      ].includes(kind)
-    )
-      return false;
+    // These are leaf cards on the homepage: they open on their owning page and
+    // leave the current layer in place.
+    if (['business_process', 'communication', 'metric_entry'].includes(kind)) return false;
 
     return false;
   }
@@ -895,11 +828,9 @@ if (ensureHomeLayout()) {
           ? item.rationale
           : kind === 'interested_party'
             ? item.description
-            : kind === 'incident'
-              ? item.text
-              : kind === 'metric_entry'
-                ? item.notes
-                : item.description;
+            : kind === 'metric_entry'
+              ? item.notes
+              : item.description;
     return `<div class="home-node-card card h-100" data-kind="${esc(kind)}" data-id="${esc(id)}">
     <div class="card-body d-flex flex-column gap-2">
       <div class="d-flex align-items-start gap-2 min-w-0">
@@ -1238,18 +1169,6 @@ if (ensureHomeLayout()) {
     const out = { ...(it || {}) };
     if (kind === 'source' && !out.id) out.id = out.source;
     if (kind === 'evidence' && !out.id && out.event_id) out.id = out.event_id;
-    if (kind === 'artifact') {
-      out.id = out.id || out.artifact_id;
-      out.filename = out.filename || out.name || out.storage_uri || out.kind || 'Artifact';
-      out.download_url =
-        out.download_url ||
-        (out.id ? `/api/v1/artifacts/${encodeURIComponent(out.id)}/download` : '');
-    }
-    if (kind === 'question') {
-      const posts = Array.isArray(out.posts) ? out.posts : [];
-      const firstPost = posts[0] || {};
-      out.title = out.title || shortText(firstPost.body || 'Question thread', 90);
-    }
     if (kind === 'risk') {
       out.title =
         out.title ||
@@ -1531,48 +1450,6 @@ if (ensureHomeLayout()) {
     wireHomeControls();
   }
 
-  async function loadEvidence(id, push = true) {
-    enter(
-      {
-        kind: 'evidence',
-        id,
-        label: 'Evidence',
-        title: 'Evidence connections',
-        subtitle:
-          'Evidence connects sources, controls, audits, artifacts, incidents and questions.',
-      },
-      push,
-    );
-    setLoading('Loading evidence connections…');
-    const [event, audits, questions] = await Promise.all([
-      safeGet(apiUrl(`/api/v1/events/${encodeURIComponent(id)}`), null),
-      safeGet(`/api/v1/audits/by-event/${encodeURIComponent(id)}`, { items: [] }),
-      safeGet(`/api/v1/events/${encodeURIComponent(id)}/questions`, { threads: [] }),
-    ]);
-    if (!event) return setEmpty('Evidence event not found.');
-    current.label = shortText(event.summary || event.identifier || 'Evidence', 80);
-    renderCrumbs();
-
-    const source = event.source
-      ? { id: event.source, source: event.source, label: event.source }
-      : null;
-    const auditItems = (audits.items || []).map((x) => x.audit).filter(Boolean);
-    const artifactItems = (event.artifacts || []).map((x) => normaliseItem('artifact', x));
-    const incidentItems = (event.incidents || []).map((x) => normaliseItem('incident', x));
-    const questionItems = (questions.threads || []).map((x) => normaliseItem('question', x));
-
-    explorerCanvas.innerHTML = `
-    ${nodeHeader('evidence', event, `${event.timestamp ? fmtTs(event.timestamp) : ''} · ${event.source || ''}`.replace(/^ · | · $/g, ''))}
-    ${source ? sectionHtml('Source', 'Where this evidence came from.', gridItem(cardHtml('source', source))) : ''}
-    ${paginatedSectionHtml('Mapped controls', 'Controls supported by this event.', event.controls || [], (c) => gridItem(cardHtml('control', c)), { sectionKey: 'evidence-controls' })}
-    ${paginatedSectionHtml('Audit usage', 'Audits that sampled this event as evidence.', auditItems, (a) => gridItem(cardHtml('audit', a)), { sectionKey: 'evidence-audits' })}
-    ${paginatedSectionHtml('Artifacts', 'Captured files and payloads attached to this event.', artifactItems, (a) => gridItem(cardHtml('artifact', a)), { sectionKey: 'evidence-artifacts' })}
-    ${paginatedSectionHtml('Incidents', 'External incidents created from this event.', incidentItems, (i) => gridItem(cardHtml('incident', i)), { sectionKey: 'evidence-incidents' })}
-    ${paginatedSectionHtml('Questions', 'Auditor questions and replies attached to this evidence.', questionItems, (q) => gridItem(cardHtml('question', q)), { sectionKey: 'evidence-questions' })}
-  `;
-    wireHomeControls();
-  }
-
   async function loadEffectivenessMeasure(id, push = true) {
     enter(
       {
@@ -1689,12 +1566,7 @@ if (ensureHomeLayout()) {
       if (k === 'interested_party') return await loadInterestedParty(id, push);
       if (k === 'audit') return await loadAudit(id, push);
       if (k === 'effectiveness_measure') return await loadEffectivenessMeasure(id, push);
-      if (k === 'evidence') return await loadEvidence(id, push);
       if (k === 'source') return await loadSource(id, push);
-      if (['artifact', 'incident', 'question'].includes(k)) {
-        window.open(entityHref(k, { id }), '_blank', 'noopener,noreferrer');
-        return;
-      }
     } catch (e) {
       toast(status, `Could not load connection layer: ${String(e)}`, 'danger');
       setEmpty('Could not load this connection layer.');

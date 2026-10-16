@@ -202,19 +202,34 @@ function isoDateOnly(date) {
   return date.toISOString().slice(0, 10);
 }
 
-function numericMetricEntriesForTrend() {
+function metricEntryNumericValue(entry) {
+  // Qualitative-only entries carry metric_value: null, which Number() would read as 0.
+  const raw = entry?.metric_value;
+  if (raw === null || raw === undefined || raw === '') return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+// Entries for the selected source within the selected period, split into the
+// numeric values that can be plotted and the count of entries that cannot.
+function metricTrendSelection() {
   const src = String($('trendSource')?.value || '').trim();
   const from = String($('trendFrom')?.value || '').trim();
   const to = String($('trendTo')?.value || '').trim();
   const fromMs = from ? Date.parse(`${from}T00:00:00Z`) : null;
   const toMs = to ? Date.parse(`${to}T23:59:59.999Z`) : null;
-  return (metrics || [])
-    .map((entry) => ({ entry, date: metricEntryDate(entry), value: Number(entry.metric_value) }))
-    .filter((x) => x.date && Number.isFinite(x.value))
+  const selected = (metrics || [])
+    .map((entry) => ({
+      entry,
+      date: metricEntryDate(entry),
+      value: metricEntryNumericValue(entry),
+    }))
+    .filter((x) => x.date)
     .filter((x) => !src || String(x.entry.source_type || '') === src)
     .filter((x) => fromMs === null || x.date.getTime() >= fromMs)
-    .filter((x) => toMs === null || x.date.getTime() <= toMs)
-    .sort((a, b) => a.date - b.date);
+    .filter((x) => toMs === null || x.date.getTime() <= toMs);
+  const data = selected.filter((x) => x.value !== null).sort((a, b) => a.date - b.date);
+  return { data, nonNumericCount: selected.length - data.length };
 }
 
 function populateTrendSources() {
@@ -253,12 +268,8 @@ function renderMetricTrend() {
     meta.textContent = 'D3 is unavailable; cannot render metric trend visualisation.';
     return;
   }
-  const data = numericMetricEntriesForTrend();
+  const { data, nonNumericCount } = metricTrendSelection();
   const selectedSource = String($('trendSource')?.value || '').trim();
-  const totalInSelection = (metrics || []).filter(
-    (entry) => !selectedSource || String(entry.source_type || '') === selectedSource,
-  ).length;
-  const nonNumericCount = Math.max(0, totalInSelection - data.length);
   const svg = d3lib.select(svgEl);
   svg.selectAll('*').remove();
 

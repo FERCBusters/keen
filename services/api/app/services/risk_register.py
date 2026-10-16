@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlItem,
     Risk,
@@ -20,7 +21,10 @@ from app.db.models import (
     RiskRegisterSettings,
 )
 from app.security.csv import spreadsheet_cell
-from app.services.entity_changelog import record_entity_changelog
+from app.services.entity_changelog import (
+    record_entity_changelog,
+    risk_changelog_state,
+)
 from app.services.errors import DomainError
 from app.services.risks import (
     RiskUpsertPayload,
@@ -337,6 +341,9 @@ def import_register(
             raise ValueError("Import at most 1000 risks per file")
         if not entries:
             raise ValueError("CSV contains no risks")
+        # The file is saved as one transaction, so every imported risk and its
+        # creation record carry the same moment: the time of the import.
+        imported_at = utc_now_naive()
         for lineno, entry in enumerate(entries, start=2):
             if None in entry:
                 raise ValueError(f"Row {lineno}: extra columns")
@@ -369,8 +376,9 @@ def import_register(
                     if s.strip()
                 ],
             )
-            row = Risk(created_by_user_id=user.id)
+            row = Risk(created_by_user_id=user.id, created_at=imported_at)
             _apply_payload(db, row, payload, is_create=True)
+            row.updated_at = imported_at
             for field in (
                 "register_likelihood",
                 "register_impact",
@@ -411,6 +419,19 @@ def import_register(
                 _replace_control_links(
                     db, row, framework=fw, control_values=payload.controls
                 )
+            db.flush()  # the recorded state reads the new control links
+            record_entity_changelog(
+                db,
+                entity_type="risk",
+                entity_id=row.id,
+                action="created",
+                before=None,
+                after=risk_changelog_state(db, row, framework=fw),
+                user=user,
+                request_method="POST",
+                request_path="/v1/risks/register/import.csv",
+                changed_at=imported_at,
+            )
         db.commit()
     except (ValueError, DomainError, TypeError, ValidationError) as exc:
         db.rollback()

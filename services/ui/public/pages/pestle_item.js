@@ -178,7 +178,7 @@ function setFormReadOnly(readonly) {
   }
   if (savePestleItem) savePestleItem.style.display = disabled ? 'none' : '';
   if (samplePestleAudit)
-    samplePestleAudit.style.display = canSampleIntoAudit(me) && itemId ? '' : 'none';
+    samplePestleAudit.style.display = canSampleIntoAudit(me, 'pestle_item') && itemId ? '' : 'none';
   if (deletePestleItem) deletePestleItem.style.display = !disabled && itemId ? '' : 'none';
   if (saveBusinessProcessRelevance)
     saveBusinessProcessRelevance.style.display = disabled ? 'none' : '';

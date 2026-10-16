@@ -652,6 +652,7 @@ function activateInitialTab() {
     ismseffectiveness: 'soaIsmsEffectivenessTab',
     ismseffectivenessmeasures: 'soaIsmsEffectivenessTab',
     orgassets: 'soaIsmsOrgAssetsTab',
+    ismsorgassets: 'soaIsmsOrgAssetsTab',
   }[String(tab || '').toLowerCase()];
   const target = document.getElementById(
     mapped || `soa${tab.charAt(0).toUpperCase()}${tab.slice(1)}Tab`,

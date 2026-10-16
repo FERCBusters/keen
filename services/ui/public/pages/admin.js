@@ -13,7 +13,6 @@ import {
   fmtTs,
   getCurrentFramework,
   withFramework,
-  safeExternalHref,
   entityChangelogHtml,
   userPillHtml,
 } from '/app.js';
@@ -90,12 +89,6 @@ function selectedFrameworkFallback() {
   const f = (document.getElementById('framework')?.value || '').trim();
   return f || currentFramework || 'iso_27001_2022';
 }
-
-// Questions (admin queue)
-const questionsStatus = document.getElementById('questionsStatus');
-const questionsRows = document.getElementById('questionsRows');
-const questionsRefresh = document.getElementById('questionsRefresh');
-const questionsStatusFilter = document.getElementById('questionsStatusFilter');
 
 // ------------------------------------------------------------------
 // RBAC caches (users / groups / permissions)
@@ -649,10 +642,6 @@ const groupPermissions = document.getElementById('groupPermissions');
 const groupApplyMembers = document.getElementById('groupApplyMembers');
 const groupApplyPermissions = document.getElementById('groupApplyPermissions');
 
-const permissionCreateForm = document.getElementById('permissionCreateForm');
-const newPermCode = document.getElementById('newPermCode');
-const newPermDesc = document.getElementById('newPermDesc');
-
 let selectedGroupId = null;
 
 function showGroupsStatus(msg, kind = 'info') {
@@ -715,9 +704,10 @@ async function refreshPermissions() {
   }
 }
 
-async function openGroupDetail(gid) {
+async function openGroupDetail(gid, { keepStatus = false } = {}) {
   selectedGroupId = String(gid);
-  showGroupsStatus('', 'info');
+  // A reload after a successful action keeps its confirmation visible.
+  if (!keepStatus) showGroupsStatus('', 'info');
 
   if (groupDetailEmpty) groupDetailEmpty.style.display = 'none';
   if (groupDetail) groupDetail.style.display = 'block';
@@ -781,7 +771,7 @@ if (groupCreateForm) {
       if (newGroupDesc) newGroupDesc.value = '';
       if (newGroupRole) newGroupRole.value = '';
       await refreshGroups(false);
-      if (g?.id) await openGroupDetail(g.id);
+      if (g?.id) await openGroupDetail(g.id, { keepStatus: true });
     } catch (e) {
       toast(groupsStatus, `Failed: ${String(e)}`, 'danger');
     }
@@ -804,7 +794,7 @@ if (groupSave) {
       );
       toast(groupsStatus, 'Group updated', 'success');
       await refreshGroups(false);
-      await openGroupDetail(res.id || selectedGroupId);
+      await openGroupDetail(res.id || selectedGroupId, { keepStatus: true });
     } catch (e) {
       toast(groupsStatus, `Failed: ${String(e)}`, 'danger');
     }
@@ -840,7 +830,7 @@ if (groupApplyMembers) {
       });
       showGroupsStatus('Members saved', 'success');
       await refreshGroups(false);
-      await openGroupDetail(selectedGroupId);
+      await openGroupDetail(selectedGroupId, { keepStatus: true });
     } catch (e) {
       showGroupsStatus(`Failed: ${String(e)}`, 'danger');
     }
@@ -859,28 +849,9 @@ if (groupApplyPermissions) {
       );
       showGroupsStatus('Permissions saved', 'success');
       await refreshGroups(false);
-      await openGroupDetail(selectedGroupId);
+      await openGroupDetail(selectedGroupId, { keepStatus: true });
     } catch (e) {
       showGroupsStatus(`Failed: ${String(e)}`, 'danger');
-    }
-  });
-}
-
-if (permissionCreateForm) {
-  permissionCreateForm.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    try {
-      const code = (newPermCode?.value || '').trim();
-      const description = (newPermDesc?.value || '').trim() || null;
-      if (!code) throw new Error('Permission code is required');
-      await apiPost('/api/v1/admin/permissions', { code, description });
-      toast(groupsStatus, `Created permission ${code}`, 'success');
-      if (newPermCode) newPermCode.value = '';
-      if (newPermDesc) newPermDesc.value = '';
-      await refreshPermissions();
-      if (selectedGroupId) await openGroupDetail(selectedGroupId);
-    } catch (e) {
-      toast(groupsStatus, `Failed: ${String(e)}`, 'danger');
     }
   });
 }
@@ -1216,7 +1187,7 @@ function wireEntityChangeAutoApply() {
       apply();
     }
   };
-  if (me?.pref_auto_apply_filters) {
+  if (autoApplyFilters) {
     entityChangeDebouncedApply = debounce(apply, 500);
     entityChangeUser?.addEventListener('input', entityChangeDebouncedApply);
     entityChangeQuery?.addEventListener('input', entityChangeDebouncedApply);
@@ -1357,113 +1328,6 @@ if (autoApplyFilters) {
   auditUser?.addEventListener('keydown', applyOnEnter);
   auditPath?.addEventListener('keydown', applyOnEnter);
 }
-
-// ------------------------------------------------------------------
-// Questions queue (admin-only)
-// ------------------------------------------------------------------
-
-function questionStatusBadge(status) {
-  const s = String(status || '').toLowerCase();
-  if (s === 'answered') return `<span class="badge text-bg-success">answered</span>`;
-  if (s === 'reviewing') return `<span class="badge text-bg-info">reviewing</span>`;
-  return `<span class="badge text-bg-warning">unanswered</span>`;
-}
-
-function renderQuestionsQueue(items) {
-  if (!questionsRows) return;
-  const rows = (items || [])
-    .map((it) => {
-      // Render the status badge (typo here previously caused: "ReferenceError: question is not defined")
-      const st = questionStatusBadge(it.status);
-      const upd = it.updated_at ? fmtTs(it.updated_at) : '–';
-      const askedBy = userPillHtml(it.created_by_username, { empty: '–' });
-      const evSum = esc(it.target_label || it.event_summary || '(no summary)');
-      const evMeta = esc(
-        [
-          it.target_type && it.target_type !== 'event'
-            ? String(it.target_type).replaceAll('_', ' ')
-            : it.event_source || '',
-          it.event_timestamp ? fmtTs(it.event_timestamp) : it.target_ref || '—',
-        ]
-          .filter(Boolean)
-          .join(' • '),
-      );
-      const rawHref = withFramework(
-        it?.target_url ||
-          `/event.html?id=${encodeURIComponent(it?.event_id || '')}&thread=${encodeURIComponent(it?.thread_id || '')}#questions`,
-        currentFramework,
-      );
-      const href = safeExternalHref(rawHref) || '#';
-      return `
-      <tr>
-        <td>${st}</td>
-        <td class="small-muted">${esc(upd)}</td>
-        <td>
-          <div class="fw-bold">${evSum}</div>
-          <div class="small-muted">${evMeta}</div>
-          <div class="small-muted mono">Thread: ${esc(it.thread_id)}</div>
-        </td>
-        <td>${askedBy}</td>
-        <td class="text-end">
-          <div class="btn-group btn-group-sm" role="group" aria-label="Question actions">
-            <a class="btn btn-outline-primary" href="${esc(href)}">Open</a>
-            <button class="btn btn-outline-danger" type="button" data-delete-question="${esc(it.thread_id || '')}">Delete</button>
-          </div>
-        </td>
-      </tr>
-    `;
-    })
-    .join('');
-  questionsRows.innerHTML =
-    rows || `<tr><td colspan="5" class="small-muted">No matching questions.</td></tr>`;
-}
-
-async function refreshQuestionsQueue() {
-  if (!isAdmin) return;
-  if (!questionsRows) return;
-
-  if (questionsStatus) {
-    questionsStatus.style.display = '';
-    questionsStatus.textContent = 'Loading questions…';
-  }
-
-  const st = (questionsStatusFilter?.value || '').trim();
-  const url = new URL('/api/v1/admin/questions', location.origin);
-  if (st) url.searchParams.set('status', st);
-
-  try {
-    const res = await apiGet(url.pathname + url.search);
-    renderQuestionsQueue(res.items || []);
-    if (questionsStatus) {
-      questionsStatus.style.display = 'none';
-    }
-  } catch (e) {
-    renderQuestionsQueue([]);
-    if (questionsStatus) {
-      questionsStatus.style.display = '';
-      questionsStatus.textContent = `Failed: ${String(e)}`;
-    }
-  }
-}
-
-questionsRefresh?.addEventListener('click', refreshQuestionsQueue);
-questionsStatusFilter?.addEventListener('change', refreshQuestionsQueue);
-questionsRows?.addEventListener('click', async (ev) => {
-  const btn = ev.target?.closest?.('[data-delete-question]');
-  if (!btn || !isAdmin) return;
-  const tid = btn.getAttribute('data-delete-question') || '';
-  if (!tid) return;
-  if (!confirm('Delete this question thread and all replies?')) return;
-  btn.disabled = true;
-  try {
-    await apiDelete(`/api/v1/questions/${encodeURIComponent(tid)}`);
-    toast(questionsStatus || status, 'Question deleted', 'success');
-    await refreshQuestionsQueue();
-  } catch (e) {
-    toast(questionsStatus || status, String(e), 'danger');
-    btn.disabled = false;
-  }
-});
 
 // ------------------------------------------------------------------
 // Init

@@ -78,6 +78,16 @@ def _clause_out(c: FrameworkClause, link_count: int | None = None) -> dict:
     }
 
 
+def _control_link_count(db: Session, clause_id) -> int:
+    """Count the clause's control links, as the clause list does."""
+    return (
+        db.query(func.count(ControlClauseLink.control_item_id))
+        .filter(ControlClauseLink.clause_id == clause_id)
+        .scalar()
+        or 0
+    )
+
+
 def _tree(items: list[dict]) -> list[dict]:
     by_id = {it["id"]: {**it, "children": []} for it in items}
     roots: list[dict] = []
@@ -146,7 +156,7 @@ def get_clause(*, clause_id: str, db: Session):
     row = db.query(FrameworkClause).filter(FrameworkClause.id == cid).one_or_none()
     if not row:
         raise DomainError(status_code=404, detail="Clause not found")
-    return _clause_out(row)
+    return _clause_out(row, _control_link_count(db, row.id))
 
 
 def clause_changelog(*, clause_id: str, limit: int = 50, offset: int = 0, db: Session):
@@ -205,7 +215,7 @@ def clause_controls(*, clause_id: str, limit: int = 5000, offset: int = 0, db: S
     items.sort(key=lambda it: (it["type"], _ref_sort_key(it["ref"])))
     total = len(items)
     return {
-        "clause": _clause_out(clause),
+        "clause": _clause_out(clause, _control_link_count(db, clause.id)),
         "total": total,
         "limit": limit,
         "offset": offset,

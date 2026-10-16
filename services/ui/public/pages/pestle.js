@@ -35,7 +35,7 @@ const canViewPestle = !!(
   me?.can_manage_risks
 );
 const canManagePestle = !!(me?.is_admin || me?.can_manage_pestle || me?.can_manage_risks);
-const canSampleAudits = canSampleIntoAudit(me);
+const canSampleAudits = canSampleIntoAudit(me, 'pestle_item');
 
 const params = new URLSearchParams(location.search);
 const requestedItemId = params.get('id') || '';
@@ -380,14 +380,9 @@ function pestleEffectiveBackgroundColour(node) {
     }
     el = el.parentElement;
   }
-  return (
-    pestleParseRgbColour(window.getComputedStyle(document.body).backgroundColor) || {
-      r: 255,
-      g: 255,
-      b: 255,
-      a: 1,
-    }
-  );
+  // With no opaque background anywhere, the page itself shows white.
+  const bodyBg = pestleParseRgbColour(window.getComputedStyle(document.body).backgroundColor);
+  return bodyBg && bodyBg.a > 0.05 ? bodyBg : { r: 255, g: 255, b: 255, a: 1 };
 }
 
 function pestleRelativeLuminance({ r, g, b }) {

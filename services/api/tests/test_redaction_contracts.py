@@ -83,6 +83,16 @@ def test_custom_redaction_extends_defaults_and_replace_is_explicit(monkeypatch):
         ("at 13:40:19", "at 13:40:19"),
         ("version 1.2.3", "version 1.2.3"),
         ("bad 999.999.999.999", "bad 999.999.999.999"),
+        # Sentence punctuation must not let an address escape masking.
+        ("Login from 192.0.2.1.", "Login from [MASKED_IP]."),
+        ("Mail a@example.test.", "Mail [MASKED_EMAIL]."),
+        ("Peers: 192.0.2.1, 198.51.100.7.", "Peers: [MASKED_IP], [MASKED_IP]."),
+        ("from fe80::1.", "from [MASKED_IP]."),
+        ("(a@example.test)", "([MASKED_EMAIL])"),
+        ("a@mail.example.co.uk", "[MASKED_EMAIL]"),
+        # Longer dotted tokens are left alone as versions or host names.
+        ("build 1.2.3.4.5", "build 1.2.3.4.5"),
+        ("host 192.0.2.1a", "host 192.0.2.1a"),
     ],
 )
 def test_sample_masking_does_not_confuse_times_or_versions(text, expected):

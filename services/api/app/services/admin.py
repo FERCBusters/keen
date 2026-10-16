@@ -9,6 +9,7 @@ from datetime import date, datetime, time, timezone
 from typing import Any
 
 from sqlalchemy import desc, distinct, func
+from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.cache import cache_delete_prefix
@@ -69,6 +70,7 @@ from app.services.control_evidence_stats import (
     clear_stats_caches,
     rebuild_framework_event_stats,
 )
+from app.services.control_refs import control_by_ref
 from app.services.entity_changelog import (
     affected_clause_ids_for_control,
     affected_control_ids_for_clause,
@@ -78,6 +80,7 @@ from app.services.entity_changelog import (
     record_entity_changelog,
 )
 from app.services.errors import DomainError
+from app.services.frameworks import validate_framework_slug
 from app.services.presentation import (
     normalize_diary_details as _normalize_diary_details,
 )
@@ -119,9 +122,9 @@ def _ensure_dt_iso_for_admin(value: Any) -> str | None:
 
 
 def admin_import_controls(*, payload: ControlImportPayload, user, db: Session):
-    framework_slug = (
-        payload.framework or ""
-    ).strip() or settings.default_framework_slug
+    framework_slug = validate_framework_slug(
+        (payload.framework or "").strip() or settings.default_framework_slug
+    )
 
     if payload.framework_url:
         payload.framework_url = _validate_upstream_url(payload.framework_url) or ""
@@ -169,87 +172,109 @@ def admin_import_controls(*, payload: ControlImportPayload, user, db: Session):
 
     for item in payload.items:
         try:
-            t = (item.type or "").strip()
-            r = (item.ref or "").strip()
-            if not t or not r:
-                raise ValueError("type/ref required")
-
-            existing = (
-                db.query(ControlItem)
-                .filter(
-                    ControlItem.framework_slug == framework_slug,
-                    ControlItem.type == t,
-                    ControlItem.ref == r,
-                )
-                .one_or_none()
-            )
-            if existing:
-                existing.title = item.title
-                existing.in_scope = bool(item.in_scope)
-                existing.tags = item.tags or {}
-                existing.meta = item.metadata or {}
-                updated += 1
-            else:
-                db.add(
-                    ControlItem(
-                        framework_slug=framework_slug,
-                        type=t,
-                        ref=r,
-                        title=item.title,
-                        in_scope=bool(item.in_scope),
-                        tags=item.tags or {},
-                        meta=item.metadata or {},
-                    )
-                )
+            # Apply each item in its own flushed savepoint. Later items, such as
+            # child clauses, then find rows added earlier in the same file, and
+            # an item the database refuses is reported without losing the rest.
+            with db.begin_nested():
+                is_new = _import_control_item(db, framework_slug, item)
+            if is_new:
                 created += 1
-
-            # Keep first-class clause rows in sync when importing legacy
-            # framework YAML items of type='clause'. Clause metadata may include
-            # upstream_url and optional parent_ref for hierarchy.
-            if t == "clause":
-                meta = item.metadata or {}
-                parent_ref = str(
-                    meta.get("parent_ref") or meta.get("parent") or ""
-                ).strip()
-                parent_id = None
-                if parent_ref:
-                    parent = (
-                        db.query(FrameworkClause)
-                        .filter(
-                            FrameworkClause.framework_slug == framework_slug,
-                            FrameworkClause.ref == parent_ref,
-                        )
-                        .one_or_none()
-                    )
-                    parent_id = parent.id if parent else None
-                clause = (
-                    db.query(FrameworkClause)
-                    .filter(
-                        FrameworkClause.framework_slug == framework_slug,
-                        FrameworkClause.ref == r,
-                    )
-                    .one_or_none()
-                )
-                if clause:
-                    clause.title = item.title or clause.title or r
-                    clause.parent_clause_id = parent_id
-                    clause.meta = meta
-                else:
-                    db.add(
-                        FrameworkClause(
-                            framework_slug=framework_slug,
-                            ref=r,
-                            title=item.title or r,
-                            parent_clause_id=parent_id,
-                            sort_order=0,
-                            meta=meta,
-                        )
-                    )
+            else:
+                updated += 1
+        except (DataError, IntegrityError):
+            # The database refused this item's values. Its message carries SQL
+            # text, so report the item generically.
+            errors.append(
+                {
+                    "ref": getattr(item, "ref", None),
+                    "error": "The item could not be stored",
+                }
+            )
+        except SQLAlchemyError:
+            # Connection, lock or other database failures abandon the import.
+            raise
         except Exception as e:
             errors.append({"ref": getattr(item, "ref", None), "error": str(e)})
 
     db.commit()
     return {"created": created, "updated": updated, "errors": errors}
+
+
+def _import_control_item(db: Session, framework_slug: str, item) -> bool:
+    """Create or update one imported item; return True when it was created."""
+    t = (item.type or "").strip()
+    r = (item.ref or "").strip()
+    if not t or not r:
+        raise ValueError("type/ref required")
+
+    existing = (
+        db.query(ControlItem)
+        .filter(
+            ControlItem.framework_slug == framework_slug,
+            ControlItem.type == t,
+            ControlItem.ref == r,
+        )
+        .one_or_none()
+    )
+    if existing:
+        existing.title = item.title
+        existing.in_scope = bool(item.in_scope)
+        existing.tags = item.tags or {}
+        existing.meta = item.metadata or {}
+    else:
+        db.add(
+            ControlItem(
+                framework_slug=framework_slug,
+                type=t,
+                ref=r,
+                title=item.title,
+                in_scope=bool(item.in_scope),
+                tags=item.tags or {},
+                meta=item.metadata or {},
+            )
+        )
+
+    # Keep first-class clause rows in sync when importing legacy
+    # framework YAML items of type='clause'. Clause metadata may include
+    # upstream_url and optional parent_ref for hierarchy.
+    if t == "clause":
+        meta = item.metadata or {}
+        parent_ref = str(meta.get("parent_ref") or meta.get("parent") or "").strip()
+        parent_id = None
+        if parent_ref:
+            parent = (
+                db.query(FrameworkClause)
+                .filter(
+                    FrameworkClause.framework_slug == framework_slug,
+                    FrameworkClause.ref == parent_ref,
+                )
+                .one_or_none()
+            )
+            parent_id = parent.id if parent else None
+        clause = (
+            db.query(FrameworkClause)
+            .filter(
+                FrameworkClause.framework_slug == framework_slug,
+                FrameworkClause.ref == r,
+            )
+            .one_or_none()
+        )
+        if clause:
+            clause.title = item.title or clause.title or r
+            clause.parent_clause_id = parent_id
+            clause.meta = meta
+        else:
+            db.add(
+                FrameworkClause(
+                    framework_slug=framework_slug,
+                    ref=r,
+                    title=item.title or r,
+                    parent_clause_id=parent_id,
+                    sort_order=0,
+                    meta=meta,
+                )
+            )
+    return existing is None
 
 
 def _is_intermediate_clause_parent(db: Session, clause: FrameworkClause) -> bool:
@@ -676,14 +701,7 @@ def admin_update_clause_controls(
                 .one_or_none()
             )
         elif item.ref:
-            control = (
-                db.query(ControlItem)
-                .filter(
-                    ControlItem.framework_slug == clause.framework_slug,
-                    ControlItem.ref == item.ref.strip(),
-                )
-                .one_or_none()
-            )
+            control = control_by_ref(db, clause.framework_slug, item.ref)
         if not control:
             raise DomainError(status_code=400, detail="Unknown control for framework")
         if control.id in seen:

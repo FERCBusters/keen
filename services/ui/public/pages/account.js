@@ -176,7 +176,8 @@ function renderLandingPageOptions(meObj, savedSearches = []) {
   if (!prefLandingPage) return;
 
   const fixed = [
-    { v: '/index.html', label: 'Home' },
+    // The API stores Home as '/', which is also the default preference.
+    { v: '/', label: 'Home' },
     { v: '/controls.html', label: 'Controls register' },
     { v: '/events.html', label: 'Events' },
     { v: '/sources.html', label: 'Sources' },
@@ -209,7 +210,8 @@ function renderLandingPageOptions(meObj, savedSearches = []) {
   }
   const savedLabels = saved.map((s) => {
     const dup = (nameCounts.get(s.name.toLowerCase()) || 0) > 1;
-    const label = dup ? `${esc(s.name)} — ${esc(shorten(s.url, 60))}` : esc(s.name);
+    // Plain text; escaped once when the <option> is rendered.
+    const label = dup ? `${s.name} — ${shorten(s.url, 60)}` : s.name;
     return { v: s.url, label };
   });
 
