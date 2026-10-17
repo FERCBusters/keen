@@ -65,7 +65,7 @@ def _to_utc_naive(dt: datetime) -> datetime:
 
 
 def _parse_iso_ts(value: str | None) -> datetime | None:
-    if not value:
+    if not isinstance(value, str) or not value:
         return None
     v = value.strip()
     # Common GitHub forms: 2026-01-07T00:09:08Z or with offset
@@ -74,6 +74,48 @@ def _parse_iso_ts(value: str | None) -> datetime | None:
         return _to_utc_naive(dt)
     except Exception:
         return None
+
+
+_EPOCH = datetime(1970, 1, 1)
+
+
+def _audit_ts(entry: dict[str, Any]) -> datetime | None:
+    """Return when an audit log entry happened, as naive UTC.
+
+    GitHub reports audit log times as Unix epoch milliseconds; ISO 8601 text
+    is accepted as well.
+    """
+    value = entry.get("@timestamp")
+    if value is None:
+        value = entry.get("created_at")
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return _EPOCH + timedelta(milliseconds=value)
+        except (OverflowError, ValueError):
+            return None
+    return _parse_iso_ts(value)
+
+
+def _within_api(url: str) -> bool:
+    """Return whether a URL GitHub returned lies within the configured API.
+
+    Pagination links are followed with KEEN's token, so they must stay on the
+    API origin and under its base path.
+    """
+    try:
+        base = httpx.URL(settings.github_base_url.rstrip("/"))
+        target = httpx.URL(url)
+    except (httpx.InvalidURL, TypeError):
+        return False
+    return (
+        target.scheme == base.scheme
+        and target.host == base.host
+        and target.port == base.port
+        and not target.userinfo
+        and (target.path.rstrip("/") + "/").startswith(base.path.rstrip("/") + "/")
+    )
 
 
 def _fetch_pages(
@@ -520,16 +562,24 @@ def ingest_github_org_repo_events(
     }
 
 
+AUDIT_LOG_MAX_PAGES = 10
+
+
 def ingest_github_org_auditlog(
     db: Session,
     org: str,
     label: str | None = None,
     lookback_days: int = 7,
     per_page: int = 100,
+    max_pages: int = AUDIT_LOG_MAX_PAGES,
 ) -> dict[str, Any]:
     """Ingest GitHub *organization* audit log entries.
 
-    This avoids enumerating every repo. It requires an org owner token with the `read:audit_log` scope.
+    This avoids enumerating every repo. It requires an org owner token with the
+    `read:audit_log` scope. Each run asks for entries from the cursor's second
+    onwards, oldest first, and follows GitHub's pagination links for up to
+    `max_pages` pages. The cursor advances after every page, so a busy period
+    continues on the next run.
     """
 
     cursor_name = namespace(f"github:audit:{org}")
@@ -550,99 +600,118 @@ def ingest_github_org_auditlog(
         else (now - timedelta(days=lookback_days))
     )
 
-    # GitHub's audit log endpoint supports a search phrase with created timestamps.
-    # Use a date-level filter to keep requests simple; cursor will do the precise cutoff.
-    phrase = f"created:>={since.date().isoformat()}"
-
-    with _client() as c:
-        r = c.get(
-            f"/orgs/{org}/audit-log",
-            params={
-                "per_page": str(per_page),
-                "include": "all",
-                "order": "asc",
-                "phrase": phrase,
-            },
-        )
-        r.raise_for_status()
-        entries = r.json() or []
+    # The audit log search accepts a time to the second; +00:00 marks it as UTC.
+    phrase = f"created:>={since.replace(microsecond=0).isoformat()}+00:00"
 
     created = 0
+    seen = 0
+    pages = 0
     cursor_last = _to_utc_naive(cur.last_ts) if cur.last_ts else None
     newest_ts = cursor_last
 
-    for e in entries:
-        ts = _parse_iso_ts(e.get("@timestamp") or e.get("created_at"))
-        if not ts:
-            continue
-        if cursor_last and ts <= cursor_last:
-            continue
+    with _client() as c:
+        url: str | None = f"/orgs/{org}/audit-log"
+        params: dict[str, str] | None = {
+            "per_page": str(per_page),
+            "include": "all",
+            "order": "asc",
+            "phrase": phrase,
+        }
+        while url and pages < max_pages:
+            r = c.get(url, params=params)
+            r.raise_for_status()
+            pages += 1
+            entries = r.json() or []
+            if not isinstance(entries, list):
+                raise ValueError("GitHub audit log response is not a list")
 
-        actor = e.get("actor") or e.get("user")
-        action = e.get("action") or "audit"
-        # Try to give the summary a bit of meaning without being overly specific.
-        repo = e.get("repo") or e.get("repository")
-        target = e.get("target") or e.get("user") or e.get("actor")
-        parts = [f"github org {org}", action]
-        if repo:
-            parts.append(f"repo={repo}")
-        if target and target != actor:
-            parts.append(f"target={target}")
-        if actor:
-            parts.append(f"by {actor}")
-        summary = " ".join(parts)
-        if label:
-            summary = f"[{label}] {summary}"
+            for e in entries:
+                if not isinstance(e, dict):
+                    continue
+                ts = _audit_ts(e)
+                if not ts:
+                    continue
+                seen += 1
+                # Entries at the cursor's instant are fetched again; the
+                # external ID de-duplicates the ones already stored.
+                if cursor_last and ts < cursor_last:
+                    continue
 
-        payload_bytes = json.dumps(e, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
-        ext_id = fingerprint(
-            [cursor_name, str(e.get("_id") or e.get("id") or ""), str(action)],
-            payload_bytes,
-        )
-        key = f"github/audit/{org}/{ts.date().isoformat()}/{ext_id}.json"
+                actor = e.get("actor") or e.get("user")
+                action = e.get("action") or "audit"
+                entry_id = e.get("_document_id") or e.get("_id") or e.get("id")
+                # Give the summary a bit of meaning without being overly specific.
+                repo = e.get("repo") or e.get("repository")
+                target = e.get("target") or e.get("user") or e.get("actor")
+                parts = [f"github org {org}", action]
+                if repo:
+                    parts.append(f"repo={repo}")
+                if target and target != actor:
+                    parts.append(f"target={target}")
+                if actor:
+                    parts.append(f"by {actor}")
+                summary = " ".join(parts)
+                if label:
+                    summary = f"[{label}] {summary}"
 
-        res = store_event_with_artifact(
-            db,
-            timestamp=ts,
-            source="github",
-            system=label or f"org:{org}",
-            actor=actor,
-            action=str(action),
-            outcome="info",
-            severity=3,
-            summary=summary,
-            raw_pointer={
-                "github": {
-                    "org": org,
-                    "audit": True,
-                    "action": action,
-                    "id": e.get("_id") or e.get("id"),
-                }
-            },
-            normalized_payload={"audit": e},
-            external_id=ext_id,
-            artifact_kind="github_audit",
-            artifact_bytes=payload_bytes,
-            artifact_content_type="application/json",
-            artifact_key=key,
-            captured_by="keen:github",
-        )
-        if not res.get("deduped"):
-            created += 1
+                payload_bytes = json.dumps(
+                    e, sort_keys=True, separators=(",", ":")
+                ).encode("utf-8")
+                ext_id = fingerprint(
+                    [cursor_name, str(entry_id or ""), str(action)],
+                    payload_bytes,
+                )
+                key = f"github/audit/{org}/{ts.date().isoformat()}/{ext_id}.json"
 
-        if (newest_ts is None) or (ts > newest_ts):
-            newest_ts = ts
+                res = store_event_with_artifact(
+                    db,
+                    timestamp=ts,
+                    source="github",
+                    system=label or f"org:{org}",
+                    actor=actor,
+                    action=str(action),
+                    outcome="info",
+                    severity=3,
+                    summary=summary,
+                    raw_pointer={
+                        "github": {
+                            "org": org,
+                            "audit": True,
+                            "action": action,
+                            "id": entry_id,
+                        }
+                    },
+                    normalized_payload={"audit": e},
+                    external_id=ext_id,
+                    artifact_kind="github_audit",
+                    artifact_bytes=payload_bytes,
+                    artifact_content_type="application/json",
+                    artifact_key=key,
+                    captured_by="keen:github",
+                )
+                if not res.get("deduped"):
+                    created += 1
 
-    cur.last_ts = newest_ts or cur.last_ts
-    cur.updated_at = utc_now_naive()
-    db.add(cur)
-    db.commit()
+                if (newest_ts is None) or (ts > newest_ts):
+                    newest_ts = ts
+
+            # Keep each completed page, so a later failure loses nothing.
+            cur.last_ts = newest_ts or cur.last_ts
+            cur.updated_at = utc_now_naive()
+            db.add(cur)
+            db.commit()
+
+            url = (r.links.get("next") or {}).get("url") if entries else None
+            params = None
+            if url and not _within_api(url):
+                raise ValueError("GitHub returned a pagination link outside its API")
 
     return {
         "org": org,
         "created_events": created,
+        "entries_seen": seen,
+        "pages": pages,
+        "more": bool(url),
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
     }
 

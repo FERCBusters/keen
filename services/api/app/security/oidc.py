@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx2 as httpx
+from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oauth2.rfc6749.errors import OAuth2Error
 from authlib.oidc.core import CodeIDToken
@@ -23,6 +24,8 @@ from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import OidcLoginState, User, UserIdentity, UserSsoEmail
 from app.security.sso_http import client_options
+
+TOKEN_ENDPOINT_AUTH_METHODS = ("client_secret_basic", "client_secret_post")
 
 
 @dataclass(frozen=True)
@@ -117,7 +120,9 @@ def _oidc_provider() -> SsoProvider:
         auto_provision=bool(_setting("oidc_auto_provision", False)),
         auto_provision_role="",
         auto_link_existing=bool(_setting("oidc_auto_link_existing", True)),
-        token_endpoint_auth_method="client_secret_basic",
+        token_endpoint_auth_method=_first_nonempty(
+            _setting("oidc_token_endpoint_auth_method", ""), "client_secret_basic"
+        ).lower(),
         supports_id_token=True,
         id_token_leeway_seconds=int(_setting("oidc_id_token_leeway_seconds", 60) or 0),
     )
@@ -300,6 +305,15 @@ def _require_provider_config(provider_key: str | None) -> SsoProvider:
             detail=(
                 f"{provider.label} SSO is enabled but required settings are missing: "
                 f"{', '.join(missing)}"
+            ),
+        )
+    # Both supported methods authenticate KEEN with its client secret.
+    if provider.token_endpoint_auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"{provider.label} token endpoint authentication must be "
+                + " or ".join(TOKEN_ENDPOINT_AUTH_METHODS)
             ),
         )
     for setting_name, value in (
@@ -852,6 +866,9 @@ async def handle_callback(
             )
     except (
         JoseError,
+        # authlib's HTTP client reports a provider's token error responses as
+        # OAuthError; OAuth2Error covers its protocol-level errors.
+        OAuthError,
         OAuth2Error,
         httpx.HTTPError,
         TimeoutError,
