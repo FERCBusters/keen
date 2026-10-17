@@ -34,7 +34,7 @@ PASSWORD = "synthetic-password-for-tests"
 
 
 @pytest.fixture
-def keen(contract_db, monkeypatch):
+def keen(contract_db, tmp_path, monkeypatch):
     from app import main
     from app.db.session import get_db
     from sqlalchemy.orm import sessionmaker
@@ -62,12 +62,23 @@ def keen(contract_db, monkeypatch):
 
     monkeypatch.setattr(main, "SessionLocal", factory)
     main.app.dependency_overrides[get_db] = database
+    # Configuration readers open their own short session; point them at the
+    # same test database so assembled request paths see the same data.
+    from app.core import managed_configuration, source_meta
+
+    monkeypatch.setattr(managed_configuration, "SessionLocal", factory)
     monkeypatch.setattr(settings, "public_base_url", BASE)
     monkeypatch.setattr(settings, "trust_remote_user", False)
     monkeypatch.setattr(settings, "mfa_policy", "optional")
     monkeypatch.setattr(settings, "local_auth_enabled", True)
     monkeypatch.setattr(settings, "hosted_mode", False)
     monkeypatch.setattr(settings, "demo_mode", False)
+    # Saving an ISMS entity or risk with framework links records an automatic
+    # diary entry; give its artifacts a writable local store and stub the
+    # display metadata that reads plugin configuration files.
+    monkeypatch.setattr(settings, "artifact_storage_backend", "local")
+    monkeypatch.setattr(settings, "artifact_local_dir", str(tmp_path))
+    monkeypatch.setattr(source_meta, "_configured_source_meta", lambda bucket: {})
 
     class Keen:
         db = contract_db

@@ -39,6 +39,10 @@ from app.services.entity_changelog import (
     risk_changelog_state,
 )
 from app.services.errors import DomainError
+from app.services.isms.link_diary import (
+    remove_entity_link_diary,
+    sync_entity_link_diary,
+)
 from app.services.risk_mitigator import analyse_risk_mitigation
 
 RISK_READ_PERMISSION = "risk.read"
@@ -582,7 +586,12 @@ def _dedupe_controls(values: list[str] | None) -> list[str]:
 
 
 def _replace_control_links(
-    db: Session, risk: Risk, *, framework: str, control_values: list[str] | None
+    db: Session,
+    risk: Risk,
+    *,
+    framework: str,
+    control_values: list[str] | None,
+    user=None,
 ) -> list[ControlItem]:
     vals = _dedupe_controls(control_values)
     controls = [_control_or_404(db, framework, v) for v in vals]
@@ -600,6 +609,9 @@ def _replace_control_links(
                 created_at=now,
             )
         )
+    if user is not None:
+        db.flush()
+        sync_entity_link_diary(db, "risk", risk.id, user)
     return controls
 
 
@@ -1522,6 +1534,8 @@ def create_risk(
             db, risk, framework="KEEN-AF:1.0", control_values=template_refs
         )
     db.flush()
+    # One entry records every framework's links, including template links.
+    sync_entity_link_diary(db, "risk", risk.id, user)
     record_entity_changelog(
         db,
         entity_type="risk",
@@ -1574,7 +1588,9 @@ def update_risk(*, risk_id: str, payload: RiskUpsertPayload, user, db: Session):
     before_risk = risk_changelog_state(db, risk.id, framework=fw)
     _apply_payload(db, risk, payload, is_create=False)
     if payload.controls is not None:
-        _replace_control_links(db, risk, framework=fw, control_values=payload.controls)
+        _replace_control_links(
+            db, risk, framework=fw, control_values=payload.controls, user=user
+        )
     db.add(risk)
     db.flush()
     record_entity_changelog(
@@ -1608,6 +1624,10 @@ def delete_risk(*, risk_id: str, user, db: Session):
         request_path=f"/v1/risks/{risk_id}",
     )
     db.delete(risk)
+    db.flush()
+    # Risk control links cascade with the row; withdraw the automatic diary
+    # entry that recorded them.
+    remove_entity_link_diary(db, "risk", risk.id)
     db.commit()
     return {"ok": True}
 
@@ -1642,7 +1662,7 @@ def update_risk_controls(
     risk = _risk_or_404(db, risk_id)
     before_risk = risk_changelog_state(db, risk.id, framework=fw)
     controls = _replace_control_links(
-        db, risk, framework=fw, control_values=payload.controls
+        db, risk, framework=fw, control_values=payload.controls, user=user
     )
     risk.updated_at = _utcnow()
     db.add(risk)

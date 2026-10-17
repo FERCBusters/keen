@@ -1,5 +1,6 @@
 """Test-only database setup; production metadata is never modified."""
 
+from sqlalchemy import BigInteger
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.compiler import compiles
 
@@ -14,6 +15,13 @@ def sqlite_uuid(_type, _compiler, **_kw):
     # SQLite gives a column named UUID numeric affinity, which can turn valid
     # hex identifiers into lossy floating-point values. Match Uuid emulation.
     return "CHAR(32)"
+
+
+@compiles(BigInteger, "sqlite")
+def sqlite_bigint(_type, _compiler, **_kw):
+    # SQLite integers are already 64-bit; only an INTEGER PRIMARY KEY receives
+    # automatic row IDs, which PostgreSQL bigserial keys rely on.
+    return "INTEGER"
 
 
 from sqlalchemy import DefaultClause, MetaData, create_engine, event, text

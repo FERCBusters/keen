@@ -26,6 +26,7 @@ from app.services.entity_changelog import (
     risk_changelog_state,
 )
 from app.services.errors import DomainError
+from app.services.isms.link_diary import sync_entity_link_diary
 from app.services.risks import (
     RiskUpsertPayload,
     _apply_payload,
@@ -344,6 +345,7 @@ def import_register(
         # The file is saved as one transaction, so every imported risk and its
         # creation record carry the same moment: the time of the import.
         imported_at = utc_now_naive()
+        linked_risk_ids: list[uuid.UUID] = []
         for lineno, entry in enumerate(entries, start=2):
             if None in entry:
                 raise ValueError(f"Row {lineno}: extra columns")
@@ -419,6 +421,7 @@ def import_register(
                 _replace_control_links(
                     db, row, framework=fw, control_values=payload.controls
                 )
+                linked_risk_ids.append(row.id)
             db.flush()  # the recorded state reads the new control links
             record_entity_changelog(
                 db,
@@ -432,13 +435,17 @@ def import_register(
                 request_path="/v1/risks/register/import.csv",
                 changed_at=imported_at,
             )
-        db.commit()
     except (ValueError, DomainError, TypeError, ValidationError) as exc:
         db.rollback()
         raise DomainError(
             400,
             f"Import failed at row {locals().get('lineno', 'header')}: {getattr(exc, 'detail', str(exc))}",
         ) from exc
+    # Diary entries store artifacts, so they are written only once every row
+    # has been accepted; a rejected file leaves nothing in artifact storage.
+    for risk_id in linked_risk_ids:
+        sync_entity_link_diary(db, "risk", risk_id, user)
+    db.commit()
     return {"created": len(entries)}
 
 

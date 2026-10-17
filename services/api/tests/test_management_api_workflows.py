@@ -13,9 +13,13 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def api(contract_db, monkeypatch):
+def api(contract_db, monkeypatch, tmp_path):
     db = contract_db
     monkeypatch.setattr(settings, "aggregate_cache_ttl_seconds", 0)
+    # Risk and ISMS framework links record automatic diary entries with
+    # artifacts; give the local artifact store a writable directory.
+    monkeypatch.setattr(settings, "artifact_storage_backend", "local")
+    monkeypatch.setattr(settings, "artifact_local_dir", str(tmp_path))
     admin = User(
         username="manager", password_hash="unused", role="admin", is_active=True
     )
@@ -562,6 +566,7 @@ def test_org_parent_updates_reject_cycles_and_unknown_parents(api):
 
 def test_audit_report_download_sanitises_stored_filename(api, monkeypatch):
     import io
+
     from app.db.models import Audit
 
     row = Audit(

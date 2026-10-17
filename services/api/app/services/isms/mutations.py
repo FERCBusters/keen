@@ -35,6 +35,7 @@ from app.services.errors import DomainError
 
 from .common import _clause_by_ref_or_id, _clean_text, _control_by_ref_or_id, _utcnow
 from .constants import MEETING_LINK_TYPES
+from .link_diary import remove_entity_link_diary, sync_entity_link_diary
 from .schemas import AssetPayload, IsmsLinksPayload, LicensePayload, MeetingLinkPayload
 
 
@@ -276,6 +277,10 @@ def _apply_links(
         db, entity_type, entity_id, framework, payload.controls, user
     )
     _replace_clause_links(db, entity_type, entity_id, framework, payload.clauses, user)
+    if payload.controls is not None or payload.clauses is not None:
+        # The automatic diary entry mirrors the live link state, so revising an
+        # entity removes withdrawn controls from its recorded evidence.
+        sync_entity_link_diary(db, entity_type, entity_id, user)
 
 
 def _apply_effectiveness_links(
@@ -298,21 +303,24 @@ def _apply_effectiveness_links(
         IsmsEntityClauseLink.framework_slug == framework,
     ).delete(synchronize_session=False)
     db.flush()
+    if payload.controls is not None:
+        sync_entity_link_diary(db, "effectiveness_measure", entity_id, user)
 
 
 def _delete_entity_links(
     db: Session, entity_type: str, entity_id: uuid.UUID, framework: str
 ) -> None:
+    # Deleting the entity removes its links in every framework, not just the
+    # framework view the delete was made from.
     db.query(IsmsEntityControlLink).filter(
         IsmsEntityControlLink.entity_type == entity_type,
         IsmsEntityControlLink.entity_id == entity_id,
-        IsmsEntityControlLink.framework_slug == framework,
     ).delete(synchronize_session=False)
     db.query(IsmsEntityClauseLink).filter(
         IsmsEntityClauseLink.entity_type == entity_type,
         IsmsEntityClauseLink.entity_id == entity_id,
-        IsmsEntityClauseLink.framework_slug == framework,
     ).delete(synchronize_session=False)
+    remove_entity_link_diary(db, entity_type, entity_id)
 
 
 def _replace_objective_resources(

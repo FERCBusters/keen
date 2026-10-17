@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -146,35 +146,40 @@ def apply_rules(db: Session, ev: Event) -> int:
     return created
 
 
-def store_event_with_artifact(
-    db: Session,
+class NormalisedFields(NamedTuple):
+    """Event fields after redaction, optional masking and storage bounds."""
+
+    system: Optional[str]
+    actor: Optional[str]
+    action: Optional[str]
+    outcome: Optional[str]
+    summary: str
+    external_id: Optional[str]
+    raw_pointer: dict[str, Any]
+    normalized_payload: dict[str, Any]
+    artifact_bytes: bytes
+    redaction_status: str
+
+
+def normalise_ingested_fields(
     *,
-    timestamp: datetime,
-    source: str,
     system: Optional[str],
     actor: Optional[str],
     action: Optional[str],
     outcome: Optional[str],
-    severity: Optional[int],
-    summary: str,
+    summary: str | None,
+    external_id: Optional[str] = None,
     raw_pointer: dict[str, Any],
     normalized_payload: dict[str, Any],
-    external_id: str,
-    artifact_kind: str,
     artifact_bytes: bytes,
     artifact_content_type: str,
-    artifact_key: str,
-    captured_by: str,
-    commit: bool = True,
-) -> dict[str, Any]:
-    from app.services.ingestion_pause import require_purge_receiving
+) -> NormalisedFields:
+    """Redact, optionally mask and make storable every persisted event field.
 
-    require_purge_receiving(db)
-    from app.ingest.connections import artifact_key as scoped_artifact_key
-    from app.ingest.connections import identity, namespace
+    Shared by event ingestion and in-place updates of automatic diary entries,
+    so both apply the same secret redaction and event-data masking.
+    """
 
-    external_id = namespace(external_id)
-    artifact_key = scoped_artifact_key(artifact_key)
     # --- hardening: redact secrets BEFORE persisting anything ---
     system, actor, action, outcome, summary = (
         redact_str(value) for value in (system, actor, action, outcome, summary)
@@ -219,6 +224,73 @@ def store_event_with_artifact(
         system = system[: Event.__table__.c.system.type.length]
     if actor is not None:
         actor = actor[: Event.__table__.c.actor.type.length]
+    return NormalisedFields(
+        system,
+        actor,
+        action,
+        outcome,
+        summary,
+        external_id,
+        raw_pointer,
+        normalized_payload,
+        artifact_bytes,
+        redaction_status,
+    )
+
+
+def store_event_with_artifact(
+    db: Session,
+    *,
+    timestamp: datetime,
+    source: str,
+    system: Optional[str],
+    actor: Optional[str],
+    action: Optional[str],
+    outcome: Optional[str],
+    severity: Optional[int],
+    summary: str,
+    raw_pointer: dict[str, Any],
+    normalized_payload: dict[str, Any],
+    external_id: str,
+    artifact_kind: str,
+    artifact_bytes: bytes,
+    artifact_content_type: str,
+    artifact_key: str,
+    captured_by: str,
+    commit: bool = True,
+) -> dict[str, Any]:
+    from app.services.ingestion_pause import require_purge_receiving
+
+    require_purge_receiving(db)
+    from app.ingest.connections import artifact_key as scoped_artifact_key
+    from app.ingest.connections import identity, namespace
+
+    external_id = namespace(external_id)
+    artifact_key = scoped_artifact_key(artifact_key)
+
+    (
+        system,
+        actor,
+        action,
+        outcome,
+        summary,
+        external_id,
+        raw_pointer,
+        normalized_payload,
+        artifact_bytes,
+        redaction_status,
+    ) = normalise_ingested_fields(
+        system=system,
+        actor=actor,
+        action=action,
+        outcome=outcome,
+        summary=summary,
+        external_id=external_id,
+        raw_pointer=raw_pointer,
+        normalized_payload=normalized_payload,
+        artifact_bytes=artifact_bytes,
+        artifact_content_type=artifact_content_type,
+    )
 
     # Fast de-dupe check (avoids triggering a rollback that would also undo
     # ingestion cursor updates that may be pending in the same session).

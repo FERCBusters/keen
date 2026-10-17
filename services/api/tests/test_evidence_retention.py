@@ -357,6 +357,23 @@ class RetentionDatabaseTests(unittest.TestCase):
         r.database_batch()
         self.assertEqual(self.left(), set())
 
+    def test_diary_entries_survive_retention(self):
+        self.event(400)
+        diary_event = self.insert(
+            models.Event,
+            timestamp=r.now() - timedelta(days=400),
+            source="diary",
+            summary="diary",
+            external_id=uuid.uuid4().hex,
+        )
+        with self.session() as db:
+            # The ordinary event is eligible; the diary entry is protected in
+            # every retention mode, including a blanket purge.
+            self.assertEqual(r.preview(db, "age", 30)["eligible_events"], 1)
+        self.job(mode="all")
+        r.database_batch()
+        self.assertEqual(self.left(), {str(diary_event)})
+
     def test_job_snapshots_overrides(self):
         event = self.event(90)
         self.override("source", "test", "disabled")
@@ -366,8 +383,8 @@ class RetentionDatabaseTests(unittest.TestCase):
         self.assertEqual(self.left(), {str(event)})
 
     def test_save_cancels_previous_policy_job_and_rejects_stale_editor(self):
-        from app.services.retention_management import SettingsPayload, set_policy
         from app.services.errors import DomainError
+        from app.services.retention_management import SettingsPayload, set_policy
 
         self.override("source", "test", "disabled")
         self.job("age", 30)

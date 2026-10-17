@@ -18,9 +18,10 @@ from app.storage.s3 import delete_stored_object
 LOCK_ID = 836210083
 BATCH_SIZE = 200
 
-# Additional references protect lineage and question attachments belonging to
-# other records. They can become eligible after those records are removed.
-UNPROTECTED = """
+# Audit holds keep sampled events. Additional references keep lineage and
+# question attachments belonging to other records; those events can become
+# eligible after the other records are removed.
+UNREFERENCED = """
 NOT EXISTS (SELECT 1 FROM audit_event_retention_holds h WHERE h.event_id=e.id)
 AND NOT EXISTS (
     SELECT 1 FROM artifacts a JOIN artifacts child ON child.parent_artifact_id=a.id
@@ -32,6 +33,25 @@ AND NOT EXISTS (
     JOIN event_question_threads qt ON qt.id=qp.thread_id
     WHERE a.event_id=e.id AND qt.event_id IS DISTINCT FROM e.id)
 """
+# Diary entries are persistent records of ISMS and risk associations and
+# manual observations, so no retention mode removes them.
+UNPROTECTED = "\ne.source <> 'diary'\nAND " + UNREFERENCED.lstrip("\n")
+
+
+def is_referenced(db, event_id) -> bool:
+    """Return whether an audit hold or another record still references an event.
+
+    Uses the retention predicate's own reference checks, so callers deleting an
+    event outside retention keep the same audit and lineage guarantees.
+    """
+    from sqlalchemy import bindparam
+
+    from app.db.models import Event
+
+    statement = text(
+        f"SELECT 1 FROM events e WHERE e.id = :event_id AND NOT ({UNREFERENCED})"
+    ).bindparams(bindparam("event_id", type_=Event.__table__.c.id.type))
+    return db.execute(statement, {"event_id": event_id}).first() is not None
 
 
 def now():

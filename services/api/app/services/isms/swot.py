@@ -23,6 +23,7 @@ from app.services.errors import DomainError
 
 from .access import _can_manage_isms, _can_read_isms
 from .common import _by_id_or_404, _clean_framework, _record, _utcnow
+from .link_diary import remove_entity_link_diary
 from .mutations import _apply_links
 from .serializers import _attach_links
 
@@ -444,6 +445,8 @@ def delete_item(*, item_id, expected_version, user, db, context):
             synchronize_session=False
         )
     db.query(IsmsSwotLink).filter_by(swot_id=row.id).delete(synchronize_session=False)
+    # Withdraw the automatic diary entry that recorded the deleted item's links.
+    remove_entity_link_diary(db, "swot", row.id)
     _record(db, "swot", row, "deleted", summary(row), None, user, context)
     db.delete(row)
     db.commit()

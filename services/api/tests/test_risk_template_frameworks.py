@@ -6,7 +6,9 @@ import pytest
 from app.api.routes import risk_register, risks
 from app.core.config import settings
 from app.db.models import (
+    Artifact,
     ControlItem,
+    Event,
     Framework,
     ManagedConfiguration,
     RiskAsset,
@@ -37,9 +39,12 @@ def db(monkeypatch):
     "enabled,environment", [(True, ""), (False, ""), (True, "CUSTOM")]
 )
 def test_library_stays_available_but_implicit_links_require_enabled_framework(
-    db, monkeypatch, enabled, environment
+    db, monkeypatch, tmp_path, enabled, environment
 ):
     monkeypatch.setattr(settings, "enabled_frameworks", environment)
+    # Risk control links record an automatic diary entry with artifacts.
+    monkeypatch.setattr(settings, "artifact_storage_backend", "local")
+    monkeypatch.setattr(settings, "artifact_local_dir", str(tmp_path))
     user = User(username="admin", password_hash="unused", role="admin")
     category = RiskCategory(name="IT")
     template = RiskLibraryEntry(
@@ -112,3 +117,17 @@ def test_library_stays_available_but_implicit_links_require_enabled_framework(
     if enabled and not environment:
         expected.add(("KEEN-AF:1.0", "NET-1"))
     assert links == expected
+    # One automatic diary entry records every framework's links at creation.
+    entry = (
+        db.query(Event)
+        .filter_by(source="diary", external_id=f"isms-link:risk:{saved['id']}")
+        .one()
+    )
+    assert set(entry.normalized_payload["details"]["linked"]) == {
+        framework for framework, _ref in expected
+    }
+    assert (
+        not db.query(Artifact)
+        .filter_by(event_id=entry.id, kind="diary_entry_edit")
+        .count()
+    )
