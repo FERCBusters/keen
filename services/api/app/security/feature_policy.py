@@ -70,6 +70,8 @@ def requirements(route, params=None, query=None):
         needed.add("mitigator")
     if owner == "controls" and "evidence" in parts:
         needed.add("evidence")
+    if owner == "questions" and "events" in parts:
+        needed.add("evidence")
     if owner == "stats" and "charts" in parts:
         needed.add("visualisations")
     if owner == "events" and any(p in parts for p in ("incident", "incidents")):

@@ -36,6 +36,9 @@ from app.storage.filenames import safe_download_ext
 from app.storage.s3 import put_bytes
 
 QUESTION_CREATE_PERMISSION = "question.create"
+# Question routes accept exactly these names, so the type in a request path is
+# always the one the route's feature policy checks.
+QUESTION_TARGET_TYPES = frozenset({"event", "risk", "pestle_item", "isms_swot"})
 _NOTIFICATION_RECHECK_SECONDS = 30
 MAX_ATTACHMENT_BYTES = 40 * 1024 * 1024
 
@@ -70,6 +73,11 @@ def _count_unread_replies_for_user(db: Session, user_id):
 
 
 def _ensure_event_visible(db: Session, user: User, event_id: uuid.UUID) -> Event:
+    from app.services.features import require_entity
+
+    # Thread replies, deletion and the author's list reach events by thread,
+    # outside the event routes' feature policy.
+    require_entity(db, "event")
     if not is_effective_admin(db, user) and not has_permission(db, user, "events.read"):
         raise DomainError(status_code=403, detail="events.read permission required")
     ev = db.query(Event).filter(Event.id == event_id).first()
@@ -131,13 +139,14 @@ def _pestle_question_target(
 
 
 def _ensure_question_target_visible(
-    db: Session, user: User, entity_type: str, entity_id: uuid.UUID
+    db: Session, user: User, target_type: str, entity_id: uuid.UUID
 ) -> tuple[str, str, str, uuid.UUID | None]:
     from app.services.features import require_entity
 
-    typ = (entity_type or "").strip().lower().replace("-", "_")
-    require_entity(db, typ)
-    if typ == "isms_swot":
+    if target_type not in QUESTION_TARGET_TYPES:
+        raise DomainError(status_code=400, detail="Unsupported question target type")
+    require_entity(db, target_type)
+    if target_type == "isms_swot":
         from app.services.isms.swot import require_access
 
         require_access(db, user)
@@ -145,7 +154,7 @@ def _ensure_question_target_visible(
         if not row:
             raise DomainError(404, "SWOT item not found")
         return (row.kind, row.title, f"/isms-swot.html?id={row.id}&tab=questions", None)
-    if typ in {"event", "evidence"}:
+    if target_type == "event":
         ev = _ensure_event_visible(db, user, entity_id)
         return (
             (ev.source or "evidence")[:128],
@@ -153,13 +162,11 @@ def _ensure_question_target_visible(
             f"/event.html?id={ev.id}#questions",
             ev.id,
         )
-    if typ in {"risk", "cia_risk", "cia_triad_risk"}:
+    if target_type == "risk":
         ref, title, url = _risk_question_target(db, user, entity_id)
         return (ref, title, url, None)
-    if typ in {"pestle", "pestle_item", "pestle_risk"}:
-        ref, title, url = _pestle_question_target(db, user, entity_id)
-        return (ref, title, url, None)
-    raise DomainError(status_code=400, detail="Unsupported question target type")
+    ref, title, url = _pestle_question_target(db, user, entity_id)
+    return (ref, title, url, None)
 
 
 def _question_target_label(thread: EventQuestionThread) -> str:
@@ -170,7 +177,7 @@ def _question_target_label(thread: EventQuestionThread) -> str:
         prefix = "SWOT item"
     elif typ == "risk":
         prefix = "CIA Triad risk"
-    elif typ in {"pestle", "pestle_item"}:
+    elif typ == "pestle_item":
         prefix = "PESTLE(E) item"
     else:
         prefix = "Evidence"
@@ -191,7 +198,7 @@ def _question_target_url(thread: EventQuestionThread) -> str:
         return f"/isms-swot.html?id={target_id}&tab=questions&thread={tid}"
     if typ == "risk" and target_id:
         return f"/risk.html?id={target_id}&thread={tid}#questions"
-    if typ in {"pestle", "pestle_item"} and target_id:
+    if typ == "pestle_item" and target_id:
         return f"/pestle_item.html?id={target_id}&tab=questions&thread={tid}#questions"
     if target_id:
         return f"/event.html?id={target_id}&thread={tid}#questions"
@@ -201,7 +208,7 @@ def _question_target_url(thread: EventQuestionThread) -> str:
 def _ensure_thread_visible_for_user(
     db: Session, user: User, thread: EventQuestionThread
 ) -> None:
-    """Ensure non-admin question deletion cannot target hidden/private entities."""
+    """Require the thread's target to be visible; a thread without one is refused."""
     target_type = (thread.target_type or "event").strip().lower()
     if target_type == "event":
         if not thread.event_id:
@@ -735,13 +742,7 @@ async def reply_to_question(
     if not thread:
         raise DomainError(status_code=404, detail="Thread not found")
 
-    target_type = (thread.target_type or "event").strip().lower()
-    if target_type == "event":
-        if not thread.event_id:
-            raise DomainError(status_code=404, detail="Event not found")
-        _ensure_event_visible(db, user, thread.event_id)
-    elif thread.target_id:
-        _ensure_question_target_visible(db, user, target_type, thread.target_id)
+    _ensure_thread_visible_for_user(db, user, thread)
 
     is_admin = is_effective_admin(db, user)
     is_author = user.id == thread.created_by_user_id
@@ -996,16 +997,8 @@ def list_entity_questions(
     eid = _try_uuid(entity_id)
     if not eid:
         raise DomainError(status_code=400, detail="Invalid entity id")
-    ref, title, url, event_id = _ensure_question_target_visible(
-        db, user, entity_type, eid
-    )
-    target_type = (entity_type or "").strip().lower().replace("-", "_")
-    if target_type in {"evidence"}:
-        target_type = "event"
-    if target_type in {"cia_risk", "cia_triad_risk"}:
-        target_type = "risk"
-    if target_type in {"pestle", "pestle_risk"}:
-        target_type = "pestle_item"
+    _ensure_question_target_visible(db, user, entity_type, eid)
+    target_type = entity_type
 
     threads = (
         db.query(EventQuestionThread)
@@ -1059,13 +1052,7 @@ async def create_entity_question(
     ref, title, url, event_id = _ensure_question_target_visible(
         db, user, entity_type, eid
     )
-    target_type = (entity_type or "").strip().lower().replace("-", "_")
-    if target_type in {"evidence"}:
-        target_type = "event"
-    if target_type in {"cia_risk", "cia_triad_risk"}:
-        target_type = "risk"
-    if target_type in {"pestle", "pestle_risk"}:
-        target_type = "pestle_item"
+    target_type = entity_type
 
     if target_type == "event":
         return await create_event_question(
@@ -1128,13 +1115,7 @@ async def mark_entity_questions_seen(
     if not eid:
         raise DomainError(status_code=400, detail="Invalid entity id")
     _ensure_question_target_visible(db, user, entity_type, eid)
-    target_type = (entity_type or "").strip().lower().replace("-", "_")
-    if target_type in {"evidence"}:
-        target_type = "event"
-    if target_type in {"cia_risk", "cia_triad_risk"}:
-        target_type = "risk"
-    if target_type in {"pestle", "pestle_risk"}:
-        target_type = "pestle_item"
+    target_type = entity_type
 
     now = _utcnow()
     q = (

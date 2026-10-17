@@ -6,6 +6,7 @@ export PATH="/app/.venv/bin:$PATH"
 export PYTHONPATH="${PYTHONPATH:-/app}"
 
 : "${KEEN_DATABASE_URL:?KEEN_DATABASE_URL is required}"
+: "${KEEN_PUBLIC_BASE_URL:?KEEN_PUBLIC_BASE_URL is required: set it to the browser-facing origin, for example https://keen.example.com}"
 
 echo "[keen] waiting for database..."
 python - <<'PY'

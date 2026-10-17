@@ -71,6 +71,9 @@ KEEN_DATABASE_URL=sqlite:// KEEN_BOOTSTRAP_ADMIN_USERNAME=test \
   poetry run pytest tests -q --cov=app --cov-branch
 ```
 
+KEEN requires `KEEN_PUBLIC_BASE_URL` at start-up; the suite sets it to the
+test client's origin, `http://testserver`, unless the environment provides one.
+
 This intentionally skips PostgreSQL-only tests and is not the release gate.
 The new database contracts use SQLite locally; `tests.sh` sets
 `KEEN_CONTRACT_TEST_DATABASE_URL` so CI runs them against the migrated release

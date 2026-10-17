@@ -22,8 +22,8 @@ from app.services.audits.access import (
 from app.services.audits.references import control_out
 from app.services.audits.samples import (
     audit_sample_entity_reference,
+    clean_audit_sample_entity_type,
     clean_optional_entity_id,
-    normalise_audit_sample_entity_type,
     short_text,
 )
 from app.services.audits.schemas import (
@@ -242,7 +242,7 @@ def add_audit_evidence(
     features.require("sampling")
     if payload.event_id:
         features.require("event_sampling")
-    entity_type = normalise_audit_sample_entity_type(payload.entity_type)
+    entity_type = clean_audit_sample_entity_type(payload.entity_type)
     if not entity_type and not has_permission(db, user, "events.read"):
         raise DomainError(403, "events.read permission required")
     a = editable_audit_or_404(db, user, audit_id)

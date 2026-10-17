@@ -37,41 +37,6 @@ AUDIT_SAMPLE_ENTITY_LABELS = {
 }
 
 
-AUDIT_SAMPLE_ENTITY_ALIASES = {
-    "risk": "risk",
-    "cia_risk": "risk",
-    "pestle": "pestle_item",
-    "pestle_item": "pestle_item",
-    "interested_party": "interested_party",
-    "interested-party": "interested_party",
-    "isms_swot": "isms_swot",
-    "objective": "isms_objective",
-    "isms_objective": "isms_objective",
-    "document": "isms_document",
-    "isms_document": "isms_document",
-    "bookstack_section": "bookstack_section",
-    "org": "isms_org_node",
-    "org_node": "isms_org_node",
-    "isms_org_node": "isms_org_node",
-    "asset": "isms_asset",
-    "isms_asset": "isms_asset",
-    "access": "isms_access_control_matrix",
-    "access_control_matrix": "isms_access_control_matrix",
-    "isms_access_control_matrix": "isms_access_control_matrix",
-    "application_configuration": "isms_application_configuration",
-    "app_config": "isms_application_configuration",
-    "isms_application_configuration": "isms_application_configuration",
-    "meeting": "isms_meeting",
-    "isms_meeting": "isms_meeting",
-    "effectiveness": "isms_effectiveness_measure",
-    "effectiveness_measure": "isms_effectiveness_measure",
-    "isms_effectiveness_measure": "isms_effectiveness_measure",
-    "metric": "isms_effectiveness_metric",
-    "effectiveness_metric": "isms_effectiveness_metric",
-    "isms_effectiveness_metric": "isms_effectiveness_metric",
-}
-
-
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 

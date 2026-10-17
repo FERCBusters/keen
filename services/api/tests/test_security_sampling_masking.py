@@ -200,18 +200,18 @@ def test_sampling_cannot_grant_itself_bookstack_snapshot_read(sampling_client):
 @pytest.mark.parametrize(
     "entity_type",
     [
-        "cia_risk",
-        "pestle",
-        "interested-party",
-        "objective",
-        "document",
-        "org",
-        "asset",
-        "access",
-        "app_config",
-        "meeting",
-        "effectiveness",
-        "metric",
+        "risk",
+        "pestle_item",
+        "interested_party",
+        "isms_objective",
+        "isms_document",
+        "isms_org_node",
+        "isms_asset",
+        "isms_access_control_matrix",
+        "isms_application_configuration",
+        "isms_meeting",
+        "isms_effectiveness_measure",
+        "isms_effectiveness_metric",
     ],
 )
 def test_sampling_other_sources_requires_their_read_permission(
@@ -226,6 +226,29 @@ def test_sampling_other_sources_requires_their_read_permission(
     assert response.status_code == 403, response.text
     with factory() as db:
         assert db.query(AuditEvidence).count() == 0
+
+
+@pytest.mark.parametrize("entity_type", ["document", "Isms_Document", "isms-document"])
+def test_sampling_accepts_only_the_stored_entity_names(sampling_client, entity_type):
+    client, factory, ids = sampling_client
+    grant(factory, ids.user, "isms.read")
+    url = f"/v1/audits/{ids.audit}/evidence"
+
+    refused = client.post(
+        url, json={"entity_type": entity_type, "entity_id": str(ids.document)}
+    )
+    assert refused.status_code == 400, refused.text
+    assert refused.json()["detail"] == "Unsupported sampled entity type"
+    with factory() as db:
+        assert db.query(AuditEvidence).count() == 0
+
+    stored = client.post(
+        url, json={"entity_type": "isms_document", "entity_id": str(ids.document)}
+    )
+    assert stored.status_code == 200, stored.text
+    with factory() as db:
+        (row,) = db.query(AuditEvidence).all()
+        assert (row.entity_type, row.entity_id) == ("isms_document", ids.document)
 
 
 @pytest.mark.parametrize("mask", ["false", "true"])

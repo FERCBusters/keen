@@ -50,7 +50,10 @@ from app.db.models import (
 )
 
 # Imported fixture: the assembled application with an in-memory session store.
-from tests.test_assembled_authority_regressions import keen  # noqa: F401
+from tests.test_assembled_authority_regressions import (
+    keen,  # noqa: F401
+    unsafe,
+)
 
 HOSTILE = '<img src=x onerror="alert(1)">'
 
@@ -365,7 +368,7 @@ def test_reverse_lookups_list_audits_that_sampled_an_item(audits):
     no_events = app.client(app.user("audits.read"))
     _get(no_events, f"/v1/audits/by-event/{event.id}", expect=403)
 
-    by_entity = _get(reader, f"/v1/audits/by-entity/cia_risk/{risk.id}")
+    by_entity = _get(reader, f"/v1/audits/by-entity/risk/{risk.id}")
     assert by_entity["entity_type"] == "risk"
     assert [item["evidence"]["title"] for item in by_entity["items"]] == ["Risk sample"]
     assert _get(reader, f"/v1/audits/by-entity/risk/{uuid.uuid4()}")["items"] == []
@@ -376,6 +379,63 @@ def test_reverse_lookups_list_audits_that_sampled_an_item(audits):
     (evidence,) = detail["evidence"]
     assert evidence["event"]["id"] == str(event.id)
     assert [c["ref"] for c in evidence["controls"]] == ["A.5.1"]
+
+
+def test_reverse_lookups_follow_the_sampled_records_feature(audits):
+    db = audits.db
+    risk = _risk(db)
+    db.add(
+        AuditEvidence(
+            audit_id=audits.open_audit.id,
+            entity_type="risk",
+            entity_id=risk.id,
+            title="Risk sample",
+        )
+    )
+    db.commit()
+    app = audits.keen
+    reader = app.client(app.user("audits.read"))
+    path = f"/v1/audits/by-entity/risk/{risk.id}"
+    assert [i["evidence"]["title"] for i in _get(reader, path)["items"]] == [
+        "Risk sample"
+    ]
+
+    admin = app.client(app.user(role="admin"))
+    switched = admin.put(
+        "/v1/admin/features",
+        json={"version": 0, "changes": {"risk_cia": False}},
+        headers=unsafe(admin),
+    )
+    assert switched.status_code == 200, switched.text
+
+    off = _get(reader, path, expect=404)
+    assert off["detail"] == "This feature is disabled by an administrator."
+    assert _get(reader, f"/v1/audits/by-entity/RISK/{risk.id}", expect=404) == off
+    # A former short name is refused rather than looked up past the switch.
+    refused = _get(reader, f"/v1/audits/by-entity/cia_risk/{risk.id}", expect=400)
+    assert refused["detail"] == "Unsupported sampled entity type"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "cia_risk",
+        "pestle",
+        "org",
+        "access",
+        "app_config",
+        "effectiveness",
+        "metric",
+        "interested-party",
+        "Risk",
+    ],
+)
+def test_reverse_lookups_accept_only_the_stored_entity_names(audits, name):
+    reader = audits.keen.client(audits.keen.user("audits.read"))
+
+    refused = _get(reader, f"/v1/audits/by-entity/{name}/{uuid.uuid4()}", expect=400)
+
+    assert refused["detail"] == "Unsupported sampled entity type"
 
 
 def _risk(db):

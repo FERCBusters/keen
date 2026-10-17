@@ -213,7 +213,7 @@ def create_event_incident(
         payload=payload,
         context=change_context(request),
         db=db,
-        event_url=build_event_url(request, event_id),
+        event_url=build_event_url(event_id),
     )
 
 

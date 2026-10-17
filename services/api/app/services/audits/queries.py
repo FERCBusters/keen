@@ -30,8 +30,8 @@ from app.services.audits.access import (
 )
 from app.services.audits.references import clause_out, control_out, document_out
 from app.services.audits.samples import (
+    clean_audit_sample_entity_type,
     clean_optional_entity_id,
-    normalise_audit_sample_entity_type,
 )
 from app.services.audits.scope import selectable_clause_descendants
 from app.services.audits.serializers import (
@@ -405,7 +405,7 @@ def list_audits_for_event(*, event_id: str, db: Session, user: User):
 def list_audits_for_entity(
     *, entity_type: str, entity_id: str, db: Session, user: User
 ):
-    sampled_type = normalise_audit_sample_entity_type(entity_type)
+    sampled_type = clean_audit_sample_entity_type(entity_type)
     sampled_id = clean_optional_entity_id(entity_id)
     if not sampled_type or not sampled_id:
         raise DomainError(status_code=400, detail="entity_id must be a UUID")

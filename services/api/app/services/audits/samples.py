@@ -32,7 +32,6 @@ from app.db.models import (
 )
 from app.services.audits.references import control_out
 from app.services.audits.validation import (
-    AUDIT_SAMPLE_ENTITY_ALIASES,
     AUDIT_SAMPLE_ENTITY_LABELS,
     try_uuid,
 )
@@ -46,14 +45,14 @@ def short_text(raw: str | None, limit: int = 160) -> str:
     return text[: max(0, limit - 1)].rstrip() + "…"
 
 
-def normalise_audit_sample_entity_type(raw: str | None) -> str | None:
-    value = (raw or "").strip().lower().replace("-", "_")
+def clean_audit_sample_entity_type(raw: str | None) -> str | None:
+    """Accept exactly the stored names, which the route feature policy checks."""
+    value = (raw or "").strip()
     if not value:
         return None
-    entity_type = AUDIT_SAMPLE_ENTITY_ALIASES.get(value)
-    if not entity_type:
+    if value not in AUDIT_SAMPLE_ENTITY_LABELS:
         raise DomainError(status_code=400, detail="Unsupported sampled entity type")
-    return entity_type
+    return value
 
 
 def clean_optional_entity_id(raw: uuid.UUID | str | None) -> uuid.UUID | None:
@@ -208,7 +207,7 @@ def audit_sample_entity_reference(
             status_code=400,
             detail="entity_type and entity_id must be provided together",
         )
-    entity_type = normalise_audit_sample_entity_type(entity_type)
+    entity_type = clean_audit_sample_entity_type(entity_type)
     if entity_type is None:
         return None
     label = AUDIT_SAMPLE_ENTITY_LABELS.get(entity_type, "Keen item")

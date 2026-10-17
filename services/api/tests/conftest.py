@@ -12,6 +12,13 @@ from sqlalchemy.pool import NullPool, StaticPool
 from tests.db_helpers import create_sqlite_schema, schema_engine
 
 
+def pytest_configure(config):
+    # KEEN requires its public origin at start-up. Tests use the test client's
+    # origin unless the environment chooses another; this runs before any test
+    # module imports the settings.
+    os.environ.setdefault("KEEN_PUBLIC_BASE_URL", "http://testserver")
+
+
 @pytest.fixture(scope="module")
 def contract_postgres_engine():
     url = os.getenv("KEEN_CONTRACT_TEST_DATABASE_URL")

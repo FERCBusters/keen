@@ -66,27 +66,13 @@ def incident_webhook_enabled() -> bool:
     return bool((settings.incident_webhook_url or "").strip())
 
 
-def build_event_url(request, event_id: str) -> str:
-    base = (settings.public_base_url or "").strip().rstrip("/")
-    if not base:
-        origin = (request.headers.get("origin") or "").strip().rstrip("/")
-        if origin:
-            base = origin
-    if not base:
-        proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
-        host = (
-            (
-                request.headers.get("x-forwarded-host")
-                or request.headers.get("host")
-                or ""
-            )
-            .split(",")[0]
-            .strip()
-        )
-        if host:
-            base = f"{proto or request.url.scheme}://{host}"
-    qs = urlencode({"id": event_id})
-    return f"{base}/event.html?{qs}" if base else f"/event.html?{qs}"
+def build_event_url(event_id: str) -> str:
+    """Return the absolute link to an event for outbound incident messages.
+
+    The host comes from KEEN_PUBLIC_BASE_URL alone. Origin, Host and forwarded
+    headers are chosen by the client, so they never shape a posted link.
+    """
+    return f"{settings.public_base_url}/event.html?{urlencode({'id': event_id})}"
 
 
 @dataclass(frozen=True)

@@ -142,6 +142,7 @@ class LocalMfaTests(unittest.TestCase):
             patch.object(login_operations, "get_valkey", return_value=self.redis),
             patch.object(login_routes, "get_valkey", return_value=self.redis),
             patch.object(settings, "mfa_policy", "optional"),
+            patch.object(settings, "public_base_url", "https://keen.example"),
             patch.object(settings, "mfa_origin", "https://keen.example"),
             patch.object(
                 settings, "mfa_encryption_key", Fernet.generate_key().decode()

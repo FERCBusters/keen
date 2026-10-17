@@ -261,21 +261,45 @@ class Settings(BaseSettings):
     # - true: mask at event ingestion time before storage
     event_data_masking: str = Field(default="false")
 
-    # Public base URL (optional)
-    # Used when generating absolute links in outbound notifications (e.g. webhook
-    # messages to Slack/Teams/Google Chat/email).
+    # Public base URL (required): the browser-facing origin, without a path.
+    # Absolute links in emails, notifications and outbound webhook messages are
+    # built from it, and browser Origin checks compare against it.
     # Example: https://keen.example.com
-    public_base_url: str = Field(default="")
+    public_base_url: str = Field(default="", validate_default=True)
 
     @field_validator("public_base_url")
     @classmethod
     def validate_public_base_url(cls, v: str) -> str:
-        if not v or not v.strip():
-            return ""
-        v = v.strip().rstrip("/")
-        if not v.startswith("https://") and not v.startswith("http://"):
-            raise ValueError("public_base_url must start with http:// or https://")
-        return v
+        from urllib.parse import urlsplit
+
+        value = (v or "").strip().rstrip("/")
+        if not value:
+            raise ValueError(
+                "KEEN_PUBLIC_BASE_URL is required: set it to the browser-facing "
+                "origin, for example https://keen.example.com"
+            )
+        try:
+            parts = urlsplit(value)
+            parts.port  # Rejects a malformed port.
+        except ValueError:
+            parts = None
+        if (
+            parts is None
+            or parts.scheme not in ("http", "https")
+            or not parts.hostname
+            or parts.username is not None
+            or parts.password is not None
+            or parts.path
+            or parts.query
+            or parts.fragment
+            or any(ord(c) < 33 or ord(c) == 127 or c == "\\" for c in value)
+        ):
+            raise ValueError(
+                "KEEN_PUBLIC_BASE_URL must be an http:// or https:// origin "
+                "without a path, query or credentials, for example "
+                "https://keen.example.com"
+            )
+        return f"{parts.scheme}://{parts.netloc.lower()}"
 
     # -----------------------------------------------------------------------------
     # SMTP outbound mail
