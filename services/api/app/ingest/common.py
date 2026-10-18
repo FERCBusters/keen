@@ -126,8 +126,8 @@ def apply_rules(db: Session, ev: Event) -> int:
                 continue
             if ci.id in existing_control_ids:
                 continue
-            # Two targets, such as a control and an older kind-less target, can
-            # name the same row; it is mapped once.
+            # Two targets, such as a control target and a target without a
+            # kind, can name the same row; it is mapped once.
             existing_control_ids.add(ci.id)
             mp = Mapping(
                 event_id=ev.id,

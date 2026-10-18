@@ -93,8 +93,7 @@ def test_preferences_are_validated_and_saved_with_patch_semantics(keen):  # noqa
         "date_range": {"start_date": "2026-01-01", "end_date": "2026-03-01"},
         "sunburst_focus": {"source_key": "github"},
     }
-    # The legacy mode preference follows the default visualisation.
-    assert saved["viz_mode"] == "heatmap"
+    assert "viz_mode" not in saved
 
     # Only the fields sent are changed; a blank theme keeps the current theme.
     partial = _json(
@@ -116,7 +115,6 @@ def test_preferences_are_validated_and_saved_with_patch_semantics(keen):  # noqa
                 "default_visualisation": None,
                 "landing_page": "",
                 "default_framework": " ",
-                "viz_mode": "",
             },
         )
     )
@@ -124,7 +122,6 @@ def test_preferences_are_validated_and_saved_with_patch_semantics(keen):  # noqa
     assert cleared["default_visualisation"] is None
     assert cleared["landing_page"] == "/"
     assert cleared["default_framework"] is None
-    assert cleared["viz_mode"] == "graph"
     assert _json(client.get("/v1/me/preferences"))["theme"] == "ocean-dark"
     days = _json(
         client.patch(
@@ -149,7 +146,7 @@ def test_preferences_are_validated_and_saved_with_patch_semantics(keen):  # noqa
     "payload",
     [
         {"date_format": "mm/dd/yyyy"},
-        {"viz_mode": "pie"},
+        {"default_visualisation": {"mode": "pie"}},
         {"timezone": "Mars/Olympus"},
         {"source_colors": {"github": "red"}},
         {"source_colors": {"x" * 129: "#000000"}},
@@ -242,13 +239,13 @@ def test_saved_searches_are_private_to_their_owner(keen):  # noqa: F811
     # Saving the same name again updates the URL in place.
     again = _json(
         owner.post(
-            "/v1/me/shortcuts",
+            "/v1/me/saved-searches",
             headers=unsafe(owner),
             json={"name": HOSTILE, "url": "/events.html?q=sudo"},
         )
     )
     assert again["id"] == created["id"]
-    assert [row["url"] for row in _json(owner.get("/v1/me/shortcuts"))] == [
+    assert [row["url"] for row in _json(owner.get("/v1/me/saved-searches"))] == [
         "/events.html?q=sudo"
     ]
     assert _json(other.get("/v1/me/saved-searches")) == []
@@ -266,7 +263,7 @@ def test_saved_searches_are_private_to_their_owner(keen):  # noqa: F811
         == 400
     )
     assert _json(
-        owner.delete(f"/v1/me/shortcuts/{created['id']}", headers=unsafe(owner))
+        owner.delete(f"/v1/me/saved-searches/{created['id']}", headers=unsafe(owner))
     ) == {"ok": True}
     assert (
         keen.db.query(SavedSearch).filter_by(id=uuid.UUID(created["id"])).one_or_none()

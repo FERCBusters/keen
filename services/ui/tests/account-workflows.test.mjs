@@ -681,7 +681,7 @@ test('saved searches can be deleted and duplicate names are disambiguated for th
   assert.equal(state.prompts[0], 'Delete saved search "Unmapped"?');
 });
 
-test('saved search failures are reported or hide an unsupported card', async (t) => {
+test('saved search failures are reported in the card', async (t) => {
   const failing = await account(t, { fail: { remove: true } });
   failing.ui.el('savedSearchesList').querySelector('button').click();
   await settle(
@@ -690,8 +690,12 @@ test('saved search failures are reported or hide an unsupported card', async (t)
   const declined = await account(t, { confirm: false });
   declined.ui.el('savedSearchesList').querySelector('button').click();
   assert.deepEqual(declined.state.removed, []);
-  const unsupported = await account(t, { fail: { saved: true } });
-  await settle(() => unsupported.ui.el('savedSearchesCard').style.display === 'none');
+  const unavailable = await account(t, { fail: { saved: true } });
+  const message = unavailable.ui.el('savedSearchesEmpty');
+  await settle(() => message.textContent === 'Failed to load saved searches: Error: Unsupported');
+  assert.equal(message.className, 'alert alert-danger mb-0');
+  assert.equal(message.style.display, '');
+  assert.equal(unavailable.ui.el('savedSearchesCard').style.display, '');
   const none = await account(t, { saved: [] });
   assert.equal(none.ui.el('savedSearchesEmpty').style.display, '');
 });

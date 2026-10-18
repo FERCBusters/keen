@@ -4,6 +4,7 @@ Local storage runs against a real temporary directory. S3 runs against a fake
 boto3 client that records exactly what KEEN asks the bucket to do.
 """
 
+import hashlib
 import io
 import os
 import stat
@@ -98,6 +99,40 @@ def test_local_artifacts_round_trip_privately(local):
     assert body.closed
 
 
+class Recording(io.BytesIO):
+    """A seekable upload that records how much each read asked for."""
+
+    def __init__(self, data):
+        super().__init__(data)
+        self.reads = []
+
+    def read(self, size=-1):
+        self.reads.append(size)
+        return super().read(size)
+
+
+def test_files_are_stored_in_bounded_chunks(local):
+    data = os.urandom(3 * 1024 * 1024 + 5)
+    content = Recording(data)
+    content.seek(0, os.SEEK_END)  # wherever the caller left it
+
+    stored = s3.put_file("isms-documents/d/report.pdf", content, "application/pdf")
+
+    assert (stored.uri, stored.size_bytes) == (
+        "local://local/isms-documents/d/report.pdf",
+        len(data),
+    )
+    assert stored.sha256 == hashlib.sha256(data).hexdigest()
+    path = local.root / "isms-documents/d/report.pdf"
+    assert path.read_bytes() == data
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    # Each read takes at most one MiB; nothing reads the whole file at once.
+    assert content.reads and all(0 < size <= 1024 * 1024 for size in content.reads)
+    with pytest.raises(FileExistsError):
+        s3.put_file("isms-documents/d/report.pdf", Recording(b"forged"), "text/plain")
+    assert path.read_bytes() == data
+
+
 def test_stored_evidence_is_never_replaced(local):
     s3.put_bytes("events/a.json", b"original", "text/plain")
 
@@ -189,7 +224,27 @@ def test_s3_artifacts_are_pinned_to_the_version_written(bucket):
     assert bucket.calls[-1][1]["VersionId"] == "v/1"
 
 
-def test_legacy_unversioned_s3_artifacts_keep_their_plain_uri(bucket):
+def test_s3_receives_a_file_as_a_stream_from_its_start(bucket):
+    content = Recording(b"evidence")
+    content.seek(3)
+
+    stored = s3.put_file("isms-documents/a b.pdf", content, "application/pdf")
+
+    ((name, put),) = bucket.calls
+    assert name == "put_object"
+    assert put["Body"] is content and content.tell() == 0
+    assert (put["Key"], put["ContentType"]) == (
+        "isms-documents/a b.pdf",
+        "application/pdf",
+    )
+    assert (stored.sha256, stored.size_bytes) == (
+        hashlib.sha256(b"evidence").hexdigest(),
+        8,
+    )
+    assert stored.uri == "s3://evidence/isms-documents/a%20b.pdf?versionId=v%2F1"
+
+
+def test_an_unversioned_bucket_stores_artifacts_under_a_plain_uri(bucket):
     bucket.version = None
     stored = s3.put_bytes("events/a b.json", b"evidence", "application/json")
 

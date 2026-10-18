@@ -73,7 +73,6 @@ _CHANGE_FIELD_LABELS = {
     "task_action": "Task/Action",
     "role": "Role",
     "roles": "Roles",
-    "role_org_node_id": "Role",
     "role_org_node_ids": "Roles",
     "start_time": "Start time",
     "status": "Status",
@@ -404,31 +403,13 @@ def _clause_controls(db: Session, clause_id: uuid.UUID) -> list[dict[str, Any]]:
 
 
 def _clause_evidence_mappings(clause: FrameworkClause) -> list[dict[str, str]]:
-    meta = dict(getattr(clause, "meta", None) or {})
-    raw = meta.get("evidence_mappings")
-    if raw is None:
-        raw = (
-            meta.get("evidence_urls")
-            or meta.get("evidenceUrls")
-            or meta.get("evidence_links")
-            or meta.get("evidence")
-        )
-    if isinstance(raw, str):
-        raw = [line.strip() for line in raw.splitlines() if line.strip()]
-    if not isinstance(raw, list):
-        return []
+    raw = (getattr(clause, "meta", None) or {}).get("evidence_mappings")
     out: list[dict[str, str]] = []
-    for item in raw:
-        if isinstance(item, dict):
-            url = str(
-                item.get("url") or item.get("href") or item.get("link") or ""
-            ).strip()
-            title = str(
-                item.get("title") or item.get("text") or item.get("label") or ""
-            ).strip()
-        else:
-            url = str(item or "").strip()
-            title = ""
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or "").strip()
+        title = str(item.get("title") or "").strip()
         if url:
             out.append({"title": title or url, "url": url})
     out.sort(key=lambda x: (x.get("title") or "", x.get("url") or ""))

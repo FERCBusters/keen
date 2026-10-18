@@ -2,23 +2,23 @@
 # IMPORTANT: Review with your ISMS owner/auditor and tune for your environment.
 # These rules assume you imported iso_27001_2022 Annex A refs like "A.8.32" etc.
 
-# Multi-framework mapping patterns supported:
+# A rule maps to its own framework, named by `framework` (or a list in
+# `frameworks`), or to the default framework. `map_to` takes three forms:
 #
-# 1) Legacy (applies to rule/framework context):
+# 1) References in the rule's framework:
 #    map_to: ["A.8.15", "A.8.16"]
 #
-# 2) Framework map:
+# 2) A framework map:
 #    map_to:
 #      iso_27001_2022: ["A.8.15", "A.8.16"]
 #      UK-DVSTF:1.0: ["11.8.1.a", "11.8.1.b"]
 #
-# 3) Target objects with optional role gating:
+# 3) Target objects:
 #    map_to:
 #      - framework: "iso_27001_2022"
 #        ref: "A.8.15"
 #      - framework: "UK-DVSTF:1.0"
 #        refs: ["11.8.1.a", "11.8.1.b"]
-#        roles_any: ["ops", "security"]
 #
 #    A target object may also say whether its reference names a control or a
 #    clause. Evidence then attaches only to that item, which matters where a
@@ -26,6 +26,10 @@
 #      - framework: "iso_27001_2022"
 #        ref: "9.2"
 #        kind: "clause"   # or "control"
+#
+# KEEN skips any rule it cannot read exactly as written, such as one with a
+# misspelt key, an unquoted number where text is expected, or an unsafe
+# pattern, and logs a warning that names the rule and the problem.
 #
 rules:
   - id: "ossec_ssh_failed"

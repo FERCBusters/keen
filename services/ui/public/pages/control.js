@@ -270,10 +270,6 @@ function activateControlTab(tabName) {
       risks: controlRisksTab,
       'interested-parties': controlInterestedPartiesTab,
       isms: controlIsmsTab,
-      // Backwards-compatible: old links to the removed dedicated
-      // Effectiveness Measures tab now land on the combined ISMS tab.
-      effectiveness: controlIsmsTab,
-      'effectiveness-measures': controlIsmsTab,
       changelog: controlChangelogTab,
     }[name] || controlEvidenceTab;
   if (!tab || !window.bootstrap?.Tab) return;

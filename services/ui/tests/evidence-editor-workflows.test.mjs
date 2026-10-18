@@ -43,6 +43,8 @@ async function fixture(
     defaultView = false,
     controls = [{ ref: 'A1', title: 'Control A' }],
     suggestions = [],
+    frameworks = [{ slug: 'A', name: 'Framework A' }],
+    active = 'F1',
   } = {},
 ) {
   const calls = [];
@@ -69,9 +71,12 @@ async function fixture(
       return { rules: rule ? [rule] : [], collectors: [], rules_version: 1 };
     if (url.pathname.startsWith('/api/v1/admin/adapter-settings/'))
       return { settings: {}, version: 1 };
-    if (url.pathname === '/api/v1/frameworks')
-      return { items: [{ slug: 'A', name: 'Framework A' }] };
-    if (url.pathname === '/api/v1/controls') return { items: controls };
+    if (url.pathname === '/api/v1/frameworks') return { items: frameworks };
+    if (url.pathname === '/api/v1/controls')
+      return {
+        items:
+          typeof controls === 'function' ? controls(url.searchParams.get('framework')) : controls,
+      };
     if (url.pathname.includes('/mapping-rules/') && url.pathname.endsWith('/revisions'))
       return { revisions: [] };
     if (url.pathname === '/api/v1/admin/rule-backfills') return { jobs: [] };
@@ -91,7 +96,7 @@ async function fixture(
       window.mappingSwitches = 0;
       window.addEventListener('keen-show-evidence-mapping', () => window.mappingSwitches++);
     },
-    vendor: { apiGet, apiPost },
+    vendor: { apiGet, apiPost, getCurrentFramework: () => active },
   });
   t.after(() => ui.close());
   await until(() =>
@@ -384,4 +389,70 @@ test('a clause and a control sharing a reference become separate targets', async
     { framework: 'A', ref: '5.1', kind: 'control' },
     { framework: 'A', ref: '6.1', kind: 'clause' },
   ]);
+});
+
+test('a new rule opens the control picker on the active framework', async (t) => {
+  const { document, window, calls } = await fixture(t, {
+    defaultView: true,
+    frameworks: [
+      { slug: 'A', name: 'Framework A' },
+      { slug: 'B', name: 'Framework B' },
+    ],
+    active: 'B',
+    controls: (framework) => [{ ref: framework + '1', title: 'Control ' + framework }],
+  });
+  const picker = document.getElementById('ec-framework');
+  const control = document.getElementById('ec-control');
+  await until(() => control.options.length === 2);
+  assert.equal(picker.value, 'B');
+  assert.deepEqual(
+    [...control.options].map((option) => option.value),
+    ['', 'B1'],
+  );
+  // The page asks only for the active framework's controls.
+  assert.deepEqual(
+    calls.filter((call) => call.startsWith('/api/v1/controls')),
+    ['/api/v1/controls?framework=B&limit=5000'],
+  );
+
+  // Choosing another framework for one rule does not carry over to the next.
+  picker.value = 'A';
+  picker.dispatchEvent(new window.Event('change'));
+  await until(() => control.options[1]?.value === 'A1');
+  document.getElementById('ec-new-rule').click();
+  await until(() => control.options[1]?.value === 'B1');
+  assert.equal(picker.value, 'B');
+  document.getElementById('ec-next-step').click();
+  document.getElementById('ec-description').value = 'Access reviews';
+  control.value = 'B1';
+  document.getElementById('ec-add-target').click();
+  assert.deepEqual(
+    [...document.getElementById('ec-targets').children].map(
+      (row) => row.querySelector('span').textContent,
+    ),
+    ['B / B1'],
+  );
+});
+
+test('an active framework the picker does not list leaves its first framework', async (t) => {
+  const { document, calls } = await fixture(t, {
+    defaultView: true,
+    frameworks: [
+      { slug: 'A', name: 'Framework A' },
+      { slug: 'B', name: 'Framework B' },
+    ],
+    active: 'retired',
+    controls: (framework) => [{ ref: framework + '1', title: 'Control ' + framework }],
+  });
+  const control = document.getElementById('ec-control');
+  await until(() => control.options.length === 2);
+  assert.equal(document.getElementById('ec-framework').value, 'A');
+  assert.deepEqual(
+    calls.filter((call) => call.startsWith('/api/v1/controls')),
+    ['/api/v1/controls?framework=A&limit=5000'],
+  );
+  document.getElementById('ec-new-rule').click();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(document.getElementById('ec-framework').value, 'A');
+  assert.equal(calls.filter((call) => call.startsWith('/api/v1/controls')).length, 1);
 });

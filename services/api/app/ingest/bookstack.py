@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import html as _html
 import json
-import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -122,18 +121,6 @@ def _stamp_book_scope(
     return page
 
 
-def _first_non_empty(*values: Any) -> Optional[str]:
-    """Return the first non-empty string-like value."""
-
-    for value in values:
-        if value is None:
-            continue
-        text = str(value).strip()
-        if text:
-            return text
-    return None
-
-
 def _nested_dict(root: Any, key: str) -> dict[str, Any]:
     """Return a nested dictionary if present, otherwise an empty dict."""
 
@@ -144,83 +131,30 @@ def _nested_dict(root: Any, key: str) -> dict[str, Any]:
 
 
 def _event_bookstack_page_payloads(ev: Event) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Build BookStack-like page payloads from an already stored event.
+    """Rebuild the page fields page mappings match from a stored event.
 
-    Existing events may pre-date current BookStack payload fields.  Remapping
-    should therefore not depend solely on fresh BookStack API calls; recover the
-    page slug/book slug from normalized_payload, raw_pointer, and finally the
-    system/summary strings that KEEN has historically stored.
+    A collected page's event records its ID, slug, title and book in its
+    normalised payload, and its book ID in its pointer, so remapping needs no
+    fresh BookStack call.
     """
 
-    normalized = (
-        ev.normalized_payload if isinstance(ev.normalized_payload, dict) else {}
-    )
-    raw_pointer = ev.raw_pointer if isinstance(ev.raw_pointer, dict) else {}
-    nbs = _nested_dict(normalized, "bookstack")
-    rbs = _nested_dict(raw_pointer, "bookstack")
-
-    page_id_raw = nbs.get("page_id") or rbs.get("page_id")
-    if page_id_raw is None and isinstance(ev.external_id, str):
-        # Current BookStack external IDs are page:<id>:<updated-at>.
-        m = re.match(r"^page:(\d+):", ev.external_id.strip())
-        if m:
-            page_id_raw = m.group(1)
-    try:
-        page_id = int(page_id_raw) if page_id_raw is not None else None
-    except Exception:
-        page_id = None
-
-    page_slug = _first_non_empty(
-        nbs.get("page_slug"),
-        rbs.get("page_slug"),
-        nbs.get("slug"),
-        rbs.get("slug"),
-    )
-    book_slug = _first_non_empty(nbs.get("book_slug"), rbs.get("book_slug"))
-    title = _first_non_empty(nbs.get("page_title"), rbs.get("page_title"))
-
-    system = str(ev.system or "").strip()
-    if system:
-        # Expected shape: <label>:<book-slug>:<page-slug>.  Preserve a tolerant
-        # fallback for older events that only had <label>:<page-slug>.
-        parts = [part.strip() for part in system.split(":") if part.strip()]
-        if len(parts) >= 3:
-            book_slug = book_slug or parts[1]
-            page_slug = page_slug or parts[-1]
-        elif len(parts) == 2:
-            page_slug = page_slug or parts[1]
-
-    summary = str(ev.summary or "").strip()
-    if summary:
-        if not title:
-            m_title = re.search(r"page\s+'([^']+)'", summary, flags=re.IGNORECASE)
-            if m_title:
-                title = m_title.group(1).strip() or None
-        # Summaries include a friendly combined slug suffix such as
-        # "(hrnet-contract-of-employment)".  Use it as a last-resort slug
-        # candidate if no direct page_slug is available.
-        if not page_slug:
-            m_slug = re.search(r"\(([^()]+)\)\s*$", summary)
-            if m_slug:
-                combined = m_slug.group(1).strip()
-                if combined:
-                    if book_slug and combined.lower().startswith(
-                        f"{book_slug.lower()}-"
-                    ):
-                        page_slug = combined[len(book_slug) + 1 :]
-                    else:
-                        page_slug = combined
-
+    page = _nested_dict(ev.normalized_payload, "bookstack")
+    pointer = _nested_dict(ev.raw_pointer, "bookstack")
     payload: dict[str, Any] = {}
-    if page_id is not None:
-        payload["id"] = page_id
-    if page_slug:
-        payload["slug"] = page_slug
-    if title:
-        payload["name"] = title
-    if book_slug:
-        payload["book_slug"] = book_slug
-        payload["book"] = {"slug": book_slug}
+    for key, value in (
+        ("id", page.get("page_id")),
+        ("book_id", pointer.get("book_id")),
+    ):
+        if isinstance(value, int) and not isinstance(value, bool):
+            payload[key] = value
+    for key, field in (
+        ("slug", "page_slug"),
+        ("name", "page_title"),
+        ("book_slug", "book_slug"),
+    ):
+        value = page.get(field)
+        if isinstance(value, str) and value.strip():
+            payload[key] = value.strip()
     return payload, dict(payload)
 
 

@@ -173,7 +173,8 @@ def test_event_aggregates_require_events_read(keen):
         assert plain.get(path).status_code == 403, path
     summary = plain.get("/v1/stats/summary").json()
     assert summary["events"] is None
-    assert summary["controls"]["with_evidence"] is None
+    assert summary["controls"]["with_evidence_in_scope"] is None
+    assert summary["controls"]["without_evidence_all"] is None
     assert all(
         item["evidence_count"] is None and item["last_evidence"] is None
         for item in plain.get("/v1/stats/controls").json()["items"]
@@ -468,7 +469,7 @@ def test_oauth_token_path_change_requires_reentry(keen, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "path", ["/v1/auth/oidc/callback", "/v1/auth/sso/google/callback"]
+    "path", ["/v1/auth/sso/oidc/callback", "/v1/auth/sso/google/callback"]
 )
 def test_audit_trail_omits_authorisation_codes(keen, path):
     keen.client().get(path, params={"code": "SYNTH-AUTH-CODE", "state": "SYNTH-STATE"})

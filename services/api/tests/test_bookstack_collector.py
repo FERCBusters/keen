@@ -225,8 +225,6 @@ def test_slug_scoping_helpers():
     assert preserved["book_slug"] == "hr"
     assert preserved["book_id"] == 7
     assert bs._stamp_book_scope("junk", book_id=7, book_slug="isms") == "junk"
-    assert bs._first_non_empty(None, " ", "value") == "value"
-    assert bs._first_non_empty(None, "") is None
     assert bs._nested_dict({"a": {"b": 1}}, "a") == {"b": 1}
     assert bs._nested_dict({"a": "x"}, "a") == {}
     assert bs._nested_dict("junk", "a") == {}
@@ -275,64 +273,81 @@ def test_html_stripping_and_previews():
     assert bs._make_preview({}, None) == ("", "html")
 
 
-def test_event_payload_recovery_shapes():
+def test_a_stored_page_event_gives_the_fields_page_mappings_match():
     ev = MagicMock()
     ev.normalized_payload = {
         "bookstack": {
             "page_id": 11,
-            "page_slug": "access-control-policy",
+            "page_slug": " access-control-policy ",
             "page_title": "Access Control Policy",
             "book_slug": "isms",
         }
     }
-    ev.raw_pointer = {}
-    ev.system = ""
-    ev.external_id = "page:11:2026-10-09"
-    ev.summary = ""
+    ev.raw_pointer = {"bookstack": {"page_id": 11, "book_id": 4}}
+
     payload, copy = bs._event_bookstack_page_payloads(ev)
-    assert payload["id"] == 11
-    assert payload["slug"] == "access-control-policy"
-    assert payload["book"] == {"slug": "isms"}
-    assert copy == payload
 
-    # Recover the page id from the external id and slugs from system parts.
-    ev.normalized_payload = {}
-    ev.system = "hr:hr-docs:onboarding"
-    payload, _ = bs._event_bookstack_page_payloads(ev)
-    assert payload["id"] == 11
-    assert payload["slug"] == "onboarding"
-    assert payload["book_slug"] == "hr-docs"
-
-    # Legacy two-part systems only carry the page slug.
-    ev.system = "hr:onboarding"
-    payload, _ = bs._event_bookstack_page_payloads(ev)
-    assert payload["slug"] == "onboarding"
-    assert "book" not in payload
-
-    # Summaries offer last-resort title and combined slug recovery.
-    ev.system = "hr"
-    ev.summary = (
-        "bookstack: updated page 'Employment Contract' (hr-employment-contract)"
+    assert payload == {
+        "id": 11,
+        "book_id": 4,
+        "slug": "access-control-policy",
+        "name": "Access Control Policy",
+        "book_slug": "isms",
+    }
+    assert copy == payload and copy is not payload
+    # Remapping honours a mapping scoped by book ID, slug, title or page ID.
+    mappings = bs._parse_page_mappings(
+        {
+            "page_mappings": [
+                {
+                    "match": {"book_id": 4, "slug": "access-control-policy"},
+                    "map_to": ["A"],
+                },
+                {
+                    "match": {"book_slug": "isms", "title": "access control policy"},
+                    "map_to": ["B"],
+                },
+                {"match": {"id": 11}, "map_to": ["C"]},
+                {
+                    "match": {"book_id": 5, "slug": "access-control-policy"},
+                    "map_to": ["D"],
+                },
+                {"match": {"slug": "isms-access-control-policy"}, "map_to": ["E"]},
+            ]
+        }
     )
-    payload, _ = bs._event_bookstack_page_payloads(ev)
-    assert payload["name"] == "Employment Contract"
-    assert payload["slug"] == "hr-employment-contract"
+    assert [m.map_to for m in mappings if m.matches(payload, copy)] == [
+        ["A"],
+        ["B"],
+        ["C"],
+        ["E"],
+    ]
 
-    # A combined slug that starts with the book slug is stripped after recovery.
-    ev5 = MagicMock()
-    ev5.normalized_payload = {"bookstack": {"book_slug": "hr"}}
-    ev5.raw_pointer = {}
-    ev5.system = ""
-    ev5.external_id = "page:99:z"
-    ev5.summary = "page 'X' (hr-employment-contract)"
-    payload, _ = bs._event_bookstack_page_payloads(ev5)
-    assert payload["slug"] == "employment-contract"
 
-    # Unparsable page ids and unusable text leave no payload at all.
-    ev5.external_id = "weird"
-    ev5.summary = ""
-    payload, _ = bs._event_bookstack_page_payloads(ev5)
-    assert payload == {"book_slug": "hr", "book": {"slug": "hr"}}
+@pytest.mark.parametrize(
+    "normalized,pointer",
+    [
+        (
+            {
+                "bookstack": {
+                    "page_id": "11",
+                    "page_slug": " ",
+                    "page_title": None,
+                    "book_slug": 7,
+                }
+            },
+            {"bookstack": {"book_id": True}},
+        ),
+        ({"bookstack": "page"}, {"bookstack": ["book"]}),
+        (None, "pointer"),
+    ],
+    ids=["other-types", "other-shapes", "absent"],
+)
+def test_page_fields_an_event_lacks_stay_out(normalized, pointer):
+    ev = MagicMock()
+    ev.normalized_payload, ev.raw_pointer = normalized, pointer
+
+    assert bs._event_bookstack_page_payloads(ev) == ({}, {})
 
 
 def test_resolve_book_id_uses_filtered_lookup_then_caches(env):

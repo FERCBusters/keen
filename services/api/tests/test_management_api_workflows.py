@@ -302,7 +302,7 @@ def test_risk_scores_controls_owner_and_change_history(api):
         "risks",
         {
             "framework": "A",
-            "asset": "Database",
+            "asset_name": "Database",
             "category_name": "Information",
             "subcategory_name": "Records",
             "risk_types": ["Confidentiality"],

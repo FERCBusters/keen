@@ -30,25 +30,24 @@ class ManagedConfigurationTests(unittest.TestCase):
                 "jobs": [{"name": "release", "label": "prod", "kind": "deployment"}]
             },
             "rules": {
-                "frameworks": {
-                    "ISO27001:2022": [
-                        {
-                            "id": "deployment",
-                            "when": {
-                                "source": "jenkins",
-                                "action": "deployment",
-                                "system": "prod",
-                            },
-                            "map_to": ["A.8.32"],
+                "framework": "ISO27001:2022",
+                "rules": [
+                    {
+                        "id": "deployment",
+                        "when": {
+                            "source": "jenkins",
+                            "action": "deployment",
+                            "system": "prod",
                         },
-                        {
-                            "id": "all_builds",
-                            "when": {"source": "jenkins", "outcome": "failed"},
-                            "map_to": ["A.8.15"],
-                            "enabled": False,
-                        },
-                    ]
-                }
+                        "map_to": ["A.8.32"],
+                    },
+                    {
+                        "id": "all_builds",
+                        "when": {"source": "jenkins", "outcome": "failed"},
+                        "map_to": ["A.8.15"],
+                        "enabled": False,
+                    },
+                ],
             },
             "bookstack": {
                 "pages": [

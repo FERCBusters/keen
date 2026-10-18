@@ -136,6 +136,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0011_retire_unused_counters",
         "0010_swot_planning",
         "0009_retention_overrides",
         "0008_integration_auth_kind",
@@ -146,3 +147,101 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
         "0002_release_seed",
         "0001_release_schema",
     ]
+
+
+def test_retiring_the_unused_counters_keeps_each_visualisation_preference():
+    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires PostgreSQL integration database")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "counters_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+
+    def tables(conn):
+        return set(
+            conn.scalars(
+                text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = :schema"
+                ),
+                {"schema": schema},
+            )
+        )
+
+    def columns(conn):
+        return set(
+            conn.scalars(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = :schema AND table_name = 'users'"
+                ),
+                {"schema": schema},
+            )
+        )
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0010_swot_planning")
+            for name, chosen in (
+                ("heatmap-user", {"mode": "heatmap", "range": "30d"}),
+                ("unknown-mode-user", {"mode": "pie"}),
+                ("no-choice-user", None),
+            ):
+                conn.execute(
+                    text(
+                        "INSERT INTO users (id, username, password_hash, created_at,"
+                        " updated_at, pref_auto_apply_filters, pref_source_colors,"
+                        " pref_viz_mode, pref_landing_page, pref_date_format,"
+                        " authz_version, pref_default_visualisation) VALUES"
+                        " (:id, :name, 'unused', now(), now(), false, '{}', 'graph',"
+                        " '/', 'dmy', 1, CAST(:chosen AS jsonb))"
+                    ),
+                    {
+                        "id": uuid.uuid4(),
+                        "name": name,
+                        "chosen": json.dumps(chosen) if chosen else None,
+                    },
+                )
+            for n in range(2):
+                conn.execute(
+                    text(
+                        "INSERT INTO events (id, timestamp, source, summary,"
+                        " external_id, created_at) VALUES"
+                        " (:id, now(), 'ci', 'build', :external, now())"
+                    ),
+                    {"id": uuid.uuid4(), "external": f"build-{n}"},
+                )
+            conn.commit()
+
+            command.upgrade(config, "0011_retire_unused_counters")
+            assert not {"global_event_stats", "framework_event_stats"} & tables(conn)
+            assert "pref_viz_mode" not in columns(conn)
+            assert "pref_default_visualisation" in columns(conn)
+
+            command.downgrade(config, "0010_swot_planning")
+            assert {"global_event_stats", "framework_event_stats"} <= tables(conn)
+            modes = dict(
+                conn.execute(text("SELECT username, pref_viz_mode FROM users")).all()
+            )
+            assert modes == {
+                "heatmap-user": "heatmap",
+                "unknown-mode-user": "graph",
+                "no-choice-user": "graph",
+            }
+            assert conn.execute(
+                text("SELECT stats_key, total_events FROM global_event_stats")
+            ).all() == [("events", 2)]
+            assert conn.scalar(text("SELECT count(*) FROM framework_event_stats")) == 0
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()

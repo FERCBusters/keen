@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generator, Tuple
+from typing import BinaryIO, Generator, Tuple
 from urllib.parse import parse_qs, quote, urlparse
 
 import boto3
@@ -137,12 +138,30 @@ def _client(*, cleanup=False):
     return boto3.client("s3", **kwargs)
 
 
+_CHUNK = 1024 * 1024
+
+
 def put_bytes(key: str, data: bytes, content_type: str) -> StoredObject:
     """Store an immutable blob and return its stable URI and checksum."""
     _validate_key(key)
-    sha = hashlib.sha256(data).hexdigest()
-    size = len(data)
+    return _store(key, data, content_type, hashlib.sha256(data).hexdigest(), len(data))
 
+
+def put_file(key: str, content: BinaryIO, content_type: str) -> StoredObject:
+    """Store a seekable file, reading it in bounded chunks rather than at once."""
+    _validate_key(key)
+    digest, size = hashlib.sha256(), 0
+    content.seek(0)
+    for chunk in iter(lambda: content.read(_CHUNK), b""):
+        digest.update(chunk)
+        size += len(chunk)
+    content.seek(0)
+    return _store(key, content, content_type, digest.hexdigest(), size)
+
+
+def _store(
+    key: str, body: bytes | BinaryIO, content_type: str, sha: str, size: int
+) -> StoredObject:
     backend = _write_backend()
     if backend == "local":
         path = _local_path(key)
@@ -151,7 +170,10 @@ def put_bytes(key: str, data: bytes, content_type: str) -> StoredObject:
         try:
             with os.fdopen(fd, "wb") as output:
                 os.fchmod(output.fileno(), 0o600)
-                output.write(data)
+                if isinstance(body, bytes):
+                    output.write(body)
+                else:
+                    shutil.copyfileobj(body, output, _CHUNK)
                 output.flush()
                 os.fsync(output.fileno())
             os.link(temporary, path)  # never replace an existing evidence object
@@ -168,7 +190,7 @@ def put_bytes(key: str, data: bytes, content_type: str) -> StoredObject:
     result = c.put_object(
         Bucket=settings.s3_bucket,
         Key=key,
-        Body=data,
+        Body=body,
         ContentType=content_type,
         **({"IfNoneMatch": "*"} if settings.hosted_mode else {}),
     )
@@ -184,10 +206,10 @@ def put_bytes(key: str, data: bytes, content_type: str) -> StoredObject:
 
 
 class ArtifactKey(str):
-    """A string key carrying the immutable S3 version selected by the stored URI.
+    """An object key that also carries the S3 version its stored URI selects.
 
-    Existing callers pass the parsed key directly to the read/presign helpers.
-    The string value remains the object key for backwards compatibility.
+    As a string it is the object key, so callers hand it straight to the read
+    and presign helpers, which use the version when one is present.
     """
 
     def __new__(cls, key, version_id=None):
@@ -218,7 +240,8 @@ def parse_s3_uri(uri: str) -> Tuple[str, str]:
         bucket = _LOCAL_BUCKET
     else:
         _guard_bucket(bucket)
-        # New S3 URIs are escaped and version-pinned. Keep old unversioned keys unchanged.
+        # URIs from a versioned bucket pin the object version; URIs from an
+        # unversioned bucket name the key alone.
         if p.query:
             from urllib.parse import unquote
 
@@ -270,15 +293,16 @@ def presign_get_url(bucket: str, key: str, expires_in: int = 900) -> str:
 
 
 class UnpinnedVersionedObject(ValueError):
-    """Legacy URI needs an explicit version before permanent removal is safe."""
+    """A versioned bucket holds this URI's object, and the URI names no version."""
 
 
 def delete_stored_object(uri: str) -> None:
     """Delete one stored object permanently, without bypassing retention locks.
 
-    Version-pinned S3 URIs remove that exact version. Refuse to create a delete
-    marker for legacy, unversioned URIs in versioned buckets: that would hide
-    evidence while continuing to consume storage.
+    Version-pinned S3 URIs remove that exact version. A URI stored before its
+    bucket kept versions names no version, and deleting it would only add a
+    delete marker that hides the evidence while it keeps consuming storage, so
+    that deletion is refused.
     """
     bucket, key = parse_s3_uri(uri)
     if bucket == _LOCAL_BUCKET:

@@ -123,7 +123,7 @@ def sso(keen, monkeypatch, signing_key):  # noqa: F811 - fixture imported above
         "github_sso_enabled": False,
         "github_client_id": "gh-client",
         "github_client_secret": "gh-secret",
-        "github_redirect_uri": "",
+        "github_redirect_uri": "https://keen.example/api/v1/auth/sso/github/callback",
         "github_allowed_email_domains": "",
     }.items():
         monkeypatch.setattr(settings, name, value)
@@ -562,6 +562,31 @@ def test_the_key_set_is_fetched_once_an_hour(sso, monkeypatch):
             "KEEN_OIDC_CLIENT_SECRET, KEEN_OIDC_JWKS_URI, KEEN_OIDC_ISSUER",
         ),
         (
+            # KEEN never derives a callback address from the request.
+            {"oidc_redirect_uri": ""},
+            500,
+            f"{LABEL} SSO is enabled but required settings are missing: "
+            "KEEN_OIDC_REDIRECT_URI",
+        ),
+        (
+            {
+                "oidc_redirect_uri": "https://elsewhere.example/api/v1/auth/sso/oidc/callback"
+            },
+            500,
+            f"{LABEL} redirect URI must be on KEEN_PUBLIC_BASE_URL",
+        ),
+        (
+            # The public origin followed by more host name is another host.
+            {"oidc_redirect_uri": "https://keen.example.attacker.example/callback"},
+            500,
+            f"{LABEL} redirect URI must be on KEEN_PUBLIC_BASE_URL",
+        ),
+        (
+            {"oidc_redirect_uri": "http://keen.example/api/v1/auth/sso/oidc/callback"},
+            500,
+            f"{LABEL} redirect URI must be on KEEN_PUBLIC_BASE_URL",
+        ),
+        (
             {"oidc_token_endpoint": "http://idp.example/token"},
             500,
             f"{LABEL} token endpoint must use HTTPS",
@@ -586,6 +611,10 @@ def test_the_key_set_is_fetched_once_an_hour(sso, monkeypatch):
         "disabled",
         "auto-provision",
         "incomplete",
+        "no-redirect-uri",
+        "redirect-elsewhere",
+        "redirect-on-a-longer-host",
+        "redirect-over-http",
         "plain-http",
         "other-scheme",
         "no-client-authentication",
@@ -605,7 +634,6 @@ def test_misconfigured_sign_in_fails_closed_before_contacting_the_provider(
     assert sso.states() == 0 and sso.provider.requests == []
     methods = browser.get("/v1/auth/methods").json()
     assert (methods["sso_enabled"], methods["sso_providers"]) == (False, [])
-    assert (methods["oidc_enabled"], methods["oidc"]) == (False, None)
 
 
 def test_only_working_providers_are_offered_on_the_sign_in_page(sso, monkeypatch):
@@ -618,7 +646,17 @@ def test_only_working_providers_are_offered_on_the_sign_in_page(sso, monkeypatch
             "start_url": "/api/v1/auth/sso/oidc/start",
         }
     ]
-    assert methods["oidc"] == {"label": LABEL, "start_url": "/api/v1/auth/oidc/start"}
+    assert methods["sso_enabled"] is True
+    # The sign-in page reads only the provider list; there is no second,
+    # provider-specific description of the same sign-in.
+    assert set(methods) == {
+        "demo",
+        "local_enabled",
+        "ldap_enabled",
+        "remote_user_enabled",
+        "sso_enabled",
+        "sso_providers",
+    }
 
     # Plain HTTP is accepted only with the explicit development setting.
     monkeypatch.setattr(settings, "oidc_token_endpoint", "http://idp.example/token")

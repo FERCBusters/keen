@@ -162,8 +162,6 @@ def _validate_access_control_payload(
     role_ids: list[uuid.UUID] = []
     if not fields or "role_org_node_ids" in fields:
         role_ids.extend(payload.role_org_node_ids or [])
-    if (not fields or "role_org_node_id" in fields) and payload.role_org_node_id:
-        role_ids.append(payload.role_org_node_id)
     for role_id in set(role_ids):
         if not db.query(IsmsOrgNode.id).filter(IsmsOrgNode.id == role_id).first():
             raise DomainError(status_code=400, detail="Unknown organisation chart role")
@@ -205,15 +203,7 @@ def create_access_control_matrix_entry(
     db.add(row)
     db.flush()
     _replace_access_control_accounts(db, row, payload.aws_account_ids)
-    _replace_access_control_roles(
-        db,
-        row,
-        (
-            payload.role_org_node_ids
-            if payload.role_org_node_ids is not None
-            else ([payload.role_org_node_id] if payload.role_org_node_id else [])
-        ),
-    )
+    _replace_access_control_roles(db, row, payload.role_org_node_ids or [])
     db.flush()
     after = _access_control_matrix_out(db, row, fw)
     _record(db, "access_control_matrix", row, "created", None, after, user, context)
@@ -277,10 +267,6 @@ def update_access_control_matrix_entry(
         row.approved_by_user_id = payload.approved_by_user_id
     if "role_org_node_ids" in fields:
         _replace_access_control_roles(db, row, payload.role_org_node_ids or [])
-    elif "role_org_node_id" in fields:
-        _replace_access_control_roles(
-            db, row, [payload.role_org_node_id] if payload.role_org_node_id else []
-        )
     if "notes" in fields:
         row.notes = _clean_text(payload.notes, max_len=12000)
     if "aws_account_ids" in fields:

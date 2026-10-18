@@ -364,7 +364,7 @@ def test_bookstack_timestamps_are_normalized_to_naive_utc(value, expected):
     assert bookstack._parse_bookstack_ts(value) == expected
 
 
-def test_bookstack_recovers_legacy_page_identity_from_stored_events():
+def test_bookstack_reads_page_identity_from_a_collected_event():
     from app.db.models import Event
     from app.ingest import bookstack
 
@@ -373,16 +373,33 @@ def test_bookstack_recovers_legacy_page_identity_from_stored_events():
         external_id="page:7:2026-01-01",
         system="Policies:isms:security",
         summary="bookstack: updated page 'Security' (isms-security)",
-        normalized_payload={},
-        raw_pointer={},
+        normalized_payload={
+            "bookstack": {
+                "page_id": 7,
+                "page_slug": "security",
+                "page_title": "Security",
+                "book_slug": "isms",
+            }
+        },
+        raw_pointer={"bookstack": {"page_id": 7, "book_id": 3}},
     )
     full, listing = bookstack._event_bookstack_page_payloads(event)
-    assert full == listing
     assert (
-        full["id"] == 7
-        and full["slug"] == "security"
-        and full["book_slug"] == "isms"
-        and full["name"] == "Security"
+        full
+        == listing
+        == {
+            "id": 7,
+            "book_id": 3,
+            "slug": "security",
+            "name": "Security",
+            "book_slug": "isms",
+        }
+    )
+    # The page fields come from the payload, never from display text.
+    event.normalized_payload = {}
+    assert bookstack._event_bookstack_page_payloads(event) == (
+        {"book_id": 3},
+        {"book_id": 3},
     )
 
 

@@ -22,38 +22,18 @@ def _clean_evidence_title(raw: object, fallback_url: str = "") -> str:
 
 
 def _clause_evidence_mappings(c: FrameworkClause) -> list[dict]:
-    meta = dict(getattr(c, "meta", None) or {})
-    raw = meta.get("evidence_mappings")
-    if raw is None:
-        raw = meta.get("evidence_urls")
-    if raw is None:
-        raw = (
-            meta.get("evidenceUrls")
-            or meta.get("evidence_links")
-            or meta.get("evidence")
-        )
-    if isinstance(raw, str):
-        raw = [line.strip() for line in raw.splitlines()]
-    if not isinstance(raw, list):
-        return []
+    """The clause's evidence links as an administrator saved them, without repeats."""
+    raw = (getattr(c, "meta", None) or {}).get("evidence_mappings")
     out: list[dict] = []
     seen: set[str] = set()
-    for item in raw:
-        title = ""
-        url = ""
-        if isinstance(item, dict):
-            title = str(
-                item.get("title") or item.get("label") or item.get("name") or ""
-            ).strip()
-            url = str(
-                item.get("url") or item.get("href") or item.get("link") or ""
-            ).strip()
-        else:
-            url = str(item or "").strip()
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or "").strip()
         if not url or url in seen:
             continue
         seen.add(url)
-        out.append({"title": _clean_evidence_title(title, url), "url": url})
+        out.append({"title": _clean_evidence_title(item.get("title"), url), "url": url})
     return out
 
 
@@ -69,8 +49,6 @@ def _clause_out(c: FrameworkClause, link_count: int | None = None) -> dict:
         "sort_order": int(c.sort_order or 0),
         "upstream_url": _upstream_url(c),
         "evidence_mappings": evidence_mappings,
-        # Backward-compatible URL-only projection for older UI/API callers.
-        "evidence_urls": [item["url"] for item in evidence_mappings],
         "evidence_count": len(evidence_mappings),
         "metadata": c.meta or {},
         "control_link_count": int(link_count or 0),

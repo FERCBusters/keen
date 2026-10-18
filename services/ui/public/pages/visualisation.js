@@ -709,65 +709,16 @@ function renderTopLists() {
   const sourceNodes = nodes.filter((n) => n.type === 'source');
   const controlNodes = nodes.filter((n) => n.type === 'control');
 
-  // Prefer backend-provided distinct mapped event totals (avoids double-counting).
-  const hasMappedTotals = nodes.some((n) => typeof n.mapped_events === 'number');
-
-  const topSources = (
-    hasMappedTotals
-      ? sourceNodes.map((n) => ({
-          node: n,
-          total: Number(n.mapped_events || 0),
-        }))
-      : []
-  )
-    .filter((x) => x.total > 0)
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 12);
-
-  const topControls = (
-    hasMappedTotals
-      ? controlNodes.map((n) => ({
-          node: n,
-          total: Number(n.mapped_events || 0),
-        }))
-      : []
-  )
-    .filter((x) => x.total > 0)
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 12);
-
-  // Fallback (older API): sum link weights (may overcount when events map to multiple controls)
-  if (!hasMappedTotals) {
-    const nodeById = new Map(nodes.map((n) => [n.id, n]));
-    const srcTotals = new Map();
-    const ctrlTotals = new Map();
-
-    for (const l of graphData.links || []) {
-      const v = Number(l.value || 0);
-      if (!v) continue;
-      srcTotals.set(l.source, (srcTotals.get(l.source) || 0) + v);
-      ctrlTotals.set(l.target, (ctrlTotals.get(l.target) || 0) + v);
-    }
-
-    topSources.length = 0;
-    topControls.length = 0;
-
-    topSources.push(
-      ...Array.from(srcTotals.entries())
-        .map(([id, total]) => ({ node: nodeById.get(id), total }))
-        .filter((x) => x.node)
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 12),
-    );
-
-    topControls.push(
-      ...Array.from(ctrlTotals.entries())
-        .map(([id, total]) => ({ node: nodeById.get(id), total }))
-        .filter((x) => x.node)
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 12),
-    );
-  }
+  // Each node carries its distinct mapped-event total, which never double-counts
+  // an event mapped to several controls.
+  const top = (list) =>
+    list
+      .map((n) => ({ node: n, total: Number(n.mapped_events || 0) }))
+      .filter((x) => x.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 12);
+  const topSources = top(sourceNodes);
+  const topControls = top(controlNodes);
 
   topSourcesEl.innerHTML = topSources.length
     ? topSources
@@ -2290,6 +2241,26 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
   setSunburstOtherPanel('');
   if (!graphData) return;
 
+  // Exports carry the source → control edges the sunburst is built from.
+  {
+    const nodeById = new Map((graphData.nodes || []).map((n) => [n.id, n]));
+    const edges = (graphData.links || [])
+      .map((l) => {
+        const s = nodeById.get(l.source);
+        const c = nodeById.get(l.target);
+        return {
+          source: s?.source || '',
+          source_label: s?.label || s?.source || '',
+          control_id: c?.control_id || '',
+          control_ref: c?.label || '',
+          control_title: c?.title || '',
+          mapped_events: Number(l.value || 0),
+        };
+      })
+      .filter((e) => e.mapped_events > 0);
+    lastView = { mode, range: getActiveRange(), payload: { edges } };
+  }
+
   const isDrill = !!(drill && typeof drill === 'object' && drill.data);
   const drillBack = isDrill ? drill.back || null : null;
   const data = isDrill ? drill.data : buildHierarchy(mode);
@@ -2992,8 +2963,6 @@ async function loadTimeseries(days, opts = null) {
   if (r) {
     u.searchParams.set('start_date', r.from);
     u.searchParams.set('end_date', r.to);
-    // Keep days as a fallback for older backends / partial ranges.
-    u.searchParams.set('days', String(d));
   } else {
     u.searchParams.set('days', String(d));
   }
@@ -3006,26 +2975,6 @@ async function loadTimeseries(days, opts = null) {
   const res = await apiGet(u.pathname + u.search);
   timeseriesCache.set(key, res);
   return res;
-
-  // Update export payload (sunburst uses the same edge list as the graph).
-  {
-    const nodeById = new Map((graphData?.nodes || []).map((n) => [n.id, n]));
-    const edges = (graphData?.links || [])
-      .map((l) => {
-        const s = nodeById.get(l.source);
-        const c = nodeById.get(l.target);
-        return {
-          source: s?.source || '',
-          source_label: s?.label || s?.source || '',
-          control_id: c?.control_id || '',
-          control_ref: c?.label || '',
-          control_title: c?.title || '',
-          mapped_events: Number(l.value || 0),
-        };
-      })
-      .filter((e) => e.mapped_events > 0);
-    lastView = { mode, range: getActiveRange(), payload: { edges } };
-  }
 }
 
 async function drawHistogram() {

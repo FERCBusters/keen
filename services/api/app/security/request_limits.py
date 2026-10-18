@@ -1,11 +1,18 @@
 """Bound request bodies and screen request targets before handlers see them."""
 
+import re
 import tempfile
 
 import anyio
 from starlette.responses import JSONResponse
 
 MAX_BODY = 40 * 1024 * 1024
+# ISMS document files and audit final reports accept a single file up to this
+# size; their operations check the file itself against the same figure.
+MAX_FILE_UPLOAD = 100 * 1024 * 1024
+# Room for the multipart boundary and part headers around that one file.
+_MULTIPART_ROOM = 64 * 1024
+_FILE_UPLOADS = re.compile(r"/v1/(?:isms/documents/[^/]+/file|audits/[^/]+/report)")
 
 
 def body_limit(path):
@@ -19,6 +26,8 @@ def body_limit(path):
         return 1024 * 1024
     if path.startswith("/v1/webhooks/"):
         return 10 * 1024 * 1024
+    if _FILE_UPLOADS.fullmatch(path):
+        return MAX_FILE_UPLOAD + _MULTIPART_ROOM
     return MAX_BODY
 
 

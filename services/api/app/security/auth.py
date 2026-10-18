@@ -78,13 +78,6 @@ def _remote_user_from_headers(headers: Mapping[str, str], *, peer=None) -> str |
     return val
 
 
-def _remote_user_from_request(request: Request) -> str | None:
-    # Backwards-compatible wrapper.
-    return _remote_user_from_headers(
-        request.headers, peer=getattr(request.client, "host", None)
-    )
-
-
 def cookie_name() -> str:
     return settings.session_cookie_name
 

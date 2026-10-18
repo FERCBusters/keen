@@ -55,10 +55,12 @@ def catalogue(keen, monkeypatch, tmp_path):  # noqa: F811 - fixture imported abo
                     "title": "  Statement of Applicability  ",
                     "url": "https://docs.example/soa",
                 },
-                {"label": "", "href": "/event.html?id=1"},
+                {"title": "", "url": "/event.html?id=1"},
                 {"title": "Duplicate", "url": "https://docs.example/soa"},
                 {"title": "No URL"},
+                # Only title-and-URL entries are evidence mappings.
                 "https://docs.example/plain",
+                {"label": "Plain", "href": "https://docs.example/plain"},
             ],
             "upstream_url": "https://standards.example/4.10",
         },
@@ -69,7 +71,12 @@ def catalogue(keen, monkeypatch, tmp_path):  # noqa: F811 - fixture imported abo
         title=HOSTILE,
         parent_clause_id=root.id,
         sort_order=1,
-        meta={"evidence_urls": "https://docs.example/a\n\n https://docs.example/b "},
+        meta={
+            "evidence_mappings": [
+                {"title": "A", "url": " https://docs.example/a "},
+                {"title": "B", "url": "https://docs.example/b"},
+            ]
+        },
     )
     other = FrameworkClause(framework_slug="B", ref="1", title="Other framework")
     db.add_all([child10, child2, other])
@@ -180,14 +187,14 @@ def test_clauses_are_listed_as_a_naturally_sorted_tree(catalogue):
     assert by_ref["4.10"]["evidence_mappings"] == [
         {"title": "Statement of Applicability", "url": "https://docs.example/soa"},
         {"title": "/event.html?id=1", "url": "/event.html?id=1"},
-        {"title": "https://docs.example/plain", "url": "https://docs.example/plain"},
     ]
-    assert by_ref["4.10"]["evidence_count"] == 3
+    assert by_ref["4.10"]["evidence_count"] == 2
     assert by_ref["4.10"]["upstream_url"] == "https://standards.example/4.10"
-    assert by_ref["4.2"]["evidence_urls"] == [
-        "https://docs.example/a",
-        "https://docs.example/b",
+    assert by_ref["4.2"]["evidence_mappings"] == [
+        {"title": "A", "url": "https://docs.example/a"},
+        {"title": "B", "url": "https://docs.example/b"},
     ]
+    assert "evidence_urls" not in by_ref["4.2"]
     assert by_ref["5"]["evidence_mappings"] == []
 
     page = client.get(
@@ -212,7 +219,7 @@ def test_clause_detail_controls_and_changelog(catalogue):
     assert detail["ref"] == "4.2" and detail["parent_id"] == str(catalogue.root.id)
     # The detail reports the same link count as the clause list.
     assert detail["control_link_count"] == 2
-    assert detail["evidence_urls"] == [
+    assert [item["url"] for item in detail["evidence_mappings"]] == [
         "https://docs.example/a",
         "https://docs.example/b",
     ]

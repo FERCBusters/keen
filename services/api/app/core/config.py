@@ -126,8 +126,6 @@ class Settings(BaseSettings):
 
     mfa_policy: str = Field(default="optional")
     mfa_encryption_key: str = Field(default="", repr=False)
-    mfa_origin: str = Field(default="")
-    mfa_rp_id: str = Field(default="")
 
     @field_validator("mfa_policy")
     @classmethod
@@ -147,9 +145,9 @@ class Settings(BaseSettings):
     trust_remote_user: bool = Field(default=False)
     remote_user_header_name: str = Field(default="REMOTE_USER")
 
-    # Optional upstream logout URL (legacy external SSO proxy mode). Native OIDC
-    # uses KEEN_OIDC_END_SESSION_ENDPOINT and the ID token stored in KEEN's own
-    # session instead.
+    # Optional sign-out address of the trusted proxy that authenticates users.
+    # Native OIDC uses KEEN_OIDC_END_SESSION_ENDPOINT and the ID token stored in
+    # KEEN's own session instead.
     upstream_logout_url: str = Field(default="")
 
     # -----------------------------------------------------------------------------
@@ -475,13 +473,10 @@ class Settings(BaseSettings):
     taiga_username: str = Field(default="")
     taiga_password: str = Field(default="")
 
-    # --- RSS / Atom (polling)
-    # Note: TLS verification is ALWAYS enforced for RSS feeds (verify=True in all clients).
-    # The rss_verify_tls field is retained for backwards compatibility but ignored.
+    # --- RSS / Atom (polling); feed requests always verify TLS.
     imap_enabled: bool = Field(default=False)
     rss_enabled: bool = Field(default=False)
     rss_config_path: str = Field(default="/app/config/rss.yml")
-    rss_verify_tls: bool = Field(default=True)  # Deprecated: always True
     rss_user_agent: str = Field(default="Keen RSS ingester")
 
     # --- Google Workspace (Admin SDK Reports API)

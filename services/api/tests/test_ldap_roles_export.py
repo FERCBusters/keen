@@ -352,7 +352,6 @@ def test_ldap_login_route_and_mfa_with_local_disabled(db, directory, monkeypatch
     monkeypatch.setattr(settings, "local_auth_enabled", False)
     monkeypatch.setattr(settings, "mfa_policy", "off")
     monkeypatch.setattr(settings, "public_base_url", "https://keen.example")
-    monkeypatch.setattr(settings, "mfa_origin", "https://keen.example")
     request = Request(
         {
             "type": "http",

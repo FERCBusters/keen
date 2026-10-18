@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -51,8 +52,7 @@ class Condition:
 class RuleTarget:
     framework_slug: str
     ref: str
-    roles_any: set[str] | None = None
-    # "control" or "clause". None for targets written before rules recorded it.
+    # "control" or "clause". None leaves the catalogue to say which it names.
     kind: str | None = None
 
 
@@ -138,37 +138,19 @@ def _event_label_values(event: dict[str, Any]) -> list[str]:
     return out
 
 
-def _clean_slug(v: Any) -> str | None:
-    s = str(v or "").strip()
-    return s or None
-
-
-def _clean_ref(v: Any) -> str | None:
-    s = str(v or "").strip()
-    return s or None
-
-
-def _clean_roles(v: Any) -> set[str] | None:
-    if not isinstance(v, list):
-        return None
-    out = {str(x).strip().lower() for x in v if str(x).strip()}
-    return out or None
-
-
-def _clean_optional_str(v: Any) -> str | None:
-    s = str(v or "").strip()
-    return s or None
-
-
-def _clean_optional_int(v: Any) -> int | None:
-    if v is None or v == "":
-        return None
-    try:
-        return int(v)
-    except Exception:
-        return None
-
-
+# A rule entry and a target object may carry only these keys; anything else is
+# taken for a typo, so the rule is skipped rather than read differently.
+_RULE_KEYS = {
+    "id",
+    "description",
+    "when",
+    "map_to",
+    "confidence",
+    "enabled",
+    "framework",
+    "frameworks",
+}
+_TARGET_KEYS = {"framework", "frameworks", "ref", "refs", "kind"}
 _KNOWN_WHEN_KEYS = {
     "fields",
     "bookstack_book_id",
@@ -195,250 +177,211 @@ _KNOWN_WHEN_KEYS = {
     "label_regex",
     "summary_regex",
 }
-_WARNED_UNKNOWN_WHEN: set[tuple[str, tuple[str, ...]]] = set()
+# Whole-number conditions and their largest values, as the rule editor accepts.
+_INTEGER_CONDITIONS = {
+    "severity": 1000,
+    "bookstack_book_id": 2_147_483_647,
+    "bookstack_page_id": 2_147_483_647,
+}
+_TEXT_LIMIT = 512
+_REF_LIMIT = 64
+_FRAMEWORK = re.compile(r"[A-Za-z0-9._:-]{1,64}")
+_WARNED: set[tuple[str, str]] = set()
 
 
-def _warn_unknown_when_keys(rule_id: str, when: dict[str, Any]) -> None:
-    unknown = tuple(
-        sorted(str(k) for k in when.keys() if str(k) not in _KNOWN_WHEN_KEYS)
-    )
-    if unknown and (rule_id, unknown) not in _WARNED_UNKNOWN_WHEN:
-        _WARNED_UNKNOWN_WHEN.add((rule_id, unknown))
-        log.warning(
-            "Ignoring unsupported rules.yml condition key(s) on rule %s: %s",
-            rule_id,
-            ", ".join(unknown),
-        )
+class _Invalid(ValueError):
+    """A rule entry KEEN cannot read as it is written."""
+
+
+def _skip(rule_id: str, problem: str) -> None:
+    # Rules are reread for each collected event, so a problem is logged once.
+    if (rule_id, problem) not in _WARNED:
+        if len(_WARNED) >= 1024:
+            _WARNED.clear()
+        _WARNED.add((rule_id, problem))
+        log.warning("Skipping mapping rule %s: %s", rule_id, problem)
 
 
 def _as_rule_entries(raw: Any) -> list[tuple[str | None, dict[str, Any]]]:
-    """Return (framework_hint, rule_dict) tuples from multiple YAML layouts.
+    """Return (framework, rule) pairs from a rules document.
 
-    Supported layouts:
-      1) Legacy list of rules
-         - [{...}, {...}]
-      2) Legacy dict with `rules`
-         - {rules: [{...}]}
-      3) Framework bucket map
-         - {frameworks: {"iso_27001_2022": [{...}], "UK-DVSTF:1.0": [{...}]}}
-         - {"iso_27001_2022": [{...}], "UK-DVSTF:1.0": [{...}]}
-
-    Rule-level keys (`framework` / `frameworks`) override the inherited bucket.
+    A document is ``{rules: [...]}``, optionally naming the framework its rules
+    map to when they name none themselves.
     """
-
-    out: list[tuple[str | None, dict[str, Any]]] = []
-
-    if isinstance(raw, list):
-        for item in raw:
-            if isinstance(item, dict):
-                out.append((None, item))
-        return out
-
-    if not isinstance(raw, dict):
-        return out
-
-    if isinstance(raw.get("rules"), list):
-        inherited = _clean_slug(raw.get("framework"))
-        for item in raw.get("rules") or []:
-            if isinstance(item, dict):
-                out.append((inherited, item))
-
-    fw_map = raw.get("frameworks")
-    if isinstance(fw_map, dict):
-        for fw, bucket in fw_map.items():
-            fw_slug = _clean_slug(fw)
-            if isinstance(bucket, dict):
-                bucket_rules = bucket.get("rules")
-            else:
-                bucket_rules = bucket
-            if not isinstance(bucket_rules, list):
-                continue
-            for item in bucket_rules:
-                if isinstance(item, dict):
-                    out.append((fw_slug, item))
-
-    # Treat top-level mapping as a framework map when no explicit keys are present.
-    if "rules" not in raw and "frameworks" not in raw:
-        for fw, bucket in raw.items():
-            fw_slug = _clean_slug(fw)
-            if isinstance(bucket, dict):
-                bucket_rules = bucket.get("rules")
-            else:
-                bucket_rules = bucket
-            if not isinstance(bucket_rules, list):
-                continue
-            for item in bucket_rules:
-                if isinstance(item, dict):
-                    out.append((fw_slug, item))
-
-    return out
-
-
-def _normalize_framework_targets(
-    rule: dict[str, Any], inherited_fw: str | None
-) -> list[str]:
-    explicit_many = rule.get("frameworks")
-    if isinstance(explicit_many, list):
-        vals = [str(x).strip() for x in explicit_many if str(x).strip()]
-        if vals:
-            return vals
-
-    explicit_one = rule.get("framework")
-    if isinstance(explicit_one, str) and explicit_one.strip():
-        return [explicit_one.strip()]
-
-    if inherited_fw and inherited_fw.strip():
-        return [inherited_fw.strip()]
-
-    return [settings.default_framework_slug]
-
-
-def _targets_from_list_scalars(
-    values: list[Any], frameworks: list[str]
-) -> list[RuleTarget]:
-    refs = [_clean_ref(v) for v in values]
-    refs = [r for r in refs if r]
-    out: list[RuleTarget] = []
-    for fw in frameworks:
-        for ref in refs:
-            out.append(RuleTarget(framework_slug=fw, ref=ref))
-    return out
-
-
-def _targets_from_dict_map(
-    values: dict[str, Any], frameworks: list[str]
-) -> list[RuleTarget]:
-    """Parse legacy map_to dict where keys are framework slugs.
-
-    Example:
-      map_to:
-        iso_27001_2022: [A.8.16]
-        UK-DVSTF:1.0: [11.8.1.a]
-        "*": [fallback_ref]
-    """
-
-    out: list[RuleTarget] = []
-
-    wildcard = values.get("*")
-    default_bucket = values.get("default")
-
-    for fw in frameworks:
-        bucket = values.get(fw)
-        if bucket is None:
-            bucket = wildcard if wildcard is not None else default_bucket
-        if bucket is None:
-            continue
-        refs = bucket if isinstance(bucket, list) else [bucket]
-        for ref in refs:
-            r = _clean_ref(ref)
-            if r:
-                out.append(RuleTarget(framework_slug=fw, ref=r))
-
-    # Also allow explicit framework keys beyond inherited/default frameworks.
-    for fw, bucket in values.items():
-        if fw in {"*", "default"}:
-            continue
-        fw_slug = _clean_slug(fw)
-        if not fw_slug:
-            continue
-        refs = bucket if isinstance(bucket, list) else [bucket]
-        for ref in refs:
-            r = _clean_ref(ref)
-            if r:
-                out.append(RuleTarget(framework_slug=fw_slug, ref=r))
-
-    return out
-
-
-def _targets_from_list_objects(
-    values: list[dict[str, Any]], frameworks: list[str]
-) -> list[RuleTarget]:
-    """Parse object targets.
-
-    Supported forms:
-      - {framework: "iso_27001_2022", ref: "A.8.16"}
-      - {framework: "UK-DVSTF:1.0", refs: ["11.8.1.a", "11.8.2.b"]}
-      - {ref: "A.8.16"}  # uses inherited/default framework(s)
-      - {ref: "11.8.1.a", framework: "UK-DVSTF:1.0", roles_any: ["admin","ops"]}
-      - {framework: "iso_27001_2022", ref: "9.2", kind: "clause"}
-
-    ``kind`` says whether the reference names a control or a clause. A target
-    with any other kind is ignored, so evidence never attaches to a guess.
-    """
-
-    out: list[RuleTarget] = []
-
-    for item in values:
-        if not isinstance(item, dict):
-            continue
-
-        fw_list: list[str] = []
-        one_fw = _clean_slug(item.get("framework") or item.get("framework_slug"))
-        many_fw = item.get("frameworks")
-        if isinstance(many_fw, list):
-            fw_list = [str(x).strip() for x in many_fw if str(x).strip()]
-        elif one_fw:
-            fw_list = [one_fw]
-        else:
-            fw_list = list(frameworks)
-
-        refs_raw = item.get("refs")
-        if refs_raw is None:
-            refs_raw = [item.get("ref")]
-        if not isinstance(refs_raw, list):
-            refs_raw = [refs_raw]
-
-        roles_any = _clean_roles(item.get("roles_any"))
-        kind = str(item.get("kind") or "").strip().lower() or None
-        if kind is not None and kind not in TARGET_KINDS:
-            log.warning("Ignoring a rules.yml target with unsupported kind %r", kind)
-            continue
-
-        refs = [_clean_ref(r) for r in refs_raw]
-        refs = [r for r in refs if r]
-        for fw in fw_list:
-            for ref in refs:
-                out.append(
-                    RuleTarget(
-                        framework_slug=fw, ref=ref, roles_any=roles_any, kind=kind
-                    )
-                )
-
-    return out
-
-
-def _normalize_rule_targets(raw_map: Any, frameworks: list[str]) -> list[RuleTarget]:
-    """Normalize map_to/controls into explicit per-framework targets."""
-
-    if isinstance(raw_map, list):
-        if raw_map and all(isinstance(x, dict) for x in raw_map):
-            return _targets_from_list_objects(raw_map, frameworks)
-        return _targets_from_list_scalars(raw_map, frameworks)
-
-    if isinstance(raw_map, dict):
-        # Explicit target-object container form:
-        # map_to: {targets: [{framework, ref}, ...]}
-        targets = (
-            raw_map.get("targets") if isinstance(raw_map.get("targets"), list) else None
-        )
-        if targets and all(isinstance(x, dict) for x in targets):
-            return _targets_from_list_objects(targets, frameworks)
-
-        return _targets_from_dict_map(raw_map, frameworks)
-
-    # Scalar ref.
-    one = _clean_ref(raw_map)
-    if not one:
+    if not isinstance(raw, dict) or not isinstance(raw.get("rules"), list):
         return []
-    return [RuleTarget(framework_slug=fw, ref=one) for fw in frameworks]
+    framework = raw.get("framework")
+    inherited = (framework.strip() or None) if isinstance(framework, str) else None
+    return [(inherited, item) for item in raw["rules"] if isinstance(item, dict)]
+
+
+def _collector(value: str) -> None:
+    try:
+        identity = json.loads(value)
+    except ValueError:
+        identity = None
+    if not (
+        isinstance(identity, list)
+        and len(identity) == 3
+        and all(isinstance(part, str) and part for part in identity)
+    ):
+        raise _Invalid("collector must be a collection identity")
+
+
+def _condition(when: Any) -> Condition:
+    from app.security.regex import validate_pattern
+
+    if not isinstance(when, dict):
+        raise _Invalid("when must be an object of conditions")
+    unknown = sorted(str(key) for key in when if key not in _KNOWN_WHEN_KEYS)
+    if unknown:
+        raise _Invalid("unsupported condition " + ", ".join(unknown))
+    values: dict[str, Any] = {}
+    for key, value in when.items():
+        if key == "fields":
+            try:
+                values[key] = validate_fields(value)
+            except ValueError as exc:
+                raise _Invalid(f"fields: {exc}") from None
+        elif key in _INTEGER_CONDITIONS:
+            largest = _INTEGER_CONDITIONS[key]
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or not 0 <= value <= largest
+            ):
+                raise _Invalid(f"{key} must be a whole number from 0 to {largest}")
+            values[key] = value
+        else:
+            if not isinstance(value, str) or len(value) > _TEXT_LIMIT:
+                raise _Invalid(f"{key} must be text of up to {_TEXT_LIMIT} characters")
+            if key.endswith("_regex"):
+                try:
+                    validate_pattern(value)
+                except ValueError as exc:
+                    raise _Invalid(f"{key}: {exc}") from None
+            if key == "collector":
+                _collector(value)
+            values[key] = value.strip() or None
+    return Condition(**values)
+
+
+def _framework_names(value: Any, label: str) -> list[str]:
+    names = value if isinstance(value, list) else [value]
+    if not names or not all(
+        isinstance(name, str) and _FRAMEWORK.fullmatch(name.strip()) for name in names
+    ):
+        raise _Invalid(f"{label} must name frameworks by their identifiers")
+    return [name.strip() for name in names]
+
+
+def _frameworks(item: dict[str, Any], inherited: list[str]) -> list[str]:
+    if "framework" in item and "frameworks" in item:
+        raise _Invalid("give framework or frameworks, as alternatives")
+    if "frameworks" in item:
+        if not isinstance(item["frameworks"], list):
+            raise _Invalid("frameworks must be a list")
+        return _framework_names(item["frameworks"], "frameworks")
+    if "framework" in item:
+        return _framework_names(item["framework"], "framework")
+    return inherited
+
+
+def _refs(value: Any) -> list[str]:
+    refs = value if isinstance(value, list) else [value]
+    if not refs or not all(
+        isinstance(ref, str) and ref.strip() and len(ref.strip()) <= _REF_LIMIT
+        for ref in refs
+    ):
+        raise _Invalid(
+            f"map_to references must be text of up to {_REF_LIMIT} characters"
+        )
+    return [ref.strip() for ref in refs]
+
+
+def _target_objects(values: list[dict[str, Any]], frameworks: list[str]):
+    """Read target objects such as ``{framework, ref}`` or ``{refs, kind}``.
+
+    ``kind`` says whether the reference names a control or a clause, so
+    evidence attaches only to the item the rule names.
+    """
+    for item in values:
+        unknown = sorted(str(key) for key in item if key not in _TARGET_KEYS)
+        if unknown:
+            raise _Invalid("unsupported target key " + ", ".join(unknown))
+        if ("ref" in item) == ("refs" in item):
+            raise _Invalid("each target needs ref or refs")
+        refs = _refs(item["ref"] if "ref" in item else item["refs"])
+        kind = item.get("kind")
+        if kind is not None:
+            kind = kind.strip().lower() if isinstance(kind, str) else kind
+            if kind not in TARGET_KINDS:
+                raise _Invalid("a target's kind must be control or clause")
+        for framework in _frameworks(item, frameworks):
+            for ref in refs:
+                yield RuleTarget(framework_slug=framework, ref=ref, kind=kind)
+
+
+def _targets(raw_map: Any, frameworks: list[str]) -> list[RuleTarget]:
+    """Turn ``map_to`` into one target per framework and reference.
+
+    ``map_to`` is a reference or a list of references for the rule's
+    frameworks, a map of framework identifiers to references, or a list of
+    target objects.
+    """
+    if raw_map is None:
+        raise _Invalid("map_to is required")
+    if raw_map in ({}, []):
+        raise _Invalid("map_to lists no targets")
+    if isinstance(raw_map, dict):
+        return [
+            RuleTarget(framework_slug=framework, ref=ref)
+            for key, refs in raw_map.items()
+            for framework in _framework_names(key, "map_to")
+            for ref in _refs(refs)
+        ]
+    if (
+        isinstance(raw_map, list)
+        and raw_map
+        and all(isinstance(item, dict) for item in raw_map)
+    ):
+        return list(_target_objects(raw_map, frameworks))
+    return [
+        RuleTarget(framework_slug=framework, ref=ref)
+        for framework in frameworks
+        for ref in _refs(raw_map)
+    ]
+
+
+def _parse_rule(rid: str, inherited: str | None, item: dict[str, Any]) -> Rule | None:
+    unknown = sorted(str(key) for key in item if key not in _RULE_KEYS)
+    if unknown:
+        raise _Invalid("unsupported key " + ", ".join(unknown))
+    enabled = item.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise _Invalid("enabled must be true or false")
+    if not enabled:
+        return None
+    if "when" not in item:
+        raise _Invalid("when is required")
+    condition = _condition(item["when"])
+    confidence = item.get("confidence", 0.8)
+    if (
+        isinstance(confidence, bool)
+        or not isinstance(confidence, (int, float))
+        or not 0 <= confidence <= 1
+    ):
+        raise _Invalid("confidence must be a number from 0 to 1")
+    frameworks = _frameworks(item, [inherited or settings.default_framework_slug])
+    targets: list[RuleTarget] = []
+    for target in _targets(item.get("map_to"), frameworks):
+        if target not in targets:
+            targets.append(target)
+    return Rule(id=rid, when=condition, targets=targets, confidence=float(confidence))
 
 
 def load_rules(path: str, *, db: Any = None) -> list[Rule]:
-    """Load rules from the managed document, or the shipped YAML.
-
-    Backward compatible with the original single-framework schema while allowing
-    multi-framework rules and object-style per-target mappings.
-    """
+    """Load rules from the managed document, or the shipped YAML."""
 
     from app.core.managed_configuration import load_document
 
@@ -449,88 +392,34 @@ def load_rules(path: str, *, db: Any = None) -> list[Rule]:
     return parse_rules(raw)
 
 
+def rule_problem(item: dict[str, Any]) -> str | None:
+    """Describe why a rule entry would be skipped, or return None."""
+    try:
+        _parse_rule(str(item.get("id") or ""), None, item)
+    except _Invalid as problem:
+        return str(problem)
+    return None
+
+
 def parse_rules(raw: Any) -> list[Rule]:
-    """Use the same parser for runtime matching and admin validation/preview."""
+    """Read every usable rule; skip and log each entry that cannot be read.
+
+    Runtime matching, the rule editor, previews and backfills share this parser.
+    """
     rules: list[Rule] = []
-    entries = _as_rule_entries(raw)
-
-    for idx, (inherited_fw, it) in enumerate(entries):
-        if it.get("enabled") is False:
-            continue
-        rid = str(it.get("id") or f"r{idx}")
-        w = it.get("when") or {}
-        if not isinstance(w, dict):
-            log.warning("Ignoring non-object rules.yml condition on rule %s", rid)
-            w = {}
-        _warn_unknown_when_keys(rid, w)
-
-        severity = _clean_optional_int(w.get("severity"))
-        if w.get("severity") is not None and severity is None:
-            log.warning(
-                "Ignoring invalid rules.yml severity condition on rule %s: %r",
-                rid,
-                w.get("severity"),
-            )
-
-        cond = Condition(
-            fields=validate_fields(w["fields"]) if "fields" in w else None,
-            connection_id=_clean_optional_str(w.get("connection_id")),
-            collector=_clean_optional_str(w.get("collector")),
-            source=_clean_optional_str(w.get("source")),
-            source_regex=_clean_optional_str(w.get("source_regex")),
-            system=_clean_optional_str(w.get("system")),
-            system_regex=_clean_optional_str(w.get("system_regex")),
-            actor=_clean_optional_str(w.get("actor")),
-            actor_regex=_clean_optional_str(w.get("actor_regex")),
-            action=_clean_optional_str(w.get("action")),
-            action_regex=_clean_optional_str(w.get("action_regex")),
-            outcome=_clean_optional_str(w.get("outcome")),
-            outcome_regex=_clean_optional_str(w.get("outcome_regex")),
-            severity=severity,
-            label=_clean_optional_str(w.get("label")),
-            label_regex=_clean_optional_str(w.get("label_regex")),
-            summary_regex=_clean_optional_str(w.get("summary_regex")),
-            bookstack_book_id=_clean_optional_int(w.get("bookstack_book_id")),
-            bookstack_book_slug=_clean_optional_str(w.get("bookstack_book_slug")),
-            bookstack_page_id=_clean_optional_int(w.get("bookstack_page_id")),
-            bookstack_page_slug=_clean_optional_str(w.get("bookstack_page_slug")),
-            bookstack_page_slug_regex=_clean_optional_str(
-                w.get("bookstack_page_slug_regex")
-            ),
-            bookstack_page_title=_clean_optional_str(w.get("bookstack_page_title")),
-            bookstack_page_title_regex=_clean_optional_str(
-                w.get("bookstack_page_title_regex")
-            ),
-        )
-
-        conf_raw = it.get("confidence", 0.8)
+    listed = raw.get("rules") if isinstance(raw, dict) else None
+    for position, item in enumerate(listed if isinstance(listed, list) else [], 1):
+        if not isinstance(item, dict):
+            _skip(f"#{position}", "a rule must be an object")
+    for index, (inherited, item) in enumerate(_as_rule_entries(raw)):
+        rid = str(item.get("id") or f"r{index}")
         try:
-            conf = float(conf_raw)
-        except Exception:
-            conf = 0.8
-
-        frameworks = _normalize_framework_targets(it, inherited_fw)
-        raw_map = it.get("map_to")
-        if raw_map is None:
-            raw_map = it.get("controls")
-
-        targets = _normalize_rule_targets(raw_map, frameworks)
-        if not targets:
+            rule = _parse_rule(rid, inherited, item)
+        except _Invalid as problem:
+            _skip(rid, str(problem))
             continue
-
-        # Deduplicate targets while preserving order.
-        seen: set[tuple[str, str, tuple[str, ...] | None, str | None]] = set()
-        uniq: list[RuleTarget] = []
-        for t in targets:
-            roles_key = tuple(sorted(t.roles_any)) if t.roles_any else None
-            k = (t.framework_slug, t.ref, roles_key, t.kind)
-            if k in seen:
-                continue
-            seen.add(k)
-            uniq.append(t)
-
-        rules.append(Rule(id=rid, when=cond, targets=uniq, confidence=conf))
-
+        if rule is not None:
+            rules.append(rule)
     return rules
 
 
@@ -538,7 +427,6 @@ def evaluate_by_framework(
     event: dict[str, Any],
     rules: list[Rule],
     *,
-    active_roles: set[str] | None = None,
     details: bool = False,
 ) -> dict[str, list[str]] | dict[str, list[dict[str, Any]]]:
     """Return matched refs, or provenance and confidence for persisted mappings."""
@@ -564,8 +452,6 @@ def evaluate_by_framework(
                 summary = str(payload)
 
     labels = _event_label_values(event)
-
-    roles = {str(r).strip().lower() for r in (active_roles or set()) if str(r).strip()}
 
     hits: dict[str, list[Any]] = {}
 
@@ -672,12 +558,6 @@ def evaluate_by_framework(
             continue
 
         for t in r.targets:
-            if t.roles_any is not None and roles and t.roles_any.isdisjoint(roles):
-                continue
-            # If rule target has role gating and caller provided no roles,
-            # treat as not satisfied.
-            if t.roles_any is not None and not roles:
-                continue
             bucket = hits.setdefault(t.framework_slug, [])
             bucket.append(
                 {
@@ -703,31 +583,3 @@ def evaluate_by_framework(
                 chosen[key] = entry
         out[fw] = list(chosen.values())
     return out
-
-
-def evaluate(
-    event: dict[str, Any],
-    rules: list[Rule],
-    framework: str | None = None,
-    *,
-    active_roles: set[str] | None = None,
-) -> list[str]:
-    """Backward-compatible matcher.
-
-    - framework provided: refs for that framework only
-    - framework omitted: flattened refs across all frameworks
-    """
-
-    by_fw = evaluate_by_framework(event, rules, active_roles=active_roles)
-    if framework:
-        return list(by_fw.get(framework, []))
-
-    merged: list[str] = []
-    seen: set[str] = set()
-    for refs in by_fw.values():
-        for ref in refs:
-            if ref in seen:
-                continue
-            seen.add(ref)
-            merged.append(ref)
-    return merged

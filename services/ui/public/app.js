@@ -3,8 +3,8 @@ import { applyFeatures, featureEnabled } from '/pages/feature-availability.js';
 export * from '/vendor/mosp-design-system/app.js';
 import { initContextHelp } from './help-launcher.js';
 
-// Keen's UI pages historically imported a couple of helpers from /app.js.
-// Keep them here so older pages (e.g. account.js) continue to work.
+// Design-system helpers this module uses itself; pages reach every
+// design-system export through the re-export above.
 import {
   getCurrentFramework,
   getLoadedFrameworkCatalog,

@@ -259,10 +259,9 @@ def get_audit_scope_coverage(
             .all()
         )
         for audit_id, clause in scoped_clause_rows:
-            # Older audit scope rows may still contain parent clauses.  Scope
-            # coverage reports reviewable leaf clauses only, so treat a parent
-            # scoped clause as coverage for its leaf descendants rather than
-            # emitting the parent heading itself.
+            # Scope coverage reports reviewable leaf clauses, so a scoped
+            # clause that has since gained child clauses counts as coverage for
+            # its leaf descendants.
             for leaf in selectable_clause_descendants(db, fw, clause):
                 clause_sources.setdefault(leaf.id, []).extend(
                     source_by_audit_id.get(audit_id, [])

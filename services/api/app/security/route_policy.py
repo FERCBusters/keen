@@ -14,8 +14,6 @@ PUBLIC_HTTP_ROUTES = {
         "/health",
         "/v1/auth/methods",
         "/v1/auth/logout",
-        "/v1/auth/oidc/start",
-        "/v1/auth/oidc/callback",
         "/v1/auth/oidc/logout",
         "/v1/auth/sso/{provider_key}/start",
         "/v1/auth/sso/{provider_key}/callback",
@@ -70,7 +68,6 @@ def is_public_request(request):
 
 _PERMISSION_WRITES = {
     "POST": (
-        "/v1/me/shortcuts",
         "/v1/events/{event_id}/questions",
         "/v1/events/{event_id}/questions/mark-seen",
         "/v1/questions/{thread_id}/posts",
@@ -86,7 +83,6 @@ _PERMISSION_WRITES = {
         "/v1/pestle/items/{item_id}/clauses",
     ),
     "DELETE": (
-        "/v1/me/shortcuts/{shortcut_id}",
         "/v1/questions/{thread_id}",
         "/v1/pestle/items/{item_id}",
         "/v1/pestle/business-processes/{process_id}",

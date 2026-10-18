@@ -14,8 +14,6 @@ PUBLIC_API = {
         "/health",
         "/v1/auth/methods",
         "/v1/auth/logout",
-        "/v1/auth/oidc/start",
-        "/v1/auth/oidc/callback",
         "/v1/auth/oidc/logout",
         "/v1/auth/sso/{provider_key}/start",
         "/v1/auth/sso/{provider_key}/callback",

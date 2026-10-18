@@ -16,7 +16,6 @@ from app.services.audits.access import (
     can_admin_audits,
     can_manage_audits,
     can_read_audits,
-    editable_audit_or_404,
     require_audit_access,
 )
 from app.services.audits.schemas import (
@@ -32,7 +31,6 @@ from app.services.audits.schemas import (
     ScheduledAuditPayload,
     ScheduledAuditUpdatePayload,
 )
-from app.services.audits.validation import require_mutable_audit
 from app.storage.filenames import content_disposition_attachment
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri
 
@@ -365,28 +363,23 @@ def delete_finding(
     )
 
 
-async def _read_upload(file: UploadFile) -> bytes:
-    data = await file.read(reports.MAX_REPORT_BYTES + 1)
-    return data or b""
-
-
 @router.post("/v1/audits/{audit_id}/report")
-async def upload_final_report(
+def upload_final_report(
     audit_id: str,
     request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(require_audit_manage),
 ):
-    # Check the audit before reading the upload; the service also enforces mutability.
-    require_mutable_audit(editable_audit_or_404(db, user, audit_id))
+    # A synchronous handler keeps the storage write off the event loop; the
+    # operation checks access and mutability under the audit's lock.
     return reports.save_final_report(
         audit_id=audit_id,
         db=db,
         user=user,
         filename=file.filename,
         content_type=file.content_type,
-        data=await _read_upload(file),
+        content=file.file,
     )
 
 

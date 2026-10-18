@@ -472,9 +472,7 @@ def test_clause_control_links_replace_and_clear_intermediate_parents(admin):
 
 def test_control_justification_and_upstream_urls(admin):
     db = admin.db
-    control = _control(
-        db, meta={"soa_justification": "old", "upstreamUrl": "https://old.example"}
-    )
+    control = _control(db, meta={"soa_justification": "old"})
     clause = _clause(db)
     saved = admin.call(
         "PATCH",
@@ -504,8 +502,7 @@ def test_control_justification_and_upstream_urls(admin):
         "PATCH", f"/v1/admin/controls/{control.id}/upstream-url", {"upstream_url": None}
     )
     db.expire_all()
-    meta = db.get(ControlItem, control.id).meta
-    assert "upstream_url" not in meta and "upstreamUrl" not in meta
+    assert "upstream_url" not in db.get(ControlItem, control.id).meta
 
     admin.call(
         "PATCH", f"/v1/admin/clauses/{clause.id}/upstream-url", {"upstream_url": url}
@@ -538,7 +535,10 @@ def test_control_justification_and_upstream_urls(admin):
 def test_clause_evidence_mappings_are_validated_and_canonicalised(admin):
     db = admin.db
     clause = _clause(db)
-    clause.meta = {"evidence_urls": ["https://legacy.example"], "evidence": "x"}
+    clause.meta = {
+        "evidence_mappings": [{"title": "Old", "url": "https://old.example"}],
+        "upstream_url": "https://standards.example/9.2",
+    }
     db.commit()
     saved = admin.call(
         "PATCH",
@@ -559,14 +559,11 @@ def test_clause_evidence_mappings_are_validated_and_canonicalised(admin):
     assert saved["evidence_count"] == 2
     db.expire_all()
     meta = db.get(FrameworkClause, clause.id).meta
-    assert "evidence_urls" not in meta and "evidence" not in meta
-
-    legacy = admin.call(
-        "PATCH",
-        f"/v1/admin/clauses/{clause.id}/evidence-urls",
-        {"evidence_urls": ["https://x.example"]},
-    )
-    assert legacy["evidence_urls"] == ["https://x.example"]
+    # The list replaced the earlier mappings and left other metadata alone.
+    assert meta == {
+        "evidence_mappings": saved["evidence_mappings"],
+        "upstream_url": "https://standards.example/9.2",
+    }
     empty = admin.call(
         "PATCH",
         f"/v1/admin/clauses/{clause.id}/evidence-urls",

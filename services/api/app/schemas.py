@@ -29,10 +29,7 @@ class PreferencesOut(BaseModel):
     auto_apply_filters: bool = Field(default=False)
     source_colors: dict[str, str] = Field(default_factory=dict)
 
-    # Legacy: visualisation page default mode (mode only)
-    viz_mode: str = Field(default="graph")
-
-    # New: default Visualisation page state (mode + date range + sunburst focus).
+    # Default Visualisation page state (mode + date range + sunburst focus).
     # When unset/None, the UI falls back to Graph + last 7 days.
     default_visualisation: dict | None = Field(default=None)
 
@@ -51,7 +48,6 @@ class PreferencesUpdatePayload(BaseModel):
     auto_apply_filters: bool | None = None
     source_colors: dict[str, str] | None = None
 
-    viz_mode: str | None = None
     default_visualisation: dict | None = None
     landing_page: str | None = None
     default_framework: str | None = None
@@ -116,7 +112,6 @@ class ControlImportPayload(BaseModel):
     framework_name: str | None = None
     framework_version: str | None = None
     framework_url: str | None = None
-    framework_source: str | None = None
     items: list[ControlImportItem]
 
 
@@ -154,10 +149,8 @@ class ClauseEvidenceMappingItem(BaseModel):
 
 
 class ClauseEvidenceUrlsPayload(BaseModel):
-    # New canonical shape: title + URL.
-    evidence_mappings: list[ClauseEvidenceMappingItem] | None = None
-    # Legacy URL-only shape, retained so older clients keep working.
-    evidence_urls: list[str] = Field(default_factory=list)
+    # The list replaces the clause's evidence mappings.
+    evidence_mappings: list[ClauseEvidenceMappingItem] = Field(default_factory=list)
 
 
 from app.services.framework_catalogue import FrameworkListItem as FrameworkListItem

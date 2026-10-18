@@ -275,7 +275,7 @@ def test_named_categories_and_licences_are_reused_ignoring_case(reg):
         "POST",
         "assets",
         {
-            "name": "HR database",
+            "asset": "HR database",
             "category_name": "DATA",
             "subcategory_name": "databases",
             "license_name": "enterprise SEAT",
@@ -425,7 +425,7 @@ def test_an_update_changes_only_the_fields_it_names(reg):
     )
     path = f"assets/{original['id']}"
 
-    renamed = reg.manage("PATCH", path, {"asset_name": "Payroll DB"})
+    renamed = reg.manage("PATCH", path, {"asset": "Payroll DB"})
     cleared = reg.manage(
         "PATCH",
         path,

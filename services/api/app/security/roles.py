@@ -2,17 +2,9 @@ from __future__ import annotations
 
 """Role resolution helpers.
 
-Keen historically used a simple per-user role model:
-  - admin
-  - normal
-
-To support organising users into groups, we allow roles to be assigned to
-groups as well. Users can either:
-  - have an explicit role (admin/normal), or
-  - set role='inherit' and have their effective role resolved from group roles.
-
-If a user inherits, 'admin' wins over 'normal' when multiple group roles
-are present.
+Each user holds an explicit role (admin or normal) or ``inherit``, which takes
+the effective role from the roles of the user's groups. Among several group
+roles, admin wins over normal.
 """
 
 from sqlalchemy import exists, select, text

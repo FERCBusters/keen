@@ -242,16 +242,11 @@ function isIntermediateParentClause() {
 }
 
 function clauseEvidenceMappings() {
-  if (Array.isArray(clause?.evidence_mappings)) {
-    return clause.evidence_mappings
-      .map((item) => ({
-        title: String(item?.title || '').trim(),
-        url: String(item?.url || '').trim(),
-      }))
-      .filter((item) => item.url);
-  }
-  return (Array.isArray(clause?.evidence_urls) ? clause.evidence_urls : [])
-    .map((url) => ({ title: '', url: String(url || '').trim() }))
+  return (Array.isArray(clause?.evidence_mappings) ? clause.evidence_mappings : [])
+    .map((item) => ({
+      title: String(item?.title || '').trim(),
+      url: String(item?.url || '').trim(),
+    }))
     .filter((item) => item.url);
 }
 
@@ -506,11 +501,7 @@ saveClauseEvidenceUrls?.addEventListener('click', async () => {
         evidence_mappings: evidenceMappings,
       },
     );
-    clause = {
-      ...clause,
-      evidence_mappings: data?.evidence_mappings || [],
-      evidence_urls: data?.evidence_urls || [],
-    };
+    clause = { ...clause, evidence_mappings: data?.evidence_mappings || [] };
     evidenceEditMode = false;
     renderEvidenceMapping();
     await loadClauseChangelog();

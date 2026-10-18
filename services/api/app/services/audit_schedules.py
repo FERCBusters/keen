@@ -488,6 +488,70 @@ def _email_attendees(db: Session, *, audit: Audit) -> int:
     return sent
 
 
+def _materialise_template(
+    db: Session, template: Audit, *, run_today: date, latest_create_date: date
+) -> tuple[Audit | None, dict[str, Any] | None]:
+    """Advance one locked template and create its due audit, if it has one.
+
+    Returns the created audit and the record of any missed runs it skipped;
+    the caller commits.
+    """
+    skipped = None
+    run_date = template.schedule_next_run_date
+    if not run_date or run_date > latest_create_date:
+        return None, None
+
+    if run_date < run_today:
+        next_run_date, skipped_dates = _advance_template_past_missed_runs(
+            template, run_today=run_today
+        )
+        template.schedule_next_run_date = next_run_date
+        template.updated_at = utcnow()
+        if skipped_dates:
+            skipped = {
+                "template_id": str(template.id),
+                "skipped_run_dates": skipped_dates,
+                "next_run_date": (next_run_date.isoformat() if next_run_date else None),
+            }
+        run_date = next_run_date
+        if not run_date or run_date > latest_create_date:
+            return None, skipped
+
+    # Defensive idempotency guard for repeated runs on the same persisted template state.
+    if template.schedule_last_run_date and template.schedule_last_run_date >= run_date:
+        template.schedule_next_run_date = _next_template_occurrence(template, run_date)
+        return None, skipped
+
+    now = utcnow()
+    audit = Audit(
+        title=f"{template.title} ({run_date.isoformat()})",
+        framework_slug=template.framework_slug,
+        status="open",
+        audit_type=template.audit_type or "internal",
+        start_date=run_date,
+        end_date=_audit_end_for_run(template, run_date),
+        created_by_user_id=template.created_by_user_id,
+        created_at=now,
+        updated_at=now,
+        notes=template.notes or "",
+        executive_summary=template.executive_summary or "",
+        meta={
+            **(template.meta or {}),
+            "scheduled_from_template_id": str(template.id),
+            "scheduled_run_date": run_date.isoformat(),
+        },
+    )
+    db.add(audit)
+    db.flush()
+    _copy_template_scope_and_attendees(db, template=template, audit=audit)
+
+    template.schedule_last_run_date = run_date
+    template.schedule_last_created_audit_id = audit.id
+    template.schedule_next_run_date = _next_template_occurrence(template, run_date)
+    template.updated_at = now
+    return audit, skipped
+
+
 def materialize_due_scheduled_audits(
     db: Session, *, today: date | None = None
 ) -> dict[str, Any]:
@@ -498,8 +562,8 @@ def materialize_due_scheduled_audits(
     run_today = today or _today_for_schedule()
     days_ahead = max(0, int(settings.scheduled_audit_create_days_ahead or 0))
     latest_create_date = run_today + timedelta(days=days_ahead)
-    templates = (
-        db.query(Audit)
+    due = (
+        db.query(Audit.id)
         .filter(Audit.status == "template")
         .filter(Audit.schedule_next_run_date.isnot(None))
         .filter(Audit.schedule_next_run_date <= latest_create_date)
@@ -509,88 +573,43 @@ def materialize_due_scheduled_audits(
 
     created: list[dict[str, Any]] = []
     skipped_past: list[dict[str, Any]] = []
-    for template in templates:
-        run_date = template.schedule_next_run_date
-        if not run_date:
-            continue
-
-        if run_date < run_today:
-            next_run_date, skipped_dates = _advance_template_past_missed_runs(
-                template, run_today=run_today
-            )
-            template.schedule_next_run_date = next_run_date
-            template.updated_at = utcnow()
-            db.add(template)
-            db.commit()
-            if skipped_dates:
-                skipped_past.append(
-                    {
-                        "template_id": str(template.id),
-                        "skipped_run_dates": skipped_dates,
-                        "next_run_date": (
-                            next_run_date.isoformat() if next_run_date else None
-                        ),
-                    }
-                )
-            run_date = next_run_date
-            if not run_date or run_date > latest_create_date:
-                continue
-
-        # Defensive idempotency guard for repeated runs on the same persisted template state.
-        if (
-            template.schedule_last_run_date
-            and template.schedule_last_run_date >= run_date
-        ):
-            template.schedule_next_run_date = _next_template_occurrence(
-                template, run_date
-            )
-            db.add(template)
-            db.commit()
-            continue
-
-        now = utcnow()
-        audit = Audit(
-            title=f"{template.title} ({run_date.isoformat()})",
-            framework_slug=template.framework_slug,
-            status="open",
-            audit_type=template.audit_type or "internal",
-            start_date=run_date,
-            end_date=_audit_end_for_run(template, run_date),
-            created_by_user_id=template.created_by_user_id,
-            created_at=now,
-            updated_at=now,
-            notes=template.notes or "",
-            executive_summary=template.executive_summary or "",
-            meta={
-                **(template.meta or {}),
-                "scheduled_from_template_id": str(template.id),
-                "scheduled_run_date": run_date.isoformat(),
-            },
+    for (template_id,) in due:
+        # Each template is read again under its row lock, which template edits
+        # also take, so an overlapping run or edit is seen before an audit is
+        # created and one run date never produces two audits. The commit ends
+        # the template's transaction and releases the lock.
+        template = (
+            db.query(Audit)
+            .filter(Audit.id == template_id, Audit.status == "template")
+            .with_for_update()
+            .one_or_none()
         )
-        db.add(audit)
-        db.flush()
-        _copy_template_scope_and_attendees(db, template=template, audit=audit)
-
-        template.schedule_last_run_date = run_date
-        template.schedule_last_created_audit_id = audit.id
-        template.schedule_next_run_date = _next_template_occurrence(template, run_date)
-        template.updated_at = now
-        db.add(template)
+        audit, skipped = (
+            _materialise_template(
+                db,
+                template,
+                run_today=run_today,
+                latest_create_date=latest_create_date,
+            )
+            if template is not None
+            else (None, None)
+        )
         db.commit()
-        db.refresh(audit)
-
-        emails_sent = _email_attendees(db, audit=audit)
-        created.append(
-            {
-                "template_id": str(template.id),
-                "audit_id": str(audit.id),
-                "run_date": run_date.isoformat(),
-                "emails_sent": emails_sent,
-            }
-        )
+        if skipped:
+            skipped_past.append(skipped)
+        if audit is not None:
+            db.refresh(audit)
+            created.append(
+                {
+                    "template_id": str(template_id),
+                    "audit_id": str(audit.id),
+                    "run_date": audit.start_date.isoformat(),
+                    "emails_sent": _email_attendees(db, audit=audit),
+                }
+            )
 
     return {
-        "checked": len(templates),
+        "checked": len(due),
         "created": created,
         "skipped_past": skipped_past,
         "create_days_ahead": days_ahead,

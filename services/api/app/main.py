@@ -179,8 +179,9 @@ async def csrf_middleware(request: Request, call_next):
 
     response = await call_next(request)
 
-    # Backwards-compatible: if an existing session predates CSRF, mint a token
-    # during the next authenticated request.
+    # Browsers signed in by a trusted proxy have no KEEN sign-in response to
+    # carry the CSRF cookie, and a browser may lose the cookie before its
+    # session ends; either receives a token with this response.
     if user and not get_csrf_token_from_request(request):
         try:
             set_csrf_cookie(response, generate_csrf_token())
@@ -346,7 +347,6 @@ async def audit_trail_middleware(request: Request, call_next):
         "/health",
         "/v1/admin/questions/summary",  # admin bell badge poll,
         "/v1/evidence/latest",  # homepage ambient evidence ticker,
-        "/v1/events/latest",  # backwards-compatible ticker alias,
         "/v1/webhooks",  # webhook ingesters
     }:
         return await call_next(request)

@@ -879,8 +879,8 @@ def test_logout_requires_intent_and_get_never_revokes(
 @pytest.mark.parametrize(
     "path,method",
     [
-        ("/v1/me/shortcuts", "POST"),
-        ("/v1/me/shortcuts/00000000-0000-0000-0000-000000000001", "DELETE"),
+        ("/v1/me/saved-searches", "POST"),
+        ("/v1/me/saved-searches/00000000-0000-0000-0000-000000000001", "DELETE"),
         ("/v1/questions/entities/risk/00000000-0000-0000-0000-000000000001", "POST"),
         ("/v1/pestle/items", "POST"),
         ("/v1/pestle/items/00000000-0000-0000-0000-000000000001", "PATCH"),
@@ -953,10 +953,10 @@ def test_permission_owned_mutations_keep_csrf_and_route_permissions(
 @pytest.mark.parametrize(
     "path,method",
     [
-        ("/v1/me/shortcuts/new-admin-action", "POST"),
+        ("/v1/events/event-id/questions/new-admin-action", "POST"),
         ("/v1/pestle/items/new-admin-action/extra", "PATCH"),
         ("/v1/questions/entities/risk/id/delete", "POST"),
-        ("/v1/me/shortcuts", "PUT"),
+        ("/v1/pestle/items", "PUT"),
     ],
 )
 def test_permission_write_inventory_does_not_exempt_neighbour_paths(path, method):
@@ -1076,6 +1076,86 @@ def test_assembled_remote_user_uses_direct_peer_and_rejects_duplicates(
         assert client.get("/v1/auth/check", headers=headers).status_code == expected
     finally:
         client.close()
+
+
+@pytest.mark.parametrize("signed_in_by", ["trusted proxy", "KEEN session"])
+def test_a_signed_in_browser_without_a_csrf_token_receives_one_for_its_writes(
+    production_client, contract_db, monkeypatch, signed_in_by
+):
+    """Trusted-proxy browsers never see a KEEN sign-in response, and a browser
+    may lose its token before its session ends; both still need to write."""
+    from app import main
+    from app.db.session import get_db
+
+    _, redis, _, reader = production_client
+    if signed_in_by == "trusted proxy":
+        monkeypatch.setattr(settings, "trust_remote_user", True)
+        monkeypatch.setattr(settings, "oidc_enabled", False)
+        monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "127.0.0.1/32")
+    main.app.dependency_overrides[get_db] = lambda: contract_db
+    browsers = []
+
+    def browser():
+        client = TestClient(
+            main.app, base_url="https://keen.example", client=("127.0.0.1", 12345)
+        )
+        browsers.append(client)
+        if signed_in_by == "trusted proxy":
+            client.headers["REMOTE_USER"] = reader.username
+        else:
+            sid = sessions.create_session(
+                redis, user_id=str(reader.id), ttl_seconds=300
+            )
+            client.cookies.set(settings.session_cookie_name, sid)
+        return client
+
+    def minted(response):
+        cookies = [
+            value
+            for value in response.headers.get_list("set-cookie")
+            if value.startswith(csrf.csrf_cookie_name() + "=")
+        ]
+        assert len(cookies) <= 1, cookies
+        return cookies[0] if cookies else None
+
+    path, origin = "/v1/me/preferences", {"Origin": "https://keen.example"}
+    write = ("/v1/me/saved-searches", {"name": "Open risks", "url": "/risks.html"})
+    try:
+        client = browser()
+        # The signed-in browser still needs the token before it can write.
+        refused = client.post(write[0], json=write[1], headers=origin)
+        assert refused.status_code == 403 and "CSRF" in refused.text
+
+        first = client.get(path)
+        assert first.status_code == 200, first.text
+        cookie = minted(first)
+        assert cookie is not None
+        # The UI reads the token to echo it, and only same-site requests carry it.
+        flags = {part.strip().lower() for part in cookie.split(";")}
+        assert "httponly" not in flags and "samesite=strict" in flags
+        assert "path=/" in flags
+        token = client.cookies.get(csrf.csrf_cookie_name())
+        assert token and len(token) >= 32
+
+        # The browser keeps its token, so requests already in flight stay valid.
+        later = client.get(path)
+        assert later.status_code == 200 and minted(later) is None
+        assert client.cookies.get(csrf.csrf_cookie_name()) == token
+
+        saved = client.post(
+            write[0], json=write[1], headers={**origin, csrf.csrf_header_name(): token}
+        )
+        assert saved.status_code == 200, saved.text
+        assert [s["name"] for s in client.get(write[0]).json()] == ["Open risks"]
+
+        # Each browser receives its own token.
+        other = browser()
+        assert other.get(path).status_code == 200
+        assert other.cookies.get(csrf.csrf_cookie_name()) not in (None, token)
+    finally:
+        main.app.dependency_overrides.pop(get_db, None)
+        for client in browsers:
+            client.close()
 
 
 def test_retention_overrides_keep_admin_and_csrf_boundary(

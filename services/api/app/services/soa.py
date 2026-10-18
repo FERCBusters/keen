@@ -118,7 +118,6 @@ def _clause_summary(clause: FrameworkClause) -> dict[str, Any]:
         "sort_order": int(clause.sort_order or 0),
         "upstream_url": _control_upstream_url(clause),
         "evidence_mappings": evidence_mappings,
-        "evidence_urls": [item["url"] for item in evidence_mappings],
         "evidence_count": len(evidence_mappings),
     }
 

@@ -95,11 +95,7 @@ async function clausePage(t, options = {}) {
     patch: async (u, b) => {
       state.patched.push({ path: u.pathname, body: plain(b) });
       if (options.patchFail) throw new Error('Rejected');
-      if (u.pathname.endsWith('/evidence-urls'))
-        return {
-          evidence_mappings: b.evidence_mappings,
-          evidence_urls: b.evidence_mappings.map((m) => m.url),
-        };
+      if (u.pathname.endsWith('/evidence-urls')) return { evidence_mappings: b.evidence_mappings };
       if (u.pathname.endsWith('/upstream-url')) return { upstream_url: b.upstream_url };
       if (u.pathname.endsWith('/controls')) {
         state.linked = b.controls.map((c) => ({
@@ -153,11 +149,10 @@ test('clause page renders header, guidance, evidence mappings and linked control
   assert.match(ui.el('clauseChangelog').textContent, /No clause changes have been recorded yet/);
 });
 
-test('legacy evidence URL lists and unsafe guidance URLs are handled', async (t) => {
+test('blank evidence links and unsafe guidance URLs are left out', async (t) => {
   const { ui } = await clausePage(t, {
     clause: clause({
-      evidence_mappings: undefined,
-      evidence_urls: ['https://a.example/1', ' '],
+      evidence_mappings: [{ title: 'Register', url: 'https://a.example/1' }, { url: ' ' }],
       upstream_url: 'javascript:alert(1)',
       parent_ref: '',
     }),

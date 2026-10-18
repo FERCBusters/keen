@@ -60,8 +60,6 @@ def test_targets_keep_the_kind_they_name():
         {"ref": "5.1", "kind": "control"},
         {"ref": "5.1"},
         {"ref": "7.1", "kind": " Clause "},
-        # An unsupported kind is dropped so evidence never attaches to a guess.
-        {"ref": "8.1", "kind": "chapter"},
     )
     (rule,) = rules
     assert [(t.ref, t.kind) for t in rule.targets] == [
@@ -79,6 +77,9 @@ def test_targets_keep_the_kind_they_name():
     ]
     # Without details, matches stay a list of distinct references.
     assert evaluate_by_framework({"source": "test"}, rules) == {"A": ["5.1", "7.1"]}
+    # An unsupported kind skips the whole rule, so evidence never attaches to a
+    # guess about what the rule meant.
+    assert _rules({"ref": "5.1"}, {"ref": "8.1", "kind": "chapter"}) == []
 
 
 def test_migrated_rules_keep_their_target_kinds():

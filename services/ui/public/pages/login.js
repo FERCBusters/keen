@@ -9,7 +9,6 @@ const nextEl = document.getElementById('next');
 const btn = document.getElementById('loginBtn');
 const ssoSection = document.getElementById('ssoSection');
 const ssoButtons = document.getElementById('ssoButtons');
-const localLoginHint = document.getElementById('localLoginHint');
 
 // Clean the current history entry before using its query as a return destination.
 // This cannot remove requests already recorded by the browser or reverse proxy.
@@ -60,7 +59,7 @@ async function maybeAlreadyLoggedIn() {
 
 function startOidc(startUrl) {
   const n = computeNext();
-  const u = new URL(startUrl || '/api/v1/auth/oidc/start', location.origin);
+  const u = new URL(startUrl, location.origin);
   if (n) u.searchParams.set('next', n);
   location.assign(u.pathname + u.search);
 }
@@ -102,8 +101,7 @@ async function loadAuthMethods() {
     methods = null;
   }
 
-  let providers = Array.isArray(methods?.sso_providers) ? methods.sso_providers : [];
-  if (!providers.length && methods?.oidc_enabled && methods?.oidc) providers = [methods.oidc];
+  const providers = Array.isArray(methods?.sso_providers) ? methods.sso_providers : [];
   renderSsoButtons(providers);
 
   if (methods?.ldap_enabled && form) {
@@ -117,17 +115,10 @@ async function loadAuthMethods() {
     select.add(new Option('LDAP directory', 'ldap'));
     if (methods.local_enabled) select.add(new Option('Local KEEN account', 'local'));
     form.prepend(label, select);
-    if (localLoginHint)
-      localLoginHint.textContent =
-        'Use your directory username and password, or select a local KEEN account.';
   }
   if (methods && methods.local_enabled === false && !methods.ldap_enabled) {
     if (form) form.classList.add('d-none');
-    if (localLoginHint) localLoginHint.classList.add('d-none');
     if (!providers.length) toast(status, 'No interactive login method is enabled.', 'danger');
-  } else if (!methods && ssoSection) {
-    // Keep the local form as a safe fallback if the methods endpoint is unavailable.
-    ssoSection.classList.add('d-none');
   }
 }
 

@@ -131,40 +131,19 @@ def admin_import_controls(*, payload: ControlImportPayload, user, db: Session):
         payload.framework_url = _validate_upstream_url(payload.framework_url) or ""
     fw = db.query(Framework).filter(Framework.slug == framework_slug).one_or_none()
     if fw:
-        if payload.framework_name and hasattr(fw, "name"):
-            fw.name = payload.framework_name.strip() or getattr(
-                fw, "name", framework_slug
-            )
-        if payload.framework_version and hasattr(fw, "version"):
-            fw.version = payload.framework_version.strip() or getattr(
-                fw, "version", None
-            )
+        if payload.framework_name:
+            fw.name = payload.framework_name.strip() or fw.name
+        if payload.framework_version:
+            fw.version = payload.framework_version.strip() or fw.version
         if payload.framework_url:
-            if hasattr(fw, "upstream_url"):
-                fw.upstream_url = payload.framework_url.strip() or getattr(
-                    fw, "upstream_url", None
-                )
-            if hasattr(fw, "url"):
-                fw.url = payload.framework_url.strip() or getattr(fw, "url", None)
-        if payload.framework_source and hasattr(fw, "source"):
-            fw.source = payload.framework_source.strip() or getattr(fw, "source", None)
-        if hasattr(fw, "imported_at"):
-            fw.imported_at = utc_now_naive()
+            fw.upstream_url = payload.framework_url.strip() or fw.upstream_url
     else:
-        fw = Framework(slug=framework_slug)
-        # Some deployments extend the Framework model with metadata columns.
-        if hasattr(fw, "name"):
-            fw.name = (payload.framework_name or framework_slug).strip()
-        if hasattr(fw, "version"):
-            fw.version = payload.framework_version or None
-        if hasattr(fw, "source"):
-            fw.source = (payload.framework_source or "manual_import").strip()
-        if hasattr(fw, "upstream_url"):
-            fw.upstream_url = payload.framework_url or None
-        if hasattr(fw, "url"):
-            fw.url = payload.framework_url or None
-        if hasattr(fw, "imported_at"):
-            fw.imported_at = utc_now_naive()
+        fw = Framework(
+            slug=framework_slug,
+            name=(payload.framework_name or framework_slug).strip(),
+            version=payload.framework_version or None,
+            upstream_url=payload.framework_url or None,
+        )
         db.add(fw)
 
     created = 0
@@ -235,9 +214,8 @@ def _import_control_item(db: Session, framework_slug: str, item) -> bool:
             )
         )
 
-    # Keep first-class clause rows in sync when importing legacy
-    # framework YAML items of type='clause'. Clause metadata may include
-    # upstream_url and optional parent_ref for hierarchy.
+    # Imported items of type 'clause' also create or update the clause row.
+    # Clause metadata may include upstream_url and parent_ref for hierarchy.
     if t == "clause":
         meta = item.metadata or {}
         parent_ref = str(meta.get("parent_ref") or meta.get("parent") or "").strip()
@@ -347,13 +325,9 @@ def _validate_clause_evidence_mappings(
     out: list[dict] = []
     seen: set[str] = set()
 
-    if payload.evidence_mappings is not None:
-        rows = [
-            {"title": item.title, "url": item.url} for item in payload.evidence_mappings
-        ]
-    else:
-        rows = [{"title": "", "url": raw} for raw in payload.evidence_urls or []]
-
+    rows = [
+        {"title": item.title, "url": item.url} for item in payload.evidence_mappings
+    ]
     for raw in rows:
         url = _validate_clause_evidence_url(raw.get("url"))
         if not url or url in seen:
@@ -372,7 +346,6 @@ def _set_metadata_url(obj, upstream_url: str | None) -> None:
         meta["upstream_url"] = upstream_url
     else:
         meta.pop("upstream_url", None)
-        meta.pop("upstreamUrl", None)
     obj.meta = meta
 
 
@@ -588,17 +561,11 @@ def admin_update_clause_evidence_urls(
 
     before_clause = clause_changelog_state(db, clause)
     mappings = _validate_clause_evidence_mappings(payload)
-    urls = [item["url"] for item in mappings]
     meta = dict(clause.meta or {})
     if mappings:
         meta["evidence_mappings"] = mappings
     else:
         meta.pop("evidence_mappings", None)
-    # Drop historical/alias keys so there is one canonical storage shape.
-    meta.pop("evidence_urls", None)
-    meta.pop("evidenceUrls", None)
-    meta.pop("evidence_links", None)
-    meta.pop("evidence", None)
     clause.meta = meta
     db.add(clause)
     db.flush()
@@ -617,8 +584,6 @@ def admin_update_clause_evidence_urls(
     return {
         "ok": True,
         "evidence_mappings": mappings,
-        # Backward-compatible URL-only projection for older UI/API callers.
-        "evidence_urls": urls,
         "evidence_count": len(mappings),
     }
 

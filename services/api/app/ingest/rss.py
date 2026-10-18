@@ -357,13 +357,11 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
             headers[connection.configuration["header_name"]] = connection.credentials[
                 "header_value"
             ]
-    verify_tls = True
-
     # Fetch without following redirects - redirects are not allowed
     with ingestion_client(
         timeout=30.0,
         follow_redirects=False,
-        verify=verify_tls,
+        verify=True,
         headers=headers,
         auth=auth,
     ) as c:

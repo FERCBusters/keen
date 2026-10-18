@@ -368,7 +368,11 @@ worker.main()
     }
     assert not result.stderr
     assert secret not in result.stdout and b"synthetic-secret" not in result.stdout
-    assert len(commands) == 3  # CAPABILITY, LOGIN, EXAMINE; no referral request.
+    # The referral answers EXAMINE and the client follows it nowhere. Newer
+    # imaplib releases ask for capabilities again after LOGIN.
+    verbs = [command.split()[1] for command in commands]
+    assert [verb for verb in verbs if verb != b"CAPABILITY"] == [b"LOGIN", b"EXAMINE"]
+    assert verbs[-1] == b"EXAMINE"
 
 
 @pytest.mark.parametrize(

@@ -49,7 +49,7 @@ async function home(
       if (handler !== undefined)
         return typeof handler === 'function' ? handler(u) : structuredClone(handler);
       if (key === '/api/v1/home') return structuredClone(overview);
-      if (key === '/api/v1/evidence/latest') return { event: null, events: [] };
+      if (key === '/api/v1/evidence/latest') return { events: [] };
       throw new Error('Unexpected GET ' + u);
     },
   });
@@ -788,8 +788,8 @@ test('the latest-evidence ticker shows new events as text and polls after the ne
         },
       ],
     },
-    // A legacy single-event response repeating an event already shown is ignored.
-    { event: { id: 'e2', source: 'okta', summary: 'Repeat' } },
+    // A response repeating an event already shown is ignored.
+    { events: [{ id: 'e2', source: 'okta', summary: 'Repeat' }] },
     { events: [{ event_id: 'e3', created_at: '2026-10-01T10:01:00Z', source: 'aws' }] },
   ];
   const requests = [];

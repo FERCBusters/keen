@@ -112,23 +112,10 @@ def upsert_framework(*, payload: FrameworkUpsert, db: Session):
         db.add(row)
         created = True
 
-    # Persist optional metadata only when the DB model has those attributes.
-    # This keeps compatibility with existing deployments where frameworks only
-    # store a slug.
-    if hasattr(row, "name"):
-        setattr(
-            row,
-            "name",
-            (payload.name or slug).strip() if payload.name is not None else slug,
-        )
-    if hasattr(row, "version"):
-        setattr(row, "version", (payload.version or "").strip() or None)
-    if hasattr(row, "description"):
-        setattr(row, "description", (payload.description or "").strip() or None)
-    if hasattr(row, "upstream_url"):
-        setattr(row, "upstream_url", (payload.upstream_url or "").strip() or None)
-    if hasattr(row, "url"):
-        setattr(row, "url", (payload.upstream_url or "").strip() or None)
+    row.name = (payload.name or slug).strip() if payload.name is not None else slug
+    row.version = (payload.version or "").strip() or None
+    row.description = (payload.description or "").strip() or None
+    row.upstream_url = (payload.upstream_url or "").strip() or None
 
     db.commit()
 
@@ -283,8 +270,8 @@ def save_framework_node(
     elif payload.clause_refs:
         raise DomainError(400, "Only controls can link to clauses")
     url = _url(payload.upstream_url)
-    # Older imports may have controls but no framework row. Promote the slug
-    # when the first edited node is saved, in the same transaction.
+    # A framework known only from its controls gains its row when its first
+    # edited node is saved, in the same transaction.
     if not framework_exists:
         db.add(Framework(slug=slug, name=slug))
     row = (

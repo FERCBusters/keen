@@ -181,7 +181,7 @@ def update_license(
     if conflict:
         raise DomainError(status_code=400, detail="License already exists")
     _apply_license_payload(row, payload)
-    # Keep the legacy text column synchronized for older clients/searches.
+    # Register searches match each asset's stored licence name.
     db.query(RiskAsset).filter(RiskAsset.license_id == row.id).update(
         {RiskAsset.license: row.name, RiskAsset.updated_at: _utcnow()},
         synchronize_session=False,
@@ -361,7 +361,7 @@ def update_asset(
                 )
             ),
         )
-    if {"asset", "asset_name", "name"} & fields:
+    if "asset" in fields:
         row.name = _asset_name_from_payload(payload)
     if category:
         row.category_id = category.id
@@ -379,7 +379,7 @@ def update_asset(
     )
     if conflict:
         raise DomainError(status_code=400, detail="Asset already exists")
-    if {"license_id", "license_name", "license"} & fields:
+    if {"license_id", "license_name"} & fields:
         license_row = _license_from_payload(db, payload, user)
         row.license_id = license_row.id if license_row else None
         row.license = license_row.name if license_row else ""

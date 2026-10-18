@@ -968,18 +968,7 @@ def test_assets_carry_licences_owners_and_descriptions(reg):
         },
     )
     assert erp["license_id"] == crm["license_id"]
-    legacy = reg.manage(
-        "POST",
-        create,
-        {
-            "name": "Mail",
-            "category_name": "Software",
-            "subcategory_name": "SaaS",
-            "license": "Legacy seat",
-        },
-    )
-    assert legacy["license"] == "Legacy seat" and legacy["license_id"]
-    assert reg.db.query(IsmsLicense).count() == 2
+    assert reg.db.query(IsmsLicense).count() == 1
     missing = reg.manage(
         "POST",
         create,
@@ -1010,7 +999,7 @@ def test_assets_carry_licences_owners_and_descriptions(reg):
         status=400,
     )
     assert response["detail"] == "Unknown asset subcategory"
-    assert reg.db.query(RiskAsset).count() == 3
+    assert reg.db.query(RiskAsset).count() == 2
 
 
 def test_assets_are_searchable_and_editable(reg):

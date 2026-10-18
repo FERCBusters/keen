@@ -194,9 +194,8 @@ def user_email_snapshot(user: User | None) -> str | None:
     email = getattr(user, "email", None)
     if looks_like_email(email):
         return str(email).strip()
-    # Backwards-compatible fallback for deployments where the Keen username is
-    # the user's email address. If usernames are non-email identifiers, admins
-    # can set the dedicated user email field instead.
+    # A username that is an email address serves as the user's email. Where
+    # usernames are other identifiers, administrators set the email field.
     username = getattr(user, "username", None)
     if looks_like_email(username):
         return str(username).strip()

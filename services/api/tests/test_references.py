@@ -105,172 +105,188 @@ def test_absolute_http_url():
     assert rf.absolute_http_url("https://example.com/" + "\\") is None
 
 
-def test_upstream_url_prefers_metadata(tmp_path):
-    control = Obj(meta={"upstream_url": "https://catalogue.example/a"}, ref="A.9.1")
-    # Metadata always wins over the YAML catalogue and skips the lookup.
-    with patch.object(rf, "load_control_links", return_value={}) as loader:
+def test_a_rows_own_catalogue_link_comes_first():
+    control = Obj(
+        meta={"upstream_url": "https://catalogue.example/a"},
+        ref="A.9.1",
+        framework_slug="iso",
+    )
+    with patch.object(rf, "load_control_links") as loader:
         assert rf.control_upstream_url(control) == "https://catalogue.example/a"
         loader.assert_not_called()
 
-    from unittest.mock import MagicMock
-
-    broken = MagicMock()
-    broken.meta = None
-    broken.ref = "A.9.1"
-    broken.framework_slug = "ISO-Bucket"
-    links = {
-        "ISO-Bucket": {"A.9.1": "https://catalogue.example/iso"},
-        "__default__": {"A.9.1": "https://catalogue.example/default"},
-    }
+    # Imported metadata counts only as an absolute web link.
+    links = {"iso": {"A.9.1": "https://links.example/iso"}}
     with patch.object(rf, "load_control_links", return_value=links):
-        assert rf.control_upstream_url(broken) == "https://catalogue.example/iso"
-
-    # With a framework present, unrelated framework buckets are never used.
-    with patch.object(
-        rf,
-        "load_control_links",
-        return_value={"OTHER": {"A.9.1": "https://catalogue.example/other"}},
-    ):
-        assert rf.control_upstream_url(broken) is None
-
-    # Without a framework, any framework bucket provides a last-resort link.
-    bare = MagicMock()
-    bare.meta = None
-    bare.ref = "A.9.1"
-    bare.framework = None
-    with patch.object(
-        rf,
-        "load_control_links",
-        return_value={"OTHER": {"A.9.1": "https://catalogue.example/other"}},
-    ):
-        assert rf.control_upstream_url(bare) == "https://catalogue.example/other"
-        bare.framework_slug = None
-        assert rf.control_upstream_url(bare) == "https://catalogue.example/other"
+        for value in ("javascript:alert(1)", "/relative", 42, None):
+            control.meta = {"upstream_url": value}
+            assert rf.control_upstream_url(control) == "https://links.example/iso"
+        control.meta = None
+        assert rf.control_upstream_url(control) == "https://links.example/iso"
 
 
-def test_control_upstream_url_dict_form(tmp_path):
+def test_the_links_file_applies_only_under_the_rows_framework(monkeypatch):
+    monkeypatch.setattr(rf.settings, "control_links_path", "/links/control_links.yml")
     links = {
-        "__default__": {"A.5.1": "https://handbook.example/default"},
-        "ISO-27001": {"A.6.2": "https://handbook.example/remote"},
+        "iso": {"5.1": "https://links.example/iso/5-1"},
+        "dvstf": {"5.1": "https://links.example/dvstf/5-1"},
     }
-    with patch.object(rf, "load_control_links", return_value=links):
-        assert (
-            rf.control_upstream_url({"ref": "A.5.1", "framework_slug": None})
-            == "https://handbook.example/default"
-        )
-        assert (
-            rf.control_upstream_url({"ref": " A.6.2 ", "framework": " ISO-27001 "})
-            == "https://handbook.example/remote"
-        )
-        # A framework without the ref must not cross into other framework
-        # buckets (the default bucket still applies).
-        assert rf.control_upstream_url(
-            {"ref": "A.5.1", "framework_slug": "ISO-27001"}
-        ) == ("https://handbook.example/default")
-        assert (
-            rf.control_upstream_url({"ref": "9.9", "framework_slug": "ISO-27001"})
-            is None
-        )
+    with patch.object(rf, "load_control_links", return_value=links) as loader:
+        iso = Obj(meta={}, ref=" 5.1 ", framework_slug=" iso ")
+        assert rf.control_upstream_url(iso) == "https://links.example/iso/5-1"
+        loader.assert_called_with("/links/control_links.yml")
+        dvstf = Obj(meta={}, ref="5.1", framework_slug="dvstf")
+        assert rf.control_upstream_url(dvstf) == "https://links.example/dvstf/5-1"
+        # Clause references such as 5.1 recur across frameworks, so another
+        # framework's link never stands in.
+        other = Obj(meta={}, ref="5.1", framework_slug="nist")
+        assert rf.control_upstream_url(other) is None
+        for row in (
+            Obj(meta={}, ref="5.1", framework_slug=None),
+            Obj(meta={}, ref="5.1", framework_slug=""),
+            Obj(meta={}, ref="", framework_slug="iso"),
+            Obj(meta={}, ref=None, framework_slug="iso"),
+        ):
+            assert rf.control_upstream_url(row) is None
 
 
-def test_load_control_links_layouts(tmp_path):
-    legacy = tmp_path / "legacy.yml"
-    legacy.write_text(
-        "A.5.1: https://old.example/links/a51\n"
-        "A.8.1:\n  url: https://old.example/links/a81\n"
-    )
-    result = rf.load_control_links(str(legacy))
-    assert result["__default__"] == {
-        "A.5.1": "https://old.example/links/a51",
-        "A.8.1": "https://old.example/links/a81",
-    }
+def links_file(tmp_path, text):
+    path = tmp_path / "control_links.yml"
+    path.write_text(text)
+    rf.load_control_links.cache_clear()
+    return str(path)
 
-    multi = tmp_path / "multi.yml"
-    multi.write_text(
-        "default:\n  A.5.1: https://new.example/default/a51\n"
+
+def test_control_links_name_each_frameworks_references(tmp_path, caplog):
+    path = links_file(
+        tmp_path,
         "frameworks:\n"
         "  iso_27001_2022:\n"
-        "    A.5.1: https://new.example/iso/a51\n"
+        "    A.5.1: https://links.example/iso/a51\n"
+        "    ' A.6.2 ': ' https://links.example/iso/a62 '\n"
         "  'UK-DVSTF:1.0':\n"
-        "    '12.5.a': https://new.example/dvstf/12-5-a\n"
+        "    '5.1': http://links.example/dvstf/5-1\n",
     )
-    result = rf.load_control_links(str(multi))
-    assert result["iso_27001_2022"]["A.5.1"] == "https://new.example/iso/a51"
-    assert result["UK-DVSTF:1.0"]["12.5.a"] == "https://new.example/dvstf/12-5-a"
-    assert result["__default__"]["A.5.1"] == "https://new.example/default/a51"
 
-    # Provenance note: only the explicit `frameworks:` bucket form produces
-    # framework buckets; bare top-level ref/URL maps are treated as default
-    # bucket entries because the URL extractor recurses into dict values.
-    frameworks_only = tmp_path / "frameworks-only.yml"
-    frameworks_only.write_text(
+    assert rf.load_control_links(path) == {
+        "iso_27001_2022": {
+            "A.5.1": "https://links.example/iso/a51",
+            "A.6.2": "https://links.example/iso/a62",
+        },
+        "UK-DVSTF:1.0": {"5.1": "http://links.example/dvstf/5-1"},
+    }
+    assert not caplog.records
+    # The file is read once for the process.
+    (tmp_path / "control_links.yml").write_text("frameworks: {}\n")
+    assert "iso_27001_2022" in rf.load_control_links(path)
+
+
+def test_unreadable_link_entries_are_skipped_and_logged(tmp_path, caplog):
+    long_ref = "A" * 65
+    path = links_file(
+        tmp_path,
+        "default:\n"
+        "  A.5.1: https://links.example/default\n"
         "frameworks:\n"
-        "  iso_27001_2022:\n"
-        "    A.5.1: https://short.example/a51\n"
-        "    A.6.2: https://short.example/a62\n"
-    )
-    result = rf.load_control_links(str(frameworks_only))
-    assert result["iso_27001_2022"]["A.5.1"] == "https://short.example/a51"
-    assert result["iso_27001_2022"]["A.6.2"] == "https://short.example/a62"
-
-    listform = tmp_path / "listform.yml"
-    listform.write_text(
-        "controls:\n"
-        "  - ref: A.5.1\n"
-        "    href: https://obj.example/a51\n"
-        "  - ref: A.6.1\n"
-        "    link: https://obj.example/a61\n"
-    )
-    result = rf.load_control_links(str(listform))
-    # A `controls:` alias holding a list lands in the default bucket.
-    assert result["__default__"]["A.5.1"] == "https://obj.example/a51"
-    assert result["__default__"]["A.6.1"] == "https://obj.example/a61"
-
-    # The controls alias and single-key dict forms resolve nested URLs too.
-    alias = tmp_path / "alias.yml"
-    alias.write_text(
-        "controls:\n  A.5.1:\n    upstream_url: https://alias.example/a51\n"
-    )
-    result = rf.load_control_links(str(alias))
-    assert result["__default__"]["A.5.1"] == "https://alias.example/a51"
-
-    single = tmp_path / "single.yml"
-    single.write_text("A.5.1:\n  https://only.example/a51\n")
-    result = rf.load_control_links(str(single))
-    assert result["__default__"]["A.5.1"] == "https://only.example/a51"
-
-    missing = rf.load_control_links(str(tmp_path / "missing.yml"))
-    assert missing == {"__default__": {}}
-
-    fallback = tmp_path / "fallback.yml"
-    fallback.write_text("A.5.1: https://fallback.example/a51\n")
-    with patch("yaml.safe_load", side_effect=RuntimeError("bad yaml")):
-        result_ = rf.load_control_links(str(fallback))
-    assert result_ == {"__default__": {"A.5.1": "https://fallback.example/a51"}}
-
-    empty = tmp_path / "empty.yml"
-    empty.write_text("")
-    assert rf.load_control_links(str(empty)) == {"__default__": {}}
-
-    junk = tmp_path / "junk.yml"
-    junk.write_text("- just\n- a\n- list")
-    assert rf.load_control_links(str(junk))["__default__"] == {}
-
-    scalar = tmp_path / "scalar.yml"
-    scalar.write_text("42\n")
-    assert rf.load_control_links(str(scalar)) == {"__default__": {}}
-
-    www = tmp_path / "www.yml"
-    www.write_text("A.5.1: www.example.com/docs\n")
-    assert rf.load_control_links(str(www))["__default__"]["A.5.1"] == (
-        "https://www.example.com/docs"
+        "  iso:\n"
+        "    A.5.1: https://links.example/iso/a51\n"
+        "    5.1: https://links.example/iso/5-1\n"
+        f"    {long_ref}: https://links.example/iso/long\n"
+        "    A.5.2: javascript:alert(1)\n"
+        "    A.5.3: /controls.html\n"
+        "    A.5.4: see https://links.example/iso/a54\n"
+        "    A.5.5: www.links.example/a55\n"
+        "    A.5.6:\n"
+        "      url: https://links.example/iso/a56\n"
+        "    A.5.7: https://links.example/iso/a57\n"
+        "  'bad framework':\n"
+        "    A.5.1: https://links.example/bad\n"
+        "  listed:\n"
+        "    - https://links.example/listed\n",
     )
 
-    embedded = tmp_path / "embedded.yml"
-    embedded.write_text("A.5.1: 'see also https://link.example/x (docs)'\n")
-    assert rf.load_control_links(str(embedded))["__default__"]["A.5.1"] == (
-        "https://link.example/x (docs)"
-    )
+    with caplog.at_level("WARNING", logger="app.core.references"):
+        loaded = rf.load_control_links(path)
 
-    unreachable = rf.load_control_links("/unreachable/nonexistent.yml")
-    assert unreachable == {"__default__": {}}
+    # The readable entries still apply.
+    assert loaded == {
+        "iso": {
+            "A.5.1": "https://links.example/iso/a51",
+            "A.5.7": "https://links.example/iso/a57",
+        }
+    }
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 10
+    assert all(message.startswith("Skipping control link ") for message in messages)
+    assert all(f" in {path}: " in message for message in messages)
+    expected = {
+        "'default'": "only frameworks is read",
+        "iso 5.1": "not a control or clause reference",
+        f"iso '{long_ref}'": "not a control or clause reference",
+        "'bad framework'": "not a framework identifier",
+        "listed": "needs a map of references to links",
+    }
+    for ref in ("A.5.2", "A.5.3", "A.5.4", "A.5.5", "A.5.6"):
+        expected[f"iso '{ref}'"] = "needs an absolute http or https link"
+    assert sorted(messages) == sorted(
+        f"Skipping control link {entry} in {path}: {problem}"
+        for entry, problem in expected.items()
+    )
+    # Logged entries name the reference, never the link text.
+    assert "javascript" not in " ".join(messages)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "A.5.1: https://links.example/a51\n",
+        "controls:\n  A.5.1: https://links.example/a51\n",
+        "- ref: A.5.1\n  href: https://links.example/a51\n",
+        "frameworks:\n  - https://links.example/a51\n",
+        "42\n",
+    ],
+    ids=["references-only", "controls", "list", "frameworks-list", "scalar"],
+)
+def test_a_file_without_a_frameworks_map_gives_no_links(tmp_path, caplog, text):
+    path = links_file(tmp_path, text)
+
+    assert rf.load_control_links(path) == {}
+    assert [record.getMessage() for record in caplog.records] == [
+        f"Ignoring control links file {path}: it needs a frameworks map"
+    ]
+
+
+def test_a_missing_empty_or_broken_file_gives_no_links(tmp_path, caplog):
+    rf.load_control_links.cache_clear()
+    assert rf.load_control_links(str(tmp_path / "missing.yml")) == {}
+    for empty in ("", "{}\n", "frameworks: {}\n"):
+        assert rf.load_control_links(links_file(tmp_path, empty)) == {}
+    assert not caplog.records
+
+    broken = links_file(
+        tmp_path, "frameworks:\n  iso:\n    A.8.1: A.8.1: https://links.example/a81\n"
+    )
+    assert rf.load_control_links(broken) == {}
+    (message,) = [record.getMessage() for record in caplog.records]
+    assert message.startswith(f"Ignoring control links file {broken}: ")
+    assert "line 3" in message
+
+
+def test_the_shipped_links_file_loads_every_entry(caplog):
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[3] / "config" / "control_links.yml"
+    rf.load_control_links.cache_clear()
+    with caplog.at_level("WARNING", logger="app.core.references"):
+        loaded = rf.load_control_links(str(path))
+
+    assert not caplog.records
+    # One entry per link line: a repeated reference would silently replace
+    # another framework item's link.
+    lines = [
+        line
+        for line in path.read_text().splitlines()
+        if line.startswith("    ") and not line.lstrip().startswith("#")
+    ]
+    assert sum(len(refs) for refs in loaded.values()) == len(lines)
+    assert {"iso_27001_2022", "UK-DVSTF:1.0"} <= set(loaded)

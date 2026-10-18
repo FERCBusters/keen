@@ -4,7 +4,7 @@ import {
   observedPayloadFields,
   fieldChoiceGroups,
 } from '/pages/evidence-fields.js';
-import { apiGet, apiPost, apiPut, apiDelete } from '/app.js';
+import { apiGet, apiPost, apiPut, apiDelete, getCurrentFramework } from '/app.js';
 
 const $ = (suffix) => document.getElementById(`ec-${suffix}`);
 let statusTimer = null;
@@ -842,6 +842,7 @@ async function newRule({ openEditor = true } = {}) {
     $(`when-${field}`).value = '';
   targets = [];
   renderTargets();
+  if (selectActiveFramework()) await loadFrameworkControls();
   $('preview-results').textContent = '';
   $('backfill').replaceChildren();
   $('sample').replaceChildren(new Option('Choose a source to see recent events', ''));
@@ -1112,7 +1113,7 @@ function renderTargets() {
     const row = document.createElement('div');
     row.className = 'list-group-item d-flex justify-content-between align-items-center';
     const text = document.createElement('span');
-    text.textContent = `${target.framework} / ${targetLabel(target.kind, target.ref)}${target.roles_any?.length ? ` · roles: ${target.roles_any.join(', ')}` : ''}`;
+    text.textContent = `${target.framework} / ${targetLabel(target.kind, target.ref)}`;
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'btn btn-sm btn-outline-danger';
@@ -1146,6 +1147,15 @@ async function loadRules({ resetEditor = true } = {}) {
     showLibrary();
   }
   if (data.warnings?.length) status(data.warnings.join(' · '), 'warning');
+}
+// The control picker opens on the framework chosen in the navigation bar, so a
+// new rule starts where the administrator is working. Returns whether it moved.
+function selectActiveFramework() {
+  const active = getCurrentFramework(),
+    picker = $('framework');
+  if (picker.value === active || ![...picker.options].some((o) => o.value === active)) return false;
+  picker.value = active;
+  return true;
 }
 async function loadFrameworkControls() {
   const data = await apiGet(
@@ -1548,6 +1558,7 @@ async function init() {
   const fw = await apiGet('/api/v1/frameworks');
   frameworks = fw.items;
   for (const item of frameworks) $('framework').add(new Option(item.name || item.slug, item.slug));
+  selectActiveFramework();
   await loadFrameworkControls();
   await draftFromEvent();
   const requestedRule = new URLSearchParams(location.search).get('rule');

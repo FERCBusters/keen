@@ -818,14 +818,6 @@ function findItem(kind, id) {
   return (data?.[key] || []).find((x) => String(x.id) === String(id)) || null;
 }
 
-function findMetricEntry(id) {
-  for (const measure of data.effectiveness_measures || []) {
-    const entry = (measure.metric_entries || []).find((x) => String(x.id) === String(id));
-    if (entry) return { ...entry, measure };
-  }
-  return null;
-}
-
 const auditSampleEntityTypes = {
   objective: 'isms_objective',
   document: 'isms_document',
@@ -833,7 +825,6 @@ const auditSampleEntityTypes = {
   asset: 'isms_asset',
   access: 'isms_access_control_matrix',
   effectiveness: 'isms_effectiveness_measure',
-  metric: 'isms_effectiveness_metric',
   meeting: 'isms_meeting',
 };
 
@@ -864,7 +855,6 @@ function ismsEntityEvidenceUrl(kind, id, item = null) {
   if (kind === 'asset') return assetHref(row);
   if (kind === 'access') return accessControlHref(row);
   if (kind === 'effectiveness') return effectivenessMeasureHref(row);
-  if (kind === 'metric') return effectivenessMetricHref(row);
   if (kind === 'meeting') return meetingHref(row);
   return null;
 }
@@ -878,15 +868,13 @@ function ismsSampleTitle(kind, item) {
   if (kind === 'access') return item.task_action || 'Access control matrix row';
   if (kind === 'effectiveness')
     return item.summary || item.metric || item.effectiveness_measure || 'Effectiveness measure';
-  if (kind === 'metric')
-    return item.value_display || item.measure?.metric || 'Effectiveness metric';
   if (kind === 'meeting') return item.title || 'ISMS meeting';
   return item.display || 'ISMS item';
 }
 
 function sampleIsmsEntity(kind, id) {
   const entityType = auditSampleEntityTypes[kind];
-  const item = kind === 'metric' ? findMetricEntry(id) : findItem(kind, id);
+  const item = findItem(kind, id);
   if (!entityType) return;
   openAuditSampleModal({
     me,
@@ -1086,10 +1074,7 @@ function populateEditForm(kind, item) {
     setSelectValues($('accessAwsAccounts'), item.aws_account_ids || []);
     $('accessStatus').value = item.status || 'Pending Approval';
     $('accessApprovedBy').value = item.approved_by_user_id || '';
-    setSelectValues(
-      $('accessRole'),
-      item.role_org_node_ids || (item.role_org_node_id ? [item.role_org_node_id] : []),
-    );
+    setSelectValues($('accessRole'), item.role_org_node_ids || []);
     $('accessNotes').value = item.notes || '';
   } else if (kind === 'effectiveness') {
     $('effSummary').value = item.summary || '';
@@ -1573,9 +1558,7 @@ function accessServiceLabel(item) {
 }
 
 function accessRoles(item) {
-  const roles = Array.isArray(item?.roles) ? item.roles : [];
-  if (roles.length) return roles;
-  return item?.role ? [item.role] : [];
+  return Array.isArray(item?.roles) ? item.roles : [];
 }
 
 function accessRoleColumns(items = []) {
@@ -2031,8 +2014,32 @@ function renderAccessFormOptions(targetAccountValues = []) {
   renderAwsAccountOptions(targetAccountValues);
 }
 
+// A refused save leaves the form as it was and says why.
+function reportIsmsFailure(error) {
+  toast(status, `Could not save: ${String(error?.message || error)}`, 'danger');
+}
+function onIsmsSubmit(id, handler) {
+  $(id)?.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    try {
+      await handler(ev);
+    } catch (error) {
+      reportIsmsFailure(error);
+    }
+  });
+}
+function onIsmsClick(id, handler) {
+  $(id)?.addEventListener('click', async (ev) => {
+    try {
+      await handler(ev);
+    } catch (error) {
+      reportIsmsFailure(error);
+    }
+  });
+}
+
 $('assetCategory')?.addEventListener('change', () => renderAssetSubcategoryOptions());
-$('addAssetCategory')?.addEventListener('click', async () => {
+onIsmsClick('addAssetCategory', async () => {
   const input = $('assetCategoryName');
   const name = String(input?.value || '').trim();
   if (!name) return;
@@ -2040,7 +2047,7 @@ $('addAssetCategory')?.addEventListener('click', async () => {
   if (input) input.value = '';
   await reloadAfter('Asset category added');
 });
-$('addAssetSubcategory')?.addEventListener('click', async () => {
+onIsmsClick('addAssetSubcategory', async () => {
   const input = $('assetSubcategoryName');
   const name = String(input?.value || '').trim();
   const categoryId = $('assetSubcategoryCategory')?.value || $('assetCategory')?.value || '';
@@ -2050,8 +2057,7 @@ $('addAssetSubcategory')?.addEventListener('click', async () => {
   await reloadAfter('Asset subcategory added');
 });
 
-$('licenseForm')?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
+onIsmsSubmit('licenseForm', async (ev) => {
   const licenseId = $('licenseId')?.value || '';
   const payload = {
     name: $('licenseName')?.value || '',
@@ -2069,8 +2075,7 @@ $('licenseForm')?.addEventListener('submit', async (ev) => {
   await reloadAfter(licenseId ? 'License updated' : 'License added');
 });
 
-$('awsAccountForm')?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
+onIsmsSubmit('awsAccountForm', async (ev) => {
   const accountId = $('awsAccountId')?.value || '';
   const payload = {
     name: $('awsAccountName')?.value || '',
@@ -2330,8 +2335,7 @@ async function reloadAfter(message, section = null) {
   }
 }
 
-$('objectiveForm')?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
+onIsmsSubmit('objectiveForm', async (ev) => {
   const editingId = ev.target.dataset.editingId || null;
   await saveIsms(
     'objective',
@@ -2355,8 +2359,7 @@ $('objectiveForm')?.addEventListener('submit', async (ev) => {
   await reloadAfter(editingId ? 'ISMS objective updated' : 'ISMS objective created');
 });
 
-$('documentForm')?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
+onIsmsSubmit('documentForm', async (ev) => {
   const editingId = ev.target.dataset.editingId || null;
   const medium = documentMedium();
   const file = medium === 'upload' ? $('docFile')?.files?.[0] : null;
@@ -2454,8 +2457,7 @@ document
   .querySelectorAll('input[name="docMedium"]')
   .forEach((input) => input.addEventListener('change', showDocumentMedium));
 
-$('orgForm')?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
+onIsmsSubmit('orgForm', async (ev) => {
   const editingId = ev.target.dataset.editingId || null;
   await saveIsms(
     'org',
@@ -2475,8 +2477,7 @@ $('orgForm')?.addEventListener('submit', async (ev) => {
   );
 });
 
-$('assetForm')?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
+onIsmsSubmit('assetForm', async (ev) => {
   const editingId = ev.target.dataset.editingId || null;
   await saveIsms(
     'asset',
@@ -2496,8 +2497,7 @@ $('assetForm')?.addEventListener('submit', async (ev) => {
   await reloadAfter(editingId ? 'ISMS asset updated' : 'ISMS asset created');
 });
 
-$('effectivenessForm')?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
+onIsmsSubmit('effectivenessForm', async (ev) => {
   const editingId = ev.target.dataset.editingId || null;
   const targetRaw = $('effTargetValue')?.value;
   await saveIsms(
@@ -2522,8 +2522,7 @@ $('effectivenessForm')?.addEventListener('submit', async (ev) => {
   await reloadAfter(editingId ? 'Effectiveness measure updated' : 'Effectiveness measure created');
 });
 
-$('metricEntryForm')?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
+onIsmsSubmit('metricEntryForm', async (ev) => {
   const measureId = $('metricMeasureId')?.value || '';
   if (!measureId) throw new Error('Select an effectiveness measure.');
   await apiPost(
@@ -2539,8 +2538,7 @@ $('cancelMetricEntry')?.addEventListener('click', () => {
   if (card) card.style.display = 'none';
 });
 
-$('accessControlForm')?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
+onIsmsSubmit('accessControlForm', async (ev) => {
   const editingId = ev.target.dataset.editingId || null;
   await saveIsms('access', accessPayloadFromForm(), editingId);
   resetForm('access');
@@ -2570,8 +2568,7 @@ $('meetingCreatePerson')?.addEventListener('click', async () => {
     toast(status, `Could not add Person: ${String(err)}`, 'danger');
   }
 });
-$('meetingForm')?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
+onIsmsSubmit('meetingForm', async (ev) => {
   const editingId = ev.target.dataset.editingId || null;
   await saveIsms(
     'meeting',
@@ -2617,7 +2614,6 @@ document.addEventListener('click', async (ev) => {
   const awsAccountDeleteBtn = ev.target.closest?.('[data-aws-account-delete]');
   const removeMeetingLinkBtn = ev.target.closest?.('[data-remove-meeting-link]');
   const effectivenessRecordBtn = ev.target.closest?.('[data-effectiveness-record]');
-  const metricEntryDeleteBtn = ev.target.closest?.('[data-metric-entry-delete]');
   try {
     if (addBtn) {
       const kind = addBtn.getAttribute('data-isms-add');
@@ -2647,15 +2643,6 @@ document.addEventListener('click', async (ev) => {
     }
     if (effectivenessRecordBtn) {
       showMetricEntryForm(effectivenessRecordBtn.getAttribute('data-effectiveness-record'));
-      return;
-    }
-    if (metricEntryDeleteBtn) {
-      const id = metricEntryDeleteBtn.getAttribute('data-metric-entry-delete');
-      if (!confirm('Delete this effectiveness metric entry?')) return;
-      await apiDelete(
-        `/api/v1/isms/effectiveness-metrics/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
-      );
-      await reloadAfter('Effectiveness metric entry deleted');
       return;
     }
     if (sampleBtn) {

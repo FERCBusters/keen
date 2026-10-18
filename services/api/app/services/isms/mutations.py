@@ -41,7 +41,7 @@ from .schemas import AssetPayload, IsmsLinksPayload, LicensePayload, MeetingLink
 
 def _asset_name_from_payload(payload: AssetPayload) -> str:
     return _clean_text(
-        payload.asset or payload.asset_name or payload.name,
+        payload.asset,
         max_len=256,
         required=True,
         label="asset",
@@ -173,9 +173,6 @@ def _license_from_payload(
     # ``license_name`` is useful for imports/API callers; the UI sends license_id.
     if payload.license_name:
         return _license_or_create_by_name(db, payload.license_name, user)
-    # Backwards compatibility for older callers still sending the old free-text field.
-    if payload.license:
-        return _license_or_create_by_name(db, payload.license, user)
     return None
 
 
@@ -297,19 +294,11 @@ def _apply_effectiveness_links(
     payload: IsmsLinksPayload,
     user: User,
 ) -> None:
-    # Effectiveness Measures are control-scoped ISMS records. They deliberately
-    # do not link directly to clauses, because the applicable clauses should be
-    # inferred through the linked controls. Remove any legacy clause links if an
-    # existing row is edited after older builds allowed them.
+    # Effectiveness Measures are control-scoped ISMS records. They link to no
+    # clauses: the applicable clauses follow from the linked controls.
     _replace_control_links(
         db, "effectiveness_measure", entity_id, framework, payload.controls, user
     )
-    db.query(IsmsEntityClauseLink).filter(
-        IsmsEntityClauseLink.entity_type == "effectiveness_measure",
-        IsmsEntityClauseLink.entity_id == entity_id,
-        IsmsEntityClauseLink.framework_slug == framework,
-    ).delete(synchronize_session=False)
-    db.flush()
     if payload.controls is not None:
         sync_entity_link_diary(db, "effectiveness_measure", entity_id, user)
 

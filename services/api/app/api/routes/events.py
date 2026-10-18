@@ -167,37 +167,15 @@ def export_events(
 
 
 @router.get("/v1/evidence/latest")
-@router.get("/v1/events/latest")
 def latest_evidence_event(
     request: Request,
     after: Optional[datetime] = None,
     limit: int = 1,
     db: Session = Depends(get_db),
 ):
-    "Return the newest visible events by ingestion time.\n\n    The homepage ticker uses this as a low-cost polling endpoint.  Visibility\n    follows the normal event listing rules; diary entries require an active\n    authenticated user.  `after` is compared with Event.created_at\n    because this endpoint is about what most recently arrived in Keen, not the\n    original event timestamp.\n\n    `limit` defaults to 1 to preserve the original endpoint contract; callers\n    that want a small ticker batch can request up to 25 events.  The legacy\n    `event` field remains the newest item, and `events` contains the returned\n    batch in newest-first order.\n"
+    "Return the newest visible events by ingestion time, newest first.\n\n    The homepage ticker polls this endpoint. Visibility follows the normal event\n    listing rules. `after` is compared with Event.created_at because the ticker\n    shows what most recently arrived in KEEN, not the original event time.\n    `limit` accepts 1 to 25 events.\n"
     user = _require_events_read(db, request)
     return service.latest_evidence_event(user=user, after=after, limit=limit, db=db)
-
-
-# Legacy convenience endpoint (kept for compatibility)
-@router.get("/v1/events/unmapped")
-def unmapped_events(
-    request: Request,
-    framework: str = settings.default_framework_slug,
-    limit: int = 100,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-):
-    user = _require_events_read(db, request)
-    return service.unmapped_events(
-        user=user,
-        framework=framework,
-        limit=limit,
-        start_date=start_date,
-        end_date=end_date,
-        db=db,
-    )
 
 
 @router.post("/v1/events/{event_id}/incident")

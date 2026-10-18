@@ -54,6 +54,7 @@ def require_audit_access(db: Session, user: User | None, audit: Audit) -> None:
 
 
 def audit_or_404(db: Session, audit_id: str, *, lock=False) -> Audit:
+    """Return the audit; with lock, hold its row lock until the change commits."""
     aid = try_uuid(audit_id)
     if not aid:
         raise DomainError(status_code=400, detail="audit_id must be a UUID")
@@ -115,10 +116,15 @@ def require_audit_admin(db: Session, user: User) -> None:
         raise DomainError(403, "audits.admin permission required")
 
 
-def editable_audit_or_404(
-    db: Session, user: User, audit_id: str, *, lock=False
-) -> Audit:
-    audit = audit_or_404(db, audit_id, lock=lock)
+def editable_audit_or_404(db: Session, user: User, audit_id: str) -> Audit:
+    """Return an audit the user may edit, locked for the edit.
+
+    Every edit of an audit, its scope, samples, attendees, findings or final
+    report holds the audit's row lock until it commits. Overlapping edits run
+    in turn, and each checks the audit as the previous one left it, so an edit
+    never lands in an audit that was completed or deleted meanwhile.
+    """
+    audit = audit_or_404(db, audit_id, lock=True)
     if not (
         can_admin_audits(db, user)
         or (can_manage_audits(db, user) and audit.created_by_user_id == user.id)

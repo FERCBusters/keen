@@ -63,13 +63,13 @@ def _normalize_source_colors(raw: dict | None) -> dict[str, str]:
     return out
 
 
-def _validate_viz_mode(raw: str | None) -> str:
-    """Validate user-selected visualisation mode. Blank/None resets to default."""
+def _validate_visualisation_mode(raw: str | None) -> str:
+    """Validate a visualisation mode. Blank/None means the default graph."""
     v = (raw or "").strip()
     if not v:
         return "graph"
     if v not in _VIZ_MODES:
-        raise DomainError(status_code=400, detail="Invalid viz_mode")
+        raise DomainError(status_code=400, detail="Invalid default_visualisation.mode")
     return v
 
 
@@ -106,7 +106,7 @@ def _validate_default_visualisation(raw: dict | None) -> dict | None:
             status_code=400, detail="default_visualisation must be an object"
         )
 
-    mode = _validate_viz_mode(raw.get("mode"))
+    mode = _validate_visualisation_mode(raw.get("mode"))
     out: dict = {"mode": mode}
 
     # Date range
@@ -279,7 +279,6 @@ def me(*, context: ChangeContext, db: Session) -> dict:
         default_visualisation=(
             getattr(user, "pref_default_visualisation", None) or None
         ),
-        viz_mode=(getattr(user, "pref_viz_mode", None) or "graph"),
         landing_page=(getattr(user, "pref_landing_page", None) or "/"),
         default_framework=(getattr(user, "pref_default_framework", None) or None),
     )
@@ -441,7 +440,6 @@ def get_my_preferences(*, context: ChangeContext) -> PreferencesOut:
         default_visualisation=(
             getattr(user, "pref_default_visualisation", None) or None
         ),
-        viz_mode=(getattr(user, "pref_viz_mode", None) or "graph"),
         landing_page=(getattr(user, "pref_landing_page", None) or "/"),
         default_framework=(getattr(user, "pref_default_framework", None) or None),
     )
@@ -482,21 +480,11 @@ def update_my_preferences(
         else:
             user.pref_source_colors = _normalize_source_colors(payload.source_colors)
 
-    if "viz_mode" in fields:
-        user.pref_viz_mode = _validate_viz_mode(payload.viz_mode)
-
     if "default_visualisation" in fields:
         # None clears the saved default. Any dict is validated/normalized.
         user.pref_default_visualisation = _validate_default_visualisation(
             payload.default_visualisation
         )
-
-        # Keep the legacy mode-only preference in sync when a default is set.
-        dv = user.pref_default_visualisation
-        if isinstance(dv, dict):
-            m = dv.get("mode")
-            if isinstance(m, str) and m in _VIZ_MODES:
-                user.pref_viz_mode = m
 
     if "landing_page" in fields:
         eff_role = (
@@ -528,7 +516,6 @@ def update_my_preferences(
         default_visualisation=(
             getattr(user, "pref_default_visualisation", None) or None
         ),
-        viz_mode=(getattr(user, "pref_viz_mode", None) or "graph"),
         landing_page=(getattr(user, "pref_landing_page", None) or "/"),
         default_framework=(getattr(user, "pref_default_framework", None) or None),
     )
@@ -633,22 +620,6 @@ def delete_my_saved_search(
     db.delete(row)
     db.commit()
     return {"ok": True}
-
-
-def list_my_shortcuts(*, context: ChangeContext, db: Session) -> list[SavedSearchOut]:
-    return list_my_saved_searches(context=context, db=db)
-
-
-def upsert_my_shortcut(
-    *, payload: SavedSearchCreatePayload, context: ChangeContext, db: Session
-) -> SavedSearchOut:
-    return upsert_my_saved_search(payload=payload, context=context, db=db)
-
-
-def delete_my_shortcut(
-    *, shortcut_id: str, context: ChangeContext, db: Session
-) -> dict:
-    return delete_my_saved_search(saved_search_id=shortcut_id, context=context, db=db)
 
 
 def change_my_password(

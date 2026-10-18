@@ -77,8 +77,7 @@ def list_sources(*, framework: str, limit: int, offset: int, db: Session, user):
     def _load() -> dict:
         visibility = diary_filter_condition(db, user)
 
-        # Total events per source. This is used by sources.html and, historically,
-        # by some dropdowns, so keep the exact count semantics intact.
+        # Total events per source, counted exactly as sources.html shows them.
         total_rows = (
             db.query(Event.source, func.count(Event.id), func.max(Event.timestamp))
             .filter(visibility)

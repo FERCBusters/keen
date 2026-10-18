@@ -641,18 +641,11 @@ def event_facets(
 
 
 def latest_evidence_event(*, after: Optional[datetime], limit: int, db: Session, user):
-    """Return the newest visible events by ingestion time.
+    """Return up to 25 of the newest visible events by ingestion time.
 
-    The homepage ticker uses this as a low-cost polling endpoint.  Visibility
-    follows the normal event listing rules; diary entries require an active
-    authenticated user.  `after` is compared with Event.created_at
-    because this endpoint is about what most recently arrived in Keen, not the
-    original event timestamp.
-
-    `limit` defaults to 1 to preserve the original endpoint contract; callers
-    that want a small ticker batch can request up to 25 events.  The legacy
-    `event` field remains the newest item, and `events` contains the returned
-    batch in newest-first order.
+    Visibility follows the normal event listing rules; diary entries require an
+    active authenticated user. `after` is compared with Event.created_at, and
+    `events` lists the batch newest first.
     """
 
     limit = max(1, min(int(limit or 1), 25))
@@ -683,57 +676,7 @@ def latest_evidence_event(*, after: Optional[datetime], limit: int, db: Session,
         .limit(limit)
         .all()
     )
-    if not events:
-        return {"event": None, "events": []}
-
-    payloads = [_latest_event_payload(event) for event in events]
-    return {"event": payloads[0], "events": payloads}
-
-
-def unmapped_events(
-    *,
-    framework: str,
-    limit: int,
-    start_date: Optional[date],
-    end_date: Optional[date],
-    db: Session,
-    user,
-):
-    limit = max(1, min(int(limit or 100), 1000))
-
-    q = (
-        db.query(Event)
-        .options(
-            load_only(
-                Event.id,
-                Event.timestamp,
-                Event.source,
-                Event.summary,
-                Event.raw_pointer,
-            )
-        )
-        .filter(diary_filter_condition(db, user))
-        .filter(_unmapped_event_condition(framework, db))
-        .order_by(desc(Event.timestamp))
-        .limit(limit)
-    )
-
-    return {
-        "items": [
-            {
-                "id": str(e.id),
-                "timestamp": e.timestamp.isoformat(),
-                "source": e.source,
-                "connection_id": e.connection_id,
-                "connection_name": e.connection_name,
-                "summary": e.summary,
-                "action": e.action,
-                "outcome": e.outcome,
-                "severity": e.severity,
-            }
-            for e in q.all()
-        ]
-    }
+    return {"events": [_latest_event_payload(event) for event in events]}
 
 
 def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session, user):

@@ -405,10 +405,6 @@ async def admin_diary(
             uploads.extend(list(form.getlist("attachments")))
         except Exception:
             pass
-        try:
-            uploads.extend(list(form.getlist("images")))  # backwards compat
-        except Exception:
-            pass
 
     return await service.admin_diary(
         db=db,

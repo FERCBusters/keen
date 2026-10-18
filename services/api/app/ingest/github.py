@@ -991,7 +991,7 @@ def ingest_github_all(db: Session) -> list[dict[str, Any]]:
             db.rollback()
             out.append({"feed": url, "error": collection_error(e)})
 
-    # --- Repo-level ingestion (legacy / small orgs) ---
+    # --- Repository-level ingestion for individually listed repositories ---
     for r in cfg.get("repos", []) or []:
         try:
             out.append(ingest_github_repo(db, r["owner"], r["repo"], r.get("label")))

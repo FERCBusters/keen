@@ -286,8 +286,8 @@ def _asset_out(
     subcategory = row.subcategory
     out = {
         "id": str(row.id),
-        # Keep both names so older ISMS UI code and the CIA Triad risk UI can
-        # consume the same canonical asset records.
+        # ISMS pages read `asset` and the risk pages `name`; both are the
+        # asset's name.
         "asset": row.name,
         "name": row.name,
         "category": _asset_category_out(category),
@@ -433,7 +433,6 @@ def _access_control_matrix_out(
         )
         if link.org_node
     ]
-    primary_role = roles[0] if roles else None
     out = {
         "id": str(row.id),
         "task_action": row.task_action or "",
@@ -448,9 +447,6 @@ def _access_control_matrix_out(
         ),
         "roles": roles,
         "role_org_node_ids": [role["id"] for role in roles if role],
-        # Compatibility for older UI/API callers that expected a single role.
-        "role": primary_role,
-        "role_org_node_id": primary_role.get("id") if primary_role else None,
         "notes": row.notes or "",
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
@@ -577,10 +573,6 @@ def _effectiveness_measure_out(
             db, "effectiveness_measure", row.id, framework
         )
         out["control_count"] = len(out["controls"])
-        # Kept as an empty list for backward-compatible API shape, but the UI no
-        # longer exposes direct clause links for effectiveness measures.
-        out["clauses"] = []
-        out["clause_count"] = 0
     return out
 
 

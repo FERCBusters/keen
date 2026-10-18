@@ -585,9 +585,11 @@ async function loadSavedSearches() {
       // ignore
     }
   } catch (e) {
-    // Non-fatal (e.g., older server); hide the card if unsupported.
-    const card = document.getElementById('savedSearchesCard');
-    if (card) card.style.display = 'none';
+    if (savedSearchesEmpty) {
+      savedSearchesEmpty.className = 'alert alert-danger mb-0';
+      savedSearchesEmpty.style.display = '';
+      savedSearchesEmpty.textContent = `Failed to load saved searches: ${String(e)}`;
+    }
   }
 }
 

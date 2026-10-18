@@ -23,6 +23,7 @@ import app.services.me as me_operations
 import cbor2
 import fakeredis
 import pyotp
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from app.api.routes import auth as login_routes
@@ -37,7 +38,7 @@ from app.security.sessions import create_session
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -143,7 +144,6 @@ class LocalMfaTests(unittest.TestCase):
             patch.object(login_routes, "get_valkey", return_value=self.redis),
             patch.object(settings, "mfa_policy", "optional"),
             patch.object(settings, "public_base_url", "https://keen.example"),
-            patch.object(settings, "mfa_origin", "https://keen.example"),
             patch.object(
                 settings, "mfa_encryption_key", Fernet.generate_key().decode()
             ),
@@ -751,3 +751,27 @@ class SecurityIpTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.parametrize(
+    "public,expected",
+    [
+        ("https://keen.example", ("https://keen.example", "keen.example")),
+        ("https://keen.example:8443", ("https://keen.example:8443", "keen.example")),
+        ("http://localhost:8080", ("http://localhost:8080", "localhost")),
+        ("http://127.0.0.1", ("http://127.0.0.1", "127.0.0.1")),
+    ],
+)
+def test_webauthn_uses_the_public_origin_and_its_host(public, expected):
+    with patch.object(settings, "public_base_url", public):
+        assert mfa.origin_config() == expected
+
+
+def test_local_mfa_needs_an_https_public_origin():
+    with patch.object(settings, "public_base_url", "http://keen.example"):
+        with pytest.raises(HTTPException) as refused:
+            mfa.origin_config()
+    assert (refused.value.status_code, refused.value.detail) == (
+        503,
+        "Local MFA requires an HTTPS KEEN_PUBLIC_BASE_URL",
+    )

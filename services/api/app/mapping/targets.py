@@ -26,11 +26,11 @@ def resolve_targets(
     """Return the row each (reference, kind) target names, and those naming none.
 
     A clause target names the framework's clause row with that reference and a
-    control target the control. A target without a kind comes from
-    configuration written before targets recorded one: it names the control
-    when a clause shares the reference, and the clause otherwise. When several
-    controls share a reference, the target names none of them and is left out of
-    both results, so evidence never attaches to a guess.
+    control target the control. A target without a kind, such as a plain
+    ``map_to`` reference, names the control when a clause shares the reference,
+    and the clause otherwise. When several controls share a reference, the
+    target names none of them and is left out of both results, so evidence
+    never attaches to a guess.
     """
     wanted = list(dict.fromkeys((ref, kind) for ref, kind in targets if ref))
     if not wanted:

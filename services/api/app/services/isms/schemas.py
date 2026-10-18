@@ -56,19 +56,13 @@ class OrgNodePayload(IsmsLinksPayload):
 
 
 class AssetPayload(IsmsLinksPayload):
-    # ``asset`` is retained as the ISMS-facing field name. ``name`` and
-    # ``asset_name`` keep compatibility with the CIA Triad risk asset API.
     asset: str | None = Field(default=None, max_length=256)
-    name: str | None = Field(default=None, max_length=256)
-    asset_name: str | None = Field(default=None, max_length=256)
     category_id: uuid.UUID | None = None
     category_name: str | None = Field(default=None, max_length=128)
     subcategory_id: uuid.UUID | None = None
     subcategory_name: str | None = Field(default=None, max_length=128)
     license_id: uuid.UUID | None = None
     license_name: str | None = Field(default=None, max_length=256)
-    # Compatibility for older clients. New UI/API clients should send license_id.
-    license: str | None = Field(default=None, max_length=256)
     owner_org_node_id: uuid.UUID | None = None
     register_held_by_org_node_id: uuid.UUID | None = None
     description: str | None = Field(default=None, max_length=20000)
@@ -107,10 +101,8 @@ class AccessControlMatrixPayload(BaseModel):
     aws_account_ids: list[uuid.UUID] | None = None
     status: str | None = Field(default=None, max_length=32)
     approved_by_user_id: uuid.UUID | None = None
-    # New clients send role_org_node_ids because one access row can apply to several
-    # organisation-chart roles. role_org_node_id is accepted for older clients.
+    # One access row can apply to several organisation-chart roles.
     role_org_node_ids: list[uuid.UUID] | None = None
-    role_org_node_id: uuid.UUID | None = None
     notes: str | None = Field(default=None, max_length=12000)
 
 

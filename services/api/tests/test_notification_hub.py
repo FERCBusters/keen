@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.realtime import admin_notifications, notifications as nt
+from app.realtime import notifications as nt
 
 
 class FakeWebSocket:
@@ -266,27 +266,6 @@ def test_listen_loop_routes_admin_and_non_dict_payloads():
             "u1", {"scope": "user", "user_id": "u1"}
         )
         assert fake_pubsub.closed is True
-
-    asyncio.run(scenario())
-
-
-def test_admin_hub_proxy_uses_admin_scope():
-    async def scenario():
-        # Proxy methods resolve the hub through admin_notifications itself.
-        with patch.object(admin_notifications, "notification_hub") as hub:
-            hub.connect = AsyncMock()
-            hub.disconnect = AsyncMock()
-            hub.broadcast_admin = AsyncMock()
-            await admin_notifications.admin_notification_hub.connect("ws")
-            hub.connect.assert_awaited_once_with("ws", user_id="admin", is_admin=True)
-            await admin_notifications.admin_notification_hub.disconnect("ws")
-            hub.disconnect.assert_awaited_once_with("ws")
-            await admin_notifications.admin_notification_hub.broadcast_open_question_count(
-                4
-            )
-            hub.broadcast_admin.assert_awaited_once_with(
-                {"type": "questions.open_count", "open_count": 4}
-            )
 
     asyncio.run(scenario())
 

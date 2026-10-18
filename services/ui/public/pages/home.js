@@ -251,8 +251,7 @@ if (ensureHomeLayout()) {
   }
 
   function latestEvidenceItemsFromResponse(data) {
-    if (Array.isArray(data?.events)) return data.events.filter(Boolean);
-    return data?.event ? [data.event] : [];
+    return Array.isArray(data?.events) ? data.events.filter(Boolean) : [];
   }
 
   function setLatestEvidenceCursor(events) {

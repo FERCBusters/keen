@@ -36,6 +36,7 @@ from app.mapping.rules import (
     _as_rule_entries,
     evaluate_by_framework,
     parse_rules,
+    rule_problem,
 )
 from app.mapping.targets import resolve_targets
 from app.security.redaction import redact_url
@@ -468,7 +469,6 @@ def _normalize_rule_document(raw: dict) -> list[dict]:
                         "framework": t.framework_slug,
                         "ref": t.ref,
                         **({"kind": t.kind} if t.kind else {}),
-                        **({"roles_any": sorted(t.roles_any)} if t.roles_any else {}),
                     }
                     for t in rule.targets
                 ],
@@ -1260,18 +1260,14 @@ def _validate_rule(rule: dict, db: Session):
     for target in targets:
         if target not in unique:
             unique.append(target)
-    rule["map_to"] = targets = unique
-    try:
-        confidence = float(rule.get("confidence", 0.8))
-    except (TypeError, ValueError):
-        confidence = -1
-    if not 0 <= confidence <= 1:
-        raise DomainError(400, "Confidence must be between 0 and 1")
-    parsed = parse_rules({"rules": [rule]})
-    if rule.get("enabled") is not False and (
-        len(parsed) != 1 or len(parsed[0].targets) != len(targets)
-    ):
-        raise DomainError(400, "Invalid rule targets")
+    rule["map_to"] = unique
+    if "enabled" in rule and not isinstance(rule["enabled"], bool):
+        raise DomainError(400, "Enabled must be true or false")
+    # Collection reads saved rules with the same parser, so a rule it would
+    # skip is refused here, paused or not.
+    problem = rule_problem({**rule, "enabled": True})
+    if problem:
+        raise DomainError(400, problem[0].upper() + problem[1:])
 
 
 def get_rules(*, db: Session):
@@ -1385,7 +1381,7 @@ def _plain_mismatch_reasons(event, when):
                     f"{label}: the rule asks for ‘{expected}’; this event has ‘{actual if actual is not None else 'not supplied'}’."
                 )
     return reasons or [
-        "A structured field, collection, label, pattern, BookStack selector or target-role condition did not match."
+        "A structured field, collection, label, pattern or BookStack selector condition did not match."
     ]
 
 

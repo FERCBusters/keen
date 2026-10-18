@@ -194,9 +194,8 @@ def _compute_framework_event_counts(
 ) -> dict[str, int]:
     """Count mapped/unmapped events directly from events and mappings.
 
-    This intentionally does not read the legacy ``global_event_stats`` or
-    ``framework_event_stats`` trigger-maintained tables. The result is cached
-    for ``KEEN_AGGREGATE_CACHE_TTL_SECONDS`` and periodically warmed by Celery.
+    The result is cached for ``KEEN_AGGREGATE_CACHE_TTL_SECONDS`` and
+    periodically warmed by Celery.
     """
 
     total = (
@@ -310,12 +309,7 @@ def rebuild_control_evidence_stats(db: Session, *, clear_cache: bool = True) -> 
 def rebuild_framework_event_stats(
     db: Session, *, clear_cache: bool = True
 ) -> dict[str, int]:
-    """Compatibility wrapper: refresh the Valkey event counter cache.
-
-    Older callers used this after bulk remapping. The Postgres trigger-maintained
-    counter tables are no longer the source of truth for global mapped/unmapped
-    counters, so this now just refreshes the cached live counts.
-    """
+    """Refresh the Valkey event counter cache after bulk remapping."""
 
     if clear_cache:
         clear_stats_caches()

@@ -85,8 +85,6 @@ class RiskAssetPayload(BaseModel):
     subcategory_name: str | None = Field(default=None, max_length=128)
     license_id: uuid.UUID | None = None
     license_name: str | None = Field(default=None, max_length=256)
-    # Compatibility for older clients. New UI/API clients should send license_id.
-    license: str | None = Field(default=None, max_length=256)
     owner_org_node_id: uuid.UUID | None = None
     register_held_by_org_node_id: uuid.UUID | None = None
     description: str | None = Field(default=None, max_length=20000)
@@ -111,8 +109,6 @@ class RiskMitigatorAnalysePayload(BaseModel):
 
 
 class RiskUpsertPayload(BaseModel):
-    # asset is retained as a backwards-compatible alias for asset_name.
-    asset: str | None = Field(default=None, max_length=256)
     asset_id: uuid.UUID | None = None
     asset_name: str | None = Field(default=None, max_length=256)
     category_id: uuid.UUID | None = None
@@ -407,20 +403,13 @@ def _license_from_payload(
     license_name = getattr(payload, "license_name", None)
     if license_name:
         return _license_or_create_by_name(db, license_name)
-    legacy_name = getattr(payload, "license", None)
-    if legacy_name:
-        return _license_or_create_by_name(db, legacy_name)
     return None
 
 
 def _asset_name_from_payload(
     payload: RiskUpsertPayload | RiskAssetPayload,
 ) -> str | None:
-    return (
-        getattr(payload, "asset_name", None)
-        or getattr(payload, "asset", None)
-        or getattr(payload, "name", None)
-    )
+    return getattr(payload, "asset_name", None) or getattr(payload, "name", None)
 
 
 def _asset_or_create(
@@ -432,7 +421,6 @@ def _asset_or_create(
 ) -> RiskAsset:
     fields = set(getattr(payload, "model_fields_set", set()) or set())
     asset_detail_fields = {
-        "asset",
         "asset_id",
         "asset_name",
         "name",
@@ -442,7 +430,6 @@ def _asset_or_create(
         "subcategory_name",
         "license_id",
         "license_name",
-        "license",
         "owner_org_node_id",
         "register_held_by_org_node_id",
         "description",
@@ -455,7 +442,6 @@ def _asset_or_create(
     if asset_id and not (
         fields
         & {
-            "asset",
             "asset_name",
             "name",
             "category_id",
@@ -464,7 +450,6 @@ def _asset_or_create(
             "subcategory_name",
             "license_id",
             "license_name",
-            "license",
         }
     ):
         return _asset_or_404(db, asset_id)
@@ -757,7 +742,7 @@ def _risk_out(
     subcategory = asset.subcategory if asset else None
     return {
         "id": str(risk.id),
-        # Keep asset/category as convenient flattened properties for existing pages.
+        # Risk lists show the asset by name.
         "asset": asset.name if asset else "",
         "asset_id": str(asset.id) if asset else None,
         "asset_entity": _asset_out(asset),
@@ -796,7 +781,6 @@ def _apply_payload(
     fields = set(payload.model_fields_set or set())
 
     asset_fields = {
-        "asset",
         "asset_id",
         "asset_name",
         "category_id",
@@ -885,8 +869,8 @@ def _apply_payload(
             raise DomainError(status_code=400, detail="mitigator_context is too large")
         risk.mitigator_context = context
 
-    # The register's four ratings are the single source of truth. Keep the
-    # historical score columns in sync for existing graph and SoA consumers.
+    # The register's four ratings are the single source of truth. The
+    # three-factor score columns mirror them for the SoA and change history.
     rating_fields = (
         "register_likelihood",
         "register_impact",
@@ -1206,7 +1190,7 @@ def update_risk_asset(*, asset_id: str, payload: RiskAssetPayload, user, db: Ses
     row.category_id = category.id
     row.subcategory_id = subcategory.id
     fields = set(payload.model_fields_set or set())
-    if {"license_id", "license_name", "license"} & fields:
+    if {"license_id", "license_name"} & fields:
         license_row = _license_from_payload(db, payload)
         row.license_id = license_row.id if license_row else None
         row.license = license_row.name if license_row else ""

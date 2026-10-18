@@ -64,11 +64,7 @@ function render() {
       const indent = depth ? `style="padding-left:${Math.min(depth * 1.25, 4)}rem"` : '';
       const cls = depth === 0 ? 'fw-bold' : '';
       const upstreamHtml = upstreamLinkHtml(c.upstream_url, { title: 'Open upstream guidance' });
-      const evidenceMappings = Array.isArray(c.evidence_mappings)
-        ? c.evidence_mappings
-        : Array.isArray(c.evidence_urls)
-          ? c.evidence_urls.map((url) => ({ title: '', url }))
-          : [];
+      const evidenceMappings = Array.isArray(c.evidence_mappings) ? c.evidence_mappings : [];
       const evidenceHtml = titledLinksHtml(evidenceMappings, {
         title: 'Open evidence mapping',
         empty: '<span class="small-muted">—</span>',

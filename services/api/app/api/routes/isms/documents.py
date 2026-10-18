@@ -167,7 +167,7 @@ def update_document(
 
 
 @router.post("/v1/isms/documents/{document_id}/file")
-async def upload_document_file(
+def upload_document_file(
     document_id: str,
     request: Request,
     file: UploadFile = File(...),
@@ -175,10 +175,10 @@ async def upload_document_file(
     user=Depends(require_isms_manage),
     db: Session = Depends(get_db),
 ):
-    data = await file.read(100 * 1024 * 1024 + 1)
+    # A synchronous handler keeps the storage write off the event loop.
     return service.upload_document_file(
         document_id=document_id,
-        data=data,
+        content=file.file,
         filename=file.filename,
         content_type=file.content_type or "application/octet-stream",
         framework=framework,

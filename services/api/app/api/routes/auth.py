@@ -43,17 +43,11 @@ from app.services import login as login_service
 router = Router()
 
 
-def _oidc_configured() -> bool:
-    return any(provider.key == "oidc" for provider in configured_sso_providers())
-
-
 @router.get("/v1/auth/methods")
 def auth_methods() -> dict:
     from app.security.demo import demo_metadata
 
     providers = configured_sso_providers()
-    oidc_enabled = _oidc_configured()
-    oidc_provider = get_sso_provider("oidc")
     return {
         "demo": demo_metadata(),
         "local_enabled": bool(getattr(settings, "local_auth_enabled", True)),
@@ -61,15 +55,6 @@ def auth_methods() -> dict:
         "remote_user_enabled": bool(
             getattr(settings, "trust_remote_user", False)
             and not getattr(settings, "oidc_enabled", False)
-        ),
-        "oidc_enabled": oidc_enabled,
-        "oidc": (
-            {
-                "label": (oidc_provider.label if oidc_provider else "Single sign-on"),
-                "start_url": "/api/v1/auth/oidc/start",
-            }
-            if oidc_enabled
-            else None
         ),
         "sso_enabled": bool(providers),
         "sso_providers": [provider.public_dict() for provider in providers],
@@ -165,20 +150,6 @@ def complete_local_login(
     set_session_cookie(response, sid)
     set_csrf_cookie(response, generate_csrf_token())
     return response
-
-
-@router.get("/v1/auth/oidc/start")
-async def oidc_start(request: Request, db: Session = Depends(get_db)) -> Response:
-    next_url = request.query_params.get("next")
-    url = await build_authorize_redirect(
-        request, db, next_url=next_url, provider_key="oidc"
-    )
-    return set_sso_binding(RedirectResponse(url, status_code=302), request)
-
-
-@router.get("/v1/auth/oidc/callback")
-async def oidc_callback(request: Request, db: Session = Depends(get_db)) -> Response:
-    return await _complete_sso_callback(request, db, provider_key="oidc")
 
 
 @router.get("/v1/auth/sso/{provider_key}/start")

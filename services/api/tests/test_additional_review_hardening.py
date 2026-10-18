@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from app.api.routes import audits as audit_routes
 from app.services import questions
 from app.services.audits import reports
 from app.services.context import ChangeContext
@@ -19,20 +18,13 @@ from starlette.datastructures import UploadFile
 from tests.test_security_sampling_masking import sampling_client as sampling_client
 
 
-def test_report_reader_bounds_actual_bytes(monkeypatch):
-    monkeypatch.setattr(reports, "MAX_REPORT_BYTES", 8)
-    upload = UploadFile(io.BytesIO(b"synthetic payload larger than the limit"))
-    assert asyncio.run(audit_routes._read_upload(upload)) == b"syntheti" + b"c"
-    assert upload.file.tell() == 9
-
-
 def test_oversized_report_does_not_write_storage_or_metadata(
     sampling_client, monkeypatch
 ):
     client, factory, ids = sampling_client
     monkeypatch.setattr(reports, "MAX_REPORT_BYTES", 8)
     store = Mock()
-    monkeypatch.setattr(reports, "put_bytes", store)
+    monkeypatch.setattr(reports, "put_file", store)
     response = client.post(
         f"/v1/audits/{ids.audit}/report",
         files={"file": ("report.txt", b"synthetic oversized report", "text/plain")},
@@ -93,23 +85,23 @@ def test_upload_object_extensions_are_safe(monkeypatch, kind, filename, extensio
         monkeypatch.setattr(reports, "editable_audit_or_404", lambda *a, **k: row)
         monkeypatch.setattr(reports, "require_mutable_audit", lambda *args: None)
         monkeypatch.setattr(reports, "report_dict", lambda *args: {})
-        monkeypatch.setattr(reports, "put_bytes", store)
+        monkeypatch.setattr(reports, "put_file", store)
         reports.save_final_report(
             audit_id=str(row.id),
             db=db,
             user=user,
             filename=filename,
             content_type="application/pdf",
-            data=b"fixture",
+            content=io.BytesIO(b"fixture"),
         )
     else:
         monkeypatch.setattr(documents, "_by_id_or_404", lambda *a, **k: row)
         monkeypatch.setattr(documents, "_document_out", lambda *args: {})
         monkeypatch.setattr(documents, "_record", lambda *args: None)
-        monkeypatch.setattr(documents, "put_bytes", store)
+        monkeypatch.setattr(documents, "put_file", store)
         documents.upload_document_file(
             document_id=str(row.id),
-            data=b"fixture",
+            content=io.BytesIO(b"fixture"),
             filename=filename,
             content_type="application/pdf",
             framework="fixture",

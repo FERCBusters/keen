@@ -39,8 +39,6 @@ def _event_visibility_cache_scope(user) -> str:
 
 
 _EVIDENCE_COVERAGE_KEYS = (
-    "with_evidence",
-    "without_evidence",
     "with_evidence_in_scope",
     "without_evidence_in_scope",
     "with_evidence_all",
@@ -84,10 +82,6 @@ def stats_summary(
     cache_parts = {
         "framework": framework,
         "visibility": _event_visibility_cache_scope(user),
-        # Bump the cache signature so older Valkey summaries do not continue
-        # to show stale mapped/unmapped counters from the legacy trigger-backed
-        # global event stats path.
-        "counter_version": "cross-framework-v1",
     }
 
     def _load() -> dict:
@@ -121,10 +115,6 @@ def stats_summary(
                     "total": int(total_controls),
                     "in_scope": int(in_scope_controls),
                     "out_of_scope": int(out_of_scope_controls),
-                    # Backwards compatible keys now report IN-SCOPE coverage.
-                    "with_evidence": int(controls_with_evidence_in_scope),
-                    "without_evidence": int(controls_without_evidence_in_scope),
-                    # New explicit keys.
                     "with_evidence_in_scope": int(controls_with_evidence_in_scope),
                     "without_evidence_in_scope": int(
                         controls_without_evidence_in_scope
@@ -135,10 +125,9 @@ def stats_summary(
                 "stats_source": stats_source,
             }
 
-        # Fast path for authenticated users: diary events are now globally
-        # visible to active users, so these dashboard counters use the global
-        # framework event-count cache instead of legacy trigger-maintained
-        # Postgres counter tables.
+        # Fast path for authenticated users: diary events are visible to every
+        # active user, so these dashboard counters use the global framework
+        # event-count cache.
         has_inheritance = has_inherited_evidence(db, framework)
         if (
             not has_inheritance
@@ -532,7 +521,7 @@ def _stats_events_timeseries(
         if end_excl <= start:
             end_excl = start + _step_for(interval_req)
 
-        # Keep start_date/end_date in sync for legacy fields.
+        # The response also reports the window as dates.
         start_date = start.date()
         end_date = (end_excl - timedelta(microseconds=1)).date()
     # Otherwise: date window if provided.

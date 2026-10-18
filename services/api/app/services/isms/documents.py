@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import uuid
+from typing import BinaryIO
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -17,12 +18,14 @@ from app.db.models import (
     IsmsDocumentRevision,
     User,
 )
+from app.security.request_limits import MAX_FILE_UPLOAD
 from app.security.rich_text import sanitize_rich_text_html
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.hierarchy import validate_parent
+from app.services.uploads import upload_size
 from app.storage.filenames import safe_download_ext
-from app.storage.s3 import put_bytes
+from app.storage.s3 import put_file
 
 from .common import (
     _by_id_or_404,
@@ -36,6 +39,8 @@ from .constants import DOCUMENT_TYPES
 from .mutations import _apply_links, _delete_entity_links
 from .schemas import DocumentCommentPayload, DocumentFolderPayload, DocumentPayload
 from .serializers import _document_out, _user_summary
+
+MAX_DOCUMENT_BYTES = MAX_FILE_UPLOAD
 
 
 def _document_folder(db: Session, folder_id: uuid.UUID | None) -> uuid.UUID | None:
@@ -344,7 +349,7 @@ def update_document(
 def upload_document_file(
     *,
     document_id: str,
-    data: bytes,
+    content: BinaryIO,
     filename: str,
     content_type: str,
     framework: str,
@@ -357,13 +362,14 @@ def upload_document_file(
     row = _by_id_or_404(db, IsmsDocument, document_id, "Document", lock=True)
     before = _document_out(db, row, fw)
     filename = os.path.basename(filename or "isms-document")[:255]
-    if not data:
+    size = upload_size(content)
+    if not size:
         raise DomainError(400, "Uploaded file is empty")
-    if len(data) > 100 * 1024 * 1024:
+    if size > MAX_DOCUMENT_BYTES:
         raise DomainError(413, "ISMS document is too large")
     ext = safe_download_ext(os.path.splitext(filename)[1])
-    stored = put_bytes(
-        f"isms-documents/{row.id}/{uuid.uuid4()}{ext}", data, content_type
+    stored = put_file(
+        f"isms-documents/{row.id}/{uuid.uuid4()}{ext}", content, content_type
     )
     from app.services.evidence_retention import queue_object
 

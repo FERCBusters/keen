@@ -21,8 +21,8 @@ celery_app = Celery(
     include=["app.worker.tasks"],
 )
 
-# Keep the existing default queue for internal work and queued-job compatibility.
-# HTTP polling is explicitly routed for scheduled, per-connection and manual runs.
+# Internal work runs on the default queue. HTTP polling is routed to its own
+# queue for scheduled, per-connection and manual runs.
 HTTP_INGEST_SOURCES = (
     "elasticsearch",
     "loki",

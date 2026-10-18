@@ -326,7 +326,7 @@ def storage_batch():
                     # Do not persist provider responses, credentials or signed URLs.
                     code = getattr(exc, "response", {}).get("Error", {}).get("Code")
                     error = (
-                        "Legacy versioned S3 URI has no version ID; operator must resolve the exact object version"
+                        "Stored S3 URI names no version in a versioned bucket; operator must resolve the exact object version"
                         if type(exc).__name__ == "UnpinnedVersionedObject"
                         else f"Storage deletion failed ({code or type(exc).__name__}); check permissions, Object Lock and connectivity"
                     )

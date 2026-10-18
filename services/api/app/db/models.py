@@ -484,42 +484,6 @@ class ControlEvidenceStats(Base):
     )
 
 
-class GlobalEventStats(Base):
-    __tablename__ = "global_event_stats"
-
-    stats_key: Mapped[str] = mapped_column(
-        String(32), primary_key=True, default="events"
-    )
-    total_events: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, onupdate=utcnow, nullable=False
-    )
-
-    __table_args__ = (
-        CheckConstraint(
-            "total_events >= 0",
-            name="ck_global_event_stats_total_nonnegative",
-        ),
-    )
-
-
-class FrameworkEventStats(Base):
-    __tablename__ = "framework_event_stats"
-
-    framework_slug: Mapped[str] = mapped_column(String(64), primary_key=True)
-    mapped_event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, onupdate=utcnow, nullable=False
-    )
-
-    __table_args__ = (
-        CheckConstraint(
-            "mapped_event_count >= 0",
-            name="ck_framework_event_stats_count_nonnegative",
-        ),
-    )
-
-
 class Mapping(Base):
     __tablename__ = "mappings"
     id: Mapped[uuid.UUID] = mapped_column(
@@ -854,11 +818,6 @@ class User(Base):
         JSONB, default=dict, nullable=False
     )
 
-    # Preferred visualisation mode (graph | heatmap | sunburst_source | sunburst_control | histogram)
-    pref_viz_mode: Mapped[str] = mapped_column(
-        String(32), default="graph", nullable=False
-    )
-
     # Default Visualisation page state (mode/date range/sunburst focus).
     # Optional; when unset the UI falls back to Graph + last 7 days.
     pref_default_visualisation: Mapped[dict | None] = mapped_column(
@@ -1132,8 +1091,8 @@ class Risk(Base):
         Integer, nullable=False, default=1
     )
     residual_risk_score: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    # Conventional 5x5 register scores are independent of KEEN's existing
-    # three-factor scenario scores; older risks remain unrated until reviewed.
+    # The conventional 5x5 register ratings, from which the risk scores and
+    # the three-factor score columns follow.
     register_likelihood: Mapped[int | None] = mapped_column(Integer, nullable=True)
     register_impact: Mapped[int | None] = mapped_column(Integer, nullable=True)
     register_residual_likelihood: Mapped[int | None] = mapped_column(

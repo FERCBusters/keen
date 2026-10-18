@@ -143,10 +143,7 @@ class RetentionDatabaseTests(unittest.TestCase):
                 ),
             ):
                 module.upgrade()
-            for filename in [
-                "0042_control_evidence_stats.py",
-                "0050_framework_event_stats.py",
-            ]:
+            for filename in ["0042_control_evidence_stats.py"]:
                 spec = importlib.util.spec_from_file_location(
                     "stats_migration", path.parent / filename
                 )
@@ -195,8 +192,6 @@ class RetentionDatabaseTests(unittest.TestCase):
                 text("UPDATE evidence_retention_policy SET mode='disabled',value=NULL")
             )
             db.execute(text("DELETE FROM evidence_retention_overrides"))
-            db.execute(text("UPDATE global_event_stats SET total_events=0"))
-            db.execute(text("DELETE FROM framework_event_stats"))
             db.commit()
 
     def insert(self, model, **values):
@@ -596,7 +591,7 @@ class RetentionDatabaseTests(unittest.TestCase):
         r.database_batch()
         self.assertIn(str(e), self.left())
 
-    def test_aggregate_counters_follow_deletion(self):
+    def test_control_evidence_counts_follow_deletion(self):
         old = self.event(90)
         held = self.event(90)
         self.sample(self.audit(), held)
@@ -612,21 +607,9 @@ class RetentionDatabaseTests(unittest.TestCase):
         r.database_batch()
         self.assertEqual(
             self.sql(
-                "SELECT total_events FROM global_event_stats WHERE stats_key='events'"
-            )[0]["total_events"],
-            1,
-        )
-        self.assertEqual(
-            self.sql(
                 "SELECT evidence_count FROM control_evidence_stats WHERE control_item_id=:id",
                 id=c,
             )[0]["evidence_count"],
-            1,
-        )
-        self.assertEqual(
-            self.sql(
-                "SELECT mapped_event_count FROM framework_event_stats WHERE framework_slug='COUNTERS'"
-            )[0]["mapped_event_count"],
             1,
         )
 

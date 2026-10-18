@@ -161,18 +161,20 @@ def test_structured_regex_rejects_unsafe_patterns_at_parse_and_runtime(pattern):
         validate_fields([condition])
     with pytest.raises(ValueError):
         field_matches({"summary": "test"}, condition)
-    with pytest.raises(ValueError):
-        parse_rules(
-            {
-                "rules": [
-                    {
-                        "id": "bad",
-                        "when": {"fields": [condition]},
-                        "map_to": [{"framework": "A", "ref": "1"}],
-                    }
-                ]
-            }
-        )
+    # A rules document with such a rule still loads; that rule alone is skipped.
+    rules = parse_rules(
+        {
+            "rules": [
+                {
+                    "id": "bad",
+                    "when": {"fields": [condition]},
+                    "map_to": [{"framework": "A", "ref": "1"}],
+                },
+                {"id": "good", "when": {}, "map_to": [{"framework": "A", "ref": "2"}]},
+            ]
+        }
+    )
+    assert [rule.id for rule in rules] == ["good"]
 
 
 def test_structured_regex_is_bounded_and_combines_with_summary_using_and():

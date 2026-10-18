@@ -1,5 +1,6 @@
 """Regressions for pre-release review findings, through assembled entry points."""
 
+import io
 import json
 import uuid
 from datetime import datetime
@@ -317,7 +318,7 @@ def test_replaced_and_deleted_files_are_queued_for_cleanup(
         for content in (b"first", b"second"):
             documents.upload_document_file(
                 document_id=str(doc.id),
-                data=content,
+                content=io.BytesIO(content),
                 filename="policy.pdf",
                 content_type="application/pdf",
                 framework="fw",
@@ -332,7 +333,7 @@ def test_replaced_and_deleted_files_are_queued_for_cleanup(
                 user=user,
                 filename="report.pdf",
                 content_type="application/pdf",
-                data=content,
+                content=io.BytesIO(content),
             )
             uris.append(contract_db.get(Audit, audit.id).final_report_storage_uri)
         documents.delete_document(

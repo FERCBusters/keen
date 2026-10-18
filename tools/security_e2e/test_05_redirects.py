@@ -44,7 +44,9 @@ def test_login_next_parameter_stays_on_origin(page_as, accounts, target, value):
 
 @pytest.mark.parametrize("value", HOSTILE_NEXT[:4])
 def test_sso_start_never_redirects_back_off_origin(anonymous, value):
-    response = anonymous.get("/api/v1/auth/oidc/start?next=" + quote(value, safe=""))
+    response = anonymous.get(
+        "/api/v1/auth/sso/oidc/start?next=" + quote(value, safe="")
+    )
     if response.status_code == 404:
         pytest.skip("OIDC not configured")
     location = response.headers.get("location", "")

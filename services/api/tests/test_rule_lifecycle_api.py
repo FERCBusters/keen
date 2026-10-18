@@ -28,8 +28,8 @@ from tests.test_assembled_authority_regressions import (
 
 FW = "fw-lifecycle"
 FALLBACK_REASON = (
-    "A structured field, collection, label, pattern, BookStack selector or "
-    "target-role condition did not match."
+    "A structured field, collection, label, pattern or BookStack selector "
+    "condition did not match."
 )
 # Every non-administrator permission that touches evidence or its review.
 BROAD_PERMISSIONS = ("events.read", "isms.manage", "risk.manage", "audits.admin")
@@ -157,6 +157,66 @@ def lab(keen, monkeypatch):  # noqa: F811 - fixture imported above
         mapping_ids=mapping_ids,
         mapped=mapped,
     )
+
+
+# --- Saving ----------------------------------------------------------------------
+
+UNREADABLE = [
+    ("misspelt-key", {**_rule("typo"), "wen": {}}, "Unsupported key wen"),
+    (
+        "paused-misspelt-key",
+        {**_rule("typo"), "enabled": False, "wen": {}},
+        "Unsupported key wen",
+    ),
+    (
+        "text-enabled",
+        {**_rule("typo"), "enabled": "yes"},
+        "Enabled must be true or false",
+    ),
+    (
+        "role-gate",
+        {
+            **_rule("typo"),
+            "map_to": [{"framework": FW, "ref": "A.1", "roles_any": ["ops"]}],
+        },
+        "Unsupported target key roles_any",
+    ),
+    (
+        "text-confidence",
+        {**_rule("typo"), "confidence": "0.5"},
+        "Confidence must be a number from 0 to 1",
+    ),
+    (
+        # Resuming a paused rule must not reveal a problem it was saved with.
+        "paused-text-confidence",
+        {**_rule("typo"), "enabled": False, "confidence": "0.5"},
+        "Confidence must be a number from 0 to 1",
+    ),
+    (
+        "paused-misspelt-condition",
+        {**_rule("typo", sourse="loki"), "enabled": False},
+        "Unsupported match fields: sourse",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "entry,detail",
+    [(entry, detail) for _, entry, detail in UNREADABLE],
+    ids=[name for name, _, _ in UNREADABLE],
+)
+def test_a_rule_collection_would_skip_is_refused_when_saved(lab, entry, detail):
+    before = lab.version()
+
+    refused = lab.admin.put(
+        "/v1/admin/mapping-rules/typo",
+        json={"version": before, "rule": entry, "apply_existing": False},
+        headers=unsafe(lab.admin),
+    )
+
+    assert (refused.status_code, refused.json()["detail"]) == (400, detail)
+    assert lab.version() == before
+    assert "typo" not in lab.rule_ids()
 
 
 # --- Stale rule mappings -------------------------------------------------------

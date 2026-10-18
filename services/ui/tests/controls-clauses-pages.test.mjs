@@ -145,7 +145,7 @@ const clauseTree = {
       ref: '5',
       title: 'Leadership',
       child_count: 2,
-      evidence_urls: ['https://docs.example/l'],
+      evidence_mappings: [{ title: '', url: 'https://docs.example/l' }],
       upstream_url: 'javascript:alert(1)',
     },
   ],

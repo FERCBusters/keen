@@ -39,31 +39,13 @@ def unb64(value):
 
 
 def origin_config():
-    origin = (settings.mfa_origin or settings.public_base_url).rstrip("/")
+    """Return the WebAuthn origin and relying-party ID: the public origin and host."""
+    origin = settings.public_base_url
     parsed = urlsplit(origin)
-    if (
-        (
-            parsed.scheme != "https"
-            and not (
-                parsed.scheme == "http"
-                and parsed.hostname in {"localhost", "127.0.0.1"}
-            )
-        )
-        or not parsed.hostname
-        or parsed.path
-        or parsed.query
-        or parsed.fragment
-        or parsed.username
-        or parsed.password
-    ):
-        raise HTTPException(
-            503, "Set KEEN_MFA_ORIGIN to the HTTPS origin of this KEEN installation"
-        )
-    rp = settings.mfa_rp_id or parsed.hostname
-    # Exact host scope avoids accidental trust of sibling customer subdomains.
-    if rp != parsed.hostname:
-        raise HTTPException(503, "KEEN_MFA_RP_ID must match the KEEN origin hostname")
-    return origin, rp
+    if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1"}:
+        raise HTTPException(503, "Local MFA requires an HTTPS KEEN_PUBLIC_BASE_URL")
+    # The relying party is the exact host, so sibling subdomains never share it.
+    return origin, parsed.hostname
 
 
 def check_origin(request):

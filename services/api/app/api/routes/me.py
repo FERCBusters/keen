@@ -78,36 +78,6 @@ def delete_my_saved_search(
     )
 
 
-# -----------------------------------------------------------------------------
-# Shortcuts compatibility endpoints (alias of saved searches)
-# -----------------------------------------------------------------------------
-
-
-@router.get("/v1/me/shortcuts", response_model=list[SavedSearchOut])
-def list_my_shortcuts(
-    request: Request, db: Session = Depends(get_db)
-) -> list[SavedSearchOut]:
-    return service.list_my_shortcuts(context=change_context(request), db=db)
-
-
-@router.post("/v1/me/shortcuts", response_model=SavedSearchOut)
-def upsert_my_shortcut(
-    payload: SavedSearchCreatePayload, request: Request, db: Session = Depends(get_db)
-) -> SavedSearchOut:
-    return service.upsert_my_shortcut(
-        payload=payload, context=change_context(request), db=db
-    )
-
-
-@router.delete("/v1/me/shortcuts/{shortcut_id}")
-def delete_my_shortcut(
-    shortcut_id: str, request: Request, db: Session = Depends(get_db)
-) -> dict:
-    return service.delete_my_shortcut(
-        shortcut_id=shortcut_id, context=change_context(request), db=db
-    )
-
-
 @router.post("/v1/me/password")
 def change_my_password(
     payload: ChangePasswordPayload, request: Request, db: Session = Depends(get_db)

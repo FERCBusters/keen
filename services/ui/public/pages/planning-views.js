@@ -77,7 +77,7 @@ function quadrantCards(items, framework, editable) {
     return `<li>${parentHint}${compactQuadrantCard(row, framework, editable)}${descendants ? `<ul aria-label="Child SWOT items">${descendants}</ul>` : ''}</li>`;
   }
   let content = (children.get('') || []).map((row) => branch(row)).join('');
-  // Keep all supplied items visible even if malformed legacy data contains a cycle.
+  // Keep every supplied item visible, including any in a parent cycle.
   for (const row of items) if (!seen.has(row.id)) content += branch(row);
   return content ? `<ul class="planning-quadrant-tree">${content}</ul>` : '';
 }

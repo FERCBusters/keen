@@ -140,7 +140,7 @@ def test_event_facets_count_only_visible_entries(keen, entries):  # noqa: F811 -
 def test_latest_events_and_exports_omit_hidden_entries(keen, entries):  # noqa: F811 - fixture imported above
     link_entries = {entries.document.id, entries.risk.id}
     for name, client, visible, _ in _readers(keen, entries):
-        latest = client.get("/v1/events/latest", params={"limit": 25})
+        latest = client.get("/v1/evidence/latest", params={"limit": 25})
         assert latest.status_code == 200, (name, latest.text)
         listed = {uuid.UUID(item["id"]) for item in latest.json()["events"]}
         assert listed & link_entries == visible, name

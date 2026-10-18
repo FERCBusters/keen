@@ -54,7 +54,6 @@ class SsoProvider:
     token_endpoint_auth_method: str = "client_secret_basic"
     supports_id_token: bool = True
     id_token_leeway_seconds: int = 60
-    legacy_oidc_routes: bool = False
     allowed_algs: tuple[str, ...] = ("RS256",)
 
     def public_dict(self) -> dict[str, str]:
@@ -239,8 +238,6 @@ def _canonical_issuer(provider: SsoProvider) -> str:
 
 
 def provider_start_url(provider: SsoProvider) -> str:
-    if provider.legacy_oidc_routes:
-        return "/api/v1/auth/oidc/start"
     return f"/api/v1/auth/sso/{provider.key}/start"
 
 
@@ -277,6 +274,8 @@ def _required_missing(provider: SsoProvider) -> list[str]:
         missing.append(f"{prefix}_AUTHORIZATION_ENDPOINT")
     if not provider.token_endpoint:
         missing.append(f"{prefix}_TOKEN_ENDPOINT")
+    if not provider.redirect_uri:
+        missing.append(f"{prefix}_REDIRECT_URI")
     if provider.kind == "oidc":
         if not provider.jwks_uri:
             missing.append(f"{prefix}_JWKS_URI")
@@ -333,6 +332,13 @@ def _require_provider_config(provider_key: str | None) -> SsoProvider:
                 status_code=500,
                 detail=f"{provider.label} {setting_name} must use HTTPS",
             )
+    # The callback must reach this installation, whose host-only cookie binds
+    # the sign-in to the browser that started it.
+    if not provider.redirect_uri.startswith(settings.public_base_url + "/"):
+        raise HTTPException(
+            status_code=500,
+            detail=f"{provider.label} redirect URI must be on KEEN_PUBLIC_BASE_URL",
+        )
     return provider
 
 
@@ -371,28 +377,6 @@ async def _get_jwks(jwks_uri: str) -> dict[str, Any]:
 
     _JWKS_CACHE[jwks_uri] = (data, now + timedelta(hours=1))
     return data
-
-
-def _redirect_uri_from_request(request: Request, provider: SsoProvider) -> str:
-    configured = (provider.redirect_uri or "").strip()
-    if configured:
-        return configured
-
-    try:
-        base = str(request.base_url).rstrip("/")
-    except Exception:
-        base = ""
-    if not base:
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Unable to derive redirect URI; configure an explicit provider "
-                "redirect URI in the environment"
-            ),
-        )
-    if provider.legacy_oidc_routes:
-        return f"{base}/api/v1/auth/oidc/callback"
-    return f"{base}/api/v1/auth/sso/{provider.key}/callback"
 
 
 def create_login_state(
@@ -615,7 +599,7 @@ async def build_authorize_redirect(
         raise HTTPException(
             429, "Too many sign-in attempts", headers={"Retry-After": str(retry)}
         )
-    redirect_uri = _redirect_uri_from_request(request, provider)
+    redirect_uri = provider.redirect_uri
     secret = secrets.token_urlsafe(32)
     request.state.sso_browser_secret = secret
     state_row = create_login_state(
@@ -716,7 +700,7 @@ async def _fetch_github_claims(
 async def _handle_github_callback(
     request: Request, db: Session, provider: SsoProvider, row: OidcLoginState
 ) -> tuple[User, str | None, str | None]:
-    redirect_uri = _redirect_uri_from_request(request, provider)
+    redirect_uri = provider.redirect_uri
     client = _new_client(provider, redirect_uri=redirect_uri)
     try:
         token = await client.fetch_token(
@@ -738,7 +722,7 @@ async def _handle_github_callback(
 async def _handle_oidc_callback(
     request: Request, db: Session, provider: SsoProvider, row: OidcLoginState
 ) -> tuple[User, str | None, str | None]:
-    redirect_uri = _redirect_uri_from_request(request, provider)
+    redirect_uri = provider.redirect_uri
     client = _new_client(provider, redirect_uri=redirect_uri)
 
     try:

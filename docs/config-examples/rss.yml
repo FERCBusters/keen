@@ -19,8 +19,7 @@
 #     url: "https://example.com/security/atom.xml"
 #     enabled: true
 #     max_items: 50
-#     overlap_minutes: 2880          # default: 2 days
-#     verify_tls: true               # default: KEEN_RSS_VERIFY_TLS
+#     overlap_minutes: 2880          # default: 2 days; TLS is always verified
 #     headers:
 #       X-Api-Key: "..."             # optional
 #     auth:

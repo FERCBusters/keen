@@ -27,6 +27,6 @@ def load_document(name: str, path: str, *, db: Session | None = None) -> dict[st
             return row.document
     with open(path, encoding="utf-8") as stream:
         data = yaml.safe_load(stream) or {}
-    if not isinstance(data, dict) and not (name == "rules" and isinstance(data, list)):
+    if not isinstance(data, dict):
         raise ValueError(f"{name} configuration must be an object")
     return data

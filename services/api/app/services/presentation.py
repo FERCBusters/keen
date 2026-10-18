@@ -285,10 +285,8 @@ def extract_source_url(
 ) -> Optional[str]:
     """Best-effort extract of an event upstream/source URL.
 
-    Historically most providers put clickable upstream links in ``raw_pointer``.
-    RSS events can also have the original entry link in
-    ``normalized_payload["rss"]["entry"]["link"]``.  Accept both so older RSS
-    rows can show links in list/table views without being re-ingested.
+    Most providers put clickable upstream links in ``raw_pointer``, and an RSS
+    event's normalised payload also holds its entry's link, so both are read.
 
     Only absolute ``http://`` and ``https://`` URLs are returned.  Relative paths
     from generic payload ``url`` fields are commonly filesystem/application paths,

@@ -96,10 +96,6 @@ def _reverse_refs_for(
             "effectiveness_metric",
         }:
             continue
-        if entity_side == "clause" and et == "effectiveness_measure":
-            # Effectiveness measures are control-scoped. Older builds allowed
-            # direct clause links, but they should not surface on clause pages.
-            continue
         key = {
             "swot": "swot",
             "objective": "objectives",

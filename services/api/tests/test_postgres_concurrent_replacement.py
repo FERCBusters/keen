@@ -7,6 +7,7 @@ file that no record references any more is queued for deletion. The changes
 run on separate PostgreSQL connections, so these tests skip on SQLite.
 """
 
+import io
 import threading
 import time
 import uuid
@@ -161,7 +162,7 @@ def upload(document_id, data):
     def change(db, user):
         documents.upload_document_file(
             document_id=document_id,
-            data=data,
+            content=io.BytesIO(data),
             filename="policy.txt",
             content_type="text/plain",
             framework="iso27001",
@@ -214,7 +215,7 @@ def test_overlapping_uploads_retire_every_replaced_file(race):
     outcome = race.run(
         upload(document_id, b"first"),
         upload(document_id, b"second"),
-        pause_at=(documents, "put_bytes"),
+        pause_at=(documents, "put_file"),
     )
 
     assert outcome == ("done", "done")
@@ -246,7 +247,7 @@ def test_an_upload_overlapping_a_deletion_leaves_no_file_behind(race, first):
         outcome = race.run(
             upload(document_id, b"replacement"),
             delete(document_id),
-            pause_at=(documents, "put_bytes"),
+            pause_at=(documents, "put_file"),
         )
         assert outcome == ("done", "done")
 
@@ -281,7 +282,7 @@ def report(audit_id, data):
             user=user,
             filename="report.txt",
             content_type="text/plain",
-            data=data,
+            content=io.BytesIO(data),
         )
 
     return change
@@ -301,7 +302,7 @@ def test_overlapping_final_reports_retire_every_replaced_report(race):
     outcome = race.run(
         report(audit_id, b"first"),
         report(audit_id, b"second"),
-        pause_at=(reports, "put_bytes"),
+        pause_at=(reports, "put_file"),
     )
 
     assert outcome == ("done", "done")
@@ -328,7 +329,7 @@ def test_a_final_report_overlapping_a_deletion_leaves_no_report_behind(race, fir
         outcome = race.run(
             report(audit_id, b"replacement"),
             delete_audit(audit_id),
-            pause_at=(reports, "put_bytes"),
+            pause_at=(reports, "put_file"),
         )
         assert outcome == ("done", "done")
 
