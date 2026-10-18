@@ -80,8 +80,8 @@ def list_document_folders(*, user: User, db: Session):
 
 
 def create_document_folder(*, payload: DocumentFolderPayload, user: User, db: Session):
-    validate_parent(db, IsmsDocumentFolder, payload.parent_id)
     parent = _document_folder(db, payload.parent_id)
+    validate_parent(db, IsmsDocumentFolder, parent)
     row = IsmsDocumentFolder(name=payload.name.strip(), parent_id=parent)
     if not row.name:
         raise DomainError(status_code=400, detail="Folder name is required")
@@ -294,7 +294,9 @@ def update_document(
     db: Session,
 ):
     fw = _clean_framework(framework)
-    row = _by_id_or_404(db, IsmsDocument, document_id, "Document")
+    # Saves of one document queue on its row, so each checks the version the
+    # previous save committed.
+    row = _by_id_or_404(db, IsmsDocument, document_id, "Document", lock=True)
     before = _document_out(db, row, fw)
     fields = set(payload.model_fields_set or set())
     if "title" in fields:
@@ -351,7 +353,8 @@ def upload_document_file(
     context: ChangeContext,
 ):
     fw = _clean_framework(framework)
-    row = _by_id_or_404(db, IsmsDocument, document_id, "Document")
+    # Locked so a concurrent replacement or deletion retires this file in turn.
+    row = _by_id_or_404(db, IsmsDocument, document_id, "Document", lock=True)
     before = _document_out(db, row, fw)
     filename = os.path.basename(filename or "isms-document")[:255]
     if not data:
@@ -398,7 +401,7 @@ def delete_document(
     *, document_id: str, context: ChangeContext, framework: str, user: User, db: Session
 ):
     fw = _clean_framework(framework)
-    row = _by_id_or_404(db, IsmsDocument, document_id, "Document")
+    row = _by_id_or_404(db, IsmsDocument, document_id, "Document", lock=True)
     if (
         db.query(BookStackSectionEvidence.id)
         .filter(BookStackSectionEvidence.document_id == row.id)

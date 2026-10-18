@@ -90,7 +90,7 @@ def test_upload_object_extensions_are_safe(monkeypatch, kind, filename, extensio
     )
     db = Mock()
     if kind == "audit":
-        monkeypatch.setattr(reports, "editable_audit_or_404", lambda *args: row)
+        monkeypatch.setattr(reports, "editable_audit_or_404", lambda *a, **k: row)
         monkeypatch.setattr(reports, "require_mutable_audit", lambda *args: None)
         monkeypatch.setattr(reports, "report_dict", lambda *args: {})
         monkeypatch.setattr(reports, "put_bytes", store)
@@ -103,7 +103,7 @@ def test_upload_object_extensions_are_safe(monkeypatch, kind, filename, extensio
             data=b"fixture",
         )
     else:
-        monkeypatch.setattr(documents, "_by_id_or_404", lambda *args: row)
+        monkeypatch.setattr(documents, "_by_id_or_404", lambda *a, **k: row)
         monkeypatch.setattr(documents, "_document_out", lambda *args: {})
         monkeypatch.setattr(documents, "_record", lambda *args: None)
         monkeypatch.setattr(documents, "put_bytes", store)

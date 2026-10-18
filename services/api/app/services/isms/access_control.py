@@ -188,7 +188,8 @@ def create_access_control_matrix_entry(
             status_code=400, detail="At least one hosting account is required"
         )
     _validate_access_control_payload(db, payload)
-    status = (payload.status or "Pending Approval").strip() or "Pending Approval"
+    # Validation has refused blank and unknown statuses.
+    status = (payload.status or "Pending Approval").strip()
     row = IsmsAccessControlMatrixEntry(
         task_action=_clean_text(
             payload.task_action, max_len=20000, required=True, label="task/action"
@@ -271,9 +272,7 @@ def update_access_control_matrix_entry(
             raise DomainError(status_code=400, detail="service_asset_id is required")
         row.service_asset_id = payload.service_asset_id
     if "status" in fields:
-        row.status = (
-            payload.status or "Pending Approval"
-        ).strip() or "Pending Approval"
+        row.status = (payload.status or "Pending Approval").strip()
     if "approved_by_user_id" in fields:
         row.approved_by_user_id = payload.approved_by_user_id
     if "role_org_node_ids" in fields:

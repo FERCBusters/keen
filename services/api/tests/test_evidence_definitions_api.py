@@ -18,6 +18,7 @@ import yaml
 from app.core.config import settings
 from app.db.models import ControlItem, Event, Framework, SourceConnection
 from app.ingest import bookstack
+from app.ingest.connections import FIELDS as CONNECTION_FIELDS
 from app.integrations.transport import encrypt
 from app.services.managed_configurations import CONNECTORS
 from app.worker import tasks
@@ -239,6 +240,7 @@ def test_collection_documents_are_saved_against_the_version_read(defs):
         ({"defaults": {"smtp_password": SECRET}}, "defaults.smtp_password"),
         ({"Authorization": SECRET}, "Authorization"),
         ({"jobs": [{"name": "deploy", "client_secret": SECRET}]}, "jobs.client_secret"),
+        ({"jobs": [{"name": "deploy", "Api-Token": SECRET}]}, "jobs.Api-Token"),
     ],
     ids=[
         "token",
@@ -246,6 +248,7 @@ def test_collection_documents_are_saved_against_the_version_read(defs):
         "password-suffix",
         "authorization",
         "client-secret",
+        "hyphenated",
     ],
 )
 def test_credentials_never_enter_collection_documents(defs, document, path):
@@ -256,6 +259,37 @@ def test_credentials_never_enter_collection_documents(defs, document, path):
         f"Move credential {path} into a server environment variable"
     )
     assert SECRET not in refused.text
+    assert defs.versions()["jenkins"] == 0
+
+
+# Every credential a source connection can hold, under the name KEEN reads it
+# by, including the names each built-in source uses today.
+CONNECTION_CREDENTIALS = sorted(
+    {name for _, secret in CONNECTION_FIELDS.values() for name in secret.split()}
+    | {
+        "api_token",
+        "token_id",
+        "token_secret",
+        "header_value",
+        "cookie",
+        "sa_json",
+        "aws_access_key_id",
+        "aws_secret_access_key",
+        "aws_session_token",
+    }
+)
+
+
+@pytest.mark.parametrize("name", CONNECTION_CREDENTIALS)
+def test_no_connection_credential_field_enters_a_collection_document(defs, name):
+    refused = defs.put_document(
+        "jenkins", {"defaults": {name: SECRET}, "jobs": []}, version=0
+    )
+
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == (
+        f"Move credential defaults.{name} into a server environment variable"
+    )
     assert defs.versions()["jenkins"] == 0
 
 

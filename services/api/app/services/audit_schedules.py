@@ -313,11 +313,8 @@ def _attendee_notification_email(db: Session, attendee: AuditAttendee) -> str | 
     return _user_notification_email(user)
 
 
-def _audit_url(audit_id: uuid.UUID) -> str | None:
-    base = (settings.public_base_url or "").strip().rstrip("/")
-    if not base:
-        return None
-    return f"{base}/audit.html?id={audit_id}"
+def _audit_url(audit_id: uuid.UUID) -> str:
+    return f"{settings.public_base_url}/audit.html?id={audit_id}"
 
 
 def _audit_end_for_run(template: Audit, run_date: date) -> date | None:

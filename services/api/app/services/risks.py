@@ -43,6 +43,7 @@ from app.services.isms.link_diary import (
     remove_entity_link_diary,
     sync_entity_link_diary,
 )
+from app.services.isms.mutations import org_node_or_400
 from app.services.risk_mitigator import analyse_risk_mitigation
 
 RISK_READ_PERMISSION = "risk.read"
@@ -512,9 +513,11 @@ def _asset_or_create(
         name=name,
         category_id=category.id,
         subcategory_id=subcategory.id,
-        owner_org_node_id=getattr(payload, "owner_org_node_id", None),
-        register_held_by_org_node_id=getattr(
-            payload, "register_held_by_org_node_id", None
+        owner_org_node_id=org_node_or_400(
+            db, getattr(payload, "owner_org_node_id", None)
+        ),
+        register_held_by_org_node_id=org_node_or_400(
+            db, getattr(payload, "register_held_by_org_node_id", None)
         ),
         description=_clean_text(getattr(payload, "description", None), max_len=20000),
         created_at=_utcnow(),
@@ -1208,9 +1211,11 @@ def update_risk_asset(*, asset_id: str, payload: RiskAssetPayload, user, db: Ses
         row.license_id = license_row.id if license_row else None
         row.license = license_row.name if license_row else ""
     if "owner_org_node_id" in fields:
-        row.owner_org_node_id = payload.owner_org_node_id
+        row.owner_org_node_id = org_node_or_400(db, payload.owner_org_node_id)
     if "register_held_by_org_node_id" in fields:
-        row.register_held_by_org_node_id = payload.register_held_by_org_node_id
+        row.register_held_by_org_node_id = org_node_or_400(
+            db, payload.register_held_by_org_node_id
+        )
     if "description" in fields:
         row.description = _clean_text(payload.description, max_len=20000)
     row.updated_at = _utcnow()

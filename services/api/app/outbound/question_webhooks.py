@@ -75,12 +75,7 @@ def _hmac_sha256(secret: str, body: bytes) -> str:
 
 
 def _abs_url(path: str) -> str:
-    base = (settings.public_base_url or "").strip().rstrip("/")
-    if not base:
-        return path
-    if not path.startswith("/"):
-        path = "/" + path
-    return base + path
+    return settings.public_base_url + path
 
 
 def build_question_links(*, event_id: str, thread_id: str) -> dict[str, str]:

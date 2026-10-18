@@ -53,11 +53,12 @@ def require_audit_access(db: Session, user: User | None, audit: Audit) -> None:
         raise DomainError(status_code=403, detail="Audit access required")
 
 
-def audit_or_404(db: Session, audit_id: str) -> Audit:
+def audit_or_404(db: Session, audit_id: str, *, lock=False) -> Audit:
     aid = try_uuid(audit_id)
     if not aid:
         raise DomainError(status_code=400, detail="audit_id must be a UUID")
-    row = db.query(Audit).filter(Audit.id == aid).one_or_none()
+    query = db.query(Audit).filter(Audit.id == aid)
+    row = (query.with_for_update() if lock else query).one_or_none()
     if not row:
         raise DomainError(status_code=404, detail="Audit not found")
     return row
@@ -114,8 +115,10 @@ def require_audit_admin(db: Session, user: User) -> None:
         raise DomainError(403, "audits.admin permission required")
 
 
-def editable_audit_or_404(db: Session, user: User, audit_id: str) -> Audit:
-    audit = audit_or_404(db, audit_id)
+def editable_audit_or_404(
+    db: Session, user: User, audit_id: str, *, lock=False
+) -> Audit:
+    audit = audit_or_404(db, audit_id, lock=lock)
     if not (
         can_admin_audits(db, user)
         or (can_manage_audits(db, user) and audit.created_by_user_id == user.id)

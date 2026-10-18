@@ -25,6 +25,7 @@ from app.db.models import (
     ManagedConfigurationRevision,
     SourceConnection,
 )
+from app.ingest.connections import FIELDS as CONNECTION_FIELDS
 from app.mapping.collector import collector_id, collector_pointer_filter
 from app.mapping.fields import observed_fields, validate_fields
 from app.mapping.rules import (
@@ -74,6 +75,9 @@ COLLECTION_SECTIONS = {
     "page_mappings",
     "pages",
 }
+# Common credential names, and every credential field a source connection reads.
+# Collectors take credentials from the environment or a connection's encrypted
+# store, so these names never belong in editable collection documents.
 SECRET_KEYS = {
     "password",
     "token",
@@ -82,6 +86,7 @@ SECRET_KEYS = {
     "client_secret",
     "private_key",
     "secret",
+    *(name for _, secret in CONNECTION_FIELDS.values() for name in secret.split()),
 }
 
 
@@ -184,7 +189,8 @@ def _safe_document(document: dict[str, Any]):
         if isinstance(value, dict):
             for key, child in value.items():
                 key = str(key)
-                if key.lower() in SECRET_KEYS or key.lower().endswith("_password"):
+                name = key.lower().replace("-", "_")
+                if name in SECRET_KEYS or name.endswith("_password"):
                     raise DomainError(
                         400,
                         f"Move credential {path + key} into a server environment variable",

@@ -80,17 +80,8 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "Hosted KEEN requires secure __Host- cookies and HTTPS OIDC"
                 )
-            from urllib.parse import urlsplit
-
-            public = urlsplit(self.public_base_url)
-            if (
-                public.scheme != "https"
-                or not public.hostname
-                or public.username
-                or public.path not in ("", "/")
-                or public.query
-                or public.fragment
-            ):
+            # The field validator has already reduced the URL to a bare origin.
+            if not self.public_base_url.startswith("https://"):
                 raise ValueError("Hosted KEEN requires an exact public HTTPS origin")
             if (
                 not self.s3_bucket

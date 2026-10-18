@@ -476,6 +476,13 @@ class LocalMfaTests(unittest.TestCase):
                 self.assertFalse(
                     any(self.secret in x.body or self.codes[0] in x.body for x in rows)
                 )
+                # Each notice names the installation by its public origin.
+                self.assertTrue(
+                    all(
+                        "KEEN installation: https://keen.example\n" in x.body
+                        for x in rows
+                    )
+                )
 
     def test_security_mail_smtp_failure_retries_then_stops(self):
         from app.db.models import SecurityNotification

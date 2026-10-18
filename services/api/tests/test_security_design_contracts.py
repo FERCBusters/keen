@@ -148,14 +148,24 @@ def test_origin_boundary_for_self_hosted_http_and_websockets(
     )
 
 
-def test_origin_fallback_and_missing_origin(monkeypatch):
-    monkeypatch.setattr(settings, "public_base_url", "")
-    assert csrf.request_origin_allowed(
-        request(origin="https://keen.example"), require_origin=True
+def test_only_the_configured_origin_counts_and_origin_can_be_required(monkeypatch):
+    monkeypatch.setattr(settings, "public_base_url", "https://keen.example")
+    # A request addressed to another host cannot make that host's origin valid.
+    spoofed = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "https",
+            "server": ("evil.example", 443),
+            "path": "/",
+            "query_string": b"",
+            "headers": [
+                (b"host", b"evil.example"),
+                (b"origin", b"https://evil.example"),
+            ],
+        }
     )
-    assert not csrf.request_origin_allowed(
-        request(origin="https://evil.example"), require_origin=True
-    )
+    assert not csrf.request_origin_allowed(spoofed, require_origin=True)
     assert not csrf.request_origin_allowed(request(), require_origin=True)
     assert csrf.request_origin_allowed(request())
 
@@ -423,7 +433,7 @@ def test_abandoned_sso_state_is_cleaned(contract_db):
     contract_db.commit()
     new = oidc.create_login_state(contract_db, next_url="/")
     assert contract_db.query(OidcLoginState).filter_by(state="expired").count() == 0
-    assert contract_db.query(OidcLoginState).count() == 1
+    assert [row.state for row in contract_db.query(OidcLoginState)] == [new.state]
 
 
 def test_pdf_preview_concurrency_is_bounded_and_slots_survive_failure(monkeypatch):

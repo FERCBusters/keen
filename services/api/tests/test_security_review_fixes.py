@@ -319,6 +319,18 @@ def test_invalidated_email_proofs(db, user, mail, change):
         confirm(db, user, token)
 
 
+def test_verification_links_need_an_https_public_origin(db, user, mail, monkeypatch):
+    send(db, user, mail)
+    assert "\nhttps://keen.example/sso-email.html#token=" in mail[-1]["body"]
+
+    monkeypatch.setattr(settings, "public_base_url", "http://keen.example")
+    with pytest.raises((HTTPException, DomainError)) as refused:
+        send(db, user, mail)
+
+    assert refused.value.status_code == 503
+    assert len(mail) == 1 and db.query(SsoEmailChallenge).count() == 1
+
+
 def test_conflict(db, user, mail):
     other = User(
         username="other",

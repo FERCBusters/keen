@@ -29,6 +29,7 @@ from .mutations import (
     _license_by_name,
     _license_from_payload,
     _license_or_404,
+    org_node_or_400,
 )
 from .schemas import (
     AssetCategoryPayload,
@@ -136,7 +137,7 @@ def create_license(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    _clean_framework(framework)
     name = _clean_text(payload.name, max_len=256, required=True, label="license")
     existing = _license_by_name(db, name)
     if existing:
@@ -234,8 +235,10 @@ def create_asset(
         name=_asset_name_from_payload(payload),
         category_id=category.id,
         subcategory_id=subcategory.id,
-        owner_org_node_id=payload.owner_org_node_id,
-        register_held_by_org_node_id=payload.register_held_by_org_node_id,
+        owner_org_node_id=org_node_or_400(db, payload.owner_org_node_id),
+        register_held_by_org_node_id=org_node_or_400(
+            db, payload.register_held_by_org_node_id
+        ),
         description=_clean_text(payload.description, max_len=20000),
         created_by_user_id=user.id,
         created_at=_utcnow(),
@@ -279,10 +282,14 @@ def list_assets(
     fw = _clean_framework(framework)
     limit = max(1, min(int(limit or 500), 1000))
     offset = max(0, int(offset or 0))
+    # Each join names its condition: a subcategory also joins to the category,
+    # so an inferred condition would pair every asset with all its siblings.
     qry = (
         db.query(RiskAsset)
-        .outerjoin(RiskCategory)
-        .outerjoin(RiskAssetSubcategory)
+        .outerjoin(RiskCategory, RiskCategory.id == RiskAsset.category_id)
+        .outerjoin(
+            RiskAssetSubcategory, RiskAssetSubcategory.id == RiskAsset.subcategory_id
+        )
         .outerjoin(IsmsLicense, IsmsLicense.id == RiskAsset.license_id)
     )
     if q.strip():
@@ -377,9 +384,11 @@ def update_asset(
         row.license_id = license_row.id if license_row else None
         row.license = license_row.name if license_row else ""
     if "owner_org_node_id" in fields:
-        row.owner_org_node_id = payload.owner_org_node_id
+        row.owner_org_node_id = org_node_or_400(db, payload.owner_org_node_id)
     if "register_held_by_org_node_id" in fields:
-        row.register_held_by_org_node_id = payload.register_held_by_org_node_id
+        row.register_held_by_org_node_id = org_node_or_400(
+            db, payload.register_held_by_org_node_id
+        )
     if "description" in fields:
         row.description = _clean_text(payload.description, max_len=20000)
     row.updated_at = _utcnow()

@@ -185,6 +185,13 @@ def _apply_license_payload(row: IsmsLicense, payload: LicensePayload) -> None:
     row.updated_at = _utcnow()
 
 
+def org_node_or_400(db: Session, node_id: uuid.UUID | None) -> uuid.UUID | None:
+    """Return the id of a stored organisation chart node, refusing any other."""
+    if node_id is not None and db.get(IsmsOrgNode, node_id) is None:
+        raise DomainError(status_code=400, detail="Unknown organisation chart node")
+    return node_id
+
+
 def _asset_or_404(db: Session, asset_id: str | uuid.UUID) -> RiskAsset:
     aid = asset_id if isinstance(asset_id, uuid.UUID) else _try_uuid(str(asset_id))
     if not aid:

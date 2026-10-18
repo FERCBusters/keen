@@ -56,7 +56,7 @@ def test_csrf_requires_matching_cookie_and_header(monkeypatch, headers, valid):
 )
 def test_hosted_csrf_requires_exact_tenant_origin(monkeypatch, origin, valid):
     monkeypatch.setattr(settings, "hosted_mode", True)
-    monkeypatch.setattr(settings, "public_base_url", "https://tenant.example/")
+    monkeypatch.setattr(settings, "public_base_url", "https://tenant.example")
     assert (
         csrf.csrf_valid(
             request({"cookie": "keen_csrf=a", "x-csrf-token": "a", "origin": origin})

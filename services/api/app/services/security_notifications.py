@@ -34,8 +34,7 @@ def enqueue(db, user, event, *, ip=None):
         "operator-reset": "Your KEEN two-factor authentication was reset by an operator",
     }
     title = titles[event]
-    site = (settings.public_base_url or settings.mfa_origin or "").rstrip("/")
-    body = f"{title}.\n\nAccount: {user.username}\nKEEN installation: {site or 'Your KEEN installation'}\nTime (UTC): {now().isoformat(timespec='seconds')}Z\nIP address: {address}\n\n"
+    body = f"{title}.\n\nAccount: {user.username}\nKEEN installation: {settings.public_base_url}\nTime (UTC): {now().isoformat(timespec='seconds')}Z\nIP address: {address}\n\n"
     if event == "login-ip":
         body += "This address has not previously been recorded for a successful sign-in to this account. A VPN, mobile connection or changing ISP address can cause this alert.\n\n"
     body += "If this was you, no action is needed. If you do not recognise this activity, open your known KEEN address directly and contact your KEEN administrator. Review your password and authenticators.\n"

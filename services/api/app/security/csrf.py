@@ -72,9 +72,9 @@ def clear_csrf_cookie(response: Response) -> None:
 def request_origin_allowed(request, *, require_origin=False) -> bool:
     """Validate browser origins for both HTTP and WebSocket entry points.
 
-    Explicit public_base_url is authoritative behind TLS termination. With no
-    configured origin, use the request's own scheme/host, never forwarded headers.
-    Non-browser HTTP clients may omit Origin and still need their CSRF token.
+    KEEN_PUBLIC_BASE_URL is the one accepted origin, so the request's own Host
+    and forwarded headers have no say. Non-browser HTTP clients may omit Origin
+    and still need their CSRF token.
     """
     from urllib.parse import urlsplit
 
@@ -83,12 +83,6 @@ def request_origin_allowed(request, *, require_origin=False) -> bool:
         return (
             not require_origin and request.headers.get("sec-fetch-site") != "cross-site"
         )
-    expected = (settings.public_base_url or "").rstrip("/")
-    if not expected:
-        scheme = {"ws": "http", "wss": "https"}.get(
-            request.url.scheme, request.url.scheme
-        )
-        expected = f"{scheme}://{request.url.netloc}"
 
     def origin(value):
         parsed = urlsplit(value)
@@ -111,7 +105,7 @@ def request_origin_allowed(request, *, require_origin=False) -> bool:
         )
 
     try:
-        return origin(supplied) == origin(expected)
+        return origin(supplied) == origin(settings.public_base_url)
     except ValueError:
         return False
 

@@ -176,11 +176,12 @@ def test_invite_dates_fall_back_safely():
         framework_slug="A",
         scheduled_for="not-a-date",
         scheduled_until="2000-01-01",
+        audit_url="https://keen.example/audit.html?id=2",
     )
     today = date.today().strftime("%Y%m%d")
     assert f"DTSTART;VALUE=DATE:{today}" in ics
     # An end before the start becomes a single day.
-    assert "SUMMARY:Keen audit" in ics and "URL:" not in ics
+    assert "SUMMARY:Keen audit" in ics
     assert mailer._ics_date(date(2026, 1, 2), default=date(2000, 1, 1)) == date(
         2026, 1, 2
     )

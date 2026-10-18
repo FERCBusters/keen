@@ -167,7 +167,7 @@ def build_audit_ics(
     framework_slug: str,
     scheduled_for: str,
     scheduled_until: str | None = None,
-    audit_url: str | None = None,
+    audit_url: str,
     uid: str | None = None,
 ) -> str:
     """Build a small all-day iCalendar invite for an audit attendee email."""
@@ -181,9 +181,7 @@ def build_audit_ics(
     type_label = (
         "External" if str(audit_type or "").lower() == "external" else "Internal"
     )
-    description = f"{type_label} audit for {framework_slug}."
-    if audit_url:
-        description += f" Open audit: {audit_url}"
+    description = f"{type_label} audit for {framework_slug}. Open audit: {audit_url}"
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
@@ -197,10 +195,10 @@ def build_audit_ics(
         f"DTEND;VALUE=DATE:{exclusive_end.strftime('%Y%m%d')}",
         f"SUMMARY:{_ics_escape(audit_title or 'Keen audit')}",
         f"DESCRIPTION:{_ics_escape(description)}",
+        f"URL:{_ics_escape(audit_url)}",
+        "END:VEVENT",
+        "END:VCALENDAR",
     ]
-    if audit_url:
-        lines.append(f"URL:{_ics_escape(audit_url)}")
-    lines.extend(["END:VEVENT", "END:VCALENDAR"])
     return "\r\n".join(_ics_fold(line) for line in lines) + "\r\n"
 
 
@@ -213,7 +211,7 @@ def send_scheduled_audit_created_email(
     framework_slug: str,
     scheduled_for: str,
     scheduled_until: str | None = None,
-    audit_url: str | None = None,
+    audit_url: str,
     uid: str | None = None,
 ) -> None:
     from_name = (settings.smtp_from_name or "Keen").strip() or "Keen"
@@ -233,9 +231,7 @@ def send_scheduled_audit_created_email(
     )
     if scheduled_until:
         body += f"Scheduled end date: {scheduled_until}\n"
-    body += "\n"
-    if audit_url:
-        body += f"Open audit: {audit_url}\n\n"
+    body += f"\nOpen audit: {audit_url}\n\n"
     body += "You are receiving this email because you were listed as an attendee on the scheduled audit template.\n"
 
     ics = build_audit_ics(

@@ -119,16 +119,7 @@ def request_address(
         raise DomainError(
             503, "SMTP must be configured before verifying SSO email addresses"
         )
-    base = (settings.public_base_url or "").rstrip("/")
-    parsed = urlsplit(base)
-    if (
-        parsed.scheme != "https"
-        or not parsed.netloc
-        or parsed.username
-        or parsed.password
-        or parsed.query
-        or parsed.fragment
-    ):
+    if urlsplit(settings.public_base_url).scheme != "https":
         raise DomainError(
             503, "An HTTPS KEEN_PUBLIC_BASE_URL is required for verification emails"
         )
@@ -164,7 +155,7 @@ def request_address(
             subject="Verify your KEEN SSO email address",
             body=f"You requested to add {email} to KEEN account {user.username}.\n\n"
             f"While signed into that KEEN account, open this link and confirm:\n"
-            f"{base}/sso-email.html#token={token}\n\n"
+            f"{settings.public_base_url}/sso-email.html#token={token}\n\n"
             "This link expires in 30 minutes and works once. If you did not request it, ignore this email.",
         )
     except Exception:

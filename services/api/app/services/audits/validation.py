@@ -211,7 +211,7 @@ def is_locked_audit(audit: Audit | None) -> bool:
     return audit_status_value(audit) in LOCKED_AUDIT_STATUSES
 
 
-def require_mutable_audit(audit: Audit, *, action: str = "modify") -> None:
+def require_mutable_audit(audit: Audit, *, action: str = "modified") -> None:
     if is_locked_audit(audit):
         status = audit_status_value(audit).replace("_", " ")
         raise DomainError(

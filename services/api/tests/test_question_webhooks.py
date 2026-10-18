@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-
 from app.outbound import question_webhooks as qw
 
 PAYLOAD = {
@@ -65,15 +64,12 @@ def test_hmac_signature_format():
 
 
 def test_abs_url_and_question_links():
-    with patch.object(qw.settings, "public_base_url", "https://keen.example/"):
+    with patch.object(qw.settings, "public_base_url", "https://keen.example"):
         links = qw.build_question_links(event_id="e1", thread_id="t-1")
-        assert links["event"].startswith("https://keen.example/event.html?")
-        assert "id=e1" in links["event"] and "thread=t-1" in links["event"]
-        assert links["admin_queue"] == "https://keen.example/questions.html"
-    with patch.object(qw.settings, "public_base_url", ""):
-        links = qw.build_question_links(event_id="e1", thread_id="t-1")
-        assert links["event"].startswith("/event.html?")
-        assert links["admin_queue"] == "/questions.html"
+    assert links == {
+        "event": "https://keen.example/event.html?id=e1&thread=t-1#questions",
+        "admin_queue": "https://keen.example/questions.html",
+    }
 
 
 def test_from_settings_created_uses_primary_urls():

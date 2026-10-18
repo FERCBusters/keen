@@ -188,8 +188,11 @@ def _summarize_json(
             parts.append(f"user={user}")
         if full_log:
             brief = _brief_http_request(str(full_log))
-            parts.append("-")
-            parts.append(brief or _truncate(str(full_log), 120))
+            if parts:
+                parts.append("-")
+                parts.append(brief or _truncate(str(full_log), 120))
+            elif brief:
+                parts.append(brief)
 
         summary = " ".join([p for p in parts if p])
         if summary:

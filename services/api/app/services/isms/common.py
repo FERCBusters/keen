@@ -69,11 +69,12 @@ def _clean_framework(raw: str | None) -> str:
     return value
 
 
-def _by_id_or_404(db: Session, model, raw_id: str, label: str):
+def _by_id_or_404(db: Session, model, raw_id: str, label: str, *, lock=False):
     rid = _try_uuid(raw_id)
     if not rid:
         raise DomainError(status_code=400, detail=f"{label} id must be a UUID")
-    row = db.query(model).filter(model.id == rid).one_or_none()
+    query = db.query(model).filter(model.id == rid)
+    row = (query.with_for_update() if lock else query).one_or_none()
     if not row:
         raise DomainError(status_code=404, detail=f"{label} not found")
     return row

@@ -115,7 +115,7 @@ def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):
 
 def delete_audit(*, audit_id: str, db: Session, user: User):
     require_audit_admin(db, user)
-    a = audit_or_404(db, audit_id)
+    a = audit_or_404(db, audit_id, lock=True)
     if a.status == "template":
         raise DomainError(
             status_code=400,

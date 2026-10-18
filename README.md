@@ -91,7 +91,7 @@ The agent setup and enrollment instructions are in **Help**. Install and configu
 
 KEEN supports local accounts, LDAP, OpenID Connect, Google and GitHub sign-in, user/group permissions, and local second-factor authentication with TOTP, security keys/passkeys and recovery codes. Administrators assign access to evidence, risks, ISMS records, audits and administration.
 
-Set `KEEN_PUBLIC_BASE_URL` before configuring authentication. TOTP requires a separate persistent `KEEN_MFA_ENCRYPTION_KEY`. Follow the authentication chapters in **Help** for callback URLs, account linking and MFA policy.
+TOTP requires a separate persistent `KEEN_MFA_ENCRYPTION_KEY`. Follow the authentication chapters in **Help** for callback URLs, account linking and MFA policy.
 
 ## Storage and operation
 

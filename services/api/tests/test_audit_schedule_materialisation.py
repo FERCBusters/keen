@@ -331,7 +331,7 @@ def mailer(monkeypatch):
     monkeypatch.setattr(
         schedules, "send_scheduled_audit_created_email", lambda **kw: sent.append(kw)
     )
-    monkeypatch.setattr(settings, "public_base_url", "https://keen.example/")
+    monkeypatch.setattr(settings, "public_base_url", "https://keen.example")
     monkeypatch.setattr(settings, "scheduled_audit_create_days_ahead", 0)
     return sent
 
@@ -603,7 +603,6 @@ def test_mail_failures_are_logged_without_stopping_creation(contract_db, monkeyp
 def test_no_mail_is_attempted_without_smtp(contract_db, monkeypatch):
     db = contract_db
     monkeypatch.setattr(settings, "scheduled_audit_create_days_ahead", 0)
-    monkeypatch.setattr(settings, "public_base_url", "")
     monkeypatch.setattr(schedules, "smtp_configured", lambda: False)
     send = Mock()
     monkeypatch.setattr(schedules, "send_scheduled_audit_created_email", send)
@@ -615,7 +614,6 @@ def test_no_mail_is_attempted_without_smtp(contract_db, monkeypatch):
     result = schedules.materialize_due_scheduled_audits(db, today=TODAY)
     assert result["created"][0]["emails_sent"] == 0
     assert not send.called
-    assert schedules._audit_url(uuid.uuid4()) is None
 
 
 def test_scheduling_can_be_switched_off(contract_db, mailer):

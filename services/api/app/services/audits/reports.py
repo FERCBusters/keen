@@ -27,7 +27,8 @@ def save_final_report(
     content_type: str | None,
     data: bytes,
 ):
-    a = editable_audit_or_404(db, user, audit_id)
+    # Locked so a concurrent replacement or deletion retires this report in turn.
+    a = editable_audit_or_404(db, user, audit_id, lock=True)
     require_mutable_audit(a)
     filename = os.path.basename(filename or "audit-report")[:255]
     content_type = content_type or "application/octet-stream"
