@@ -339,6 +339,72 @@ details summary {
   }
 }
 
+/* Reading aids: a chapter opens with what it helps you do, each task is short,
+   and the fine print waits in a "Going deeper" panel until it is wanted. */
+.lead {
+  font-size: 1.08rem;
+  line-height: 1.6;
+  color: var(--keen-muted);
+}
+.callout {
+  margin: 1.25rem 0;
+  padding: 0.9rem 1.1rem;
+  border-left: 4px solid var(--keen-accent);
+  border-radius: 0.65rem;
+  background: var(--keen-accent-100);
+}
+.callout > :last-child {
+  margin-bottom: 0;
+}
+.callout-note {
+  border-left-color: var(--bs-info, #0dcaf0);
+  background: var(--bs-info-bg-subtle, #eaf8fb);
+}
+.callout-caution {
+  border-left-color: var(--bs-warning, #ffc107);
+  background: var(--bs-warning-bg-subtle, #fff7e0);
+}
+details.more {
+  margin: 1.25rem 0;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--docs-border);
+  border-radius: 0.65rem;
+  background: var(--docs-surface);
+}
+details.more > summary {
+  padding: 0.35rem 0;
+  font-weight: 600;
+}
+details.more[open] > summary {
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--docs-border);
+}
+details.more > :last-child {
+  margin-bottom: 0.5rem;
+}
+ol.steps > li {
+  margin-bottom: 0.85rem;
+}
+dl.terms dt {
+  font-weight: 600;
+  margin-top: 0.75rem;
+}
+dl.terms dd {
+  margin: 0.15rem 0 0;
+  max-width: 78ch;
+}
+.at-a-glance {
+  margin: 1.25rem 0;
+  padding: 0.9rem 1.1rem 0.2rem;
+  border: 1px solid var(--docs-border);
+  border-radius: 0.65rem;
+  background: var(--docs-surface);
+}
+.at-a-glance ul {
+  margin-top: 0.4rem;
+  padding-left: 1.2rem;
+}
+
 #supported-ingesters + p + ul {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));

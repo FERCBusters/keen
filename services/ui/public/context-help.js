@@ -120,6 +120,90 @@ const topics = {
     'Record a human observation as evidence, with enough context for a reviewer to understand its source and relevance.',
     'Saving creates an evidence record. Check its timestamp and content before submitting.',
   ],
+  stories: [
+    'Stories',
+    'using-events.html#stories',
+    'A story collects the events that tell one account of what happened, in the order you choose, with a note on each step. Stories can be shared, commented on and sampled into audits.',
+    'Add events from the Events list or a visualisation window, then arrange them on the timeline. The guide walks through starting, building and using a story.',
+  ],
+  storyFlow: [
+    'Story flow chart',
+    'using-events.html#build-the-story',
+    'The flow chart shows the story’s items as boxes you drag into place and join with labelled arrows, for example from the sign-in to the export it led to.',
+    'If you can edit the story, drag boxes, choose Link items to draw an arrow, then Save layout. Arrange by time resets the positions; the Timeline order is unchanged.',
+  ],
+  storyComments: [
+    'Story comments and review',
+    'using-events.html#share-the-story',
+    'Comments let reviewers discuss a story without changing it. Questions and the changelog record who asked, answered and edited what.',
+    'Share the story link with people who can read its events. The guide explains what withheld items mean for readers with narrower access.',
+  ],
+  visualisations: [
+    'Visualisations',
+    'using-operations.html#visualisation-tabs',
+    'The Visualisations tab charts the records you have filtered on this page. Histogram windows can open the matching events or start a story from them.',
+    'Set your filters first; the charts follow them. The guide explains each chart and how to read the counts.',
+  ],
+  questions: [
+    'Questions and incidents',
+    'using-events.html#questions-and-incidents',
+    'A question asks a colleague about a record and keeps the answer with it. An incident is declared from evidence and tracked to closure.',
+    'Ask from the record itself so the thread stays attached. The guide covers notifications and who can see each thread.',
+  ],
+  changelog: [
+    'Changelog',
+    'administrator-audit-trail.html#audit-trail-entity-changes',
+    'The Changelog tab lists recorded changes to this record: who changed which fields, and when, with the earlier and later values.',
+    'Use it to understand an unexpected edit before changing anything else. The administrative Audit trail shows the surrounding requests.',
+  ],
+  context: [
+    'Organisational context',
+    'using-isms.html#context',
+    'PESTLE(E) items and interested parties record the external and internal factors your management system responds to.',
+    'Link each item to the controls or clauses it influences. The guide explains how context feeds objectives and risk assessment.',
+  ],
+  objectives: [
+    'Objectives',
+    'using-isms.html#objectives',
+    'An objective states a measurable outcome, its owner and its due date, linked to the measures that show progress.',
+    'Choose wording you can evaluate. The guide explains how SWOT responses and measures connect to objectives.',
+  ],
+  documents: [
+    'Policies, processes and documents',
+    'using-documents.html',
+    'Write a policy in KEEN, upload a document, or link one maintained elsewhere. Every version is kept and can be linked to controls.',
+    'Pick the workflow that matches where the document lives. The guide covers approvals, versions and framework links.',
+  ],
+  peopleAssets: [
+    'People, suppliers and assets',
+    'using-people-assets.html',
+    'The organisation chart, People directory, vendors, asset matrix and access matrix describe who and what your controls protect.',
+    'Keep owners current; assets, risks and access records reference them. The guide explains each matrix.',
+  ],
+  measures: [
+    'Effectiveness measures',
+    'using-measures.html',
+    'A measure defines what you observe, its unit and target. Observations arrive by hand, from sources or through the measurement webhook.',
+    'Check the unit and target before recording values. The guide explains automatic zeros and how to send measurements.',
+  ],
+  meetings: [
+    'Meetings and decisions',
+    'using-isms.html#meetings',
+    'Meeting minutes record attendees, decisions and actions, and can be linked to the controls and records they concern.',
+    'Record the decision and its owner, then link the records it affects. The guide covers follow-up and audit use.',
+  ],
+  soa: [
+    'Statement of Applicability',
+    'using-frameworks.html#4-controls-clauses-and-applicability',
+    'The Statement of Applicability records which controls are in scope, why, and what supports each decision.',
+    'Review scope decisions deliberately; excluded controls need a reason. The guide explains applicability and inherited evidence.',
+  ],
+  accountSecurity: [
+    'Account security',
+    'using-account.html#local-account-security',
+    'Manage your password, authenticator apps, security keys and recovery codes, and the e-mail addresses that may link an SSO identity.',
+    'Store recovery codes somewhere safe before you need them. The guide explains what sign-in looks like afterwards.',
+  ],
 };
 const sourceGuides = {
   elasticsearch: ['Elasticsearch', 'elasticsearch'],
@@ -142,20 +226,84 @@ const sourceGuides = {
 const pages = {
   home: 'start',
   events: 'events',
-  questions: 'events',
+  questions: 'questions',
+  'my-questions': 'questions',
+  stories: 'stories',
   sources: 'sources',
   source: 'sources',
   controls: 'frameworks',
   clauses: 'frameworks',
-  soa: 'frameworks',
+  soa: 'soa',
   audits: 'audits',
   risks: 'risks',
-  pestle: 'risks',
+  pestle: 'context',
   mitigator: 'mitigator',
-  'interested-party': 'risks',
-  'interested-parties': 'risks',
+  'interested-party': 'context',
+  'interested-parties': 'context',
   account: 'account',
+  isms: 'isms',
+  'isms-document': 'documents',
+  'isms-asset': 'peopleAssets',
+  'isms-access': 'peopleAssets',
+  'isms-effectiveness-measure': 'measures',
+  'isms-effectiveness-metric': 'measures',
+  'isms-objective': 'objectives',
+  'isms-meeting': 'meetings',
 };
+// Tabs that change the subject of a page. Keys are the tab buttons' ids.
+const tabs = {
+  flowTab: 'storyFlow',
+  visualisationTab: 'swot',
+  commentsTab: 'storyComments',
+  swotTab: 'swot',
+  objectivesTab: 'objectives',
+  documentsTab: 'documents',
+  orgTab: 'peopleAssets',
+  assetsTab: 'peopleAssets',
+  accessControlTab: 'peopleAssets',
+  effectivenessTab: 'measures',
+  meetingsTab: 'meetings',
+  soaTab: 'soa',
+  sourceEffectivenessTab: 'measures',
+  'security-tab': 'accountSecurity',
+  'my-questions-tab': 'questions',
+  'my-audits-tab': 'audits',
+  'my-risks-tab': 'risks',
+  'my-isms-objectives-tab': 'objectives',
+  'my-isms-role-tab': 'peopleAssets',
+  'my-isms-assets-tab': 'peopleAssets',
+  'my-meetings-tab': 'meetings',
+  libraryTab: 'risks',
+  newRiskScenarioTab: 'risks',
+  controlPestleTab: 'context',
+  clausePestleTab: 'context',
+  soaPestleTab: 'context',
+  soaInterestedPartiesTab: 'context',
+  soaSwotTab: 'swot',
+  soaIsmsObjectivesTab: 'objectives',
+  soaIsmsDocumentsTab: 'documents',
+  soaIsmsEffectivenessTab: 'measures',
+  soaIsmsOrgAssetsTab: 'peopleAssets',
+  controlRisksTab: 'risks',
+  soaRisksTab: 'risks',
+  controlEvidenceTab: 'events',
+  sourceEventsTab: 'events',
+};
+// Tabs that recur across pages are recognised by their id's ending.
+const tabEndings = [
+  ['VisualisationsTab', 'visualisations'],
+  ['ChangelogTab', 'changelog'],
+  ['changelogTab', 'changelog'],
+  ['QuestionsTab', 'questions'],
+  ['questionsTab', 'questions'],
+];
+function activeTabTopic() {
+  const tab = document.querySelector(
+    '.nav-tabs .nav-link.active[role="tab"], .nav-tabs [role="tab"][aria-selected="true"]',
+  );
+  const id = tab?.id || '';
+  return own(tabs, id) || tabEndings.find(([ending]) => id.endsWith(ending))?.[1] || null;
+}
 const panes = {
   'pane-evidence-config': 'sources',
   'pane-agents': 'agents',
@@ -175,12 +323,14 @@ export function resolveHelp(trigger) {
   if (key === 'page') {
     const page = document.body.dataset.page || '';
     const pane = document.querySelector('#adminTabContent > .tab-pane.active');
-    key =
-      page === 'admin'
-        ? own(panes, pane?.id) || 'sources'
-        : (['/swot.html', '/isms-swot.html'].includes(location.pathname)
-            ? 'swot'
-            : own(pages, page)) || (page.startsWith('isms') ? 'isms' : 'start');
+    if (page === 'admin') key = own(panes, pane?.id) || 'sources';
+    else {
+      const swot = ['/swot.html', '/isms-swot.html'].includes(location.pathname);
+      key =
+        activeTabTopic() ||
+        (swot ? 'swot' : own(pages, page)) ||
+        (page.startsWith('isms') ? 'isms' : 'start');
+    }
   }
   if (key === 'sources' && document.querySelector('#hub-mapping[aria-selected="true"]'))
     key = 'mapping';

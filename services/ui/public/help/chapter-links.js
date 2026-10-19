@@ -18,13 +18,13 @@ window.KEEN_DOC_LINKS = {
     'using-frameworks.html#reuse-evidence-across-frameworks',
   'using.html#browse-related-controls': 'using-frameworks.html#browse-related-controls',
   'using.html#collecting-evidence': 'using-collection.html#collecting-evidence',
-  'using.html#configuration-ownership': 'using-collection.html#configuration-ownership',
+  'using.html#source-setup-sequence': 'using-collection.html#source-setup-sequence',
   'using.html#connector-rollout': 'using-collection.html#connector-rollout',
+  'using.html#configuration-ownership': 'using-collection.html#configuration-ownership',
   'using.html#integration-builder': 'using-collection.html#integration-builder',
   'using.html#integration-operations': 'using-collection.html#integration-operations',
   'using.html#integration-measurements': 'using-collection.html#integration-measurements',
   'using.html#agent-evidence': 'using-collection.html#agent-evidence',
-  'using.html#source-setup-sequence': 'using-collection.html#source-setup-sequence',
   'using.html#remove-api-ingesters': 'using-collection.html#remove-api-ingesters',
   'using.html#named-source-connections': 'using-collection.html#named-source-connections',
   'using.html#rss-source-setup': 'using-collection.html#rss-source-setup',
@@ -33,6 +33,7 @@ window.KEEN_DOC_LINKS = {
     'using-mapping.html#5-configure-collection-and-mapping-with-evidence-definitions',
   'using.html#collection-settings-and-credentials':
     'using-mapping.html#collection-settings-and-credentials',
+  'using.html#mapping-preview-results': 'using-mapping.html#mapping-preview-results',
   'using.html#definitions-before-events-arrive':
     'using-mapping.html#definitions-before-events-arrive',
   'using.html#evidence-workflow': 'using-mapping.html#evidence-workflow',
@@ -53,6 +54,9 @@ window.KEEN_DOC_LINKS = {
   'using.html#client-ip-evidence': 'using-structured-fields.html#client-ip-evidence',
   'using.html#review-evidence': 'using-events.html#review-evidence',
   'using.html#7-collect-and-inspect-evidence': 'using-events.html#7-collect-and-inspect-evidence',
+  'using.html#find-events': 'using-events.html#find-events',
+  'using.html#read-one-event': 'using-events.html#read-one-event',
+  'using.html#chart-events': 'using-events.html#chart-events',
   'using.html#event-actions': 'using-events.html#event-actions',
   'using.html#evidence-review': 'using-events.html#evidence-review',
   'using.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
@@ -61,6 +65,9 @@ window.KEEN_DOC_LINKS = {
   'using.html#questions-workflow': 'using-events.html#questions-workflow',
   'using.html#incidents-workflow': 'using-events.html#incidents-workflow',
   'using.html#stories': 'using-events.html#stories',
+  'using.html#start-a-story': 'using-events.html#start-a-story',
+  'using.html#build-the-story': 'using-events.html#build-the-story',
+  'using.html#share-the-story': 'using-events.html#share-the-story',
   'using.html#evidence-lifecycle': 'using-events.html#evidence-lifecycle',
   'using.html#risks-and-treatment': 'using-risks.html#risks-and-treatment',
   'using.html#9-assess-and-maintain-risks': 'using-risks.html#9-assess-and-maintain-risks',
@@ -142,18 +149,23 @@ window.KEEN_DOC_LINKS = {
   'using.html#security-comparison-sources':
     'using-security-monitoring.html#security-comparison-sources',
   'using.html#local-account-security': 'using-account.html#local-account-security',
+  'using.html#signing-in-with-a-second-factor':
+    'using-account.html#signing-in-with-a-second-factor',
+  'using.html#replace-a-lost-authenticator': 'using-account.html#replace-a-lost-authenticator',
   'using.html#account-security-emails': 'using-account.html#account-security-emails',
-  'using.html#mapping-preview-results': 'using-account.html#mapping-preview-results',
   'administrator.html#1-runtime-and-responsibilities':
     'administrator-deployment.html#1-runtime-and-responsibilities',
   'administrator.html#2-deploy-a-self-managed-installation':
     'administrator-deployment.html#2-deploy-a-self-managed-installation',
+  'administrator.html#first-administrator': 'administrator-deployment.html#first-administrator',
   'administrator.html#3-configure-the-runtime':
     'administrator-deployment.html#3-configure-the-runtime',
   'administrator.html#core-and-authentication-settings':
     'administrator-deployment.html#core-and-authentication-settings',
+  'administrator.html#oidc-settings': 'administrator-deployment.html#oidc-settings',
   'administrator.html#storage-mail-and-privacy-settings':
     'administrator-deployment.html#storage-mail-and-privacy-settings',
+  'administrator.html#masking-settings': 'administrator-deployment.html#masking-settings',
   'administrator.html#installation-features': 'administrator-deployment.html#installation-features',
   'administrator.html#local-mfa-administration':
     'administrator-identity.html#local-mfa-administration',
@@ -175,6 +187,8 @@ window.KEEN_DOC_LINKS = {
   'administrator.html#supported-ingesters': 'administrator-sources.html#supported-ingesters',
   'administrator.html#sources-connections-and-mapping':
     'administrator-sources.html#sources-connections-and-mapping',
+  'administrator.html#define-a-source-connection':
+    'administrator-sources.html#define-a-source-connection',
   'administrator.html#6-connect-operational-sources':
     'administrator-sources.html#6-connect-operational-sources',
   'administrator.html#incoming-webhooks-and-metrics':
@@ -189,13 +203,18 @@ window.KEEN_DOC_LINKS = {
     'administrator-sources.html#named-source-connections',
   'administrator.html#5-operate-evidence-definitions':
     'administrator-rules.html#5-operate-evidence-definitions',
+  'administrator.html#write-a-definition': 'administrator-rules.html#write-a-definition',
   'administrator.html#configuration-storage-and-concurrency':
     'administrator-rules.html#configuration-storage-and-concurrency',
   'administrator.html#export-mapping-yaml': 'administrator-rules.html#export-mapping-yaml',
   'administrator.html#8-historical-mapping-and-revision-recovery':
     'administrator-rules.html#8-historical-mapping-and-revision-recovery',
+  'administrator.html#review-historical-remapping':
+    'administrator-rules.html#review-historical-remapping',
   'administrator.html#7-scheduling-manual-runs-and-cursors':
     'administrator-scheduling.html#7-scheduling-manual-runs-and-cursors',
+  'administrator.html#run-a-source-by-hand': 'administrator-scheduling.html#run-a-source-by-hand',
+  'administrator.html#cursors': 'administrator-scheduling.html#cursors',
   'administrator.html#pause-source-ingestion':
     'administrator-scheduling.html#pause-source-ingestion',
   'administrator.html#measurement-webhook-setup':
@@ -226,6 +245,7 @@ window.KEEN_DOC_LINKS = {
     'administrator-google-workspace.html#source-google-workspace',
   'administrator.html#source-webhooks': 'administrator-webhooks.html#source-webhooks',
   'administrator.html#source-diary': 'administrator-diary.html#source-diary',
+  'administrator.html#automatic-diary-entries': 'administrator-diary.html#automatic-diary-entries',
   'administrator.html#source-api-ingesters':
     'administrator-api-ingesters.html#source-api-ingesters',
   'administrator.html#delete-api-ingesters':
@@ -270,6 +290,9 @@ window.KEEN_DOC_LINKS = {
   'administrator.html#evidence-storage': 'administrator-retention.html#evidence-storage',
   'administrator.html#evidence-retention': 'administrator-retention.html#evidence-retention',
   'administrator.html#retention-overrides': 'administrator-retention.html#retention-overrides',
+  'administrator.html#what-retention-never-removes':
+    'administrator-retention.html#what-retention-never-removes',
+  'administrator.html#purge-all-evidence': 'administrator-retention.html#purge-all-evidence',
   'administrator.html#audit-trail': 'administrator-audit-trail.html#audit-trail',
   'administrator.html#audit-trail-entity-changes':
     'administrator-audit-trail.html#audit-trail-entity-changes',
@@ -279,6 +302,7 @@ window.KEEN_DOC_LINKS = {
   'administrator.html#9-upgrade-safely': 'administrator-maintenance.html#9-upgrade-safely',
   'administrator.html#10-backups-and-restore':
     'administrator-maintenance.html#10-backups-and-restore',
+  'administrator.html#test-a-restore': 'administrator-maintenance.html#test-a-restore',
   'administrator.html#12-diagnose-problems-in-order':
     'administrator-maintenance.html#12-diagnose-problems-in-order',
   'administrator.html#13-routine-assurance-checks':
@@ -291,6 +315,7 @@ window.KEEN_DOC_LINKS = {
     'developer-architecture.html#2-follow-a-request-through-the-application',
   'developer.html#3-identity-sessions-and-authorisation':
     'developer-security.html#3-identity-sessions-and-authorisation',
+  'developer.html#oidc-and-hosted-mode': 'developer-security.html#oidc-and-hosted-mode',
   'developer.html#local-mfa-design': 'developer-security.html#local-mfa-design',
   'developer.html#security-email-outbox': 'developer-security.html#security-email-outbox',
   'developer.html#4-frameworks-are-application-data':
@@ -303,10 +328,13 @@ window.KEEN_DOC_LINKS = {
   'developer.html#field-condition-schema': 'developer-frameworks-rules.html#field-condition-schema',
   'developer.html#6-ingestion-artefacts-and-historical-mapping':
     'developer-ingestion.html#6-ingestion-artefacts-and-historical-mapping',
+  'developer.html#historical-mapping-jobs': 'developer-ingestion.html#historical-mapping-jobs',
   'developer.html#ingester-contract': 'developer-ingestion.html#ingester-contract',
+  'developer.html#adding-an-integration': 'developer-ingestion.html#adding-an-integration',
   'developer.html#connection-scoped-ingestion':
     'developer-ingestion.html#connection-scoped-ingestion',
   'developer.html#agent-protocol': 'developer-otlp.html#agent-protocol',
+  'developer.html#the-receiver': 'developer-otlp.html#the-receiver',
   'developer.html#test-ingestion': 'developer-otlp.html#test-ingestion',
   'developer.html#7-risk-register-library-and-keen-assurance-framework':
     'developer-isms.html#7-risk-register-library-and-keen-assurance-framework',
@@ -317,6 +345,7 @@ window.KEEN_DOC_LINKS = {
     'developer-development.html#9-frontend-conventions-and-documentation',
   'developer.html#10-develop-and-verify-a-change':
     'developer-development.html#10-develop-and-verify-a-change',
+  'developer.html#run-the-test-suite': 'developer-development.html#run-the-test-suite',
   'developer.html#help-generation': 'developer-development.html#help-generation',
   'developer.html#feature-availability': 'developer-development.html#feature-availability',
   'administrator-sources.html#elasticsearch-ingestion':
@@ -344,13 +373,13 @@ window.KEEN_DOC_LINKS = {
     'using-frameworks.html#reuse-evidence-across-frameworks',
   'adopter.html#browse-related-controls': 'using-frameworks.html#browse-related-controls',
   'adopter.html#collecting-evidence': 'using-collection.html#collecting-evidence',
-  'adopter.html#configuration-ownership': 'using-collection.html#configuration-ownership',
+  'adopter.html#source-setup-sequence': 'using-collection.html#source-setup-sequence',
   'adopter.html#connector-rollout': 'using-collection.html#connector-rollout',
+  'adopter.html#configuration-ownership': 'using-collection.html#configuration-ownership',
   'adopter.html#integration-builder': 'using-collection.html#integration-builder',
   'adopter.html#integration-operations': 'using-collection.html#integration-operations',
   'adopter.html#integration-measurements': 'using-collection.html#integration-measurements',
   'adopter.html#agent-evidence': 'using-collection.html#agent-evidence',
-  'adopter.html#source-setup-sequence': 'using-collection.html#source-setup-sequence',
   'adopter.html#remove-api-ingesters': 'using-collection.html#remove-api-ingesters',
   'adopter.html#named-source-connections': 'using-collection.html#named-source-connections',
   'adopter.html#rss-source-setup': 'using-collection.html#rss-source-setup',
@@ -359,6 +388,7 @@ window.KEEN_DOC_LINKS = {
     'using-mapping.html#5-configure-collection-and-mapping-with-evidence-definitions',
   'adopter.html#collection-settings-and-credentials':
     'using-mapping.html#collection-settings-and-credentials',
+  'adopter.html#mapping-preview-results': 'using-mapping.html#mapping-preview-results',
   'adopter.html#definitions-before-events-arrive':
     'using-mapping.html#definitions-before-events-arrive',
   'adopter.html#evidence-workflow': 'using-mapping.html#evidence-workflow',
@@ -380,6 +410,9 @@ window.KEEN_DOC_LINKS = {
   'adopter.html#client-ip-evidence': 'using-structured-fields.html#client-ip-evidence',
   'adopter.html#review-evidence': 'using-events.html#review-evidence',
   'adopter.html#7-collect-and-inspect-evidence': 'using-events.html#7-collect-and-inspect-evidence',
+  'adopter.html#find-events': 'using-events.html#find-events',
+  'adopter.html#read-one-event': 'using-events.html#read-one-event',
+  'adopter.html#chart-events': 'using-events.html#chart-events',
   'adopter.html#event-actions': 'using-events.html#event-actions',
   'adopter.html#evidence-review': 'using-events.html#evidence-review',
   'adopter.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
@@ -388,6 +421,9 @@ window.KEEN_DOC_LINKS = {
   'adopter.html#questions-workflow': 'using-events.html#questions-workflow',
   'adopter.html#incidents-workflow': 'using-events.html#incidents-workflow',
   'adopter.html#stories': 'using-events.html#stories',
+  'adopter.html#start-a-story': 'using-events.html#start-a-story',
+  'adopter.html#build-the-story': 'using-events.html#build-the-story',
+  'adopter.html#share-the-story': 'using-events.html#share-the-story',
   'adopter.html#evidence-lifecycle': 'using-events.html#evidence-lifecycle',
   'adopter.html#risks-and-treatment': 'using-risks.html#risks-and-treatment',
   'adopter.html#9-assess-and-maintain-risks': 'using-risks.html#9-assess-and-maintain-risks',
@@ -469,8 +505,10 @@ window.KEEN_DOC_LINKS = {
   'adopter.html#security-comparison-sources':
     'using-security-monitoring.html#security-comparison-sources',
   'adopter.html#local-account-security': 'using-account.html#local-account-security',
+  'adopter.html#signing-in-with-a-second-factor':
+    'using-account.html#signing-in-with-a-second-factor',
+  'adopter.html#replace-a-lost-authenticator': 'using-account.html#replace-a-lost-authenticator',
   'adopter.html#account-security-emails': 'using-account.html#account-security-emails',
-  'adopter.html#mapping-preview-results': 'using-account.html#mapping-preview-results',
   'walkthroughs.html': 'using.html',
   'walkthroughs.html#evidence-to-assurance': 'using-start.html#evidence-to-assurance',
   'walkthroughs.html#getting-started': 'using-start.html#getting-started',
@@ -491,13 +529,13 @@ window.KEEN_DOC_LINKS = {
     'using-frameworks.html#reuse-evidence-across-frameworks',
   'walkthroughs.html#browse-related-controls': 'using-frameworks.html#browse-related-controls',
   'walkthroughs.html#collecting-evidence': 'using-collection.html#collecting-evidence',
-  'walkthroughs.html#configuration-ownership': 'using-collection.html#configuration-ownership',
+  'walkthroughs.html#source-setup-sequence': 'using-collection.html#source-setup-sequence',
   'walkthroughs.html#connector-rollout': 'using-collection.html#connector-rollout',
+  'walkthroughs.html#configuration-ownership': 'using-collection.html#configuration-ownership',
   'walkthroughs.html#integration-builder': 'using-collection.html#integration-builder',
   'walkthroughs.html#integration-operations': 'using-collection.html#integration-operations',
   'walkthroughs.html#integration-measurements': 'using-collection.html#integration-measurements',
   'walkthroughs.html#agent-evidence': 'using-collection.html#agent-evidence',
-  'walkthroughs.html#source-setup-sequence': 'using-collection.html#source-setup-sequence',
   'walkthroughs.html#remove-api-ingesters': 'using-collection.html#remove-api-ingesters',
   'walkthroughs.html#named-source-connections': 'using-collection.html#named-source-connections',
   'walkthroughs.html#rss-source-setup': 'using-collection.html#rss-source-setup',
@@ -506,6 +544,7 @@ window.KEEN_DOC_LINKS = {
     'using-mapping.html#5-configure-collection-and-mapping-with-evidence-definitions',
   'walkthroughs.html#collection-settings-and-credentials':
     'using-mapping.html#collection-settings-and-credentials',
+  'walkthroughs.html#mapping-preview-results': 'using-mapping.html#mapping-preview-results',
   'walkthroughs.html#definitions-before-events-arrive':
     'using-mapping.html#definitions-before-events-arrive',
   'walkthroughs.html#evidence-workflow': 'using-mapping.html#evidence-workflow',
@@ -528,6 +567,9 @@ window.KEEN_DOC_LINKS = {
   'walkthroughs.html#review-evidence': 'using-events.html#review-evidence',
   'walkthroughs.html#7-collect-and-inspect-evidence':
     'using-events.html#7-collect-and-inspect-evidence',
+  'walkthroughs.html#find-events': 'using-events.html#find-events',
+  'walkthroughs.html#read-one-event': 'using-events.html#read-one-event',
+  'walkthroughs.html#chart-events': 'using-events.html#chart-events',
   'walkthroughs.html#event-actions': 'using-events.html#event-actions',
   'walkthroughs.html#evidence-review': 'using-events.html#evidence-review',
   'walkthroughs.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
@@ -536,6 +578,9 @@ window.KEEN_DOC_LINKS = {
   'walkthroughs.html#questions-workflow': 'using-events.html#questions-workflow',
   'walkthroughs.html#incidents-workflow': 'using-events.html#incidents-workflow',
   'walkthroughs.html#stories': 'using-events.html#stories',
+  'walkthroughs.html#start-a-story': 'using-events.html#start-a-story',
+  'walkthroughs.html#build-the-story': 'using-events.html#build-the-story',
+  'walkthroughs.html#share-the-story': 'using-events.html#share-the-story',
   'walkthroughs.html#evidence-lifecycle': 'using-events.html#evidence-lifecycle',
   'walkthroughs.html#risks-and-treatment': 'using-risks.html#risks-and-treatment',
   'walkthroughs.html#9-assess-and-maintain-risks': 'using-risks.html#9-assess-and-maintain-risks',
@@ -622,8 +667,11 @@ window.KEEN_DOC_LINKS = {
   'walkthroughs.html#security-comparison-sources':
     'using-security-monitoring.html#security-comparison-sources',
   'walkthroughs.html#local-account-security': 'using-account.html#local-account-security',
+  'walkthroughs.html#signing-in-with-a-second-factor':
+    'using-account.html#signing-in-with-a-second-factor',
+  'walkthroughs.html#replace-a-lost-authenticator':
+    'using-account.html#replace-a-lost-authenticator',
   'walkthroughs.html#account-security-emails': 'using-account.html#account-security-emails',
-  'walkthroughs.html#mapping-preview-results': 'using-account.html#mapping-preview-results',
   'operations.html': 'using.html',
   'operations.html#evidence-to-assurance': 'using-start.html#evidence-to-assurance',
   'operations.html#getting-started': 'using-start.html#getting-started',
@@ -644,13 +692,13 @@ window.KEEN_DOC_LINKS = {
     'using-frameworks.html#reuse-evidence-across-frameworks',
   'operations.html#browse-related-controls': 'using-frameworks.html#browse-related-controls',
   'operations.html#collecting-evidence': 'using-collection.html#collecting-evidence',
-  'operations.html#configuration-ownership': 'using-collection.html#configuration-ownership',
+  'operations.html#source-setup-sequence': 'using-collection.html#source-setup-sequence',
   'operations.html#connector-rollout': 'using-collection.html#connector-rollout',
+  'operations.html#configuration-ownership': 'using-collection.html#configuration-ownership',
   'operations.html#integration-builder': 'using-collection.html#integration-builder',
   'operations.html#integration-operations': 'using-collection.html#integration-operations',
   'operations.html#integration-measurements': 'using-collection.html#integration-measurements',
   'operations.html#agent-evidence': 'using-collection.html#agent-evidence',
-  'operations.html#source-setup-sequence': 'using-collection.html#source-setup-sequence',
   'operations.html#remove-api-ingesters': 'using-collection.html#remove-api-ingesters',
   'operations.html#named-source-connections': 'using-collection.html#named-source-connections',
   'operations.html#rss-source-setup': 'using-collection.html#rss-source-setup',
@@ -659,6 +707,7 @@ window.KEEN_DOC_LINKS = {
     'using-mapping.html#5-configure-collection-and-mapping-with-evidence-definitions',
   'operations.html#collection-settings-and-credentials':
     'using-mapping.html#collection-settings-and-credentials',
+  'operations.html#mapping-preview-results': 'using-mapping.html#mapping-preview-results',
   'operations.html#definitions-before-events-arrive':
     'using-mapping.html#definitions-before-events-arrive',
   'operations.html#evidence-workflow': 'using-mapping.html#evidence-workflow',
@@ -681,6 +730,9 @@ window.KEEN_DOC_LINKS = {
   'operations.html#review-evidence': 'using-events.html#review-evidence',
   'operations.html#7-collect-and-inspect-evidence':
     'using-events.html#7-collect-and-inspect-evidence',
+  'operations.html#find-events': 'using-events.html#find-events',
+  'operations.html#read-one-event': 'using-events.html#read-one-event',
+  'operations.html#chart-events': 'using-events.html#chart-events',
   'operations.html#event-actions': 'using-events.html#event-actions',
   'operations.html#evidence-review': 'using-events.html#evidence-review',
   'operations.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
@@ -689,6 +741,9 @@ window.KEEN_DOC_LINKS = {
   'operations.html#questions-workflow': 'using-events.html#questions-workflow',
   'operations.html#incidents-workflow': 'using-events.html#incidents-workflow',
   'operations.html#stories': 'using-events.html#stories',
+  'operations.html#start-a-story': 'using-events.html#start-a-story',
+  'operations.html#build-the-story': 'using-events.html#build-the-story',
+  'operations.html#share-the-story': 'using-events.html#share-the-story',
   'operations.html#evidence-lifecycle': 'using-events.html#evidence-lifecycle',
   'operations.html#risks-and-treatment': 'using-risks.html#risks-and-treatment',
   'operations.html#9-assess-and-maintain-risks': 'using-risks.html#9-assess-and-maintain-risks',
@@ -772,18 +827,23 @@ window.KEEN_DOC_LINKS = {
   'operations.html#security-comparison-sources':
     'using-security-monitoring.html#security-comparison-sources',
   'operations.html#local-account-security': 'using-account.html#local-account-security',
+  'operations.html#signing-in-with-a-second-factor':
+    'using-account.html#signing-in-with-a-second-factor',
+  'operations.html#replace-a-lost-authenticator': 'using-account.html#replace-a-lost-authenticator',
   'operations.html#account-security-emails': 'using-account.html#account-security-emails',
-  'operations.html#mapping-preview-results': 'using-account.html#mapping-preview-results',
   'agents.html': 'administrator-agents.html#keen-agent',
   'agents.html#1-runtime-and-responsibilities':
     'administrator-deployment.html#1-runtime-and-responsibilities',
   'agents.html#2-deploy-a-self-managed-installation':
     'administrator-deployment.html#2-deploy-a-self-managed-installation',
+  'agents.html#first-administrator': 'administrator-deployment.html#first-administrator',
   'agents.html#3-configure-the-runtime': 'administrator-deployment.html#3-configure-the-runtime',
   'agents.html#core-and-authentication-settings':
     'administrator-deployment.html#core-and-authentication-settings',
+  'agents.html#oidc-settings': 'administrator-deployment.html#oidc-settings',
   'agents.html#storage-mail-and-privacy-settings':
     'administrator-deployment.html#storage-mail-and-privacy-settings',
+  'agents.html#masking-settings': 'administrator-deployment.html#masking-settings',
   'agents.html#installation-features': 'administrator-deployment.html#installation-features',
   'agents.html#local-mfa-administration': 'administrator-identity.html#local-mfa-administration',
   'agents.html#mfa-operator-recovery': 'administrator-identity.html#mfa-operator-recovery',
@@ -802,6 +862,7 @@ window.KEEN_DOC_LINKS = {
   'agents.html#supported-ingesters': 'administrator-sources.html#supported-ingesters',
   'agents.html#sources-connections-and-mapping':
     'administrator-sources.html#sources-connections-and-mapping',
+  'agents.html#define-a-source-connection': 'administrator-sources.html#define-a-source-connection',
   'agents.html#6-connect-operational-sources':
     'administrator-sources.html#6-connect-operational-sources',
   'agents.html#incoming-webhooks-and-metrics':
@@ -813,13 +874,17 @@ window.KEEN_DOC_LINKS = {
   'agents.html#named-source-connections': 'administrator-sources.html#named-source-connections',
   'agents.html#5-operate-evidence-definitions':
     'administrator-rules.html#5-operate-evidence-definitions',
+  'agents.html#write-a-definition': 'administrator-rules.html#write-a-definition',
   'agents.html#configuration-storage-and-concurrency':
     'administrator-rules.html#configuration-storage-and-concurrency',
   'agents.html#export-mapping-yaml': 'administrator-rules.html#export-mapping-yaml',
   'agents.html#8-historical-mapping-and-revision-recovery':
     'administrator-rules.html#8-historical-mapping-and-revision-recovery',
+  'agents.html#review-historical-remapping': 'administrator-rules.html#review-historical-remapping',
   'agents.html#7-scheduling-manual-runs-and-cursors':
     'administrator-scheduling.html#7-scheduling-manual-runs-and-cursors',
+  'agents.html#run-a-source-by-hand': 'administrator-scheduling.html#run-a-source-by-hand',
+  'agents.html#cursors': 'administrator-scheduling.html#cursors',
   'agents.html#pause-source-ingestion': 'administrator-scheduling.html#pause-source-ingestion',
   'agents.html#measurement-webhook-setup':
     'administrator-scheduling.html#measurement-webhook-setup',
@@ -846,6 +911,7 @@ window.KEEN_DOC_LINKS = {
     'administrator-google-workspace.html#source-google-workspace',
   'agents.html#source-webhooks': 'administrator-webhooks.html#source-webhooks',
   'agents.html#source-diary': 'administrator-diary.html#source-diary',
+  'agents.html#automatic-diary-entries': 'administrator-diary.html#automatic-diary-entries',
   'agents.html#source-api-ingesters': 'administrator-api-ingesters.html#source-api-ingesters',
   'agents.html#delete-api-ingesters': 'administrator-api-ingesters.html#delete-api-ingesters',
   'agents.html#redmine-ingestion': 'administrator-redmine.html#redmine-ingestion',
@@ -883,6 +949,9 @@ window.KEEN_DOC_LINKS = {
   'agents.html#evidence-storage': 'administrator-retention.html#evidence-storage',
   'agents.html#evidence-retention': 'administrator-retention.html#evidence-retention',
   'agents.html#retention-overrides': 'administrator-retention.html#retention-overrides',
+  'agents.html#what-retention-never-removes':
+    'administrator-retention.html#what-retention-never-removes',
+  'agents.html#purge-all-evidence': 'administrator-retention.html#purge-all-evidence',
   'agents.html#audit-trail': 'administrator-audit-trail.html#audit-trail',
   'agents.html#audit-trail-entity-changes':
     'administrator-audit-trail.html#audit-trail-entity-changes',
@@ -891,6 +960,7 @@ window.KEEN_DOC_LINKS = {
     'administrator-audit-trail.html#audit-trail-interpretation',
   'agents.html#9-upgrade-safely': 'administrator-maintenance.html#9-upgrade-safely',
   'agents.html#10-backups-and-restore': 'administrator-maintenance.html#10-backups-and-restore',
+  'agents.html#test-a-restore': 'administrator-maintenance.html#test-a-restore',
   'agents.html#12-diagnose-problems-in-order':
     'administrator-maintenance.html#12-diagnose-problems-in-order',
   'agents.html#13-routine-assurance-checks':
@@ -902,11 +972,14 @@ window.KEEN_DOC_LINKS = {
     'administrator-deployment.html#1-runtime-and-responsibilities',
   'redmine.html#2-deploy-a-self-managed-installation':
     'administrator-deployment.html#2-deploy-a-self-managed-installation',
+  'redmine.html#first-administrator': 'administrator-deployment.html#first-administrator',
   'redmine.html#3-configure-the-runtime': 'administrator-deployment.html#3-configure-the-runtime',
   'redmine.html#core-and-authentication-settings':
     'administrator-deployment.html#core-and-authentication-settings',
+  'redmine.html#oidc-settings': 'administrator-deployment.html#oidc-settings',
   'redmine.html#storage-mail-and-privacy-settings':
     'administrator-deployment.html#storage-mail-and-privacy-settings',
+  'redmine.html#masking-settings': 'administrator-deployment.html#masking-settings',
   'redmine.html#installation-features': 'administrator-deployment.html#installation-features',
   'redmine.html#local-mfa-administration': 'administrator-identity.html#local-mfa-administration',
   'redmine.html#mfa-operator-recovery': 'administrator-identity.html#mfa-operator-recovery',
@@ -925,6 +998,8 @@ window.KEEN_DOC_LINKS = {
   'redmine.html#supported-ingesters': 'administrator-sources.html#supported-ingesters',
   'redmine.html#sources-connections-and-mapping':
     'administrator-sources.html#sources-connections-and-mapping',
+  'redmine.html#define-a-source-connection':
+    'administrator-sources.html#define-a-source-connection',
   'redmine.html#6-connect-operational-sources':
     'administrator-sources.html#6-connect-operational-sources',
   'redmine.html#incoming-webhooks-and-metrics':
@@ -937,13 +1012,18 @@ window.KEEN_DOC_LINKS = {
   'redmine.html#named-source-connections': 'administrator-sources.html#named-source-connections',
   'redmine.html#5-operate-evidence-definitions':
     'administrator-rules.html#5-operate-evidence-definitions',
+  'redmine.html#write-a-definition': 'administrator-rules.html#write-a-definition',
   'redmine.html#configuration-storage-and-concurrency':
     'administrator-rules.html#configuration-storage-and-concurrency',
   'redmine.html#export-mapping-yaml': 'administrator-rules.html#export-mapping-yaml',
   'redmine.html#8-historical-mapping-and-revision-recovery':
     'administrator-rules.html#8-historical-mapping-and-revision-recovery',
+  'redmine.html#review-historical-remapping':
+    'administrator-rules.html#review-historical-remapping',
   'redmine.html#7-scheduling-manual-runs-and-cursors':
     'administrator-scheduling.html#7-scheduling-manual-runs-and-cursors',
+  'redmine.html#run-a-source-by-hand': 'administrator-scheduling.html#run-a-source-by-hand',
+  'redmine.html#cursors': 'administrator-scheduling.html#cursors',
   'redmine.html#pause-source-ingestion': 'administrator-scheduling.html#pause-source-ingestion',
   'redmine.html#measurement-webhook-setup':
     'administrator-scheduling.html#measurement-webhook-setup',
@@ -971,6 +1051,7 @@ window.KEEN_DOC_LINKS = {
     'administrator-google-workspace.html#source-google-workspace',
   'redmine.html#source-webhooks': 'administrator-webhooks.html#source-webhooks',
   'redmine.html#source-diary': 'administrator-diary.html#source-diary',
+  'redmine.html#automatic-diary-entries': 'administrator-diary.html#automatic-diary-entries',
   'redmine.html#source-api-ingesters': 'administrator-api-ingesters.html#source-api-ingesters',
   'redmine.html#delete-api-ingesters': 'administrator-api-ingesters.html#delete-api-ingesters',
   'redmine.html#redmine-ingestion': 'administrator-redmine.html#redmine-ingestion',
@@ -1008,6 +1089,9 @@ window.KEEN_DOC_LINKS = {
   'redmine.html#evidence-storage': 'administrator-retention.html#evidence-storage',
   'redmine.html#evidence-retention': 'administrator-retention.html#evidence-retention',
   'redmine.html#retention-overrides': 'administrator-retention.html#retention-overrides',
+  'redmine.html#what-retention-never-removes':
+    'administrator-retention.html#what-retention-never-removes',
+  'redmine.html#purge-all-evidence': 'administrator-retention.html#purge-all-evidence',
   'redmine.html#audit-trail': 'administrator-audit-trail.html#audit-trail',
   'redmine.html#audit-trail-entity-changes':
     'administrator-audit-trail.html#audit-trail-entity-changes',
@@ -1016,6 +1100,7 @@ window.KEEN_DOC_LINKS = {
     'administrator-audit-trail.html#audit-trail-interpretation',
   'redmine.html#9-upgrade-safely': 'administrator-maintenance.html#9-upgrade-safely',
   'redmine.html#10-backups-and-restore': 'administrator-maintenance.html#10-backups-and-restore',
+  'redmine.html#test-a-restore': 'administrator-maintenance.html#test-a-restore',
   'redmine.html#12-diagnose-problems-in-order':
     'administrator-maintenance.html#12-diagnose-problems-in-order',
   'redmine.html#13-routine-assurance-checks':

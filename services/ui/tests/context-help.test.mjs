@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { loadUi } from './support/load-ui.mjs';
 import { settle } from './support/page-fixture.mjs';
 
@@ -151,4 +151,115 @@ test('the real lazy module opens page help and handles keyboard dismissal cleanu
   dialog.close();
   assert.equal(ui.document.querySelector('dialog'), null);
   assert.equal(ui.document.activeElement, trigger);
+});
+
+test('page help follows the page and the active tab', async (t) => {
+  const ui = await loadUi('context-help.js', {
+    html: '<body data-page="stories"><ul class="nav nav-tabs" role="tablist"><li><button class="nav-link active" role="tab" id="timelineTab">Timeline</button></li><li><button class="nav-link" role="tab" id="flowTab">Flow chart</button></li><li><button class="nav-link" role="tab" id="commentsTab">Comments</button></li><li><button class="nav-link" role="tab" id="questionsTab">Questions</button></li><li><button class="nav-link" role="tab" id="changelogTab">Changelog</button></li></ul><a data-help-topic="page">Help</a></body>',
+  });
+  t.after(ui.close);
+  const trigger = ui.document.querySelector('a');
+  const select = (id) => {
+    for (const tab of ui.document.querySelectorAll('[role="tab"]')) {
+      tab.classList.toggle('active', tab.id === id);
+      tab.setAttribute('aria-selected', String(tab.id === id));
+    }
+    return ui.api.resolveHelp(trigger);
+  };
+  assert.equal(select('timelineTab').url, '/help/using-events.html#stories');
+  assert.equal(select('flowTab').title, 'Story flow chart');
+  assert.equal(select('flowTab').url, '/help/using-events.html#build-the-story');
+  assert.equal(select('commentsTab').url, '/help/using-events.html#share-the-story');
+  assert.equal(select('questionsTab').url, '/help/using-events.html#questions-and-incidents');
+  assert.equal(
+    select('changelogTab').url,
+    '/help/administrator-audit-trail.html#audit-trail-entity-changes',
+  );
+  // Tabs that are not a subject of their own keep the page topic.
+  ui.document.getElementById('timelineTab').id = 'detailsTab';
+  assert.equal(select('detailsTab').url, '/help/using-events.html#stories');
+  // Other pages: ISMS tabs, recurring visualisation tabs and the account security tab.
+  const cases = [
+    ['isms', 'documentsTab', '/help/using-documents.html'],
+    ['isms', 'assetsTab', '/help/using-people-assets.html'],
+    ['isms', 'effectivenessTab', '/help/using-measures.html'],
+    ['isms', 'overviewTab', '/help/using-isms.html'],
+    ['events', 'eventsVisualisationsTab', '/help/using-operations.html#visualisation-tabs'],
+    ['events', 'eventsRegisterTab', '/help/using-events.html'],
+    ['risks', 'riskVisualisationsTab', '/help/using-operations.html#visualisation-tabs'],
+    ['account', 'security-tab', '/help/using-account.html#local-account-security'],
+    ['account', 'preferences-tab', '/help/using-account.html'],
+    ['pestle', 'pestleItemsTab', '/help/using-isms.html#context'],
+    ['my-questions', 'none', '/help/using-events.html#questions-and-incidents'],
+    ['isms-document', 'documentDetailsTab', '/help/using-documents.html'],
+    ['soa', 'soaControlsTab', '/help/using-frameworks.html#4-controls-clauses-and-applicability'],
+  ];
+  for (const [page, tab, url] of cases) {
+    ui.document.body.dataset.page = page;
+    ui.document.getElementById('detailsTab').id = tab;
+    assert.equal(select(tab).url, url, `${page} / ${tab}`);
+    ui.document.getElementById(tab).id = 'detailsTab';
+  }
+});
+
+test('SWOT pages keep the SWOT guide for their own visualisation tab', async (t) => {
+  const ui = await loadUi('context-help.js', {
+    html: '<body data-page="isms"><ul class="nav nav-tabs"><li><button class="nav-link active" role="tab" id="visualisationTab">Views</button></li></ul><a data-help-topic="page">Help</a></body>',
+    url: 'https://keen.example/swot.html',
+  });
+  t.after(ui.close);
+  assert.equal(ui.api.resolveHelp(ui.document.querySelector('a')).url, '/help/using-swot.html');
+});
+
+test('every help topic points at a published chapter and anchor', async (t) => {
+  const ui = await loadUi('context-help.js', {
+    html: '<body data-page="home"><a data-help-topic="page">Help</a></body>',
+  });
+  t.after(ui.close);
+  const trigger = ui.document.querySelector('a');
+  const keys = [
+    'start',
+    'sources',
+    'connection',
+    'inputs',
+    'mapping',
+    'events',
+    'frameworks',
+    'audits',
+    'auditTrail',
+    'mitigator',
+    'risks',
+    'swot',
+    'isms',
+    'account',
+    'agents',
+    'retention',
+    'integrations',
+    'identity',
+    'scheduling',
+    'diary',
+    'stories',
+    'storyFlow',
+    'storyComments',
+    'visualisations',
+    'questions',
+    'changelog',
+    'context',
+    'objectives',
+    'documents',
+    'peopleAssets',
+    'measures',
+    'meetings',
+    'soa',
+    'accountSecurity',
+  ];
+  for (const key of keys) {
+    trigger.dataset.helpTopic = key;
+    const { url, title } = ui.api.resolveHelp(trigger);
+    assert.ok(title, key);
+    const [file, anchor] = url.split('#');
+    const path = new URL('../public' + file, import.meta.url);
+    const html = await readFile(path, 'utf8');
+    if (anchor) assert.ok(html.includes(`id="${anchor}"`), `${key}: #${anchor} in ${file}`);
+  }
 });
