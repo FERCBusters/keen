@@ -41,6 +41,8 @@ const pages = {
   '/vendors.html': 'vendors',
   '/vendor.html': 'vendors',
   '/audits.html': 'audits',
+  '/stories.html': 'stories',
+  '/story.html': 'stories',
   '/audit.html': 'audits',
   '/scheduled-audits.html': 'audit_scheduling',
   '/soa.html': 'soa',

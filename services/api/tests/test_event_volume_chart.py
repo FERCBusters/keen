@@ -143,6 +143,34 @@ def test_counts_follow_the_framework_and_source_filters(chart):
     assert loki["source"] == "loki"
 
 
+def test_counts_follow_the_events_page_filters(chart):
+    """The chart shows the events the list shows: lists, controls and text."""
+    both = chart.get(chart.reader, source="loki,ci", breakdown="source", **WINDOW)
+    assert chart.counts(both)[:2] == [("2026-03-01", 2, 1, 1), ("2026-03-02", 3, 1, 2)]
+    assert both["source"] == "loki,ci"
+    assert [s["source"] for s in both["sources"]] == ["loki", "ci"]
+
+    control = chart.get(chart.reader, control="A.1", **WINDOW)
+    assert chart.counts(control)[:2] == [
+        ("2026-03-01", 1, 1, 0),
+        ("2026-03-02", 1, 1, 0),
+    ]
+    condition = chart.get(chart.reader, f="summary:contains:loki at", **WINDOW)
+    assert chart.counts(condition)[:2] == [
+        ("2026-03-01", 0, 0, 0),
+        ("2026-03-02", 3, 1, 2),
+    ]
+    unmapped = chart.get(chart.reader, unmapped="true", **WINDOW)
+    assert chart.counts(unmapped)[:2] == [
+        ("2026-03-01", 1, 0, 1),
+        ("2026-03-02", 2, 0, 2),
+    ]
+    refused = chart.reader.get(
+        PATH, params={"framework": FW, "f": "colour:contains:x", **WINDOW}
+    )
+    assert refused.status_code == 400
+
+
 def test_hourly_buckets_follow_a_timestamp_window_with_an_exclusive_end(chart):
     body = chart.get(
         chart.reader,

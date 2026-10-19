@@ -34,6 +34,7 @@ AUDIT_SAMPLE_ENTITY_LABELS = {
     "isms_meeting": "ISMS meeting",
     "isms_effectiveness_measure": "ISMS effectiveness measure",
     "isms_effectiveness_metric": "ISMS effectiveness metric",
+    "story": "Story",
 }
 
 

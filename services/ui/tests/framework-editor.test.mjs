@@ -363,3 +363,85 @@ test('changing framework loads its nodes and load failures are reported', async 
   putFail.$('save-selection').click();
   await settle(() => putFail.$('organisation-note').textContent === 'Node rejected');
 });
+
+test('the node being edited is marked in the tree and brought into view after a save', async (t) => {
+  const { ui, $ } = await editor(t);
+  const scrolled = [];
+  ui.window.HTMLElement.prototype.scrollIntoView = function (options) {
+    scrolled.push([this.dataset.nodeKey, plain(options)]);
+  };
+  const rows = () => [...$('tree').children];
+  const marked = () =>
+    rows()
+      .filter((row) => row.classList.contains('framework-section-row-selected'))
+      .map((row) => [
+        row.textContent.split('  ')[0],
+        row.classList.contains('active'),
+        row.getAttribute('aria-current'),
+      ]);
+  assert.deepEqual(marked(), []);
+  assert.equal($('prev-node').disabled, true);
+  assert.equal($('next-node').disabled, true);
+
+  rows()
+    .find((row) => row.textContent.startsWith('A.5.1'))
+    .click();
+  assert.deepEqual(marked(), [['A.5.1', true, 'true']]);
+  // A row the user clicked is already in view.
+  assert.deepEqual(scrolled, []);
+
+  // Saving reloads the tree; the saved node stays marked and scrolls into view.
+  $('title').value = 'Renamed';
+  $('save-node').click();
+  await settle(() => $('message').textContent === 'Node saved');
+  assert.deepEqual(marked(), [['A.5.1', true, 'true']]);
+  assert.deepEqual(scrolled, [['annex_control\0A.5.1', { block: 'nearest' }]]);
+
+  // A search that hides the node leaves nothing marked; showing it again marks it.
+  $('search').value = 'context';
+  $('search').dispatchEvent(new ui.window.Event('input'));
+  assert.deepEqual(marked(), []);
+  $('search').value = '';
+  $('search').dispatchEvent(new ui.window.Event('input'));
+  assert.deepEqual(marked(), [['A.5.1', true, 'true']]);
+
+  // New node clears the mark.
+  $('new').click();
+  assert.deepEqual(marked(), []);
+});
+
+test('Previous and Next move through the tree in its displayed order', async (t) => {
+  const { ui, $ } = await editor(t);
+  const scrolled = [];
+  ui.window.HTMLElement.prototype.scrollIntoView = function () {
+    scrolled.push(this.dataset.nodeKey);
+  };
+  const rows = () => [...$('tree').children];
+  const order = rows().map((row) => row.textContent.split('  ')[0]);
+  assert.deepEqual(order.slice(0, 5), ['4', '4.2', '4.10', 'A.5', 'A.5.1']);
+
+  rows()[0].click();
+  assert.equal($('prev-node').disabled, true);
+  assert.equal($('next-node').disabled, false);
+
+  $('next-node').click();
+  assert.equal($('ref').value, '4.2');
+  $('next-node').click();
+  assert.equal($('ref').value, '4.10');
+  assert.equal($('prev-node').disabled, false);
+  $('prev-node').click();
+  assert.equal($('ref').value, '4.2');
+  assert.deepEqual(scrolled, ['clause\x004.2', 'clause\x004.10', 'clause\x004.2']);
+  assert.equal(
+    rows()
+      .find((row) => row.classList.contains('framework-section-row-selected'))
+      .textContent.split('  ')[0],
+    '4.2',
+  );
+
+  // The last row has no next node.
+  rows().at(-1).click();
+  assert.equal($('next-node').disabled, true);
+  $('next-node').click();
+  assert.equal($('ref').value, rows().at(-1).textContent.split('  ')[0]);
+});

@@ -94,6 +94,18 @@ async function shell(
   return { ...ui, me: result, nav, seen, topLevel, menu, window: win };
 }
 
+test('the design system receives the Stories link for accounts that may read them', async (t) => {
+  const ui = await shell(t);
+  assert.deepEqual(JSON.parse(JSON.stringify(ui.seen.config.links)), [
+    {
+      key: 'stories',
+      label: 'Stories',
+      href: '/stories.html',
+      requireAny: ['is_admin', 'can_view_stories'],
+    },
+  ]);
+});
+
 test('risk and ISMS pages are grouped into menus that keep the framework', async (t) => {
   const ui = await shell(t);
 

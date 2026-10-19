@@ -31,6 +31,7 @@ from app.security.permissions import can_read_events, has_permission
 from app.services.context import ChangeContext
 from app.services.control_inheritance import evidence_pairs
 from app.services.errors import DomainError
+from app.services.event_filters import EventFilters, event_predicates
 
 
 def _event_filters(start_date: Optional[date], end_date: Optional[date]):
@@ -93,7 +94,7 @@ def graph_control_source(
     framework: str = settings.default_framework_slug,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    source: Optional[str] = None,
+    scope: EventFilters | None = None,
     db: Session,
 ):
     """Graph for visualisation: Sources -> Controls.
@@ -105,18 +106,19 @@ def graph_control_source(
     user = context.actor
     if not can_read_events(db, user):
         raise DomainError(status_code=403, detail="events.read permission required")
+    scope = scope or EventFilters(framework=framework)
     cache_parts = {
         "framework": framework,
         "start_date": start_date.isoformat() if start_date else None,
         "end_date": end_date.isoformat() if end_date else None,
-        "source": source,
+        "scope": scope.cache_parts(),
         "user": user_cache_scope(user),
     }
 
     def _load():
-        event_filters = _event_filters(start_date, end_date)
-        if source:
-            event_filters.append(Event.source == source)
+        event_filters = _event_filters(start_date, end_date) + event_predicates(
+            scope, db
+        )
         pairs = evidence_pairs(framework, db)
 
         edge_rows = (
@@ -212,6 +214,7 @@ def graph_clause_source(
     framework: str = settings.default_framework_slug,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    scope: EventFilters | None = None,
     db: Session,
 ):
     """Graph for visualisation: Sources -> Clauses by mapped-event evidence.
@@ -225,15 +228,19 @@ def graph_clause_source(
     user = context.actor
     if not can_read_events(db, user):
         raise DomainError(status_code=403, detail="events.read permission required")
+    scope = scope or EventFilters(framework=framework)
     cache_parts = {
         "framework": framework,
         "start_date": start_date.isoformat() if start_date else None,
         "end_date": end_date.isoformat() if end_date else None,
+        "scope": scope.cache_parts(),
         "user": user_cache_scope(user),
     }
 
     def _load():
-        event_filters = _event_filters(start_date, end_date)
+        event_filters = _event_filters(start_date, end_date) + event_predicates(
+            scope, db
+        )
         pairs = evidence_pairs(framework, db)
 
         edge_rows = (

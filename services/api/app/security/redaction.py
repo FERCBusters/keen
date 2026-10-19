@@ -41,6 +41,19 @@ _EMAIL_RE = re.compile(
     r"(?![A-Z0-9_%+-]|\.[A-Z0-9])",
     re.IGNORECASE,
 )
+# A mailbox as address headers write it: a display name before the address in
+# angle brackets. The name identifies the person as much as the address does,
+# so the whole mailbox is masked. A name is up to five words of letters, which
+# may carry apostrophes, dots and hyphens, or one quoted string; every
+# repetition is bounded, so malformed headers cannot stall the scan.
+_NAME_WORD = r"[^\W\d_]{1,40}(?:['.-][^\W\d_]{1,40}){0,3}\.?"
+_MAILBOX_RE = re.compile(
+    r"(?:(?<![\w\"'.-])"
+    r"(?:\"[^\"\n]{1,100}\"|" + _NAME_WORD + r"(?:[ \t]+" + _NAME_WORD + r"){0,4})"
+    r"[ \t]*)?"
+    r"<[ \t]*" + _EMAIL_RE.pattern + r"[ \t]*>",
+    re.IGNORECASE,
+)
 _IPV4_RE = re.compile(
     r"(?<![\w.])(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
     # Reject a fifth octet or a longer token, but allow sentence punctuation.
@@ -224,6 +237,7 @@ def mask_event_data_str(s: str | None) -> str | None:
     if s is None:
         return None
     txt = str(s)
+    txt = _MAILBOX_RE.sub(MASKED_EMAIL, txt)
     txt = _EMAIL_RE.sub(MASKED_EMAIL, txt)
 
     def _ipv6_sub(m: re.Match) -> str:

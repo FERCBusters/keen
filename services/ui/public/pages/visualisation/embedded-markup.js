@@ -57,6 +57,7 @@ export function ensureEmbeddedVisualisationMarkup() {
       <div>
         <h2 class="h4 mb-1">${title}</h2>
         <div class="small-muted">${intro}</div>
+        <div class="small text-body-secondary mt-1" id="vizScope" role="note" hidden></div>
       </div>
     </div>
     <div class="row g-3">
@@ -116,6 +117,7 @@ export function ensureEmbeddedVisualisationMarkup() {
                 <button id="histBack" class="btn btn-sm btn-outline-secondary d-none" type="button" title="Go back one zoom level">Back</button>
                 <button id="histResetZoom" class="btn btn-sm btn-outline-secondary d-none" type="button" title="Reset histogram zoom to the selected date range">Reset zoom</button>
                 <button id="histZoomMode" class="btn btn-sm btn-outline-secondary" type="button" title="Toggle range-selection mode for the histogram (drag on the chart to zoom)">Zoom mode</button>
+                <button id="histStory" class="btn btn-sm btn-outline-primary d-none" type="button" title="Create a story from the events in the selected window"><i class="bi bi-journal-plus me-1" aria-hidden="true"></i>Story from window</button>
               </div>
 
               <div class="dropdown">
@@ -131,6 +133,16 @@ export function ensureEmbeddedVisualisationMarkup() {
             </div>
           </div>
           <div class="card-body" data-mosp-viz-body>
+            <div id="histStoryPanel" class="border rounded p-3 mb-3" role="region" aria-label="Story from the selected window" hidden>
+              <div class="d-flex flex-wrap gap-2 align-items-end">
+                <div class="me-auto"><strong>Story from this window</strong><div class="small-muted" data-window></div></div>
+                <label class="small-muted">Title<input class="form-control form-control-sm d-block" data-window-title maxlength="256" style="width:20rem;"></label>
+                <label class="small-muted">What happened here?<textarea class="form-control form-control-sm d-block" data-window-note rows="2" maxlength="4000" style="width:24rem;" placeholder="Your annotation becomes the story’s first note"></textarea></label>
+                <button class="btn btn-sm btn-primary" type="button" data-window-create>Create story</button>
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-window-cancel>Cancel</button>
+              </div>
+              <div class="small-muted mt-2">Right-click a bar to pick that bar alone, or zoom into a range first. The story takes the window’s events under the current filters, newest first, up to 200.</div>
+            </div>
             <div id="vizWrap">
               <svg id="viz"></svg>
               <div id="sunburstOtherPanel" class="mt-2"></div>

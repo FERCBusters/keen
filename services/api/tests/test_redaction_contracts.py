@@ -99,6 +99,22 @@ def test_custom_redaction_extends_defaults_and_replace_is_explicit(monkeypatch):
         ("route via 2001:db8::.", "route via [MASKED_IP]."),
         ("(a@example.test)", "([MASKED_EMAIL])"),
         ("a@mail.example.co.uk", "[MASKED_EMAIL]"),
+        # A display name identifies the person as much as the address does.
+        ("Alice Smith <alice@example.test>", "[MASKED_EMAIL]"),
+        (
+            'To: "Smith, Alice" <alice@example.test>, Bob <bob@example.test>',
+            "To: [MASKED_EMAIL], [MASKED_EMAIL]",
+        ),
+        ("Dr. J. R. R. Tolkien-Smith <jrr@example.test>", "[MASKED_EMAIL]"),
+        ("Ünal Yılmaz <unal@example.test>", "[MASKED_EMAIL]"),
+        ("Reply-To: <noreply@example.test>", "Reply-To: [MASKED_EMAIL]"),
+        # Words that are not a name stay: numbers, punctuation and URLs.
+        ("Version 1.2.3 sent by bob <b@example.test>", "Version 1.2.3 [MASKED_EMAIL]"),
+        ("ticket #42: Bob <bob@example.test>", "ticket #42: [MASKED_EMAIL]"),
+        (
+            "see https://x.example/<alice@example.test>",
+            "see https://x.example/[MASKED_EMAIL]",
+        ),
         # Longer dotted tokens are left alone as versions or host names.
         ("build 1.2.3.4.5", "build 1.2.3.4.5"),
         ("host 192.0.2.1a", "host 192.0.2.1a"),
@@ -231,3 +247,48 @@ def test_malformed_json_artifacts_fall_back_to_text_protection():
 )
 def test_colon_separated_tokens_that_are_not_addresses_are_kept(text):
     assert r.mask_event_data_str(text) == text
+
+
+def test_mailbox_headers_from_a_mail_collector_are_masked_whole(monkeypatch):
+    """Address headers mask the person, not only the address."""
+    from app.core.config import settings
+    from app.ingest.common import normalise_ingested_fields
+
+    monkeypatch.setattr(settings, "event_data_masking", "true")
+    message = {
+        "headers": {
+            "from": "Alice Smith <alice@example.test>",
+            "to": '"Smith, Bob" <bob@example.test>, carol@example.test',
+            "subject": "Re: access review for dave@example.test",
+        },
+        "body": "Hi Bob,\nplease add Erin <erin@example.test> from 192.0.2.7.",
+    }
+    fields = normalise_ingested_fields(
+        system="mail",
+        actor=message["headers"]["from"],
+        action="received",
+        outcome=None,
+        summary="Email: " + message["headers"]["subject"],
+        external_id="<id@example.test>",
+        raw_pointer={"uid": 7},
+        normalized_payload=message,
+        artifact_bytes=json.dumps(message).encode(),
+        artifact_content_type="application/json",
+    )
+
+    assert fields.actor == "[MASKED_EMAIL]"
+    assert fields.summary == "Email: Re: access review for [MASKED_EMAIL]"
+    assert fields.normalized_payload["headers"] == {
+        "from": "[MASKED_EMAIL]",
+        "to": "[MASKED_EMAIL], [MASKED_EMAIL]",
+        "subject": "Re: access review for [MASKED_EMAIL]",
+    }
+    # Words before a bracketed address can be a name, so they go with it.
+    assert (
+        fields.normalized_payload["body"] == "Hi Bob,\n[MASKED_EMAIL] from [MASKED_IP]."
+    )
+    stored = json.loads(fields.artifact_bytes)
+    assert stored == fields.normalized_payload
+    assert fields.redaction_status == "redacted"
+    # The dedupe identifier is never masked; it is not shown as evidence.
+    assert fields.external_id == "<id@example.test>"

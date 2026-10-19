@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { page, settle } from './support/page-fixture.mjs';
+import { page, settle, pickFilter, filterChips, chosenChips } from './support/page-fixture.mjs';
 
 const sources = [
   {
@@ -268,7 +268,7 @@ async function sourcesPage(t, options = {}) {
     get: async (u) => {
       if (u.pathname === '/api/v1/sources') {
         if (options.fail) throw new Error('Offline');
-        return { items: sources.slice(0, 2) };
+        return { items: options.items || sources.slice(0, 2) };
       }
       throw new Error('Unexpected GET ' + u);
     },
@@ -307,6 +307,85 @@ test('the sources list can be filtered by name with an escaped filter label', as
   assert.equal(none.el('sourcesFilter').querySelector('b'), null);
   assert.match(none.el('rows').textContent, /No sources match "<b>zzz<\/b>"/);
   assert.equal(none.el('rows').querySelector('b'), null);
+});
+
+test('the register narrows by several source types, a name and coverage, keeping the address current', async (t) => {
+  const ui = await sourcesPage(t, { query: '&type=aws,retired' });
+  const shown = () =>
+    [...ui.el('rows').querySelectorAll('tr td[data-sort]:first-child')].map(
+      (td) => td.dataset.sort,
+    );
+  assert.deepEqual(shown(), ['aws']);
+  assert.deepEqual(chosenChips(ui, 'sourceTypes'), [
+    ['aws', 'aws'],
+    ['retired', 'retired'],
+  ]);
+  assert.deepEqual(filterChips(ui, 'sourceTypes'), [
+    ['aws', 'aws'],
+    ['retired', 'retired'],
+    ['github', 'GitHub (github)'],
+  ]);
+  assert.match(ui.el('sourcesFilter').textContent, /Filtered: 2 source types/);
+
+  pickFilter(ui, 'sourceTypes', 'github');
+  assert.deepEqual(shown(), ['github', 'aws']);
+  const address = () => new URL(ui.window.location.href).searchParams;
+  assert.equal(address().get('source'), 'aws,retired,github');
+  assert.equal(address().has('type'), false);
+
+  ui.el('sourcesCoverage').value = 'unmapped';
+  ui.el('sourcesCoverage').dispatchEvent(new ui.window.Event('change'));
+  assert.deepEqual(shown(), ['github']);
+  assert.equal(address().get('coverage'), 'unmapped');
+  ui.el('sourcesCoverage').value = 'none';
+  ui.el('sourcesCoverage').dispatchEvent(new ui.window.Event('change'));
+  assert.deepEqual(shown(), ['aws']);
+
+  // The name filter reads labels as well as source keys.
+  ui.el('sourcesCoverage').value = '';
+  ui.el('sourcesCoverage').dispatchEvent(new ui.window.Event('change'));
+  ui.el('sourcesSearch').value = 'hub';
+  ui.el('sourcesSearch').dispatchEvent(new ui.window.Event('input'));
+  assert.deepEqual(shown(), ['github']);
+  assert.equal(address().get('q'), 'hub');
+  assert.match(ui.el('sourcesFilter').textContent, /name contains “hub”/);
+  ui.el('sourcesSearch').value = 'nothing';
+  ui.el('sourcesSearch').dispatchEvent(new ui.window.Event('input'));
+  assert.match(
+    ui.el('rows').textContent,
+    /No sources match "3 source types; name contains “nothing”"/,
+  );
+});
+
+test('the name filter reads source labels as well as keys', async (t) => {
+  const ui = await sourcesPage(t, {
+    items: [
+      {
+        source: 'github',
+        label: 'Code host',
+        total_events: 1,
+        mapped_events: 1,
+        unmapped_events: 0,
+      },
+      { source: 'aws', label: '', total_events: 1, mapped_events: 1, unmapped_events: 0 },
+    ],
+  });
+  ui.el('sourcesSearch').value = 'code';
+  ui.el('sourcesSearch').dispatchEvent(new ui.window.Event('input'));
+  assert.deepEqual(
+    [...ui.el('rows').querySelectorAll('td[data-sort]:first-child')].map((td) => td.dataset.sort),
+    ['github'],
+  );
+});
+
+test('filters set in the address narrow the register when it loads', async (t) => {
+  const ui = await sourcesPage(t, { query: '&q=git&coverage=mapped' });
+  assert.equal(ui.el('rows').querySelectorAll('tr').length, 1);
+  assert.equal(ui.el('sourcesSearch').value, 'git');
+  assert.equal(ui.el('sourcesCoverage').value, 'mapped');
+  const unknown = await sourcesPage(t, { query: '&coverage=weird' });
+  assert.equal(unknown.el('sourcesCoverage').value, '');
+  assert.equal(unknown.el('rows').querySelectorAll('tr').length, 2);
 });
 
 test('source list failures are reported', async (t) => {

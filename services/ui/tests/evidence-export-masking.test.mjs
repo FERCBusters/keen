@@ -38,6 +38,18 @@ const cases = [
   ['route via 2001:db8::.', 'route via [MASKED_IP].'],
   ['(a@example.test)', '([MASKED_EMAIL])'],
   ['a@mail.example.co.uk', '[MASKED_EMAIL]'],
+  // A display name identifies the person as much as the address does.
+  ['Alice Smith <alice@example.test>', '[MASKED_EMAIL]'],
+  [
+    'To: "Smith, Alice" <alice@example.test>, Bob <bob@example.test>',
+    'To: [MASKED_EMAIL], [MASKED_EMAIL]',
+  ],
+  ['Dr. J. R. R. Tolkien-Smith <jrr@example.test>', '[MASKED_EMAIL]'],
+  ['Ünal Yılmaz <unal@example.test>', '[MASKED_EMAIL]'],
+  ['Reply-To: <noreply@example.test>', 'Reply-To: [MASKED_EMAIL]'],
+  ['Version 1.2.3 sent by bob <b@example.test>', 'Version 1.2.3 [MASKED_EMAIL]'],
+  ['ticket #42: Bob <bob@example.test>', 'ticket #42: [MASKED_EMAIL]'],
+  ['see https://x.example/<alice@example.test>', 'see https://x.example/[MASKED_EMAIL]'],
   // Longer dotted tokens are versions or host names.
   ['build 1.2.3.4.5', 'build 1.2.3.4.5'],
   ['host 192.0.2.1a', 'host 192.0.2.1a'],
@@ -163,6 +175,10 @@ test('long runs of address characters are masked in bounded time', () => {
     ];
     for (const text of hostile) {
       if (maskEventDataString(' ' + text) !== ' ' + text) throw new Error('changed');
+    }
+    // Long runs before a bracketed address finish, and the address is masked.
+    for (const text of ['Ab '.repeat(30000) + '<a@b.co>', '<'.repeat(30000) + 'a@b.co>']) {
+      if (!maskEventDataString(text).endsWith('[MASKED_EMAIL]')) throw new Error('address kept');
     }
     const tail = '1:'.repeat(32768) + 'z then 2001:db8::1.';
     if (maskEventDataString(tail) !== '1:'.repeat(32768) + 'z then [MASKED_IP].') {

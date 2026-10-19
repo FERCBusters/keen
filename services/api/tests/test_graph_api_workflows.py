@@ -211,6 +211,34 @@ def test_source_control_graph_counts_distinct_events(graph):
         "/v1/graph/control_source", params={"framework": "A", "source": "github"}
     ).json()
     assert _links(github) == {("source:github", change): 1}
+    # The graph follows the Events page filters: several sources, a control,
+    # search text and a text condition.
+    two = client.get(
+        "/v1/graph/control_source", params={"framework": "A", "source": "github,diary"}
+    ).json()
+    assert _links(two) == {("source:github", change): 1, ("source:diary", logging): 1}
+    scoped = client.get(
+        "/v1/graph/control_source",
+        params={
+            "framework": "A",
+            "control": "A.2",
+            "f": "summary:not_contains:private",
+        },
+    ).json()
+    assert _links(scoped) == {
+        ("source:jenkins", logging): 1,
+        ("source:jenkins", change): 1,
+        ("source:github", change): 1,
+    }
+    assert _nodes(scoped)["source:jenkins"]["mapped_events"] == 1
+    reflective = client.get(
+        "/v1/graph/control_source", params={"framework": "A", "q": "reflection"}
+    ).json()
+    assert _links(reflective) == {("source:diary", logging): 1}
+    refused = client.get(
+        "/v1/graph/control_source", params={"framework": "A", "f": "actor:near:x"}
+    )
+    assert refused.status_code == 400
     assert (
         client.get(
             "/v1/graph/control_source", params={"start_date": "not-a-date"}

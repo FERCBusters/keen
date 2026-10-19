@@ -1,6 +1,7 @@
 """One-hop evidence inheritance, starting from evidence before joining OSA memberships."""
 
 from sqlalchemy import or_, select
+from sqlalchemy.orm import aliased
 
 from app.db.models import (
     ControlItem,
@@ -93,11 +94,14 @@ def effective_framework_ids(framework, db=None):
 
 
 def event_has_control(control_id, event_id, db=None):
+    # An alias keeps the subquery's mappings apart from any mapping the
+    # enclosing query joins, so the predicate works in aggregate queries too.
+    mapping = aliased(Mapping)
     return (
-        select(Mapping.id)
+        select(mapping.id)
         .where(
-            Mapping.event_id == event_id,
-            Mapping.control_item_id.in_(effective_control_ids(control_id, db)),
+            mapping.event_id == event_id,
+            mapping.control_item_id.in_(effective_control_ids(control_id, db)),
         )
         .exists()
     )

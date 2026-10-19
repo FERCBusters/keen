@@ -239,11 +239,27 @@ export function initNavbar(...args) {
   return navbarInitialisation;
 }
 
+// Stories sit after Audits in the navigation for accounts that can read them.
+export function withStoriesLink(links = []) {
+  const list = Array.isArray(links) ? [...links] : [];
+  if (list.some((link) => link?.key === 'stories')) return list;
+  const stories = {
+    key: 'stories',
+    label: 'Stories',
+    href: '/stories.html',
+    requireAny: ['is_admin', 'can_view_stories'],
+  };
+  const after = list.findIndex((link) => link?.key === 'audits');
+  list.splice(after < 0 ? list.length : after + 1, 0, stories);
+  return list;
+}
+
 async function initialiseNavbar(...args) {
   initContextHelp();
   const cfg = getUiConfig(args[0]);
   const me = await _mospInitNavbar({
     ...cfg,
+    links: withStoriesLink(cfg.links),
     auth: { ...cfg.auth, meCacheMs: 0 },
     bell: {
       ...cfg.bell,
@@ -715,6 +731,7 @@ export function canSampleIntoAudit(me = null, entityType = '') {
     .trim()
     .toLowerCase();
   if (type === 'isms_swot') return Boolean(me?.can_view_isms);
+  if (type === 'story') return Boolean(me?.can_view_stories);
   if (type === 'event') return Boolean(me?.can_view_events);
   if (type === 'bookstack_section' || type.startsWith('isms')) return Boolean(me?.can_sample_isms);
   return true;

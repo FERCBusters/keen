@@ -27,9 +27,22 @@ function isIpv6Address(text) {
   return halves.length === 2 ? count < 8 : count === 8;
 }
 
+// A mailbox as address headers write it: a display name before the address in
+// angle brackets. The name identifies the person as much as the address does,
+// so the whole mailbox is masked. A name is up to five words of letters, which
+// may carry apostrophes, dots and hyphens, or one quoted string; every
+// repetition is bounded.
+const NAME_WORD = "\\p{L}{1,40}(?:['.-]\\p{L}{1,40}){0,3}\\.?";
+const MAILBOX = new RegExp(
+  `(?:(^|[^\\w"'.-])("[^"\\n]{1,100}"|${NAME_WORD}(?:[ \\t]+${NAME_WORD}){0,4})[ \\t]*)?` +
+    '<[ \\t]*[A-Za-z0-9._%+-]{1,128}@[A-Za-z0-9.-]+\\.[A-Za-z]{2,63}[ \\t]*>',
+  'giu',
+);
+
 export function maskEventDataString(value) {
   if (value == null) return value;
   let txt = String(value);
+  txt = txt.replace(MAILBOX, (match, prefix) => `${prefix || ''}[MASKED_EMAIL]`);
   // A full stop after an address ends the sentence; ".<letter or digit>"
   // continues the address.
   txt = txt.replace(

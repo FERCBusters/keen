@@ -38,7 +38,9 @@ from app.storage.s3 import put_bytes
 QUESTION_CREATE_PERMISSION = "question.create"
 # Question routes accept exactly these names, so the type in a request path is
 # always the one the route's feature policy checks.
-QUESTION_TARGET_TYPES = frozenset({"event", "risk", "pestle_item", "isms_swot"})
+QUESTION_TARGET_TYPES = frozenset(
+    {"event", "risk", "pestle_item", "isms_swot", "story"}
+)
 MAX_ATTACHMENT_BYTES = 40 * 1024 * 1024
 
 
@@ -153,6 +155,14 @@ def _ensure_question_target_visible(
         if not row:
             raise DomainError(404, "SWOT item not found")
         return (row.kind, row.title, f"/isms-swot.html?id={row.id}&tab=questions", None)
+    if target_type == "story":
+        from app.services.stories import readable_story, require_read
+
+        require_read(db, user)
+        row = readable_story(db, user, entity_id)
+        if not row:
+            raise DomainError(404, "Story not found")
+        return (row.status, row.title, f"/story.html?id={row.id}&tab=questions", None)
     if target_type == "event":
         ev = _ensure_event_visible(db, user, entity_id)
         return (
@@ -174,6 +184,8 @@ def _question_target_label(thread: EventQuestionThread) -> str:
     title = (thread.target_title or "").strip()
     if typ == "isms_swot":
         prefix = "SWOT item"
+    elif typ == "story":
+        prefix = "Story"
     elif typ == "risk":
         prefix = "CIA Triad risk"
     elif typ == "pestle_item":
@@ -195,6 +207,8 @@ def _question_target_url(thread: EventQuestionThread) -> str:
     target_id = str(thread.target_id or thread.event_id or "")
     if typ == "isms_swot" and target_id:
         return f"/isms-swot.html?id={target_id}&tab=questions&thread={tid}"
+    if typ == "story" and target_id:
+        return f"/story.html?id={target_id}&tab=questions&thread={tid}"
     if typ == "risk" and target_id:
         return f"/risk.html?id={target_id}&thread={tid}#questions"
     if typ == "pestle_item" and target_id:

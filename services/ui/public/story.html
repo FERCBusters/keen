@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Story</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="stylesheet" href="/planning.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/demo-notice.js" defer></script>
+</head>
+<body data-page="stories">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div id="status" class="alert alert-info" style="display:none;" role="status"></div>
+    <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between mb-3">
+      <div>
+        <a href="/stories.html" data-nav-fw="1">← Stories</a>
+        <h1 id="storyTitle" class="h3 mt-2 mb-1">Loading…</h1>
+        <div class="small-muted"><span id="storyStatus" class="badge text-bg-success">open</span> <span id="storyMeta"></span></div>
+        <p id="storySummary" class="mt-2 mb-0 story-summary"></p>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <button id="edit" class="btn btn-outline-primary" type="button" hidden><i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit</button>
+        <button id="sample" data-feature="sampling" class="btn btn-outline-success" type="button" hidden>Sample into audit</button>
+        <button id="deleteStory" class="btn btn-outline-danger" type="button" hidden>Delete story</button>
+      </div>
+    </div>
+
+    <form id="storyForm" class="card card-body mb-3" hidden>
+      <div class="row g-2">
+        <div class="col-md-6"><label for="title" class="form-label">Title</label><input id="title" class="form-control" maxlength="256" required></div>
+        <div class="col-md-3"><label for="statusSelect" class="form-label">Status</label><select id="statusSelect" class="form-select"><option value="open">Open</option><option value="closed">Closed</option></select></div>
+        <div class="col-12"><label for="summary" class="form-label">Summary</label><textarea id="summary" class="form-control" rows="4" maxlength="20000"></textarea><div class="form-text">What happened, in a paragraph. Items and notes below carry the detail.</div></div>
+        <div class="col-12 d-flex gap-2"><button class="btn btn-primary" type="submit">Save story</button><button class="btn btn-outline-secondary" type="button" id="cancelEdit">Cancel</button></div>
+      </div>
+    </form>
+
+    <ul class="nav nav-tabs mb-3" role="tablist">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#timelinePane" type="button" role="tab" id="timelineTab">Timeline</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#flowPane" type="button" role="tab" id="flowTab">Flow chart</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#commentsPane" type="button" role="tab" id="commentsTab">Comments <span id="commentCount" class="badge text-bg-light"></span></button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#questionsPane" type="button" role="tab" id="questionsTab" data-feature="questions">Questions</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#changelogPane" type="button" role="tab" id="changelogTab">Changelog</button></li>
+    </ul>
+    <div class="tab-content">
+      <section class="tab-pane fade show active" id="timelinePane" role="tabpanel">
+        <p id="controlsLine" class="small-muted" hidden>Mapped controls in this framework: <span id="controlsList"></span></p>
+        <ol id="timeline" class="story-timeline list-unstyled"></ol>
+        <section id="addItems" class="card card-body mt-3" hidden>
+          <h2 class="h6">Add to the story</h2>
+          <div class="row g-2 align-items-end">
+            <div class="col-md-3"><label for="addKind" class="form-label">Kind</label><select id="addKind" class="form-select"><option value="event">Event</option><option value="risk" data-feature="risk_cia">Risk</option><option value="document" data-feature="documents">Document</option><option value="asset" data-feature="assets">Asset</option><option value="objective" data-feature="objectives">Objective</option><option value="note">Note</option></select></div>
+            <div class="col-md-6" id="searchField"><label for="addSearch" class="form-label">Search</label><input id="addSearch" class="form-control" maxlength="256" placeholder="Summary, title or name"></div>
+            <div class="col-md-3" id="searchAction"><button id="findItems" class="btn btn-outline-primary" type="button">Search</button></div>
+            <div class="col-md-4" id="noteLabelField" hidden><label for="noteLabel" class="form-label">Note title</label><input id="noteLabel" class="form-control" maxlength="256"></div>
+            <div class="col-md-6" id="noteTextField" hidden><label for="noteText" class="form-label">Text</label><textarea id="noteText" class="form-control" rows="2" maxlength="4000"></textarea></div>
+            <div class="col-md-2" id="noteAction" hidden><button id="addNote" class="btn btn-primary" type="button">Add note</button></div>
+          </div>
+          <ul id="candidates" class="list-group mt-3" hidden></ul>
+        </section>
+      </section>
+      <section class="tab-pane fade" id="flowPane" role="tabpanel">
+        <div id="flowToolbar" class="d-flex flex-wrap gap-2 align-items-center mb-2" hidden>
+          <button id="linkMode" class="btn btn-sm btn-outline-primary" type="button" aria-pressed="false"><i class="bi bi-arrow-right me-1" aria-hidden="true"></i>Link items</button>
+          <button id="arrange" class="btn btn-sm btn-outline-secondary" type="button">Arrange by time</button>
+          <span id="linkEditor" class="d-flex gap-2 align-items-center" hidden><label class="small-muted" for="linkLabel">Link label</label><input id="linkLabel" class="form-control form-control-sm" maxlength="128" style="width:14rem;"><button id="removeLink" class="btn btn-sm btn-outline-danger" type="button">Remove link</button></span>
+          <button id="saveLayout" class="btn btn-sm btn-primary ms-auto" type="button" disabled>Save layout</button>
+        </div>
+        <p id="flowHint" class="small-muted">Drag boxes to arrange the story. Choose <strong>Link items</strong>, then an item and the item it leads to, to draw an arrow between them.</p>
+        <div id="flow" class="story-flow-host" role="region" aria-label="Story flow chart"></div>
+      </section>
+      <section class="tab-pane fade" id="commentsPane" role="tabpanel">
+        <div id="comments"></div>
+        <form id="commentForm" class="planning-question-form" hidden><label for="commentBody" class="form-label">Add a comment</label><textarea id="commentBody" class="form-control" rows="3" maxlength="5000" required></textarea><button class="btn btn-primary mt-2" type="submit">Comment</button></form>
+      </section>
+      <section class="tab-pane fade" id="questionsPane" role="tabpanel"><div id="questionList"></div><form id="questionForm" data-feature="questions" class="planning-question-form" hidden><label for="questionBody" class="form-label">Ask a question</label><textarea id="questionBody" class="form-control" rows="3" maxlength="5000" required></textarea><button class="btn btn-primary mt-2" type="submit">Ask question</button></form></section>
+      <section class="tab-pane fade" id="changelogPane" role="tabpanel"><div id="changelog"></div></section>
+    </div>
+  </main>
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/story.js"></script>
+</body>
+</html>

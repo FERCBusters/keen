@@ -36,32 +36,46 @@
     <div class="card mb-3 no-print" data-mosp-filter-section="events-filters" data-mosp-filter-title="Filters">
       <div class="card-body">
         <form id="filters" class="row g-2 align-items-end">
-          <div class="col-12 col-lg-5">
-            <label class="form-label small-muted mb-1">Search</label>
+          <div class="col-12 col-lg-6">
+            <label class="form-label small-muted mb-1" for="q">Search</label>
             <input id="q" class="form-control" type="search" placeholder="summary / actor / system / source…">
           </div>
-          <div class="col-12 col-lg-3">
-            <label class="form-label small-muted mb-1">Source</label>
-            <select id="source" class="form-select">
-              <option value="">All sources</option>
-            </select>
-          </div>
-          <div class="col-12 col-lg-2">
-            <label class="form-label small-muted mb-1">Control</label>
-            <select id="control" class="form-select">
-              <option value="">All controls</option>
-            </select>
-          </div>
-          <div class="col-12 col-lg-2">
+          <div class="col-12 col-lg-6">
             <div class="form-check mb-2">
               <input class="form-check-input" type="checkbox" id="unmapped">
               <label class="form-check-label small-muted" for="unmapped">Unmapped only</label>
             </div>
             <div class="d-flex gap-2">
-              <button class="btn btn-primary w-100" type="submit">Apply</button>
+              <button class="btn btn-primary" type="submit">Apply</button>
               <button class="btn btn-outline-primary" id="reset" type="button">Reset</button>
               <button class="btn btn-outline-primary" id="saveSearch" type="button">Save</button>
             </div>
+          </div>
+          <div class="col-12 col-lg-4">
+            <label class="form-label small-muted mb-1" for="source">Sources</label>
+            <select id="source" class="form-select">
+              <option value="">All sources</option>
+            </select>
+          </div>
+          <div class="col-12 col-lg-4">
+            <label class="form-label small-muted mb-1" for="control">Controls</label>
+            <select id="control" class="form-select">
+              <option value="">All controls</option>
+            </select>
+          </div>
+          <div class="col-12 col-lg-4">
+            <label class="form-label small-muted mb-1" for="rule">Mapping rules</label>
+            <select id="rule" class="form-select">
+              <option value="">All mapping rules</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+              <span class="form-label small-muted mb-0">Text filters</span>
+              <button class="btn btn-sm btn-outline-secondary" id="addCondition" type="button"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add text filter</button>
+            </div>
+            <div id="conditions" class="d-flex flex-column gap-2"></div>
+            <div class="small-muted mt-1">Each text filter applies one operator to one field; all filters must match. Regular expressions use the database's syntax, ignore case and have a time budget.</div>
           </div>
           <div class="row g-2 mt-2">
             <div class="col-6 col-lg-3">
@@ -93,6 +107,21 @@
           Tip: click a <span class="badge badge-soft">control</span> or <span class="badge badge-soft">source</span> badge to pivot sideways.
         </div>
       </div>
+    </div>
+
+    <div id="selectionBar" class="alert alert-primary d-flex flex-wrap gap-2 align-items-center py-2 no-print" role="region" aria-label="Selected events" hidden>
+      <strong data-selection-count>0 selected</strong>
+      <input class="form-control form-control-sm" data-story-title aria-label="Story title" maxlength="256" placeholder="Story title" style="width:16rem;">
+      <button class="btn btn-sm btn-primary" type="button" data-create-story><i class="bi bi-journal-plus me-1" aria-hidden="true"></i>Create story</button>
+      <span class="small-muted">or</span>
+      <select class="form-select form-select-sm" data-story-target aria-label="Add to an existing story" style="width:16rem;"><option value="">Choose a story…</option></select>
+      <button class="btn btn-sm btn-outline-primary" type="button" data-add-to-story>Add to story</button>
+      <button class="btn btn-sm btn-outline-secondary ms-auto" type="button" data-clear-selection>Clear selection</button>
+    </div>
+    <div id="rowMenu" class="dropdown-menu show position-absolute shadow" role="menu" hidden>
+      <button class="dropdown-item" type="button" role="menuitem" data-menu-action="create">Create story from <span data-selection-count>1</span> selected</button>
+      <button class="dropdown-item" type="button" role="menuitem" data-menu-action="add">Add selected to a story…</button>
+      <button class="dropdown-item" type="button" role="menuitem" data-menu-action="clear">Clear selection</button>
     </div>
 
     <div class="card">
@@ -127,10 +156,11 @@
           <table class="table table-hover mb-0" data-sortable>
             <thead>
               <tr>
+                <th id="selectHeader" class="story-select-cell" hidden><input class="form-check-input" type="checkbox" id="selectAll" aria-label="Select every event on this page"></th>
                 <th style="width:190px;">Time</th>
                 <th style="width:140px;">Source</th>
                 <th style="width:200px;">Identifier</th>
-                <th>Summary</th>
+                <th>Summary <span class="small-muted fw-normal">(click for details)</span></th>
                 <th style="width:260px;">Mapped controls</th>
                 <th style="width:90px;">Links</th>
                 <th style="width:120px;">Artifacts</th>
@@ -150,12 +180,24 @@
         <div data-keen-visualisation-mount
              data-viz-title="Event visualisations"
              data-viz-intro="Review event volume over time and pivot from histogram bars into the Events table."
-             data-viz-modes="histogram"
+             data-viz-modes="histogram,sunburst_source,heatmap"
+             data-viz-filter-params="source,control,clause,rule,q,f,unmapped"
              data-show-distribution="0"
              data-show-coverage-gaps="0"></div>
       </section>
     </div>
   </main>
+
+  <aside class="offcanvas offcanvas-end" tabindex="-1" id="eventPanel" aria-labelledby="eventPanelTitle" data-bs-scroll="true">
+    <div class="offcanvas-header align-items-start">
+      <h2 class="offcanvas-title h5 text-break" id="eventPanelTitle" data-panel-title>Event</h2>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-panel-close aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body" data-panel-body></div>
+    <div class="offcanvas-footer border-top p-3 d-flex gap-2 justify-content-end">
+      <a class="btn btn-primary" href="#" data-panel-full>View full event</a>
+    </div>
+  </aside>
 
   <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
   <script src="/vendor/d3/d3.min.js"></script>

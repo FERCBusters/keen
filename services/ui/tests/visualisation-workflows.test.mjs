@@ -104,6 +104,7 @@ async function viz(t, options = {}) {
       XMLSerializer: function XMLSerializer() {
         return new win.XMLSerializer();
       },
+      ...(options.globals || {}),
     },
     setup(window) {
       win = window;
@@ -133,8 +134,10 @@ async function viz(t, options = {}) {
         return typeof options.series === 'function' ? options.series(u) : options.series;
       }
       if (u.pathname === '/api/v1/stats/controls') return options.stats(u);
+      if (options.get) return options.get(u);
       throw new Error('Unexpected GET ' + u);
     },
+    post: options.post,
     patch: async (u, body) => {
       assert.equal(u.pathname, '/api/v1/me/preferences');
       // Bodies come from the page's realm; compare them as plain data.
@@ -957,4 +960,167 @@ test('a shared link restores the view, and Reset returns to the defaults', async
     [null, null, null, null, null],
   );
   assert.equal(search.get('framework'), 'A');
+});
+
+// --- Stories from the histogram ---------------------------------------------------
+
+const hourSeries = (start, end) => ({
+  interval: 'hour',
+  start_ts: start,
+  end_ts: end,
+  items: ['00', '01', '02'].map((h) => ({
+    bucket: `2026-10-02T${h}:00:00Z`,
+    total: 2,
+    mapped: 2,
+    unmapped: 0,
+    by_source: { github: 2 },
+  })),
+  sources: [{ source: 'github', label: 'GitHub', total: 6 }],
+});
+
+// The page reads its filters and zoom from the address, so the stand-in
+// location carries the same query as the page under test.
+function storyLocation(assigned, query = '') {
+  const search = `?framework=A&mode=histogram${query}`;
+  return {
+    origin: 'https://keen.example',
+    href: `https://keen.example/sources.html${search}`,
+    search,
+    assign: (u) => assigned.push(u),
+  };
+}
+
+test('a zoomed window becomes a story with the annotation as its first note', async (t) => {
+  const start = '2026-10-02T00:00:00.000Z';
+  const end = '2026-10-02T03:00:00.000Z';
+  const assigned = [];
+  const requests = [];
+  const posted = [];
+  const query = `&source=github&hstart=${start}&hend=${end}&hint=hour`;
+  const ui = await viz(t, {
+    // The Events page scopes its charts to the list filters.
+    htmlName: 'events',
+    mode: 'histogram',
+    me: { can_view_events: true, can_manage_stories: true },
+    query,
+    series: (u) => (u.searchParams.get('interval') === 'hour' ? hourSeries(start, end) : daySeries),
+    globals: { location: storyLocation(assigned, query) },
+    get: async (u) => {
+      requests.push(u.pathname + u.search);
+      if (u.pathname === '/api/v1/events')
+        return { total: 3, items: [{ id: 'e3' }, { id: 'e2' }, { id: 'e1' }] };
+      throw new Error('Unexpected GET ' + u);
+    },
+    post: async (u, body) => {
+      posted.push([u.pathname + u.search, JSON.parse(JSON.stringify(body))]);
+      return { id: 'story-1' };
+    },
+  });
+  await settle(() => bars(ui).length === 3);
+  await settle(() => !ui.el('histStory').classList.contains('d-none'));
+  assert.equal(ui.el('histStoryPanel').hidden, true);
+  ui.el('histStory').click();
+  assert.equal(ui.el('histStoryPanel').hidden, false);
+  const panel = ui.el('histStoryPanel');
+  assert.equal(panel.querySelector('[data-window]').textContent, `${start} – ${end} · 6 events`);
+  assert.equal(panel.querySelector('[data-window-title]').value, `Events from ${start} to ${end}`);
+  panel.querySelector('[data-window-note]').value = '  Deploy storm after the release  ';
+  panel.querySelector('[data-window-create]').click();
+  await settle(() => assigned.length === 1);
+  // The page's own source filter scopes the events taken into the story.
+  assert.deepEqual(requests, [
+    `/api/v1/events?framework=A&start_ts=${encodeURIComponent(start)}&end_ts=${encodeURIComponent(end)}&limit=200&source=github`,
+  ]);
+  assert.deepEqual(posted, [
+    [
+      '/api/v1/stories?framework=A',
+      {
+        title: `Events from ${start} to ${end}`,
+        items: [
+          {
+            kind: 'note',
+            label: 'Annotation',
+            note: 'Deploy storm after the release',
+            occurred_at: start,
+          },
+          { kind: 'event', entity_id: 'e3' },
+          { kind: 'event', entity_id: 'e2' },
+          { kind: 'event', entity_id: 'e1' },
+        ],
+      },
+    ],
+  ]);
+  assert.deepEqual(assigned, ['/story.html?id=story-1&framework=A']);
+});
+
+test('right-clicking a bar picks that bar alone, and a full window is reported', async (t) => {
+  const assigned = [];
+  const requests = [];
+  const posted = [];
+  const ui = await viz(t, {
+    mode: 'histogram',
+    me: { can_view_events: true, can_manage_stories: true },
+    series: daySeries,
+    globals: { location: storyLocation(assigned) },
+    get: async (u) => {
+      requests.push(Object.fromEntries(u.searchParams));
+      return { total: 201, items: [{ id: 'e1' }] };
+    },
+    post: async (u, body) => {
+      posted.push(JSON.parse(JSON.stringify(body)));
+      return { id: 'story-2' };
+    },
+  });
+  await settle(() => bars(ui).length === 4);
+  assert.ok(ui.el('histStory').classList.contains('d-none'));
+  const bar = ui.titled(
+    '#viz g.layer rect',
+    '2026-10-02\nGitHub: 1\nTotal: 4\nMapped: 4\nUnmapped: 0',
+  );
+  const menu = new ui.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+  bar.dispatchEvent(menu);
+  assert.equal(menu.defaultPrevented, true);
+  assert.equal(ui.el('histStoryPanel').hidden, false);
+  assert.equal(
+    ui.el('histStoryPanel').querySelector('[data-window]').textContent,
+    '2026-10-02T00:00:00.000Z – 2026-10-03T00:00:00.000Z · 4 events · source github',
+  );
+  ui.el('histStoryPanel').querySelector('[data-window-title]').value = 'The spike';
+  ui.el('histStoryPanel').querySelector('[data-window-create]').click();
+  await settle(() => assigned.length === 1);
+  assert.deepEqual(requests, [
+    {
+      framework: 'A',
+      start_ts: '2026-10-02T00:00:00.000Z',
+      end_ts: '2026-10-03T00:00:00.000Z',
+      limit: '200',
+      source: 'github',
+    },
+  ]);
+  assert.deepEqual(posted, [{ title: 'The spike', items: [{ kind: 'event', entity_id: 'e1' }] }]);
+  assert.equal(
+    ui.el('status').textContent,
+    'The window holds 201 events; the newest 1 were added to the story.',
+  );
+  // Cancel hides the panel without a request.
+  ui.el('histStoryPanel').querySelector('[data-window-cancel]').click();
+  assert.equal(ui.el('histStoryPanel').hidden, true);
+});
+
+test('readers get no story controls on the histogram', async (t) => {
+  const ui = await viz(t, {
+    mode: 'histogram',
+    me: { can_view_events: true, can_view_stories: true },
+    query: '&hstart=2026-10-02T00:00:00.000Z&hend=2026-10-02T03:00:00.000Z&hint=hour',
+    series: (u) =>
+      u.searchParams.get('interval') === 'hour'
+        ? hourSeries('2026-10-02T00:00:00.000Z', '2026-10-02T03:00:00.000Z')
+        : daySeries,
+  });
+  await settle(() => bars(ui).length === 3);
+  assert.ok(ui.el('histStory').classList.contains('d-none'));
+  const menu = new ui.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+  bars(ui)[0].dispatchEvent(menu);
+  assert.equal(menu.defaultPrevented, false);
+  assert.equal(ui.el('histStoryPanel').hidden, true);
 });

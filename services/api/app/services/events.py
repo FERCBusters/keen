@@ -6,25 +6,23 @@ import csv
 import io
 import json
 import uuid
-from datetime import date, datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import desc, exists, false, func, or_, select, text
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session, aliased, joinedload, load_only
 
 from app.core.cache import cached_json, user_cache_scope
 from app.core.config import settings
-from app.core.datetime_utils import after_inclusive_date, utc_now_naive
+from app.core.datetime_utils import utc_now_naive
 from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     Artifact,
-    ControlClauseLink,
     ControlItem,
     EffectiveCrossFrameworkControlLink,
     Event,
     EventIncident,
-    FrameworkClause,
     Mapping,
     User,
     effective_cross_framework_links,
@@ -48,15 +46,20 @@ from app.security.roles import is_effective_admin
 from app.services.activity_log import record_action as _audit_action
 from app.services.context import ChangeContext
 from app.services.control_inheritance import (
-    effective_framework_ids,
-    event_has_control,
     evidence_pairs,
     page_controls,
-    source_ids_for_control,
 )
-from app.services.control_refs import control_by_ref
 from app.services.errors import DomainError
+from app.services.event_filters import (
+    EventFilters,
+    event_predicates,
+    event_time_filters,
+    norm_ts,
+    run_scan,
+    scan_budget,
+)
 from app.services.exports import Export
+from app.services.mapping_provenance import rule_id_of
 from app.services.presentation import event_identifier as _event_identifier
 from app.services.presentation import extract_source_url as _extract_source_url
 
@@ -107,205 +110,13 @@ def _incident_to_dict(incident: EventIncident) -> dict[str, Any]:
     }
 
 
-def _norm_ts(ts: datetime) -> datetime:
-    """Normalise a timestamp query param into a naive UTC datetime.
-
-    The DB stores timestamps as naive DateTime (assumed UTC). FastAPI may parse
-    ISO8601 strings with tzinfo (e.g. trailing 'Z'). Convert those to UTC and
-    drop tzinfo so SQLAlchemy comparisons are consistent.
-    """
-
-    if ts.tzinfo is not None:
-        return ts.astimezone(timezone.utc).replace(tzinfo=None)
-    return ts
-
-
-def _event_time_filters(
-    start_date: date | None,
-    end_date: date | None,
-    start_ts: datetime | None = None,
-    end_ts: datetime | None = None,
-):
-    """Build SQLAlchemy filters for Event.timestamp.
-
-    Supports either:
-      - day granularity (start_date/end_date), OR
-      - precise timestamps (start_ts/end_ts).
-
-    Semantics:
-      - start_date is inclusive at 00:00:00 UTC
-      - end_date is inclusive (implemented as < end_date+1 day at 00:00:00 UTC)
-      - start_ts is inclusive
-      - end_ts is exclusive
-    """
-
-    filters = []
-    if start_ts is not None:
-        filters.append(Event.timestamp >= _norm_ts(start_ts))
-    elif start_date:
-        filters.append(
-            Event.timestamp >= datetime.combine(start_date, datetime.min.time())
-        )
-
-    if end_ts is not None:
-        filters.append(Event.timestamp < _norm_ts(end_ts))
-    elif end_date:
-        filters.append(Event.timestamp < after_inclusive_date(end_date))
-    return filters
-
-
-def _event_text_search_condition(q: str | None):
-    """Return the event free-text search predicate.
-
-    The existing UI semantics are substring-style search across event display fields.
-    We keep that behaviour via pg_trgm-backed ILIKE predicates, and add a PostgreSQL
-    full-text predicate that can use the combined GIN index created by migration 0029.
-    This avoids pushing users to a sidecar search service for the common evidence
-    lookup path.
-    """
-
-    term = str(q or "").strip()
-    if not term:
-        return None
-
-    # The term is a bound parameter and plainto_tsquery reads it as plain text.
-    # Substring matches keep punctuation such as "R&D"; LIKE wildcards in the
-    # term match literally.
-    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    like = f"%{escaped}%"
-    fts = text(
-        "to_tsvector('simple', "
-        "coalesce(events.summary, '') || ' ' || "
-        "coalesce(events.action, '') || ' ' || "
-        "coalesce(events.system, '') || ' ' || "
-        "coalesce(events.actor, '') || ' ' || "
-        "coalesce(events.source, '') || ' ' || "
-        "coalesce(events.outcome, '') || ' ' || "
-        "coalesce(events.external_id, '')"
-        ") @@ plainto_tsquery('simple', :keen_event_q)"
-    ).bindparams(keen_event_q=term)
-
-    return or_(
-        fts,
-        *(
-            column.ilike(like, escape="\\")
-            for column in (
-                Event.summary,
-                Event.action,
-                Event.system,
-                Event.actor,
-                Event.source,
-                Event.outcome,
-                Event.external_id,
-            )
-        ),
-    )
-
-
-def _unmapped_event_condition(framework: str, db=None):
-    """Return a NOT EXISTS predicate for events without framework mappings.
-
-    Keep this anti-join focused on ``mappings`` by using a small framework-control
-    subquery. In production datasets the events table is much larger than the
-    framework controls list, and this shape lets Postgres use the existing
-    event/control mapping index instead of repeatedly joining ``control_items``
-    inside the correlated EXISTS check.
-    """
-
-    framework_control_ids = effective_framework_ids(framework, db)
-    return ~exists().where(Mapping.event_id == Event.id).where(
-        Mapping.control_item_id.in_(framework_control_ids)
-    )
-
-
-def _clause_event_condition(framework: str, clause: str, db=None):
-    """Return an EXISTS predicate for events mapped to controls linked to a clause.
-
-    `clause` may be a FrameworkClause UUID or a clause ref such as ``5.1``.
-    The condition is framework-scoped so refs from another framework cannot leak in.
-    """
-
-    cid = _try_uuid(clause)
-    cond = (
-        exists()
-        .where(Mapping.event_id == Event.id)
-        .where(
-            or_(
-                Mapping.control_item_id == ControlItem.id,
-                Mapping.control_item_id.in_(source_ids_for_control(ControlItem.id, db)),
-            )
-        )
-        .where(ControlClauseLink.control_item_id == ControlItem.id)
-        .where(ControlClauseLink.clause_id == FrameworkClause.id)
-        .where(ControlItem.framework_slug == framework)
-        .where(FrameworkClause.framework_slug == framework)
-    )
-    if cid:
-        cond = cond.where(FrameworkClause.id == cid)
-    else:
-        cond = cond.where(FrameworkClause.ref == str(clause or "").strip())
-    return cond
-
-
-def _build_event_id_query(
-    db: Session,
-    *,
-    framework: str,
-    q: str | None = None,
-    source: str | None = None,
-    system: str | None = None,
-    actor: str | None = None,
-    control: str | None = None,
-    clause: str | None = None,
-    unmapped: bool = False,
-    start_date: date | None = None,
-    end_date: date | None = None,
-    start_ts: datetime | None = None,
-    end_ts: datetime | None = None,
-    user: User | None = None,
-):
+def _build_event_id_query(db: Session, filters: EventFilters, user: User | None):
     """Return a query that yields distinct Event IDs for the given filters."""
-
     qry = db.query(Event.id)
     # RBAC: hide diary events the caller is not permitted to see.
     qry = qry.filter(diary_filter_condition(db, user))
-    qry = qry.filter(*_event_time_filters(start_date, end_date, start_ts, end_ts))
-
-    if source:
-        qry = qry.filter(Event.source == source)
-
-    if system:
-        qry = qry.filter(Event.system.ilike(f"%{system}%"))
-
-    if actor:
-        qry = qry.filter(Event.actor.ilike(f"%{actor}%"))
-
-    search_cond = _event_text_search_condition(q)
-    if search_cond is not None:
-        qry = qry.filter(search_cond)
-
-    if control:
-        cid = _try_uuid(control)
-        if cid:
-            valid = (
-                db.query(ControlItem.id)
-                .filter(ControlItem.id == cid, ControlItem.framework_slug == framework)
-                .first()
-            )
-            qry = qry.filter(event_has_control(cid, Event.id, db) if valid else false())
-        else:
-            c = control_by_ref(db, framework, control)
-            if not c:
-                qry = qry.filter(false())
-            else:
-                qry = qry.filter(event_has_control(c.id, Event.id, db))
-
-    if clause:
-        qry = qry.filter(_clause_event_condition(framework, clause, db))
-
-    if unmapped:
-        qry = qry.filter(_unmapped_event_condition(framework, db))
-
+    qry = qry.filter(*event_time_filters(filters))
+    qry = qry.filter(*event_predicates(filters, db))
     return qry.distinct()
 
 
@@ -344,18 +155,7 @@ def _latest_event_payload(event: Event) -> dict[str, Any]:
 
 def list_events(
     *,
-    framework: str,
-    q: Optional[str],
-    source: Optional[str],
-    system: Optional[str],
-    actor: Optional[str],
-    control: Optional[str],
-    clause: Optional[str],
-    unmapped: bool,
-    start_date: Optional[date],
-    end_date: Optional[date],
-    start_ts: Optional[datetime],
-    end_ts: Optional[datetime],
+    filters: EventFilters,
     limit: int,
     offset: int,
     db: Session,
@@ -363,95 +163,57 @@ def list_events(
 ):
     limit = max(1, min(int(limit or 50), 200))
     offset = max(0, int(offset or 0))
+    framework = filters.framework
+    unmapped = filters.unmapped
 
     qry = db.query(Event)
-
     qry = qry.filter(diary_filter_condition(db, user))
-    qry = qry.filter(*_event_time_filters(start_date, end_date, start_ts, end_ts))
-
-    if source:
-        qry = qry.filter(Event.source == source)
-
-    if system:
-        qry = qry.filter(Event.system.ilike(f"%{system}%"))
-
-    if actor:
-        qry = qry.filter(Event.actor.ilike(f"%{actor}%"))
-
-    search_cond = _event_text_search_condition(q)
-    if search_cond is not None:
-        qry = qry.filter(search_cond)
-
-    if control:
-        cid = _try_uuid(control)
-        if cid:
-            valid = (
-                db.query(ControlItem.id)
-                .filter(ControlItem.id == cid, ControlItem.framework_slug == framework)
-                .first()
-            )
-            qry = qry.filter(event_has_control(cid, Event.id, db) if valid else false())
-        else:
-            c = control_by_ref(db, framework, control)
-            if not c:
-                return {"total": 0, "limit": limit, "offset": offset, "items": []}
-            qry = qry.filter(event_has_control(c.id, Event.id, db))
-
-    if clause:
-        qry = qry.filter(_clause_event_condition(framework, clause, db))
-
-    if unmapped:
-        qry = qry.filter(_unmapped_event_condition(framework, db))
+    qry = qry.filter(*event_time_filters(filters))
+    qry = qry.filter(*event_predicates(filters, db))
 
     cache_parts = {
-        "framework": framework,
-        "q": q,
-        "source": source,
-        "system": system,
-        "actor": actor,
-        "control": control,
-        "clause": clause,
-        "unmapped": bool(unmapped),
-        "start_date": start_date,
-        "end_date": end_date,
-        "start_ts": start_ts,
-        "end_ts": end_ts,
+        **filters.cache_parts(),
         "limit": limit,
         "offset": offset,
         "user": user_cache_scope(user),
-        "query_version": "inherited-controls-v2",
+        "query_version": "inherited-controls-v3",
     }
 
     def _load_page() -> dict[str, Any]:
         count_cache_parts = dict(cache_parts)
         count_cache_parts.pop("limit", None)
         count_cache_parts.pop("offset", None)
+        scan_budget(db, filters)
         total = cached_json(
             "events:list:count",
             count_cache_parts,
-            lambda: int(qry.order_by(None).count()),
+            lambda: run_scan(db, filters, lambda: int(qry.order_by(None).count())),
         )
 
-        events = (
-            qry.options(
-                load_only(
-                    Event.id,
-                    Event.timestamp,
-                    Event.source,
-                    Event.system,
-                    Event.actor,
-                    Event.action,
-                    Event.outcome,
-                    Event.severity,
-                    Event.summary,
-                    Event.raw_pointer,
-                    Event.normalized_payload,
+        events = run_scan(
+            db,
+            filters,
+            lambda: (
+                qry.options(
+                    load_only(
+                        Event.id,
+                        Event.timestamp,
+                        Event.source,
+                        Event.system,
+                        Event.actor,
+                        Event.action,
+                        Event.outcome,
+                        Event.severity,
+                        Event.summary,
+                        Event.raw_pointer,
+                        Event.normalized_payload,
+                    )
                 )
-            )
-            .order_by(desc(Event.timestamp))
-            .limit(limit)
-            .offset(offset)
-            .all()
+                .order_by(desc(Event.timestamp))
+                .limit(limit)
+                .offset(offset)
+                .all()
+            ),
         )
 
         event_ids = [e.id for e in events]
@@ -501,20 +263,53 @@ def list_events(
     return cached_json("events:list:page", cache_parts, _load_page)
 
 
+def _rule_facet(db: Session, filters: EventFilters, user) -> list[dict[str, Any]]:
+    """Mapping rules that made mappings for the filtered events, with counts.
+
+    The rule list itself is left out of the filters, so the facet offers the
+    rules a user could switch to. Rules are described by their description
+    and targets; their conditions stay in the administration area.
+    """
+    from app.services.managed_configurations import rule_descriptions
+
+    event_ids = _build_event_id_query(db, filters.without("rule"), user).subquery()
+    rows = run_scan(
+        db,
+        filters,
+        lambda: (
+            db.query(
+                Mapping.rationale,
+                func.count(func.distinct(Mapping.event_id)).label("count"),
+            )
+            .join(event_ids, event_ids.c.id == Mapping.event_id)
+            .filter(Mapping.method == "rule", Mapping.mapped_by == "system")
+            .filter(Mapping.rationale.like("auto by rule %"))
+            .group_by(Mapping.rationale)
+            .all()
+        ),
+    )
+    suffix = f" ({filters.framework})"
+    counts: dict[str, int] = {}
+    for rationale, count in rows:
+        if rationale.endswith(suffix):
+            rule_id = rationale[len("auto by rule ") : -len(suffix)]
+            counts[rule_id] = counts.get(rule_id, 0) + int(count)
+    described = rule_descriptions(db)
+    facet = [
+        {
+            "rule_id": rule_id,
+            "count": count,
+            **described.get(rule_id, {"description": "", "targets": []}),
+        }
+        for rule_id, count in counts.items()
+    ]
+    facet.sort(key=lambda row: (-row["count"], row["rule_id"]))
+    return facet
+
+
 def event_facets(
     *,
-    framework: str,
-    q: Optional[str],
-    source: Optional[str],
-    system: Optional[str],
-    actor: Optional[str],
-    control: Optional[str],
-    clause: Optional[str],
-    unmapped: bool,
-    start_date: Optional[date],
-    end_date: Optional[date],
-    start_ts: Optional[datetime],
-    end_ts: Optional[datetime],
+    filters: EventFilters,
     max_sources: int,
     max_controls: int,
     db: Session,
@@ -525,10 +320,13 @@ def event_facets(
     Counts are computed with other filters applied, but *exclude* the facet
     itself so the UI can show meaningful alternatives for switching.
 
-    - sources: applies q/system/actor/control/unmapped (excludes source)
-    - controls: applies q/system/actor/source/unmapped (excludes control)
+    - sources: every filter except the source list
+    - controls: every filter except the control list
+    - rules: every filter except the rule list
     """
 
+    framework = filters.framework
+    unmapped = filters.unmapped
     max_sources = max(
         0, min(int(max_sources if max_sources is not None else 500), 5000)
     )
@@ -537,58 +335,40 @@ def event_facets(
     )
 
     cache_parts = {
-        "framework": framework,
-        "q": q,
-        "source": source,
-        "system": system,
-        "actor": actor,
-        "control": control,
-        "clause": clause,
-        "unmapped": bool(unmapped),
-        "start_date": start_date,
-        "end_date": end_date,
-        "start_ts": start_ts,
-        "end_ts": end_ts,
+        **filters.cache_parts(),
         "max_sources": max_sources,
         "max_controls": max_controls,
         "user": user_cache_scope(user),
+        "query_version": "rules-facet-v1",
     }
 
     def _load() -> dict:
         # Sources facet (exclude source filter). Allow callers to pass
         # max_sources=0 when they need the event page quickly and do not need
         # expensive facet counters.
+        scan_budget(db, filters)
         src_rows = []
         if max_sources:
             src_ids = _build_event_id_query(
-                db,
-                framework=framework,
-                q=q,
-                source=None,
-                system=system,
-                actor=actor,
-                control=control,
-                clause=clause,
-                unmapped=unmapped,
-                start_date=start_date,
-                end_date=end_date,
-                start_ts=start_ts,
-                end_ts=end_ts,
-                user=user,
+                db, filters.without("source"), user
             ).subquery()
 
-            src_rows = (
-                db.query(
-                    Event.source.label("source"),
-                    func.count(Event.id).label("count"),
-                )
-                .join(src_ids, src_ids.c.id == Event.id)
-                .filter(Event.source.isnot(None))
-                .filter(Event.source != "")
-                .group_by(Event.source)
-                .order_by(desc("count"), Event.source.asc())
-                .limit(max_sources)
-                .all()
+            src_rows = run_scan(
+                db,
+                filters,
+                lambda: (
+                    db.query(
+                        Event.source.label("source"),
+                        func.count(Event.id).label("count"),
+                    )
+                    .join(src_ids, src_ids.c.id == Event.id)
+                    .filter(Event.source.isnot(None))
+                    .filter(Event.source != "")
+                    .group_by(Event.source)
+                    .order_by(desc("count"), Event.source.asc())
+                    .limit(max_sources)
+                    .all()
+                ),
             )
 
         # Controls facet (exclude control filter). It is necessarily empty for
@@ -597,37 +377,28 @@ def event_facets(
         ctl_rows = []
         if max_controls and not unmapped:
             ctl_ids = _build_event_id_query(
-                db,
-                framework=framework,
-                q=q,
-                source=source,
-                system=system,
-                actor=actor,
-                control=None,
-                clause=clause,
-                unmapped=unmapped,
-                start_date=start_date,
-                end_date=end_date,
-                start_ts=start_ts,
-                end_ts=end_ts,
-                user=user,
+                db, filters.without("control"), user
             ).subquery()
 
             pairs = evidence_pairs(framework, db, select(ctl_ids.c.id))
-            ctl_rows = (
-                db.query(
-                    ControlItem.ref.label("ref"),
-                    ControlItem.title.label("title"),
-                    ControlItem.type.label("type"),
-                    func.count(pairs.c.event_id).label("count"),
-                )
-                .join(pairs, pairs.c.control_id == ControlItem.id)
-                .join(ctl_ids, ctl_ids.c.id == pairs.c.event_id)
-                .filter(ControlItem.framework_slug == framework)
-                .group_by(ControlItem.id)
-                .order_by(desc("count"), ControlItem.ref.asc())
-                .limit(max_controls)
-                .all()
+            ctl_rows = run_scan(
+                db,
+                filters,
+                lambda: (
+                    db.query(
+                        ControlItem.ref.label("ref"),
+                        ControlItem.title.label("title"),
+                        ControlItem.type.label("type"),
+                        func.count(pairs.c.event_id).label("count"),
+                    )
+                    .join(pairs, pairs.c.control_id == ControlItem.id)
+                    .join(ctl_ids, ctl_ids.c.id == pairs.c.event_id)
+                    .filter(ControlItem.framework_slug == framework)
+                    .group_by(ControlItem.id)
+                    .order_by(desc("count"), ControlItem.ref.asc())
+                    .limit(max_controls)
+                    .all()
+                ),
             )
 
         return {
@@ -636,6 +407,7 @@ def event_facets(
                 {"ref": r, "title": t, "type": ty, "count": int(c)}
                 for r, t, ty, c in ctl_rows
             ],
+            "rules": [] if unmapped else _rule_facet(db, filters, user),
         }
 
     return cached_json("events:facets", cache_parts, _load)
@@ -670,7 +442,7 @@ def latest_evidence_event(*, after: Optional[datetime], limit: int, db: Session,
     )
 
     if after is not None:
-        qry = qry.filter(Event.created_at > _norm_ts(after))
+        qry = qry.filter(Event.created_at > norm_ts(after))
 
     events = (
         qry.order_by(desc(Event.created_at), desc(Event.timestamp), desc(Event.id))
@@ -713,14 +485,7 @@ def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session
             "confidence": mp.confidence,
             "method": mp.method,
             "rationale": mp.rationale,
-            "rule_id": (
-                mp.rationale[len("auto by rule ") : -len(f" ({ci.framework_slug})")]
-                if mp.method == "rule"
-                and mp.mapped_by == "system"
-                and mp.rationale.startswith("auto by rule ")
-                and mp.rationale.endswith(f" ({ci.framework_slug})")
-                else None
-            ),
+            "rule_id": rule_id_of(mp, ci.framework_slug),
             "mapped_at": mp.mapped_at.isoformat() if mp.mapped_at else None,
         }
         for mp, ci in mapped
@@ -827,19 +592,8 @@ def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session
 
 def export_events(
     *,
-    framework: str,
+    filters: EventFilters,
     format: str,
-    q: Optional[str],
-    source: Optional[str],
-    system: Optional[str],
-    actor: Optional[str],
-    control: Optional[str],
-    clause: Optional[str],
-    unmapped: bool,
-    start_date: Optional[date],
-    end_date: Optional[date],
-    start_ts: Optional[datetime],
-    end_ts: Optional[datetime],
     max_rows: int,
     db: Session,
     user,
@@ -850,6 +604,7 @@ def export_events(
     over a time period). Exports are capped to avoid accidental huge downloads.
     """
 
+    framework = filters.framework
     fmt = (format or "csv").lower().strip()
     if fmt not in ("csv", "json", "ndjson"):
         raise DomainError(
@@ -860,44 +615,11 @@ def export_events(
     max_rows = max(1, min(int(max_rows or 50000), 50000))
 
     qry = db.query(Event).filter(diary_filter_condition(db, user))
-    qry = qry.filter(*_event_time_filters(start_date, end_date, start_ts, end_ts))
+    qry = qry.filter(*event_time_filters(filters))
+    qry = qry.filter(*event_predicates(filters, db))
 
-    if source:
-        qry = qry.filter(Event.source == source)
-    if system:
-        qry = qry.filter(Event.system.ilike(f"%{system}%"))
-    if actor:
-        qry = qry.filter(Event.actor.ilike(f"%{actor}%"))
-    search_cond = _event_text_search_condition(q)
-    if search_cond is not None:
-        qry = qry.filter(search_cond)
-
-    if control:
-        cid = _try_uuid(control)
-        if cid:
-            valid = (
-                db.query(ControlItem.id)
-                .filter(ControlItem.id == cid, ControlItem.framework_slug == framework)
-                .first()
-            )
-            qry = qry.filter(event_has_control(cid, Event.id, db) if valid else false())
-        else:
-            c = control_by_ref(db, framework, control)
-            if not c:
-                # Empty export
-                if fmt == "csv":
-                    content = "id,timestamp,source,system,actor,action,outcome,severity,identifier,summary,source_url,controls,artifact_count\n"
-                    return Export(iter([content]), "text/csv")
-                return {"total": 0, "returned": 0, "items": []}
-            qry = qry.filter(event_has_control(c.id, Event.id, db))
-
-    if clause:
-        qry = qry.filter(_clause_event_condition(framework, clause, db))
-
-    if unmapped:
-        qry = qry.filter(_unmapped_event_condition(framework, db))
-
-    total = qry.order_by(None).count()
+    scan_budget(db, filters)
+    total = run_scan(db, filters, lambda: qry.order_by(None).count())
     returned = min(total, max_rows)
 
     # Filename hints
@@ -906,16 +628,18 @@ def export_events(
         return v[:80] or "events"
 
     name_parts = ["events"]
-    if control:
-        name_parts.append(f"control-{_safe_name(control)}")
-    if clause:
-        name_parts.append(f"clause-{_safe_name(clause)}")
-    if source:
-        name_parts.append(f"source-{_safe_name(source)}")
-    if start_date:
-        name_parts.append(f"from-{start_date.isoformat()}")
-    if end_date:
-        name_parts.append(f"to-{end_date.isoformat()}")
+    for label, values in (
+        ("control", filters.controls),
+        ("clause", filters.clauses),
+        ("source", filters.sources),
+        ("rule", filters.rules),
+    ):
+        if values:
+            name_parts.append(f"{label}-{_safe_name('-'.join(values))}")
+    if filters.start_date:
+        name_parts.append(f"from-{filters.start_date.isoformat()}")
+    if filters.end_date:
+        name_parts.append(f"to-{filters.end_date.isoformat()}")
     filename = "_".join(name_parts) + (".ndjson" if fmt == "ndjson" else f".{fmt}")
 
     headers = {

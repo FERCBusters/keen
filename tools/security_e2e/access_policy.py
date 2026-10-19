@@ -45,6 +45,9 @@ PERMISSIONS = (
     "incident.delete",
     "question.create",
     "question.delete",
+    "stories.read",
+    "stories.manage",
+    "stories.admin",
 )
 
 
@@ -90,6 +93,10 @@ AUDITS_READ = any_of("audits.read", "audits.manage", "audits.admin")
 AUDITS_MANAGE = any_of("audits.manage", "audits.admin")
 AUDITS_ADMIN = any_of("audits.admin")
 AUDIT_TRAIL = any_of("audittrail.read")
+# stories.manage and stories.admin include story reads; see OBJECT_RULES for
+# the ownership rule that limits stories.manage to its holder's own stories.
+STORIES_READ = any_of("stories.read", "stories.manage", "stories.admin")
+STORIES_MANAGE = any_of("stories.manage", "stories.admin")
 
 # Additional object rules. The matrix probe account owns nothing, so these
 # operations are checked with their permission gate only.
@@ -114,6 +121,22 @@ OBJECT_RULES = {
     ),
     "GET /v1/statement-of-applicability": "Risk, PESTLE(E) and party sections follow their read permissions.",
     "GET /v1/stats/summary": "Evidence totals need events.read.",
+    "GET /v1/stories/{story_id}": (
+        "Each item is shown only when the account can read the referenced record; "
+        "other items appear as placeholders without the record's identifier."
+    ),
+    "PATCH /v1/stories/{story_id}": "stories.manage can edit stories its holder created.",
+    "DELETE /v1/stories/{story_id}": "stories.manage can delete stories its holder created.",
+    "POST /v1/stories/{story_id}/items": (
+        "stories.manage can add to stories its holder created; each item needs read "
+        "access to the referenced event or record."
+    ),
+    "PATCH /v1/stories/{story_id}/items/{item_id}": "As above, for the story's own items.",
+    "DELETE /v1/stories/{story_id}/items/{item_id}": "As above.",
+    "PUT /v1/stories/{story_id}/layout": "As above; positions and links name the story's own items.",
+    "DELETE /v1/stories/{story_id}/comments/{comment_id}": (
+        "The comment's author can delete it; stories.admin can delete any comment."
+    ),
     "GET /v1/stats/controls": "Evidence counts need events.read.",
 }
 
@@ -357,6 +380,20 @@ POLICY = {
     "GET /v1/sources/{source_name}/effectiveness-measures": ISMS_READ,
     "GET /v1/statement-of-applicability": SIGNED_IN,
     "GET /v1/stats/controls": SIGNED_IN,
+    "GET /v1/stories": STORIES_READ,
+    "POST /v1/stories": STORIES_MANAGE,
+    "GET /v1/stories/choices/{kind}": STORIES_MANAGE,
+    "GET /v1/stories/{story_id}": STORIES_READ,
+    "PATCH /v1/stories/{story_id}": STORIES_MANAGE,
+    "DELETE /v1/stories/{story_id}": STORIES_MANAGE,
+    "GET /v1/stories/{story_id}/changelog": STORIES_READ,
+    "POST /v1/stories/{story_id}/items": STORIES_MANAGE,
+    "PATCH /v1/stories/{story_id}/items/{item_id}": STORIES_MANAGE,
+    "DELETE /v1/stories/{story_id}/items/{item_id}": STORIES_MANAGE,
+    "PUT /v1/stories/{story_id}/layout": STORIES_MANAGE,
+    "GET /v1/stories/{story_id}/comments": STORIES_READ,
+    "POST /v1/stories/{story_id}/comments": STORIES_READ,
+    "DELETE /v1/stories/{story_id}/comments/{comment_id}": STORIES_READ,
     "GET /v1/stats/summary": SIGNED_IN,
     # --- ISMS ----------------------------------------------------------------------
     "GET /v1/isms/access-control-matrix": ISMS_READ,

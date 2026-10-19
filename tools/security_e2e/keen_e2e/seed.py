@@ -114,6 +114,36 @@ def build(admin, payloads, cleanup, *, evidence_writes=False):
     )
     seed.pages += [("isms", "/isms.html"), ("documents", "/documents.html")]
     create(
+        "story",
+        "/api/v1/stories",
+        {
+            "title": short,
+            "summary": text,
+            "items": [
+                {
+                    "kind": "risk",
+                    "entity_id": seed.ids["risk"],
+                    "label": short,
+                    "note": text,
+                },
+                {"kind": "document", "entity_id": seed.ids["document"], "note": text},
+                {"kind": "note", "label": short, "note": text},
+            ],
+        },
+        "/api/v1/stories",
+        "/story.html?id={id}",
+    )
+    # Deleting a story names the version it was last seen at; comments leave it.
+    cleanup.items[-1] += "?expected_version=1"
+    admin.ok(
+        admin.post(
+            f"/api/v1/stories/{seed.ids['story']}/comments", json={"body": text}
+        ),
+        200,
+        201,
+    )
+    seed.pages.append(("stories", "/stories.html"))
+    create(
         "audit",
         "/api/v1/audits",
         {"title": short, "notes": text, "executive_summary": text},

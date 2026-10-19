@@ -29,6 +29,7 @@ from app.db.models import (
     Risk,
     RiskAsset,
     RiskControlLink,
+    Story,
 )
 from app.services.audits.references import control_out
 from app.services.audits.validation import (
@@ -76,6 +77,8 @@ def entity_href(entity_type: str, entity_id: uuid.UUID, framework: str) -> str:
         return f"/interested_party.html?id={eid}{fwq}"
     if entity_type == "isms_swot":
         return f"/isms-swot.html?id={eid}{fwq}"
+    if entity_type == "story":
+        return f"/story.html?id={eid}{fwq}"
     if entity_type == "isms_objective":
         return (
             f"/isms.html{fwfirst}&tab=objectives" if fw else "/isms.html?tab=objectives"
@@ -395,6 +398,14 @@ def audit_sample_entity_reference(
                 controls = isms_sample_controls(
                     db, "isms_effectiveness_measure", measure.id, framework
                 )
+    elif entity_type == "story":
+        from app.services.stories import story_controls
+
+        row = db.get(Story, entity_id)
+        if row:
+            title = f"Story: {short_text(row.title, 180)}"
+            subtitle = short_text(row.summary, 220)
+            controls = story_controls(db, row.id, framework)
     elif entity_type == "isms_meeting":
         row = db.query(IsmsMeeting).filter(IsmsMeeting.id == entity_id).one_or_none()
         if row:

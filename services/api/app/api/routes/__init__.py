@@ -26,6 +26,7 @@ from .risks import router as risks_router
 from .soa import router as soa_router
 from .sources import router as sources_router
 from .stats import router as stats_router
+from .stories import router as stories_router
 from .users import router as users_router
 from .webhooks import router as webhooks_router
 
@@ -78,6 +79,10 @@ OPENAPI_TAGS = [
         "name": "Statement of Applicability",
         "description": "Read-only SoA summary across controls, clauses, CIA risks, PESTLE(E), Interested Parties and ISMS.",
     },
+    {
+        "name": "Stories",
+        "description": "Curated sets of events, records and notes with a timeline and flow chart.",
+    },
     {"name": "Stats", "description": "Aggregate statistics and counts."},
     {"name": "Graph", "description": "Graph/topology endpoints."},
 ]
@@ -108,6 +113,7 @@ router.include_router(risks_router, tags=["Risks"])
 router.include_router(artifacts_router, tags=["Artifacts"])
 router.include_router(sources_router, tags=["Sources"])
 router.include_router(soa_router, tags=["Statement of Applicability"])
+router.include_router(stories_router, tags=["Stories"])
 router.include_router(stats_router, tags=["Stats"])
 router.include_router(graph_router, tags=["Graph"])
 

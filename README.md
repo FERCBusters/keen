@@ -14,6 +14,7 @@ KEEN brings operational evidence, assurance frameworks, risk management and ISMS
 - **Choose available tools:** administrators enable or disable workspaces, ISMS subsections, questions and audit sampling under Administration → Features. Parent settings preserve child preferences and existing records.
 - **Manage risks and ISMS records:** maintain risk registers and treatments, use the reusable risk library and KEEN Mitigator, and link policies, assets, objectives, interested parties, measurements and meetings.
 - **Conduct audits:** plan and schedule audits, sample evidence, record findings, discuss evidence through questions, and retain reports and document revisions.
+- **Tell the story of an episode:** gather the events, risks, records and notes of one incident or change into a story with a timeline and a drag-and-drop flow chart, start it from selected events or a histogram window, comment on it, question it and sample it into an audit.
 
 The catalogue includes 94 frameworks, including 88 from Open Security Architecture. Administrators choose which frameworks to enable and can edit their controls and definitions. Evidence coverage indicates that evidence is present; reviewers assess its relevance, quality and sufficiency.
 

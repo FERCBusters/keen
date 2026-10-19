@@ -78,6 +78,9 @@ def complete_local_login(
         can_manage_isms or has_permission(db, user, "isms.read") or can_view_risks
     )
     can_view_events = bool(has_permission(db, user, "events.read"))
+    can_admin_stories = has_permission(db, user, "stories.admin")
+    can_manage_stories = can_admin_stories or has_permission(db, user, "stories.manage")
+    can_view_stories = can_manage_stories or has_permission(db, user, "stories.read")
     can_create_questions = bool(has_permission(db, user, "question.create"))
     can_delete_questions = bool(has_permission(db, user, "question.delete"))
     incident_webhook_enabled = bool(
@@ -105,6 +108,9 @@ def complete_local_login(
         "can_view_isms": can_view_isms,
         "can_manage_isms": can_manage_isms,
         "can_view_events": can_view_events,
+        "can_view_stories": can_view_stories,
+        "can_manage_stories": can_manage_stories,
+        "can_admin_stories": can_admin_stories,
         "can_create_questions": can_create_questions,
         "can_question_events": can_create_questions,
         "can_delete_questions": can_delete_questions,

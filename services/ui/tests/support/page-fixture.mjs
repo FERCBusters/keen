@@ -150,3 +150,35 @@ export async function page(
   });
   return { ...ui, calls, el: (id) => ui.document.getElementById(id) };
 }
+
+// Chooses `value` in the pill picker for the select `id`, as a user clicking
+// its chip would; the picker reports the change on the select.
+export function pickFilter(ui, id, value) {
+  const chip = ui.document.querySelector(
+    `#${id}FilterPillModal .keen-filter-pill-grid [data-value="${value}"]`,
+  );
+  if (!chip) throw new Error(`No ${id} option ${value}`);
+  chip.click();
+}
+
+// The chips a pill picker offers, as [value, label] pairs.
+export function filterChips(ui, id) {
+  return [
+    ...ui.document.querySelectorAll(`#${id}FilterPillModal .keen-filter-pill-grid [data-value]`),
+  ].map((chip) => [
+    chip.dataset.value,
+    chip.querySelector('.keen-filter-pill-chip-text').textContent,
+  ]);
+}
+
+// The chips currently chosen in a pill picker.
+export function chosenChips(ui, id) {
+  return [
+    ...ui.document.querySelectorAll(
+      `[data-filter-pill-for="${id}"] .keen-filter-pill-inline [data-value]`,
+    ),
+  ].map((chip) => [
+    chip.dataset.value,
+    chip.querySelector('.keen-filter-pill-chip-text').textContent,
+  ]);
+}

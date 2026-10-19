@@ -42,6 +42,13 @@ window.KEEN_DOC_LINKS = {
   'using.html#mapping-from-an-event': 'using-mapping.html#mapping-from-an-event',
   'using.html#structured-evidence-fields':
     'using-structured-fields.html#structured-evidence-fields',
+  'using.html#structured-condition-operators':
+    'using-structured-fields.html#structured-condition-operators',
+  'using.html#structured-condition-regex':
+    'using-structured-fields.html#structured-condition-regex',
+  'using.html#structured-condition-editor':
+    'using-structured-fields.html#structured-condition-editor',
+  'using.html#structured-condition-save': 'using-structured-fields.html#structured-condition-save',
   'using.html#nginx-evidence-mapping': 'using-structured-fields.html#nginx-evidence-mapping',
   'using.html#client-ip-evidence': 'using-structured-fields.html#client-ip-evidence',
   'using.html#review-evidence': 'using-events.html#review-evidence',
@@ -53,6 +60,7 @@ window.KEEN_DOC_LINKS = {
     'using-events.html#8-sources-questions-and-incidents',
   'using.html#questions-workflow': 'using-events.html#questions-workflow',
   'using.html#incidents-workflow': 'using-events.html#incidents-workflow',
+  'using.html#stories': 'using-events.html#stories',
   'using.html#evidence-lifecycle': 'using-events.html#evidence-lifecycle',
   'using.html#risks-and-treatment': 'using-risks.html#risks-and-treatment',
   'using.html#9-assess-and-maintain-risks': 'using-risks.html#9-assess-and-maintain-risks',
@@ -360,6 +368,14 @@ window.KEEN_DOC_LINKS = {
   'adopter.html#mapping-from-an-event': 'using-mapping.html#mapping-from-an-event',
   'adopter.html#structured-evidence-fields':
     'using-structured-fields.html#structured-evidence-fields',
+  'adopter.html#structured-condition-operators':
+    'using-structured-fields.html#structured-condition-operators',
+  'adopter.html#structured-condition-regex':
+    'using-structured-fields.html#structured-condition-regex',
+  'adopter.html#structured-condition-editor':
+    'using-structured-fields.html#structured-condition-editor',
+  'adopter.html#structured-condition-save':
+    'using-structured-fields.html#structured-condition-save',
   'adopter.html#nginx-evidence-mapping': 'using-structured-fields.html#nginx-evidence-mapping',
   'adopter.html#client-ip-evidence': 'using-structured-fields.html#client-ip-evidence',
   'adopter.html#review-evidence': 'using-events.html#review-evidence',
@@ -371,6 +387,7 @@ window.KEEN_DOC_LINKS = {
     'using-events.html#8-sources-questions-and-incidents',
   'adopter.html#questions-workflow': 'using-events.html#questions-workflow',
   'adopter.html#incidents-workflow': 'using-events.html#incidents-workflow',
+  'adopter.html#stories': 'using-events.html#stories',
   'adopter.html#evidence-lifecycle': 'using-events.html#evidence-lifecycle',
   'adopter.html#risks-and-treatment': 'using-risks.html#risks-and-treatment',
   'adopter.html#9-assess-and-maintain-risks': 'using-risks.html#9-assess-and-maintain-risks',
@@ -498,6 +515,14 @@ window.KEEN_DOC_LINKS = {
   'walkthroughs.html#mapping-from-an-event': 'using-mapping.html#mapping-from-an-event',
   'walkthroughs.html#structured-evidence-fields':
     'using-structured-fields.html#structured-evidence-fields',
+  'walkthroughs.html#structured-condition-operators':
+    'using-structured-fields.html#structured-condition-operators',
+  'walkthroughs.html#structured-condition-regex':
+    'using-structured-fields.html#structured-condition-regex',
+  'walkthroughs.html#structured-condition-editor':
+    'using-structured-fields.html#structured-condition-editor',
+  'walkthroughs.html#structured-condition-save':
+    'using-structured-fields.html#structured-condition-save',
   'walkthroughs.html#nginx-evidence-mapping': 'using-structured-fields.html#nginx-evidence-mapping',
   'walkthroughs.html#client-ip-evidence': 'using-structured-fields.html#client-ip-evidence',
   'walkthroughs.html#review-evidence': 'using-events.html#review-evidence',
@@ -510,6 +535,7 @@ window.KEEN_DOC_LINKS = {
     'using-events.html#8-sources-questions-and-incidents',
   'walkthroughs.html#questions-workflow': 'using-events.html#questions-workflow',
   'walkthroughs.html#incidents-workflow': 'using-events.html#incidents-workflow',
+  'walkthroughs.html#stories': 'using-events.html#stories',
   'walkthroughs.html#evidence-lifecycle': 'using-events.html#evidence-lifecycle',
   'walkthroughs.html#risks-and-treatment': 'using-risks.html#risks-and-treatment',
   'walkthroughs.html#9-assess-and-maintain-risks': 'using-risks.html#9-assess-and-maintain-risks',
@@ -642,6 +668,14 @@ window.KEEN_DOC_LINKS = {
   'operations.html#mapping-from-an-event': 'using-mapping.html#mapping-from-an-event',
   'operations.html#structured-evidence-fields':
     'using-structured-fields.html#structured-evidence-fields',
+  'operations.html#structured-condition-operators':
+    'using-structured-fields.html#structured-condition-operators',
+  'operations.html#structured-condition-regex':
+    'using-structured-fields.html#structured-condition-regex',
+  'operations.html#structured-condition-editor':
+    'using-structured-fields.html#structured-condition-editor',
+  'operations.html#structured-condition-save':
+    'using-structured-fields.html#structured-condition-save',
   'operations.html#nginx-evidence-mapping': 'using-structured-fields.html#nginx-evidence-mapping',
   'operations.html#client-ip-evidence': 'using-structured-fields.html#client-ip-evidence',
   'operations.html#review-evidence': 'using-events.html#review-evidence',
@@ -654,6 +688,7 @@ window.KEEN_DOC_LINKS = {
     'using-events.html#8-sources-questions-and-incidents',
   'operations.html#questions-workflow': 'using-events.html#questions-workflow',
   'operations.html#incidents-workflow': 'using-events.html#incidents-workflow',
+  'operations.html#stories': 'using-events.html#stories',
   'operations.html#evidence-lifecycle': 'using-events.html#evidence-lifecycle',
   'operations.html#risks-and-treatment': 'using-risks.html#risks-and-treatment',
   'operations.html#9-assess-and-maintain-risks': 'using-risks.html#9-assess-and-maintain-risks',

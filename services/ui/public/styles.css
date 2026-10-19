@@ -1940,3 +1940,164 @@ button.keen-filter-pill-chip:focus-visible {
 [data-feature-hidden] {
   display: none !important;
 }
+
+/* Event rows open a details panel. */
+.event-row {
+  cursor: pointer;
+}
+
+/* Stories: timeline and flow chart */
+.story-summary {
+  white-space: pre-wrap;
+  max-width: 60rem;
+}
+.story-note {
+  white-space: pre-wrap;
+}
+.story-timeline {
+  border-left: 2px solid var(--bs-border-color);
+  margin-left: 0.5rem;
+  padding-left: 0;
+}
+.story-timeline-item {
+  position: relative;
+  display: flex;
+  gap: 1rem;
+  padding: 0.5rem 0 0.75rem 1.25rem;
+}
+.story-timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 0.9rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bs-primary);
+}
+.story-timeline-withheld::before {
+  background: var(--bs-secondary);
+}
+.story-timeline-time {
+  flex: 0 0 11rem;
+}
+.story-timeline-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.story-flow-host {
+  position: relative;
+  overflow: auto;
+  min-height: 24rem;
+  max-height: 70vh;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-tertiary-bg);
+}
+.story-flow {
+  position: relative;
+}
+.story-flow-links {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.story-flow-links line {
+  stroke: var(--bs-secondary-color);
+  stroke-width: 2;
+}
+.story-flow-links .story-link-hit {
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.story-flow-links .story-link.selected line:not(.story-link-hit) {
+  stroke: var(--bs-primary);
+  stroke-width: 3;
+}
+.story-flow-links marker path {
+  fill: var(--bs-secondary-color);
+}
+.story-flow-links text {
+  font-size: 0.75rem;
+  fill: var(--bs-body-color);
+  paint-order: stroke;
+  stroke: var(--bs-tertiary-bg);
+  stroke-width: 3px;
+}
+.story-flow-nodes {
+  position: relative;
+}
+.story-node {
+  position: absolute;
+  width: 200px;
+  height: 90px;
+  padding: 0.4rem 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-body-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  user-select: none;
+  touch-action: none;
+}
+.story-flow-editable .story-node {
+  cursor: grab;
+}
+.story-flow-editable .story-node-dragging {
+  cursor: grabbing;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.story-flow-link-mode .story-node {
+  cursor: crosshair;
+}
+.story-node-linking {
+  outline: 2px solid var(--bs-primary);
+}
+.story-node-withheld {
+  border-style: dashed;
+  color: var(--bs-secondary-color);
+}
+.story-node-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.story-node-subtitle,
+.story-node-time {
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.story-node[data-kind='event'] {
+  border-left: 4px solid var(--bs-primary);
+}
+.story-node[data-kind='risk'] {
+  border-left: 4px solid var(--bs-danger);
+}
+.story-node[data-kind='note'] {
+  border-left: 4px solid var(--bs-warning);
+}
+.story-node[data-kind='document'],
+.story-node[data-kind='asset'],
+.story-node[data-kind='objective'] {
+  border-left: 4px solid var(--bs-success);
+}
+.story-select-cell {
+  width: 2.25rem;
+}
+#rowMenu {
+  z-index: 1050;
+}
+
+/* The event panel opens beneath the fixed navigation bar, never under it. */
+#eventPanel.offcanvas {
+  top: var(--ui-nav-height, var(--keen-nav-height, 0px));
+  height: auto;
+}

@@ -11,6 +11,11 @@ import {
   withFramework,
   showTableLoading,
 } from '/app.js';
+import {
+  enhanceFilterPillMultiSelect,
+  selectedFilterPillValues,
+  setFilterPillOptions,
+} from '/pages/filter-pill-multiselect.js';
 
 await initNavbar();
 const framework = getCurrentFramework();
@@ -18,20 +23,49 @@ enableTableSorting();
 
 const status = document.getElementById('status');
 const tbody = document.getElementById('rows');
-const params = new URLSearchParams(location.search || '');
-const filterSourceRaw = (params.get('source') || params.get('type') || '').trim();
-const filterSource = filterSourceRaw ? filterSourceRaw.toLowerCase() : '';
 const filterEl = document.getElementById('sourcesFilter');
+const typePicker = document.getElementById('sourceTypes');
+const searchInput = document.getElementById('sourcesSearch');
+const coverageSelect = document.getElementById('sourcesCoverage');
 
-if (filterEl && filterSource) {
-  const pretty = filterSourceRaw;
-  filterEl.innerHTML = `
-    <span class="badge badge-soft me-2">Filtered: ${esc(pretty)}</span>
-    <a class="small-muted" href="${withFramework('/sources.html', framework)}">Clear filter</a>
-  `;
+function splitList(value) {
+  return String(value || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
 }
 
+// Filters arrive from badges and links as ?source= or ?type=, one or several.
+function readFilters() {
+  const params = new URLSearchParams(location.search || '');
+  const coverage = String(params.get('coverage') || '');
+  return {
+    types: splitList(params.get('source') || params.get('type') || ''),
+    q: String(params.get('q') || '').trim(),
+    coverage: ['unmapped', 'mapped', 'none'].includes(coverage) ? coverage : '',
+  };
+}
+
+let filters = readFilters();
+
+enhanceFilterPillMultiSelect(typePicker, {
+  title: 'Choose source types',
+  description: 'Select one or more source types to show. Clear the selection to show every source.',
+  buttonLabel: 'Choose source types',
+  singular: 'source type',
+  plural: 'source types',
+  emptyText: 'All source types',
+  emptySelectedText: 'No source type filters selected. All source types are shown.',
+  noMatchText: 'No source types match your filter.',
+  searchPlaceholder: 'Filter source types…',
+  options: [],
+  selectedValues: filters.types,
+});
+searchInput.value = filters.q;
+coverageSelect.value = filters.coverage;
+
 let sourceMeta = {};
+let allItems = [];
 
 function sourceHref(src, overrides = {}) {
   const p = new URLSearchParams();
@@ -40,6 +74,47 @@ function sourceHref(src, overrides = {}) {
   if (overrides.tab) p.set('tab', overrides.tab);
   if (overrides.unmapped) p.set('unmapped', 'true');
   return `/source.html?${p.toString()}`;
+}
+
+function describeFilters() {
+  const parts = [];
+  if (filters.types.length)
+    parts.push(
+      filters.types.length === 1
+        ? sourceMeta[filters.types[0]]?.label || filters.types[0]
+        : `${filters.types.length} source types`,
+    );
+  if (filters.q) parts.push(`name contains “${filters.q}”`);
+  if (filters.coverage === 'unmapped') parts.push('with unmapped events');
+  if (filters.coverage === 'mapped') parts.push('with mapped events');
+  if (filters.coverage === 'none') parts.push('fully mapped');
+  return parts;
+}
+
+function renderFilterSummary() {
+  const parts = describeFilters();
+  if (!parts.length) {
+    filterEl.replaceChildren();
+    return;
+  }
+  filterEl.innerHTML = `
+    <span class="badge badge-soft me-2">Filtered: ${esc(parts.join('; '))}</span>
+    <a class="small-muted" href="${withFramework('/sources.html', framework)}">Clear filter</a>
+  `;
+}
+
+function matches(s) {
+  const src = String(s.source || '').toLowerCase();
+  if (filters.types.length && !filters.types.some((t) => t.toLowerCase() === src)) return false;
+  if (filters.q) {
+    const label = String(sourceMeta[s.source]?.label || '').toLowerCase();
+    const needle = filters.q.toLowerCase();
+    if (!src.includes(needle) && !label.includes(needle)) return false;
+  }
+  if (filters.coverage === 'unmapped' && !(Number(s.unmapped_events) > 0)) return false;
+  if (filters.coverage === 'mapped' && !(Number(s.mapped_events) > 0)) return false;
+  if (filters.coverage === 'none' && Number(s.unmapped_events) > 0) return false;
+  return true;
 }
 
 function render(items) {
@@ -65,12 +140,38 @@ function render(items) {
 
   if (items.length === 0) {
     const tr = document.createElement('tr');
-    const msg = filterSource
-      ? `No sources match "${esc(filterSourceRaw)}".`
+    const parts = describeFilters();
+    const msg = parts.length
+      ? `No sources match "${esc(parts.join('; '))}".`
       : 'No sources found. Ingest some data first.';
     tr.innerHTML = `<td colspan="6" class="small-muted p-4">${msg}</td>`;
     tbody.appendChild(tr);
   }
+}
+
+function syncUrl() {
+  const url = new URL(String(location.href), document.baseURI);
+  for (const [key, value] of [
+    ['source', filters.types.join(',')],
+    ['q', filters.q],
+    ['coverage', filters.coverage],
+  ]) {
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
+  }
+  url.searchParams.delete('type');
+  history.replaceState({}, '', url.pathname + url.search + url.hash);
+}
+
+function applyFilters() {
+  filters = {
+    types: selectedFilterPillValues(typePicker),
+    q: searchInput.value.trim(),
+    coverage: coverageSelect.value,
+  };
+  syncUrl();
+  renderFilterSummary();
+  render(allItems.filter(matches));
 }
 
 async function load() {
@@ -88,11 +189,22 @@ async function load() {
         color: String(x.color || '').trim(),
       };
     }
-    let items = data.items || [];
-    if (filterSource) {
-      items = (items || []).filter((s) => String(s.source || '').toLowerCase() === filterSource);
-    }
-    render(items);
+    allItems = data.items || [];
+    // A type chosen from a link stays chosen even when it has no events yet.
+    const known = new Set(Object.keys(sourceMeta));
+    setFilterPillOptions(
+      typePicker,
+      [
+        ...filters.types.filter((t) => !known.has(t)).map((t) => ({ value: t, label: t })),
+        ...Object.values(sourceMeta).map((m) => ({
+          value: m.source,
+          label: m.label !== m.source ? `${m.label} (${m.source})` : m.source,
+        })),
+      ],
+      { selectedValues: filters.types, pruneSelected: false },
+    );
+    renderFilterSummary();
+    render(allItems.filter(matches));
   } catch (e) {
     toast(status, `Failed to load sources: ${String(e)}`, 'danger');
     tbody.innerHTML =
@@ -122,6 +234,13 @@ for (const btn of Array.from(document.querySelectorAll('#sourcesTabs [data-bs-to
   });
 }
 
+typePicker.addEventListener('change', applyFilters);
+coverageSelect.addEventListener('change', applyFilters);
+searchInput.addEventListener('input', applyFilters);
+document.getElementById('sourcesFilters').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  applyFilters();
+});
 document.getElementById('reload').addEventListener('click', async () => {
   await load().then(activateInitialTab);
 });

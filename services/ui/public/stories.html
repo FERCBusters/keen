@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Stories</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/demo-notice.js" defer></script>
+</head>
+<body data-page="stories">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1">Stories</h1>
+        <div class="small-muted">Bring the events, risks, records and notes of one episode together, on a timeline and a flow chart, so it can be read, questioned and sampled as one piece of evidence.</div>
+      </div>
+      <div class="d-flex gap-2">
+        <button id="showCreate" class="btn btn-primary" type="button" hidden><i class="bi bi-journal-plus me-1" aria-hidden="true"></i>New story</button>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <div id="createCard" class="card mb-3" hidden>
+      <div class="card-header"><div class="fw-bold">New story</div><div class="small-muted">Give the story a title now; add events and records from its page or from the Events screen.</div></div>
+      <div class="card-body">
+        <form id="createForm" class="row g-2">
+          <div class="col-md-6"><label for="createTitle" class="form-label">Title</label><input id="createTitle" class="form-control" maxlength="256" required></div>
+          <div class="col-md-6"><label for="createSummary" class="form-label">Summary (optional)</label><textarea id="createSummary" class="form-control" rows="2" maxlength="20000"></textarea></div>
+          <div class="col-12 d-flex gap-2"><button class="btn btn-primary" type="submit">Create story</button><button class="btn btn-outline-secondary" type="button" id="cancelCreate">Cancel</button></div>
+        </form>
+      </div>
+    </div>
+
+    <form id="filters" class="card mb-3">
+      <div class="card-body row g-2 align-items-end">
+        <div class="col-md-6"><label for="q" class="form-label">Search</label><input id="q" class="form-control" maxlength="256" placeholder="Title or summary"></div>
+        <div class="col-md-3"><label for="statusFilter" class="form-label">Status</label><select id="statusFilter" class="form-select"><option value="">Open and closed</option><option value="open">Open</option><option value="closed">Closed</option></select></div>
+        <div class="col-md-3 d-flex gap-2"><button class="btn btn-primary" type="submit">Apply</button><button class="btn btn-outline-secondary" type="button" id="reset">Reset</button></div>
+      </div>
+    </form>
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center"><span id="meta" class="small-muted">Loading…</span><div class="d-flex gap-2"><button id="prev" class="btn btn-sm btn-outline-primary" type="button">Prev</button><button id="next" class="btn btn-sm btn-outline-primary" type="button">Next</button></div></div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr><th>Title</th><th style="width:110px;">Status</th><th style="width:90px;">Items</th><th style="width:170px;">Updated</th><th style="width:160px;">Created by</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/stories.js"></script>
+</body>
+</html>

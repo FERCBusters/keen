@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { page, settle } from './support/page-fixture.mjs';
+import { page, settle, pickFilter } from './support/page-fixture.mjs';
 const event = {
   id: 'event-1',
   source: 'keen-agent',
@@ -56,8 +56,8 @@ test('events render safe content, bounded control badges and correct paging', as
 test('applying filters resets pagination and preserves framework and clause', async (t) => {
   const ui = await fixture(t, { query: '&offset=50&clause=4.1' });
   ui.el('q').value = '  blocked packets  ';
-  ui.el('source').value = 'keen-agent';
-  ui.el('control').value = 'A1';
+  pickFilter(ui, 'source', 'keen-agent');
+  pickFilter(ui, 'control', 'A1');
   ui.el('filters').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => ui.el('resultMeta').textContent === '1–50 of 101');
   const u = new URL(

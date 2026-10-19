@@ -64,6 +64,11 @@ class Rule:
     confidence: float = 0.8
 
 
+def rule_rationale(rule_id: str, framework_slug: str) -> str:
+    """The rationale a rule mapping records; it names the rule and the framework."""
+    return f"auto by rule {rule_id} ({framework_slug})"
+
+
 def _match_regex(pat: str | None, val: str | None) -> bool:
     if not pat:
         return True
@@ -564,7 +569,7 @@ def evaluate_by_framework(
                     "ref": t.ref,
                     "kind": t.kind,
                     "confidence": r.confidence,
-                    "rationale": f"auto by rule {r.id} ({t.framework_slug})",
+                    "rationale": rule_rationale(r.id, t.framework_slug),
                 }
                 if details
                 else t.ref

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,7 @@ from app.schemas import IncidentCreatePayload
 from app.security.permissions import has_permission
 from app.security.roles import is_effective_admin
 from app.services import events as service
+from app.services.event_filters import parse_event_filters
 from app.services.exports import Export
 
 router = Router()
@@ -47,8 +48,10 @@ def list_events(
     source: Optional[str] = None,
     system: Optional[str] = None,
     actor: Optional[str] = None,
-    control: Optional[str] = None,  # UUID or ref
-    clause: Optional[str] = None,  # UUID or ref
+    control: Optional[str] = None,  # UUIDs or refs, comma-separated
+    clause: Optional[str] = None,  # UUIDs or refs, comma-separated
+    rule: Optional[str] = None,  # mapping rule ids, comma-separated
+    conditions: list[str] = Query(default=[], alias="f"),
     unmapped: bool = False,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
@@ -59,8 +62,7 @@ def list_events(
     db: Session = Depends(get_db),
 ):
     user = _require_events_read(db, request)
-    return service.list_events(
-        user=user,
+    filters = parse_event_filters(
         framework=framework,
         q=q,
         source=source,
@@ -68,14 +70,16 @@ def list_events(
         actor=actor,
         control=control,
         clause=clause,
+        rule=rule,
+        conditions=conditions,
         unmapped=unmapped,
         start_date=start_date,
         end_date=end_date,
         start_ts=start_ts,
         end_ts=end_ts,
-        limit=limit,
-        offset=offset,
-        db=db,
+    )
+    return service.list_events(
+        filters=filters, limit=limit, offset=offset, db=db, user=user
     )
 
 
@@ -89,6 +93,8 @@ def event_facets(
     actor: Optional[str] = None,
     control: Optional[str] = None,
     clause: Optional[str] = None,
+    rule: Optional[str] = None,
+    conditions: list[str] = Query(default=[], alias="f"),
     unmapped: bool = False,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
@@ -98,10 +104,9 @@ def event_facets(
     max_controls: int = 500,
     db: Session = Depends(get_db),
 ):
-    "Facet counts for the Events UI.\n\n    Counts are computed with other filters applied, but *exclude* the facet\n    itself so the UI can show meaningful alternatives for switching.\n\n    - sources: applies q/system/actor/control/unmapped (excludes source)\n    - controls: applies q/system/actor/source/unmapped (excludes control)\n"
+    "Facet counts for the Events UI.\n\n    Counts are computed with other filters applied, but *exclude* the facet\n    itself so the UI can show meaningful alternatives for switching.\n\n    - sources: every filter except the source list\n    - controls: every filter except the control list\n    - rules: every filter except the rule list\n"
     user = _require_events_read(db, request)
-    return service.event_facets(
-        user=user,
+    filters = parse_event_filters(
         framework=framework,
         q=q,
         source=source,
@@ -109,14 +114,20 @@ def event_facets(
         actor=actor,
         control=control,
         clause=clause,
+        rule=rule,
+        conditions=conditions,
         unmapped=unmapped,
         start_date=start_date,
         end_date=end_date,
         start_ts=start_ts,
         end_ts=end_ts,
+    )
+    return service.event_facets(
+        filters=filters,
         max_sources=max_sources,
         max_controls=max_controls,
         db=db,
+        user=user,
     )
 
 
@@ -129,8 +140,10 @@ def export_events(
     source: Optional[str] = None,
     system: Optional[str] = None,
     actor: Optional[str] = None,
-    control: Optional[str] = None,  # UUID or ref
-    clause: Optional[str] = None,  # UUID or ref
+    control: Optional[str] = None,  # UUIDs or refs, comma-separated
+    clause: Optional[str] = None,  # UUIDs or refs, comma-separated
+    rule: Optional[str] = None,
+    conditions: list[str] = Query(default=[], alias="f"),
     unmapped: bool = False,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
@@ -141,23 +154,24 @@ def export_events(
 ):
     "Export events matching filters in CSV/JSON/NDJSON.\n\n    This is intended for audit/export workflows (e.g., export all events mapped to a control\n    over a time period). Exports are capped to avoid accidental huge downloads.\n"
     user = _require_events_read(db, request)
-    result = service.export_events(
-        user=user,
+    filters = parse_event_filters(
         framework=framework,
-        format=format,
         q=q,
         source=source,
         system=system,
         actor=actor,
         control=control,
         clause=clause,
+        rule=rule,
+        conditions=conditions,
         unmapped=unmapped,
         start_date=start_date,
         end_date=end_date,
         start_ts=start_ts,
         end_ts=end_ts,
-        max_rows=max_rows,
-        db=db,
+    )
+    result = service.export_events(
+        filters=filters, format=format, max_rows=max_rows, db=db, user=user
     )
     if isinstance(result, Export):
         return StreamingResponse(

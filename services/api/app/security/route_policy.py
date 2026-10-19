@@ -77,17 +77,26 @@ _PERMISSION_WRITES = {
         "/v1/questions/entities/{entity_type}/{entity_id}/mark-seen",
         "/v1/pestle/items",
         "/v1/pestle/business-processes",
+        "/v1/stories",
+        "/v1/stories/{story_id}/items",
+        "/v1/stories/{story_id}/comments",
     ),
     "PATCH": (
         "/v1/pestle/items/{item_id}",
         "/v1/pestle/business-processes/{process_id}",
         "/v1/pestle/items/{item_id}/business-processes",
         "/v1/pestle/items/{item_id}/clauses",
+        "/v1/stories/{story_id}",
+        "/v1/stories/{story_id}/items/{item_id}",
     ),
+    "PUT": ("/v1/stories/{story_id}/layout",),
     "DELETE": (
         "/v1/questions/{thread_id}",
         "/v1/pestle/items/{item_id}",
         "/v1/pestle/business-processes/{process_id}",
+        "/v1/stories/{story_id}",
+        "/v1/stories/{story_id}/items/{item_id}",
+        "/v1/stories/{story_id}/comments/{comment_id}",
     ),
 }
 _PERMISSION_WRITE_PATTERNS = {

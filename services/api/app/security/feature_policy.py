@@ -19,6 +19,7 @@ OWNERS = {
     "interested_parties": "interested_parties",
     "bookstack_sections": "documents",
     "soa": "soa",
+    "stories": "stories",
 }
 ISMS_OWNERS = {
     "objectives": "objectives",

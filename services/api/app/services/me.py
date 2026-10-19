@@ -324,6 +324,13 @@ def me(*, context: ChangeContext, db: Session) -> dict:
         can_manage_isms or has_permission(db, user, "isms.read") or can_view_risks
     )
     can_view_events = bool(is_admin or has_permission(db, user, "events.read"))
+    can_admin_stories = bool(is_admin or has_permission(db, user, "stories.admin"))
+    can_manage_stories = bool(
+        can_admin_stories or has_permission(db, user, "stories.manage")
+    )
+    can_view_stories = bool(
+        can_manage_stories or has_permission(db, user, "stories.read")
+    )
     can_create_questions = bool(is_admin or has_permission(db, user, "question.create"))
     can_question_events = can_create_questions
     can_delete_questions = bool(is_admin or has_permission(db, user, "question.delete"))
@@ -391,6 +398,9 @@ def me(*, context: ChangeContext, db: Session) -> dict:
         "can_view_isms": can_view_isms and enabled("isms"),
         "can_manage_isms": can_manage_isms and enabled("isms"),
         "can_view_events": can_view_events and enabled("evidence"),
+        "can_view_stories": can_view_stories and enabled("stories"),
+        "can_manage_stories": can_manage_stories and enabled("stories"),
+        "can_admin_stories": can_admin_stories and enabled("stories"),
         "can_create_questions": can_create_questions and enabled("questions"),
         "can_question_events": can_question_events and enabled("questions"),
         "can_delete_questions": can_delete_questions and enabled("questions"),

@@ -1279,6 +1279,22 @@ def get_rules(*, db: Session):
     return {"version": _version(db, "rules"), "items": rules}
 
 
+def rule_descriptions(db: Session) -> dict[str, dict]:
+    """How each rule is described to readers: its description and targets.
+
+    Event readers see this beside rule names; the conditions stay with the
+    administration area.
+    """
+    return {
+        rule["id"]: {
+            "description": rule["description"],
+            "enabled": rule["enabled"],
+            "targets": [f"{t['framework']}:{t['ref']}" for t in rule["map_to"]],
+        }
+        for rule in _normalized_rules(db)
+    }
+
+
 def _queue_rule_backfill(db: Session, rule: dict, version: int) -> dict | None:
     if rule.get("enabled") is False:
         return None
@@ -1300,7 +1316,7 @@ def _queue_rule_backfill(db: Session, rule: dict, version: int) -> dict | None:
             "total_estimate": current.total_estimate,
         }
     cutoff = utc_now_naive()
-    from app.worker.rule_backfill import rule_owned_event_ids
+    from app.services.mapping_provenance import rule_owned_event_ids
 
     exists = (
         db.query(Event.id)

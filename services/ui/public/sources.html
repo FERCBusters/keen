@@ -18,7 +18,6 @@
       <div>
         <h1 class="h3 mb-1">Sources</h1>
         <div class="small-muted" id="sourcesSubtitle">Pivot around the dataset by source type (Loki, Taiga, GitHub, Jenkins…).</div>
-        <div id="sourcesFilter" class="mt-1"></div>
       </div>
       <div class="d-flex gap-2 no-print">
         <a class="btn btn-outline-primary" href="/events.html">Browse events</a>
@@ -34,13 +33,37 @@
     <div class="tab-content">
       <section class="tab-pane fade show active" id="sourcesRegisterPane" role="tabpanel" aria-labelledby="sourcesRegisterTab" tabindex="0">
 
-    <div class="card mb-3 no-print">
-      <div class="card-body d-flex flex-wrap gap-2 align-items-center justify-content-between">
-        <div>
-          <div class="fw-bold">Source register</div>
-          <div class="small-muted">Click a source to open its events, effectiveness measures and visualisations, or jump straight to unmapped.</div>
+    <div class="card mb-3 no-print" data-mosp-filter-section="sources-filters" data-mosp-filter-title="Filters">
+      <div class="card-body">
+        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-2">
+          <div>
+            <div class="fw-bold">Source register</div>
+            <div class="small-muted">Click a source to open its events, effectiveness measures and visualisations, or jump straight to unmapped.</div>
+          </div>
+          <button id="reload" class="btn btn-outline-primary">Reload</button>
         </div>
-        <button id="reload" class="btn btn-outline-primary">Reload</button>
+        <form id="sourcesFilters" class="row g-2 align-items-end">
+          <div class="col-12 col-lg-5">
+            <label class="form-label small-muted mb-1" for="sourceTypes">Source types</label>
+            <select id="sourceTypes" class="form-select">
+              <option value="">All source types</option>
+            </select>
+          </div>
+          <div class="col-12 col-lg-4">
+            <label class="form-label small-muted mb-1" for="sourcesSearch">Name</label>
+            <input id="sourcesSearch" class="form-control" type="search" placeholder="Source name contains…" autocomplete="off">
+          </div>
+          <div class="col-12 col-lg-3">
+            <label class="form-label small-muted mb-1" for="sourcesCoverage">Coverage</label>
+            <select id="sourcesCoverage" class="form-select">
+              <option value="">All sources</option>
+              <option value="unmapped">With unmapped events</option>
+              <option value="mapped">With mapped events</option>
+              <option value="none">Fully mapped</option>
+            </select>
+          </div>
+        </form>
+        <div id="sourcesFilter" class="mt-2"></div>
       </div>
     </div>
 

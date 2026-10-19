@@ -1,6 +1,7 @@
 import { applyFeatures, featureEnabled } from '/pages/feature-availability.js';
 import { csvEscape } from '../csv.js';
 import { ensureEmbeddedVisualisationMarkup } from './visualisation/embedded-markup.js';
+import { createWindowStory } from './visualisation/window-story.js';
 import {
   MS_PER_DAY,
   histStepMs,
@@ -39,18 +40,81 @@ const me = window.keenMe || window.mospMe || (await initNavbar());
 applyFeatures(me);
 const framework = getCurrentFramework();
 const visualisationMount = document.querySelector('[data-keen-visualisation-mount]');
-function scopedSourceFilter() {
-  const direct = String(visualisationMount?.dataset?.vizSource || '').trim();
-  if (direct) return direct;
-  const paramName = String(visualisationMount?.dataset?.vizSourceParam || '').trim();
-  if (!paramName) return '';
+// The page's own filters scope every chart. A mount names the address
+// parameters that carry them (data-viz-filter-params, or data-viz-source-param
+// for one source), and they are read again for every request so a change on
+// the page's register tab reaches the charts.
+function scopedFilterParams() {
+  const out = [];
+  const names = String(
+    visualisationMount?.dataset?.vizFilterParams ||
+      visualisationMount?.dataset?.vizSourceParam ||
+      '',
+  )
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean);
+  let params;
   try {
-    return String(new URLSearchParams(location.search || '').get(paramName) || '').trim();
+    params = new URLSearchParams(location.search || '');
   } catch {
-    return '';
+    return out;
+  }
+  for (const name of names) {
+    for (const value of params.getAll(name)) if (value.trim()) out.push([name, value]);
+  }
+  return out;
+}
+
+function scopeSignature() {
+  return JSON.stringify(scopedFilterParams());
+}
+
+function applyScope(url, { sourcesOnly = false } = {}) {
+  for (const [name, value] of scopedFilterParams()) {
+    if (sourcesOnly && name !== 'source') continue;
+    url.searchParams.append(name, value);
   }
 }
-const scopedSource = scopedSourceFilter();
+
+const SCOPE_LABELS = {
+  source: 'source',
+  control: 'control',
+  clause: 'clause',
+  rule: 'mapping rule',
+  q: 'search',
+  f: 'text filter',
+  unmapped: 'unmapped only',
+};
+
+function describeScope() {
+  const parts = [];
+  for (const [name, value] of scopedFilterParams()) {
+    const label = SCOPE_LABELS[name] || name;
+    if (name === 'unmapped') {
+      if (value === 'true') parts.push(label);
+      continue;
+    }
+    const values =
+      name === 'f'
+        ? [value]
+        : value
+            .split(',')
+            .map((v) => v.trim())
+            .filter(Boolean);
+    parts.push(`${label}${values.length > 1 ? 's' : ''} ${values.join(', ')}`);
+  }
+  return parts;
+}
+
+let appliedScopeSignature = null;
+function renderScope() {
+  const note = document.getElementById('vizScope');
+  if (!note) return;
+  const parts = describeScope();
+  note.hidden = !parts.length;
+  note.textContent = parts.length ? `Scoped to the page filters: ${parts.join('; ')}.` : '';
+}
 const autoApplyFilters = !!me?.preferences?.auto_apply_filters;
 
 const status = document.getElementById('status');
@@ -149,6 +213,14 @@ const histApply = document.getElementById('histApply');
 const histBack = document.getElementById('histBack');
 const histResetZoom = document.getElementById('histResetZoom');
 const histZoomModeBtn = document.getElementById('histZoomMode');
+const windowStory = createWindowStory({
+  me,
+  framework,
+  button: document.getElementById('histStory'),
+  panel: document.getElementById('histStoryPanel'),
+  statusEl: status,
+  applyScope: (url) => applyScope(url),
+});
 const saveDefaultViz = document.getElementById('saveDefaultViz');
 
 // Graph controls + export
@@ -334,6 +406,8 @@ const HIST_MAX_BUCKETS = 5000;
 //  - Hold Shift and drag on the histogram to zoom, OR
 //  - Toggle "Zoom mode" to drag without a keyboard (touch devices).
 let histZoomModeOn = false;
+// Events in the zoomed window as last drawn, for the story panel.
+let histWindowTotal = null;
 let histBrushShiftActive = false;
 let _setHistogramBrushEnabled = null;
 const _VIZ_MODES = [
@@ -507,6 +581,13 @@ function updateHistogramZoomButtons() {
   const active = Array.isArray(histZoomStack) ? histZoomStack.length : 0;
   if (histBack) histBack.classList.toggle('d-none', active < 1);
   if (histResetZoom) histResetZoom.classList.toggle('d-none', active < 1);
+  // The zoom window is what a story from the histogram covers.
+  const zoom = active ? histZoomStack[active - 1] : null;
+  windowStory.update(
+    vizMode === 'histogram' && zoom
+      ? { start_ts: zoom.start_ts, end_ts: zoom.end_ts, total: histWindowTotal }
+      : null,
+  );
 }
 
 function updateHistogramBrushEnabled() {
@@ -933,9 +1014,7 @@ function buildGraphDatasetUrl(key, range = getActiveRange()) {
     u.searchParams.set('start_date', range.from);
     u.searchParams.set('end_date', range.to);
   }
-  if (scopedSource && key !== 'clause_control') {
-    u.searchParams.set('source', scopedSource);
-  }
+  if (key !== 'clause_control') applyScope(u);
   return u.pathname + u.search;
 }
 
@@ -2971,6 +3050,7 @@ async function loadTimeseries(days, opts = null) {
   if (interval) u.searchParams.set('interval', interval);
   if (startTs) u.searchParams.set('start_ts', startTs);
   if (endTs) u.searchParams.set('end_ts', endTs);
+  applyScope(u);
 
   const res = await apiGet(u.pathname + u.search);
   timeseriesCache.set(key, res);
@@ -3006,6 +3086,8 @@ async function drawHistogram() {
       .trim()
       .toLowerCase() || 'day';
   const items = Array.isArray(res?.items) ? res.items : [];
+  histWindowTotal = items.reduce((sum, item) => sum + (Number(item?.total) || 0), 0);
+  updateHistogramZoomButtons();
   if (items.length === 0) {
     const w = getWrapWidth(680);
     sizeSvg(w, 360);
@@ -3218,6 +3300,21 @@ async function drawHistogram() {
         start_ts: new Date(startMs).toISOString(),
         end_ts: new Date(endMs).toISOString(),
       });
+    })
+    .on('contextmenu', (ev, d) => {
+      // A bar is a spike worth annotating: pick its window for a story.
+      if (!windowStory.enabled) return;
+      ev.preventDefault();
+      const bucket = String(d?.data?.bucket || '').trim();
+      const startMs = histBucketToUtcMs(bucket, intervalEff);
+      if (!Number.isFinite(startMs)) return;
+      windowStory.update({
+        start_ts: new Date(startMs).toISOString(),
+        end_ts: new Date(startMs + histStepMs(intervalEff)).toISOString(),
+        total: Number(d?.data?.total) || 0,
+        source: d.key === OTHER_KEY ? '' : String(d.key || '').trim(),
+      });
+      windowStory.open();
     })
     .append('title')
     .text((d) => {
@@ -3793,6 +3890,8 @@ async function load() {
   // Histogram data is range-sensitive; keep the cache small.
   timeseriesCache.clear();
   clearRangeSensitiveCaches();
+  appliedScopeSignature = scopeSignature();
+  renderScope();
 
   // Validate the saved/query-selected mode before deciding what to fetch.
   if (!isAvailableVizMode(vizMode)) vizMode = firstAvailableVizMode();
@@ -3903,6 +4002,11 @@ if (
 ) {
   embeddedTabButton?.addEventListener('shown.bs.tab', () => {
     setEmbeddedVisualisationTabQuery(true);
+    // Filters changed on the register tab reach the charts when they are shown.
+    if (visualisationStarted && appliedScopeSignature !== scopeSignature()) {
+      load();
+      return;
+    }
     startVisualisation();
   });
   const otherTabButtons = Array.from(document.querySelectorAll('[data-bs-toggle="tab"]')).filter(

@@ -176,7 +176,7 @@ def test_event_endpoints_keep_labels_and_provenance(catalogue, monkeypatch):
     monkeypatch.setattr(routes, "_require_events_read", lambda db, request: user)
     monkeypatch.setattr(settings, "aggregate_cache_ttl_seconds", 0)
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-    page = routes.list_events(request, framework="F0", limit=50, db=db)
+    page = routes.list_events(request, framework="F0", limit=50, conditions=[], db=db)
     assert page["total"] == 60 and len(page["items"]) == 50
     detail = routes.get_event(request, str(events[0].id), framework="F0", db=db)
     assert len(detail["controls"]) == 8
@@ -187,6 +187,8 @@ def test_event_endpoints_keep_labels_and_provenance(catalogue, monkeypatch):
     assert reviewed["inherited_from"]["control_id"] in {
         str(g[0].id) for g in controls[1:]
     }
-    unmapped = routes.list_events(request, framework="F0", unmapped=True, db=db)
+    unmapped = routes.list_events(
+        request, framework="F0", unmapped=True, conditions=[], db=db
+    )
     assert unmapped["total"] == 1
     assert unmapped["items"][0]["id"] == str(events[-1].id)

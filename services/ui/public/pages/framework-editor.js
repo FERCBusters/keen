@@ -47,7 +47,39 @@ function newNode() {
   $('scope').checked = true;
   $('clauses').replaceChildren();
   updateChoices();
+  markSelectedRow();
   message('');
+}
+
+// The tree row of the node being edited stays marked, and comes into view
+// when the editor opens a node the user did not click on.
+function markSelectedRow({ scroll = false } = {}) {
+  const rows = [...$('tree').children];
+  const current = selected ? key(selected) : null;
+  let marked = null;
+  for (const row of rows) {
+    const isCurrent = current !== null && row.dataset.nodeKey === current;
+    row.classList.toggle('active', isCurrent);
+    row.classList.toggle('framework-section-row-selected', isCurrent);
+    if (isCurrent) row.setAttribute('aria-current', 'true');
+    else row.removeAttribute('aria-current');
+    if (isCurrent) marked = row;
+  }
+  if (marked && scroll) marked.scrollIntoView({ block: 'nearest' });
+  const index = marked ? rows.indexOf(marked) : -1;
+  $('prev-node').disabled = index <= 0;
+  $('next-node').disabled = index < 0 || index >= rows.length - 1;
+  return marked;
+}
+
+// Opens the row before or after the marked one in the tree's current order.
+function step(offset) {
+  const rows = [...$('tree').children];
+  const current = selected ? rows.findIndex((row) => row.dataset.nodeKey === key(selected)) : -1;
+  const target = rows[current + offset];
+  if (!target) return;
+  const item = nodes.find((node) => key(node) === target.dataset.nodeKey);
+  if (item) editNode(item, { scroll: true });
 }
 
 function updateChoices() {
@@ -63,7 +95,7 @@ function updateChoices() {
     $('clauses').add(new Option(`${item.ref} — ${item.title}`, item.ref));
 }
 
-function editNode(item) {
+function editNode(item, { scroll = false } = {}) {
   selected = item;
   $('kind').value = item.kind;
   if ($('kind').value !== item.kind) {
@@ -81,6 +113,7 @@ function editNode(item) {
   $('parent').value = item.parent_ref || '';
   for (const option of $('clauses').options)
     option.selected = (item.clause_refs || []).includes(option.value);
+  markSelectedRow({ scroll });
   message('');
 }
 
@@ -126,9 +159,11 @@ function renderTree() {
     button.title = `Section ${group} · ${item.kind}`;
     button.style.paddingLeft = `${12 + Math.min(depth, 8) * 18}px`;
     button.textContent = `${item.ref}  ${item.title} · ${item.kind}`;
+    button.dataset.nodeKey = key(item);
     button.addEventListener('click', () => editNode(item));
     container.append(button);
   }
+  markSelectedRow();
 }
 function compare(a, b) {
   return (
@@ -142,6 +177,8 @@ $('frameworks').addEventListener('change', () =>
 );
 $('search').addEventListener('input', renderTree);
 $('new').addEventListener('click', newNode);
+$('prev-node').addEventListener('click', () => step(-1));
+$('next-node').addEventListener('click', () => step(1));
 $('kind').addEventListener('change', updateChoices);
 $('new-framework').addEventListener('click', () => {
   for (const id of ['slug', 'name', 'version', 'description', 'url']) $(id).value = '';
@@ -191,7 +228,7 @@ $('save-node').addEventListener('click', async () => {
     });
     await selectFramework();
     const item = nodes.find((n) => n.kind === kind && n.ref === ref);
-    if (item) editNode(item);
+    if (item) editNode(item, { scroll: true });
     message('Node saved');
   } catch (error) {
     message(error.message);

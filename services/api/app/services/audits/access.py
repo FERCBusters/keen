@@ -99,6 +99,10 @@ def require_sample_source_access(
         from app.services.interested_parties import _can_read_interested_parties
 
         allowed = _can_read_interested_parties(db, user)
+    elif entity_type == "story":
+        from app.services.stories import can_read_stories
+
+        allowed = can_read_stories(db, user)
     elif entity_type == "bookstack_section" or entity_type.startswith("isms_"):
         allowed = has_permission(db, user, "isms.read")
     else:

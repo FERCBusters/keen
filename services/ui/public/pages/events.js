@@ -29,6 +29,14 @@ import {
   offsetPagerState,
   wireOffsetPagerButtons,
 } from '/app.js';
+import {
+  enhanceFilterPillMultiSelect,
+  selectedFilterPillValues,
+  setFilterPillOptions,
+} from '/pages/filter-pill-multiselect.js';
+import { createConditionEditor } from '/pages/event-filter-conditions.js';
+import { createEventPanel } from '/pages/event-panel.js';
+import { createEventSelection } from '/pages/event-selection.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -60,51 +68,40 @@ const pageTitleEl = document.getElementById('pageTitle') || document.querySelect
 function controlHeading(ref) {
   const r = String(ref || '').trim();
   if (!r) return '';
-
-  // Prefer the global controls index (from /api/v1/controls)
-  let title = String(controlsIndex?.[r]?.title || '').trim();
-
-  // Fallback: if controls failed to load, try to infer the title from the <select> option text.
-  if (!title) {
-    try {
-      const opt = Array.from(selControl?.options || []).find((o) => o.value === r);
-      if (opt) {
-        let t = String(opt.textContent || '').trim();
-        t = t.replace(/\s*\(\d+\)\s*$/, '').trim(); // strip trailing counts
-        t = t.replace(/^Current filter:\s*/i, '').trim();
-        const parts = t
-          .split('—')
-          .map((x) => x.trim())
-          .filter(Boolean);
-        // Option text is usually: "A.8.6 — Secure coding" → extract the title part
-        if (parts.length >= 2) title = parts.slice(1).join(' — ');
-      }
-    } catch {
-      // non-fatal
-    }
-  }
-
+  const title = String(controlsIndex?.[r]?.title || '').trim();
   // Include BOTH reference + title when we have it.
   return title ? `${r} — ${title}` : r;
 }
 
-function updatePageTitle({ source, control, clause } = {}) {
-  const src =
-    source !== undefined ? String(source || '').trim() : String(state.source || '').trim();
-  const ctl =
-    control !== undefined ? String(control || '').trim() : String(state.control || '').trim();
-  const cls =
-    clause !== undefined ? String(clause || '').trim() : String(state.clause || '').trim();
+function splitList(value) {
+  return String(value || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
 
-  const srcLabel = src ? String(sourceLabel(src, sourceMeta) || src).trim() : '';
-  const ctlLabel = ctl ? controlHeading(ctl) : '';
+function describeList(values, one, many) {
+  if (values.length === 1) return one(values[0]);
+  return `${values.length} ${many}`;
+}
+
+function updatePageTitle({ source, control, clause } = {}) {
+  const sources = splitList(source !== undefined ? source : state.source);
+  const controls = splitList(control !== undefined ? control : state.control);
+  const clauses = splitList(clause !== undefined ? clause : state.clause);
+  const rules = splitList(state.rule);
 
   let heading = 'Events';
-  if (srcLabel || ctlLabel || cls) {
+  if (sources.length || controls.length || clauses.length || rules.length) {
     const parts = [];
-    if (srcLabel) parts.push(srcLabel);
-    if (ctlLabel) parts.push(`control ${ctlLabel}`);
-    if (cls) parts.push(`clause ${cls}`);
+    if (sources.length)
+      parts.push(
+        describeList(sources, (src) => String(sourceLabel(src, sourceMeta) || src), 'sources'),
+      );
+    if (controls.length)
+      parts.push(describeList(controls, (ref) => `control ${controlHeading(ref)}`, 'controls'));
+    if (clauses.length) parts.push(describeList(clauses, (ref) => `clause ${ref}`, 'clauses'));
+    if (rules.length) parts.push(describeList(rules, (id) => `rule ${id}`, 'mapping rules'));
     heading = `Events for ${parts.join(' and ')}`;
   }
 
@@ -113,7 +110,10 @@ function updatePageTitle({ source, control, clause } = {}) {
 }
 
 function updatePageTitleFromInputs() {
-  updatePageTitle({ source: selSource?.value || '', control: selControl?.value || '' });
+  updatePageTitle({
+    source: selectedFilterPillValues(selSource).join(','),
+    control: selectedFilterPillValues(selControl).join(','),
+  });
 }
 
 const inpQ = document.getElementById('q');
@@ -122,7 +122,15 @@ const inpQ = document.getElementById('q');
 attachSavedSearchAutocomplete(inpQ);
 const selSource = document.getElementById('source');
 const selControl = document.getElementById('control');
+const selRule = document.getElementById('rule');
 const chkUnmapped = document.getElementById('unmapped');
+const conditionEditor = createConditionEditor({
+  host: document.getElementById('conditions'),
+  addButton: document.getElementById('addCondition'),
+  onChange: () => {
+    if (autoApplyFilters) maybeNavigateSavedSearchOrReload(true);
+  },
+});
 const selLimit = document.getElementById('limit');
 
 const startDate = document.getElementById('startDate');
@@ -149,6 +157,8 @@ let state = {
   source: qs('source', ''),
   control: qs('control', ''),
   clause: qs('clause', ''),
+  rule: qs('rule', ''),
+  conditions: new URLSearchParams(location.search).getAll('f'),
   unmapped: qbool('unmapped', false),
   start_date: qs('start_date', ''),
   end_date: qs('end_date', ''),
@@ -163,6 +173,92 @@ let state = {
 
 let sourceMeta = {};
 let controlsIndex = {};
+const eventPanel = createEventPanel({ framework, getSourceMeta: () => sourceMeta });
+const selection = createEventSelection({
+  me,
+  framework,
+  tbody,
+  bar: document.getElementById('selectionBar'),
+  menu: document.getElementById('rowMenu'),
+  statusEl: status,
+});
+const columnCount = 7 + selection.columns;
+
+// The filters a request carries, as the API reads them.
+function filterParams() {
+  const p = new URLSearchParams();
+  if (state.q) p.set('q', state.q);
+  if (framework) p.set('framework', framework);
+  if (state.source) p.set('source', state.source);
+  if (state.control) p.set('control', state.control);
+  if (state.clause) p.set('clause', state.clause);
+  if (state.rule) p.set('rule', state.rule);
+  for (const condition of state.conditions) p.append('f', condition);
+  if (state.unmapped) p.set('unmapped', 'true');
+  if (state.start_date) p.set('start_date', state.start_date);
+  if (state.end_date) p.set('end_date', state.end_date);
+  if (state.start_ts) p.set('start_ts', state.start_ts);
+  if (state.end_ts) p.set('end_ts', state.end_ts);
+  return p;
+}
+
+// setQuery writes one value per key; the text filters repeat theirs.
+function syncConditionsToUrl() {
+  const url = new URL(String(location.href), document.baseURI);
+  url.searchParams.delete('f');
+  for (const condition of state.conditions) url.searchParams.append('f', condition);
+  history.replaceState({}, '', url.pathname + url.search + url.hash);
+}
+
+function picker(el, singular, plural, description) {
+  return enhanceFilterPillMultiSelect(el, {
+    title: `Choose ${plural}`,
+    description,
+    buttonLabel: `Choose ${plural}`,
+    singular,
+    plural,
+    emptyText: `All ${plural}`,
+    emptySelectedText: `No ${singular} filters selected. All ${plural} are included.`,
+    noMatchText: `No ${plural} match your filter.`,
+    searchPlaceholder: `Filter ${plural}…`,
+    options: [],
+    selectedValues: splitList(state[el.id]),
+  });
+}
+picker(
+  selSource,
+  'source',
+  'sources',
+  'Select one or more sources to include. Clear the selection to include every source.',
+);
+picker(
+  selControl,
+  'control',
+  'controls',
+  'Select one or more controls; an event matches when it is mapped to any of them.',
+);
+picker(
+  selRule,
+  'mapping rule',
+  'mapping rules',
+  'Select one or more mapping rules; an event matches when any of them mapped it to a control.',
+);
+
+// A chosen value stays available until its facet count returns.
+function keepingSelected(options, selected, describe) {
+  const known = new Set(options.map((opt) => opt.value));
+  return [
+    ...selected.filter((value) => !known.has(value)).map((value) => describe(value)),
+    ...options,
+  ];
+}
+
+function setPickerOptions(el, options, selected, describe) {
+  setFilterPillOptions(el, keepingSelected(options, selected, describe), {
+    selectedValues: selected,
+    pruneSelected: false,
+  });
+}
 
 function isIsoDateStr(v) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim());
@@ -207,6 +303,7 @@ function syncInputs() {
   inpQ.value = state.q;
   chkUnmapped.checked = state.unmapped;
   selLimit.value = String(state.limit);
+  conditionEditor.set(state.conditions);
   // Hidden native date inputs keep YYYY-MM-DD values.
   if (startDate) startDate.value = state.start_date || '';
   if (endDate) endDate.value = state.end_date || '';
@@ -232,18 +329,19 @@ async function loadSources() {
         color: String(x.color || '').trim(),
       };
     }
-    const opts = items
-      .map((x) => {
+    setPickerOptions(
+      selSource,
+      items.map((x) => {
         const src = x.source;
         const label = String(x.label || sourceLabel(src, sourceMeta) || src);
-        const text = label && label !== src ? `${label} (${src})` : src;
-        return `<option value="${esc(src)}">${esc(text)}</option>`;
-      })
-      .join('');
-    selSource.innerHTML = `<option value="">All sources</option>` + opts;
-    if (state.source) selSource.value = state.source;
+        return { value: src, label: label && label !== src ? `${label} (${src})` : src };
+      }),
+      splitList(state.source),
+      (value) => ({ value, label: value }),
+    );
   } catch {
-    // non-fatal
+    // The chosen sources stay available without the source register.
+    setPickerOptions(selSource, [], splitList(state.source), (value) => ({ value, label: value }));
   }
 }
 
@@ -261,119 +359,86 @@ async function loadControls() {
       controlsIndex[ref] = { ref, title: String(c.title || '').trim(), type: c.type || 'control' };
     }
 
-    const byType = {};
-    for (const c of items) {
-      const t = c.type || 'control';
-      byType[t] = byType[t] || [];
-      byType[t].push(c);
-    }
-
-    const knownRefs = new Set(items.map((c) => c.ref));
-    let html = `<option value="">All controls</option>`;
-
-    const types = Object.keys(byType).sort();
-    for (const t of types) {
-      const group = byType[t];
-      const options = group
-        .map((c) => {
-          const label = c.title ? `${c.ref} — ${c.title}` : c.ref;
-          return `<option value="${esc(c.ref)}">${esc(label)}</option>`;
-        })
-        .join('');
-      html += `<optgroup label="${esc(t)}">${options}</optgroup>`;
-    }
-
-    // Preserve a UUID/ref filter that isn't in the current controls list (rare, but possible)
-    if (state.control && !knownRefs.has(state.control)) {
-      html =
-        `<option value="${esc(state.control)}">Current filter: ${esc(state.control)}</option>` +
-        html;
-    }
-
-    selControl.innerHTML = html;
-    if (state.control) selControl.value = state.control;
+    setPickerOptions(
+      selControl,
+      items.map((c) => ({
+        value: c.ref,
+        label: c.title ? `${c.ref} — ${c.title}` : c.ref,
+        title: `${c.type || 'control'}: ${c.title ? `${c.ref} — ${c.title}` : c.ref}`,
+      })),
+      splitList(state.control),
+      (value) => ({ value, label: `Current filter: ${value}` }),
+    );
   } catch {
-    // non-fatal
-    selControl.innerHTML = `<option value="">All controls</option>`;
-    if (state.control) {
-      const opt = document.createElement('option');
-      opt.value = state.control;
-      opt.textContent = `Current filter: ${state.control}`;
-      selControl.insertBefore(opt, selControl.firstChild);
-      selControl.value = state.control;
-    }
+    // The chosen controls stay available without the catalogue.
+    setPickerOptions(selControl, [], splitList(state.control), (value) => ({
+      value,
+      label: `Current filter: ${value}`,
+    }));
   }
 }
 
 function renderSourceOptions(facets) {
-  const current = state.source || '';
-  const rows = Array.isArray(facets) ? facets : [];
-  const counts = new Map(rows.map((r) => [String(r.source), Number(r.count || 0)]));
-
-  const items = rows
-    .filter((r) => r && r.source && Number(r.count || 0) > 0)
-    .map((r) => ({
-      source: String(r.source),
-      count: Number(r.count || 0),
-    }));
-
-  let html = '<option value="">All sources</option>';
-
-  // Preserve current selection even if it yields zero results under other filters.
-  if (current && !counts.has(current)) {
-    const label = String(sourceLabel(current, sourceMeta) || current);
-    const text = label && label !== current ? `${label} (${current})` : current;
-    html += `<option value="${esc(current)}">${esc(text)} (0)</option>`;
-  }
-
-  for (const it of items) {
-    const src = it.source;
-    const label = String(sourceLabel(src, sourceMeta) || src);
-    const text = label && label !== src ? `${label} (${src})` : src;
-    html += `<option value="${esc(src)}">${esc(text)} (${it.count})</option>`;
-  }
-
-  selSource.innerHTML = html;
-  if (current) selSource.value = current;
+  const rows = (Array.isArray(facets) ? facets : []).filter(
+    (r) => r && r.source && Number(r.count || 0) > 0,
+  );
+  setPickerOptions(
+    selSource,
+    rows.map((r) => {
+      const src = String(r.source);
+      const label = String(sourceLabel(src, sourceMeta) || src);
+      const text = label && label !== src ? `${label} (${src})` : src;
+      return { value: src, label: `${text} (${Number(r.count || 0)})` };
+    }),
+    splitList(state.source),
+    // Preserve current selection even if it yields zero results under other filters.
+    (value) => ({ value, label: `${sourceLabel(value, sourceMeta) || value} (0)` }),
+  );
 }
 
 function renderControlOptions(facets) {
-  const current = state.control || '';
-  const rows = Array.isArray(facets) ? facets : [];
-  const counts = new Map(rows.map((r) => [String(r.ref), Number(r.count || 0)]));
+  const rows = (Array.isArray(facets) ? facets : []).filter(
+    (r) => r && String(r.ref || '').trim() && Number(r.count || 0) > 0,
+  );
+  setPickerOptions(
+    selControl,
+    rows.map((r) => {
+      const ref = String(r.ref).trim();
+      const title = String(r.title || controlsIndex[ref]?.title || '');
+      const type = String(r.type || controlsIndex[ref]?.type || 'control');
+      // Without the catalogue, the results still name the control.
+      if (title && !controlsIndex[ref]) controlsIndex[ref] = { ref, title, type };
+      const label = title ? `${ref} — ${title}` : ref;
+      return {
+        value: ref,
+        label: `${label} (${Number(r.count || 0)})`,
+        title: `${type}: ${label}`,
+      };
+    }),
+    splitList(state.control),
+    (value) => ({ value, label: `Current filter: ${value} (0)` }),
+  );
+}
 
-  const byType = {};
-  for (const r of rows) {
-    const ref = String(r.ref || '').trim();
-    if (!ref) continue;
-    const count = Number(r.count || 0);
-    if (count <= 0) continue;
-    const ty = String(r.type || controlsIndex[ref]?.type || 'control');
-    byType[ty] = byType[ty] || [];
-    byType[ty].push({ ref, title: String(r.title || controlsIndex[ref]?.title || ''), count });
-  }
-
-  let html = '<option value="">All controls</option>';
-
-  // Preserve current selection even if it yields zero results under other filters.
-  if (current && !counts.has(current)) {
-    html = `<option value="${esc(current)}">Current filter: ${esc(current)} (0)</option>` + html;
-  }
-
-  const types = Object.keys(byType).sort();
-  for (const ty of types) {
-    const opts = byType[ty]
-      .sort((a, b) => b.count - a.count || a.ref.localeCompare(b.ref))
-      .map((c) => {
-        const label = c.title ? `${c.ref} — ${c.title}` : c.ref;
-        return `<option value="${esc(c.ref)}">${esc(label)} (${c.count})</option>`;
-      })
-      .join('');
-    html += `<optgroup label="${esc(ty)}">${opts}</optgroup>`;
-  }
-
-  selControl.innerHTML = html;
-  if (current) selControl.value = current;
+function renderRuleOptions(facets) {
+  const rows = (Array.isArray(facets) ? facets : []).filter(
+    (r) => r && String(r.rule_id || '').trim() && Number(r.count || 0) > 0,
+  );
+  setPickerOptions(
+    selRule,
+    rows.map((r) => {
+      const id = String(r.rule_id).trim();
+      const description = String(r.description || '').trim();
+      const targets = (r.targets || []).join(', ');
+      return {
+        value: id,
+        label: `${description ? `${id} — ${description}` : id} (${Number(r.count || 0)})`,
+        title: targets ? `${id} maps to ${targets}` : id,
+      };
+    }),
+    splitList(state.rule),
+    (value) => ({ value, label: `Current filter: ${value} (0)` }),
+  );
 }
 
 function shouldSkipAutoFacets() {
@@ -387,21 +452,10 @@ function shouldSkipAutoFacets() {
 
 async function loadFacets() {
   try {
-    const p = new URLSearchParams();
-    if (state.q) p.set('q', state.q);
-    if (framework) p.set('framework', framework);
-    if (state.source) p.set('source', state.source);
-    if (state.control) p.set('control', state.control);
-    if (state.clause) p.set('clause', state.clause);
-    if (state.unmapped) p.set('unmapped', 'true');
-    if (state.start_date) p.set('start_date', state.start_date);
-    if (state.end_date) p.set('end_date', state.end_date);
-    if (state.start_ts) p.set('start_ts', state.start_ts);
-    if (state.end_ts) p.set('end_ts', state.end_ts);
-
-    const data = await apiGet(`/api/v1/events/facets?${p.toString()}`);
+    const data = await apiGet(`/api/v1/events/facets?${filterParams().toString()}`);
     renderSourceOptions(data?.sources || []);
     renderControlOptions(data?.controls || []);
+    renderRuleOptions(data?.rules || []);
   } catch {
     // Non-fatal; keep existing options.
   }
@@ -462,17 +516,19 @@ function renderRows(items) {
     const linksHtml = upstreamLinkHtml(e.source_url, { title: 'Open source event' });
 
     const tr = document.createElement('tr');
+    tr.dataset.eventId = e.id;
+    tr.className = 'event-row';
 
     // Identifier column: broad, human-friendly context.
     // Prefer the API-provided identifier (computed from config for some sources,
     // e.g. RSS feed label), otherwise fall back to the stored system field.
     const context = e.identifier ?? e.system ?? '';
 
-    tr.innerHTML = `
+    tr.innerHTML = `${selection.cellHtml(e)}
       <td class="small-muted" data-sort="${esc(tsSortKey(e.timestamp))}">${esc(fmtTs(e.timestamp))}</td>
       <td data-sort="${esc(e.source || '')}">${sourceHtml}</td>
       <td class="small-muted" data-sort="${esc(context)}">${context ? esc(context) : ''}</td>
-      <td class="wrap"><a href="${withFramework(`/event.html?id=${encodeURIComponent(e.id)}`, framework)}" class="fw-semibold" title="${esc(
+      <td class="wrap"><a href="${withFramework(`/event.html?id=${encodeURIComponent(e.id)}`, framework)}" class="fw-semibold" data-event-summary title="${esc(
         e.summary || '(no summary)',
       )}">${esc(shorten(e.summary || '(no summary)', 160))}</a></td>
       <td class="wrap">${controlsHtml}</td>
@@ -481,30 +537,34 @@ function renderRows(items) {
     `;
     tbody.appendChild(tr);
   }
+  selection.rendered();
 
   if ((items || []).length === 0) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="7" class="small-muted p-4">No events match the current filters.</td>`;
+    tr.innerHTML = `<td colspan="${columnCount}" class="small-muted p-4">No events match the current filters.</td>`;
     tbody.appendChild(tr);
   }
 }
 
+// A click on a row opens the event's details beside the list. Links and
+// buttons in the row keep their own behaviour, and a modified click on the
+// summary still opens the full page in a new tab.
+tbody.addEventListener('click', (ev) => {
+  const row = ev.target.closest('tr[data-event-id]');
+  if (!row || !tbody.contains(row)) return;
+  const summary = ev.target.closest('[data-event-summary]');
+  if (ev.target.closest('a, button, input, label') && !summary) return;
+  if (summary && (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button === 1)) return;
+  ev.preventDefault();
+  eventPanel.open(row.dataset.eventId);
+});
+
 async function loadEvents() {
   status.style.display = 'none';
   meta.textContent = 'Loading…';
-  showTableLoading(tbody, 7, 'Loading events…');
+  showTableLoading(tbody, columnCount, 'Loading events…');
   try {
-    const p = new URLSearchParams();
-    if (state.q) p.set('q', state.q);
-    if (framework) p.set('framework', framework);
-    if (state.source) p.set('source', state.source);
-    if (state.control) p.set('control', state.control);
-    if (state.clause) p.set('clause', state.clause);
-    if (state.unmapped) p.set('unmapped', 'true');
-    if (state.start_date) p.set('start_date', state.start_date);
-    if (state.end_date) p.set('end_date', state.end_date);
-    if (state.start_ts) p.set('start_ts', state.start_ts);
-    if (state.end_ts) p.set('end_ts', state.end_ts);
+    const p = filterParams();
     p.set('limit', String(state.limit));
     p.set('offset', String(state.offset));
 
@@ -524,8 +584,7 @@ async function loadEvents() {
   } catch (e) {
     toast(status, `Failed to load events: ${String(e)}`, 'danger');
     meta.textContent = '—';
-    tbody.innerHTML =
-      '<tr><td colspan="7" class="small-muted p-4">Failed to load events.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${columnCount}" class="small-muted p-4">Failed to load events.</td></tr>`;
   }
 }
 
@@ -534,8 +593,10 @@ function applyFromInputs(resetOffset = true) {
   const prevEndDate = state.end_date || '';
 
   state.q = inpQ.value.trim();
-  state.source = selSource.value;
-  state.control = selControl.value;
+  state.source = selectedFilterPillValues(selSource).join(',');
+  state.control = selectedFilterPillValues(selControl).join(',');
+  state.rule = selectedFilterPillValues(selRule).join(',');
+  state.conditions = conditionEditor.values();
   state.unmapped = chkUnmapped.checked;
 
   // Sync visible dd/mm/yyyy fields into the hidden YYYY-MM-DD inputs.
@@ -613,6 +674,7 @@ function applyFromInputs(resetOffset = true) {
     source: state.source || null,
     control: state.control || null,
     clause: state.clause || null,
+    rule: state.rule || null,
     unmapped: state.unmapped ? 'true' : null,
     start_date: state.start_date || null,
     end_date: state.end_date || null,
@@ -621,6 +683,7 @@ function applyFromInputs(resetOffset = true) {
     limit: state.limit,
     offset: state.offset,
   });
+  syncConditionsToUrl();
   // Keep the page heading in sync with the current filters.
   updatePageTitle();
 }
@@ -645,8 +708,9 @@ selControl?.addEventListener('change', updatePageTitleFromInputs);
 
 document.getElementById('reset').addEventListener('click', () => {
   inpQ.value = '';
-  selSource.value = '';
-  selControl.value = '';
+  for (const el of [selSource, selControl, selRule])
+    setFilterPillOptions(el, [], { selectedValues: [] });
+  conditionEditor.set([]);
   chkUnmapped.checked = false;
   if (startDate) startDate.value = '';
   if (endDate) endDate.value = '';
@@ -659,6 +723,8 @@ document.getElementById('reset').addEventListener('click', () => {
     source: '',
     control: '',
     clause: '',
+    rule: '',
+    conditions: [],
     unmapped: false,
     start_date: '',
     end_date: '',
@@ -702,6 +768,7 @@ if (autoApplyFilters) {
   // treat it consistently as a saved-search selection.
   selSource?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
   selControl?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
+  selRule?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
   chkUnmapped?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
   startDate?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
   endDate?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
@@ -731,17 +798,7 @@ function exportEvents(fmt) {
   // Sync inputs to state (but keep current offset unchanged)
   applyFromInputs(false);
 
-  const p = new URLSearchParams();
-  if (state.q) p.set('q', state.q);
-  if (framework) p.set('framework', framework);
-  if (state.source) p.set('source', state.source);
-  if (state.control) p.set('control', state.control);
-  if (state.clause) p.set('clause', state.clause);
-  if (state.unmapped) p.set('unmapped', 'true');
-  if (state.start_date) p.set('start_date', state.start_date);
-  if (state.end_date) p.set('end_date', state.end_date);
-  if (state.start_ts) p.set('start_ts', state.start_ts);
-  if (state.end_ts) p.set('end_ts', state.end_ts);
+  const p = filterParams();
   p.set('format', fmt);
 
   const url = `/api/v1/events/export?${p.toString()}`;

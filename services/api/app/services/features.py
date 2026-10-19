@@ -44,6 +44,7 @@ DEFINITIONS = (
     ("sampling", "Evidence and entity sampling into audits", "audits"),
     ("event_sampling", "Event sampling as PDF or audit evidence", "evidence"),
     ("questions", "Questions and replies", None),
+    ("stories", "Stories", None),
     ("incidents", "Incident actions", None),
 )
 KEYS = frozenset(key for key, _, _ in DEFINITIONS)
@@ -78,6 +79,7 @@ ENTITY_FEATURES = {
     "swot": "swot",
     "org_node": "organisation",
     "business_process": "business_processes",
+    "story": "stories",
 }
 SECTION_FEATURES = {
     "objectives": "objectives",

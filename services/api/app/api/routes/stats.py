@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import Depends, Request
+from fastapi import Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.api.context import change_context
@@ -11,6 +11,7 @@ from app.api.routing import Router
 from app.core.config import settings
 from app.db.session import get_db
 from app.services import stats as service
+from app.services.event_filters import parse_event_filters
 
 router = Router()
 
@@ -51,6 +52,12 @@ def stats_events_timeseries(
     days: int = 120,
     framework: str = settings.default_framework_slug,
     source: Optional[str] = None,
+    control: Optional[str] = None,
+    clause: Optional[str] = None,
+    rule: Optional[str] = None,
+    q: Optional[str] = None,
+    conditions: list[str] = Query(default=[], alias="f"),
+    unmapped: bool = False,
     breakdown: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
@@ -67,7 +74,16 @@ def stats_events_timeseries(
         context=change_context(request),
         days=days,
         framework=framework,
-        source=source,
+        scope=parse_event_filters(
+            framework=framework,
+            q=q,
+            source=source,
+            control=control,
+            clause=clause,
+            rule=rule,
+            conditions=conditions,
+            unmapped=unmapped,
+        ),
         breakdown=breakdown,
         start_date=start_date,
         end_date=end_date,

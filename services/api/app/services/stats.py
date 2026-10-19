@@ -29,6 +29,7 @@ from app.services.control_inheritance import (
     has_inherited_evidence,
 )
 from app.services.errors import DomainError
+from app.services.event_filters import EventFilters, event_predicates
 
 
 def _event_visibility_cache_scope(user) -> str:
@@ -433,7 +434,7 @@ def _stats_events_timeseries(
     context: ChangeContext,
     days: int = 120,
     framework: str = settings.default_framework_slug,
-    source: Optional[str] = None,
+    scope: EventFilters | None = None,
     breakdown: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
@@ -443,6 +444,10 @@ def _stats_events_timeseries(
     db: Session,
 ):
     """Return event volume over time.
+
+    ``scope`` carries the Events page filters (sources, controls, clauses,
+    rules, search text and text conditions), so the chart shows the same
+    events as the list.
 
     The histogram is bucketed by `interval` (default: daily). The endpoint
     supports either a date window (start_date/end_date inclusive) or a
@@ -459,6 +464,9 @@ def _stats_events_timeseries(
     user = context.actor
     if not can_read_events(db, user):
         raise DomainError(status_code=403, detail="events.read permission required")
+    scope = scope or EventFilters(framework=framework)
+    scope_filters = event_predicates(scope, db)
+    source = ",".join(scope.sources) or None
 
     def _iso_z(dt: datetime) -> str:
         """Format a naive datetime as UTC with a trailing Z."""
@@ -593,9 +601,7 @@ def _stats_events_timeseries(
         .filter(Event.timestamp >= start)
         .filter(diary_filter_condition(db, user))
     )
-    total_q = total_q.filter(Event.timestamp < end_excl)
-    if source:
-        total_q = total_q.filter(Event.source == source)
+    total_q = total_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
     total_rows = total_q.group_by("b").order_by("b").all()
     total_by_bucket: dict[datetime, int] = {}
     for b, n in total_rows:
@@ -613,9 +619,7 @@ def _stats_events_timeseries(
         .filter(Mapping.control_item_id.in_(effective_framework_ids(framework, db)))
         .filter(diary_filter_condition(db, user))
     )
-    mapped_q = mapped_q.filter(Event.timestamp < end_excl)
-    if source:
-        mapped_q = mapped_q.filter(Event.source == source)
+    mapped_q = mapped_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
     mapped_rows = mapped_q.group_by("b").order_by("b").all()
     mapped_by_bucket: dict[datetime, int] = {}
     for b, n in mapped_rows:
@@ -640,9 +644,7 @@ def _stats_events_timeseries(
             .filter(Event.timestamp >= start)
             .filter(diary_filter_condition(db, user))
         )
-        by_q = by_q.filter(Event.timestamp < end_excl)
-        if source:
-            by_q = by_q.filter(Event.source == source)
+        by_q = by_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
 
         for b, src, n in by_q.group_by("b", "src").order_by("b").all():
             if b is None:

@@ -232,6 +232,8 @@ for (const [user, type, allowed] of [
   [{ can_admin_audits: true }, 'event', false],
   [{ can_manage_audits: true, can_view_isms: true }, 'bookstack_section', false],
   [{ can_manage_audits: true, can_sample_isms: true }, 'isms_document', true],
+  [{ can_manage_audits: true, can_view_events: true }, 'story', false],
+  [{ can_manage_audits: true, can_view_stories: true }, 'story', true],
   [{ is_admin: true }, 'event', true],
 ])
   test(`audit sampling source ${type} ${JSON.stringify(user)}`, () => {
@@ -292,4 +294,26 @@ test('failed navbar account requests can be retried', async () => {
   } finally {
     u.close();
   }
+});
+
+test('the Stories link follows Audits and is offered once', () => {
+  const links = [{ key: 'events' }, { key: 'audits' }, { key: 'admin' }];
+  const withStories = a.withStoriesLink(links);
+  assert.deepEqual(
+    [...withStories.map((link) => link.key)],
+    ['events', 'audits', 'stories', 'admin'],
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(withStories[2])), {
+    key: 'stories',
+    label: 'Stories',
+    href: '/stories.html',
+    requireAny: ['is_admin', 'can_view_stories'],
+  });
+  assert.deepEqual([...links.map((link) => link.key)], ['events', 'audits', 'admin']);
+  assert.equal(a.withStoriesLink(withStories).length, 4);
+  assert.deepEqual(
+    [...a.withStoriesLink([{ key: 'controls' }]).map((link) => link.key)],
+    ['controls', 'stories'],
+  );
+  assert.deepEqual([...a.withStoriesLink(undefined).map((link) => link.key)], ['stories']);
 });

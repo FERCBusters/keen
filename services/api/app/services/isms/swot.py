@@ -8,24 +8,15 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, text
 
-from app.db.models import (
-    AuditSwotScope,
-    IsmsDocument,
-    IsmsObjective,
-    IsmsPerson,
-    IsmsSwot,
-    IsmsSwotLink,
-    IsmsVendor,
-    Risk,
-    RiskAsset,
-    User,
-)
+from app.db.models import AuditSwotScope, IsmsSwot, IsmsSwotLink, User
 from app.services.errors import DomainError
 
 from .access import _can_manage_isms, _can_read_isms
 from .common import _by_id_or_404, _clean_framework, _record, _utcnow
 from .link_diary import remove_entity_link_diary
 from .mutations import _apply_links
+from .related_records import resolve_target as _target
+from .related_records import search_targets, target_summary
 from .serializers import _attach_links
 
 KINDS = ("strength", "weakness", "opportunity", "threat")
@@ -38,16 +29,6 @@ STATUSES = (
     "deferred",
     "superseded",
 )
-TARGETS = {
-    "objective": IsmsObjective,
-    "document": IsmsDocument,
-    "asset": RiskAsset,
-    "person": IsmsPerson,
-    "vendor": IsmsVendor,
-    "risk": Risk,
-}
-
-
 Reference = Annotated[str, Field(min_length=1, max_length=128)]
 
 
@@ -136,57 +117,6 @@ def summary(row):
             "updated_at",
         )
         for value in [getattr(row, key)]
-    }
-
-
-def _target(db, user, kind, target_id, *, required=True):
-    if kind not in TARGETS:
-        raise DomainError(400, "Unknown relationship type")
-    from app.services.features import ENTITY_FEATURES, state
-
-    if not state(db).enabled(ENTITY_FEATURES[kind]):
-        if required:
-            raise DomainError(404, "Related feature is disabled")
-        return None
-    row = db.get(TARGETS[kind], target_id)
-    allowed = _can_read_isms(db, user)
-    if kind == "risk":
-        from app.services.risks import _can_read_specific_risk
-
-        allowed = _can_read_specific_risk(db, user, row)
-    if not row or not allowed:
-        if required:
-            raise DomainError(404, "Related item not available")
-        return None
-    return row
-
-
-def target_summary(kind, row):
-    title = (
-        getattr(row, "title", None)
-        or getattr(row, "name", None)
-        or getattr(row, "goal", None)
-        or getattr(row, "threat_summary", None)
-        or kind
-    )
-    page = {
-        "objective": "isms-objective",
-        "document": "isms-document",
-        "asset": "isms-asset",
-        "risk": "risk",
-        "person": "assurance",
-        "vendor": "assurance",
-    }[kind]
-    suffix = (
-        f"?tab={kind}s&edit={row.id}"
-        if kind in ("person", "vendor")
-        else f"?id={row.id}"
-    )
-    return {
-        "target_type": kind,
-        "target_id": str(row.id),
-        "title": title,
-        "url": f"/{page}.html{suffix}",
     }
 
 
@@ -500,20 +430,4 @@ def change_link(*, item_id, payload, remove, user, db, context):
 
 def choices(*, target_type, q, user, db):
     require_access(db, user)
-    if target_type not in TARGETS:
-        raise DomainError(400, "Unknown relationship type")
-    model = TARGETS[target_type]
-    field = {"objective": "goal", "document": "title", "risk": "threat_summary"}.get(
-        target_type, "name"
-    )
-    qry = db.query(model)
-    if q:
-        qry = qry.filter(getattr(model, field).ilike(f"%{q[:256]}%"))
-    rows = qry.order_by(getattr(model, field), model.id).limit(100).all()
-    return {
-        "items": [
-            target_summary(target_type, row)
-            for row in rows
-            if _target(db, user, target_type, row.id, required=False)
-        ]
-    }
+    return {"items": search_targets(db, user, target_type, q)}

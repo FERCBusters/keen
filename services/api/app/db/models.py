@@ -3351,3 +3351,111 @@ _evidence_retention_overrides = Table(
         "(mode='disabled' AND value IS NULL) OR (mode='age' AND value IS NOT NULL AND value BETWEEN 1 AND 36500) OR (mode='count' AND value IS NOT NULL AND value BETWEEN 1 AND 1000000000)"
     ),
 )
+
+
+class Story(Base):
+    """A curated set of events, records and notes that explain what happened."""
+
+    __tablename__ = "stories"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="open", index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False, index=True
+    )
+    __table_args__ = (
+        CheckConstraint("status in ('open','closed')", name="ck_stories_status"),
+    )
+
+
+class StoryItem(Base):
+    __tablename__ = "story_items"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    story_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("stories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    label: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime)
+    x: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    y: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    __table_args__ = (
+        CheckConstraint(
+            "kind in ('event','risk','document','asset','objective','note')",
+            name="ck_story_item_kind",
+        ),
+        CheckConstraint(
+            "(kind = 'note') = (entity_id IS NULL)", name="ck_story_item_entity"
+        ),
+        UniqueConstraint("story_id", "kind", "entity_id", name="uq_story_item_entity"),
+        Index("ix_story_items_entity", "kind", "entity_id"),
+    )
+
+
+class StoryLink(Base):
+    __tablename__ = "story_links"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    story_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stories.id", ondelete="CASCADE"), nullable=False
+    )
+    from_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("story_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    to_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("story_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    label: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    __table_args__ = (
+        CheckConstraint("from_item_id <> to_item_id", name="ck_story_link_ends"),
+        UniqueConstraint(
+            "story_id", "from_item_id", "to_item_id", name="uq_story_link"
+        ),
+    )
+
+
+class StoryComment(Base):
+    __tablename__ = "story_comments"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    story_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stories.id", ondelete="CASCADE"), nullable=False
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    __table_args__ = (
+        Index("ix_story_comments_story_created", "story_id", "created_at"),
+    )

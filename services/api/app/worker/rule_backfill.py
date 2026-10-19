@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import timedelta
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.datetime_utils import utc_now_naive
@@ -19,9 +19,10 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 from app.mapping.collector import collector_pointer_filter
-from app.mapping.rules import evaluate_by_framework, parse_rules
+from app.mapping.rules import evaluate_by_framework, parse_rules, rule_rationale
 from app.mapping.targets import resolve_targets
 from app.services.control_evidence_stats import clear_stats_caches
+from app.services.mapping_provenance import rule_owned_event_ids
 
 log = logging.getLogger(__name__)
 BATCH_SIZE = 200
@@ -42,20 +43,6 @@ def _target_rows(db, rules) -> dict[tuple[str, str, str | None], uuid.UUID]:
             {(framework, ref, kind): row.id for (ref, kind), row in found.items()}
         )
     return rows
-
-
-def rule_owned_event_ids(rule_id: str):
-    """Identify exact system-rule provenance, never manual/imported mappings."""
-    return (
-        select(Mapping.event_id)
-        .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-        .where(
-            Mapping.method == "rule",
-            Mapping.mapped_by == "system",
-            Mapping.rationale
-            == "auto by rule " + rule_id + " (" + ControlItem.framework_slug + ")",
-        )
-    )
 
 
 def process_batch(job_id: uuid.UUID) -> bool:
@@ -168,7 +155,7 @@ def process_batch(job_id: uuid.UUID) -> bool:
             if (
                 mapping.method == "rule"
                 and mapping.mapped_by == "system"
-                and mapping.rationale == f"auto by rule {job.rule_id} ({framework})"
+                and mapping.rationale == rule_rationale(job.rule_id, framework)
             ):
                 owned.setdefault(mapping.event_id, []).append((mapping, framework, ref))
         created = 0
