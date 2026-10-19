@@ -469,7 +469,7 @@ def _snapshot(db, org, selector, label, kind, row, fields=None):
 @contextmanager
 def _run_lock(db):
     # Single import across keys prevents races creating the shared framework/category.
-    with db.get_bind().connect() as connection:
+    with db.get_bind().engine.connect() as connection:
         acquired = connection.execute(
             text("SELECT pg_try_advisory_lock(1262830937)")
         ).scalar()

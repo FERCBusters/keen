@@ -7,11 +7,11 @@ books and tags) while keeping every response offline and bounded.
 import contextlib
 import json
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-
 from app.ingest import bookstack as bs
 from app.security.regex import compile_pattern
 
@@ -83,6 +83,9 @@ class BookStackApi:
             offset = int(request.url.params.get("offset", 0))
             count = int(request.url.params.get("count", "100"))
             window = [p for p in self.list_items if p.get("_in_window", True)]
+            book_id = request.url.params.get("filter[book_id]")
+            if book_id is not None:
+                window = [p for p in window if str(p.get("book_id")) == book_id]
             if slug is not None:
                 window = [p for p in window if p["slug"] == slug]
             if name is not None:
@@ -509,7 +512,6 @@ def test_page_mapping_matches():
         }
     )[0]
     assert mapping.matches(PAGE_LIST_ITEM, PAGE_FULL) is True
-    combined = mapping.with_confidence if False else None
     # A different book scope fails the match.
     other = bs._parse_page_mappings(
         {"page_mappings": [{"match": {"book_id": 8}, "map_to": ["A.1"]}]}
@@ -834,15 +836,17 @@ def test_ingest_all_capture_full_content_mode(db, env):
     assert stored_calls[0]["artifact_kind"] == "bookstack_page"
 
 
-def test_ingest_all_books_listing_and_optional_slug_filter(db, env):
+def test_ingest_all_lists_only_books_it_resolves(db, env):
     stack, api = env(list_items=[PAGE_LIST_ITEM], full_pages={11: PAGE_FULL})
     cfg = {
         "label": "books-mode",
         "books": ["isms", {"slug": "unknown-book"}],
         "poll": {"count": 10},
     }
+    stored = []
 
     def store(db, **kwargs):
+        stored.append(kwargs)
         return {"deduped": False, "event_id": "ev-1"}
 
     with contextlib.ExitStack() as total:
@@ -854,7 +858,9 @@ def test_ingest_all_books_listing_and_optional_slug_filter(db, env):
         total.enter_context(patch.object(bs.settings, "bookstack_enabled", True))
         total.enter_context(patch.object(bs, "store_event_with_artifact", store))
         results = bs.ingest_bookstack_all(db)
-    assert results[0]["created"] == 1
+
+    summary = results[0]
+    assert summary["created"] == 1
     book_requests = [
         r
         for r in api.requests
@@ -862,13 +868,78 @@ def test_ingest_all_books_listing_and_optional_slug_filter(db, env):
     ]
     slugs = {r.url.params["filter[slug]"] for r in book_requests}
     assert slugs == {"isms", "unknown-book"}
-    listing = [
-        r
-        for r in api.requests
-        if isinstance(r, httpx.Request) and r.url.path == "/api/pages"
+    # BookStack ignores page filters it does not support, so a book slug that
+    # resolves to no book is never listed: the listing would hold every book.
+    listing = [r for r in api.requests if r.url.path == "/api/pages"]
+    assert [r.url.params.get("filter[book_id]") for r in listing] == ["7"]
+    assert [call["system"] for call in stored] == [
+        "books-mode:isms:access-control-policy"
     ]
-    # The unresolved slug falls back to the slug filter instead of a book id.
-    assert any(r.url.params.get("filter[book_slug]") == "unknown-book" for r in listing)
+    assert summary["errors"] == [
+        "book_slug=unknown-book: No readable BookStack book has this slug"
+    ]
+    # The unread book keeps the cursor in place for the next run.
+    assert summary["cursor_set_to"] is None
+
+
+def test_a_book_whose_listing_fails_is_reported_and_read_again(db, env):
+    stack, api = env(list_items=[PAGE_LIST_ITEM], full_pages={11: PAGE_FULL})
+    upstream = api.handler
+
+    def handler(request):
+        if request.url.params.get("filter[book_id]") == "8":
+            return httpx.Response(500, json={"error": "unavailable"})
+        return upstream(request)
+
+    api.handler = handler
+    cfg = {"label": "books-mode", "books": [{"id": 8}, {"id": 7, "slug": "isms"}]}
+    stored = []
+
+    def store(db, **kwargs):
+        stored.append(kwargs)
+        return {"deduped": False, "event_id": "ev-1"}
+
+    with contextlib.ExitStack() as total:
+        total.enter_context(stack)
+        connections, run_lock = connections_env()
+        total.enter_context(connections)
+        total.enter_context(run_lock)
+        total.enter_context(patch.object(bs, "load_bookstack_config", return_value=cfg))
+        total.enter_context(patch.object(bs.settings, "bookstack_enabled", True))
+        total.enter_context(patch.object(bs, "store_event_with_artifact", store))
+        results = bs.ingest_bookstack_all(db)
+
+    # The other book is still collected, and the failure holds the cursor.
+    assert [call["system"] for call in stored] == [
+        "books-mode:isms:access-control-policy"
+    ]
+    assert results[0]["errors"] == [
+        "book=8: Collection failed: upstream returned HTTP 500"
+    ]
+    assert results[0]["cursor_set_to"] is None
+
+
+def test_a_cursor_moves_to_the_run_start_when_every_book_is_read(db, env):
+    stack, api = env(list_items=[PAGE_LIST_ITEM], full_pages={11: PAGE_FULL})
+    cfg = {"label": "books-mode", "books": ["isms"]}
+
+    with contextlib.ExitStack() as total:
+        total.enter_context(stack)
+        connections, run_lock = connections_env()
+        total.enter_context(connections)
+        total.enter_context(run_lock)
+        total.enter_context(patch.object(bs, "load_bookstack_config", return_value=cfg))
+        total.enter_context(patch.object(bs.settings, "bookstack_enabled", True))
+        total.enter_context(
+            patch.object(
+                bs, "store_event_with_artifact", return_value={"deduped": True}
+            )
+        )
+        before = datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
+        results = bs.ingest_bookstack_all(db)
+
+    assert results[0]["errors"] == []
+    assert datetime.fromisoformat(results[0]["cursor_set_to"]) >= before
 
 
 def test_ingest_all_disabled(db):
@@ -897,3 +968,267 @@ def test_ingest_all_dedup_advances_cursor_without_storing(db, env):
             results = bs.ingest_bookstack_all(db)
     assert results[0]["deduped"] == 1
     assert results[0]["created"] == 0
+
+
+def listed(page_id, slug, name, book_id):
+    return dict(PAGE_LIST_ITEM, id=page_id, slug=slug, name=name, book_id=book_id)
+
+
+def detail(item):
+    return dict(item, html=f"<p>{item['name']}</p>", markdown=None, tags=[])
+
+
+def seeded_run(db, env, cfg, pages, window=(), failing=None, details=None):
+    """Run a poll whose window lists only ``window``; mapped pages are seeded."""
+    full = {p["id"]: detail(p) for p in pages}
+    full.update(details or {})
+    stack, api = env(list_items=pages, full_pages=full)
+    upstream = api.handler
+
+    def handler(request):
+        if "filter[updated_at:gt]" in request.url.params:
+            api.requests.append(request)
+            data = [p for p in pages if p["id"] in window]
+            offset = int(request.url.params.get("offset", 0))
+            count = int(request.url.params.get("count", 100))
+            page = data[offset : offset + count]
+            return httpx.Response(200, json={"data": page, "total": len(data)})
+        if failing and failing(request):
+            return httpx.Response(500, json={"error": "unavailable"})
+        return upstream(request)
+
+    api.handler = handler
+    stored, mapped = [], []
+
+    def store(db, **kwargs):
+        stored.append(kwargs)
+        return {
+            "deduped": False,
+            "event_id": f"ev-{kwargs['raw_pointer']['bookstack']['page_id']}",
+        }
+
+    def add_mappings(db, *, event_id, refs, confidence, method, rationale):
+        mapped.append((event_id, refs))
+        return len(refs)
+
+    with contextlib.ExitStack() as total:
+        total.enter_context(stack)
+        connections, run_lock = connections_env()
+        total.enter_context(connections)
+        total.enter_context(run_lock)
+        total.enter_context(patch.object(bs, "load_bookstack_config", return_value=cfg))
+        total.enter_context(patch.object(bs.settings, "bookstack_enabled", True))
+        total.enter_context(patch.object(bs, "store_event_with_artifact", store))
+        total.enter_context(patch.object(bs, "_ensure_and_add_mappings", add_mappings))
+        results = bs.ingest_bookstack_all(db)
+    assert results[0].get("ok") is True, results
+    return SimpleNamespace(
+        summary=results[0],
+        pages=[c["raw_pointer"]["bookstack"]["page_id"] for c in stored],
+        mapped=mapped,
+        requests=api.requests,
+        stored=stored,
+    )
+
+
+SEEDED_PAGES = [
+    listed(11, "access-control-policy", "Access Control Policy", 7),
+    listed(44, "employment-contract", "Employment Contract", 7),
+    listed(51, "supplier-security", "Supplier Security", 7),
+    listed(52, "supplier-onboarding", "Supplier Onboarding", 8),
+    listed(53, "hr-handbook", "HR Handbook", 8),
+    listed(54, "hr-handbook", "Old HR Handbook", 7),
+    listed(61, "asset-register", "Asset Register", 9),
+    listed(70, "board-minutes", "Board minutes", 7),
+    listed(80, "release-notes", "Release notes", 7),
+]
+
+
+def test_mapped_pages_are_captured_within_their_book_scope(db, env):
+    cfg = {
+        "label": "seeded",
+        "book": {"slug": "isms"},
+        "page_mappings": [
+            {"match": {"slug": "access-control-policy"}, "map_to": ["A.5.15"]},
+            {"match": {"title": "Employment Contract"}, "map_to": ["A.6.2"]},
+            {"match": {"slug_regex": "^supplier-"}, "map_to": ["A.5.19"]},
+            {"match": {"book": {"id": 8}, "slug": "hr-handbook"}, "map_to": ["A.6.3"]},
+            {"match": {"id": 61}, "map_to": ["A.5.9"]},
+            # Invalid patterns are skipped, so they match nothing.
+            {"match": {"slug_regex": "("}, "map_to": ["A.1"]},
+            {"match": {"title_regex": "["}, "map_to": ["A.2"]},
+        ],
+        "capture_pages": [{"title": "Board minutes"}],
+    }
+
+    run = seeded_run(db, env, cfg, SEEDED_PAGES, window=[80])
+
+    # Page 80 changed in the window; the rest are captured because a mapping
+    # or capture selector names them, each looked up in its book scope.
+    assert run.pages == [11, 44, 51, 53, 61, 70, 80]
+    assert run.mapped == [
+        ("ev-11", ["A.5.15"]),
+        ("ev-44", ["A.6.2"]),
+        ("ev-51", ["A.5.19"]),
+        ("ev-53", ["A.6.3"]),
+        ("ev-61", ["A.5.9"]),
+    ]
+    assert run.summary["errors"] == [] and run.summary["config_mappings_created"] == 5
+    lookups = [
+        dict(r.url.params)
+        for r in run.requests
+        if r.url.path == "/api/pages"
+        and ("filter[name]" in r.url.params or "filter[slug]" in r.url.params)
+    ]
+    assert {
+        (q.get("filter[slug]") or q["filter[name]"], q["filter[book_id]"])
+        for q in lookups
+    } == {
+        ("access-control-policy", "7"),
+        ("Employment Contract", "7"),
+        ("Board minutes", "7"),
+        ("hr-handbook", "8"),
+    }
+
+
+def test_mapped_pages_in_an_unknown_book_are_never_looked_up(db, env):
+    cfg = {
+        "label": "seeded",
+        "book": {"slug": "retired-book"},
+        "page_mappings": [
+            {"match": {"slug": "access-control-policy"}, "map_to": ["A.5.15"]},
+            {"match": {"title": "Employment Contract"}, "map_to": ["A.6.2"]},
+            {"match": {"slug_regex": "^supplier-"}, "map_to": ["A.5.19"]},
+        ],
+    }
+
+    run = seeded_run(db, env, cfg, SEEDED_PAGES)
+
+    assert (run.pages, run.mapped) == ([], [])
+    assert [r for r in run.requests if r.url.path == "/api/pages"] == []
+    assert run.summary["errors"] == [
+        "book_slug=retired-book: No readable BookStack book has this slug"
+    ]
+    assert run.summary["cursor_set_to"] is None
+
+
+def test_without_a_book_scope_mapped_pages_are_found_instance_wide(db, env):
+    cfg = {
+        "label": "seeded",
+        "page_mappings": [
+            {"match": {"slug": "asset-register"}, "map_to": ["A.5.9"]},
+            {"match": {"slug_regex": "^supplier-"}, "map_to": ["A.5.19"]},
+        ],
+        "seed_mapped_pages": True,
+    }
+
+    run = seeded_run(db, env, cfg, SEEDED_PAGES)
+
+    assert run.pages == [51, 52, 61]
+    assert sorted(run.mapped) == [
+        ("ev-51", ["A.5.19"]),
+        ("ev-52", ["A.5.19"]),
+        ("ev-61", ["A.5.9"]),
+    ]
+
+
+def test_mapped_pages_wait_for_changes_when_seeding_is_off(db, env):
+    cfg = {
+        "label": "seeded",
+        "seed_mapped_pages": False,
+        "page_mappings": [{"match": {"slug": "release-notes"}, "map_to": ["A.8.32"]}],
+    }
+
+    run = seeded_run(db, env, cfg, SEEDED_PAGES, window=[44])
+
+    # Only the changed page is read; the mapping still applies to what is read.
+    assert (run.pages, run.mapped) == ([44], [])
+    run = seeded_run(db, env, cfg, SEEDED_PAGES, window=[80])
+    assert (run.pages, run.mapped) == ([80], [("ev-80", ["A.8.32"])])
+
+
+def test_mapped_pages_are_found_in_each_configured_book(db, env):
+    cfg = {
+        "label": "multi",
+        # Entries without a usable identity are ignored.
+        "books": [{"id": 7}, {"id": 8}, {"id": "seven"}, {"slug": ""}, 5],
+        "page_mappings": [
+            {"match": {"slug": "hr-handbook"}, "map_to": ["A.6.3"]},
+            {"match": {"slug_regex": "^supplier-"}, "map_to": ["A.5.19"]},
+            {"match": {"title": "Board minutes"}, "map_to": ["A.5.4"]},
+        ],
+    }
+
+    run = seeded_run(db, env, cfg, SEEDED_PAGES)
+
+    # The first book with the slug wins; patterns are matched in every book.
+    assert run.pages == [51, 52, 54, 70]
+    listings = {
+        r.url.params.get("filter[book_id]")
+        for r in run.requests
+        if r.url.path == "/api/pages" and "filter[slug]" not in r.url.params
+    }
+    assert listings == {"7", "8"}
+
+
+def test_a_failed_lookup_in_one_book_falls_through_to_the_next(db, env):
+    cfg = {
+        "label": "multi",
+        "books": [{"id": 7}, {"id": 8}],
+        "page_mappings": [
+            {"match": {"slug": "hr-handbook"}, "map_to": ["A.6.3"]},
+            {"match": {"title": "Supplier Onboarding"}, "map_to": ["A.5.19"]},
+            {"match": {"slug_regex": "^asset-"}, "map_to": ["A.5.9"]},
+        ],
+    }
+
+    def book_seven(request):
+        return request.url.params.get("filter[book_id]") == "7"
+
+    run = seeded_run(db, env, cfg, SEEDED_PAGES, failing=book_seven)
+
+    assert run.pages == [52, 53]
+    assert run.summary["errors"] == []
+
+
+def test_window_listings_follow_every_page(db, env):
+    cfg = {"label": "paged", "poll": {"count": 2}}
+
+    run = seeded_run(db, env, cfg, SEEDED_PAGES, window=[11, 44, 51, 52, 53])
+
+    assert run.pages == [11, 44, 51, 52, 53]
+    offsets = [
+        r.url.params["offset"]
+        for r in run.requests
+        if r.url.path == "/api/pages" and "filter[updated_at:gt]" in r.url.params
+    ]
+    assert offsets == ["0", "2", "4"]
+
+
+def test_unusable_settings_fall_back_and_actors_come_from_the_creator(db, env):
+    created_only = dict(
+        detail(SEEDED_PAGES[1]),
+        updated_by=None,
+        created_by={"id": 1, "name": "Founder"},
+    )
+    cfg = {
+        "label": "fallbacks",
+        "book": {"id": "seven"},
+        "capture": {"preview_chars": "lots"},
+    }
+
+    run = seeded_run(
+        db, env, cfg, SEEDED_PAGES, window=[44], details={44: created_only}
+    )
+
+    (stored,) = run.stored
+    assert stored["actor"] == "Founder"
+    payload = stored["normalized_payload"]["bookstack"]
+    assert payload["preview_chars"] == 500
+    # An unusable book id leaves the listing unscoped.
+    listing = next(
+        r
+        for r in run.requests
+        if r.url.path == "/api/pages" and "filter[updated_at:gt]" in r.url.params
+    )
+    assert "filter[book_id]" not in listing.url.params

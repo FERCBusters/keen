@@ -115,6 +115,7 @@ async function auditPage(t, options = {}) {
     me: options.me || { is_admin: true, user_id: 'u1' },
     globals: { NodeFilter, ...(options.globals || {}) },
     setup: options.setup,
+    vendor: options.vendor,
     get: async (u) => {
       switch (u.pathname) {
         case '/api/v1/audits/users':
@@ -391,6 +392,38 @@ test('audit scope graph renders a bipartite SVG and reports unlinked items', asy
   );
 });
 
+test('scope graph nodes open their clause or control; Ctrl or Cmd opens a new tab', async (t) => {
+  const location = { href: 'https://keen.example/audit.html?id=a1&framework=A' };
+  const opened = [];
+  const { ui } = await auditPage(t, {
+    globals: { location },
+    setup(window) {
+      window.open = (...args) => void opened.push(args);
+    },
+  });
+  const svg = ui.el('scopeHeatmap').querySelector('svg');
+  const click = (link, init = {}) => {
+    const event = new ui.window.MouseEvent('click', { bubbles: true, cancelable: true, ...init });
+    link.querySelector('g').dispatchEvent(event);
+    return event;
+  };
+  const clause = svg.querySelector('a.scope-clause');
+  const [control, other] = svg.querySelectorAll('a.scope-control');
+
+  // The page navigates itself, so the link's own navigation is cancelled.
+  assert.equal(click(clause).defaultPrevented, true);
+  assert.equal(location.href, clause.getAttribute('href'));
+  click(control, { ctrlKey: true });
+  click(other, { metaKey: true });
+
+  assert.deepEqual(opened, [
+    [control.getAttribute('href'), '_blank', 'noopener'],
+    [other.getAttribute('href'), '_blank', 'noopener'],
+  ]);
+  assert.match(control.getAttribute('href'), /^\/control\.html\?id=c\d&framework=A$/);
+  assert.equal(location.href, clause.getAttribute('href'));
+});
+
 test('audit scope graph shows guidance for empty scope and escapes load failures', async (t) => {
   const empty = await auditPage(t, { scopeMap: { clauses: [], controls: [], links: [] } });
   assert.match(
@@ -423,6 +456,32 @@ test('saving audit details sends the edited fields and reloads', async (t) => {
       executive_summary: '<p>Summary</p>',
     },
   });
+  await settle(() => /Audit details saved/.test(ui.el('status').textContent));
+  await idle(ui);
+});
+
+test('audit details with a date in the wrong format are not saved', async (t) => {
+  const invalid = new Set();
+  const { ui, state } = await auditPage(t, {
+    vendor: {
+      // The design system's date field reports whether its text is a date.
+      wireIsoDateTextField: (input) => ({ syncHiddenFromText: () => !invalid.has(input.id) }),
+    },
+  });
+  for (const field of ['auditStart', 'auditEnd']) {
+    invalid.clear();
+    invalid.add(field);
+    ui.el('detailsForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+    assert.equal(ui.el('status').textContent, 'Enter dates using the configured date format.');
+    assert.equal(ui.el('status').dataset.alert, 'warning');
+  }
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(state.patched, []);
+
+  invalid.clear();
+  ui.el('detailsForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => state.patched.length === 1);
+  assert.equal(state.patched[0].body.start_date, '2026-01-01');
   await settle(() => /Audit details saved/.test(ui.el('status').textContent));
   await idle(ui);
 });
@@ -950,6 +1009,21 @@ test('the audit ZIP capture masks addresses that end a sentence', async (t) => {
     /Checked a login from \[MASKED_IP\]\. Contact \[MASKED_EMAIL\]\. Peer \[MASKED_IP\]\./,
   );
   assert.doesNotMatch(text, /192\.0\.2\.1|dana@example\.test|fe80::1/);
+});
+
+test('the audit ZIP capture masks an IPv6 address written in full with an IPv4 tail', async (t) => {
+  const audit = baseAudit();
+  audit.evidence[0].notes =
+    'Mapped peer 0:0:0:0:0:ffff:192.0.2.1 and NAT64 64:ff9b:0:0:0:0:198.51.100.7.';
+  const responses = {
+    '/api/v1/audits/a1/report/download': ['final', { 'Content-Type': 'application/pdf' }],
+    '/api/v1/artifacts/art1/download?sample_export=1': ['log', {}],
+    '/api/v1/artifacts/art2/download?sample_export=1': ['png', {}],
+  };
+  const { captured } = await auditZipExport(t, responses, audit);
+  const text = captured.join('\n');
+  assert.match(text, /Mapped peer \[MASKED_IP\] and NAT64 \[MASKED_IP\]\./);
+  assert.doesNotMatch(text, /ffff|ff9b/);
 });
 
 test('audit ZIP entries never contain dot segments from download names', async (t) => {

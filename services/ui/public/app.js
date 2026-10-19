@@ -936,15 +936,6 @@ export async function openAuditSampleModal({
   }
 }
 
-export function auditSampleActionButtonHtml({
-  label = 'Sample into audit',
-  title = 'Sample into audit',
-  className = 'btn btn-sm btn-outline-success',
-  attrs = '',
-} = {}) {
-  return `<button class="${esc(className)}" type="button" ${attrs} title="${esc(title)}"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="d-none d-xl-inline ms-1">${esc(label)}</span></button>`;
-}
-
 export function loadingSpinnerHtml(message = 'Loading data…', { small = true } = {}) {
   const msg = esc(message || 'Loading data…');
   const spinnerClass = small ? 'spinner-border spinner-border-sm' : 'spinner-border';
@@ -1014,20 +1005,6 @@ export function safeAbsoluteHttpHref(url) {
     // Fall through to blank.
   }
   return '';
-}
-
-export function linkArrowsHtml(
-  urls,
-  { className = 'btn btn-sm btn-outline-secondary', title = 'Open link', empty = '' } = {},
-) {
-  const rows = Array.isArray(urls) ? urls : urls ? [urls] : [];
-  const links = rows
-    .map((url, idx) =>
-      arrowLinkHtml(url, { className, title: rows.length > 1 ? `${title} ${idx + 1}` : title }),
-    )
-    .filter(Boolean);
-  if (!links.length) return empty || '';
-  return `<div class="btn-group btn-group-sm" role="group">${links.join('')}</div>`;
 }
 
 export function titledLinksHtml(

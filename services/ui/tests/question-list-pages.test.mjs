@@ -26,10 +26,19 @@ const items = [
 ];
 
 async function questionsPage(t, name, options = {}) {
-  const state = { items: structuredClone(options.items ?? items), removed: [], statuses: [] };
+  const state = {
+    items: structuredClone(options.items ?? items),
+    removed: [],
+    statuses: [],
+    bell: 0,
+  };
   const ui = await page(t, name, {
     me: options.me || { is_admin: true },
     globals: options.globals,
+    setup(window) {
+      // The design system's navbar exposes this hook for the question bell.
+      window.keenRefreshBell = () => (state.bell += 1);
+    },
     get: async (u) => {
       if (u.pathname === '/api/v1/admin/questions') {
         state.statuses.push(u.searchParams.get('status'));
@@ -135,6 +144,8 @@ test('my questions lists threads, deletes after confirmation and explains failur
   });
   const rows = [...ui.el('questionsTbody').querySelectorAll('tr')];
   assert.equal(rows.length, 3);
+  // Each load brings the navbar's question count up to date.
+  assert.equal(state.bell, 1);
   assert.equal(ui.el('questionsTbody').querySelector('img'), null);
   assert.match(rows[0].textContent, /new reply/);
   assert.match(rows[1].textContent, /pestle item • P-1/);
@@ -147,6 +158,7 @@ test('my questions lists threads, deletes after confirmation and explains failur
   assert.deepEqual(state.removed, ['/api/v1/questions/t3']);
   ui.el('btnRefresh').click();
   await settle(() => ui.calls.filter((c) => c.url === '/api/v1/me/questions').length === 3);
+  await settle(() => state.bell === 3);
 
   const readOnly = await questionsPage(t, 'my-questions', { me: {}, items: [] });
   assert.equal(readOnly.ui.el('questionsEmpty').style.display, '');

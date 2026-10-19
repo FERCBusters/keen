@@ -83,9 +83,13 @@ retention and concurrency tests continue using their native PostgreSQL fixtures.
 
 The full runner writes backend HTML, JSON and XML coverage under `test-results/`
 and frontend reports alongside them. Both suites run even if backend tests fail.
-Coverage measures the whole application rather than only selected new modules;
-there is no arbitrary global percentage gate yet. Use the HTML reports to find
-uncovered behaviour before adding assertions, rather than tests that only
+Coverage measures the whole application rather than only selected new modules.
+Each suite has a coverage floor a little below its current level, so a change
+that leaves its behaviour untested fails the run: `tests.sh` gives pytest a
+minimum for combined statement and branch coverage, and `tests-ui.sh` gives c8
+minimums for lines, branches and functions. Raise a floor when coverage rises,
+and explain any reduction in the change that makes it. Use the HTML reports to
+find uncovered behaviour before adding assertions, rather than tests that only
 repeat implementation details.
 
 ## Readable frontend source

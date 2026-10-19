@@ -282,6 +282,9 @@ def _validate_connector(name: str, document: dict):
             raise DomainError(
                 400, "providers must be an object of named provider settings"
             )
+        # Provider names become webhook paths and source names in every editor.
+        for provider, entry in rows.items():
+            _validate_collection_entry(name, "providers", entry, str(provider))
     elif (
         not isinstance(rows, list)
         or len(rows) > 500
@@ -306,6 +309,7 @@ def _validate_connector(name: str, document: dict):
         if any(not value for value in keys) or len(set(keys)) != len(keys):
             raise DomainError(400, f"Every {name} entry needs a distinct {identity}")
     if name in ("forgejo", "gitea", "gitlab"):
+        product = {"forgejo": "Forgejo", "gitea": "Gitea", "gitlab": "GitLab"}[name]
         for section, field in (
             (("groups", "group"), ("users", "user"))
             if name == "gitlab"
@@ -332,11 +336,11 @@ def _validate_connector(name: str, document: dict):
                     or value in (".", "..")
                 ):
                     raise DomainError(
-                        400, f"Enter a valid Forgejo {field} account name"
+                        400, f"Enter a valid {product} {field} account name"
                     )
                 names.append(value.lower())
             if len(set(names)) != len(names):
-                raise DomainError(400, f"Duplicate Forgejo {section}")
+                raise DomainError(400, f"Duplicate {product} {section}")
     if name == "rss":
         for feed in rows:
             address = urlparse(str(feed.get("url") or ""))

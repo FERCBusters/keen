@@ -1,4 +1,5 @@
 import { fmtTsFilename, sourceLabel, toast } from '/app.js';
+import { maskDomText } from './masking.js';
 import { parseContentDispositionFilename, extFromContentType, buildZipStore } from './archive.js';
 import {
   sliceCanvasToA4JpegPages,
@@ -58,82 +59,8 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
   function _maskSampleExportsEnabled() {
     return _eventDataMaskingMode === 'samples' || _eventDataMaskingMode === 'true';
   }
-  function _isValidIpv4Literal(value) {
-    return /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(
-      String(value || ''),
-    );
-  }
-  function _isMaskableIpv6Candidate(raw) {
-    const candidate = String(raw || '').split('%', 1)[0];
-    if (!candidate || !candidate.includes(':')) return false;
-    if (/[^0-9A-Fa-f:.]/.test(candidate)) return false;
-    const compressionMatches = candidate.match(/::/g) || [];
-    if (compressionMatches.length > 1) return false;
-    const hasCompression = compressionMatches.length === 1;
-    const colonCount = (candidate.match(/:/g) || []).length;
-    // Avoid treating ordinary times like 13:40:19 as IPv6 addresses.
-    if (!hasCompression && colonCount !== 7) return false;
-    if (hasCompression && colonCount < 2) return false;
-
-    const parts = candidate.split(':');
-    const last = parts[parts.length - 1] || '';
-    const hasIpv4Tail = last.includes('.');
-    if (parts.some((part, idx) => part.includes('.') && idx !== parts.length - 1)) return false;
-    if (hasIpv4Tail && !_isValidIpv4Literal(last)) return false;
-
-    const hexParts = hasIpv4Tail ? parts.slice(0, -1) : parts;
-    if (!hasCompression && hexParts.some((part) => part === '')) return false;
-    for (const part of hexParts) {
-      if (!part) continue;
-      if (!/^[0-9A-Fa-f]{1,4}$/.test(part)) return false;
-    }
-
-    const groupCount = hexParts.filter(Boolean).length + (hasIpv4Tail ? 2 : 0);
-    return hasCompression ? groupCount < 8 : groupCount === 8;
-  }
-  function maskEventDataString(value) {
-    if (value == null) return value;
-    let txt = String(value);
-    txt = txt.replace(
-      /(^|[^A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{1,128})@([A-Za-z0-9.-]+\.[A-Za-z]{2,63})(?![A-Za-z0-9._%+-])/g,
-      '$1[MASKED_EMAIL]',
-    );
-    txt = txt.replace(
-      /(^|[^\w:.])([A-Fa-f0-9:.]+(?::[A-Fa-f0-9:.]*)+(?:%[A-Za-z0-9_.-]+)?)(?![\w:])/g,
-      (match, prefix, raw) => {
-        if (!_isMaskableIpv6Candidate(raw)) return match;
-        return `${prefix}[MASKED_IP]`;
-      },
-    );
-    txt = txt.replace(
-      /(^|[^\w.])((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})(?![\w.])/g,
-      '$1[MASKED_IP]',
-    );
-    return txt;
-  }
   function _maskExportDom(root) {
-    if (!root || !_maskSampleExportsEnabled()) return;
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        const parent = node?.parentElement;
-        if (!parent) return NodeFilter.FILTER_REJECT;
-        if (['SCRIPT', 'STYLE', 'NOSCRIPT'].includes(parent.tagName))
-          return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      },
-    });
-    const textNodes = [];
-    while (walker.nextNode()) textNodes.push(walker.currentNode);
-    for (const node of textNodes) node.nodeValue = maskEventDataString(node.nodeValue);
-    root.querySelectorAll('input, textarea').forEach((el) => {
-      if ('value' in el) el.value = maskEventDataString(el.value);
-    });
-    root.querySelectorAll('[title], [alt], [aria-label], [placeholder]').forEach((el) => {
-      for (const attr of ['title', 'alt', 'aria-label', 'placeholder']) {
-        if (el.hasAttribute(attr))
-          el.setAttribute(attr, maskEventDataString(el.getAttribute(attr) || ''));
-      }
-    });
+    if (_maskSampleExportsEnabled()) maskDomText(root);
   }
   function _sampleExportUrl(url) {
     if (!_maskSampleExportsEnabled()) return url;
@@ -314,55 +241,8 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       try {
         await _waitForImages(wrap);
 
-        // Avoid cutting evidence thumbnails across pages by nudging page breaks
-        // to occur before/after thumbnails when slicing the rendered canvas.
-        const scale = 2;
-        const wr = wrap.getBoundingClientRect();
-        const avoidRanges = [];
-
-        const addRangeForEl = (el, pad = 8) => {
-          if (!el) return;
-          try {
-            const r = el.getBoundingClientRect();
-            if (!r || r.height < 8) return;
-            const top = Math.max(0, Math.round((r.top - wr.top - pad) * scale));
-            const bottom = Math.max(0, Math.round((r.bottom - wr.top + pad) * scale));
-            if (bottom > top + 20) avoidRanges.push({ top, bottom });
-          } catch {}
-        };
-
-        // Keep certain blocks together when possible (prevents ugly mid-card splits).
-        addRangeForEl(wrap.querySelector('#normalized')?.closest('.card'), 10);
-        addRangeForEl(wrap.querySelector('#raw')?.closest('.card'), 10);
-
-        // Bonus: keep the "Attached files" heading with the first thumbnail row.
-        const previewsWrap = wrap.querySelector('#imagePreviews');
-        const attachedHeading = previewsWrap?.querySelector('.pdf-keep-with-next');
-        const firstPreviewImg = previewsWrap?.querySelector('img.evidence-img');
-
-        for (const img of Array.from(wrap.querySelectorAll('img.evidence-img'))) {
-          try {
-            const r = img.getBoundingClientRect();
-            if (!r || r.height < 10) continue;
-            const pad = 6;
-
-            let top = Math.max(0, Math.round((r.top - wr.top - pad) * scale));
-            const bottom = Math.max(0, Math.round((r.bottom - wr.top + pad) * scale));
-
-            // If we're about to break right at the start of the first thumbnail,
-            // push the break up to the heading so the heading doesn't get stranded
-            // at the bottom of the previous page.
-            if (attachedHeading && firstPreviewImg === img) {
-              try {
-                const hr = attachedHeading.getBoundingClientRect();
-                const hTop = Math.max(0, Math.round((hr.top - wr.top - pad) * scale));
-                if (Number.isFinite(hTop)) top = Math.min(top, hTop);
-              } catch {}
-            }
-
-            if (bottom > top + 20) avoidRanges.push({ top, bottom });
-          } catch {}
-        }
+        // Page breaks avoid cutting cards and evidence thumbnails when possible.
+        const avoidRanges = _computeAvoidRangesForWrap(wrap, 2);
 
         const canvas = await h2c(wrap, {
           scale: 2,

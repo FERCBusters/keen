@@ -186,10 +186,7 @@ def build_generic_payload(
         "links": links,
     }
     if extra:
-        try:
-            payload.update(extra)
-        except Exception:
-            pass
+        payload.update(extra)
     return payload
 
 
@@ -214,14 +211,7 @@ def _compact_text(payload: dict[str, Any]) -> str:
     body = str(post.get("body") or "")
 
     ctrls = payload.get("controls") or []
-    ctrl_refs: list[str] = []
-    try:
-        for c in ctrls:
-            ref = str((c or {}).get("ref") or "").strip()
-            if ref:
-                ctrl_refs.append(ref)
-    except Exception:
-        ctrl_refs = []
+    ctrl_refs = [ref for c in ctrls if (ref := str((c or {}).get("ref") or "").strip())]
 
     ctrl_part = f"\nControls: {', '.join(ctrl_refs[:12])}" if ctrl_refs else ""
     if len(ctrl_refs) > 12:
@@ -335,8 +325,6 @@ def _send_many(
     retry_on_status = retry_on_status or set()
 
     for url in urls:
-        if not url:
-            continue
         try:
             p = mk_payload(base_payload)
             code = _post_json(client, url, p, headers=extra_headers)
@@ -379,68 +367,29 @@ def send_question_created_webhooks(
     if not config.any_enabled():
         return {"enabled": False}
 
-    timeout = httpx.Timeout(config.timeout_seconds)
     # Keep a short connect timeout; most endpoints are public.
-    if timeout.connect is None:
-        timeout = httpx.Timeout(
-            config.timeout_seconds, connect=min(config.timeout_seconds, 3.0)
-        )
+    timeout = httpx.Timeout(
+        config.timeout_seconds, connect=min(config.timeout_seconds, 3.0)
+    )
 
     out: dict[str, Any] = {"enabled": True}
 
     with secure_http_client(
         timeout=timeout, follow_redirects=False, verify=True, trust_env=False
     ) as client:
-        # Slack
-        try:
-            s, f = _send_many(
+        # Chat services; a temporary failure stops the fan-out for a retry.
+        for name, urls, mk_payload in (
+            ("slack", config.slack_urls, slack_payload),
+            ("teams", config.teams_urls, teams_payload),
+            ("google_chat", config.google_chat_urls, google_chat_payload),
+        ):
+            out[f"{name}_sent"], out[f"{name}_failed"] = _send_many(
                 client=client,
-                urls=config.slack_urls,
-                mk_payload=slack_payload,
+                urls=urls,
+                mk_payload=mk_payload,
                 base_payload=generic_payload,
-                log_prefix="slack",
+                log_prefix=name,
                 retry_on_status={429},
-            )
-            out["slack_sent"], out["slack_failed"] = s, f
-        except _TemporarySendError:
-            raise
-        except Exception:
-            # shouldn't happen, but keep fanout resilient
-            out["slack_sent"], out["slack_failed"] = 0, len(config.slack_urls)
-
-        # Teams
-        try:
-            s, f = _send_many(
-                client=client,
-                urls=config.teams_urls,
-                mk_payload=teams_payload,
-                base_payload=generic_payload,
-                log_prefix="teams",
-                retry_on_status={429},
-            )
-            out["teams_sent"], out["teams_failed"] = s, f
-        except _TemporarySendError:
-            raise
-        except Exception:
-            out["teams_sent"], out["teams_failed"] = 0, len(config.teams_urls)
-
-        # Google Chat
-        try:
-            s, f = _send_many(
-                client=client,
-                urls=config.google_chat_urls,
-                mk_payload=google_chat_payload,
-                base_payload=generic_payload,
-                log_prefix="google_chat",
-                retry_on_status={429},
-            )
-            out["google_chat_sent"], out["google_chat_failed"] = s, f
-        except _TemporarySendError:
-            raise
-        except Exception:
-            out["google_chat_sent"], out["google_chat_failed"] = (
-                0,
-                len(config.google_chat_urls),
             )
 
         # Generic (send canonical JSON so optional signature can be verified)
@@ -457,8 +406,6 @@ def send_question_created_webhooks(
         g_sent = 0
         g_failed = 0
         for url in config.generic_urls:
-            if not url:
-                continue
             try:
                 with client.stream(
                     "POST", url, content=body, headers=generic_headers

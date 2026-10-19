@@ -206,16 +206,3 @@ def test_malformed_session_cannot_be_used_or_resurrected(raw):
         ttl_seconds=60,
     )
     assert r.get(sessions.session_key("bad")).decode() == raw
-
-
-def test_authz_versions_deduplicate_users_and_fail_to_authoritative_lookup():
-    r = fakeredis.FakeRedis()
-    assert sessions.get_authz_version(r, "one") == 0
-    sessions.bump_authz_versions(r, ["one", "one", "two", None])
-    assert sessions.get_authz_version(r, "one") == 1
-    assert sessions.get_authz_version(r, "two") == 1
-    r.set(sessions.authz_version_key("one"), "corrupt")
-    assert sessions.get_authz_version(r, "one") is None
-    failing = Mock()
-    failing.get.side_effect = ConnectionError("offline")
-    assert sessions.get_authz_version(failing, "one") is None

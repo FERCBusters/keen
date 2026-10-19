@@ -254,10 +254,6 @@ def configured_sso_providers() -> list[SsoProvider]:
     return out
 
 
-def any_sso_enabled() -> bool:
-    return any(p.enabled for p in all_sso_providers())
-
-
 def _required_missing(provider: SsoProvider) -> list[str]:
     prefix = {
         "oidc": "KEEN_OIDC",
@@ -281,8 +277,6 @@ def _required_missing(provider: SsoProvider) -> list[str]:
             missing.append(f"{prefix}_JWKS_URI")
         if not provider.issuer:
             missing.append(f"{prefix}_ISSUER")
-    if provider.kind == "github" and not provider.userinfo_endpoint:
-        missing.append(f"{prefix}_USER_ENDPOINT")
     return missing
 
 
@@ -645,12 +639,11 @@ async def _fetch_github_claims(
         user_info = user_resp.json()
 
         emails: list[dict[str, Any]] = []
-        if provider.emails_endpoint:
-            email_resp = await client.get(provider.emails_endpoint, headers=headers)
-            if email_resp.status_code < 400:
-                raw = email_resp.json()
-                if isinstance(raw, list):
-                    emails = [e for e in raw if isinstance(e, dict)]
+        email_resp = await client.get(provider.emails_endpoint, headers=headers)
+        if email_resp.status_code < 400:
+            raw = email_resp.json()
+            if isinstance(raw, list):
+                emails = [e for e in raw if isinstance(e, dict)]
 
     if not isinstance(user_info, dict):
         raise HTTPException(status_code=400, detail="GitHub user response invalid")
@@ -674,13 +667,11 @@ async def _fetch_github_claims(
         ),
         None,
     )
+    # A public GitHub profile email carries no verification flag. It is kept for
+    # display and never links accounts across providers.
     if primary_verified:
         email = str(primary_verified.get("email") or "").strip().lower() or email
         email_verified = True
-    elif email:
-        # Public GitHub profile email is not accompanied by a verification flag.
-        # Keep it for display, but do not use it for cross-provider linking.
-        email_verified = False
 
     claims = {
         "iss": _canonical_issuer(provider),

@@ -152,23 +152,13 @@ def redact_query_string(
 ) -> str | None:
     if not qs:
         return None
-    try:
-        parts: list[tuple[str, str]] = []
-        changed = False
-        for k, v in parse_qsl(qs, keep_blank_values=True):
-            if (
-                isinstance(k, str)
-                and (is_sensitive_key(k) or _normalize_key(k) in extra_keys)
-                and v
-            ):
-                parts.append((k, REDACTED))
-                changed = True
-            else:
-                parts.append((k, v))
-        out = urlencode(parts, doseq=True)
-        return out if (changed or out != qs) else qs
-    except Exception:
-        return qs
+    parts: list[tuple[str, str]] = []
+    for k, v in parse_qsl(qs, keep_blank_values=True):
+        if (is_sensitive_key(k) or _normalize_key(k) in extra_keys) and v:
+            parts.append((k, REDACTED))
+        else:
+            parts.append((k, v))
+    return urlencode(parts, doseq=True)
 
 
 def redact_url(url: str) -> str:
@@ -238,9 +228,12 @@ def mask_event_data_str(s: str | None) -> str | None:
 
     def _ipv6_sub(m: re.Match) -> str:
         whole = m.group(0)
-        # Sentence punctuation is part of the candidate match; keep it outside
-        # the address so "from fe80::1." is still masked.
+        # Punctuation after an address is part of the candidate match; keep it
+        # outside the address so "from fe80::1." and "address 2001:db8::1: not
+        # known" are still masked. An address ends in a colon only as "::".
         raw = whole.rstrip(".")
+        if raw.endswith(":") and not raw.endswith("::"):
+            raw = raw[:-1]
         suffix = whole[len(raw) :]
         # Strip a zone id for validation only (e.g. fe80::1%eth0).
         val = raw.split("%", 1)[0]
@@ -248,11 +241,10 @@ def mask_event_data_str(s: str | None) -> str | None:
         # Times such as 13:40:19 contain two colons but are not addresses.
         if "::" not in val and val.count(":") < 3:
             return whole
+        # A candidate with colons parses only as IPv6.
         try:
-            parsed = ipaddress.ip_address(val)
+            ipaddress.ip_address(val)
         except ValueError:
-            return whole
-        if parsed.version != 6:
             return whole
         return MASKED_IP + suffix
 

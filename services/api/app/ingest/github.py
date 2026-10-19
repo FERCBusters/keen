@@ -786,25 +786,17 @@ def ingest_github_atom_feed(
         """
         if not eid:
             return None
-        try:
-            tail = eid.split(":")[-1]
-            et = (tail.split("/")[0] or "").strip()
-            return et or None
-        except Exception:
-            return None
+        return eid.split(":")[-1].split("/")[0].strip() or None
 
     def _repo_from_link(href: str | None) -> str | None:
         if not href:
             return None
         try:
-            u2 = urlparse(href)
-            parts = (u2.path or "").strip("/").split("/")
-            if len(parts) >= 2:
-                owner, repo = parts[0], parts[1]
-                if owner and repo:
-                    return f"{owner}/{repo}"
-        except Exception:
+            parts = urlparse(href).path.strip("/").split("/")
+        except ValueError:
             return None
+        if len(parts) >= 2 and parts[0] and parts[1]:
+            return f"{parts[0]}/{parts[1]}"
         return None
 
     # Atom feeds are usually newest-first.

@@ -324,9 +324,11 @@ def _replace_objective_resources(
 ) -> None:
     if user_ids is None:
         return
+    # Synchronising removes the deleted links from the session, so a link
+    # saved again under the same key replaces them cleanly.
     db.query(IsmsObjectiveResourceUser).filter(
         IsmsObjectiveResourceUser.objective_id == objective.id
-    ).delete(synchronize_session=False)
+    ).delete(synchronize_session="fetch")
     seen = set()
     now = _utcnow()
     for uid in user_ids or []:
@@ -345,10 +347,7 @@ def _replace_objective_resources(
             )
         )
     db.flush()
-    try:
-        db.expire(objective, ["resource_users"])
-    except Exception:
-        pass
+    db.expire(objective, ["resource_users"])
 
 
 def _replace_access_control_accounts(
@@ -360,7 +359,7 @@ def _replace_access_control_accounts(
         return
     db.query(IsmsAccessControlMatrixAwsAccount).filter(
         IsmsAccessControlMatrixAwsAccount.entry_id == row.id
-    ).delete(synchronize_session=False)
+    ).delete(synchronize_session="fetch")
     seen = set()
     now = _utcnow()
     for account_id in aws_account_ids or []:
@@ -383,10 +382,7 @@ def _replace_access_control_accounts(
             )
         )
     db.flush()
-    try:
-        db.expire(row, ["aws_account_links"])
-    except Exception:
-        pass
+    db.expire(row, ["aws_account_links"])
 
 
 def _replace_access_control_roles(
@@ -398,17 +394,13 @@ def _replace_access_control_roles(
         return
     db.query(IsmsAccessControlMatrixRole).filter(
         IsmsAccessControlMatrixRole.entry_id == row.id
-    ).delete(synchronize_session=False)
+    ).delete(synchronize_session="fetch")
     seen = set()
     now = _utcnow()
+    # Callers have already checked that every role exists.
     for org_node_id in role_org_node_ids or []:
         if org_node_id in seen:
             continue
-        if not db.query(IsmsOrgNode.id).filter(IsmsOrgNode.id == org_node_id).first():
-            raise DomainError(
-                status_code=400,
-                detail=f"Unknown organisation chart role: {org_node_id}",
-            )
         seen.add(org_node_id)
         db.add(
             IsmsAccessControlMatrixRole(
@@ -418,10 +410,7 @@ def _replace_access_control_roles(
             )
         )
     db.flush()
-    try:
-        db.expire(row, ["role_links"])
-    except Exception:
-        pass
+    db.expire(row, ["role_links"])
 
 
 def _replace_org_node_users(
@@ -439,7 +428,7 @@ def _replace_org_node_users(
         label="relationship_type",
     )
     db.query(IsmsOrgNodeUser).filter(IsmsOrgNodeUser.org_node_id == node.id).delete(
-        synchronize_session=False
+        synchronize_session="fetch"
     )
     seen = set()
     now = _utcnow()
@@ -459,10 +448,7 @@ def _replace_org_node_users(
             )
         )
     db.flush()
-    try:
-        db.expire(node, ["users"])
-    except Exception:
-        pass
+    db.expire(node, ["users"])
 
 
 def _replace_meeting_people(
@@ -475,7 +461,7 @@ def _replace_meeting_people(
         return
     db.query(IsmsMeetingAttendee).filter(
         IsmsMeetingAttendee.meeting_id == meeting.id
-    ).delete(synchronize_session=False)
+    ).delete(synchronize_session="fetch")
     now = _utcnow()
     seen = set()
     for kind, ids in (("attendee", attendee_ids or []), ("apology", apology_ids or [])):
@@ -499,10 +485,7 @@ def _replace_meeting_people(
                 )
             )
     db.flush()
-    try:
-        db.expire(meeting, ["attendees"])
-    except Exception:
-        pass
+    db.expire(meeting, ["attendees"])
 
 
 def _replace_meeting_person_links(
@@ -587,7 +570,4 @@ def _replace_meeting_links(
             )
         )
     db.flush()
-    try:
-        db.expire(meeting, ["links"])
-    except Exception:
-        pass
+    db.expire(meeting, ["links"])

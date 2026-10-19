@@ -646,3 +646,62 @@ def test_administrators_reset_local_passwords_only(keen, admin_client):  # noqa:
         == 404
     )
     assert hash_password  # imported helper retained for fixture users
+
+
+@pytest.mark.parametrize(
+    "operation,arguments",
+    [
+        ("me", {}),
+        ("get_my_preferences", {}),
+        ("update_my_preferences", {"payload": None}),
+        ("list_my_saved_searches", {}),
+        ("upsert_my_saved_search", {"payload": None}),
+        ("delete_my_saved_search", {"saved_search_id": "any"}),
+        ("change_my_password", {"payload": None}),
+    ],
+)
+def test_account_operations_fail_closed_without_a_signed_in_user(operation, arguments):
+    from app.services import me as account
+    from app.services.context import ChangeContext
+    from app.services.errors import DomainError
+
+    call = getattr(account, operation)
+    extra = {} if operation == "get_my_preferences" else {"db": None}
+
+    with pytest.raises(DomainError) as refused:
+        call(context=ChangeContext(), **arguments, **extra)
+
+    assert (refused.value.status_code, refused.value.detail) == (
+        401,
+        "Not authenticated",
+    )
+
+
+def test_password_changes_stop_while_the_rate_limit_store_is_unavailable(
+    keen,  # noqa: F811 - fixture imported above
+    monkeypatch,
+):
+    from app.services import me as account
+
+    client = keen.client(keen.user())
+
+    def unavailable():
+        raise ConnectionError("valkey down")
+
+    monkeypatch.setattr(account, "get_valkey", unavailable)
+
+    response = client.post(
+        "/v1/me/password",
+        headers=unsafe(client),
+        json={
+            "current_password": PASSWORD,
+            "new_password": "another-synthetic-passphrase",
+        },
+    )
+
+    assert (response.status_code, response.json()["detail"]) == (
+        503,
+        "Service temporarily unavailable. Please try again later.",
+    )
+    # The password is unchanged.
+    assert client.get("/v1/me").status_code == 200

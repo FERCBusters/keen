@@ -469,7 +469,12 @@ def test_oauth_token_path_change_requires_reentry(keen, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "path", ["/v1/auth/sso/oidc/callback", "/v1/auth/sso/google/callback"]
+    "path",
+    [
+        "/v1/auth/sso/oidc/callback",
+        "/v1/auth/sso/google/callback",
+        "/v1/auth/oidc/callback",
+    ],
 )
 def test_audit_trail_omits_authorisation_codes(keen, path):
     keen.client().get(path, params={"code": "SYNTH-AUTH-CODE", "state": "SYNTH-STATE"})

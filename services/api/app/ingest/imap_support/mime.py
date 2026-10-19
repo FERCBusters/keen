@@ -197,10 +197,9 @@ def decode_body(raw, part, max_chars):
         "windows-1252": "cp1252",
     }
     charset = aliases.get(charset, charset)
-    fallback = charset not in {"utf-8", "ascii", "latin-1", "cp1252"}
-    if fallback:
+    if charset not in {"utf-8", "ascii", "latin-1", "cp1252"}:
         raise ValueError("Unsupported body charset")
     text = raw.decode(charset, "replace")
     # Redact the bounded decoded input before a display limit can split a value.
     text = redact_str(text)
-    return text[:max_chars], len(text) > max_chars, fallback
+    return text[:max_chars], len(text) > max_chars

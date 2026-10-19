@@ -162,12 +162,9 @@ def list_scheduled_audits(
     items = [schedule_summary(db, x, authors) for x in rows]
     occurrences: list[dict[str, Any]] = []
     for template in rows:
-        if window_start and window_end:
-            occurrences.extend(
-                template_occurrences_payload(
-                    template, start=window_start, end=window_end
-                )
-            )
+        occurrences.extend(
+            template_occurrences_payload(template, start=window_start, end=window_end)
+        )
     occurrences.sort(key=lambda x: (x["date"], x["title"]))
     return {"total": len(rows), "items": items, "occurrences": occurrences}
 

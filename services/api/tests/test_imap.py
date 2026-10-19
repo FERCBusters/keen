@@ -37,10 +37,10 @@ def test_mime_prefers_plain_and_excludes_attachments():
         structure(b"(" * 30 + b"NIL" + b")" * 30)
     with pytest.raises(ValueError):
         structure(b"(" * 40000)
-    text, truncated, fallback = decode_body(
+    text, truncated = decode_body(
         b'<img src="https://evil">', {"encoding": "7bit", "charset": "utf-8"}, 8
     )
-    assert text == "<img src" and truncated and not fallback
+    assert text == "<img src" and truncated
 
 
 @pytest.mark.parametrize(
@@ -390,7 +390,7 @@ def test_custom_redaction_precedes_body_character_limit(monkeypatch):
     monkeypatch.setenv("KEEN_SENSITIVE_KEYS", "private_code")
     redaction._sensitive_cfg.cache_clear()
     try:
-        text, _, _ = decode_body(
+        text, _ = decode_body(
             b'private_code="secret value with spaces" ordinary',
             {"encoding": "7bit", "charset": "utf-8"},
             30,
@@ -488,3 +488,195 @@ def test_connection_admin_csrf_credential_isolation_and_queue(keen, monkeypatch)
         "configuration": {**payload["configuration"], "fetch_body": "maybe"},
     }
     assert admin.post(path, json=invalid, headers=unsafe(admin)).status_code == 422
+
+
+CURSOR = {"uidvalidity": 7, "last_uid": 1}
+MAILBOX = {
+    "host": "mail.example",
+    "port": 993,
+    "username": "u",
+    "password": "p",
+    "folder": "INBOX",
+    "fetch_body": False,
+    "body_max_chars": 5,
+}
+
+
+def hostile_peer(**replies):
+    """A peer that answers one command with a scripted, hostile reply."""
+
+    class Hostile(Peer):
+        def __init__(self, *args):
+            super().__init__(*args)
+            self.received = replies.get("received", 0)
+
+        def response(self, key):
+            if key == "UIDNEXT" and "uidnext" in replies:
+                return key, [replies["uidnext"]]
+            return super().response(key)
+
+        def uid(self, command, *args):
+            if command == "SEARCH" and "search" in replies:
+                self.commands.append((command, *args))
+                return "OK", replies["search"]
+            if (
+                command == "FETCH"
+                and args[1] == "(UID RFC822.SIZE)"
+                and "meta" in replies
+            ):
+                self.commands.append((command, *args))
+                return "OK", replies["meta"]
+            if (
+                command == "FETCH"
+                and "HEADER.FIELDS" in args[1]
+                and "header" in replies
+            ):
+                self.commands.append((command, *args))
+                data = replies["header"]
+                section = args[1].split("BODY.PEEK[", 1)[1].split("]", 1)[0]
+                return "OK", [
+                    (
+                        f"1 (UID {args[0]} BODY[{section}]<0> {{{len(data)}}}".encode(),
+                        data,
+                    ),
+                    b")",
+                ]
+            return super().uid(command, *args)
+
+    return Hostile
+
+
+@pytest.mark.parametrize(
+    "replies,detail",
+    [
+        ({"uidnext": b"1"}, "IMAP UIDNEXT moved backwards"),
+        ({"search": [b"2", b"2"]}, "Oversized IMAP search response"),
+        ({"search": [b"2 " * 601]}, "Oversized IMAP search response"),
+        ({"search": [b"2 two"]}, "Invalid IMAP search response"),
+        ({"search": [b"5"]}, "IMAP returned UID outside requested window"),
+        (
+            {"meta": [b"1 (UID 2 RFC822.SIZE 100)", b"1 (UID 2 RFC822.SIZE 100)"]},
+            "Unsupported IMAP metadata response",
+        ),
+        ({"meta": [b"UID 2 RFC822.SIZE 100"]}, "Invalid IMAP metadata response"),
+        ({"meta": [b"1 (UID 2)"]}, "Invalid IMAP metadata fields"),
+        ({"meta": [b"1 (UID 9 RFC822.SIZE 100)"]}, "IMAP metadata UID mismatch"),
+        ({"meta": [b"1 (UID 2 RFC822.SIZE NIL)"]}, "Invalid IMAP message size"),
+        ({"meta": [b'1 (UID 2 RFC822.SIZE "1e3")']}, "Invalid IMAP message size"),
+        ({"header": b"X: y\r\n" * 201}, "IMAP headers exceed limit"),
+        ({"header": b"x" * 16384}, "IMAP headers exceed limit"),
+    ],
+)
+def test_hostile_mailbox_replies_end_the_collection(monkeypatch, replies, detail):
+    monkeypatch.setattr(worker, "Client", hostile_peer(**replies))
+
+    with pytest.raises(ValueError) as error:
+        worker.collect(MAILBOX, CURSOR, "")
+
+    assert str(error.value) == detail
+    assert Peer.last.closed
+
+
+def test_a_spent_session_budget_leaves_messages_for_the_next_run(monkeypatch):
+    monkeypatch.setattr(worker, "Client", hostile_peer(received=4 * 1024 * 1024))
+
+    result = worker.collect(MAILBOX, CURSOR, "")
+
+    # Nothing is fetched and the cursor stays before the unread message.
+    assert result == {"uidvalidity": 7, "last_uid": 1, "items": []}
+    assert [c[0] for c in Peer.last.commands] == ["EXAMINE", "SEARCH"]
+
+
+@pytest.mark.parametrize(
+    "raw,detail",
+    [
+        (b"", "Incomplete IMAP structure"),
+        (b"   ", "Incomplete IMAP structure"),
+        (b'("TEXT" "PLAIN"', "Incomplete IMAP structure"),
+        (b'("TEXT" "PLA', "Unterminated IMAP string"),
+        (b'"ends with an escape\\', "Unterminated IMAP string"),
+        (b"({5}\r\nhello)", "Unsupported IMAP structure literal"),
+        (b"(NIL) trailing", "Trailing IMAP structure data"),
+    ],
+)
+def test_malformed_body_structures_are_refused(raw, detail):
+    with pytest.raises(ValueError) as error:
+        structure(raw)
+    assert str(error.value) == detail
+
+
+def test_structure_strings_keep_escaped_characters():
+    assert structure(b'("a \\"quoted\\" \\\\ value" NIL)') == [
+        'a "quoted" \\ value',
+        None,
+    ]
+
+
+@pytest.mark.parametrize(
+    "tree,detail",
+    [
+        (["TEXT"], "Invalid MIME structure"),
+        ([["TEXT"], "MIXED"], "Invalid MIME structure"),
+        (
+            [["TEXT", "PLAIN", None, None, None, "7BIT", "x", 1], "MIXED"],
+            "Invalid MIME part size",
+        ),
+        (
+            [["TEXT", "PLAIN", None, None, None, "7BIT", "-1", 1], "MIXED"],
+            "Invalid MIME part size",
+        ),
+        (
+            [["TEXT", "PLAIN", None, None, None, "7BIT", "1", 1], ["X"]],
+            "Missing MIME multipart subtype",
+        ),
+        (
+            [["TEXT", "PLAIN", ["CHARSET"], None, None, "7BIT", "1", 1], "MIXED"],
+            "Invalid MIME parameters",
+        ),
+        (
+            [
+                [
+                    "TEXT",
+                    "PLAIN",
+                    None,
+                    None,
+                    None,
+                    "7BIT",
+                    "1",
+                    1,
+                    None,
+                    ["ATTACHMENT"],
+                ],
+                "MIXED",
+            ],
+            "Invalid MIME disposition",
+        ),
+    ],
+)
+def test_malformed_mime_trees_are_refused(tree, detail):
+    with pytest.raises(ValueError) as error:
+        body_part(tree)
+    assert str(error.value) == detail
+
+
+def test_named_or_attached_parts_are_never_bodies():
+    plain = ["TEXT", "PLAIN", None, None, None, "7BIT", "4", 1]
+    # A multipart that is itself named or attached is skipped as a whole.
+    assert body_part([plain, "MIXED", ["NAME", "bundle.eml"]]) is None
+    assert body_part([plain, "MIXED", None, ["ATTACHMENT", None]]) is None
+    assert body_part([plain, "MIXED", None, ["INLINE", ["FILENAME", "a.txt"]]]) is None
+    assert body_part([plain + [None, ["INLINE", None]], "MIXED"])["section"] == "1"
+    deep = plain
+    for _ in range(13):
+        deep = [deep, "MIXED"]
+    with pytest.raises(ValueError, match="Too many MIME parts"):
+        body_part(deep)
+
+
+def test_quoted_printable_bodies_are_decoded_and_redacted():
+    text, truncated = decode_body(
+        b"token=3Dhunter2 caf=C3=A9",
+        {"encoding": "quoted-printable", "charset": "utf8"},
+        100,
+    )
+    assert (text, truncated) == ("token=REDACTED café", False)

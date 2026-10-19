@@ -104,10 +104,10 @@ class RedisNotificationBus:
         self._stop.set()
         if self._task:
             self._task.cancel()
-            try:
-                await self._task
-            except Exception:
-                pass
+            # The listener can end cancelled, for example before its first run
+            # or during a retry delay. Waiting for it reports neither as a
+            # failure, and a cancellation of this call still propagates.
+            await asyncio.wait({self._task})
         self._task = None
 
         try:
@@ -125,12 +125,8 @@ class RedisNotificationBus:
         self._pub = None
 
     async def publish(self, payload: dict[str, Any]) -> None:
-        """Best-effort publish."""
-        try:
-            await self._pub_client().publish(CHANNEL, json.dumps(payload))
-        except Exception:
-            # Allow caller to fallback to local fanout.
-            raise
+        """Publish to every process; failures reach the caller's local fallback."""
+        await self._pub_client().publish(CHANNEL, json.dumps(payload))
 
     async def publish_admin_open_count(
         self, open_count: int, *, fallback_hub: NotificationHub | None = None

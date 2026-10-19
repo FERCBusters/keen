@@ -173,6 +173,25 @@ def test_audit_views_need_audit_permission_or_administrator(keen):  # noqa: F811
     )
 
 
+def test_audit_views_check_access_in_the_operation_itself(keen):  # noqa: F811
+    from app.services import admin as admin_service
+    from app.services.errors import DomainError
+
+    reader = keen.user("isms.read")
+    for operation in (
+        admin_service.admin_audit_trail,
+        admin_service.admin_entity_changelog,
+    ):
+        with pytest.raises(DomainError) as refused:
+            operation(user=reader, db=keen.db)
+        assert (refused.value.status_code, refused.value.detail) == (
+            403,
+            "Audit access required",
+        )
+    auditor = keen.user("audittrail.read")
+    assert admin_service.admin_entity_changelog(user=auditor, db=keen.db)["items"] == []
+
+
 def test_entity_changelog_filters_are_validated(admin):
     admin.call(
         "GET", "/v1/admin/entity-changelog", status=400, params={"entity_type": "user"}
@@ -1045,11 +1064,14 @@ def test_diary_entries_map_controls_and_store_attachments(admin):
             "author": "someone-else",
             "controls": "A.5.1, 6.1",
             "framework": "A",
-            "link": [{"url": "https://docs.example.test"}],
+            "links": [{"url": "https://docs.example.test"}],
         },
     )
     second = db.query(Event).filter(Event.id == uuid.UUID(json_entry["event_id"])).one()
     assert second.actor == admin.user.username
+    assert [link["url"] for link in second.normalized_payload["links"]] == [
+        "https://docs.example.test"
+    ]
     assert (
         db.query(ControlItem).filter_by(framework_slug="A", ref="6.1").one().type
         == "clause"

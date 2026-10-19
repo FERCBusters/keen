@@ -88,6 +88,15 @@ def test_custom_redaction_extends_defaults_and_replace_is_explicit(monkeypatch):
         ("Mail a@example.test.", "Mail [MASKED_EMAIL]."),
         ("Peers: 192.0.2.1, 198.51.100.7.", "Peers: [MASKED_IP], [MASKED_IP]."),
         ("from fe80::1.", "from [MASKED_IP]."),
+        # A colon after an address introduces the rest of a log message.
+        (
+            "address 2001:db8::1: Name or service not known",
+            "address [MASKED_IP]: Name or service not known",
+        ),
+        ("peer 2001:db8:1:2:3:4:5:6: refused", "peer [MASKED_IP]: refused"),
+        ("at 13:40:19: done", "at 13:40:19: done"),
+        ("mapped 0:0:0:0:0:ffff:192.0.2.1.", "mapped [MASKED_IP]."),
+        ("route via 2001:db8::.", "route via [MASKED_IP]."),
         ("(a@example.test)", "([MASKED_EMAIL])"),
         ("a@mail.example.co.uk", "[MASKED_EMAIL]"),
         # Longer dotted tokens are left alone as versions or host names.
@@ -153,3 +162,72 @@ def test_json_sample_masking_preserves_structure_and_scalars():
 )
 def test_redaction_status_composition(statuses, expected):
     assert r.combine_redaction_status(*statuses) == expected
+
+
+def test_malformed_credential_urls_are_replaced_whole():
+    assert r.redact_url("https://user:pw@[::1/report") == "REDACTED"
+    assert r.redact_str("see https://user:pw@[::1/report now") == "see REDACTED now"
+
+
+def test_query_strings_keep_blank_and_safe_values():
+    assert r.redact_query_string("") is None
+    assert r.redact_query_string("token=&page=2&api-key=x") == (
+        "token=&page=2&api-key=REDACTED"
+    )
+    # Extra keys apply only where a caller names them, such as OAuth callbacks.
+    assert r.redact_query_string("code=abc&state=xyz", frozenset({"code"})) == (
+        "code=REDACTED&state=xyz"
+    )
+
+
+def test_tuples_are_redacted_masked_and_made_storable():
+    value = ("token=DO-NOT-LEAK", "from 192.0.2.1", "a\x00b")
+
+    assert r.redact_obj(value) == ("token=REDACTED", "from 192.0.2.1", "a\x00b")
+    assert r.mask_event_data_obj(value)[1] == "from [MASKED_IP]"
+    assert r.storable(value)[2] == "a�b"
+    assert r.prepare_event_fields({"pair": value}, mask=True) == {
+        "pair": ("token=REDACTED", "from [MASKED_IP]", "a�b")
+    }
+
+
+@pytest.mark.parametrize("protect", [r.redact_bytes, r.mask_event_data_bytes])
+def test_empty_and_untyped_artifacts_are_left_alone(protect):
+    data = b"token=x from 192.0.2.1"
+
+    assert protect(b"", "text/plain") == (b"", "clean")
+    assert protect(data, None) == (data, "skipped")
+
+
+def test_text_artifacts_with_invalid_utf8_are_still_protected():
+    data = b"\xff\xfe token=DO-NOT-LEAK from 192.0.2.1"
+
+    redacted, status = r.redact_bytes(data, "text/plain; charset=utf-8")
+    assert status == "redacted" and b"DO-NOT-LEAK" not in redacted
+    masked, status = r.mask_event_data_bytes(data, "text/plain")
+    assert status == "redacted" and b"192.0.2.1" not in masked
+    # Text with nothing to protect keeps its original bytes.
+    assert r.mask_event_data_bytes(b"\xff plain", "text/plain") == (
+        b"\xff plain",
+        "clean",
+    )
+
+
+def test_malformed_json_artifacts_fall_back_to_text_protection():
+    data = b'{"token": "DO-NOT-LEAK", "ip": "192.0.2.1"'
+
+    redacted, status = r.redact_bytes(data, "application/json")
+    assert status == "redacted" and b"DO-NOT-LEAK" not in redacted
+    masked, status = r.mask_event_data_bytes(data, "application/vnd.keen+json")
+    assert status == "redacted" and b"192.0.2.1" not in masked
+    assert r.mask_event_data_bytes(b'{"n": 1}', "application/json") == (
+        b'{"n": 1}',
+        "clean",
+    )
+
+
+@pytest.mark.parametrize(
+    "text", ["ratio 1:2:3:4", "id ab::cd::ef", "node 1:2:3:4:5:6:7:8:9"]
+)
+def test_colon_separated_tokens_that_are_not_addresses_are_kept(text):
+    assert r.mask_event_data_str(text) == text

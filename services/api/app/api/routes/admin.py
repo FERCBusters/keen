@@ -343,9 +343,9 @@ async def admin_diary(
         summary = (body.get("summary") or "").strip()
         details_obj = _normalize_diary_details(body.get("details"))
 
-        links = _normalize_diary_links(body.get("links") or body.get("link"))
-        # Optional: allow passing control refs
-        raw_controls = body.get("controls") or body.get("control_refs") or []
+        links = _normalize_diary_links(body.get("links"))
+        # Controls by id or reference, as a list or a comma-separated string.
+        raw_controls = body.get("controls") or []
         if isinstance(raw_controls, str):
             controls = [c.strip() for c in raw_controls.split(",") if c.strip()]
         elif isinstance(raw_controls, list):
@@ -362,49 +362,18 @@ async def admin_diary(
 
         ts = _parse_iso_dt(form.get("timestamp"))
 
-        # controls[]
-        try:
-            controls = [
-                str(c).strip() for c in form.getlist("controls") if str(c).strip()
-            ]
-        except Exception:
-            # Some clients may send a single field
-            raw = form.get("controls")
-            if raw:
-                controls = [c.strip() for c in str(raw).split(",") if c.strip()]
+        controls = [str(c).strip() for c in form.getlist("controls") if str(c).strip()]
 
         raw_framework = form.get("framework")
         if isinstance(raw_framework, str) and raw_framework.strip():
             framework = raw_framework.strip()
 
-        # links (optional)
+        # links (optional): a JSON list of {url, text}
         links_raw = form.get("links")
         if links_raw:
             links = _normalize_diary_links(str(links_raw))
-        else:
-            try:
-                urls = [
-                    str(x).strip() for x in form.getlist("links_url") if str(x).strip()
-                ]
-            except Exception:
-                urls = []
-            try:
-                texts = [str(x).strip() for x in form.getlist("links_text")]
-            except Exception:
-                texts = []
-            if urls:
-                pairs = []
-                for i, u in enumerate(urls):
-                    t = texts[i] if i < len(texts) else ""
-                    pairs.append({"url": u, "text": t})
-                links = _normalize_diary_links(pairs)
 
-        # attachments[] (UploadFile)
-        uploads = []
-        try:
-            uploads.extend(list(form.getlist("attachments")))
-        except Exception:
-            pass
+        uploads = list(form.getlist("attachments"))
 
     return await service.admin_diary(
         db=db,

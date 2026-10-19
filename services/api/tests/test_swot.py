@@ -531,3 +531,58 @@ def test_soa_swot_framework_scope_permissions_and_feature_gate(keen):
     )
     assert response.status_code == 200, response.text
     assert reader.get(path).json()["swot_items"] == []
+
+
+def test_a_relationship_is_removed_only_at_the_current_version(keen):
+    from app.db.models import IsmsObjective
+
+    manager = keen.client(keen.user("isms.manage"))
+    reader = keen.client(keen.user("isms.read"))
+    objective = IsmsObjective(goal="Confidential objective goal")
+    keen.db.add(objective)
+    keen.db.commit()
+    item = create(
+        manager, links=[{"target_type": "objective", "target_id": str(objective.id)}]
+    )
+    path = f"/v1/isms/swot/{item['id']}/links/objective/{objective.id}"
+
+    def remove(client, version=None, headers=None):
+        params = {} if version is None else {"expected_version": version}
+        return client.delete(
+            path, params=params, headers=unsafe(client) if headers is None else headers
+        )
+
+    # Readers, requests without the token and stale or missing versions are
+    # refused, and the relationship stays.
+    assert remove(reader, item["version"]).status_code == 403
+    assert remove(manager, item["version"], headers={}).status_code == 403
+    assert remove(manager).status_code == 422
+    stale = remove(manager, item["version"] + 1)
+    assert stale.status_code == 409
+    assert keen.db.query(IsmsSwotLink).count() == 1
+    unknown = manager.delete(
+        f"/v1/isms/swot/{item['id']}/links/control/{objective.id}",
+        params={"expected_version": item["version"]},
+        headers=unsafe(manager),
+    )
+    assert unknown.status_code == 422
+
+    removed = remove(manager, item["version"])
+
+    assert removed.status_code == 200, removed.text
+    assert removed.json() == {"ok": True, "version": item["version"] + 1}
+    assert keen.db.query(IsmsSwotLink).count() == 0
+    assert reader.get(f"/v1/isms/swot/{item['id']}").json()["links"] == []
+    history = reader.get(f"/v1/isms/swot/{item['id']}/changelog").json()
+    entry = next(e for e in history["items"] if e["action"] == "relationship_removed")
+    assert {c["field"]: c["after"] for c in entry["changes"]} == {
+        "relationship_type": "objective",
+        "version": item["version"] + 1,
+    }
+    # The history names the kind of relationship, never the target.
+    assert (entry["request_method"], entry["request_path"]) == (
+        "DELETE",
+        f"/v1/isms/swot/{item['id']}/links",
+    )
+    text = str(history)
+    assert str(objective.id) not in text and objective.goal not in text

@@ -490,6 +490,50 @@ def test_provider_error_details_never_reach_the_browser(sso):
     assert not _sets_session(refused)
 
 
+@pytest.mark.parametrize(
+    "token",
+    [
+        {"access_token": "idp-access", "token_type": "Bearer"},
+        {"access_token": "idp-access", "token_type": "Bearer", "id_token": ""},
+    ],
+    ids=["absent", "empty"],
+)
+def test_a_token_response_without_an_id_token_cannot_sign_in(sso, token):
+    sso.account(subject="idp-subject")
+    sso.provider.token_response = httpx2.Response(200, json=token)
+    browser = sso.keen.client()
+    _, query = sso.authorize(browser)
+
+    refused = sso.finish(browser, query["state"])
+
+    assert (refused.status_code, refused.json()["detail"]) == (
+        400,
+        "OIDC token response missing id_token",
+    )
+    assert not _sets_session(refused) and _signed_in_as(browser) is None
+    # The login state is spent, so the callback cannot be replayed.
+    sso.provider.token_response = None
+    assert sso.finish(browser, query["state"]).json()["detail"] == (
+        "SSO state missing or expired"
+    )
+
+
+def test_an_id_token_with_a_blank_subject_cannot_sign_in(sso):
+    sso.account(email="ada@company.example")
+    sso.provider.subject = "   "
+    sso.provider.claims = {"email": "ada@company.example", "email_verified": True}
+    browser = sso.keen.client()
+
+    refused = sso.sign_in(browser)
+
+    assert (refused.status_code, refused.json()["detail"]) == (
+        400,
+        "OIDC claims missing sub",
+    )
+    assert not _sets_session(refused) and _signed_in_as(browser) is None
+    assert sso.db.query(UserIdentity).count() == 0
+
+
 def test_an_id_token_from_another_key_cannot_sign_in(sso):
     sso.account(subject="idp-subject")
     forger = RSAKey.generate_key(2048, {"kid": "idp-key"})
@@ -562,6 +606,17 @@ def test_the_key_set_is_fetched_once_an_hour(sso, monkeypatch):
             "KEEN_OIDC_CLIENT_SECRET, KEEN_OIDC_JWKS_URI, KEEN_OIDC_ISSUER",
         ),
         (
+            {
+                "oidc_client_id": "",
+                "oidc_authorization_endpoint": "",
+                "oidc_token_endpoint": "",
+            },
+            500,
+            f"{LABEL} SSO is enabled but required settings are missing: "
+            "KEEN_OIDC_CLIENT_ID, KEEN_OIDC_AUTHORIZATION_ENDPOINT, "
+            "KEEN_OIDC_TOKEN_ENDPOINT",
+        ),
+        (
             # KEEN never derives a callback address from the request.
             {"oidc_redirect_uri": ""},
             500,
@@ -611,6 +666,7 @@ def test_the_key_set_is_fetched_once_an_hour(sso, monkeypatch):
         "disabled",
         "auto-provision",
         "incomplete",
+        "no-client-or-endpoints",
         "no-redirect-uri",
         "redirect-elsewhere",
         "redirect-on-a-longer-host",
@@ -633,7 +689,11 @@ def test_misconfigured_sign_in_fails_closed_before_contacting_the_provider(
     assert response.json()["detail"] == detail
     assert sso.states() == 0 and sso.provider.requests == []
     methods = browser.get("/v1/auth/methods").json()
-    assert (methods["sso_enabled"], methods["sso_providers"]) == (False, [])
+    assert (
+        methods["oidc_enabled"],
+        methods["sso_enabled"],
+        methods["sso_providers"],
+    ) == (False, False, [])
 
 
 def test_only_working_providers_are_offered_on_the_sign_in_page(sso, monkeypatch):
@@ -647,16 +707,18 @@ def test_only_working_providers_are_offered_on_the_sign_in_page(sso, monkeypatch
         }
     ]
     assert methods["sso_enabled"] is True
-    # The sign-in page reads only the provider list; there is no second,
-    # provider-specific description of the same sign-in.
+    # The sign-in page reads the provider list. The hosted demo portal reads
+    # oidc_enabled before it offers a demo.
     assert set(methods) == {
         "demo",
         "local_enabled",
         "ldap_enabled",
         "remote_user_enabled",
+        "oidc_enabled",
         "sso_enabled",
         "sso_providers",
     }
+    assert methods["oidc_enabled"] is True
 
     # Plain HTTP is accepted only with the explicit development setting.
     monkeypatch.setattr(settings, "oidc_token_endpoint", "http://idp.example/token")
@@ -750,6 +812,21 @@ def test_a_public_github_profile_address_cannot_claim_an_account(github, emails)
     )
     assert github.db.query(UserIdentity).count() == 0
     assert _signed_in_as(browser) is None
+
+
+def test_a_github_token_response_without_an_access_token_cannot_sign_in(github):
+    github.account(email="ada@company.example")
+    github.provider.token_response = httpx2.Response(200, json={"token_type": "bearer"})
+
+    browser, _, refused = _github_sign_in(github)
+
+    assert (refused.status_code, refused.json()["detail"]) == (
+        400,
+        "GitHub token response missing access_token",
+    )
+    assert not _sets_session(refused) and _signed_in_as(browser) is None
+    # KEEN asks GitHub for no profile without a token to present.
+    assert [url for _, url in github.provider.requests if "api.github.com" in url] == []
 
 
 @pytest.mark.parametrize(

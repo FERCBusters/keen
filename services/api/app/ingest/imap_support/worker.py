@@ -192,7 +192,7 @@ def collect(config, cursor, allowed_cidrs):
                     limit = min(1024 * 1024, config["body_max_chars"] * 12 + 16)
                     raw_body = literal(client, uid, part["section"], limit)
                     try:
-                        text, truncated, fallback = decode_body(
+                        text, truncated = decode_body(
                             raw_body, part, config["body_max_chars"]
                         )
                     except ValueError:
@@ -208,7 +208,6 @@ def collect(config, cursor, allowed_cidrs):
                             body_truncated=truncated
                             or len(raw_body) >= limit
                             or part["size"] > len(raw_body),
-                            charset_fallback=fallback,
                             body_omitted_reason=None,
                         )
             # JSON escaping can expand a valid bounded Unicode body considerably.

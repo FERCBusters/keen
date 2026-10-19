@@ -51,12 +51,9 @@ def complete_local_login(
         permission_codes=permission_codes,
         authz_version=authz_version,
     )
-    try:
-        setattr(user, "session_id", sid)
-        setattr(user, "session_authz_version", authz_version)
-        setattr(user, "effective_permission_codes", set(permission_codes))
-    except Exception:
-        pass
+    user.session_id = sid
+    user.session_authz_version = authz_version
+    user.effective_permission_codes = set(permission_codes)
 
     from app.services.security_notifications import record_login
 

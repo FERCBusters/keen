@@ -127,12 +127,6 @@ def _first_matching_weekday_of_month(
     return d
 
 
-def first_weekday_of_month(year: int, month: int) -> date:
-    """Return the first Monday-Friday date for a month."""
-
-    return _first_matching_weekday_of_month(year, month)
-
-
 def first_scheduled_rule_date(year: int, month: int, rule: str) -> date:
     """Return the first concrete date for a supported fuzzy monthly rule."""
 

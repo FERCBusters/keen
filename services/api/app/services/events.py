@@ -168,15 +168,11 @@ def _event_text_search_condition(q: str | None):
     if not term:
         return None
 
-    # Sanitize input to prevent SQL injection via FTS
-    # Remove characters that could break out of plainto_tsquery
-    # plainto_tsquery treats special characters ( &:|!<> ) as operators
-    # We escape them to ensure literal search
-    import re
-
-    sanitized_term = re.sub(r"[&|!<>]", "", term)
-
-    like = f"%{sanitized_term}%"
+    # The term is a bound parameter and plainto_tsquery reads it as plain text.
+    # Substring matches keep punctuation such as "R&D"; LIKE wildcards in the
+    # term match literally.
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    like = f"%{escaped}%"
     fts = text(
         "to_tsvector('simple', "
         "coalesce(events.summary, '') || ' ' || "
@@ -187,17 +183,22 @@ def _event_text_search_condition(q: str | None):
         "coalesce(events.outcome, '') || ' ' || "
         "coalesce(events.external_id, '')"
         ") @@ plainto_tsquery('simple', :keen_event_q)"
-    ).bindparams(keen_event_q=sanitized_term)
+    ).bindparams(keen_event_q=term)
 
     return or_(
         fts,
-        Event.summary.ilike(like),
-        Event.action.ilike(like),
-        Event.system.ilike(like),
-        Event.actor.ilike(like),
-        Event.source.ilike(like),
-        Event.outcome.ilike(like),
-        Event.external_id.ilike(like),
+        *(
+            column.ilike(like, escape="\\")
+            for column in (
+                Event.summary,
+                Event.action,
+                Event.system,
+                Event.actor,
+                Event.source,
+                Event.outcome,
+                Event.external_id,
+            )
+        ),
     )
 
 

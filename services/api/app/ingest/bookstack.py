@@ -171,10 +171,9 @@ def _book_lookup_candidates(data: Any) -> list[dict[str, Any]]:
 def _resolve_book_id(client: httpx.Client, book_slug: Optional[str]) -> Optional[int]:
     """Resolve a configured BookStack book slug to its numeric ID.
 
-    BookStack page listing/filtering is reliable with ``book_id``. Some BookStack
-    versions do not include ``book_slug`` on page payloads and may not honour a
-    ``filter[book_slug]`` page filter, which caused configured ``slug_regex``
-    mappings scoped by book slug to silently miss pages.
+    Page requests are scoped by ``book_id``: BookStack ignores page filters it
+    does not support, ``book_slug`` among them. The run's connection cache keeps
+    each answer, an unresolved slug included.
     """
 
     slug = str(book_slug or "").strip()
@@ -388,6 +387,10 @@ def _list_pages(
     out: list[dict[str, Any]] = []
     if book_id is None and book_slug:
         book_id = _resolve_book_id(client, book_slug)
+        if book_id is None:
+            # BookStack ignores page filters it does not support, so listing
+            # by an unresolved slug would return the pages of every book.
+            return out
 
     offset = 0
     while True:
@@ -406,10 +409,6 @@ def _list_pages(
             params["filter[template]"] = "false"
         if book_id is not None:
             params["filter[book_id]"] = int(book_id)
-        elif book_slug:
-            # Compatibility fallback for BookStack versions/installations that
-            # support this filter. Prefer resolved book_id whenever possible.
-            params["filter[book_slug]"] = str(book_slug)
 
         r = client.get("/api/pages", params=params)
         r.raise_for_status()
@@ -446,11 +445,11 @@ def _find_page_by_slug(
         return None
     if book_id is None and book_slug:
         book_id = _resolve_book_id(client, book_slug)
+        if book_id is None:
+            return None
     params: dict[str, Any] = {"count": 1, "sort": "-updated_at", "filter[slug]": slug}
     if book_id is not None:
         params["filter[book_id]"] = int(book_id)
-    elif book_slug:
-        params["filter[book_slug]"] = str(book_slug)
     r = client.get("/api/pages", params=params)
     r.raise_for_status()
     body = r.json() or {}
@@ -509,11 +508,11 @@ def _find_page_by_title(
         return None
     if book_id is None and book_slug:
         book_id = _resolve_book_id(client, book_slug)
+        if book_id is None:
+            return None
     params: dict[str, Any] = {"count": 1, "sort": "-updated_at", "filter[name]": title}
     if book_id is not None:
         params["filter[book_id]"] = int(book_id)
-    elif book_slug:
-        params["filter[book_slug]"] = str(book_slug)
     r = client.get("/api/pages", params=params)
     r.raise_for_status()
     body = r.json() or {}
@@ -805,51 +804,43 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
         )
 
         # 1) Gather updated pages in a bounded window (since cursor, up to run start).
-        updated_pages: list[dict[str, Any]] = []
-        if book_id is not None or book_slug:
-            updated_pages = _list_pages(
+        # A configured book whose pages go unread keeps the cursor in place, so
+        # the next run reads this window again.
+        unread: list[str] = []
+
+        def window_pages(bid, bslug):
+            if bid is None and bslug:
+                bid = _resolve_book_id(client, bslug)
+                if bid is None:
+                    unread.append(
+                        f"book_slug={bslug}: No readable BookStack book has this slug"
+                    )
+                    return []
+            return _list_pages(
                 client,
                 since_ts=since_ts,
                 until_ts=run_started,
-                book_id=book_id,
-                book_slug=book_slug,
+                book_id=bid,
+                book_slug=bslug,
                 count=count,
                 include_drafts=include_drafts,
                 include_templates=include_templates,
                 max_pages=max_pages,
             )
+
+        updated_pages: list[dict[str, Any]] = []
+        if book_id is not None or book_slug:
+            updated_pages = window_pages(book_id, book_slug)
         elif books:
             # Merge results across multiple configured books.
             for bid, bslug in books:
                 try:
-                    updated_pages.extend(
-                        _list_pages(
-                            client,
-                            since_ts=since_ts,
-                            until_ts=run_started,
-                            book_id=bid,
-                            book_slug=bslug,
-                            count=count,
-                            include_drafts=include_drafts,
-                            include_templates=include_templates,
-                            max_pages=max_pages,
-                        )
-                    )
-                except Exception:
-                    continue
+                    updated_pages.extend(window_pages(bid, bslug))
+                except Exception as e:
+                    unread.append(f"book={bslug or bid}: {collection_error(e)}")
         else:
             # No book scoping: list across the whole instance.
-            updated_pages = _list_pages(
-                client,
-                since_ts=since_ts,
-                until_ts=run_started,
-                book_id=None,
-                book_slug=None,
-                count=count,
-                include_drafts=include_drafts,
-                include_templates=include_templates,
-                max_pages=max_pages,
-            )
+            updated_pages = window_pages(None, None)
 
         pages_by_id: dict[int, dict[str, Any]] = {}
         for p in updated_pages:
@@ -975,7 +966,7 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
 
         created = 0
         deduped = 0
-        errors: list[str] = []
+        errors: list[str] = list(unread)
         config_mappings_created = 0
 
         for pid, page_list in sorted(pages_by_id.items(), key=lambda kv: int(kv[0])):
@@ -1205,7 +1196,8 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
                 errors.append(f"page_id={pid}: {collection_error(e)}")
 
         # Cursor: Move the window forward to the start of this run.
-        cur.last_ts = run_started.replace(tzinfo=None)
+        if not unread:
+            cur.last_ts = run_started.replace(tzinfo=None)
         db.commit()
 
         runs.insert(

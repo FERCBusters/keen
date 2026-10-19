@@ -42,6 +42,7 @@ def test_safe_url_hint_keeps_secret_paths_out():
     assert qw._safe_url_hint("ftp://x") == "(url)"
     assert qw._safe_url_hint("not-a-url") == "(url)"
     assert qw._safe_url_hint("") == "(url)"
+    assert qw._safe_url_hint("https://[::1/hook") == "(url)"
 
 
 def test_parse_json_headers():
@@ -388,11 +389,19 @@ def test_send_created_webhooks_timeout_configuration():
             httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200)))
         )
 
-    config = make_config(slack_urls=["https://hooks.slack.example/x"])
+    config = make_config(
+        slack_urls=["https://hooks.slack.example/x"], timeout_seconds=6.0
+    )
     with patch.object(qw, "secure_http_client", capturing_client):
         qw.send_question_created_webhooks(config, PAYLOAD)
     timeout = captured["timeout"]
-    assert timeout.connect is not None and timeout.connect <= 3.0
+    # Connecting is bounded more tightly than the whole delivery.
+    assert (timeout.connect, timeout.read, timeout.write) == (3.0, 6.0, 6.0)
+    with patch.object(qw, "secure_http_client", capturing_client):
+        qw.send_question_created_webhooks(
+            make_config(slack_urls=["https://a.example/x"]), PAYLOAD
+        )
+    assert captured["timeout"].connect == 2.0
 
 
 def test_reply_webhooks_delegate_to_fanout():

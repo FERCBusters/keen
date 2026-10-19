@@ -41,14 +41,11 @@ export async function sliceCanvasToA4JpegPages(
   const contentHeightPx = Math.max(1, pageHeightPx - headerPx - footerPx);
   const fontPx = Math.max(10, Math.round(10 / ratio));
   // Precompute slice offsets so we know total page count.
-  // If a page cut would land through an evidence thumbnail, nudge the cut
-  // to start before/after the image so thumbnails aren't split across pages.
   const ranges = Array.isArray(avoidRanges) ? avoidRanges.slice() : [];
   ranges.sort((a, b) => (a?.top ?? 0) - (b?.top ?? 0));
 
   const cuts = [];
   let y = 0;
-  const minSlice = Math.max(80, Math.round(0.08 * contentHeightPx));
 
   const findRange = (pos) => {
     for (const r of ranges) {
@@ -69,20 +66,11 @@ export async function sliceCanvasToA4JpegPages(
       break;
     }
 
+    // Break before a thumbnail or card that the page end would cut, even when
+    // that makes a short page. One starting at the top of the page is taller
+    // than the page, so the break stays at the page end.
     const r = findRange(desired);
-    if (r) {
-      const before = r.top;
-      const after = r.bottom;
-
-      // Prefer breaking BEFORE the thumbnail (even if it makes a short page),
-      // because splitting thumbnails looks messy. Only fall back to AFTER if the
-      // thumbnail starts right at the top of the page.
-      if (before > y + 10) {
-        desired = before;
-      } else if (after - y <= contentHeightPx) {
-        desired = after;
-      }
-    }
+    if (r && r.top > y + 10) desired = r.top;
 
     let sliceH = Math.max(1, Math.min(contentHeightPx, desired - y));
     // Guard against no progress.
@@ -289,12 +277,7 @@ export async function sliceCanvasToFirstA4PreviewBlob(
   let desired = contentHeightPx;
   if (desired < canvas.height) {
     const r = findRange(desired);
-    if (r) {
-      const before = r.top;
-      const after = r.bottom;
-      if (before > 10) desired = before;
-      else if (after <= contentHeightPx) desired = after;
-    }
+    if (r && r.top > 10) desired = r.top;
   }
 
   const sliceH = Math.max(1, Math.min(canvas.height, Math.min(contentHeightPx, desired)));

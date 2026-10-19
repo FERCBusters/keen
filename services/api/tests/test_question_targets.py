@@ -881,3 +881,53 @@ def test_only_administrators_see_or_change_the_queue(qa):
             headers=unsafe(qa.admin),
         )
         assert response.status_code == status
+
+
+DOCX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+
+@pytest.mark.parametrize(
+    "name,data,content_type,accepted",
+    [
+        ("tiny.txt", b"abc", "text/plain", False),
+        ("notes.txt", "café notes".encode(), "text/plain", True),
+        # Text that is not UTF-8 is accepted only under a text file name.
+        ("notes.txt", b"\xff\xfe\x00 binary", "text/plain", True),
+        ("notes.exe", b"\xff\xfe\x00 binary", "text/plain", False),
+        (
+            "sheet.xls",
+            b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1 rest",
+            "application/vnd.ms-excel",
+            True,
+        ),
+        ("deck.pptx", b"PK\x03\x04 rest", DOCX, True),
+        ("deck.pptx", b"%PDF-1.4 rest", DOCX, False),
+        ("photo.gif", b"GIF89a rest", "image/gif", True),
+        ("photo.jpg", b"\xff\xd8\xff\xe0 rest", "image/jpeg", True),
+        ("tool.exe", b"MZ\x90\x00 rest", "application/x-msdownload", False),
+        # Undeclared types are inferred from the file name and checked against it.
+        ("report.pdf", b"%PDF-1.4 rest", "application/octet-stream", True),
+        ("report.pdf", b"MZ\x90\x00 rest", "application/octet-stream", False),
+        ("export.csv", b"a,b\n1,2\n", "application/octet-stream", True),
+        ("README", b"plain words", "application/octet-stream", False),
+    ],
+)
+def test_attachments_are_accepted_only_when_their_content_fits_their_type(
+    qa, name, data, content_type, accepted
+):
+    _, client = qa.member("question.create", "events.read")
+
+    response = _event_question(qa, client, [(name, data, content_type)])
+
+    stored = qa.rows(Artifact, kind="question_attachment")
+    if accepted:
+        assert response.status_code == 200, response.text
+        assert [(a.content_type, a.meta["filename"]) for a in stored] == [
+            (content_type, name)
+        ]
+    else:
+        assert (response.status_code, response.json()["detail"]) == (
+            400,
+            "Invalid file type: file content does not match declared content-type",
+        )
+        assert stored == [] and qa.rows(EventQuestionThread) == []

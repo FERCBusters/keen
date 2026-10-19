@@ -1247,17 +1247,13 @@ def admin_remap_run(
         try:
             d = date.fromisoformat(txt)
             return datetime.combine(d, time.max if end else time.min)
-        except Exception:
+        except ValueError:
             pass
-        # Datetime fallback (timezone-aware allowed)
+        # Datetime fallback; times without an offset are read as UTC.
         dt = _parse_iso_dt(txt)
         if not dt:
             return None
-        try:
-            dt = dt.astimezone(timezone.utc)
-        except Exception:
-            pass
-        return dt.replace(tzinfo=None)
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
 
     def _clean_filter(v: str | None) -> str | None:
         txt = str(v or "").strip()
@@ -1292,10 +1288,7 @@ def admin_remap_run(
     qry = qry.order_by(desc(Event.timestamp))
 
     # Allow limit=0 to mean "no limit".
-    try:
-        lim = int(limit or 0)
-    except Exception:
-        lim = 0
+    lim = int(limit or 0)
     if lim > 0:
         qry = qry.limit(lim)
 
@@ -1385,16 +1378,10 @@ def admin_audit_trail(
             qry = qry.filter(AuditLog.method == m)
 
     if status_min is not None:
-        try:
-            qry = qry.filter(AuditLog.status_code >= int(status_min))
-        except Exception:
-            pass
+        qry = qry.filter(AuditLog.status_code >= int(status_min))
 
     if status_max is not None:
-        try:
-            qry = qry.filter(AuditLog.status_code <= int(status_max))
-        except Exception:
-            pass
+        qry = qry.filter(AuditLog.status_code <= int(status_max))
 
     total = qry.order_by(None).count()
 

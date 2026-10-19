@@ -56,6 +56,8 @@ def auth_methods() -> dict:
             getattr(settings, "trust_remote_user", False)
             and not getattr(settings, "oidc_enabled", False)
         ),
+        # The hosted demo portal offers a demo once its OIDC sign-in works.
+        "oidc_enabled": any(provider.key == "oidc" for provider in providers),
         "sso_enabled": bool(providers),
         "sso_providers": [provider.public_dict() for provider in providers],
     }
@@ -168,6 +170,18 @@ async def sso_callback(
     provider_key: str, request: Request, db: Session = Depends(get_db)
 ) -> Response:
     return await _complete_sso_callback(request, db, provider_key=provider_key)
+
+
+# The hosted demo portal sends visitors to this start address and registers
+# this callback with its identity provider. Both serve the OIDC provider.
+@router.get("/v1/auth/oidc/start")
+async def oidc_start(request: Request, db: Session = Depends(get_db)) -> Response:
+    return await sso_start("oidc", request, db)
+
+
+@router.get("/v1/auth/oidc/callback")
+async def oidc_callback(request: Request, db: Session = Depends(get_db)) -> Response:
+    return await _complete_sso_callback(request, db, provider_key="oidc")
 
 
 async def _complete_sso_callback(

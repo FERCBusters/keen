@@ -291,10 +291,7 @@ def me(*, context: ChangeContext, db: Session) -> dict:
         or compute_effective_role(db, user)
         or user.role
     )
-    try:
-        setattr(user, "effective_role", eff_role)
-    except Exception:
-        pass
+    user.effective_role = eff_role
     is_admin = (eff_role or "") == ROLE_ADMIN
     can_audit_trail = bool(is_admin or has_permission(db, user, "audittrail.read"))
     can_admin_audits = has_permission(db, user, "audits.admin")

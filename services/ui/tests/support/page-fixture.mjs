@@ -28,6 +28,9 @@ export async function page(
     scripts = [],
     htmlName = name,
     frameworks = [{ slug: 'A', name: 'Framework A', control_count: 2, has_clauses: true }],
+    // Replacements for individual design-system functions, such as a
+    // controllable debounce or saved-search lookup.
+    vendor = {},
   } = {},
 ) {
   const calls = [],
@@ -138,6 +141,7 @@ export async function page(
       sourceBadgeHtml: (s) => String(s),
       upstreamLinkHtml: () => '',
       safeExternalHref: (s) => (/^https?:\/\//.test(s) ? s : ''),
+      ...vendor,
     },
   });
   t.after(() => {

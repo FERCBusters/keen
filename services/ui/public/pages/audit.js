@@ -1,4 +1,5 @@
 import { featureEnabled } from '/pages/feature-availability.js';
+import { maskDomText, maskEventDataString } from '/pages/evidence-export/masking.js';
 let selectedSwotIds = new Set(),
   swotScopeLoaded = false;
 import {
@@ -41,83 +42,8 @@ const _eventDataMaskingMode = String(me?.event_data_masking || 'false')
 function _maskSampleExportsEnabled() {
   return _eventDataMaskingMode === 'samples' || _eventDataMaskingMode === 'true';
 }
-function _isValidIpv4Literal(value) {
-  return /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(
-    String(value || ''),
-  );
-}
-function _isMaskableIpv6Candidate(raw) {
-  const candidate = String(raw || '').split('%', 1)[0];
-  if (!candidate || !candidate.includes(':')) return false;
-  if (/[^0-9A-Fa-f:.]/.test(candidate)) return false;
-  const compressionMatches = candidate.match(/::/g) || [];
-  if (compressionMatches.length > 1) return false;
-  const hasCompression = compressionMatches.length === 1;
-  const colonCount = (candidate.match(/:/g) || []).length;
-  // Avoid treating ordinary times like 13:40:19 as IPv6 addresses.
-  if (!hasCompression && colonCount !== 7) return false;
-  if (hasCompression && colonCount < 2) return false;
-
-  const parts = candidate.split(':');
-  const last = parts[parts.length - 1] || '';
-  const hasIpv4Tail = last.includes('.');
-  if (parts.some((part, idx) => part.includes('.') && idx !== parts.length - 1)) return false;
-  if (hasIpv4Tail && !_isValidIpv4Literal(last)) return false;
-
-  const hexParts = hasIpv4Tail ? parts.slice(0, -1) : parts;
-  if (!hasCompression && hexParts.some((part) => part === '')) return false;
-  for (const part of hexParts) {
-    if (!part) continue;
-    if (!/^[0-9A-Fa-f]{1,4}$/.test(part)) return false;
-  }
-
-  const groupCount = hexParts.filter(Boolean).length + (hasIpv4Tail ? 2 : 0);
-  return hasCompression ? groupCount < 8 : groupCount === 8;
-}
-function maskEventDataString(value) {
-  if (value == null) return value;
-  let txt = String(value);
-  txt = txt.replace(
-    /(^|[^A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{1,128})@([A-Za-z0-9.-]+\.[A-Za-z]{2,63})(?![A-Za-z0-9_%+-]|\.[A-Za-z0-9])/g,
-    '$1[MASKED_EMAIL]',
-  );
-  txt = txt.replace(
-    /(^|[^\w:.])([A-Fa-f0-9:.]+(?::[A-Fa-f0-9:.]*)+(?:%[A-Za-z0-9_.-]+)?)(?![\w:])/g,
-    (match, prefix, candidate) => {
-      // Keep sentence punctuation outside the address.
-      const raw = candidate.replace(/\.+$/, '');
-      if (!_isMaskableIpv6Candidate(raw)) return match;
-      return `${prefix}[MASKED_IP]${candidate.slice(raw.length)}`;
-    },
-  );
-  txt = txt.replace(
-    /(^|[^\w.])((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})(?!\w|\.\d)/g,
-    '$1[MASKED_IP]',
-  );
-  return txt;
-}
 function _maskExportDom(root) {
-  if (!root || !_maskSampleExportsEnabled()) return;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      const parent = node?.parentElement;
-      if (!parent) return NodeFilter.FILTER_REJECT;
-      if (['SCRIPT', 'STYLE', 'NOSCRIPT'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
-  const textNodes = [];
-  while (walker.nextNode()) textNodes.push(walker.currentNode);
-  for (const node of textNodes) node.nodeValue = maskEventDataString(node.nodeValue);
-  root.querySelectorAll('input, textarea').forEach((el) => {
-    if ('value' in el) el.value = maskEventDataString(el.value);
-  });
-  root.querySelectorAll('[title], [alt], [aria-label]').forEach((el) => {
-    for (const attr of ['title', 'alt', 'aria-label']) {
-      if (el.hasAttribute(attr))
-        el.setAttribute(attr, maskEventDataString(el.getAttribute(attr) || ''));
-    }
-  });
+  if (_maskSampleExportsEnabled()) maskDomText(root);
 }
 function _sampleExportUrl(url) {
   if (!_maskSampleExportsEnabled()) return url;

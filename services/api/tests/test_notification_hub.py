@@ -5,7 +5,6 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from app.realtime import notifications as nt
 
 
@@ -199,7 +198,6 @@ def test_listen_loop_refresh_after_failures_and_stop_signal():
         redis.pubsub.return_value = FailingPubSub()
         bus = nt.RedisNotificationBus("redis://localhost:6379/0")
         waits = []
-        real_sleep = asyncio.sleep
 
         async def tracked_sleep(delay):
             waits.append(delay)
@@ -280,5 +278,84 @@ def test_listener_start_stop_helpers():
             start.assert_awaited_once()
             await nt.stop_notification_listener()
             stop.assert_awaited_once()
+
+    asyncio.run(scenario())
+
+
+def _quiet_hub():
+    hub = MagicMock()
+    hub.broadcast_admin = AsyncMock()
+    hub.broadcast_user = AsyncMock()
+    return hub
+
+
+def test_stopping_straight_after_starting_shuts_down_cleanly():
+    # Application shutdown can follow startup at once, before the listener
+    # has run; stopping must not fail the shutdown.
+    async def scenario():
+        bus = nt.RedisNotificationBus("redis://127.0.0.1:1/0")
+        await bus.start(_quiet_hub())
+        task = bus._task
+
+        await bus.stop()
+
+        assert task.done()
+        assert (bus._task, bus._sub, bus._pub) == (None, None, None)
+
+    asyncio.run(scenario())
+
+
+def test_stopping_while_the_broker_is_unavailable_shuts_down_cleanly():
+    async def scenario():
+        reached = asyncio.Event()
+
+        class Unavailable:
+            async def subscribe(self, channel):
+                reached.set()
+                raise ConnectionError("broker unavailable")
+
+            async def close(self):
+                pass
+
+        redis = MagicMock()
+        redis.pubsub.return_value = Unavailable()
+        bus = nt.RedisNotificationBus("redis://127.0.0.1:1/0")
+        with patch.object(bus, "_sub_client", return_value=redis):
+            await bus.start(_quiet_hub())
+            await reached.wait()
+            # The listener now waits out its retry delay.
+            await asyncio.sleep(0.01)
+            started = asyncio.get_running_loop().time()
+
+            await bus.stop()
+
+        assert asyncio.get_running_loop().time() - started < 0.5
+        assert bus._task is None
+
+    asyncio.run(scenario())
+
+
+def test_a_cancelled_stop_still_reports_its_cancellation():
+    # Waiting for the listener must not swallow the caller's own cancellation.
+    async def scenario():
+        bus = nt.RedisNotificationBus("redis://127.0.0.1:1/0")
+        never = asyncio.Event()
+
+        async def listener(hub):
+            try:
+                await never.wait()
+            except asyncio.CancelledError:
+                await never.wait()
+
+        with patch.object(bus, "_listen_loop", listener):
+            await bus.start(_quiet_hub())
+            await asyncio.sleep(0)
+            stopping = asyncio.create_task(bus.stop())
+            await asyncio.sleep(0.01)
+            stopping.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await stopping
+            never.set()
+            await asyncio.sleep(0)
 
     asyncio.run(scenario())

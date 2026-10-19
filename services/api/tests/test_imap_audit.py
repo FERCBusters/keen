@@ -12,7 +12,7 @@ from tests.test_assembled_authority_regressions import unsafe
 @pytest.mark.parametrize("quote", ['"', "'"])
 def test_incomplete_quoted_secret_is_redacted_to_end_of_fetched_body(quote):
     raw = ("token=" + quote + "first second-secret third-secret").encode()
-    text, _, _ = decode_body(raw, {"encoding": "7bit", "charset": "utf-8"}, 4000)
+    text, _ = decode_body(raw, {"encoding": "7bit", "charset": "utf-8"}, 4000)
     assert "second-secret" not in text and "third-secret" not in text
     assert "REDACTED" in text
 

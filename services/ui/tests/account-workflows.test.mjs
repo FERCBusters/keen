@@ -139,7 +139,8 @@ async function account(t, options = {}) {
       ...options.globals,
     },
     setup(window) {
-      window.keenRefreshQuestionBell = () => (state.bell += 1);
+      // The design system's navbar exposes this hook for the question bell.
+      window.keenRefreshBell = () => (state.bell += 1);
       if (options.tabs) window.bootstrap = options.tabs;
     },
     get: async (u) => {

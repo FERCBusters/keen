@@ -39,7 +39,6 @@ QUESTION_CREATE_PERMISSION = "question.create"
 # Question routes accept exactly these names, so the type in a request path is
 # always the one the route's feature policy checks.
 QUESTION_TARGET_TYPES = frozenset({"event", "risk", "pestle_item", "isms_swot"})
-_NOTIFICATION_RECHECK_SECONDS = 30
 MAX_ATTACHMENT_BYTES = 40 * 1024 * 1024
 
 
@@ -338,24 +337,23 @@ def _validate_file_magic(data: bytes, content_type: str, filename: str) -> bool:
     # Get file extension
     ext = os.path.splitext(filename)[1].lower() if filename else ""
 
-    # Check if we have a magic signature for this content type
+    # A content type can have several signatures, such as GIF87a and GIF89a.
     matched_type = False
     for magic, allowed_types, allowed_exts in magic_signatures:
-        if content_type in allowed_types:
-            # For text-based types, be more permissive but validate content
-            if magic is None:
-                # Text files: check for binary content
-                try:
-                    data[:1024].decode("utf-8")
-                    matched_type = True
-                except (UnicodeDecodeError, AttributeError):
-                    # If it's not valid UTF-8, it might be binary masquerading as text
-                    # Allow it if the extension matches a text type
-                    matched_type = ext.lower() in [e.lower() for e in allowed_exts]
-            else:
-                # Binary files: check magic bytes
-                if data[: len(magic)] == magic:
-                    matched_type = True
+        if content_type not in allowed_types:
+            continue
+        if magic is None:
+            # Text files: check for binary content
+            try:
+                data[:1024].decode("utf-8")
+                matched_type = True
+            except UnicodeDecodeError:
+                # If it's not valid UTF-8, it might be binary masquerading as text
+                # Allow it if the extension matches a text type
+                matched_type = ext.lower() in [e.lower() for e in allowed_exts]
+        elif data[: len(magic)] == magic:
+            matched_type = True
+        if matched_type:
             break
 
     # If no content type was declared, try to infer from extension and magic

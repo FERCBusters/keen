@@ -203,37 +203,6 @@ function normalizeDateRange(a, b) {
   return { start: s, end: e };
 }
 
-function buildEventsHref(overrides = {}) {
-  const p = new URLSearchParams();
-
-  const q = overrides.q !== undefined ? overrides.q : state.q;
-  const source = overrides.source !== undefined ? overrides.source : state.source;
-  const control = overrides.control !== undefined ? overrides.control : state.control;
-  const clause = overrides.clause !== undefined ? overrides.clause : state.clause;
-  const unmapped = overrides.unmapped !== undefined ? overrides.unmapped : state.unmapped;
-  const start_date = overrides.start_date !== undefined ? overrides.start_date : state.start_date;
-  const end_date = overrides.end_date !== undefined ? overrides.end_date : state.end_date;
-  const start_ts = overrides.start_ts !== undefined ? overrides.start_ts : state.start_ts;
-  const end_ts = overrides.end_ts !== undefined ? overrides.end_ts : state.end_ts;
-  const limit = overrides.limit !== undefined ? overrides.limit : state.limit;
-  const offset = overrides.offset !== undefined ? overrides.offset : state.offset;
-
-  if (q) p.set('q', q);
-  if (framework) p.set('framework', framework);
-  if (source) p.set('source', source);
-  if (control) p.set('control', control);
-  if (clause) p.set('clause', clause);
-  if (unmapped) p.set('unmapped', 'true');
-  if (start_date) p.set('start_date', start_date);
-  if (end_date) p.set('end_date', end_date);
-  if (start_ts) p.set('start_ts', String(start_ts));
-  if (end_ts) p.set('end_ts', String(end_ts));
-  if (limit) p.set('limit', String(limit));
-  if (offset && Number(offset) > 0) p.set('offset', String(offset));
-
-  return '/events.html' + (p.toString() ? `?${p.toString()}` : '');
-}
-
 function syncInputs() {
   inpQ.value = state.q;
   chkUnmapped.checked = state.unmapped;

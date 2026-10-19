@@ -51,6 +51,19 @@ const bookstackConditions = [
 ];
 const layouts = {
   jenkins: { jobs: ['name', 'label', 'kind'] },
+  elasticsearch: {
+    queries: [
+      'name',
+      'index_pattern',
+      'query',
+      'timestamp_field',
+      'message_field',
+      'system_field',
+      'actor_field',
+      'action_field',
+      'outcome_field',
+    ],
+  },
   loki: {
     queries: [
       'name',
@@ -113,7 +126,6 @@ let rules = [],
   previewCount = 0;
 let sourceConnections = [];
 let collectors = [],
-  definitionDocument = {},
   definitionVersion = 0,
   definitionEntryKey = null;
 const definitionAdapters = [
@@ -213,11 +225,7 @@ function selectBookstackPage() {
 }
 const definitionId = (adapter, section, key) => JSON.stringify([adapter, section, String(key)]);
 function definitionKey(adapter, section, entry) {
-  if (section === 'source') return '__all__';
-  if (adapter === 'webhooks')
-    return $('definition-entry').value === '__new'
-      ? $('definition-fields').querySelector('[data-field="provider_name"]')?.value.trim()
-      : definitionEntryKey;
+  if (adapter === 'webhooks') return definitionEntryKey;
   if (adapter === 'github' && section === 'repos')
     return `${entry.owner || ''}/${entry.repo || ''}`;
   if (adapter === 'riskledger') return String(entry.org || '').trim();
@@ -301,8 +309,7 @@ function paintDefinitionEntry() {
   }
   const names = layouts[adapter][section];
   for (const name of names) {
-    const current =
-      pathGet(entry, name) ?? (selected === '__new' && name === 'enabled' ? true : undefined);
+    const current = pathGet(entry, name);
     const field = fieldNode(
       name,
       current,
@@ -378,17 +385,10 @@ async function selectDefinitionAdapter(keepConnection = false) {
   if (!keepConnection) paintConnectionChoices();
   const adapter = $('definition-adapter').value;
   const connection = sourceConnections.find((c) => c.id === selectedConnection());
-  if (connection) {
-    definitionDocument = connection.inputs;
-    definitionVersion = connection.version;
-  } else if (layouts[adapter]) {
-    const data = await apiGet(`${apiRoot}/managed-configurations/${adapter}`);
-    definitionDocument = data.document;
-    definitionVersion = data.version;
-  } else {
-    definitionDocument = {};
-    definitionVersion = 0;
-  }
+  if (connection) definitionVersion = connection.version;
+  else if (layouts[adapter])
+    definitionVersion = (await apiGet(`${apiRoot}/managed-configurations/${adapter}`)).version;
+  else definitionVersion = 0;
   $('definition-section').replaceChildren();
   $('definition-section').add(new Option('All collected events (any collection)', 'source'));
   for (const section of Object.keys(selectedConnection() ? layouts[adapter] || {} : {}))
@@ -942,23 +942,21 @@ function renderRules() {
   list.replaceChildren();
   const query = $('rule-filter').value.trim().toLowerCase();
 
-  const entries = [
-    ...rules.map((rule) => ({
-      rule,
-      origin: collectors.find(
-        (item) =>
-          item.collector === rule.when?.collector &&
-          (item.connection_id || 'env:' + item.adapter) ===
-            (rule.when?.connection_id || 'env:' + item.adapter),
-      ),
-    })),
-  ];
+  const entries = rules.map((rule) => ({
+    rule,
+    origin: collectors.find(
+      (item) =>
+        item.collector === rule.when?.collector &&
+        (item.connection_id || 'env:' + item.adapter) ===
+          (rule.when?.connection_id || 'env:' + item.adapter),
+    ),
+  }));
   const chosenSource = $('source-filter').value;
   const filtered = entries.filter(
     ({ rule, origin }) =>
-      (!chosenSource || (rule?.when?.source || origin?.adapter) === chosenSource) &&
+      (!chosenSource || (rule.when?.source || origin?.adapter) === chosenSource) &&
       (!query ||
-        `${rule?.id || ''} ${rule?.description || ''} ${rule?.when?.source || ''} ${JSON.stringify(rule?.map_to || [])} ${origin?.adapter || ''} ${origin?.key || ''}`
+        `${rule.id} ${rule.description || ''} ${rule.when?.source || ''} ${JSON.stringify(rule.map_to || [])} ${origin?.adapter || ''} ${origin?.key || ''}`
           .toLowerCase()
           .includes(query)),
   );
@@ -981,114 +979,51 @@ function renderRules() {
     btn.type = 'button';
     btn.className = 'list-group-item list-group-item-action text-start';
     const title = document.createElement('strong');
-    title.textContent = rule?.description || rule?.id || `${origin.key} · needs framework mappings`;
+    title.textContent = rule.description || rule.id;
     const meta = document.createElement('div');
     meta.className = 'small-muted';
-    meta.textContent = rule
-      ? `${rule.enabled === false ? 'Paused · ' : ''}${
-          origin
-            ? `${origin.adapter} ${inputType(origin.section)}: ${origin.key}`
-            : `All ${rule.when?.source || 'source'} events`
-        } · ${rule.map_to?.length || 0} framework targets`
-      : `${origin.adapter} ${inputType(origin.section)}: ${origin.key} · add framework targets`;
-    if (rule?.when?.connection_id)
+    meta.textContent = `${rule.enabled === false ? 'Paused · ' : ''}${
+      origin
+        ? `${origin.adapter} ${inputType(origin.section)}: ${origin.key}`
+        : `All ${rule.when?.source || 'source'} events`
+    } · ${rule.map_to?.length || 0} framework targets`;
+    if (rule.when?.connection_id)
       meta.textContent +=
         ' · ' +
         (sourceConnections.find((c) => c.id === rule.when.connection_id)?.name ||
           rule.when.connection_id);
     btn.append(title, meta);
-    btn.addEventListener('click', async () => {
-      if (rule) {
-        editRule(rule).catch((error) => status(error.message));
-        return;
-      }
-      await newRule();
-      $('definition-adapter').value = origin.adapter;
-      selectDefinitionAdapter()
-        .then(() => {
-          $('definition-section').value = origin.section;
-          paintDefinitionChoices();
-          $('definition-entry').value = origin.collector;
-          paintDefinitionEntry();
-          showSelectedInput();
-        })
-        .catch((error) => status(error.message));
-    });
+    btn.addEventListener('click', () => editRule(rule).catch((error) => status(error.message)));
     const row = document.createElement('div');
     row.className = 'd-flex gap-2 align-items-center mb-2';
     btn.classList.add('flex-grow-1');
-    row.append(btn);
-    if (rule) {
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'btn btn-outline-danger btn-sm';
-      remove.textContent = 'Delete definition';
-      remove.addEventListener('click', async () => {
-        if (
-          !confirm(
-            `Delete evidence definition ${rule.description || rule.id}? Collection and existing evidence are retained.`,
-          )
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn btn-outline-danger btn-sm';
+    remove.textContent = 'Delete definition';
+    remove.addEventListener('click', async () => {
+      if (
+        !confirm(
+          `Delete evidence definition ${rule.description || rule.id}? Collection and existing evidence are retained.`,
         )
-          return;
-        try {
-          await apiDelete(
-            `${apiRoot}/mapping-rules/${encodeURIComponent(rule.id)}?version=${ruleVersion}`,
-          );
-          await loadRules();
-          status(
-            'Evidence definition deleted. Collection and existing evidence retained.',
-            'success',
-          );
-        } catch (error) {
-          status(error.message);
-        }
-      });
-      row.append(remove);
-    }
-    if (origin && !origin.connection_id) {
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'btn btn-outline-danger btn-sm';
-      remove.textContent = 'Remove collection';
-      remove.addEventListener('click', () => removeCollection(origin));
-      row.append(remove);
-    }
+      )
+        return;
+      try {
+        await apiDelete(
+          `${apiRoot}/mapping-rules/${encodeURIComponent(rule.id)}?version=${ruleVersion}`,
+        );
+        await loadRules();
+        status(
+          'Evidence definition deleted. Collection and existing evidence retained.',
+          'success',
+        );
+      } catch (error) {
+        status(error.message);
+      }
+    });
+    row.append(btn, remove);
     row.classList.add('flex-wrap');
     list.append(row);
-  }
-}
-async function removeCollection(origin) {
-  const linked = rules.filter((rule) => rule.when?.collector === origin.collector);
-  if (linked.length) {
-    status(
-      `Delete the ${linked.length} linked evidence definition(s) first. Existing evidence will be retained.`,
-    );
-    return;
-  }
-  if (!confirm(`Stop collecting ${origin.key}? Existing evidence is retained.`)) return;
-  try {
-    const url = `${apiRoot}/managed-configurations/${encodeURIComponent(origin.adapter)}`;
-    const config = await apiGet(url);
-    const document = structuredClone(config.document);
-    const section = document[origin.section];
-    if (origin.section === 'providers') {
-      if (!Object.hasOwn(section || {}, origin.key))
-        throw new Error('Collection changed. Reload before removing it.');
-      delete section[origin.key];
-    } else {
-      if (!Array.isArray(section)) throw new Error('This collection type cannot be removed here.');
-      const remaining = section.filter(
-        (entry) => definitionKey(origin.adapter, origin.section, entry) !== String(origin.key),
-      );
-      if (remaining.length !== section.length - 1)
-        throw new Error('Expected exactly one collection. Reload before removing it.');
-      document[origin.section] = remaining;
-    }
-    await apiPut(url, { version: config.version, document });
-    await loadRules();
-    status('Collection removed. Existing evidence retained.', 'success');
-  } catch (error) {
-    status(error.message);
   }
 }
 // Framework clauses are also catalogue rows (type "clause"), so a clause and a
@@ -1510,7 +1445,7 @@ $('backfill-start').addEventListener('click', async () => {
 $('delete-rule').addEventListener('click', async () => {
   if (!selectedRule) {
     status(
-      'This item has no saved mapping. Use Remove collection in the library to stop collecting it.',
+      'This definition has not been saved. Remove its input under Sources to stop collecting it.',
     );
     return;
   }

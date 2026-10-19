@@ -82,11 +82,6 @@ def cookie_name() -> str:
     return settings.session_cookie_name
 
 
-def _session_id_from_request(request: Request) -> str | None:
-    sid = request.cookies.get(cookie_name())
-    return sid.strip() if isinstance(sid, str) and sid.strip() else None
-
-
 def get_current_user_from_headers_cookies(
     headers: Mapping[str, str],
     cookies: Mapping[str, str],
@@ -154,16 +149,13 @@ def get_current_user_from_headers_cookies(
     # The middleware/route-level permission helpers will validate the authz
     # version before trusting it, so this remains a cache rather than an
     # authority separate from the DB.
-    try:
-        setattr(user, "session_id", sid)
-        setattr(user, "session_authz_version", sess.get("authz_version"))
-        if sess.get("effective_role"):
-            setattr(user, "effective_role", str(sess.get("effective_role")))
-        codes = sess.get("permission_codes")
-        if isinstance(codes, list):
-            setattr(user, "effective_permission_codes", {str(c) for c in codes if c})
-    except Exception:
-        pass
+    user.session_id = sid
+    user.session_authz_version = sess.get("authz_version")
+    if sess.get("effective_role"):
+        user.effective_role = str(sess.get("effective_role"))
+    codes = sess.get("permission_codes")
+    if isinstance(codes, list):
+        user.effective_permission_codes = {str(c) for c in codes if c}
 
     return user
 

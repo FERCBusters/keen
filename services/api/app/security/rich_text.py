@@ -125,14 +125,6 @@ class _RichTextSanitizer(HTMLParser):
     def handle_data(self, data: str) -> None:
         self.parts.append(escape(data, quote=False))
 
-    def handle_entityref(self, name: str) -> None:
-        # convert_charrefs=True handles numeric/text refs inside data; this is a
-        # safety net for any named entity surfaced separately.
-        self.parts.append(f"&{name};")
-
-    def handle_charref(self, name: str) -> None:
-        self.parts.append(f"&#{name};")
-
     def get_html(self) -> str:
         return "".join(self.parts).strip()
 

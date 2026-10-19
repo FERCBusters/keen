@@ -78,8 +78,8 @@ async function fixture(
           typeof controls === 'function' ? controls(url.searchParams.get('framework')) : controls,
       };
     if (url.pathname.includes('/mapping-rules/') && url.pathname.endsWith('/revisions'))
-      return { revisions: [] };
-    if (url.pathname === '/api/v1/admin/rule-backfills') return { jobs: [] };
+      return { items: [] };
+    if (url.pathname === '/api/v1/admin/rule-backfills') return { items: [] };
     if (url.pathname === '/api/v1/events/' + id) return event;
     throw new Error('Unexpected GET ' + raw);
   }

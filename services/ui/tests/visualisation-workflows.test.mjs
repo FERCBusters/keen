@@ -139,6 +139,7 @@ async function viz(t, options = {}) {
       assert.equal(u.pathname, '/api/v1/me/preferences');
       // Bodies come from the page's realm; compare them as plain data.
       patches.push(JSON.parse(JSON.stringify(body)));
+      if (options.patchFail) throw new Error(options.patchFail);
       return body;
     },
   });
@@ -396,6 +397,67 @@ test('a typed date range reloads in order, and a blank date is refused', async (
   assert.equal(ui.series.length, 2);
 });
 
+// The design system's date field writes the ISO value and reports a change
+// when its visible text changes.
+function typeDate(ui, name, dmy) {
+  ui.el(name + 'Dmy').value = dmy;
+  ui.el(name).value = dmy.split('/').reverse().join('-');
+  ui.el(name).dispatchEvent(new ui.window.Event('change'));
+}
+
+function typeDays(ui, days) {
+  ui.el('histDays').value = days;
+  ui.el('histDays').dispatchEvent(new ui.window.Event('input'));
+}
+
+test('with auto-apply, editing the dates or Days reloads the chart', async (t) => {
+  const ui = await viz(t, {
+    mode: 'histogram',
+    series: daySeries,
+    me: { is_admin: true, preferences: { auto_apply_filters: true } },
+  });
+  await settle(() => ui.series.length === 1);
+  const window = () => [ui.series.at(-1).start_date, ui.series.at(-1).end_date];
+
+  typeDate(ui, 'dateFrom', '01/10/2026');
+  typeDate(ui, 'dateTo', '10/10/2026');
+
+  await settle(() => window()[1] === '2026-10-10');
+  assert.deepEqual(window(), ['2026-10-01', '2026-10-10']);
+  assert.equal(ui.el('histDays').value, '10');
+
+  // Days counts back from the end date and stays between one day and ten years.
+  const tenYears = isoDay(Date.UTC(2026, 9, 10) - 3649 * DAY);
+  for (const [days, start] of [
+    ['3', '2026-10-08'],
+    ['0', '2026-10-10'],
+    ['99999', tenYears],
+  ]) {
+    typeDays(ui, days);
+    await settle(() => window()[0] === start);
+    assert.deepEqual(window(), [start, '2026-10-10'], days);
+    assert.equal(ui.el('dateFromDmy').value, start.split('-').reverse().join('/'));
+    assert.equal(ui.el('dateToDmy').value, '10/10/2026');
+  }
+});
+
+test('without auto-apply, edited dates update Days and wait for Apply', async (t) => {
+  const ui = await viz(t, { mode: 'histogram', series: daySeries });
+  await settle(() => ui.series.length === 1);
+
+  typeDate(ui, 'dateFrom', '01/10/2026');
+  typeDate(ui, 'dateTo', '04/10/2026');
+  assert.equal(ui.el('histDays').value, '4');
+  typeDays(ui, '2');
+
+  assert.deepEqual([ui.el('dateFrom').value, ui.el('dateTo').value], ['2026-10-03', '2026-10-04']);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(ui.series.length, 1);
+  ui.el('dateApply').click();
+  await settle(() => ui.series.length === 2);
+  assert.deepEqual([ui.series[1].start_date, ui.series[1].end_date], ['2026-10-03', '2026-10-04']);
+});
+
 test('Zoom mode and Shift switch the histogram brush on and off', async (t) => {
   const ui = await viz(t, { mode: 'histogram', series: daySeries });
   await settle(() => bars(ui).length === 4);
@@ -474,6 +536,29 @@ test('the histogram exports what it shows, and saves a relative default range', 
     start_date: '2026-09-01',
     end_date: '2026-09-15',
   });
+});
+
+test('a default needs a whole date range, and a refused save is reported', async (t) => {
+  const ui = await viz(t, {
+    mode: 'histogram',
+    series: daySeries,
+    patchFail: 'Preferences offline',
+  });
+  await settle(() => ui.series.length === 1);
+
+  ui.el('saveDefaultViz').click();
+  await settle(() => /Could not save/.test(ui.el('status').textContent));
+  assert.equal(
+    ui.el('status').textContent,
+    'Could not save default visualisation: Error: Preferences offline',
+  );
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+
+  ui.el('dateFrom').value = '';
+  ui.el('saveDefaultViz').click();
+  assert.equal(ui.el('status').textContent, 'Please choose a valid date range first.');
+  assert.equal(ui.el('status').dataset.alert, 'warning');
+  assert.equal(ui.patches.length, 1);
 });
 
 // --- Sunbursts ----------------------------------------------------------------------
@@ -718,6 +803,31 @@ test('a heatmap cell opens the events behind it; an empty cell does nothing', as
     ui.el('vizCaption').textContent,
     /Showing top 2 sources × top 2 controls \(ranked by mapped events\)\./,
   );
+});
+
+test('the heatmap redraws for a new top N without fetching again', async (t) => {
+  const ui = await viz(t, { mode: 'heatmap', graph: manySources });
+  const graphCalls = () => ui.calls.filter((c) => c.url.startsWith('/api/v1/graph/')).length;
+  const before = graphCalls();
+  const rows = () => [
+    ...new Set(
+      [...ui.document.querySelectorAll('#viz rect.heat-cell')].map(
+        (cell) => cell.querySelector(':scope > title').textContent.split(' → ')[0],
+      ),
+    ),
+  ];
+  assert.equal(rows().length, 13);
+
+  // At least five sources stay in view.
+  ui.el('heatmapTopSources').value = '1';
+  // The graph's Apply button belongs to the graph views.
+  ui.el('graphApply').click();
+  assert.equal(rows().length, 13);
+  ui.el('heatmapApply').click();
+
+  assert.deepEqual(rows(), ['GitHub', 'Okta', 'AWS', 'GCP', 'JIRA']);
+  assert.match(ui.el('vizCaption').textContent, /Showing top 5 sources × top 5 controls/);
+  assert.equal(graphCalls(), before);
 });
 
 // --- Distribution, gaps, sharing and reset -------------------------------------------

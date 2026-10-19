@@ -255,3 +255,59 @@ def test_unusable_windows_are_refused_as_bad_requests(chart, params, detail):
 
     assert refused.status_code == 400
     assert refused.json()["detail"] == detail
+
+
+@pytest.mark.parametrize(
+    "params,window",
+    [
+        # With only an end, the window reaches back the requested days.
+        (
+            {"end_ts": "2026-03-03T00:00:00Z", "days": 2},
+            ("2026-03-01T00:00:00Z", "2026-03-03T00:00:00Z"),
+        ),
+        # Reversed timestamps read the same window.
+        (
+            {"start_ts": "2026-03-03T00:00:00Z", "end_ts": "2026-03-01T00:00:00Z"},
+            ("2026-03-01T00:00:00Z", "2026-03-03T00:00:00Z"),
+        ),
+        # With only an end date, the window ends that day.
+        (
+            {"end_date": "2026-03-02", "days": 2},
+            ("2026-03-01T00:00:00Z", "2026-03-03T00:00:00Z"),
+        ),
+    ],
+    ids=["end-only", "reversed", "end-date-only"],
+)
+def test_partial_windows_are_completed_from_the_days_requested(chart, params, window):
+    body = chart.get(chart.reader, **params)
+
+    assert (body["start_ts"], body["end_ts"]) == window
+    assert chart.counts(body)[:2] == [
+        ("2026-03-01", 2, 1, 1),
+        ("2026-03-02", 3, 1, 2),
+    ]
+
+
+def test_second_buckets_cover_a_short_window(chart):
+    body = chart.get(
+        chart.reader,
+        start_ts="2026-03-01T10:14:58Z",
+        end_ts="2026-03-01T10:15:02Z",
+        interval="second",
+    )
+
+    assert body["interval"] == "second"
+    assert chart.counts(body) == [
+        ("2026-03-01T10:14:58Z", 0, 0, 0),
+        ("2026-03-01T10:14:59Z", 0, 0, 0),
+        ("2026-03-01T10:15:00Z", 1, 1, 0),
+        ("2026-03-01T10:15:01Z", 0, 0, 0),
+    ]
+    # A window with no length still reads one bucket.
+    instant = chart.get(
+        chart.reader,
+        start_ts="2026-03-01T10:15:00Z",
+        end_ts="2026-03-01T10:15:00Z",
+        interval="minute",
+    )
+    assert chart.counts(instant)[0] == ("2026-03-01T10:15:00Z", 1, 1, 0)

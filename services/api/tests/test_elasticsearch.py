@@ -339,3 +339,245 @@ def test_connection_rejects_http_and_secret_field_in_inputs():
                 },
             )
         )
+
+
+class Elastic:
+    """Point-in-time searches per index pattern, with scripted failures."""
+
+    def __init__(self):
+        self.requests = []
+        self.pages = {}
+        self.pit = {}
+        self.fail_close = False
+
+    def __call__(self, request):
+        body = json.loads(request.content) if request.content else None
+        self.requests.append((request.method, request.url.path, body))
+        if request.method == "DELETE":
+            if self.fail_close:
+                raise httpx.ConnectError("close failed for pit-secret")
+            return httpx.Response(200, json={"succeeded": True})
+        if request.url.path.endswith("/_pit"):
+            index = request.url.path.split("/")[-2]
+            value = self.pit.get(
+                index, {"id": "pit-" + index, "_shards": {"failed": 0}}
+            )
+            if isinstance(value, Exception):
+                raise value
+            return httpx.Response(200, json=value)
+        index = body["pit"]["id"].removeprefix("pit-")
+        return httpx.Response(200, json=self.pages[index].pop(0))
+
+
+@pytest.fixture
+def elastic(contract_db, storage, monkeypatch):
+    from unittest.mock import patch
+
+    from app.ingest.connections import deployment_settings
+
+    if contract_db.get_bind().dialect.name != "postgresql":
+        pytest.skip("Connection runs hold a PostgreSQL advisory lock")
+    monkeypatch.setattr(deployment_settings, "elasticsearch_enabled", True)
+    server = Elastic()
+    clients = []
+
+    def client(**kwargs):
+        clients.append(kwargs)
+        return httpx.Client(transport=httpx.MockTransport(server), **kwargs)
+
+    monkeypatch.setattr(es, "ingestion_client", client)
+
+    def run(*queries, credentials=None):
+        connection = Connection(
+            "db:logs",
+            "elasticsearch",
+            "Production logs",
+            {"base_url": "https://elastic.example/prefix"},
+            credentials or {"api_key": "synthetic-api-key"},
+            {"queries": list(queries)},
+        )
+        with patch("app.ingest.connections.connections", return_value=[connection]):
+            return es.ingest_elasticsearch_all(contract_db)
+
+    return SimpleNamespace(db=contract_db, server=server, clients=clients, run=run)
+
+
+def recent(name, index, **values):
+    return {
+        "name": name,
+        "index_pattern": index,
+        "initial_lookback_minutes": 30,
+        **values,
+    }
+
+
+def test_a_run_collects_each_query_and_reports_failures_without_upstream_detail(
+    elastic,
+):
+    elastic.server.pages["auth-*"] = [page([hit()])]
+    elastic.server.pit["broken-*"] = httpx.ConnectError("10.0.0.5 refused api_key=leak")
+    elastic.server.pit["bad-*"] = {"_shards": {"failed": 0}}
+
+    results = elastic.run(
+        recent("Auth", "auth-*", query='"login failed"', message_field="log.message"),
+        recent("Broken", "broken-*"),
+        recent("Bad", "bad-*"),
+    )
+
+    assert [
+        {key: row.get(key) for key in ("query_name", "created_events", "error")}
+        for row in results
+    ] == [
+        {"query_name": "Auth", "created_events": 1, "error": None},
+        {
+            "query_name": "Broken",
+            "created_events": None,
+            "error": "Connection failed; check DNS, connectivity and the upstream TLS certificate",
+        },
+        {
+            "query_name": "Bad",
+            "created_events": None,
+            "error": "Elasticsearch did not return a valid point-in-time identifier",
+        },
+    ]
+    assert all(row["connection_id"] == "db:logs" for row in results)
+    assert results[0]["caught_up"] is True
+    (options,) = elastic.clients
+    assert options["base_url"] == "https://elastic.example/prefix/"
+    assert options["headers"] == {"Authorization": "ApiKey synthetic-api-key"}
+    # Query text is matched in the message field with a fixed, bounded syntax.
+    search = next(
+        body
+        for method, path, body in elastic.server.requests
+        if path.endswith("_search")
+    )
+    assert search["query"]["bool"]["filter"][1] == {
+        "simple_query_string": {
+            "query": '"login failed"',
+            "fields": ["log.message"],
+            "default_operator": "and",
+            "flags": "AND|OR|NOT|PHRASE|PRECEDENCE|WHITESPACE|ESCAPE",
+        }
+    }
+    (event,) = elastic.db.query(Event).all()
+    assert (event.connection_id, event.source) == ("db:logs", "elasticsearch")
+
+
+def test_queries_beyond_the_run_budget_wait_for_the_next_run(elastic, monkeypatch):
+    monkeypatch.setattr(es, "RUN_SECONDS", -1)
+
+    results = elastic.run(recent("Auth", "auth-*"))
+
+    assert [(row["query_name"], row["skipped"], row["reason"]) for row in results] == [
+        ("Auth", True, "Connection run budget exhausted; run collection again")
+    ]
+    assert elastic.server.requests == []
+
+
+def test_an_empty_input_list_contacts_nobody(elastic):
+    assert elastic.run() == []
+    assert elastic.clients == []
+
+
+def test_a_failed_point_in_time_close_does_not_fail_the_window(elastic):
+    elastic.server.pages["auth-*"] = [page([hit()])]
+    elastic.server.fail_close = True
+
+    (result,) = elastic.run(recent("Auth", "auth-*"))
+
+    assert (result["created_events"], result["windows_completed"]) == (1, 1)
+    assert elastic.db.query(IngestionCursor).one().last_ts is not None
+
+
+def test_windows_stop_at_the_collection_deadline(contract_db, storage, monkeypatch):
+    calls = []
+    clock = iter([0, 0, 50])
+    monkeypatch.setattr(es, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+    with scoped(), mock_client([page([hit("1"), hit("2")])], calls) as client:
+        with pytest.raises(es.ElasticsearchInputError, match="time budget"):
+            es.ingest_elasticsearch_once(contract_db, client, input_config(), 10)
+    # The deadline is checked before each document; the window is retried.
+    assert calls[-1][0] == "DELETE"
+    assert contract_db.query(IngestionCursor).one().last_ts is None
+
+
+def test_a_search_page_with_an_unusable_point_in_time_is_refused(contract_db, storage):
+    calls = []
+    with scoped(), mock_client([page([], pit_id="")], calls) as client:
+        with pytest.raises(es.ElasticsearchInputError, match="invalid point-in-time"):
+            es.ingest_elasticsearch_once(
+                contract_db, client, input_config(), time.monotonic() + 120
+            )
+
+
+@pytest.mark.parametrize(
+    "document,detail",
+    [
+        ([], "Elasticsearch configuration must be an object"),
+        ({"queries": {}}, "Configure up to 50 Elasticsearch inputs per connection"),
+        (
+            {
+                "queries": [
+                    {"name": f"q{i}", "index_pattern": "logs-*"} for i in range(51)
+                ]
+            },
+            "Configure up to 50 Elasticsearch inputs per connection",
+        ),
+        (
+            {"queries": [{"name": "Auth", "index_pattern": "a-*"}] * 2},
+            "Elasticsearch input names must be distinct",
+        ),
+        ({"queries": ["Auth"]}, "Elasticsearch inputs must be objects"),
+        (
+            {"queries": [{"name": "Auth/../x", "index_pattern": "logs-*"}]},
+            "Enter an input name using letters, numbers, spaces, dots, hyphens or underscores",
+        ),
+        (
+            {"queries": [{"name": "   ", "index_pattern": "logs-*"}]},
+            "Enter an input name using letters, numbers, spaces, dots, hyphens or underscores",
+        ),
+        (
+            {"queries": [{"name": "Auth"}]},
+            "Enter an index, alias or data stream pattern",
+        ),
+    ],
+)
+def test_configuration_documents_are_checked_as_a_whole(document, detail):
+    with pytest.raises(es.ElasticsearchInputError) as error:
+        es.validate_config(document)
+    assert str(error.value) == detail
+
+
+@pytest.mark.parametrize(
+    "configuration,credentials,detail",
+    [
+        (
+            {"base_url": "https://elastic.example", "username": "user"},
+            {},
+            "Supply both username and password",
+        ),
+        (
+            {"base_url": "https://elastic.example"},
+            {"api_key": "ApiKey with spaces"},
+            "Enter the encoded Elasticsearch API key without the Authorization prefix",
+        ),
+        (
+            {"base_url": "https://elastic.example"},
+            {"api_key": "k" * 8193},
+            "Enter the encoded Elasticsearch API key without the Authorization prefix",
+        ),
+    ],
+)
+def test_unusable_credentials_are_refused_before_connecting(
+    configuration, credentials, detail
+):
+    with scoped(configuration=configuration, credentials=credentials):
+        with pytest.raises(es.ElasticsearchInputError) as error:
+            es._client()
+    assert str(error.value) == detail
+
+
+@pytest.mark.parametrize("value", ["2026-10-11T00:00:00", 5, "x" * 65])
+def test_document_dates_need_a_time_zone(value):
+    with pytest.raises(es.ElasticsearchInputError, match="single valid date"):
+        es._timestamp(value)

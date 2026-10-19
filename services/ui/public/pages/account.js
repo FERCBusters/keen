@@ -732,7 +732,7 @@ async function loadMyQuestions() {
 
     myQuestionsLoaded = true;
     try {
-      window.keenRefreshQuestionBell?.();
+      window.keenRefreshBell?.();
     } catch {
       // ignore
     }

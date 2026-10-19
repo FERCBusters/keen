@@ -770,14 +770,6 @@ function setSelectValues(select, values = []) {
   const wanted = new Set((values || []).map((v) => String(v)));
   for (const opt of Array.from(select.options || [])) opt.selected = wanted.has(String(opt.value));
 }
-function setSelectValue(select, value = '') {
-  if (!select) return;
-  const text = String(value || '');
-  if (text && !Array.from(select.options || []).some((opt) => opt.value === text)) {
-    select.insertAdjacentHTML('beforeend', `<option value="${esc(text)}">${esc(text)}</option>`);
-  }
-  select.value = text;
-}
 function clearFileInput(input) {
   if (input) input.value = '';
 }
@@ -2202,22 +2194,6 @@ function renderSection(section) {
     renderMeetings();
     return;
   }
-}
-
-function renderAll() {
-  renderMetaSummary();
-  renderOverview();
-  for (const section of [
-    'objectives',
-    'documents',
-    'org',
-    'assets',
-    'access',
-    'effectiveness',
-    'meetings',
-  ])
-    renderSection(section);
-  populateForms();
 }
 
 async function loadMetaSection(section, { force = false } = {}) {

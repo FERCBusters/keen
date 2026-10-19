@@ -500,3 +500,142 @@ def test_bookstack_account_wide_environment_polling_is_preserved(monkeypatch):
     for field in ("base_url", "token_id", "token_secret"):
         monkeypatch.setattr(sc.deployment_settings, "bookstack_" + field, "configured")
     assert sc.environment_has_inputs("bookstack", None)
+
+
+def test_a_named_google_connection_never_inherits_the_environment_key_files(
+    monkeypatch,
+):
+    for field, value in {
+        "google_workspace_sa_keyfile": "/run/secrets/environment-account.json",
+        "google_workspace_sa_json_b64": "ZW52aXJvbm1lbnQ=",
+        "google_workspace_sa_json": "environment-json",
+        "google_workspace_config_path": "/app/config/google_workspace.yml",
+    }.items():
+        monkeypatch.setattr(sc.deployment_settings, field, value)
+    named = sc.Connection(
+        "named",
+        "google_workspace",
+        "Other tenant",
+        {"impersonate": "admin@other.example"},
+        {"sa_json": "named-json"},
+        {},
+    )
+
+    with sc.connection_scope(named):
+        assert sc.settings.google_workspace_sa_json == "named-json"
+        assert sc.settings.google_workspace_impersonate == "admin@other.example"
+        assert sc.settings.google_workspace_sa_keyfile == ""
+        assert sc.settings.google_workspace_sa_json_b64 == ""
+        # Settings that name no credential stay deployment-wide.
+        assert (
+            sc.settings.google_workspace_config_path
+            == "/app/config/google_workspace.yml"
+        )
+
+    environment = next(
+        c
+        for c in sc.connections(None, "google_workspace")
+        if c.managed_by == "environment"
+    )
+    with sc.connection_scope(environment):
+        assert (
+            sc.settings.google_workspace_sa_keyfile
+            == "/run/secrets/environment-account.json"
+        )
+
+
+def _connections_file(tmp_path, monkeypatch, text):
+    path = tmp_path / "connections.yml"
+    path.write_text(text)
+    monkeypatch.setenv("KEEN_SOURCE_CONNECTIONS_FILE", str(path))
+
+
+@pytest.mark.parametrize(
+    "entry,message",
+    [
+        (
+            "- id: prod\n  source: loki\n  name: Prod\n  configuration: {region: eu}\n",
+            "Unsupported field in source connections file",
+        ),
+        (
+            "- id: prod\n  source: loki\n  name: Prod\n  credentials: {api_key: {env: KEY}}\n",
+            "Unsupported field in source connections file",
+        ),
+        (
+            "- id: prod logs\n  source: loki\n  name: Prod\n",
+            "Connection file IDs must be stable alphanumeric identifiers",
+        ),
+        (
+            "- id: prod\n  source: loki\n  name: Prod\n- id: prod\n  source: loki\n  name: Again\n",
+            "Duplicate source connection ID",
+        ),
+    ],
+    ids=["setting", "credential", "identifier", "duplicate"],
+)
+def test_a_connections_file_with_an_invalid_entry_is_refused(
+    tmp_path, monkeypatch, entry, message
+):
+    _connections_file(tmp_path, monkeypatch, "connections:\n" + entry)
+
+    with pytest.raises(ValueError, match=message):
+        sc.connections(None, "loki")
+
+
+def test_entries_for_other_source_types_are_read_when_those_types_are(
+    tmp_path, monkeypatch
+):
+    _connections_file(
+        tmp_path,
+        monkeypatch,
+        "connections:\n"
+        "- id: logs\n  source: loki\n  name: Logs\n"
+        "- id: code\n  source: github\n  name: Code\n  configuration: {region: eu}\n",
+    )
+
+    loki = sc.connections(None, "loki")
+
+    assert [c.id for c in loki if c.managed_by == "file"] == ["file:logs"]
+    with pytest.raises(ValueError, match="Unsupported field"):
+        sc.connections(None)
+
+
+@pytest.mark.parametrize(
+    "reference,message",
+    [
+        ("plain-text-secret", "require an env or file reference"),
+        ("{env: A, file: /tmp/b}", "require an env or file reference"),
+        ("{vault: secret/keen}", "Unknown credential reference"),
+        ("{env: TEST_MISSING_LOKI_PASSWORD}", "environment variable is missing"),
+    ],
+    ids=["inline", "two-references", "unknown-kind", "missing-variable"],
+)
+def test_file_credentials_must_be_references_that_resolve(
+    tmp_path, monkeypatch, reference, message
+):
+    monkeypatch.delenv("TEST_MISSING_LOKI_PASSWORD", raising=False)
+    _connections_file(
+        tmp_path,
+        monkeypatch,
+        "connections:\n- id: prod\n  source: loki\n  name: Prod\n"
+        f"  credentials:\n    password: {reference}\n",
+    )
+    (item,) = [c for c in sc.connections(None, "loki") if c.managed_by == "file"]
+
+    with pytest.raises(ValueError, match=message):
+        sc.resolve(item)
+
+
+def test_a_file_credential_reference_reads_the_secret_file(tmp_path, monkeypatch):
+    secret = tmp_path / "loki-password"
+    secret.write_text("  file-secret\n")
+    _connections_file(
+        tmp_path,
+        monkeypatch,
+        "connections:\n- id: prod\n  source: loki\n  name: Prod\n"
+        f"  credentials:\n    password: {{file: {secret}}}\n",
+    )
+    (item,) = [c for c in sc.connections(None, "loki") if c.managed_by == "file"]
+
+    # The file is read when the connection is used, not when it is listed.
+    assert item.credentials == {}
+    assert sc.resolve(item).credentials == {"password": "file-secret"}

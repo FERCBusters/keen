@@ -158,18 +158,6 @@ function relevanceLabel(rowOrCode) {
   return meta.relevance_levels.find((x) => x.code === code)?.label || 'N/A';
 }
 
-function relevanceOptions(selectedCodeOrId = '') {
-  const selected =
-    selectedCodeOrId === null || selectedCodeOrId === undefined ? '' : String(selectedCodeOrId);
-  return (meta.relevance_levels || [])
-    .map((r) => {
-      const isSelected =
-        selected !== '' && (selected === String(r.id) || selected === String(r.code));
-      return `<option value="${esc(r.code)}" ${isSelected ? 'selected' : ''}>${esc(r.label)}</option>`;
-    })
-    .join('');
-}
-
 function fillSelects() {
   setFilterPillOptions(
     pestleTypeFilter,

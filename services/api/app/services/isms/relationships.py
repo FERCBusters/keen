@@ -90,11 +90,7 @@ def _reverse_refs_for(
         )
         if not row:
             continue
-        if et in {
-            "application_configuration",
-            "access_control_matrix",
-            "effectiveness_metric",
-        }:
+        if et in {"access_control_matrix", "effectiveness_metric"}:
             continue
         key = {
             "swot": "swot",

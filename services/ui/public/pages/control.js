@@ -393,12 +393,6 @@ function controlScopedSourceHref(src) {
   return `/source.html?${p.toString()}`;
 }
 
-function applicabilityLabel(v) {
-  if (v === 'partially_applicable') return 'Partially applicable';
-  if (v === 'applicable') return 'Applicable';
-  return 'Not applicable';
-}
-
 function applicabilityBadge(v) {
   if (v === 'partially_applicable')
     return '<span class="badge text-bg-warning">Partially applicable</span>';

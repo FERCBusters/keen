@@ -516,11 +516,12 @@ def test_ui_pages_compatible_with_external_scripts_only_policy():
 
 
 def test_websocket_rejects_cross_origin_before_database(production_client, monkeypatch):
+    from app.api.routes import questions
     from starlette.websockets import WebSocketDisconnect
 
     client, *_ = production_client
     snapshot = Mock()
-    monkeypatch.setattr(questions_operations, "_notification_snapshot", snapshot)
+    monkeypatch.setattr(questions, "_notification_snapshot", snapshot)
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect(
             "/ws/notifications", headers={"Origin": "https://evil.example"}
@@ -537,7 +538,7 @@ def test_live_websocket_closes_after_logout(production_client, monkeypatch):
 
     client, redis, admin, reader = production_client
     monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
-    monkeypatch.setattr(questions_operations, "_NOTIFICATION_RECHECK_SECONDS", 0.01)
+    monkeypatch.setattr(questions, "_NOTIFICATION_RECHECK_SECONDS", 0.01)
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
     client.cookies.set(settings.session_cookie_name, sid)
     with client.websocket_connect(
@@ -1200,3 +1201,96 @@ def test_retention_overrides_keep_admin_and_csrf_boundary(
         assert writes[0]["overrides"] == payload["overrides"]
     finally:
         main.app.dependency_overrides.pop(get_db, None)
+
+
+ORIGIN = {"Origin": "https://keen.example"}
+
+
+def _notification_client(production_client, monkeypatch, *, recheck=0.01):
+    from app import main
+    from app.api.routes import questions
+    from app.db import session as database
+
+    client, redis, admin, reader = production_client
+    monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
+    monkeypatch.setattr(questions, "_NOTIFICATION_RECHECK_SECONDS", recheck)
+    sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
+    client.cookies.set(settings.session_cookie_name, sid)
+    return client, reader
+
+
+def test_websocket_without_a_session_is_refused(production_client, monkeypatch):
+    from app import main
+    from app.db import session as database
+    from starlette.websockets import WebSocketDisconnect
+
+    client, *_ = production_client
+    monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
+
+    with pytest.raises(WebSocketDisconnect) as closed:
+        with client.websocket_connect("/ws/notifications", headers=ORIGIN):
+            pass
+
+    assert closed.value.code == 1008
+
+
+def test_each_user_has_a_bounded_number_of_notification_sockets(
+    production_client, monkeypatch
+):
+    from contextlib import ExitStack
+
+    from app.api.routes import questions
+    from starlette.websockets import WebSocketDisconnect
+
+    client, reader = _notification_client(production_client, monkeypatch, recheck=60)
+    with ExitStack() as stack:
+        for _ in range(5):
+            socket = stack.enter_context(
+                client.websocket_connect("/ws/notifications", headers=ORIGIN)
+            )
+            assert socket.receive_json()["type"] == "questions.unread_replies_count"
+        with pytest.raises(WebSocketDisconnect) as refused:
+            with client.websocket_connect("/ws/notifications", headers=ORIGIN):
+                pass
+        assert (refused.value.code, refused.value.reason) == (
+            1008,
+            "Too many notification connections",
+        )
+        assert len(questions.notification_hub._user_sockets[str(reader.id)]) == 5
+    assert not questions.notification_hub._user_sockets
+
+
+def test_live_websockets_are_pinged_until_the_users_access_changes(
+    production_client, monkeypatch, contract_db
+):
+    from app.api.routes import questions
+    from starlette.websockets import WebSocketDisconnect
+
+    client, reader = _notification_client(production_client, monkeypatch)
+    with client.websocket_connect("/ws/notifications", headers=ORIGIN) as socket:
+        assert socket.receive_json()["type"] == "questions.unread_replies_count"
+        # Each revalidation that finds the same access sends a keepalive.
+        assert socket.receive_json() == {"type": "ping"}
+        reader.authz_version = (reader.authz_version or 0) + 1
+        contract_db.commit()
+        with pytest.raises(WebSocketDisconnect):
+            for _ in range(50):
+                assert socket.receive_json() == {"type": "ping"}
+    assert not questions.notification_hub._user_sockets
+
+
+def test_oversized_websocket_messages_close_the_connection(
+    production_client, monkeypatch
+):
+    from app.api.routes import questions
+    from starlette.websockets import WebSocketDisconnect
+
+    client, _ = _notification_client(production_client, monkeypatch, recheck=60)
+    with client.websocket_connect("/ws/notifications", headers=ORIGIN) as socket:
+        socket.receive_json()
+        socket.send_text("x" * 1024)
+        socket.send_text("x" * 1025)
+        with pytest.raises(WebSocketDisconnect) as closed:
+            socket.receive_json()
+    assert closed.value.code == 1008
+    assert not questions.notification_hub._user_sockets

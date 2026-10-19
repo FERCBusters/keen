@@ -265,7 +265,7 @@ class RedmineTests(unittest.TestCase):
     def test_run_lock_release_on_error_and_busy(self):
         db = MagicMock()
         connection = (
-            db.get_bind.return_value.connect.return_value.__enter__.return_value
+            db.get_bind.return_value.engine.connect.return_value.__enter__.return_value
         )
         connection.execute.return_value.scalar.return_value = True
         with self.assertRaises(RuntimeError):

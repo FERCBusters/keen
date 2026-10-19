@@ -17,22 +17,15 @@ from app.security.sessions import update_session_authz
 
 
 def _normalise_cached_permission_codes(raw) -> set[str] | None:
+    # Sessions attach a set of codes; None means no snapshot is attached.
     if raw is None:
         return None
-    if isinstance(raw, str):
-        return {raw} if raw else set()
-    try:
-        return {str(c) for c in raw if c}
-    except Exception:
-        return None
+    return {str(c) for c in raw if c}
 
 
 def _attach_permission_snapshot(user: User, *, role: str, codes: set[str]) -> None:
-    try:
-        setattr(user, "effective_role", role)
-        setattr(user, "effective_permission_codes", set(codes or set()))
-    except Exception:
-        pass
+    user.effective_role = role
+    user.effective_permission_codes = set(codes or set())
 
 
 def get_effective_permission_codes(
@@ -55,10 +48,7 @@ def get_effective_permission_codes(
     eff = getattr(user, "effective_role", None) if use_cache else None
     if not eff:
         eff = compute_effective_role(db, user)
-        try:
-            setattr(user, "effective_role", eff)
-        except Exception:
-            pass
+        user.effective_role = eff
 
     if (eff or "") == ROLE_ADMIN:
         # Admin is treated as 'allow all'. Return a sentinel-ish set.
@@ -113,21 +103,13 @@ def ensure_session_authorization_current(db: Session, user: User) -> None:
         # No KEEN-owned session (for example trusted remote-user auth). Compute the
         # role for this request and let has_permission() query the DB as before.
         if not cached_role:
-            try:
-                setattr(user, "effective_role", compute_effective_role(db, user))
-            except Exception:
-                pass
+            user.effective_role = compute_effective_role(db, user)
         return
 
-    try:
-        current_version = int(getattr(user, "authz_version", 0) or 0)
-    except Exception:
-        current_version = None
-
+    current_version = int(user.authz_version or 0)
     if (
-        current_version is not None
-        and cached_version is not None
-        and int(cached_version) == int(current_version)
+        cached_version is not None
+        and int(cached_version) == current_version
         and cached_role
         and cached_codes is not None
     ):
@@ -136,15 +118,8 @@ def ensure_session_authorization_current(db: Session, user: User) -> None:
     # Cache miss/stale snapshot: recompute once from the DB and write the refreshed
     # result back into the server-side session.
     role = compute_effective_role(db, user)
-    try:
-        setattr(user, "effective_role", role)
-    except Exception:
-        pass
     codes = get_effective_permission_codes(db, user, use_cache=False)
     _attach_permission_snapshot(user, role=role, codes=codes)
-
-    if current_version is None:
-        return
     try:
         r = get_valkey()
         setattr(user, "session_authz_version", int(current_version))
@@ -177,10 +152,7 @@ def has_permission(db: Session, user: User, code: str) -> bool:
     eff = getattr(user, "effective_role", None)
     if not eff:
         eff = compute_effective_role(db, user)
-        try:
-            setattr(user, "effective_role", eff)
-        except Exception:
-            pass
+        user.effective_role = eff
 
     if (eff or "") == ROLE_ADMIN:
         return True

@@ -1,18 +1,14 @@
-from __future__ import annotations
-
-from app.core.datetime_utils import utc_now_naive
-from app.security.errors import collection_error
-from app.services.ingestion_pause import pausable
-
 """Generic RSS/Atom feed ingester.
 
 This ingester is intentionally generic:
-  - Supports RSS 2.0 and Atom 1.0 with minimal assumptions.
+  - Supports RSS 1.0, RSS 2.0 and Atom 1.0 with minimal assumptions.
   - Stores a JSON artifact per entry (suitable as an evidence blob).
   - Uses per-feed cursors (last_ts + conditional GET headers) and global de-dupe.
 
 See config/rss.yml for an example configuration.
 """
+
+from __future__ import annotations
 
 import hashlib
 import json
@@ -26,11 +22,15 @@ import httpx
 from dateutil import parser as dtparser
 from sqlalchemy.orm import Session
 
+from app.core.config import settings as deployment_settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
 from app.ingest.common import is_safe_url, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
+from app.security.errors import collection_error
 from app.security.redaction import redact_url
+from app.services.ingestion_pause import pausable
 
 
 def load_rss_config(path: str) -> dict[str, Any]:
@@ -38,20 +38,15 @@ def load_rss_config(path: str) -> dict[str, Any]:
 
 
 def _to_utc_naive(dt: datetime) -> datetime:
-    """Normalize to UTC naive (DB stores TIMESTAMP WITHOUT TIME ZONE)."""
-    if dt.tzinfo is None:
-        return dt
+    """Normalize an aware time to UTC naive (DB stores TIMESTAMP WITHOUT TIME ZONE)."""
     return dt.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
-    v = value.strip()
-    if not v:
-        return None
     try:
-        dt = dtparser.parse(v)
+        dt = dtparser.parse(value)
         # If the parsed datetime is naive, assume UTC.
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
@@ -261,16 +256,14 @@ def _parse_feed(xml_bytes: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]]
 
 
 def _safe_label_from_url(url: str) -> str:
-    try:
-        u = urlparse(url)
-        host = (u.hostname or "rss").lower()
-        path = (u.path or "").strip("/")
-        bits = [host] + ([path.split("/")[0]] if path else [])
-        s = "-".join([b for b in bits if b])
-        s = re.sub(r"[^a-z0-9._-]+", "-", s)
-        return (s or "rss")[:60]
-    except Exception:
-        return "rss"
+    # Callers pass a URL that is_safe_url has already parsed.
+    u = urlparse(url)
+    host = (u.hostname or "rss").lower()
+    path = (u.path or "").strip("/")
+    bits = [host] + ([path.split("/")[0]] if path else [])
+    s = "-".join([b for b in bits if b])
+    s = re.sub(r"[^a-z0-9._-]+", "-", s)
+    return (s or "rss")[:60]
 
 
 def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -317,7 +310,10 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
         db.flush()
 
     headers: dict[str, str] = {}
-    headers["User-Agent"] = settings.rss_user_agent
+    # A connection without its own user agent sends the deployment's.
+    headers["User-Agent"] = (
+        settings.rss_user_agent.strip() or deployment_settings.rss_user_agent
+    )
     for k, v in (feed_cfg.get("headers") or {}).items():
         if isinstance(k, str) and isinstance(v, str) and k.strip() and v.strip():
             headers[k.strip()] = v.strip()
@@ -410,8 +406,6 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
         entries_sorted = entries_sorted[-max_items:]
 
     cursor_last = cur.last_ts
-    if cursor_last and cursor_last.tzinfo is not None:
-        cursor_last = cursor_last.replace(tzinfo=None)
 
     # Overlap window to avoid missing slightly-out-of-order entries
     floor_ts: datetime | None = None
@@ -422,10 +416,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
     newest_ts: datetime | None = cursor_last
 
     for e in entries_sorted:
-        entry_id = (e.get("id") or "").strip()
-        if not entry_id:
-            continue
-
+        entry_id = e["id"]  # The parser keeps only entries with an identity.
         ts = _entry_ts(e)
         if floor_ts and ts < floor_ts:
             continue

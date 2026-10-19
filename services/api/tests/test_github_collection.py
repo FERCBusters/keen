@@ -710,6 +710,7 @@ def test_pagination_links_off_the_api_are_never_followed(audit, next_base):
         ),
         ("https://ghe.example/api/v3", "https://ghe.example/login", False),
         ("https://api.github.com", "not a url at all", False),
+        ("https://api.github.com", "https://[::1/organizations/1", False),
     ],
 )
 def test_the_api_boundary_for_pagination_links(monkeypatch, base, url, within):
@@ -748,3 +749,169 @@ def test_malformed_audit_responses_store_nothing(audit):
     )
     result = github.ingest_github_org_auditlog(audit.db, "acme")
     assert (result["created_events"], result["entries_seen"]) == (1, 1)
+
+
+# --- Listed repositories, organisation stages and summaries ---------------------
+
+
+def test_listed_repositories_are_collected_and_failures_stay_with_their_repository(
+    gh, monkeypatch
+):
+    feed = [
+        _event("30", "2026-03-05T00:00:00Z"),
+        {
+            "type": "WatchEvent",
+            "created_at": "2026-03-05T00:00:00Z",
+            "actor": {"login": "carol"},
+        },
+        {"id": "31", "type": "PushEvent", "payload": {}},
+    ]
+    gh.fake.routes[("api.github.com", "/repos/acme/app/events")] = httpx.Response(
+        200, json=feed
+    )
+    config = {
+        "repos": [
+            {"owner": "acme", "repo": "app", "label": "App"},
+            {"owner": "acme", "repo": "missing"},
+        ]
+    }
+
+    results = _run_all(gh, monkeypatch, config)
+
+    assert (results[0]["repo"], results[0]["created_events"]) == ("acme/app", 2)
+    assert results[1] == {
+        "repo": "acme/missing",
+        "error": "Collection failed: upstream returned HTTP 404",
+    }
+    # An event without a time is skipped; one without an ID gets a content ID.
+    assert [(e.system, e.summary) for e in gh.events()] == [
+        ("App", "[App] GitHub WatchEvent acme/app by carol"),
+        ("App", "[App] GitHub push 1 commit(s) to acme/app (main) by alice"),
+    ]
+    again = _run_all(gh, monkeypatch, config)
+    assert again[0]["created_events"] == 0
+    assert len(gh.events()) == 2
+
+
+def test_repository_and_audit_stages_report_their_own_failures(gh, monkeypatch):
+    monkeypatch.setattr(settings, "github_token", TOKEN)
+    gh.fake.routes[("api.github.com", "/orgs/acme/repos")] = httpx.Response(
+        500, json={"message": "Server Error"}
+    )
+    gh.fake.routes[("api.github.com", "/orgs/acme/audit-log")] = httpx.Response(
+        403, json={"message": "Must have admin rights"}
+    )
+
+    results = _run_all(
+        gh,
+        monkeypatch,
+        {
+            "organizations": [{"org": "acme", "include": "repo_events audit"}],
+            "feeds": [{"label": "a feed without an address"}],
+        },
+    )
+
+    assert results == [
+        {
+            "org": "acme",
+            "error": "Collection failed: upstream returned HTTP 500",
+            "stage": "repo_events",
+        },
+        {
+            "org": "acme",
+            "error": "Collection failed: upstream returned HTTP 403",
+            "stage": "audit_log",
+        },
+    ]
+    # Organisation events were not asked for.
+    assert ("api.github.com", "/orgs/acme/events") not in gh.fake.paths()
+
+
+def test_feed_entries_without_dates_or_repository_links_are_handled(gh):
+    feed = "https://feeds.example/odd.atom"
+    gh.fake.routes[("feeds.example", "/odd.atom")] = httpx.Response(
+        200,
+        text=(
+            '<feed xmlns="http://www.w3.org/2005/Atom">'
+            "<entry><id>tag:github.com,2008:push/1</id><title>undated</title></entry>"
+            "<entry><id></id><updated>2099-01-02T00:00:00Z</updated>"
+            '<link rel="alternate"/><link href="https://github.com/solo"/></entry>'
+            "<entry><id>tag:github.com,2008:watch/3</id><title>odd link</title>"
+            '<updated>2099-01-03T00:00:00Z</updated><link href="https://[::1/a/b"/>'
+            "</entry></feed>"
+        ),
+    )
+
+    result = github.ingest_github_atom_feed(gh.db, feed, label="Odd")
+
+    assert (result["entries_seen"], result["created_events"]) == (3, 2)
+    assert [(e.action, e.system, e.summary) for e in gh.events()] == [
+        ("feed_entry", "Odd", "[Odd] github feed entry"),
+        ("watch", "Odd", "[Odd] github feed: odd link"),
+    ]
+    assert gh.events()[0].raw_pointer["github"]["link"] == "https://github.com/solo"
+
+
+@pytest.mark.parametrize(
+    "event,summary",
+    [
+        (
+            {
+                "type": "PullRequestEvent",
+                "repo": {"name": "acme/app"},
+                "payload": {"action": "closed", "pull_request": {"title": " Fix "}},
+            },
+            'GitHub PR closed acme/app "Fix"',
+        ),
+        ({"type": "PullRequestEvent", "payload": {}}, "GitHub PR updated"),
+        (
+            {
+                "type": "IssueCommentEvent",
+                "repo": {"name": "acme/app"},
+                "actor": {"login": "bob"},
+                "payload": {
+                    "action": "created",
+                    "issue": {"number": 7, "title": "Crash"},
+                },
+            },
+            'GitHub comment created acme/app#7 "Crash" by bob',
+        ),
+        (
+            {"type": "IssuesEvent", "repo": {"name": "acme/app"}, "payload": {}},
+            "GitHub issue updated acme/app",
+        ),
+        (
+            {
+                "type": "ReleaseEvent",
+                "repo": {"name": "acme/app"},
+                "payload": {"release": {"tag_name": "v1.0", "name": "v1.0"}},
+            },
+            "GitHub release published acme/app v1.0",
+        ),
+        (
+            {
+                "type": "ReleaseEvent",
+                "actor": {"login": "eve"},
+                "payload": {
+                    "action": "created",
+                    "release": {"tag_name": "v2", "name": "Second"},
+                },
+            },
+            'GitHub release created v2 "Second" by eve',
+        ),
+        (
+            {
+                "type": "DeleteEvent",
+                "repo": {"name": "acme/app"},
+                "actor": {"login": "bob"},
+                "payload": {"ref": "old", "ref_type": "branch"},
+            },
+            "GitHub branch deletion acme/app old by bob",
+        ),
+        ({"type": "DeleteEvent"}, "GitHub reference deletion"),
+        ({"type": "PushEvent"}, "GitHub push"),
+        ({}, "GitHub Event"),
+    ],
+)
+def test_event_summaries_name_what_github_reports(event, summary):
+    assert github._summarize_event(event) == summary

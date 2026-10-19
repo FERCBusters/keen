@@ -95,6 +95,12 @@ def directory(monkeypatch):
             if self.kw["user"].startswith("uid=") and not state["bind"]:
                 self.result = {"result": 49}
                 return False
+            if not self.kw["user"].startswith("uid=") and "service_bind" in state:
+                self.result = {"result": state["service_bind"]}
+                return False
+            if self.kw["user"].startswith("uid=") and "user_bind" in state:
+                self.result = {"result": state["user_bind"]}
+                return False
             return True
 
         def search(self, base, query, **kw):
@@ -158,6 +164,107 @@ def test_directory_denials(directory, case):
     if case == "partial":
         state["result"] = 4
     assert ldap.directory_identity("alice", "secret") is None
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"ldap_url": "https://directory.example"},
+        {"ldap_url": "ldap://"},
+        {"ldap_url": "ldap://reader:secret@directory.example"},
+        {"ldap_url": "ldap://directory.example/dc=example"},
+        {"ldap_url": "ldap://directory.example?uid"},
+        {"ldap_url": "ldap://directory.example#top"},
+        {"ldap_base_dn": "   "},
+        {"ldap_base_dn": "not a distinguished name"},
+        {"ldap_username_attribute": "uid)(objectClass=*"},
+        {"ldap_email_attribute": "mail;binary"},
+        {"ldap_id_attribute": "1entryUUID"},
+        {"ldap_bind_password": ""},
+        {"ldap_bind_dn": ""},
+    ],
+    ids=[
+        "scheme",
+        "no-host",
+        "embedded-credentials",
+        "path",
+        "query",
+        "fragment",
+        "blank-base",
+        "malformed-base",
+        "filter-in-attribute",
+        "option-in-attribute",
+        "attribute-digit",
+        "dn-without-password",
+        "password-without-dn",
+    ],
+)
+def test_unsafe_directory_settings_refuse_sign_in_before_connecting(
+    directory, monkeypatch, changes
+):
+    for key, value in changes.items():
+        monkeypatch.setattr(settings, key, value)
+
+    with pytest.raises(HTTPException) as error:
+        ldap.directory_identity("alice", "secret")
+
+    assert error.value.status_code == 503
+    assert error.value.detail == (
+        "LDAP authentication unavailable; check directory configuration and connectivity"
+    )
+    assert directory[1] == []
+
+
+@pytest.mark.parametrize("result", [49, 52])
+def test_a_refused_service_bind_makes_directory_sign_in_unavailable(directory, result):
+    directory[0]["service_bind"] = result
+    with pytest.raises(HTTPException) as error:
+        ldap.directory_identity("alice", "secret")
+    assert error.value.status_code == 503
+    # The search never runs and the user's password is never sent.
+    assert "search" not in directory[0]
+    assert ("bind", "uid=alice,ou=People,dc=example") not in directory[1]
+
+
+def test_a_directory_failure_during_the_user_bind_is_not_a_wrong_password(directory):
+    # Only result 49 (invalid credentials) denies the user; anything else means
+    # the directory could not answer.
+    directory[0]["user_bind"] = 52
+    with pytest.raises(HTTPException) as error:
+        ldap.directory_identity("alice", "secret")
+    assert error.value.status_code == 503
+    directory[0]["user_bind"] = 49
+    assert ldap.directory_identity("alice", "secret") is None
+
+
+def test_directory_attributes_are_read_as_single_values_whatever_their_shape(
+    directory,
+):
+    attributes = directory[0]["entries"][0].entry_attributes_as_dict
+    attributes.update(uid="alice", mail=["alice@example.org"], entryUUID=[b"\x01\x02"])
+
+    identity = ldap.directory_identity("alice", "secret")
+
+    assert identity["username"] == "alice"
+    # A binary identifier, such as objectGUID, is kept as base64 text.
+    assert identity["subject"] == "AQI="
+    attributes.update(uid=["alice", "alicia"])
+    assert ldap.directory_identity("alice", "secret") is None
+
+
+def test_a_new_directory_user_never_takes_an_existing_account_name(db, directory):
+    taken = User(username="ldap:alice", password_hash="local-hash", role="admin")
+    db.add(taken)
+    db.commit()
+
+    user = ldap.authenticate_ldap(db, "alice", "password")
+
+    assert user.id != taken.id
+    assert user.username.startswith("ldap:") and len(user.username) == 37
+    assert (user.role, user.auth_backend) == ("normal", "ldap")
+    # The same directory identity returns to the same account afterwards.
+    assert ldap.authenticate_ldap(db, "alice", "password").id == user.id
+    assert ldap.verify_ldap_user(db, taken, "password") is False
 
 
 def test_empty_password_never_connects(directory):

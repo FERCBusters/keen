@@ -29,7 +29,7 @@ from alembic.operations import Operations
 from app.api.routes import auth as login_routes
 from app.api.routes import mfa as routes
 from app.core.config import settings
-from app.db.models import MfaChallenge, MfaRecoveryCode, User
+from app.db.models import MfaChallenge, MfaCredential, MfaRecoveryCode, User
 from app.db.session import Base, get_db
 from app.security import auth as identity
 from app.security import mfa
@@ -395,6 +395,51 @@ class LocalMfaTests(unittest.TestCase):
             200,
         )
 
+    def test_removing_factors_keeps_the_rest_and_the_last_turns_mfa_off(self):
+        self.enrol()
+        # Adding a factor needs the existing one first.
+        self.start()
+        self.allow_next_totp()
+        verified = self.post(
+            "verify-code", {"kind": "totp", "code": pyotp.TOTP(self.secret).now()}
+        )
+        self.assertEqual(verified.status_code, 200, verified.text)
+        private, cid, credential = self.webauthn_registration(start=False)
+        added = self.post(
+            "webauthn/register", {"credential": credential, "name": "Desk key"}
+        )
+        self.assertEqual(added.status_code, 200, added.text)
+        # A further factor issues no new recovery codes.
+        self.assertIsNone(added.json()["recovery_codes"])
+        with self.Session() as db:
+            (key,) = db.query(MfaCredential).filter_by(user_id=self.uid).all()
+            key_id = str(key.id)
+
+        self.assertEqual(self.post("remove", {"id": "totp"}).status_code, 200)
+        with self.Session() as db:
+            user = db.get(User, self.uid)
+            self.assertIsNone(user.mfa_totp_secret)
+            self.assertTrue(user.mfa_enabled)
+            self.assertEqual(
+                db.query(MfaRecoveryCode).filter_by(user_id=self.uid).count(), 10
+            )
+        missing = self.post("remove", {"id": str(uuid.uuid4())})
+        self.assertEqual(missing.status_code, 404)
+
+        self.assertEqual(self.post("remove", {"id": key_id}).status_code, 200)
+        with self.Session() as db:
+            user = db.get(User, self.uid)
+            self.assertFalse(user.mfa_enabled)
+            self.assertEqual(
+                db.query(MfaRecoveryCode).filter_by(user_id=self.uid).count(), 0
+            )
+            self.assertEqual(
+                db.query(MfaCredential).filter_by(user_id=self.uid).count(), 0
+            )
+        refused = self.post("recovery/regenerate")
+        self.assertEqual(refused.status_code, 400)
+        self.assertEqual(refused.json()["detail"], "Enrol an authenticator first")
+
     def test_cancel_and_logout_invalidate_pending_challenge(self):
         self.start()
         token = self.client.cookies.get(mfa.COOKIE)
@@ -605,8 +650,9 @@ class LocalMfaTests(unittest.TestCase):
             self.assertTrue(any("password was changed" in x for x in subjects))
             self.assertTrue(any("password was reset" in x for x in subjects))
 
-    def webauthn_registration(self):
-        self.start()
+    def webauthn_registration(self, start=True):
+        if start:
+            self.start()
         options = self.post("webauthn/register-options").json()
         private = ec.generate_private_key(ec.SECP256R1())
         public = private.public_key().public_numbers()

@@ -339,7 +339,7 @@ def _run_lock(db, base):
     lock_id = int.from_bytes(
         hashlib.sha256(("redmine:" + base).encode()).digest()[:8], "big", signed=True
     )
-    with db.get_bind().connect() as connection:
+    with db.get_bind().engine.connect() as connection:
         acquired = connection.execute(
             text("SELECT pg_try_advisory_lock(:key)"), {"key": lock_id}
         ).scalar()

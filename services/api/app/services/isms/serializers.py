@@ -13,7 +13,6 @@ from app.db.models import (
     ControlItem,
     FrameworkClause,
     IsmsAccessControlMatrixEntry,
-    IsmsApplicationConfigurationEntry,
     IsmsAwsAccount,
     IsmsBusinessProcess,
     IsmsDocument,
@@ -257,10 +256,6 @@ def _asset_categories_out(db: Session) -> list[dict[str, Any]]:
     ]
 
 
-def _asset_display_name(row: RiskAsset | None) -> str:
-    return row.name if row else "Asset"
-
-
 def _license_out(
     row: IsmsLicense | None, *, include_asset_count: bool = False
 ) -> dict[str, Any] | None:
@@ -323,54 +318,6 @@ def _asset_out(
         "display": row.name,
     }
     return _attach_links(db, out, "asset", row.id, framework, include_links)
-
-
-def _app_config_source(row: IsmsApplicationConfigurationEntry) -> dict[str, Any]:
-    if row.source_type == "document":
-        return {
-            "id": str(row.document_id) if row.document_id else None,
-            "label": row.document.title if row.document else "Document",
-        }
-    if row.source_type == "person":
-        return {
-            "id": str(row.user_id) if row.user_id else None,
-            "label": row.user.username if row.user else "Person",
-        }
-    if row.source_type == "asset":
-        return {
-            "id": str(row.asset_id) if row.asset_id else None,
-            "label": _asset_display_name(row.asset),
-        }
-    return {
-        "id": str(row.org_node_id) if row.org_node_id else None,
-        "label": row.org_node.name if row.org_node else "Organisation chart node",
-    }
-
-
-def _app_config_out(
-    db: Session,
-    row: IsmsApplicationConfigurationEntry,
-    framework: str,
-    *,
-    include_links: bool = True,
-) -> dict[str, Any]:
-    out = {
-        "id": str(row.id),
-        "source_type": row.source_type,
-        "source": _app_config_source(row),
-        "document_id": str(row.document_id) if row.document_id else None,
-        "user_id": str(row.user_id) if row.user_id else None,
-        "asset_id": str(row.asset_id) if row.asset_id else None,
-        "org_node_id": str(row.org_node_id) if row.org_node_id else None,
-        "business_process": _business_process_out(row.business_process),
-        "business_process_id": str(row.business_process_id),
-        "value": row.value,
-        "notes": row.notes or "",
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-        "display": f"{_app_config_source(row).get('label')} → {row.business_process.name if row.business_process else 'Business process'}",
-    }
-    return out
 
 
 def _aws_account_out(
@@ -665,27 +612,10 @@ def _entity_out(
         return _attach_links(db, out, "org_node", row.id, framework, include_links)
     if entity_type == "asset":
         return _asset_out(db, row, framework, include_links=include_links)
-    if entity_type == "application_configuration":
-        return _app_config_out(db, row, framework, include_links=include_links)
-    if entity_type == "access_control_matrix":
-        return _access_control_matrix_out(
-            db, row, framework, include_links=include_links
-        )
     if entity_type == "effectiveness_measure":
         return _effectiveness_measure_out(
             db, row, framework, include_links=include_links
         )
-    if entity_type == "effectiveness_metric":
-        out = _metric_entry_out(row) or {}
-        measure = getattr(row, "measure", None)
-        out["measure"] = (
-            _effectiveness_measure_out(
-                db, measure, framework, include_links=False, include_entries=False
-            )
-            if measure
-            else None
-        )
-        return out
     if entity_type == "meeting":
         return _meeting_out(db, row, framework, include_links=include_links)
     raise DomainError(status_code=400, detail="Unknown ISMS entity type")

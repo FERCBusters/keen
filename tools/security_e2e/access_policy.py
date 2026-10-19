@@ -137,6 +137,8 @@ POLICY = {
     "GET /v1/auth/logout": PUBLIC,
     "POST /v1/auth/logout": PUBLIC,
     "POST /v1/auth/login": PUBLIC,
+    "GET /v1/auth/oidc/start": PUBLIC,
+    "GET /v1/auth/oidc/callback": PUBLIC,
     "GET /v1/auth/oidc/logout": PUBLIC,
     "POST /v1/auth/oidc/logout": PUBLIC,
     "GET /v1/auth/sso/{provider_key}/start": PUBLIC,

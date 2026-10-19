@@ -2,12 +2,6 @@ import { esc } from '/app.js';
 
 const instances = new Map();
 
-function targetId(target) {
-  if (!target) return '';
-  if (typeof target === 'string') return target.replace(/^#/, '');
-  return target.id || '';
-}
-
 function targetEl(target) {
   if (!target) return null;
   if (typeof target === 'string') return document.getElementById(target.replace(/^#/, ''));
@@ -367,13 +361,5 @@ export function setFilterPillOptions(target, options, opts = {}) {
   if (!el) return null;
   const inst = instances.get(el.id) || buildInstance(el, opts.config || {});
   inst?.setOptions(options, opts);
-  return inst;
-}
-
-export function setFilterPillSelected(target, values, opts = {}) {
-  const el = targetEl(target);
-  if (!el) return null;
-  const inst = instances.get(el.id) || buildInstance(el, opts.config || {});
-  inst?.setSelected(values, opts);
   return inst;
 }

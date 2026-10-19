@@ -212,10 +212,14 @@ def test_first_weekday_rules_pick_the_matching_day(
 
 
 def test_first_weekday_helpers_skip_weekends():
-    assert schedules.first_weekday_of_month(2026, 2) == date(
+    first_weekday = "first_weekday_of_month"
+    # 1 February 2026 is a Sunday.
+    assert schedules.first_scheduled_rule_date(2026, 2, first_weekday) == date(
         2026, 2, 2
-    )  # 1 Feb is a Sunday
-    assert schedules.first_weekday_of_month(2026, 4) == date(2026, 4, 1)
+    )
+    assert schedules.first_scheduled_rule_date(2026, 4, first_weekday) == date(
+        2026, 4, 1
+    )
     assert schedules.first_scheduled_rule_date(
         2026, 2, "first_thursday_of_month"
     ) == date(2026, 2, 5)

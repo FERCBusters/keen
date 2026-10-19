@@ -1,5 +1,6 @@
 """SWOT analysis, bounded hierarchy and permission-aware relationships."""
 
+from dataclasses import replace
 from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID
@@ -478,7 +479,11 @@ def change_link(*, item_id, payload, remove, user, db, context):
     row.version += 1
     row.updated_at = _utcnow()
     # Target identifiers and titles are resolved at read time, never copied into
-    # an ISMS-readable history that could bypass risk permissions later.
+    # an ISMS-readable history that could bypass risk permissions later. A
+    # removal names its target in the request path, so every relationship
+    # entry records the item's relationship collection as its path.
+    if context is not None:
+        context = replace(context, path=f"/v1/isms/swot/{row.id}/links")
     _record(
         db,
         "swot",

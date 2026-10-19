@@ -64,11 +64,17 @@ def document_or_404(
     val = (document_id_or_title or "").strip()
     did = try_uuid(val)
     q = db.query(IsmsDocument)
-    row = (
-        q.filter(IsmsDocument.id == did).one_or_none()
-        if did
-        else q.filter(IsmsDocument.title == val).one_or_none()
-    )
+    if did:
+        row = q.filter(IsmsDocument.id == did).one_or_none()
+    else:
+        # Titles need not be unique; an ambiguous title names no document.
+        rows = q.filter(IsmsDocument.title == val).limit(2).all()
+        if len(rows) > 1:
+            raise DomainError(
+                status_code=400,
+                detail=f"More than one ISMS document has the title {val}; use the document id",
+            )
+        row = rows[0] if rows else None
     if not row:
         raise DomainError(status_code=404, detail=f"ISMS document not found: {val}")
     return row

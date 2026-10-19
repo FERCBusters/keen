@@ -79,10 +79,6 @@ def view(agent):
     }
 
 
-def agent_credential(request):
-    return parse_agent_credential(request.headers.get("authorization", ""))
-
-
 def authenticate(request, db, *, lock=True):
     return authenticate_credential(
         request.headers.get("authorization", ""), db, lock=lock

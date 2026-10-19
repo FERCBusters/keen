@@ -100,7 +100,7 @@ async function load() {
 
     // Keep the navbar badge in sync if the user hits refresh here.
     try {
-      window.keenRefreshQuestionBell?.();
+      window.keenRefreshBell?.();
     } catch {}
   } catch (err) {
     const msg = `Failed to load questions: ${String(err)}`;
