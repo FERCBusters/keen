@@ -762,6 +762,146 @@ test('graph marks open their source, filtered events and clause pages', async (t
   );
 });
 
+// One RSS source split by system: each feed is its own node, as the server
+// describes it, with the Events text filter that selects the feed's events.
+const feedBreakdown = {
+  nodes: [
+    {
+      id: 'source:rss|system:NVD',
+      type: 'source',
+      node_kind: 'source',
+      label: 'RSS · NVD',
+      source: 'rss',
+      color: '#f97316',
+      mapped_events: 2,
+      breakdown: { field: 'system', value: 'NVD' },
+      events_filter: 'system:equals:NVD',
+    },
+    {
+      id: 'source:rss|system:',
+      type: 'source',
+      node_kind: 'source',
+      label: 'RSS · Not recorded',
+      source: 'rss',
+      color: '#f97316',
+      mapped_events: 1,
+      breakdown: { field: 'system', value: '' },
+      events_filter: 'system:not_regex:.',
+    },
+    {
+      id: 'control:A1',
+      type: 'control',
+      node_kind: 'control',
+      label: 'A1',
+      control_id: 'A1-id',
+      title: 'Control A1',
+      mapped_events: 3,
+    },
+  ],
+  links: [
+    { source: 'source:rss|system:NVD', target: 'control:A1', value: 2 },
+    { source: 'source:rss|system:', target: 'control:A1', value: 1 },
+  ],
+};
+
+test('a source breaks down into sub-elements that open their own events', async (t) => {
+  const requested = [];
+  const ui = await viz(t, {
+    mode: 'graph',
+    graph: (u) => {
+      requested.push(u.searchParams.get('breakdown'));
+      return u.searchParams.get('breakdown') === 'system' ? feedBreakdown : twoSources;
+    },
+  });
+  // The choice is offered for the source-based views and starts at source only.
+  assert.equal(ui.el('controlsBreakdown').classList.contains('d-none'), false);
+  assert.equal(ui.el('vizBreakdown').value, '');
+  assert.deepEqual(
+    [...ui.el('vizBreakdown').options].map((o) => o.value),
+    ['', 'connection', 'system', 'actor', 'action', 'outcome'],
+  );
+  assert.deepEqual(requested, [null]);
+
+  ui.el('vizBreakdown').value = 'system';
+  ui.el('vizBreakdown').dispatchEvent(new ui.window.Event('change'));
+  await settle(() => ui.titled('#viz g.node-source', 'RSS · NVD\nMapped events: 2'));
+  assert.deepEqual(requested, [null, 'system']);
+  assert.match(new URL(ui.window.location.href).searchParams.get('by'), /^system$/);
+
+  // A sub-element has no page of its own: it opens the events behind it, and
+  // so does the link to a control; the empty sub-element selects events whose
+  // field is not recorded.
+  ui.click(ui.titled('#viz g.node-source', 'RSS · NVD\nMapped events: 2'), { ctrlKey: true });
+  ui.click(ui.titled('#viz .links path', 'RSS · NVD → A1\nMapped events: 2'), { ctrlKey: true });
+  ui.click(ui.titled('#viz .links path', 'RSS · Not recorded → A1\nMapped events: 1'), {
+    ctrlKey: true,
+  });
+  assert.deepEqual(
+    ui.opened.map((o) => o.href),
+    [
+      `/events.html?framework=A&source=rss&f=system%3Aequals%3ANVD&${range}`,
+      `/events.html?framework=A&source=rss&f=system%3Aequals%3ANVD&control=A1&${range}`,
+      `/events.html?framework=A&source=rss&f=system%3Anot_regex%3A.&control=A1&${range}`,
+    ],
+  );
+  // The distribution links each sub-element to its events, and exports keep
+  // the sub-element in the label.
+  const rows = [...ui.el('topSources').querySelectorAll('tr')];
+  assert.equal(rows[0].textContent.trim().replace(/\s+/g, ' '), 'RSS · NVD 2');
+  assert.equal(
+    rows[0].querySelector('a').getAttribute('href'),
+    `/events.html?framework=A&source=rss&f=system%3Aequals%3ANVD&${range}`,
+  );
+  ui.el('vizExportCsv').click();
+  const csv = (await ui.files[0].blob.text()).trim().split('\n');
+  assert.deepEqual(csv.slice(1).sort(), [
+    'rss,RSS · NVD,A1-id,A1,Control A1,2',
+    'rss,RSS · Not recorded,A1-id,A1,Control A1,1',
+  ]);
+
+  // The heatmap reuses the dataset; its cells open the same events.
+  ui.el('vizSelect').value = 'heatmap';
+  ui.el('vizSelect').dispatchEvent(new ui.window.Event('change'));
+  await settle(() => ui.titled('#viz rect.heat-cell', 'RSS · NVD → A1\nMapped events: 2'));
+  assert.deepEqual(requested, [null, 'system']);
+  ui.click(ui.titled('#viz rect.heat-cell', 'RSS · NVD → A1\nMapped events: 2'), { ctrlKey: true });
+  assert.equal(
+    ui.opened.at(-1).href,
+    `/events.html?framework=A&source=rss&f=system%3Aequals%3ANVD&control=A1&${range}`,
+  );
+
+  // Share links carry the breakdown; the histogram has no sources to split.
+  ui.el('copyVizLink').click();
+  await settle(() => ui.copied.length === 1);
+  assert.equal(new URL(ui.copied[0]).searchParams.get('by'), 'system');
+  ui.el('vizSelect').value = 'histogram';
+  ui.el('vizSelect').dispatchEvent(new ui.window.Event('change'));
+  assert.equal(ui.el('controlsBreakdown').classList.contains('d-none'), true);
+});
+
+test('a shared breakdown is restored, and Reset returns to whole sources', async (t) => {
+  const requested = [];
+  const ui = await viz(t, {
+    mode: 'heatmap',
+    query: '&by=system',
+    graph: (u) => {
+      requested.push(u.searchParams.get('breakdown'));
+      return feedBreakdown;
+    },
+  });
+  assert.equal(ui.el('vizBreakdown').value, 'system');
+  assert.deepEqual(requested, ['system']);
+  ui.el('vizReset').click();
+  await settle(() => requested.length === 2 && /Loaded\./.test(ui.el('status').textContent));
+  assert.equal(ui.el('vizBreakdown').value, '');
+  assert.equal(requested[1], null);
+  assert.equal(new URL(ui.window.location.href).searchParams.has('by'), false);
+  // An unknown breakdown in a link is ignored.
+  const odd = await viz(t, { mode: 'graph', query: '&by=summary', graph: twoSources });
+  assert.equal(odd.el('vizBreakdown').value, '');
+  assert.ok(odd.calls.every((c) => !c.url.includes('breakdown=')));
+});
+
 test('the clause ↔ control graph ignores the date window and opens clauses', async (t) => {
   const relationships = {
     graph_kind: 'clause_control_relationship',

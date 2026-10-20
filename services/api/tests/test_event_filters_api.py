@@ -86,6 +86,8 @@ def events(keen):  # noqa: F811 - fixture imported above
             actor="cron",
             rule="backup-runs",
             source="jenkins",
+            connection_id="conn-1",
+            connection_name="Build feed",
         ),
         "foreign": event(
             "Access reviewed elsewhere", foreign, system="okta-test", actor="alice"
@@ -299,6 +301,21 @@ def test_exports_for_an_unknown_control_are_empty(events):
             ["Access reviewed elsewhere", "Admin login reviewed"],
         ),
         ({"f": "any:contains:jenkins"}, ["Nightly backup & restore"]),
+        # The connection that collected the evidence is a text field too.
+        ({"f": "connection:equals:Build feed"}, ["Nightly backup & restore"]),
+        (
+            {"f": "connection:not_regex:."},
+            [
+                "Access reviewed by hand",
+                "Access reviewed elsewhere",
+                "Admin login reviewed",
+                "Config reloaded",
+                "R&D budget approved",
+                "Unmapped heartbeat",
+                "userXname rotated",
+            ],
+        ),
+        ({"f": "any:contains:build feed"}, ["Nightly backup & restore"]),
         (
             {"f": "any:starts_with:okta"},
             ["Access reviewed elsewhere", "Admin login reviewed"],
@@ -340,7 +357,7 @@ def test_list_filters_combine_lists_rules_and_text_conditions(events, params, ex
         ("actor:contains", "A text filter is written field:operator:value"),
         (
             "colour:contains:x",
-            "Text filters apply to summary, system, actor, action, outcome, external_id, any",
+            "Text filters apply to summary, system, actor, action, outcome, external_id, connection, any",
         ),
         (
             "actor:near:x",

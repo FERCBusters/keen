@@ -82,7 +82,6 @@ const SCOPE_LABELS = {
   control: 'control',
   clause: 'clause',
   rule: 'mapping rule',
-  q: 'search',
   f: 'text filter',
   unmapped: 'unmapped only',
 };
@@ -201,6 +200,16 @@ wireIsoDmyDateField(dateTo, dateToDmy, dateToPick, {
   listenInput: false,
   dispatchChangeOnText: true,
 });
+
+// Sources can be split into sub-elements by one event field (connection,
+// system, actor, action or outcome); the server offers the same list.
+const BREAKDOWN_FIELDS = ['connection', 'system', 'actor', 'action', 'outcome'];
+const controlsBreakdown = document.getElementById('controlsBreakdown');
+const vizBreakdown = document.getElementById('vizBreakdown');
+function activeBreakdown() {
+  const value = String(vizBreakdown?.value || '').trim();
+  return BREAKDOWN_FIELDS.includes(value) ? value : '';
+}
 
 const controlsHeatmap = document.getElementById('controlsHeatmap');
 const heatmapTopSources = document.getElementById('heatmapTopSources');
@@ -475,6 +484,7 @@ function clearVizQueryOverrides() {
       'from',
       'to',
       'days',
+      'by',
       'hs',
       'hc',
       'gs',
@@ -697,6 +707,11 @@ function showControls() {
   };
   setFlex(controlsHeatmap, isHeatmap);
   setFlex(controlsGraph, isGraph);
+  // Source sub-elements apply to every view built from source nodes.
+  setFlex(
+    controlsBreakdown,
+    vizMode !== 'histogram' && vizMode !== 'graph_clause_control' && !isRelationshipGraph(),
+  );
   // "Days" is a convenient shortcut for all visualisations.
   setFlex(controlsHistogram, true);
 }
@@ -805,7 +820,7 @@ function renderTopLists() {
     ? topSources
         .map((s) => {
           const label = s.node?.label || s.node?.id || '';
-          const key = s.node?.source || label;
+          const key = s.node?.source ? s.node : label;
           const href =
             s.node?.node_kind === 'clause'
               ? withFramework(
@@ -846,10 +861,15 @@ function renderTopLists() {
   enableTableSorting(document);
 }
 
+// `sourceKey` is a source name, or a source node whose sub-element (one RSS
+// feed, one connection…) the server describes as an Events text filter.
 function buildEventsHref(sourceKey, controlIdOrRef, rangeOverride = null, opts = {}) {
   const u = new URL('/events.html', location.origin);
   if (framework) u.searchParams.set('framework', framework);
-  if (sourceKey) u.searchParams.set('source', sourceKey);
+  const node = sourceKey && typeof sourceKey === 'object' ? sourceKey : null;
+  const source = node ? node.source || '' : sourceKey;
+  if (source) u.searchParams.set('source', source);
+  if (node?.events_filter) u.searchParams.append('f', String(node.events_filter));
   if (controlIdOrRef) u.searchParams.set('control', controlIdOrRef);
   if (opts?.clause) u.searchParams.set('clause', opts.clause);
   const r = rangeOverride || getActiveRange();
@@ -917,6 +937,11 @@ function openGraphNode(node, ev = null) {
     return;
   }
   if (node.type === 'source') {
+    if (node.breakdown) {
+      // A sub-element has no page of its own; its events are the detail.
+      openEventsForLink(node, '', ev);
+      return;
+    }
     const src = node.source || '';
     const href = withFramework(`/source.html?source=${encodeURIComponent(src)}`, framework);
     if (ev && (ev.metaKey || ev.ctrlKey)) window.open(href, '_blank', 'noopener');
@@ -1014,7 +1039,11 @@ function buildGraphDatasetUrl(key, range = getActiveRange()) {
     u.searchParams.set('start_date', range.from);
     u.searchParams.set('end_date', range.to);
   }
-  if (key !== 'clause_control') applyScope(u);
+  if (key !== 'clause_control') {
+    applyScope(u);
+    const breakdown = activeBreakdown();
+    if (breakdown) u.searchParams.set('breakdown', breakdown);
+  }
   return u.pathname + u.search;
 }
 
@@ -1189,6 +1218,8 @@ function buildShareUrl() {
   }
 
   if (histDays?.value) u.searchParams.set('days', String(histDays.value));
+  if (activeBreakdown()) u.searchParams.set('by', activeBreakdown());
+  else u.searchParams.delete('by');
   if (heatmapTopSources?.value) u.searchParams.set('hs', String(heatmapTopSources.value));
   if (heatmapTopControls?.value) u.searchParams.set('hc', String(heatmapTopControls.value));
   if (graphTopSources?.value) u.searchParams.set('gs', String(graphTopSources.value));
@@ -1285,6 +1316,9 @@ function applyQueryOverrides() {
       updateHistogramZoomButtons();
     }
   }
+
+  const by = (qs.get('by') || '').trim().toLowerCase();
+  if (vizBreakdown) vizBreakdown.value = BREAKDOWN_FIELDS.includes(by) ? by : '';
 
   const hs = (qs.get('hs') || '').trim();
   const hc = (qs.get('hc') || '').trim();
@@ -1533,7 +1567,7 @@ function drawGraph(minW, topS = null, topC = null) {
         openGraphNode(d.targetNode || d.sourceNode, ev);
         return;
       }
-      const srcKey = d.sourceNode?.source || '';
+      const srcKey = d.sourceNode || '';
       const target = d.targetNode || {};
       if (target.node_kind === 'clause') {
         openEventsForLink(srcKey, '', ev, null, {
@@ -1917,7 +1951,7 @@ function drawHeatmap() {
       ev.preventDefault();
       if (!d.v) return;
       if (d.c?.node_kind === 'clause') {
-        openEventsForLink(d.s?.source || '', '', ev, null, {
+        openEventsForLink(d.s || '', '', ev, null, {
           clause: d.c?.label || d.c?.ref || d.c?.clause_id || '',
         });
         return;
@@ -1927,7 +1961,7 @@ function drawHeatmap() {
         return;
       }
       // Pass control ref (shown in dropdowns) instead of UUID.
-      openEventsForLink(d.s.source, d.c?.label || d.c?.control_ref || '', ev);
+      openEventsForLink(d.s, d.c?.label || d.c?.control_ref || '', ev);
     })
     .append('title')
     .text((d) => {
@@ -2147,6 +2181,7 @@ function buildHierarchy(mode) {
         control_id: n.control_id,
         control_ref: n.control_ref,
         source_key: n.source_key,
+        source_node: n.source_node,
         source_label: n.source_label,
         clause_id: n.clause_id,
         clause_ref: n.clause_ref,
@@ -2219,6 +2254,7 @@ function buildHierarchy(mode) {
           kind: s.node_kind === 'clause' ? 'clause' : 'source',
           source_label: s.label,
           source_key: s.source,
+          source_node: s,
           clause_id: s.clause_id,
           clause_ref: s.ref || s.label,
           color: s.color,
@@ -2287,6 +2323,7 @@ function buildHierarchy(mode) {
       kind: s.node_kind === 'clause' ? 'clause' : 'source',
       source_label: s.label,
       source_key: s.source,
+      source_node: s,
       clause_id: s.clause_id,
       clause_ref: s.ref || s.label,
       color: s.color,
@@ -2613,8 +2650,8 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
 
       if (mode === 'sunburst_source') {
         if (otherItemType === 'source')
-          return buildEventsHref(String(it?.source_key || '').trim(), '');
-        const src = String(node.data?.source_key || '').trim();
+          return buildEventsHref(it?.source_node || String(it?.source_key || '').trim(), '');
+        const src = node.data?.source_node || String(node.data?.source_key || '').trim();
         const control = String(it?.control_ref || label || it?.control_id || '').trim();
         return buildEventsHref(src, control);
       }
@@ -2624,7 +2661,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
           const control = String(it?.control_ref || label || it?.control_id || '').trim();
           return buildEventsHref('', control);
         }
-        const src = String(it?.source_key || '').trim();
+        const src = it?.source_node || String(it?.source_key || '').trim();
         const control = String(
           node.data?.control_ref || node.data?.name || node.data?.control_id || '',
         ).trim();
@@ -2836,7 +2873,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
         let controlId = '';
         for (const a of d.ancestors()) {
           if (!sourceKey && a.data?.kind === 'source' && a.data?.source_key)
-            sourceKey = String(a.data.source_key);
+            sourceKey = a.data.source_node || String(a.data.source_key);
           // Prefer human-friendly ref (e.g. A.8.6) over UUID for Events filtering.
           if (!controlRef && a.data?.kind === 'control') {
             const v = a.data?.control_ref || a.data?.name || '';
@@ -3580,6 +3617,7 @@ resetBtn?.addEventListener('click', () => {
   if (graphTopSources) graphTopSources.value = DEFAULT_NUMERIC.graphTopSources;
   if (graphTopControls) graphTopControls.value = DEFAULT_NUMERIC.graphTopControls;
   if (graphMinEdge) graphMinEdge.value = DEFAULT_NUMERIC.graphMinEdge;
+  if (vizBreakdown) vizBreakdown.value = '';
 
   // Restore default view (saved preference if present; otherwise Graph + last 7 days).
   histZoomStack = [];
@@ -3614,6 +3652,12 @@ histDays?.addEventListener('input', () => {
 vizSelect?.addEventListener('change', () => {
   const next = vizSelect.value;
   setViz(next);
+});
+
+// A different breakdown is a different dataset: fetch the graphs again.
+vizBreakdown?.addEventListener('change', () => {
+  syncAddressBarToShareState();
+  load();
 });
 
 saveDefaultViz?.addEventListener('click', async () => {

@@ -11,6 +11,7 @@ export const CONDITION_FIELDS = [
   ['action', 'Action'],
   ['outcome', 'Outcome'],
   ['external_id', 'Identifier'],
+  ['connection', 'Connection'],
 ];
 
 export const CONDITION_OPERATORS = [

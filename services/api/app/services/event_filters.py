@@ -43,11 +43,22 @@ from app.services.control_inheritance import (
 from app.services.control_refs import control_by_ref
 from app.services.errors import DomainError
 
-TEXT_FIELDS = ("summary", "system", "actor", "action", "outcome", "external_id")
+# Text filter field names and the event column each one reads; the connection
+# is the named connection that collected the evidence.
+TEXT_FIELD_COLUMNS = {
+    "summary": Event.summary,
+    "system": Event.system,
+    "actor": Event.actor,
+    "action": Event.action,
+    "outcome": Event.outcome,
+    "external_id": Event.external_id,
+    "connection": Event.connection_name,
+}
+TEXT_FIELDS = tuple(TEXT_FIELD_COLUMNS)
 # "any" applies the operator across every text field and the source name, as
 # the free-text search did: a positive operator matches when one field does.
 ANY_FIELD = "any"
-ANY_FIELD_COLUMNS = TEXT_FIELDS + ("source",)
+ANY_FIELD_COLUMNS = tuple(TEXT_FIELD_COLUMNS.values()) + (Event.source,)
 OPERATORS = (
     "contains",
     "not_contains",
@@ -219,9 +230,9 @@ def _column_matches(column, condition: TextCondition):
 
 def text_condition_predicate(condition: TextCondition):
     if condition.field == ANY_FIELD:
-        columns = [getattr(Event, name) for name in ANY_FIELD_COLUMNS]
+        columns = list(ANY_FIELD_COLUMNS)
     else:
-        columns = [getattr(Event, condition.field)]
+        columns = [TEXT_FIELD_COLUMNS[condition.field]]
     positives = [_column_matches(column, condition) for column in columns]
     if condition.negated:
         # An empty field does not contain, start with or equal the value; for

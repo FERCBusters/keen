@@ -35,7 +35,7 @@ HOSTILE = '<img src=x onerror="alert(1)">'
 def _event(db, source, *controls, when=datetime(2026, 3, 1, 12, 0), **kw):
     row = Event(
         source=source,
-        system="ci",
+        system=kw.pop("system", "ci"),
         action="deploy",
         outcome="success",
         severity=2,
@@ -245,6 +245,99 @@ def test_source_control_graph_counts_distinct_events(graph):
         ).status_code
         == 422
     )
+
+
+def test_a_breakdown_splits_each_source_into_its_sub_elements(graph):
+    """One RSS connection with several feeds is one source; a breakdown by
+    system shows the feeds, by connection the named connections."""
+
+    db = graph.db
+    _event(db, "rss", graph.logging, system="NVD", connection_name="Security feeds")
+    _event(db, "rss", graph.logging, system="NVD", connection_name="Security feeds")
+    _event(db, "rss", graph.change, system="CISA", connection_name="Security feeds")
+    _event(db, "rss", graph.change, system=None, connection_name=None)
+    db.commit()
+    client = graph.keen.client(graph.keen.user("events.read"))
+    logging = f"control:{graph.logging.id}"
+    change = f"control:{graph.change.id}"
+
+    plain = client.get(
+        "/v1/graph/control_source", params={"framework": "A", "source": "rss"}
+    ).json()
+    assert _nodes(plain)["source:rss"]["mapped_events"] == 4
+    assert "breakdown" not in _nodes(plain)["source:rss"]
+
+    by_system = client.get(
+        "/v1/graph/control_source",
+        params={"framework": "A", "source": "rss", "breakdown": "system"},
+    ).json()
+    nodes = _nodes(by_system)
+    assert _links(by_system) == {
+        ("source:rss|system:NVD", logging): 2,
+        ("source:rss|system:CISA", change): 1,
+        ("source:rss|system:", change): 1,
+    }
+    nvd = nodes["source:rss|system:NVD"]
+    assert (nvd["source"], nvd["label"], nvd["mapped_events"]) == (
+        "rss",
+        "RSS · NVD",
+        2,
+    )
+    assert nvd["breakdown"] == {"field": "system", "value": "NVD"}
+    # Each sub-element names the Events text filter that selects its events;
+    # an empty field is the events whose field is not recorded.
+    assert nvd["events_filter"] == "system:equals:NVD"
+    blank = nodes["source:rss|system:"]
+    assert blank["label"] == "RSS · Not recorded"
+    assert blank["events_filter"] == "system:not_regex:."
+    assert nodes[logging]["mapped_events"] == 2 and nodes[change]["mapped_events"] == 2
+
+    by_connection = client.get(
+        "/v1/graph/control_source",
+        params={"framework": "A", "source": "rss", "breakdown": "Connection"},
+    ).json()
+    assert {
+        n["id"]: n["mapped_events"]
+        for n in by_connection["nodes"]
+        if n["type"] == "source"
+    } == {
+        "source:rss|connection:Security feeds": 3,
+        "source:rss|connection:": 1,
+    }
+    assert (
+        _nodes(by_connection)["source:rss|connection:Security feeds"]["events_filter"]
+        == "connection:equals:Security feeds"
+    )
+
+    # The source ↔ clause graph takes the same breakdown.
+    clauses = client.get(
+        "/v1/graph/clause_source",
+        params={"framework": "A", "source": "rss", "breakdown": "system"},
+    ).json()
+    assert {
+        (s, t): v
+        for (s, t), v in _links(clauses).items()
+        if s == "source:rss|system:NVD"
+    } == {("source:rss|system:NVD", f"clause:{graph.context.id}"): 2}
+
+    # Only the listed event fields split a source; a column name is refused.
+    for path in ("/v1/graph/control_source", "/v1/graph/clause_source"):
+        refused = client.get(path, params={"framework": "A", "breakdown": "summary"})
+        assert refused.status_code == 400
+        assert refused.json()["detail"] == (
+            "A source breakdown is one of connection, system, actor, action, outcome"
+        )
+    # Sub-element text filters are accepted by the Events page.
+    events = client.get(
+        "/v1/events",
+        params={"framework": "A", "source": "rss", "f": "system:equals:NVD"},
+    )
+    assert events.status_code == 200 and events.json()["total"] == 2
+    blank_events = client.get(
+        "/v1/events",
+        params={"framework": "A", "source": "rss", "f": "system:not_regex:."},
+    )
+    assert blank_events.status_code == 200 and blank_events.json()["total"] == 1
 
 
 def test_source_control_graph_includes_crosswalk_evidence(graph):

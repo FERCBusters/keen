@@ -92,6 +92,18 @@ export function ensureEmbeddedVisualisationMarkup() {
                 <button id="vizReset" class="btn btn-sm btn-outline-primary" type="button">Reset</button>
               </div>
 
+              <div id="controlsBreakdown" class="flex-wrap gap-2 align-items-center d-none">
+                <label class="small-muted" for="vizBreakdown">Break sources down by</label>
+                <select id="vizBreakdown" class="form-select form-select-sm" style="width:auto;" title="Split each source into the sub-elements one event field names, for example one node per RSS feed (system) or per connection">
+                  <option value="">Source only</option>
+                  <option value="connection">Connection</option>
+                  <option value="system">System</option>
+                  <option value="actor">Actor</option>
+                  <option value="action">Action</option>
+                  <option value="outcome">Outcome</option>
+                </select>
+              </div>
+
               <div id="controlsHeatmap" class="flex-wrap gap-2 align-items-center d-none">
                 <label class="small-muted">Top sources</label>
                 <input id="heatmapTopSources" type="number" class="form-control form-control-sm" min="5" max="200" value="18" style="width:90px;">

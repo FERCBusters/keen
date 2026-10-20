@@ -52,6 +52,7 @@ def graph_control_source(
     q: Optional[str] = None,
     conditions: list[str] = Query(default=[], alias="f"),
     unmapped: bool = False,
+    breakdown: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     "Graph for visualisation: Sources -> Controls.\n\n    Counts are **distinct events**, not number of mappings. One event can map to\n    multiple controls, so counting mappings would inflate totals.\n"
@@ -61,6 +62,7 @@ def graph_control_source(
         start_date=start_date,
         end_date=end_date,
         scope=_scope(framework, source, control, clause, rule, q, conditions, unmapped),
+        breakdown=breakdown,
         db=db,
     )
 
@@ -78,6 +80,7 @@ def graph_clause_source(
     q: Optional[str] = None,
     conditions: list[str] = Query(default=[], alias="f"),
     unmapped: bool = False,
+    breakdown: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     "Graph for visualisation: Sources -> Clauses by mapped-event evidence.\n\n    This is materially more expensive than the source -> control graph because it\n    has to fan mapped controls out through clause applicability links. Cache it\n    with the same short-lived aggregate cache used by other UI count endpoints,\n    while keeping the cache scoped to the current user visibility preferences.\n"
@@ -87,6 +90,7 @@ def graph_clause_source(
         start_date=start_date,
         end_date=end_date,
         scope=_scope(framework, source, control, clause, rule, q, conditions, unmapped),
+        breakdown=breakdown,
         db=db,
     )
 

@@ -45,15 +45,74 @@ def _event_filters(start_date: Optional[date], end_date: Optional[date]):
     return filters
 
 
-def _source_node(src: str, total: int, context: ChangeContext) -> dict[str, Any]:
+# A source node can be split into the sub-elements one of these event fields
+# names: the connection that collected the evidence, or the system, actor,
+# action or outcome it recorded (for RSS, each feed is a system). The chosen
+# field is one of these names, never a client-supplied column.
+BREAKDOWN_FIELDS: dict[str, Any] = {
+    "connection": Event.connection_name,
+    "system": Event.system,
+    "actor": Event.actor,
+    "action": Event.action,
+    "outcome": Event.outcome,
+}
+BREAKDOWN_EMPTY_LABEL = "Not recorded"
+
+
+def parse_breakdown(raw: str | None) -> str | None:
+    value = str(raw or "").strip().lower()
+    if not value:
+        return None
+    if value not in BREAKDOWN_FIELDS:
+        raise DomainError(
+            400,
+            "A source breakdown is one of " + ", ".join(BREAKDOWN_FIELDS),
+        )
+    return value
+
+
+def _source_group_columns(breakdown: str | None) -> list:
+    columns = [Event.source]
+    if breakdown:
+        columns.append(BREAKDOWN_FIELDS[breakdown])
+    return columns
+
+
+def _source_key(row: tuple, breakdown: str | None) -> tuple[str, str | None]:
+    """(source, sub-element value) for a grouped row; the value is None without a breakdown."""
+    source = str(row[0])
+    if not breakdown:
+        return source, None
+    return source, str(row[1] or "").strip()
+
+
+def _grouped_node_id(row: tuple, breakdown: str | None) -> str:
+    source, value = _source_key(row, breakdown)
+    return _source_node_id(source, breakdown, value)
+
+
+def _source_node_id(source: str, breakdown: str | None, value: str | None) -> str:
+    if breakdown is None:
+        return f"source:{source}"
+    return f"source:{source}|{breakdown}:{value or ''}"
+
+
+def _source_node(
+    src: str,
+    total: int,
+    context: ChangeContext,
+    *,
+    breakdown: str | None = None,
+    value: str | None = None,
+) -> dict[str, Any]:
     default_meta = get_source_meta(src)
     user = context.actor
     overrides = (
         getattr(user, "pref_source_colors", None) if isinstance(user, User) else None
     )
     meta = apply_user_source_overrides(default_meta, overrides)
-    return {
-        "id": f"source:{src}",
+    node = {
+        "id": _source_node_id(src, breakdown, value),
         "type": "source",
         "node_kind": "source",
         "label": meta.label,
@@ -61,6 +120,14 @@ def _source_node(src: str, total: int, context: ChangeContext) -> dict[str, Any]
         "color": meta.color,
         "mapped_events": int(total or 0),
     }
+    if breakdown is not None:
+        node["label"] = f"{meta.label} · {value or BREAKDOWN_EMPTY_LABEL}"
+        node["breakdown"] = {"field": breakdown, "value": value or ""}
+        # The Events page text filter that selects this sub-element's events.
+        node["events_filter"] = (
+            f"{breakdown}:equals:{value}" if value else f"{breakdown}:not_regex:."
+        )
+    return node
 
 
 def _clause_color(ref: str | None) -> str:
@@ -95,23 +162,27 @@ def graph_control_source(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     scope: EventFilters | None = None,
+    breakdown: str | None = None,
     db: Session,
 ):
     """Graph for visualisation: Sources -> Controls.
 
     Counts are **distinct events**, not number of mappings. One event can map to
-    multiple controls, so counting mappings would inflate totals.
+    multiple controls, so counting mappings would inflate totals. With a
+    breakdown, each source node is split by that event field.
     """
 
     user = context.actor
     if not can_read_events(db, user):
         raise DomainError(status_code=403, detail="events.read permission required")
     scope = scope or EventFilters(framework=framework)
+    breakdown = parse_breakdown(breakdown)
     cache_parts = {
         "framework": framework,
         "start_date": start_date.isoformat() if start_date else None,
         "end_date": end_date.isoformat() if end_date else None,
         "scope": scope.cache_parts(),
+        "breakdown": breakdown,
         "user": user_cache_scope(user),
     }
 
@@ -120,10 +191,12 @@ def graph_control_source(
             scope, db
         )
         pairs = evidence_pairs(framework, db)
+        group = _source_group_columns(breakdown)
+        width = len(group)
 
         edge_rows = (
             db.query(
-                Event.source,
+                *group,
                 ControlItem.id,
                 ControlItem.ref,
                 ControlItem.title,
@@ -133,25 +206,29 @@ def graph_control_source(
             .join(ControlItem, ControlItem.id == pairs.c.control_id)
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
-            .group_by(Event.source, ControlItem.id, ControlItem.ref, ControlItem.title)
+            .group_by(*group, ControlItem.id, ControlItem.ref, ControlItem.title)
             .all()
         )
 
         src_totals_rows = (
-            db.query(Event.source, func.count(func.distinct(Event.id)).label("n"))
+            db.query(*group, func.count(func.distinct(Event.id)).label("n"))
             .join(pairs, pairs.c.event_id == Event.id)
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
-            .group_by(Event.source)
+            .group_by(*group)
             .all()
         )
-        src_totals = {f"source:{src}": int(n or 0) for src, n in src_totals_rows}
+        src_totals = {
+            _grouped_node_id(row, breakdown): int(row[-1] or 0)
+            for row in src_totals_rows
+        }
 
         # A single event has exactly one source, so summing the source/control
         # edge counts per control gives exact distinct-event control totals
         # without running the same aggregate join again.
         ctrl_totals: dict[str, int] = {}
-        for _src, cid, _cref, _ctitle, n in edge_rows:
+        for row in edge_rows:
+            cid, n = row[width], row[-1]
             key = f"control:{cid}"
             ctrl_totals[key] = ctrl_totals.get(key, 0) + int(n or 0)
 
@@ -159,13 +236,21 @@ def graph_control_source(
         links: list[dict[str, Any]] = []
         ctrl_ids: set = set()
 
-        for src, cid, cref, ctitle, n in edge_rows:
-            src_id = f"source:{src}"
+        for row in edge_rows:
+            src, value = _source_key(row, breakdown)
+            cid, cref, ctitle, n = row[width], row[width + 1], row[width + 2], row[-1]
+            src_id = _source_node_id(src, breakdown, value)
             ctrl_id = f"control:{cid}"
             ctrl_ids.add(cid)
 
             if src_id not in nodes:
-                nodes[src_id] = _source_node(src, src_totals.get(src_id, 0), context)
+                nodes[src_id] = _source_node(
+                    src,
+                    src_totals.get(src_id, 0),
+                    context,
+                    breakdown=breakdown,
+                    value=value,
+                )
             if ctrl_id not in nodes:
                 nodes[ctrl_id] = {
                     "id": ctrl_id,
@@ -215,6 +300,7 @@ def graph_clause_source(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     scope: EventFilters | None = None,
+    breakdown: str | None = None,
     db: Session,
 ):
     """Graph for visualisation: Sources -> Clauses by mapped-event evidence.
@@ -229,11 +315,13 @@ def graph_clause_source(
     if not can_read_events(db, user):
         raise DomainError(status_code=403, detail="events.read permission required")
     scope = scope or EventFilters(framework=framework)
+    breakdown = parse_breakdown(breakdown)
     cache_parts = {
         "framework": framework,
         "start_date": start_date.isoformat() if start_date else None,
         "end_date": end_date.isoformat() if end_date else None,
         "scope": scope.cache_parts(),
+        "breakdown": breakdown,
         "user": user_cache_scope(user),
     }
 
@@ -242,10 +330,12 @@ def graph_clause_source(
             scope, db
         )
         pairs = evidence_pairs(framework, db)
+        group = _source_group_columns(breakdown)
+        width = len(group)
 
         edge_rows = (
             db.query(
-                Event.source,
+                *group,
                 FrameworkClause.id,
                 FrameworkClause.ref,
                 FrameworkClause.title,
@@ -261,7 +351,7 @@ def graph_clause_source(
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
             .group_by(
-                Event.source,
+                *group,
                 FrameworkClause.id,
                 FrameworkClause.ref,
                 FrameworkClause.title,
@@ -270,7 +360,7 @@ def graph_clause_source(
         )
 
         src_totals_rows = (
-            db.query(Event.source, func.count(func.distinct(Event.id)).label("n"))
+            db.query(*group, func.count(func.distinct(Event.id)).label("n"))
             .join(pairs, pairs.c.event_id == Event.id)
             .join(ControlItem, ControlItem.id == pairs.c.control_id)
             .join(
@@ -280,28 +370,45 @@ def graph_clause_source(
             .filter(FrameworkClause.framework_slug == framework)
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
-            .group_by(Event.source)
+            .group_by(*group)
             .all()
         )
-        src_totals = {f"source:{src}": int(n or 0) for src, n in src_totals_rows}
+        src_totals = {
+            _grouped_node_id(row, breakdown): int(row[-1] or 0)
+            for row in src_totals_rows
+        }
 
         # A single event has exactly one source, so summing the source/clause
         # edge counts per clause gives the same distinct-event clause totals
         # without running the heavy Event -> Mapping -> Control -> Clause join
         # a third time.
         clause_totals: dict[str, int] = {}
-        for _src, clause_id, _cref, _ctitle, n in edge_rows:
+        for row in edge_rows:
+            clause_id, n = row[width], row[-1]
             key = f"clause:{clause_id}"
             clause_totals[key] = clause_totals.get(key, 0) + int(n or 0)
 
         nodes: dict[str, dict[str, Any]] = {}
         links: list[dict[str, Any]] = []
 
-        for src, clause_id, cref, ctitle, n in edge_rows:
-            src_id = f"source:{src}"
+        for row in edge_rows:
+            src, value = _source_key(row, breakdown)
+            clause_id, cref, ctitle, n = (
+                row[width],
+                row[width + 1],
+                row[width + 2],
+                row[-1],
+            )
+            src_id = _source_node_id(src, breakdown, value)
             clause_node_id = f"clause:{clause_id}"
             if src_id not in nodes:
-                nodes[src_id] = _source_node(src, src_totals.get(src_id, 0), context)
+                nodes[src_id] = _source_node(
+                    src,
+                    src_totals.get(src_id, 0),
+                    context,
+                    breakdown=breakdown,
+                    value=value,
+                )
             if clause_node_id not in nodes:
                 nodes[clause_node_id] = {
                     "id": clause_node_id,
