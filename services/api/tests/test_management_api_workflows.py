@@ -100,11 +100,7 @@ ENTITIES = [
     ),
     (
         "isms/effectiveness-measures",
-        {
-            "summary": "Coverage",
-            "metric": "Percentage",
-            "effectiveness_measure": "Measure all agents",
-        },
+        {"summary": "Coverage", "description": "Measure all agents"},
         "summary",
         "Agent coverage",
     ),
@@ -388,8 +384,7 @@ def test_effectiveness_measure_metric_entry_scoping_and_updates(api):
         "isms/effectiveness-measures",
         {
             "summary": "Agent coverage",
-            "effectiveness_measure": "Count active agents",
-            "metric": "Coverage",
+            "description": "Count active agents",
             "target_value": 95,
             "target_unit": "%",
             "threshold_operator": "gte",

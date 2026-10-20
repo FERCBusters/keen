@@ -17,6 +17,7 @@ from .metric_values import (
     _apply_metric_entry_payload,
     _validate_effectiveness_measure_payload,
     _validate_metric_entry_payload,
+    inherited_metric_source_type,
 )
 from .mutations import _apply_effectiveness_links, _delete_entity_links
 from .schemas import EffectivenessMeasurePayload, EffectivenessMetricEntryPayload
@@ -39,7 +40,7 @@ def create_effectiveness_measure(
         created_at=_utcnow(),
         updated_at=_utcnow(),
     )
-    _apply_effectiveness_measure_payload(row, payload)
+    _apply_effectiveness_measure_payload(db, row, payload)
     db.add(row)
     db.flush()
     _apply_effectiveness_links(db, row.id, fw, payload, user)
@@ -94,7 +95,7 @@ def update_effectiveness_measure(
     before = _effectiveness_measure_out(db, row, fw)
     fields = set(payload.model_fields_set or set())
     _validate_effectiveness_measure_payload(db, payload, fields=fields, row_id=row.id)
-    _apply_effectiveness_measure_payload(row, payload, partial=True)
+    _apply_effectiveness_measure_payload(db, row, payload, partial=True)
     _apply_effectiveness_links(db, row.id, fw, payload, user)
     db.add(row)
     db.flush()
@@ -146,6 +147,8 @@ def create_effectiveness_metric_entry(
     _apply_metric_entry_payload(row, payload, db)
     if not row.metric_unit:
         row.metric_unit = measure.target_unit or ""
+    if "source_type" not in set(payload.model_fields_set or set()):
+        row.source_type = inherited_metric_source_type(db, measure)
     db.add(row)
     measure.updated_at = _utcnow()
     db.add(measure)

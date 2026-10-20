@@ -129,8 +129,7 @@ const soa = () => ({
       id: 'm1',
       summary: 'Patch latency',
       description: 'Days to patch',
-      effectiveness_measure: 'Timely patching',
-      metric: 'Median days',
+      source_type: 'patch_agent',
       metric_key: 'patch_days',
       target_display: '< 7 days',
       frequency: 'Monthly',
@@ -144,8 +143,14 @@ const soa = () => ({
       metric_entry_count: 1,
       controls: [{ id: 'c1', ref: 'A.5.1' }],
     },
-    { id: 'm2', metric: 'Backups', latest_entry: { source_type: 'manual' }, metric_entry_count: 3 },
-    { id: 'm3', effectiveness_measure: 'Only measure' },
+    {
+      id: 'm2',
+      summary: 'Backups',
+      source_type: 'other',
+      latest_entry: { source_type: 'manual' },
+      metric_entry_count: 3,
+    },
+    { id: 'm3', description: 'Only a description' },
   ],
   isms_org_nodes: [
     {
@@ -376,19 +381,22 @@ test('ISMS objectives, documents, measures, organisation and assets are listed',
     '/isms-effectiveness-measure.html?id=m1&framework=A',
   );
   assert.match(measures[0].textContent, /patch_days/);
-  const latest = measures[0].querySelectorAll('td')[3];
+  assert.equal(measures[0].querySelectorAll('td')[1].textContent, 'patch_agent');
+  assert.equal(measures[1].querySelectorAll('td')[1].textContent, 'Other');
+  const latest = measures[0].querySelectorAll('td')[2];
   assert.equal(
     latest.querySelector('a').getAttribute('href'),
     '/isms-effectiveness-metric.html?id=e1&framework=A',
   );
   assert.match(latest.textContent, /5 days\s*2026-09 · Patch agent\s*1 metric entry/);
   assert.match(
-    measures[1].querySelectorAll('td')[3].textContent,
+    measures[1].querySelectorAll('td')[2].textContent,
     /^Metric entry\s*manual\s*3 metric entries/,
   );
-  assert.equal(measures[1].querySelectorAll('td')[3].querySelector('a'), null);
+  assert.equal(measures[1].querySelectorAll('td')[2].querySelector('a'), null);
   assert.equal(measures[1].querySelector('a').textContent, 'Backups');
-  assert.match(measures[2].querySelectorAll('td')[3].textContent, /No metric entries yet/);
+  assert.equal(measures[2].querySelector('a').textContent, 'Effectiveness measure');
+  assert.match(measures[2].querySelectorAll('td')[2].textContent, /No metric entries yet/);
   filter(ui, 'ismsEffectivenessFilter', 'patch agent');
   assert.equal(rowTexts(ui, 'ismsEffectivenessRows').length, 1);
   filter(ui, 'ismsEffectivenessFilter', 'zzz');

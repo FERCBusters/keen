@@ -165,7 +165,7 @@ function effectivenessMeasureLink(item) {
     `/isms-effectiveness-measure.html?id=${encodeURIComponent(item.id)}`,
     item.framework || framework,
   );
-  return `<a href="${esc(href)}">${esc(shorten(item.summary || item.effectiveness_measure || item.metric || 'Effectiveness measure', 120))}</a>`;
+  return `<a href="${esc(href)}">${esc(shorten(item.summary || 'Effectiveness measure', 120))}</a>`;
 }
 
 function effectivenessLatestValue(item) {
@@ -506,7 +506,7 @@ function renderIsmsEffectiveness() {
   if (!ismsEffectivenessRows) return;
   if (!soa.can_view_isms) {
     ismsEffectivenessRows.innerHTML =
-      '<tr><td colspan="8" class="p-4 small-muted">You do not have permission to view ISMS effectiveness measures.</td></tr>';
+      '<tr><td colspan="7" class="p-4 small-muted">You do not have permission to view ISMS effectiveness measures.</td></tr>';
     return;
   }
   const q = filterText(ismsEffectivenessFilter);
@@ -514,7 +514,7 @@ function renderIsmsEffectiveness() {
     if (!q) return true;
     const controls = (item.controls || []).map((c) => `${c.ref || ''} ${c.title || ''}`).join(' ');
     const latest = item.latest_entry || {};
-    return `${item.summary || ''} ${item.description || ''} ${item.effectiveness_measure || ''} ${item.metric || ''} ${item.metric_key || ''} ${item.target_display || ''} ${item.frequency || ''} ${item.owner?.username || ''} ${item.notes || ''} ${latest.value_display || ''} ${latest.source_title || ''} ${latest.source_type || ''} ${controls}`
+    return `${item.summary || ''} ${item.description || ''} ${item.source_type || ''} ${item.metric_key || ''} ${item.target_display || ''} ${item.frequency || ''} ${item.owner?.username || ''} ${item.notes || ''} ${latest.value_display || ''} ${latest.source_title || ''} ${latest.source_type || ''} ${controls}`
       .toLowerCase()
       .includes(q);
   });
@@ -523,8 +523,7 @@ function renderIsmsEffectiveness() {
       .map(
         (item) => `<tr>
     <td class="wrap fw-semibold">${effectivenessMeasureLink(item)}${item.description ? `<div class="small-muted mt-1">${esc(shorten(item.description || '', 180))}</div>` : ''}${item.metric_key ? `<div class="small-muted mt-1"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
-    <td class="wrap">${esc(shorten(item.effectiveness_measure || '', 180) || '—')}</td>
-    <td class="wrap">${esc(shorten(item.metric || '', 140) || '—')}</td>
+    <td>${esc(item.source_type && item.source_type !== 'other' ? item.source_type : 'Other')}</td>
     <td class="wrap">${effectivenessLatestValue(item)}${Number(item.metric_entry_count || 0) ? `<div class="small-muted">${esc(String(item.metric_entry_count))} metric ${Number(item.metric_entry_count || 0) === 1 ? 'entry' : 'entries'}</div>` : ''}</td>
     <td>${esc(item.target_display || '—')}</td>
     <td>${esc(item.frequency || '—')}</td>
@@ -533,7 +532,7 @@ function renderIsmsEffectiveness() {
   </tr>`,
       )
       .join('') ||
-    '<tr><td colspan="8" class="p-4 small-muted">No effectiveness measures match.</td></tr>';
+    '<tr><td colspan="7" class="p-4 small-muted">No effectiveness measures match.</td></tr>';
 }
 
 function renderIsmsOrgAssets() {
@@ -621,7 +620,7 @@ async function load() {
         '<tr><td colspan="6" class="p-4 small-muted">Failed to load ISMS documents.</td></tr>';
     if (ismsEffectivenessRows)
       ismsEffectivenessRows.innerHTML =
-        '<tr><td colspan="8" class="p-4 small-muted">Failed to load effectiveness measures.</td></tr>';
+        '<tr><td colspan="7" class="p-4 small-muted">Failed to load effectiveness measures.</td></tr>';
     if (ismsOrgRows)
       ismsOrgRows.innerHTML =
         '<tr><td colspan="5" class="p-4 small-muted">Failed to load organisation chart.</td></tr>';

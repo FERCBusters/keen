@@ -194,8 +194,11 @@ def test_credentials_need_the_integration_secret_key(monkeypatch):
         transport.encrypt({"secret": "s3"})
 
     monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
-    sealed = transport.encrypt({"secret": "s3"})
-    assert "s3" not in sealed and transport.decrypt(sealed) == {"secret": "s3"}
+    # A secret long enough that its appearance in the ciphertext's base64 text
+    # cannot be a coincidence.
+    secret = "s3cret-" + "x" * 24
+    sealed = transport.encrypt({"secret": secret})
+    assert secret not in sealed and transport.decrypt(sealed) == {"secret": secret}
     assert transport.decrypt("") == {}
 
 

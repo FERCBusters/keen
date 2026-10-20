@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import operator
 import re
 import uuid
 
@@ -65,6 +67,8 @@ def _validate_effectiveness_measure_payload(
                 qry = qry.filter(IsmsEffectivenessMeasure.id != row_id)
             if qry.first():
                 raise DomainError(status_code=400, detail="metric_key already exists")
+    if fields is None or "source_type" in fields:
+        _coerce_metric_source_type(db, payload.source_type)
     if (fields is None or "clauses" in fields) and payload.clauses:
         raise DomainError(
             status_code=400,
@@ -73,6 +77,7 @@ def _validate_effectiveness_measure_payload(
 
 
 def _apply_effectiveness_measure_payload(
+    db: Session,
     row: IsmsEffectivenessMeasure,
     payload: EffectivenessMeasurePayload,
     *,
@@ -84,9 +89,8 @@ def _apply_effectiveness_measure_payload(
         else {
             "summary",
             "description",
-            "effectiveness_measure",
-            "metric",
             "metric_key",
+            "source_type",
             "target_value",
             "target_unit",
             "threshold_operator",
@@ -96,22 +100,15 @@ def _apply_effectiveness_measure_payload(
         }
     )
     if "summary" in fields:
-        row.summary = _clean_text(payload.summary, max_len=20000)
+        row.summary = _clean_text(
+            payload.summary, max_len=20000, required=not partial, label="summary"
+        )
     if "description" in fields:
         row.description = _clean_text(payload.description, max_len=40000)
-    if "effectiveness_measure" in fields:
-        row.effectiveness_measure = _clean_text(
-            payload.effectiveness_measure,
-            max_len=20000,
-            required=not partial,
-            label="effectiveness measure",
-        )
-    if "metric" in fields:
-        row.metric = _clean_text(
-            payload.metric, max_len=20000, required=not partial, label="metric"
-        )
     if "metric_key" in fields:
         row.metric_key = _metric_key_from_payload(payload.metric_key)
+    if "source_type" in fields:
+        row.source_type = _coerce_metric_source_type(db, payload.source_type)
     if "target_value" in fields:
         row.target_value = payload.target_value
     if "target_unit" in fields:
@@ -166,7 +163,13 @@ def _effectiveness_metric_sources_out(
     return items
 
 
-def _coerce_metric_source_type(db: Session, raw: str | None) -> str:
+def resolve_metric_source_type(db: Session, raw: str | None) -> str | None:
+    """Return the collected KEEN source named by ``raw``, "other", or None.
+
+    Blank input means "other". Spelling variants (case, hyphen/underscore) name
+    the same collected source. None means no collected source has that name.
+    """
+
     source_type = _clean_text(raw, max_len=64).strip()
     if not source_type:
         return EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
@@ -180,10 +183,64 @@ def _coerce_metric_source_type(db: Session, raw: str | None) -> str:
     for source in sources:
         if source.lower().replace("-", "_") == source_key:
             return source
-    raise DomainError(
-        status_code=400,
-        detail="Invalid metric source type; choose an existing KEEN source or other",
+    return None
+
+
+def _coerce_metric_source_type(db: Session, raw: str | None) -> str:
+    resolved = resolve_metric_source_type(db, raw)
+    if resolved is None:
+        raise DomainError(
+            status_code=400,
+            detail="Invalid metric source type; choose an existing KEEN source or other",
+        )
+    return resolved
+
+
+def inherited_metric_source_type(db: Session, measure: IsmsEffectivenessMeasure) -> str:
+    """The source a new entry starts with: the measure's expected source while
+    it still collects evidence, otherwise "other"."""
+
+    return (
+        resolve_metric_source_type(db, measure.source_type)
+        or EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
     )
+
+
+_THRESHOLD_OPERATIONS = {
+    "lt": operator.lt,
+    "lte": operator.le,
+    "eq": operator.eq,
+    "gte": operator.ge,
+    "gt": operator.gt,
+}
+
+
+def threshold_status(
+    value: float | None,
+    target: float | None,
+    comparison: str | None,
+    unit: str | None = "",
+    target_unit: str | None = "",
+) -> str | None:
+    """Compare a recorded value with a measure's target.
+
+    Returns "met" or "outside" when the measure defines a numeric target with
+    an operator and the value is numeric in the same unit, otherwise None: a
+    qualitative entry, a measure without a target or a value recorded in a
+    different unit cannot be judged against the threshold.
+    """
+
+    operation = _THRESHOLD_OPERATIONS.get((comparison or "").strip())
+    if (
+        operation is None
+        or value is None
+        or target is None
+        or (unit or "").strip() != (target_unit or "").strip()
+    ):
+        return None
+    if not math.isfinite(value) or not math.isfinite(target):
+        return None
+    return "met" if operation(value, target) else "outside"
 
 
 def _validate_metric_entry_payload(

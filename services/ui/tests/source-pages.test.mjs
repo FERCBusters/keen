@@ -110,8 +110,8 @@ async function sourcePage(t, options = {}) {
             {
               id: 'm1',
               summary: '<b>MTTR</b>',
-              metric: 'Hours',
               metric_key: 'mttr',
+              target_display: '< 4 h',
               target_value: 4,
               threshold_operator: 'lt',
               controls: [{ id: 'c1', ref: 'A1' }],
@@ -136,7 +136,7 @@ async function sourcePage(t, options = {}) {
                 { source_type: 'jira', recorded_at: '2026-03-01', metric_value: 1 },
               ],
             },
-            { id: 'm2', metric: 'Count', metric_entries: [{ source_type: 'jira' }] },
+            { id: 'm2', summary: 'Count', metric_entries: [{ source_type: 'jira' }] },
           ],
         };
       }
@@ -254,7 +254,9 @@ test('effectiveness measures show the latest entry recorded against this source'
   assert.ok(first.querySelector('a[href="https://github.example/report"]'));
   assert.match(first.querySelector('a.font-monospace').getAttribute('href'), /event\.html\?id=e9/);
   assert.match(first.querySelector('code').textContent, /mttr/);
+  assert.equal(first.querySelectorAll('td')[1].textContent, '< 4 h');
   assert.match(second.textContent, /Count/);
+  assert.equal(second.querySelectorAll('td')[1].textContent, '—');
   assert.match(ui.el('sourceEffectivenessMeta').textContent, /recorded against github/);
   // Switching back clears the tab parameter; the tab loads once.
   ui.el('sourceEventsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
@@ -452,7 +454,7 @@ test('metric source links on the source page only allow web or KEEN URLs', async
   const ui = await sourcePage(t, {
     query: '&source=github&tab=effectiveness',
     measures: [
-      { id: 'm1', metric: 'Scripted', metric_entries: [entry('javascript:alert(1)')] },
+      { id: 'm1', summary: 'Scripted', metric_entries: [entry('javascript:alert(1)')] },
       {
         id: 'm2',
         metric: 'Data',

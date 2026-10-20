@@ -858,8 +858,7 @@ function ismsSampleTitle(kind, item) {
   if (kind === 'org') return item.name || 'Organisation chart node';
   if (kind === 'asset') return item.asset || item.name || 'ISMS asset';
   if (kind === 'access') return item.task_action || 'Access control matrix row';
-  if (kind === 'effectiveness')
-    return item.summary || item.metric || item.effectiveness_measure || 'Effectiveness measure';
+  if (kind === 'effectiveness') return item.summary || 'Effectiveness measure';
   if (kind === 'meeting') return item.title || 'ISMS meeting';
   return item.display || 'ISMS item';
 }
@@ -1071,9 +1070,11 @@ function populateEditForm(kind, item) {
   } else if (kind === 'effectiveness') {
     $('effSummary').value = item.summary || '';
     $('effDescription').value = item.description || '';
-    $('effMeasure').value = item.effectiveness_measure || '';
-    $('effMetric').value = item.metric || '';
     $('effMetricKey').value = item.metric_key || '';
+    renderEffectivenessFormOptions();
+    $('effSourceType').value = item.source_type || 'other';
+    if ($('effSourceType').value !== (item.source_type || 'other'))
+      $('effSourceType').value = 'other';
     $('effThresholdOperator').value = item.threshold_operator || '';
     $('effTargetValue').value = item.target_value ?? '';
     $('effTargetUnit').value = item.target_unit || '';
@@ -1695,7 +1696,7 @@ function renderAccessControlMatrix() {
 }
 
 function measureTitle(item) {
-  return item?.summary || item?.metric || item?.effectiveness_measure || 'Effectiveness measure';
+  return item?.summary || 'Effectiveness measure';
 }
 
 function effectivenessMeasureHref(item) {
@@ -1761,8 +1762,7 @@ function effectivenessFilterText(item) {
   return [
     item.summary,
     item.description,
-    item.effectiveness_measure,
-    item.metric,
+    item.source_type,
     item.metric_key,
     item.target_display,
     item.owner?.username,
@@ -1789,8 +1789,7 @@ function renderEffectivenessMeasures() {
           item,
         ) => `<tr data-isms-row="effectiveness" data-isms-id="${esc(item.id)}" data-isms-filter-text="${esc(effectivenessFilterText(item))}">
     <td class="wrap"><div class="fw-semibold"><a href="${esc(effectivenessMeasureHref(item))}">${esc(shorten(item.summary || 'Effectiveness measure', 140))}</a></div>${item.description ? `<div class="small-muted whitespace-pre-wrap mt-1">${esc(shorten(item.description, 260))}</div>` : ''}${item.metric_key ? `<div class="small-muted mt-1"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
-    <td class="wrap">${esc(shorten(item.effectiveness_measure || '', 220) || '—')}</td>
-    <td class="wrap">${esc(shorten(item.metric || '', 180) || '—')}</td>
+    <td class="wrap">${measureSourceHtml(item)}</td>
     <td class="wrap">${metricValueHtml(item.latest_entry, item)}${metricHistoryLinkHtml(item)}</td>
     <td>${esc(item.target_display || '—')}</td>
     <td>${userPillHtml(item.owner)}</td>
@@ -1798,8 +1797,15 @@ function renderEffectivenessMeasures() {
     ${effectivenessActionsHtml(item)}
   </tr>`,
       )
-      .join('') || emptyRow(8, 'No effectiveness measures yet.');
+      .join('') || emptyRow(7, 'No effectiveness measures yet.');
   initIsmsTooltips(rows.effectiveness);
+}
+
+function measureSourceHtml(item) {
+  const source = String(item?.source_type || 'other').trim() || 'other';
+  if (source === 'other') return '<span class="small-muted">Other</span>';
+  const option = effectivenessMetricSourceOptions().find((src) => src.id === source);
+  return `<a class="badge badge-soft text-decoration-none" href="${esc(withFramework(`/source.html?source=${encodeURIComponent(source)}`, framework))}">${esc(option?.label || source)}</a>`;
 }
 
 function effectivenessMetricSourceOptions() {
@@ -1836,11 +1842,30 @@ function renderEffectivenessFormOptions() {
   const owner = $('effOwner');
   if (owner)
     owner.innerHTML = optionList(meta.users || [], { label: 'username', includeBlank: true });
+  const sourceOptions = optionList(effectivenessMetricSourceOptions(), {
+    label: (src) => (src.source === 'other' ? 'Other' : `${src.label} (${src.source})`),
+  });
+  for (const id of ['metricSourceType', 'effSourceType']) {
+    const select = $(id);
+    if (!select) continue;
+    const current = select.value;
+    select.innerHTML = sourceOptions;
+    select.value = current;
+    if (select.value !== current) select.value = 'other';
+  }
+}
+
+// A measure names the source expected to supply its values; a new entry for
+// it starts there and keeps that choice while the operator picks a measure.
+function applyMeasureDefaultsToMetricEntry(measure) {
   const sourceType = $('metricSourceType');
-  if (sourceType)
-    sourceType.innerHTML = optionList(effectivenessMetricSourceOptions(), {
-      label: (src) => (src.source === 'other' ? 'Other' : `${src.label} (${src.source})`),
-    });
+  if (sourceType) {
+    const expected = measure?.source_type || 'other';
+    sourceType.value = expected;
+    if (sourceType.value !== expected) sourceType.value = 'other';
+  }
+  const unit = $('metricUnit');
+  if (unit) unit.value = measure?.target_unit || '';
 }
 
 function resetMetricEntryForm(measureId = '') {
@@ -1848,10 +1873,10 @@ function resetMetricEntryForm(measureId = '') {
   if (!form) return;
   form.reset();
   renderEffectivenessFormOptions();
-  if ($('metricSourceType')) $('metricSourceType').value = 'other';
   if (measureId) $('metricMeasureId').value = measureId;
-  const measure = findItem('effectiveness', measureId || $('metricMeasureId')?.value);
-  if (measure && !$('metricUnit').value) $('metricUnit').value = measure.target_unit || '';
+  applyMeasureDefaultsToMetricEntry(
+    findItem('effectiveness', measureId || $('metricMeasureId')?.value),
+  );
 }
 
 function showMetricEntryForm(measureId = '') {
@@ -2481,9 +2506,8 @@ onIsmsSubmit('effectivenessForm', async (ev) => {
     {
       summary: $('effSummary').value,
       description: $('effDescription').value,
-      effectiveness_measure: $('effMeasure').value,
-      metric: $('effMetric').value,
       metric_key: $('effMetricKey').value || null,
+      source_type: $('effSourceType')?.value || 'other',
       threshold_operator: $('effThresholdOperator').value || '',
       target_value: targetRaw === '' ? null : Number(targetRaw),
       target_unit: $('effTargetUnit').value || '',
@@ -2512,6 +2536,10 @@ onIsmsSubmit('metricEntryForm', async (ev) => {
 $('cancelMetricEntry')?.addEventListener('click', () => {
   const card = $('metricEntryFormCard');
   if (card) card.style.display = 'none';
+});
+
+$('metricMeasureId')?.addEventListener('change', (ev) => {
+  applyMeasureDefaultsToMetricEntry(findItem('effectiveness', ev.target.value));
 });
 
 onIsmsSubmit('accessControlForm', async (ev) => {

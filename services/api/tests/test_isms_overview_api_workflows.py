@@ -141,11 +141,7 @@ def isms(keen):  # noqa: F811 - fixture imported above
     measure = manage(
         "POST",
         "/v1/isms/effectiveness-measures",
-        {
-            "summary": "Agent coverage",
-            "metric": "Coverage",
-            "effectiveness_measure": "Count",
-        },
+        {"summary": "Agent coverage", "description": "Count"},
     )
     manage(
         "POST",
@@ -155,11 +151,7 @@ def isms(keen):  # noqa: F811 - fixture imported above
     manage(
         "POST",
         "/v1/isms/effectiveness-measures",
-        {
-            "summary": "Other framework",
-            "metric": "Count",
-            "effectiveness_measure": "Count",
-        },
+        {"summary": "Other framework", "description": "Count"},
         framework="B",
     )
     meeting = manage(

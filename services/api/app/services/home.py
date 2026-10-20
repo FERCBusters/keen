@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import math
-import operator
 from datetime import datetime, timezone
 
 from sqlalchemy import func
@@ -23,27 +21,12 @@ from app.security.roles import attach_effective_role
 from app.services.context import ChangeContext
 from app.services.control_evidence_stats import get_control_evidence_stats_by_id
 from app.services.control_inheritance import evidence_pairs, has_inherited_evidence
+from app.services.isms.metric_values import threshold_status
 from app.services.stats import stats_summary
 
 
 def outside_threshold(value, target, comparison, unit, target_unit):
-    operations = {
-        "lt": operator.lt,
-        "lte": operator.le,
-        "eq": operator.eq,
-        "gte": operator.ge,
-        "gt": operator.gt,
-    }
-    if (
-        comparison not in operations
-        or value is None
-        or target is None
-        or unit.strip() != target_unit.strip()
-    ):
-        return False
-    if not math.isfinite(value) or not math.isfinite(target):
-        return False
-    return not operations[comparison](value, target)
+    return threshold_status(value, target, comparison, unit, target_unit) == "outside"
 
 
 def home_overview(
@@ -187,7 +170,7 @@ def home_overview(
             result["attention"].append(
                 {
                     "kind": "measure",
-                    "label": m.summary or m.metric or "Effectiveness measure",
+                    "label": m.summary or "Effectiveness measure",
                     "detail": f"Latest value {v:g} {u} is outside its threshold",
                     "href": f"/isms-effectiveness-measure.html?id={m.id}",
                 }

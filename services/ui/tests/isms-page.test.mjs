@@ -44,7 +44,6 @@ const records = {
     {
       id: 'e1',
       summary: 'Agent coverage',
-      metric: 'Percent',
       controls: [],
       clauses: [],
       metric_entries: [],

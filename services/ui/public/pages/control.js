@@ -333,7 +333,7 @@ function _ismsEntityRows(data) {
     [
       'Effectiveness Measures',
       data.effectiveness_measures,
-      (x) => x.summary || x.metric || x.effectiveness_measure || 'Effectiveness measure',
+      (x) => x.summary || 'Effectiveness measure',
       (x) => `/isms-effectiveness-measure.html?id=${encodeURIComponent(x.id)}`,
     ],
     [

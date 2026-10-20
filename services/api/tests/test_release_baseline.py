@@ -136,6 +136,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0014_measure_source_type",
         "0013_events_source_timestamp",
         "0012_stories",
         "0011_retire_unused_counters",
@@ -243,6 +244,98 @@ def test_retiring_the_unused_counters_keeps_each_visualisation_preference():
                 text("SELECT stats_key, total_events FROM global_event_stats")
             ).all() == [("events", 2)]
             assert conn.scalar(text("SELECT count(*) FROM framework_event_stats")) == 0
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_measure_method_text_is_folded_into_the_description():
+    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires PostgreSQL integration database")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "measures_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+
+    def columns(conn):
+        return set(
+            conn.scalars(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = :schema "
+                    "AND table_name = 'isms_effectiveness_measures'"
+                ),
+                {"schema": schema},
+            )
+        )
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0013_events_source_timestamp")
+            rows = {
+                "described": ("Patch SLA", "Already explained.", "Count on time.", "%"),
+                "method-only": ("Restore test", "", "Run a restore.", "Pass/fail"),
+                "unnamed": ("", "", "", "Incidents per month"),
+                "bare": ("Bare", "", "", ""),
+            }
+            for key, (summary, description, method, metric) in rows.items():
+                conn.execute(
+                    text(
+                        "INSERT INTO isms_effectiveness_measures (id, framework_slug,"
+                        " summary, description, effectiveness_measure, metric,"
+                        " metric_key, target_unit, threshold_operator, frequency,"
+                        " notes, created_at, updated_at) VALUES (:id, 'A', :summary,"
+                        " :description, :method, :metric, :key, '', '', '', '',"
+                        " now(), now())"
+                    ),
+                    {
+                        "id": uuid.uuid4(),
+                        "summary": summary,
+                        "description": description,
+                        "method": method,
+                        "metric": metric,
+                        "key": key,
+                    },
+                )
+            conn.commit()
+
+            command.upgrade(config, "0014_measure_source_type")
+            assert "source_type" in columns(conn)
+            assert not {"effectiveness_measure", "metric"} & columns(conn)
+            migrated = {
+                key: (summary, description, source)
+                for key, summary, description, source in conn.execute(
+                    text(
+                        "SELECT metric_key, summary, description, source_type"
+                        " FROM isms_effectiveness_measures"
+                    )
+                ).all()
+            }
+            assert migrated == {
+                "described": (
+                    "Patch SLA",
+                    "Already explained.\n\nCount on time.\n\n%",
+                    "other",
+                ),
+                "method-only": ("Restore test", "Run a restore.\n\nPass/fail", "other"),
+                # A measure that only had a metric definition keeps it as its name.
+                "unnamed": ("Incidents per month", "Incidents per month", "other"),
+                "bare": ("Bare", "", "other"),
+            }
+
+            command.downgrade(config, "0013_events_source_timestamp")
+            assert {"effectiveness_measure", "metric"} <= columns(conn)
+            assert "source_type" not in columns(conn)
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

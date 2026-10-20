@@ -138,7 +138,7 @@ async function controlPage(t, options = {}) {
           documents: [{ title: 'Policy' }],
           org_nodes: [{}],
           assets: [{ asset: 'Laptop' }],
-          effectiveness_measures: [{ id: 'm1', metric: 'MTTR' }],
+          effectiveness_measures: [{ id: 'm1', summary: 'MTTR' }],
           meetings: [{ id: 'mt1', title: 'Review' }, { title: 'No id' }],
         };
       if (p === '/api/v1/controls/c1/changelog')

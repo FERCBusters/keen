@@ -353,10 +353,10 @@ test('PESTLE(E), Interested Party and audit layers render their relationships', 
 test('effectiveness measures lead to metric sources and the source layer', async (t) => {
   const ui = await home(t, {
     routes: {
-      '/api/v1/isms/effectiveness-measures': listOf([{ id: 'm1', metric: 'Patch latency' }]),
+      '/api/v1/isms/effectiveness-measures': listOf([{ id: 'm1', summary: 'Patch latency' }]),
       '/api/v1/isms/effectiveness-measures/m1': {
         id: 'm1',
-        metric: 'Patch latency',
+        summary: 'Patch latency',
         target_display: '< 7 days',
         controls: [control('c1')],
         metric_entries: [

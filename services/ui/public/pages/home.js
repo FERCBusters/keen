@@ -594,8 +594,7 @@ if (ensureHomeLayout()) {
         item.title || [item.event, item.with_whom].filter(Boolean).join(' / ') || 'Communication'
       );
     if (kind === 'audit') return item.title || 'Audit';
-    if (kind === 'effectiveness_measure')
-      return item.summary || item.metric || item.effectiveness_measure || 'Effectiveness measure';
+    if (kind === 'effectiveness_measure') return item.summary || 'Effectiveness measure';
     if (kind === 'metric_entry') return item.value_display || item.source_title || 'Metric entry';
     if (kind === 'source') return item.label || item.source || item.id || 'Source';
     return item.summary || item.title || item.identifier || 'Evidence';
@@ -1181,13 +1180,8 @@ if (ensureHomeLayout()) {
       out.description = out.description || out.rationale || '';
     }
     if (kind === 'effectiveness_measure') {
-      out.title =
-        out.title ||
-        out.summary ||
-        out.metric ||
-        out.effectiveness_measure ||
-        'Effectiveness measure';
-      out.description = out.description || out.effectiveness_measure || out.metric || '';
+      out.title = out.title || out.summary || 'Effectiveness measure';
+      out.description = out.description || '';
     }
     if (kind === 'metric_entry') {
       out.title = out.title || out.value_display || out.source_title || 'Metric entry';

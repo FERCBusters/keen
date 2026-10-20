@@ -9,8 +9,7 @@ function measure(overrides = {}) {
     framework: 'A',
     summary: '<b>Patch latency</b>',
     description: 'Days to patch',
-    effectiveness_measure: 'Patch within SLA',
-    metric: 'Median days',
+    source_type: 'jira',
     notes: '',
     metric_key: 'patch-latency',
     metric_entry_count: 3,
@@ -122,6 +121,12 @@ test('effectiveness measure details render with threshold state and linked contr
   assert.equal(ui.el('measureNotes').textContent, 'No notes recorded.');
   assert.equal(ui.el('metricKey').innerHTML, '<code>patch-latency</code>');
   assert.equal(ui.el('metricCount').textContent, '3 metric entries');
+  // The expected source renders as a source badge (the harness stubs the badge).
+  assert.equal(ui.el('measureSource').textContent.trim(), 'jira');
+  // The explanation names the target and the unit values must use.
+  assert.match(ui.el('measureThresholdExplanation').textContent, /target ≤ 7 days/);
+  assert.match(ui.el('measureThresholdExplanation').textContent, /recorded in days/);
+  assert.match(ui.el('measureThresholdExplanation').textContent, /Meets target/);
   // 9 days does not satisfy ≤ 7 days.
   assert.match(ui.el('latestValue').innerHTML, /eff-metric-value-bad/);
   assert.match(ui.el('latestValue').textContent, /9 days\s*Outside target\s*March/);
@@ -319,4 +324,20 @@ test('load failures, changelog failures and a missing id are reported', async (t
   assert.match(log.ui.el('measureChangelog').textContent, /Failed to load changelog/);
   const missing = await measurePage(t, { query: '' });
   assert.equal(missing.ui.el('status').textContent, 'Missing effectiveness measure id.');
+});
+
+test('a measure without a target explains that values are reviewed as a trend', async (t) => {
+  const { ui } = await measurePage(t, {
+    measure: measure({
+      target_display: '',
+      target_value: null,
+      threshold_operator: '',
+      source_type: 'other',
+      summary: '',
+    }),
+  });
+  assert.equal(ui.el('measureTitle').textContent, 'Effectiveness measure');
+  assert.equal(ui.el('measureSource').textContent, 'Other');
+  assert.match(ui.el('measureThresholdExplanation').textContent, /no numeric target/);
+  assert.doesNotMatch(ui.el('measureThresholdExplanation').textContent, /Outside target/);
 });

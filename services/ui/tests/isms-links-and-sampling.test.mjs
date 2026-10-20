@@ -59,7 +59,6 @@ function records() {
       {
         id: 'e1',
         summary: 'Agent coverage',
-        metric: 'Percent',
         target_value: 95,
         target_unit: '%',
         threshold_operator: 'gte',

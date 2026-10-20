@@ -20,12 +20,7 @@ def _measure(isms, summary, framework="A", **fields):  # noqa: F811
     return isms.manage(
         "POST",
         "/v1/isms/effectiveness-measures",
-        {
-            "summary": summary,
-            "metric": "Days",
-            "effectiveness_measure": "Mean",
-            **fields,
-        },
+        {"summary": summary, "description": "Mean days", **fields},
         framework=framework,
     )
 

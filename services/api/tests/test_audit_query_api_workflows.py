@@ -509,10 +509,7 @@ def test_sampled_records_are_described_with_their_controls(audits):
     node = IsmsOrgNode(name="Security officer", node_type="role")
     process = IsmsBusinessProcess(name="Payroll run")
     measure = IsmsEffectivenessMeasure(
-        framework_slug=fw,
-        summary="Coverage",
-        metric="Agent coverage",
-        effectiveness_measure="Count",
+        framework_slug=fw, summary="Coverage", description="Count"
     )
     meeting = IsmsMeeting(title="Management review", date=date(2026, 2, 1))
     db.add_all([party, swot, objective, node, process, measure, meeting])
@@ -644,7 +641,7 @@ def test_sampled_records_are_described_with_their_controls(audits):
             ["A.5.1"],
         ),
         "isms_effectiveness_metric": (
-            "ISMS metric: Agent coverage",
+            "ISMS metric: Coverage",
             "96.5 % On track",
             ["A.5.1"],
         ),

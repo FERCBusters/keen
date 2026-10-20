@@ -23,6 +23,7 @@ const meta = {
   ],
   documents: [{ id: 'd1', title: 'Security policy' }],
   document_types: ['policy', 'process'],
+  effectiveness_metric_sources: [{ id: 'ci', source: 'ci', label: 'Build server' }],
   assets: [
     { id: 'a1', asset: 'Database', name: 'Database' },
     { id: 'a2', asset: 'Payroll', name: 'Payroll' },
@@ -123,13 +124,21 @@ const records = () => ({
     {
       id: 'e1',
       summary: 'Agent coverage',
-      metric: 'Percent',
+      source_type: 'ci',
       metric_key: 'agent.coverage',
       target_value: 95,
       target_unit: '%',
       threshold_operator: 'gte',
       controls: [],
       metric_entries: [{ id: 'me1', metric_value: 90, metric_unit: '%', value_display: '90%' }],
+    },
+    {
+      id: 'e2',
+      summary: 'Restore tests',
+      source_type: 'retired-source',
+      target_unit: 'result',
+      controls: [],
+      metric_entries: [],
     },
   ],
   meetings: [
@@ -696,12 +705,34 @@ test('hosting accounts are edited and removed from their card', async (t) => {
 test('a metric entry needs a value and records against its measure', async (t) => {
   const ui = await isms(t, 'effectiveness');
   await settle(() => ui.el('effectivenessRows').textContent.includes('Agent coverage'));
+  // The register names each measure's expected source with its collected label,
+  // and keeps the stored name when that source no longer collects evidence.
+  assert.equal(
+    ui.el('effectivenessRows').querySelector('tr[data-isms-id="e1"] td:nth-child(2) a').textContent,
+    'Build server',
+  );
+  assert.equal(
+    ui.el('effectivenessRows').querySelector('tr[data-isms-id="e2"] td:nth-child(2)').textContent,
+    'retired-source',
+  );
   ui.click('[data-effectiveness-record="e1"]');
   assert.equal(ui.el('metricEntryFormCard').style.display, '');
+  // A new entry starts with the measure's unit and expected source.
   assert.deepEqual(
     ['metricMeasureId', 'metricUnit', 'metricSourceType'].map((id) => ui.el(id).value),
-    ['e1', '%', 'other'],
+    ['e1', '%', 'ci'],
   );
+  // Choosing another measure follows its defaults; an expected source that no
+  // longer collects evidence falls back to Other.
+  ui.el('metricMeasureId').value = 'e2';
+  ui.el('metricMeasureId').dispatchEvent(new ui.window.Event('change'));
+  assert.deepEqual(
+    ['metricUnit', 'metricSourceType'].map((id) => ui.el(id).value),
+    ['result', 'other'],
+  );
+  ui.el('metricMeasureId').value = 'e1';
+  ui.el('metricMeasureId').dispatchEvent(new ui.window.Event('change'));
+  ui.el('metricSourceType').value = 'other';
   ui.submit('metricEntryForm');
   await ui.statusIs('Could not save: Provide a numeric value or a qualitative value.');
   assert.deepEqual(ui.writes(), []);
@@ -739,11 +770,23 @@ test('a measure is edited with its target, and the target can be cleared', async
   await settle(() => ui.el('effectivenessRows').textContent.includes('Agent coverage'));
   ui.click('[data-isms-edit="effectiveness"][data-isms-id="e1"]');
   assert.deepEqual(
-    ['effSummary', 'effMetricKey', 'effThresholdOperator', 'effTargetValue', 'effTargetUnit'].map(
-      (id) => ui.el(id).value,
-    ),
-    ['Agent coverage', 'agent.coverage', 'gte', '95', '%'],
+    [
+      'effSummary',
+      'effMetricKey',
+      'effSourceType',
+      'effThresholdOperator',
+      'effTargetValue',
+      'effTargetUnit',
+    ].map((id) => ui.el(id).value),
+    ['Agent coverage', 'agent.coverage', 'ci', 'gte', '95', '%'],
   );
+  // The expected source is a choice among collected sources and Other.
+  assert.deepEqual(
+    [...ui.el('effSourceType').options].map((o) => o.value),
+    ['ci', 'other'],
+  );
+  assert.equal(ui.el('effMeasure'), null);
+  assert.equal(ui.el('effMetric'), null);
   ui.el('effTargetValue').value = '';
   ui.submit('effectivenessForm');
   await ui.statusIs('Effectiveness measure updated');
@@ -751,7 +794,14 @@ test('a measure is edited with its target, and the target can be cleared', async
   assert.equal(url, '/api/v1/isms/effectiveness-measures/e1?framework=A');
   assert.equal(body.target_value, null);
   assert.equal(body.metric_key, 'agent.coverage');
+  assert.equal(body.source_type, 'ci');
+  assert.equal('effectiveness_measure' in body, false);
+  assert.equal('metric' in body, false);
   assert.equal('clauses' in body, false);
+
+  // A measure whose expected source has gone is edited as Other.
+  ui.click('[data-isms-edit="effectiveness"][data-isms-id="e2"]');
+  assert.equal(ui.el('effSourceType').value, 'other');
 });
 
 test('meeting minutes keep documents and external links, and add a missing person', async (t) => {

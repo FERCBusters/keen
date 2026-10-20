@@ -33,6 +33,7 @@ from app.db.models import (
 from app.services.errors import DomainError
 
 from .constants import EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
+from .metric_values import threshold_status
 
 
 def _user_summary(u: User | None) -> dict[str, Any] | None:
@@ -430,11 +431,28 @@ def _metric_entry_value_display(row: IsmsEffectivenessMetricEntry | None) -> str
     return " ".join(parts).strip()
 
 
+def _entry_threshold_status(
+    row: IsmsEffectivenessMetricEntry | None,
+    measure: IsmsEffectivenessMeasure | None,
+) -> str | None:
+    if row is None or measure is None:
+        return None
+    return threshold_status(
+        row.metric_value,
+        measure.target_value,
+        measure.threshold_operator,
+        row.metric_unit or "",
+        measure.target_unit or "",
+    )
+
+
 def _metric_entry_out(
     row: IsmsEffectivenessMetricEntry | None,
+    measure: IsmsEffectivenessMeasure | None = None,
 ) -> dict[str, Any] | None:
     if row is None:
         return None
+    measure = measure if measure is not None else row.measure
     period = ""
     if row.period_start and row.period_end:
         period = f"{row.period_start.isoformat()} → {row.period_end.isoformat()}"
@@ -463,6 +481,7 @@ def _metric_entry_out(
         ),
         "notes": row.notes or "",
         "raw_payload": row.raw_payload or {},
+        "threshold_status": _entry_threshold_status(row, measure),
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "display": _metric_entry_value_display(row)
@@ -491,9 +510,8 @@ def _effectiveness_measure_out(
         "framework": row.framework_slug,
         "summary": row.summary or "",
         "description": row.description or "",
-        "effectiveness_measure": row.effectiveness_measure or "",
-        "metric": row.metric or "",
         "metric_key": row.metric_key,
+        "source_type": row.source_type or "other",
         "target_value": row.target_value,
         "target_unit": row.target_unit or "",
         "threshold_operator": row.threshold_operator or "",
@@ -503,17 +521,15 @@ def _effectiveness_measure_out(
         "frequency": row.frequency or "",
         "notes": row.notes or "",
         "metric_entry_count": len(entries),
-        "latest_entry": _metric_entry_out(latest),
+        "latest_entry": _metric_entry_out(latest, row),
+        "latest_threshold_status": _entry_threshold_status(latest, row),
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-        "display": row.summary
-        or row.metric
-        or row.effectiveness_measure
-        or "Effectiveness measure",
+        "display": row.summary or "Effectiveness measure",
     }
     if include_entries:
         out["metric_entries"] = [
-            _metric_entry_out(entry) for entry in entries[:25] if entry is not None
+            _metric_entry_out(entry, row) for entry in entries[:25] if entry is not None
         ]
     if include_links:
         out["controls"] = _linked_controls(

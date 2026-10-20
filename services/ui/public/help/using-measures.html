@@ -3,9 +3,9 @@
 <p class="lead">An objective says what you want. A <strong>measure</strong> says how you will tell whether you got it. A <strong>metric entry</strong> is one dated observation. This chapter shows how to define a measure, record observations by hand or from another system, and read the results without fooling yourself.</p>
 <h3 id="effectiveness">Define measures and record observations</h3>
 <ol class="steps">
-<li>Open <strong>ISMS → Effectiveness Measures</strong>. Enter the Summary, Description, Effectiveness measure and Metric. Write the method so that someone who did not design it can repeat it.</li>
-<li>If another system will submit observations, choose a stable <strong>Metric key</strong>. Then enter the threshold rule, target value, unit, owner, frequency, notes and linked controls.</li>
-<li>Save the measure. In <strong>Record metric entry</strong>, select it and supply a numeric value or a qualitative value or status, in the intended unit, with the period start and end and the source (type, title, URL or reference). Associate a source event UUID where appropriate.</li>
+<li>Open <strong>ISMS → Effectiveness Measures</strong>. The <strong>Summary</strong> names what is measured in one line; the <strong>Description</strong> explains how the value is calculated, where the numbers come from and which exclusions apply. Write it so that someone who did not design it can repeat it.</li>
+<li>Enter the pass condition: the <strong>Threshold</strong> operator, <strong>Target value</strong> and <strong>Unit</strong>, for example <em>at least 95 %</em>. Choose <em>No target</em> for qualitative measures. Choose the <strong>Expected source</strong>, the KEEN evidence source that supplies the values, or Other. If another system will submit observations, choose a stable <strong>Metric key</strong>. Then enter the owner, frequency, notes and linked controls.</li>
+<li>Save the measure. In <strong>Record metric entry</strong>, select it and supply the observed numeric value, or a qualitative value or status, in the intended unit, with the period start and end and the source (type, title, URL or reference). The source type starts as the measure’s expected source. Associate a source event UUID where appropriate. KEEN compares each numeric value recorded in the measure’s unit with the target and marks it <em>Meets target</em> or <em>Outside target</em>.</li>
 <li>Explain exceptional results in Notes. Save and inspect the measure’s <strong>Metrics</strong> tab; check the dates, value and source before using the result in a conclusion.</li>
 <li>Use <strong>Visualisations</strong> to review the trend with source and date filters, and investigate gaps and changes across the whole audit period.</li>
 </ol>
@@ -17,7 +17,7 @@
 <h3 id="measure-workflows">Interpret effectiveness measurements</h3>
 <p>Precision in the definition is what makes the numbers comparable later. Say what is counted, over which period, with which exclusions, in which unit, and which threshold means success. Link the measure to the controls it helps assess.</p>
 <ol class="steps">
-<li>Create the measure with its summary, description, method and metric definition, plus owner, frequency, target and threshold operator.</li>
+<li>Create the measure with its summary and description, plus owner, frequency, expected source, target value, unit and threshold operator.</li>
 <li>Give an automated measure a stable, unique metric key and use the same key in the submitting integration. Changing the display title is different from changing this identifier.</li>
 <li>Record each observation with its date, period, numeric value or qualitative result, unit and notes, and a source title, reference or event where available.</li>
 <li>Check the Metrics and Visualisations views with source and date filters, so you compare like periods and populations.</li>

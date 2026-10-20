@@ -125,9 +125,12 @@ def seed_metrics(seeder, frameworks):
                 dict(
                     framework_slug=framework,
                     summary=seeder.label(spec["title"]),
-                    description="Fictional worked example: measured performance, source evidence and follow-up. These targets are example organisational objectives, not prescribed certification thresholds.",
-                    effectiveness_measure=spec["method"],
-                    metric=spec["title"],
+                    description=(
+                        "Fictional worked example: measured performance, source evidence and follow-up. "
+                        "These targets are example organisational objectives, not prescribed certification thresholds.\n\n"
+                        + spec["method"]
+                    ),
+                    source_type="other",
                     target_value=spec["target"],
                     target_unit=spec["unit"],
                     threshold_operator=spec["operator"],

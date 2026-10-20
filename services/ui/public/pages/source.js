@@ -318,8 +318,8 @@ function renderEffectiveness(items) {
   for (const item of items || []) {
     const entry = latestEntryForSource(item);
     rows.push(`<tr>
-      <td class="wrap"><a class="fw-semibold" href="${esc(measureHref(item))}">${esc(shorten(item.summary || item.metric || item.effectiveness_measure || 'Effectiveness measure', 180))}</a>${item.metric_key ? `<div class="small-muted"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
-      <td class="wrap">${esc(shorten(item.metric || '', 180) || '—')}</td>
+      <td class="wrap"><a class="fw-semibold" href="${esc(measureHref(item))}">${esc(shorten(item.summary || 'Effectiveness measure', 180))}</a>${item.metric_key ? `<div class="small-muted"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
+      <td>${esc(item.target_display || '—')}</td>
       <td class="wrap">${entryValueHtml(entry, item)}</td>
       <td class="wrap">${controlsHtml(item.controls)}</td>
     </tr>`);

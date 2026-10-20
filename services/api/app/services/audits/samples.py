@@ -365,8 +365,8 @@ def audit_sample_entity_reference(
             .one_or_none()
         )
         if row:
-            title = f"ISMS effectiveness measure: {short_text(row.summary or row.metric, 180)}"
-            subtitle = short_text(row.effectiveness_measure, 220)
+            title = f"ISMS effectiveness measure: {short_text(row.summary, 180)}"
+            subtitle = short_text(row.description, 220)
             controls = isms_sample_controls(db, entity_type, row.id, framework)
     elif entity_type == "isms_effectiveness_metric":
         row = (
@@ -383,7 +383,9 @@ def audit_sample_entity_reference(
         )
         if row:
             measure = row.measure
-            title = f"ISMS metric: {short_text(measure.metric if measure else '', 160)}"
+            title = (
+                f"ISMS metric: {short_text(measure.summary if measure else '', 160)}"
+            )
             value_parts = []
             if row.metric_value is not None:
                 value_parts.append(f"{row.metric_value:g}")

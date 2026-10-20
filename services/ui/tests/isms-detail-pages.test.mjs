@@ -73,7 +73,7 @@ test('effectiveness metric entry shows its value against the parent measure targ
     measure: {
       id: 'm1',
       summary: 'MTTR',
-      metric: 'Hours',
+      description: 'Hours from alert to recovery',
       metric_key: 'mttr',
       owner: 'dana',
       target_value: 8,

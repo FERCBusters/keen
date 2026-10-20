@@ -109,9 +109,8 @@ class AccessControlMatrixPayload(BaseModel):
 class EffectivenessMeasurePayload(IsmsLinksPayload):
     summary: str | None = Field(default=None, max_length=20000)
     description: str | None = Field(default=None, max_length=40000)
-    effectiveness_measure: str | None = Field(default=None, max_length=20000)
-    metric: str | None = Field(default=None, max_length=20000)
     metric_key: str | None = Field(default=None, max_length=128)
+    source_type: str | None = Field(default=None, max_length=64)
     target_value: float | None = None
     target_unit: str | None = Field(default=None, max_length=64)
     threshold_operator: str | None = Field(default=None, max_length=16)

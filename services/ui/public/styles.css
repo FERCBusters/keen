@@ -1567,25 +1567,22 @@ a.eff-metric-value:focus {
 }
 
 .isms-effectiveness-summary-col {
-  width: 24%;
+  width: 36%;
 }
-.isms-effectiveness-measure-col {
-  width: 17%;
-}
-.isms-effectiveness-metric-col {
-  width: 12%;
+.isms-effectiveness-source-col {
+  width: 10%;
 }
 .isms-effectiveness-latest-col {
-  width: 15%;
+  width: 18%;
 }
 .isms-effectiveness-target-col {
-  width: 7%;
+  width: 8%;
 }
 .isms-effectiveness-owner-col {
-  width: 7%;
+  width: 8%;
 }
 .isms-effectiveness-controls-col {
-  width: 8%;
+  width: 10%;
 }
 .isms-effectiveness-actions-col,
 .isms-effectiveness-actions {

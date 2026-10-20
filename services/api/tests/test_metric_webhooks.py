@@ -288,3 +288,24 @@ def test_qualitative_metrics_and_other_sources_are_accepted(metrics):
         "other",
     )
     assert row.raw_payload == {"status": "Green", "source_type": "other"}
+
+
+def test_a_submission_without_a_source_inherits_the_measure_expected_source(metrics):
+    metrics.measure.source_type = "cloud-logs"
+    metrics.db.commit()
+    response = metrics.post("cpu-usage", {"value": 3})
+    assert response.status_code == 200, response.text
+    assert metrics.entries()[-1].source_type == "cloud-logs"
+    # A named source still wins, and a blank one means the measure's.
+    assert (
+        metrics.post("cpu-usage", {"value": 4, "source_type": "other"}).status_code
+        == 200
+    )
+    assert metrics.entries()[-1].source_type == "other"
+    assert metrics.post("cpu-usage", {"value": 5, "source_type": ""}).status_code == 200
+    assert metrics.entries()[-1].source_type == "cloud-logs"
+    # An expected source that no longer collects evidence falls back to other.
+    metrics.db.delete(metrics.evidence)
+    metrics.db.commit()
+    assert metrics.post("cpu-usage", {"value": 6}).status_code == 200
+    assert metrics.entries()[-1].source_type == "other"

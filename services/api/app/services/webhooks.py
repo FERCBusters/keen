@@ -21,6 +21,10 @@ from app.security.redaction import (
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
+from app.services.isms.metric_values import (
+    inherited_metric_source_type,
+    resolve_metric_source_type,
+)
 
 
 def _webhook_parse_date(value: Any) -> date | None:
@@ -77,32 +81,15 @@ def _webhook_metric_value(value: Any) -> float | None:
         )
 
 
-def _webhook_actual_source_names(db: Session) -> list[str]:
-    rows = (
-        db.query(Event.source)
-        .filter(Event.source.isnot(None), func.length(func.trim(Event.source)) > 0)
-        .group_by(Event.source)
-        .all()
-    )
-    return [str(src).strip() for (src,) in rows if str(src or "").strip()]
-
-
 def _webhook_coerce_metric_source_type(db: Session, raw: Any) -> str:
     source_type = _webhook_clean_text(raw or "other", 64)
-    if not source_type or source_type.lower() == "other":
-        return "other"
-    sources = _webhook_actual_source_names(db)
-    for source in sources:
-        if source_type == source:
-            return source
-    source_key = source_type.lower().replace("-", "_")
-    for source in sources:
-        if source.lower().replace("-", "_") == source_key:
-            return source
-    raise DomainError(
-        status_code=400,
-        detail="Invalid source_type; choose an existing KEEN source or other",
-    )
+    resolved = resolve_metric_source_type(db, source_type)
+    if resolved is None:
+        raise DomainError(
+            status_code=400,
+            detail="Invalid source_type; choose an existing KEEN source or other",
+        )
+    return resolved
 
 
 def _webhook_measure_by_key(
@@ -164,7 +151,12 @@ def record_metric(*, db, metric_key, payload, context: ChangeContext):
         raise DomainError(
             status_code=400, detail="period_end must be after period_start"
         )
-    source_type = _webhook_coerce_metric_source_type(db, payload.get("source_type"))
+    # A submission that names no source inherits the measure's expected source.
+    source_type = (
+        _webhook_coerce_metric_source_type(db, payload["source_type"])
+        if payload.get("source_type")
+        else inherited_metric_source_type(db, measure)
+    )
     source_event_id = _webhook_parse_uuid(
         payload.get("source_event_id") or payload.get("event_id")
     )

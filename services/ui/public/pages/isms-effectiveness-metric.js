@@ -80,7 +80,7 @@ function renderMetric(row) {
   document.title = `Keen – ${title}`;
   $('metricTitle').textContent = title;
   $('metricMeta').textContent = [
-    measure.summary || measure.metric || 'Effectiveness measure',
+    measure.summary || 'Effectiveness measure',
     entry.period || '',
     entry.source_type || 'other',
   ]
@@ -111,8 +111,7 @@ function renderMetric(row) {
   $('metricUpdated').textContent = fmtTs(entry.updated_at) || '—';
   $('metricControls').innerHTML = controlBadges(measure.controls);
 
-  const parentTitle =
-    measure.summary || measure.metric || measure.effectiveness_measure || 'Effectiveness measure';
+  const parentTitle = measure.summary || 'Effectiveness measure';
   const parentHref = measureHref(measure.id || entry.measure_id);
   $('parentMeasureTitle').textContent = parentTitle;
   $('parentMeasureTitle').href = parentHref;
@@ -121,7 +120,7 @@ function renderMetric(row) {
     : measure.owner
       ? userPillHtml(measure.owner)
       : '—';
-  $('parentMetricDefinition').textContent = measure.metric || '—';
+  $('parentMetricDefinition').textContent = measure.description || '—';
   $('openMeasureLink').href = parentHref;
   $('metricBreadcrumb').href = parentHref;
 

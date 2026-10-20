@@ -2280,10 +2280,13 @@ class IsmsEffectivenessMeasure(Base):
     framework_slug: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    effectiveness_measure: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    metric: Mapped[str] = mapped_column(Text, nullable=False, default="")
     metric_key: Mapped[str | None] = mapped_column(
         String(128), nullable=True, unique=True, index=True
+    )
+    # The KEEN evidence source expected to supply this measure's values, or
+    # "other"; new metric entries default to it.
+    source_type: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="other", server_default="other"
     )
     target_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     target_unit: Mapped[str] = mapped_column(String(64), nullable=False, default="")

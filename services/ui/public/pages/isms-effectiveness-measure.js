@@ -87,10 +87,28 @@ function latestValueHtml(entry, row) {
   return `${valueHtml}${effectivenessMetricThresholdBadgeHtml(row, entry)}${entry.period ? `<div class="small-muted">${esc(entry.period)}</div>` : ''}`;
 }
 
+export function thresholdExplanationHtml(row) {
+  const target = String(row?.target_display || '').trim();
+  const unit = String(row?.target_unit || '').trim();
+  if (!target) {
+    return `<p class="mb-0">This measure has no numeric target. Each metric entry records the observed value or qualitative result for its period; review the history to judge the trend.</p>`;
+  }
+  return `<p>Each metric entry records the observed value for a period. KEEN compares that value with the target <strong>${esc(target)}</strong>${unit ? ` (values must be recorded in <strong>${esc(unit)}</strong> to be compared)` : ''} and marks it <span class="eff-metric-threshold-label eff-metric-threshold-label-ok">Meets target</span> or <span class="eff-metric-threshold-label eff-metric-threshold-label-bad">Outside target</span>.</p><p class="mb-0 small-muted">Values recorded in another unit, or qualitative results, are kept but not judged against the target.</p>`;
+}
+
+function measureSourceHtml(row) {
+  const source = String(row?.source_type || 'other').trim() || 'other';
+  if (source === 'other') return 'Other';
+  return sourceBadgeHtml(
+    source,
+    sourceMeta,
+    withFramework(`/source.html?source=${encodeURIComponent(source)}`, framework),
+  );
+}
+
 function renderMeasure(row) {
   measure = row || {};
-  const title =
-    measure.summary || measure.metric || measure.effectiveness_measure || 'Effectiveness measure';
+  const title = measure.summary || 'Effectiveness measure';
   document.title = `Keen – ${title}`;
   $('measureTitle').textContent = title;
   $('measureMeta').textContent = [
@@ -104,11 +122,11 @@ function renderMeasure(row) {
     .join(' • ');
   $('measureSummary').textContent = measure.summary || 'Effectiveness measure';
   $('measureDescription').textContent = measure.description || 'No description recorded.';
-  $('measureBody').textContent = measure.effectiveness_measure || '—';
-  $('metricDefinition').textContent = measure.metric || '—';
+  $('measureThresholdExplanation').innerHTML = thresholdExplanationHtml(measure);
   $('measureNotes').textContent = measure.notes || 'No notes recorded.';
   $('latestValue').innerHTML = latestValueHtml(measure.latest_entry, measure);
   $('targetDisplay').textContent = measure.target_display || '—';
+  $('measureSource').innerHTML = measureSourceHtml(measure);
   $('metricCount').innerHTML = measure.metric_entry_count
     ? `<a href="#metrics">${esc(measure.metric_entry_count)} metric ${measure.metric_entry_count === 1 ? 'entry' : 'entries'}</a>`
     : '0';

@@ -548,7 +548,6 @@ class RetentionDatabaseTests(unittest.TestCase):
             models.IsmsEffectivenessMeasure,
             framework_slug="TEST",
             summary="measure",
-            metric="uptime",
         )
         metric = self.insert(
             models.IsmsEffectivenessMetricEntry,
@@ -572,7 +571,6 @@ class RetentionDatabaseTests(unittest.TestCase):
             models.IsmsEffectivenessMeasure,
             framework_slug="TEST",
             summary="measure",
-            metric="uptime",
         )
         self.insert(
             models.AuditEvidence,
