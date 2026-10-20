@@ -484,7 +484,12 @@ export function legacyRichTextMarkdownToHtml(text, emptyHtml = '') {
 export function richTextEditorValue(raw) {
   const value = String(raw || '').trim();
   if (!value) return '';
-  return isRichTextHtmlLike(value) ? value : legacyRichTextMarkdownToHtml(value);
+  // HTML-like values reach editable.innerHTML in setRichTextEditorValue, so
+  // they pass through the shared allowlist sanitiser first; legacy Markdown is
+  // escaped while it is converted and needs no extra pass.
+  return isRichTextHtmlLike(value)
+    ? sanitizeRichTextHtml(value)
+    : legacyRichTextMarkdownToHtml(value);
 }
 
 export function renderRichTextContent(raw, emptyHtml = '<span class="small-muted">—</span>') {
@@ -501,11 +506,13 @@ export function plainTextFromRichText(value) {
     .replace(/<\/?(?:p|div|h[1-6]|li|ul|ol|blockquote|br|hr)\b[^>]*>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
+    // The ampersand entity is decoded last so an escaped entity such as
+    // &amp;lt; stays the literal text &lt; instead of becoming markup.
+    .replace(/&amp;/gi, '&')
     .replace(/\s+/g, ' ')
     .trim();
   return text;

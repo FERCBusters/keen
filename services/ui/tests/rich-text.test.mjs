@@ -54,6 +54,21 @@ test('plain text summaries decode entities and remove formatting', () => {
     'Hello & world Next line',
   );
 });
+test('plain text summaries decode the ampersand entity last', () => {
+  assert.equal(
+    a.plainTextFromRichText('<p>a &amp;lt; b &amp;quot; c &amp;amp; d</p>'),
+    'a &lt; b &quot; c &amp; d',
+  );
+});
+test('editor values sanitise HTML-like input while Markdown stays converted', () => {
+  const hostile = a.richTextEditorValue(
+    '<p onclick="alert(1)">Reviewed</p><img src=x onerror=alert(1)>',
+  );
+  ui.document.body.innerHTML = hostile;
+  assert.equal(ui.document.querySelector('img,[onclick],[onerror]'), null);
+  assert.equal(ui.document.body.textContent, 'Reviewed');
+  assert.equal(a.richTextEditorValue('**Reviewed**'), '<p><strong>Reviewed</strong></p>');
+});
 test('empty content uses caller fallback', () =>
   assert.equal(a.renderRichTextContent(' ', 'Empty'), 'Empty'));
 for (const href of ['//evil.example', '/\\evil.example', '/\t/evil.example'])

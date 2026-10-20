@@ -161,6 +161,28 @@ def test_a_symlink_cannot_carry_writes_or_reads_outside_the_root(local):
     assert secret.read_bytes() == b"outside the artifact root"
 
 
+@pytest.mark.parametrize(
+    "key",
+    [
+        "/etc/passwd",
+        "events/../../secret",
+        "events/./a.json",
+        "events//a.json",
+        "events\\a.json",
+        "events/\x00a.json",
+        "events/\x7fa.json",
+        "events/a?query.json",
+        "events/a#fragment.json",
+    ],
+)
+def test_hostile_keys_are_rejected_before_any_storage_work(local, key):
+    # Traversal, absolute, escaped and control-character keys never reach the
+    # filesystem: no file, directory or symlink is created anywhere.
+    with pytest.raises(ValueError, match="Invalid artifact key"):
+        s3.put_bytes(key, b"x", "text/plain")
+    assert list(local.root.rglob("*")) == []
+
+
 def test_deleting_from_an_unmounted_root_is_reported(local):
     stored = s3.put_bytes("events/a.json", b"x", "text/plain")
     os.unlink(local.root / "events/a.json")

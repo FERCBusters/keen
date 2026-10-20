@@ -171,6 +171,28 @@ test('editor content is copied into the form before saving and replaced on load'
   assert.equal(locked.editable.innerHTML, '<p><strong>Reviewed</strong></p>');
 });
 
+test('hostile HTML-like values never reach the editable as markup', async (t) => {
+  const ui = await editorPage(t);
+  ui.api.initRichTextEditors(ui.document);
+  const [, locked] = ui.editors();
+
+  ui.api.setRichTextEditorValue(
+    'locked',
+    '<p onclick="alert(1)">Reviewed</p><img src=x onerror=alert(1)>' +
+      '<a href="javascript:alert(1)">link</a>',
+  );
+
+  const editable = locked.editable;
+  assert.equal(editable.querySelector('img'), null);
+  assert.equal(editable.innerHTML.includes('onclick'), false);
+  assert.equal(editable.innerHTML.includes('onerror'), false);
+  assert.equal(editable.querySelector('a').hasAttribute('href'), false);
+  assert.equal(editable.textContent, 'Reviewedlink');
+  // The textarea and the editor instance hold the same sanitised value.
+  assert.equal(ui.el('locked').value, editable.innerHTML);
+  assert.equal(locked.content.at(-1), editable.innerHTML);
+});
+
 test('caller options replace the editor defaults', async (t) => {
   const ui = await editorPage(t);
   ui.api.initRichTextEditors(ui.el('scope').parentElement, {

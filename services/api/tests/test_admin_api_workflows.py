@@ -336,6 +336,40 @@ def test_control_import_stops_on_database_failures(admin, monkeypatch):
     assert admin.db.query(Framework).filter_by(slug="IMP").one_or_none() is None
 
 
+def test_control_import_reports_unexpected_failures_without_internal_detail(
+    admin, monkeypatch
+):
+    from app.services import admin as admin_service
+
+    real = admin_service._import_control_item
+
+    def broken(db, framework_slug, item):
+        if item.ref == "A.2":
+            raise RuntimeError("internal detail: /srv/keen/secret.conf")
+        return real(db, framework_slug, item)
+
+    monkeypatch.setattr(admin_service, "_import_control_item", broken)
+    payload = {
+        "framework": "IMP",
+        "items": [
+            {"type": "annex_control", "ref": "A.1", "title": "First"},
+            {"type": "annex_control", "ref": "A.2", "title": "Second"},
+        ],
+    }
+    result = admin.call("POST", "/v1/admin/controls/import", payload)
+    # One item still imports; the failed one is reported generically without
+    # echoing the unexpected exception's message.
+    assert (result["created"], result["updated"]) == (1, 0)
+    assert result["errors"] == [
+        {"ref": "A.2", "error": "The item could not be processed"}
+    ]
+    assert "internal detail" not in json.dumps(result)
+    assert (
+        admin.db.query(ControlItem).filter_by(framework_slug="IMP", ref="A.1").count()
+        == 1
+    )
+
+
 @pytest.mark.parametrize("slug", ["ISO 27001", "a/b", HOSTILE])
 def test_control_import_needs_a_usable_framework_slug(admin, slug):
     response = admin.call(
