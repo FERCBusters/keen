@@ -143,7 +143,7 @@ async function scopedEvents(t, query) {
 test('the Events charts follow the list filters and say so', async (t) => {
   const ui = await scopedEvents(
     t,
-    '&source=diary,ci&control=A.1&rule=deploys&q=review&f=actor:contains:alice&f=outcome:equals:ok&unmapped=true',
+    '&source=diary,ci&control=A.1&rule=deploys&f=any:contains:review&f=actor:contains:alice&f=outcome:equals:ok&unmapped=true',
   );
   ui.show();
   await settle(() =>
@@ -154,14 +154,19 @@ test('the Events charts follow the list filters and say so', async (t) => {
   assert.equal(series.searchParams.get('source'), 'diary,ci');
   assert.equal(series.searchParams.get('control'), 'A.1');
   assert.equal(series.searchParams.get('rule'), 'deploys');
-  assert.equal(series.searchParams.get('q'), 'review');
-  assert.deepEqual(series.searchParams.getAll('f'), ['actor:contains:alice', 'outcome:equals:ok']);
+  // Search text reaches the charts as a text filter, never as q.
+  assert.equal(series.searchParams.has('q'), false);
+  assert.deepEqual(series.searchParams.getAll('f'), [
+    'any:contains:review',
+    'actor:contains:alice',
+    'outcome:equals:ok',
+  ]);
   assert.equal(series.searchParams.get('unmapped'), 'true');
   const scope = ui.el('vizScope');
   assert.equal(scope.hidden, false);
   assert.equal(
     scope.textContent,
-    'Scoped to the page filters: sources diary, ci; control A.1; mapping rule deploys; search review; text filter actor:contains:alice; text filter outcome:equals:ok; unmapped only.',
+    'Scoped to the page filters: sources diary, ci; control A.1; mapping rule deploys; text filter any:contains:review; text filter actor:contains:alice; text filter outcome:equals:ok; unmapped only.',
   );
   // The sunburst by source is offered here and carries the same scope.
   assert.deepEqual(
@@ -174,7 +179,11 @@ test('the Events charts follow the list filters and say so', async (t) => {
   const graph = ui.requests.find((u) => u.pathname === '/api/v1/graph/control_source');
   assert.equal(graph.searchParams.get('source'), 'diary,ci');
   assert.equal(graph.searchParams.get('rule'), 'deploys');
-  assert.deepEqual(graph.searchParams.getAll('f'), ['actor:contains:alice', 'outcome:equals:ok']);
+  assert.deepEqual(graph.searchParams.getAll('f'), [
+    'any:contains:review',
+    'actor:contains:alice',
+    'outcome:equals:ok',
+  ]);
 });
 
 test('filters changed on the list reach the charts when the tab is shown again', async (t) => {

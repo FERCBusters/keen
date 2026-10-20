@@ -292,6 +292,29 @@ def test_exports_for_an_unknown_control_are_empty(events):
                 "userXname rotated",
             ],
         ),
+        # "any" applies the operator across every text field and the source,
+        # so one filter stands in for the former free-text search box.
+        (
+            {"f": "any:contains:alice"},
+            ["Access reviewed elsewhere", "Admin login reviewed"],
+        ),
+        ({"f": "any:contains:jenkins"}, ["Nightly backup & restore"]),
+        (
+            {"f": "any:starts_with:okta"},
+            ["Access reviewed elsewhere", "Admin login reviewed"],
+        ),
+        ({"f": "any:equals:robot"}, ["Unmapped heartbeat", "userXname rotated"]),
+        ({"f": "any:regex:^okta-\\d+$"}, ["Admin login reviewed"]),
+        # A negated "any" keeps only events where no field matches, including
+        # events whose fields are empty.
+        (
+            {"f": "any:not_contains:re"},
+            ["R&D budget approved", "Unmapped heartbeat", "userXname rotated"],
+        ),
+        (
+            {"f": ["any:contains:review", "any:not_contains:okta"]},
+            ["Access reviewed by hand"],
+        ),
         # A value may contain the separator, and LIKE wildcards match literally.
         ({"f": "summary:contains:backup & restore"}, ["Nightly backup & restore"]),
         ({"f": "summary:contains:user_name"}, []),
@@ -317,7 +340,7 @@ def test_list_filters_combine_lists_rules_and_text_conditions(events, params, ex
         ("actor:contains", "A text filter is written field:operator:value"),
         (
             "colour:contains:x",
-            "Text filters apply to summary, system, actor, action, outcome, external_id",
+            "Text filters apply to summary, system, actor, action, outcome, external_id, any",
         ),
         (
             "actor:near:x",

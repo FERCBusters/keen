@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 
-from sqlalchemy import exists, false, or_, text
+from sqlalchemy import and_, exists, false, or_, text
 from sqlalchemy.exc import DataError, OperationalError
 from sqlalchemy.orm import Session, aliased
 
@@ -44,6 +44,10 @@ from app.services.control_refs import control_by_ref
 from app.services.errors import DomainError
 
 TEXT_FIELDS = ("summary", "system", "actor", "action", "outcome", "external_id")
+# "any" applies the operator across every text field and the source name, as
+# the free-text search did: a positive operator matches when one field does.
+ANY_FIELD = "any"
+ANY_FIELD_COLUMNS = TEXT_FIELDS + ("source",)
 OPERATORS = (
     "contains",
     "not_contains",
@@ -135,8 +139,10 @@ def parse_text_condition(raw: str) -> TextCondition:
     if len(parts) != 3:
         raise DomainError(400, "A text filter is written field:operator:value")
     field_name, op, value = parts[0].strip().lower(), parts[1].strip().lower(), parts[2]
-    if field_name not in TEXT_FIELDS:
-        raise DomainError(400, "Text filters apply to " + ", ".join(TEXT_FIELDS))
+    if field_name not in TEXT_FIELDS and field_name != ANY_FIELD:
+        raise DomainError(
+            400, "Text filters apply to " + ", ".join(TEXT_FIELDS + (ANY_FIELD,))
+        )
     if op not in OPERATORS:
         raise DomainError(400, "Text filter operators are " + ", ".join(OPERATORS))
     if not value.strip():
@@ -196,25 +202,37 @@ def like_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def text_condition_predicate(condition: TextCondition):
-    column = getattr(Event, condition.field)
+def _column_matches(column, condition: TextCondition):
     escaped = like_escape(condition.value)
     if condition.uses_regex:
-        positive = column.op("~*")(condition.value)
+        return column.op("~*")(condition.value)
+    pattern = {
+        "contains": f"%{escaped}%",
+        "not_contains": f"%{escaped}%",
+        "starts_with": f"{escaped}%",
+        "ends_with": f"%{escaped}",
+        "equals": escaped,
+        "not_equals": escaped,
+    }[condition.op]
+    return column.ilike(pattern, escape="\\")
+
+
+def text_condition_predicate(condition: TextCondition):
+    if condition.field == ANY_FIELD:
+        columns = [getattr(Event, name) for name in ANY_FIELD_COLUMNS]
     else:
-        pattern = {
-            "contains": f"%{escaped}%",
-            "not_contains": f"%{escaped}%",
-            "starts_with": f"{escaped}%",
-            "ends_with": f"%{escaped}",
-            "equals": escaped,
-            "not_equals": escaped,
-        }[condition.op]
-        positive = column.ilike(pattern, escape="\\")
+        columns = [getattr(Event, condition.field)]
+    positives = [_column_matches(column, condition) for column in columns]
     if condition.negated:
-        # An empty field does not contain, start with or equal the value.
-        return or_(column.is_(None), ~positive)
-    return positive
+        # An empty field does not contain, start with or equal the value; for
+        # "any" every field must fail to match.
+        return and_(
+            *(
+                or_(column.is_(None), ~positive)
+                for column, positive in zip(columns, positives)
+            )
+        )
+    return or_(*positives) if len(positives) > 1 else positives[0]
 
 
 def control_ids_for(filters: EventFilters, db: Session) -> list | None:

@@ -1,9 +1,10 @@
-// Text filters on the Events page: one operator applied to one event field.
-// Each row is kept as "field:operator:value", the form the API reads, so the
-// URL, saved searches and exports carry the same filters.
+// Text filters on the Events page: one operator applied to one event field, or
+// to any of them. Each row is kept as "field:operator:value", the form the API
+// reads, so the URL, saved searches and exports carry the same filters.
 import { esc } from '/app.js';
 
 export const CONDITION_FIELDS = [
+  ['any', 'Any field'],
   ['summary', 'Summary'],
   ['system', 'System'],
   ['actor', 'Actor'],
@@ -82,10 +83,7 @@ export function createConditionEditor({ host, addButton, onChange }) {
         <button class="btn btn-sm btn-outline-secondary" type="button" data-condition-remove aria-label="Remove text filter"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
       </div>`;
   }
-  function add(
-    condition = { field: 'summary', op: 'contains', value: '' },
-    { focus = false } = {},
-  ) {
+  function add(condition = { field: 'any', op: 'contains', value: '' }, { focus = false } = {}) {
     if (rows().length >= MAX_CONDITIONS) return;
     host.insertAdjacentHTML('beforeend', rowHtml(condition));
     updateAddButton();

@@ -55,7 +55,9 @@ test('events render safe content, bounded control badges and correct paging', as
 });
 test('applying filters resets pagination and preserves framework and clause', async (t) => {
   const ui = await fixture(t, { query: '&offset=50&clause=4.1' });
-  ui.el('q').value = '  blocked packets  ';
+  ui.el('addCondition').click();
+  const row = ui.document.querySelector('[data-condition-row]');
+  row.querySelector('[data-condition-value]').value = 'blocked packets';
   pickFilter(ui, 'source', 'keen-agent');
   pickFilter(ui, 'control', 'A1');
   ui.el('filters').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
@@ -65,7 +67,7 @@ test('applying filters resets pagination and preserves framework and clause', as
     'https://keen.example',
   );
   for (const [key, value] of Object.entries({
-    q: 'blocked packets',
+    f: 'any:contains:blocked packets',
     source: 'keen-agent',
     control: 'A1',
     framework: 'A',

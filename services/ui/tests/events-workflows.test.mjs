@@ -49,12 +49,15 @@ async function events(t, options = {}) {
 
 const params = (searchParams) => Object.fromEntries(searchParams);
 
-test('exports download the filters on screen, including unapplied search text', async (t) => {
+test('exports download the filters on screen, including an unapplied text filter', async (t) => {
   const ui = await events(t, {
     query:
       '&source=ci&control=A.1&clause=4.1&unmapped=true&start_date=2026-01-01&end_date=2026-01-31&offset=50',
   });
-  ui.el('q').value = '  deploy  ';
+  // The page has no free-text search box; text filters cover every field.
+  assert.equal(ui.el('q'), null);
+  ui.el('addCondition').click();
+  fillCondition(ui, 0, 'any', 'contains', '  deploy  ');
 
   ui.el('exportCsv').click();
 
@@ -62,11 +65,11 @@ test('exports download the filters on screen, including unapplied search text', 
   const url = new URL(ui.downloads[0].href, 'https://keen.example');
   assert.equal(url.pathname, '/api/v1/events/export');
   assert.deepEqual(params(url.searchParams), {
-    q: 'deploy',
     framework: 'A',
     source: 'ci',
     control: 'A.1',
     clause: '4.1',
+    f: 'any:contains:  deploy  ',
     unmapped: 'true',
     start_date: '2026-01-01',
     end_date: '2026-01-31',
@@ -78,7 +81,7 @@ test('exports download the filters on screen, including unapplied search text', 
   // The temporary link is gone, and the page keeps its place in the results.
   assert.equal(ui.document.querySelectorAll('a[download]').length, 0);
   const shown = new URL(ui.window.location.href).searchParams;
-  assert.equal(shown.get('q'), 'deploy');
+  assert.equal(shown.get('f'), 'any:contains:  deploy  ');
   assert.equal(shown.get('offset'), '50');
 
   // A second click straight away is the same request; it downloads once.
@@ -106,7 +109,8 @@ test('Reset clears every filter and the time window and starts from the first pa
 
   await settle(() => ui.requests.events.length === 2);
   assert.deepEqual(params(ui.lastEvents()), { framework: 'A', limit: '50', offset: '0' });
-  for (const id of ['q', 'startDateDmy', 'endDateDmy']) assert.equal(ui.el(id).value, '', id);
+  for (const id of ['startDateDmy', 'endDateDmy']) assert.equal(ui.el(id).value, '', id);
+  assert.equal(ui.document.querySelectorAll('[data-condition-row]').length, 0);
   for (const id of ['source', 'control', 'rule']) assert.deepEqual(chosenChips(ui, id), [], id);
   assert.equal(ui.el('unmapped').checked, false);
   assert.equal(ui.el('limit').value, '50');
@@ -119,101 +123,92 @@ test('Reset clears every filter and the time window and starts from the first pa
   assert.equal(ui.el('pageTitle').textContent, 'Events');
 });
 
-test('the name of a saved search opens that search instead of looking for the text', async (t) => {
-  const location = { origin: 'https://keen.example', href: 'https://keen.example/events.html' };
-  const ui = await events(t, {
-    globals: { location },
-    vendor: {
-      resolveSavedSearchUrl: (name) =>
-        name === 'Weekly deploys' ? '/events.html?source=ci&q=deploy' : null,
-    },
-  });
-  ui.el('q').value = 'Weekly deploys';
-
-  ui.el('filters').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-
-  assert.equal(location.href, '/events.html?source=ci&q=deploy&framework=A');
-  assert.equal(ui.requests.events.length, 1);
-
-  // Any other text is searched for.
-  ui.el('q').value = 'Weekly';
-  ui.el('filters').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => ui.requests.events.length === 2);
-  assert.equal(ui.lastEvents().get('q'), 'Weekly');
+test('search text in a link becomes a text filter over any field', async (t) => {
+  // The navbar and Home search send their text as q; the page shows it as the
+  // first text filter and drops q from the address.
+  const ui = await events(t, { query: '&q=  deploy  &f=actor:contains:alice&offset=50' });
+  const rows = () =>
+    [...ui.document.querySelectorAll('[data-condition-row]')].map((row) => [
+      row.querySelector('[data-condition-field]').value,
+      row.querySelector('[data-condition-op]').value,
+      row.querySelector('[data-condition-value]').value,
+    ]);
+  assert.deepEqual(rows(), [
+    ['any', 'contains', 'deploy'],
+    ['actor', 'contains', 'alice'],
+  ]);
+  assert.deepEqual(ui.lastEvents().getAll('f'), ['any:contains:deploy', 'actor:contains:alice']);
+  assert.equal(ui.lastEvents().has('q'), false);
+  const shown = new URL(ui.window.location.href).searchParams;
+  assert.equal(shown.has('q'), false);
+  assert.deepEqual(shown.getAll('f'), ['any:contains:deploy', 'actor:contains:alice']);
+  // The filter actions sit together at the end of the filter card.
+  const actions = ui.el('filterActions');
+  assert.ok(actions.classList.contains('justify-content-end'));
+  assert.deepEqual(
+    [...actions.querySelectorAll('input, button')].map((el) => el.id || el.textContent),
+    ['unmapped', 'Apply', 'reset', 'saveSearch'],
+  );
+  assert.equal(ui.el('filters').lastElementChild, actions);
 });
 
-function manualDebounce() {
-  const pending = [];
-  const debounce = (fn) => {
-    const queued = () => pending.push(fn);
-    queued.cancel = () => pending.splice(0);
-    return queued;
-  };
-  return { debounce, pending, flush: () => pending.splice(0).forEach((fn) => fn()) };
-}
+test('a saved search keeps every filter on screen, named by its text filters', async (t) => {
+  const names = [];
+  const ui = await events(t, {
+    query: '&source=ci&rule=deploys&f=any:contains:deploy&f=actor:not_contains:robot&offset=50',
+    globals: {
+      prompt: (message, suggested) => {
+        names.push(suggested);
+        return suggested;
+      },
+    },
+  });
+  ui.el('unmapped').checked = true;
+
+  ui.el('saveSearch').click();
+
+  await settle(() => ui.calls.some((c) => c.method === 'POST'));
+  const saved = ui.calls.find((c) => c.method === 'POST');
+  assert.equal(saved.url, '/api/v1/me/saved-searches');
+  assert.equal(
+    saved.body.url,
+    '/events.html?source=ci&rule=deploys&f=any%3Acontains%3Adeploy&f=actor%3Anot_contains%3Arobot&unmapped=true&limit=50',
+  );
+  assert.equal(
+    names[0],
+    'Events (source=ci, rule=deploys, Any field contains “deploy”, Actor does not contain “robot”, unmapped)',
+  );
+  assert.equal(saved.body.name, names[0]);
+});
 
 test('with automatic filtering, changes apply without pressing Apply', async (t) => {
-  const timer = manualDebounce();
-  const location = { origin: 'https://keen.example', href: 'https://keen.example/events.html' };
   const ui = await events(t, {
     me: { is_admin: true, preferences: { auto_apply_filters: true } },
     query: '&offset=50',
-    globals: { location },
-    vendor: {
-      debounce: timer.debounce,
-      resolveSavedSearchUrl: (name) =>
-        name === 'Weekly deploys' ? '/events.html?source=ci' : null,
-    },
   });
 
-  // Typing waits for a pause before searching, from the first page.
-  ui.el('q').value = 'dep';
-  ui.el('q').dispatchEvent(new ui.window.Event('input'));
-  assert.equal(ui.requests.events.length, 1);
-  timer.flush();
-  await settle(() => ui.requests.events.length === 2);
-  assert.equal(ui.lastEvents().get('q'), 'dep');
-  assert.equal(ui.lastEvents().get('offset'), '0');
-
-  // Choosing a filter applies it at once.
+  // Choosing a filter applies it at once, from the first page.
   pickFilter(ui, 'source', 'ci');
-  await settle(() => ui.requests.events.length === 3);
+  await settle(() => ui.requests.events.length === 2);
   assert.equal(ui.lastEvents().get('source'), 'ci');
+  assert.equal(ui.lastEvents().get('offset'), '0');
   ui.el('unmapped').checked = true;
   ui.el('unmapped').dispatchEvent(new ui.window.Event('change'));
-  await settle(() => ui.requests.events.length === 4);
+  await settle(() => ui.requests.events.length === 3);
   assert.equal(ui.lastEvents().get('unmapped'), 'true');
-
-  // Leaving the search box applies the text without waiting.
-  ui.el('q').value = 'deploy';
-  ui.el('q').dispatchEvent(new ui.window.Event('input'));
-  ui.el('q').dispatchEvent(new ui.window.Event('change'));
-  await settle(() => ui.requests.events.length === 5);
-  assert.equal(ui.lastEvents().get('q'), 'deploy');
-  assert.equal(timer.pending.length, 0);
-
-  // Picking a saved search from the suggestions opens it and abandons the
-  // pending search for its name.
-  ui.el('q').value = 'Weekly deploys';
-  ui.el('q').dispatchEvent(new ui.window.Event('input'));
-  ui.el('q').dispatchEvent(
-    new ui.window.InputEvent('input', { inputType: 'insertReplacementText' }),
-  );
-  assert.equal(location.href, '/events.html?source=ci&framework=A');
-  assert.equal(timer.pending.length, 0);
-  assert.equal(ui.requests.events.length, 5);
-
-  // A saved search name typed in full opens the search once the box is left.
-  location.href = 'https://keen.example/events.html';
-  ui.el('q').dispatchEvent(new ui.window.Event('change'));
-  assert.equal(location.href, '/events.html?source=ci&framework=A');
-  assert.equal(ui.requests.events.length, 5);
+  ui.el('startDateDmy').value = '01/01/2026';
+  ui.el('startDate').dispatchEvent(new ui.window.Event('change'));
+  await settle(() => ui.requests.events.length === 4);
+  assert.equal(ui.lastEvents().get('start_date'), '2026-01-01');
 });
 
 test('without automatic filtering, nothing reloads until Apply', async (t) => {
   const ui = await events(t, { me: { is_admin: true, preferences: {} } });
-  ui.el('q').value = 'deploy';
-  ui.el('q').dispatchEvent(new ui.window.Event('input'));
+  ui.el('addCondition').click();
+  fillCondition(ui, 0, 'any', 'contains', 'deploy');
+  condition(ui, 0)
+    .querySelector('[data-condition-value]')
+    .dispatchEvent(new ui.window.Event('change', { bubbles: true }));
   pickFilter(ui, 'source', 'ci');
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(ui.requests.events.length, 1);
@@ -406,6 +401,12 @@ test('text filters apply one operator per field and travel through the URL and e
   ui.el('addCondition').click();
   ui.el('addCondition').click();
   assert.equal(ui.document.activeElement, condition(ui, 2).querySelector('[data-condition-value]'));
+  // A new row starts on any field, as the search box used to.
+  assert.equal(condition(ui, 0).querySelector('[data-condition-field]').value, 'any');
+  assert.equal(
+    condition(ui, 0).querySelector('[data-condition-field] option').textContent,
+    'Any field',
+  );
   fillCondition(ui, 0, 'actor', 'not_contains', 'robot');
   fillCondition(ui, 1, 'summary', 'regex', '^Deploy: v\\d+');
   // A row without a value is not a filter.

@@ -6,7 +6,6 @@ import {
   fmtTs,
   tsSortKey,
   toast,
-  debounce,
   isoDateToDmy,
   dmyToIsoDate,
   wireIsoDmyDateField,
@@ -16,8 +15,6 @@ import {
   setQuery,
   enableTableSorting,
   shorten,
-  attachSavedSearchAutocomplete,
-  resolveSavedSearchUrl,
   sourceBadgeHtml,
   sourceLabel,
   upstreamLinkHtml,
@@ -34,7 +31,7 @@ import {
   selectedFilterPillValues,
   setFilterPillOptions,
 } from '/pages/filter-pill-multiselect.js';
-import { createConditionEditor } from '/pages/event-filter-conditions.js';
+import { createConditionEditor, describeCondition } from '/pages/event-filter-conditions.js';
 import { createEventPanel } from '/pages/event-panel.js';
 import { createEventSelection } from '/pages/event-selection.js';
 
@@ -116,10 +113,6 @@ function updatePageTitleFromInputs() {
   });
 }
 
-const inpQ = document.getElementById('q');
-
-// Saved-search autocomplete for the Events page search box
-attachSavedSearchAutocomplete(inpQ);
 const selSource = document.getElementById('source');
 const selControl = document.getElementById('control');
 const selRule = document.getElementById('rule');
@@ -128,7 +121,7 @@ const conditionEditor = createConditionEditor({
   host: document.getElementById('conditions'),
   addButton: document.getElementById('addCondition'),
   onChange: () => {
-    if (autoApplyFilters) maybeNavigateSavedSearchOrReload(true);
+    if (autoApplyFilters) reloadWithFacets(true);
   },
 });
 const selLimit = document.getElementById('limit');
@@ -152,13 +145,22 @@ const exportNdjsonBtn = document.getElementById('exportNdjson');
 // button discovery.
 const pagerButtons = collectOffsetPagerButtons();
 
+// A link from the navbar or Home search carries its text as q; it becomes a
+// text filter over any field, which is what the former search box did.
+function initialConditions() {
+  const params = new URLSearchParams(location.search);
+  const conditions = params.getAll('f');
+  const q = String(params.get('q') || '').trim();
+  if (q) conditions.unshift(`any:contains:${q}`);
+  return conditions;
+}
+
 let state = {
-  q: qs('q', ''),
   source: qs('source', ''),
   control: qs('control', ''),
   clause: qs('clause', ''),
   rule: qs('rule', ''),
-  conditions: new URLSearchParams(location.search).getAll('f'),
+  conditions: initialConditions(),
   unmapped: qbool('unmapped', false),
   start_date: qs('start_date', ''),
   end_date: qs('end_date', ''),
@@ -187,7 +189,6 @@ const columnCount = 7 + selection.columns;
 // The filters a request carries, as the API reads them.
 function filterParams() {
   const p = new URLSearchParams();
-  if (state.q) p.set('q', state.q);
   if (framework) p.set('framework', framework);
   if (state.source) p.set('source', state.source);
   if (state.control) p.set('control', state.control);
@@ -206,6 +207,8 @@ function filterParams() {
 function syncConditionsToUrl() {
   const url = new URL(String(location.href), document.baseURI);
   url.searchParams.delete('f');
+  // Search text arriving as q is already one of the conditions.
+  url.searchParams.delete('q');
   for (const condition of state.conditions) url.searchParams.append('f', condition);
   history.replaceState({}, '', url.pathname + url.search + url.hash);
 }
@@ -300,7 +303,6 @@ function normalizeDateRange(a, b) {
 }
 
 function syncInputs() {
-  inpQ.value = state.q;
   chkUnmapped.checked = state.unmapped;
   selLimit.value = String(state.limit);
   conditionEditor.set(state.conditions);
@@ -469,18 +471,6 @@ function reloadWithFacets(resetOffset = true) {
   }
 }
 
-function maybeNavigateSavedSearchOrReload(resetOffset = true) {
-  const qRaw = inpQ?.value?.trim?.() ? inpQ.value.trim() : '';
-  const saved = resolveSavedSearchUrl(qRaw);
-  if (saved) {
-    // Match the behavior of the navbar and the Controls page: saved searches are URLs,
-    // not literal strings to search for.
-    location.href = withFramework(saved, framework);
-    return;
-  }
-  reloadWithFacets(resetOffset);
-}
-
 function renderRows(items) {
   tbody.innerHTML = '';
   for (const e of items) {
@@ -592,7 +582,6 @@ function applyFromInputs(resetOffset = true) {
   const prevStartDate = state.start_date || '';
   const prevEndDate = state.end_date || '';
 
-  state.q = inpQ.value.trim();
   state.source = selectedFilterPillValues(selSource).join(',');
   state.control = selectedFilterPillValues(selControl).join(',');
   state.rule = selectedFilterPillValues(selRule).join(',');
@@ -670,7 +659,7 @@ function applyFromInputs(resetOffset = true) {
 
   setQuery({
     framework: framework || null,
-    q: state.q || null,
+    q: null,
     source: state.source || null,
     control: state.control || null,
     clause: state.clause || null,
@@ -690,15 +679,6 @@ function applyFromInputs(resetOffset = true) {
 
 document.getElementById('filters').addEventListener('submit', (ev) => {
   ev.preventDefault();
-
-  // If the search box matches a saved search name, jump to that saved URL.
-  // (Same behavior as the global and navbar event search.)
-  const qRaw = inpQ.value.trim();
-  const saved = resolveSavedSearchUrl(qRaw);
-  if (saved) {
-    location.href = withFramework(saved, framework);
-    return;
-  }
   reloadWithFacets(true);
 });
 
@@ -707,7 +687,6 @@ selSource?.addEventListener('change', updatePageTitleFromInputs);
 selControl?.addEventListener('change', updatePageTitleFromInputs);
 
 document.getElementById('reset').addEventListener('click', () => {
-  inpQ.value = '';
   for (const el of [selSource, selControl, selRule])
     setFilterPillOptions(el, [], { selectedValues: [] });
   conditionEditor.set([]);
@@ -719,7 +698,6 @@ document.getElementById('reset').addEventListener('click', () => {
   selLimit.value = '50';
   state = {
     ...state,
-    q: '',
     source: '',
     control: '',
     clause: '',
@@ -738,40 +716,12 @@ document.getElementById('reset').addEventListener('click', () => {
 
 // Optional UX: auto-apply filters as fields change (user preference).
 if (autoApplyFilters) {
-  // Longer debounce to avoid interrupting datalist (saved-search) selection while typing.
-  // (Updating the URL + rerendering the table can close the browser's datalist dropdown.)
-  const debouncedQ = debounce(() => maybeNavigateSavedSearchOrReload(true), 1500);
-
-  inpQ?.addEventListener('input', (ev) => {
-    // If the user selected a saved search from the datalist, the value becomes the saved
-    // search *name*. In auto-apply mode we should navigate to the saved URL, not treat it
-    // as a literal search string.
-    const qRaw = inpQ.value.trim();
-    const saved = resolveSavedSearchUrl(qRaw);
-    const inputType = ev?.inputType || '';
-    if (saved && inputType === 'insertReplacementText') {
-      debouncedQ.cancel?.();
-      location.href = withFramework(saved, framework);
-      return;
-    }
-    debouncedQ();
-  });
-
-  // Selecting an item from the saved-search datalist often fires a 'change' event.
-  // Apply immediately in that case.
-  inpQ?.addEventListener('change', () => {
-    debouncedQ.cancel?.();
-    maybeNavigateSavedSearchOrReload(true);
-  });
-
-  // If a saved search name is present in the search box (e.g., chosen but not yet applied),
-  // treat it consistently as a saved-search selection.
-  selSource?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
-  selControl?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
-  selRule?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
-  chkUnmapped?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
-  startDate?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
-  endDate?.addEventListener('change', () => maybeNavigateSavedSearchOrReload(true));
+  selSource?.addEventListener('change', () => reloadWithFacets(true));
+  selControl?.addEventListener('change', () => reloadWithFacets(true));
+  selRule?.addEventListener('change', () => reloadWithFacets(true));
+  chkUnmapped?.addEventListener('change', () => reloadWithFacets(true));
+  startDate?.addEventListener('change', () => reloadWithFacets(true));
+  endDate?.addEventListener('change', () => reloadWithFacets(true));
 }
 
 let exportInFlight = false;
@@ -828,12 +778,13 @@ document.getElementById('saveSearch').addEventListener('click', async () => {
   // Sync current inputs to state + URL
   applyFromInputs(false);
 
-  // Build a canonical URL without pagination
+  // Build a canonical URL without pagination; every filter on screen is kept.
   const p = new URLSearchParams();
-  if (state.q) p.set('q', state.q);
   if (state.source) p.set('source', state.source);
   if (state.control) p.set('control', state.control);
   if (state.clause) p.set('clause', state.clause);
+  if (state.rule) p.set('rule', state.rule);
+  for (const condition of state.conditions) p.append('f', condition);
   if (state.unmapped) p.set('unmapped', 'true');
   if (state.start_date) p.set('start_date', state.start_date);
   if (state.end_date) p.set('end_date', state.end_date);
@@ -843,10 +794,11 @@ document.getElementById('saveSearch').addEventListener('click', async () => {
   const url = '/events.html' + (p.toString() ? `?${p.toString()}` : '');
 
   const parts = [];
-  if (state.q) parts.push(`q=${state.q}`);
   if (state.source) parts.push(`source=${state.source}`);
   if (state.control) parts.push(`control=${state.control}`);
   if (state.clause) parts.push(`clause=${state.clause}`);
+  if (state.rule) parts.push(`rule=${state.rule}`);
+  for (const condition of state.conditions) parts.push(describeCondition(condition));
   if (state.unmapped) parts.push('unmapped');
   const defName = ('Events' + (parts.length ? ` (${parts.join(', ')})` : ' (all)')).slice(0, 128);
 
@@ -880,6 +832,7 @@ wireIsoDmyDateField(endDate, endDateDmy, endDatePick, { dispatchChangeOnText: fa
 
 // Init from query
 syncInputs();
+syncConditionsToUrl();
 updatePageTitle();
 await loadSources();
 await loadControls();
