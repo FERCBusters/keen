@@ -173,8 +173,18 @@ def admin_import_controls(*, payload: ControlImportPayload, user, db: Session):
         except SQLAlchemyError:
             # Connection, lock or other database failures abandon the import.
             raise
-        except Exception as e:
+        except (ValueError, DomainError) as e:
+            # Validation failures carry a safe public message.
             errors.append({"ref": getattr(item, "ref", None), "error": str(e)})
+        except Exception:
+            # Unexpected exceptions can name internal values, paths or SQL;
+            # report the item generically instead of echoing their message.
+            errors.append(
+                {
+                    "ref": getattr(item, "ref", None),
+                    "error": "The item could not be processed",
+                }
+            )
 
     db.commit()
     return {"created": created, "updated": updated, "errors": errors}
