@@ -166,6 +166,10 @@ test('a reader sees the timeline in time order with withheld items marked', asyn
   assert.equal(login.querySelector('.fw-semibold').textContent, 'Attacker signs in');
   const note = ui.document.querySelector('[data-item-id="i-note"] .story-note');
   assert.equal(note.textContent, 'Keys <rotated>');
+  // A note's title is its label, so the heading shows it once.
+  const noteHeading = ui.document.querySelector('[data-item-id="i-note"]');
+  assert.equal(noteHeading.querySelectorAll('.fw-semibold').length, 1);
+  assert.equal(noteHeading.textContent.includes(' · '), false);
   const withheld = ui.document.querySelector('[data-item-id="i-risk"]');
   assert.equal(withheld.classList.contains('story-timeline-withheld'), true);
   assert.equal(
@@ -314,6 +318,12 @@ test('an author edits the story, adds notes and records, and saves the layout', 
       new ui.window.MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 }),
     );
   assert.equal(ui.el('saveLayout').disabled, true);
+  // Arrange by time lays the boxes out in timeline order, not insertion order.
+  ui.el('arrange').click();
+  assert.deepEqual(
+    ['i-login', 'i-export', 'i-note', 'i-risk'].map((id) => flowNode(id).style.left),
+    ['40px', '280px', '520px', '760px'],
+  );
   pointer('pointerdown', flowNode('i-note'), 0, 0);
   pointer('pointermove', ui.el('flow'), 15, 25);
   pointer('pointerup', ui.el('flow'), 15, 25);
@@ -330,7 +340,10 @@ test('an author edits the story, adds notes and records, and saves the layout', 
   const [path, layout] = plain(calls.put[0]);
   assert.equal(path, '/api/v1/stories/s1/layout?framework=A');
   assert.equal(layout.expected_version, 4);
-  assert.deepEqual(layout.positions[0], { item_id: 'i-note', x: 55, y: 65 });
+  assert.deepEqual(
+    layout.positions.find((p) => p.item_id === 'i-note'),
+    { item_id: 'i-note', x: 535, y: 65 },
+  );
   assert.deepEqual(layout.links, [
     { from_item_id: 'i-login', to_item_id: 'i-export', label: 'then' },
     { from_item_id: 'i-export', to_item_id: 'i-note', label: 'so' },

@@ -10,12 +10,14 @@
 </div>
 <h2 id="sources-connections-and-mapping">Sources, collections and evidence mapping</h2>
 <p>The Workspace menu separates the jobs. <strong>Sources &amp; evidence mapping</strong> configures connections and collections and maps their events to controls and clauses. <strong>API ingester builder</strong> defines custom API requests. <strong>Ingest runners</strong> starts a built-in adapter immediately, and <strong>Diary Evidence</strong> records human-entered evidence.</p>
+<figure><a href="images/admin-sources.jpg"><img alt="Sources &amp; evidence mapping: each source with its inputs, and the Add input, Add mapping rule and View mapping rules actions." loading="lazy" src="images/admin-sources.jpg"/></a><figcaption>Sources &amp; evidence mapping: each source with its inputs, and the Add input, Add mapping rule and View mapping rules actions.</figcaption></figure>
 <h3 id="define-a-source-connection">Define a source</h3>
 <ol class="steps">
 <li>In the <strong>Sources</strong> view choose <strong>Define a source</strong>, enter its name, endpoint and credentials, and save. Credentials saved here are encrypted with <code>KEEN_INTEGRATION_SECRET_KEY</code>.</li>
 <li>Choose <strong>Add collection</strong> and pick the repositories, organisations, users, feeds, queries or other inputs to fetch. A collection saves without a mapping rule.</li>
 <li>After saving, use <strong>Collect now</strong> to fetch a first batch, then <strong>Add mapping rule</strong> to decide what the events prove. <strong>View definitions</strong> filters the mapping library to this source.</li>
 </ol>
+<figure><a href="images/define-source.jpg"><img alt="Define a source for an RSS feed: name, feed URL and optional credentials." loading="lazy" src="images/define-source.jpg"/></a><figcaption>Define a source for an RSS feed: name, feed URL and optional credentials.</figcaption></figure>
 <p>Environment-backed sources appear once they have configured inputs; file-managed sources use their deployment configuration. Webhook sources display a receiving URL and can be mapped directly, and custom API ingesters keep their dedicated builder.</p>
 <details class="more"><summary>Going deeper: what deleting or clearing a connection removes</summary>
 <p>Deleting an API connection removes its collectors, revisions, run history, source-specific definitions and automatic evidence-to-control links. Clearing a built-in connection empties its saved collection lists and removes its source-specific definitions and automatic links. The confirmation shows the affected definitions and counts and requires the connection name. Events, artifacts, manual and imported mappings and shared cross-source rules remain, and environment credentials are unchanged. API runs in progress block deletion; wait for completion and preview again, and review a changed preview before removing.</p>
@@ -27,6 +29,7 @@
 <li>Use <strong>Ingest runners</strong> for a small test. Inspect the collection result and one actual event.</li>
 <li>Create a mapping from that event, or use the mapping builder, and preview its matches before saving.</li>
 </ol>
+<figure><a href="images/source-catalogue.jpg"><img alt="Source catalogue and collection health shows every adapter, whether it is enabled, and lets you pause a source type." loading="lazy" src="images/source-catalogue.jpg"/></a><figcaption>Source catalogue and collection health shows every adapter, whether it is enabled, and lets you pause a source type.</figcaption></figure>
 <div class="callout callout-note"><p><strong>Collections fetch; rules attribute.</strong> Collection inputs decide what KEEN fetches, and mapping rules attribute the collected events to controls or clauses. An all-events mapping still needs a configured collection.</p></div>
 <p>Web-UI configuration overrides the corresponding YAML file once saved; administrators can manage YAML before creating an override, and each source chapter names its file. <a href="administrator-rules.html">Rules and YAML</a> explains mapping export, <a href="administrator-scheduling.html">Scheduling and pauses</a> covers run timing and saved cursors, and <a href="administrator-retention.html">Storage and retention</a> covers evidence artefacts.</p>
 <h2 id="named-source-connections">Named source connections</h2>

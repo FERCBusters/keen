@@ -11,6 +11,7 @@
 <p>For something a person did, an administrator records <strong>Diary evidence</strong> from Admin: the event and its time, attached files or permitted links, and the controls it applies to. A diary record is evidence like any other and can be sampled into an audit. Write enough for someone else to understand who did what and why.</p>
 <h4 id="find-events">Find the events you want</h4>
 <p>Start with the search box. It looks for your words across the summary, actor, system, source, outcome and identifier.</p>
+<figure><a href="images/events-filters.jpg"><img alt="Filters on the Events page: source pills, control and mapping-rule pickers, a text filter with its operator, and a date range." loading="lazy" src="images/events-filters.jpg"/></a><figcaption>Filters on the Events page: source pills, control and mapping-rule pickers, a text filter with its operator, and a date range.</figcaption></figure>
 <p>Then narrow with the pickers. <strong>Sources</strong>, <strong>Controls</strong> and <strong>Mapping rules</strong> each accept one or more values, and each value shows how many matching events it has. An event matches a picker when it has <em>any</em> of the chosen values.</p>
 <p>For anything more precise, add a <strong>text filter</strong>: one field, one operator, one value. Every text filter you add must hold, and matching ignores case.</p>
 <table><thead><tr><th>Operator</th><th>Keeps events whose field…</th></tr></thead><tbody>
@@ -25,9 +26,11 @@
 </details>
 <h4 id="read-one-event">Read one event</h4>
 <p>Click an event in the list to open a panel beside it with the summary, the mapped controls (reference and title) and the structured fields that identify the event. <strong>View full event</strong> opens the event page, which adds the timestamp, source, system, actor, action, outcome, severity and the normalised payload.</p>
+<figure><a href="images/workflow-event.jpg"><img alt="Clicking a summary opens the event beside the list: source, actor, action, outcome, mapped controls and structured fields, with a link to the full event." loading="lazy" src="images/workflow-event.jpg"/></a><figcaption>Clicking a summary opens the event beside the list: source, actor, action, outcome, mapped controls and structured fields, with a link to the full event.</figcaption></figure>
 <p>Open artefacts separately: the summary can leave out detail, and an external link may change or need another system’s credentials.</p>
 <h4 id="chart-events">Chart what you have filtered</h4>
 <p>The <strong>Visualisations</strong> tab follows the same filters as the list, and says which filters apply. A view of Diary events charts only Diary events. Choose the histogram over time, a sunburst of sources and their controls, or a heatmap.</p>
+<figure><a href="images/events-visualisations.jpg"><img alt="The Visualisations tab charts the events you have filtered; here the daily histogram stacked by source." loading="lazy" src="images/events-visualisations.jpg"/></a><figcaption>The Visualisations tab charts the events you have filtered; here the daily histogram stacked by source.</figcaption></figure>
 <div class="callout callout-tip"><p><strong>The Sources register</strong> gives the same filtering by origin: narrow by one or more source types, by name and by coverage (sources with unmapped events, with mapped events, or fully mapped). Its address bar carries the filters too.</p></div>
 <details class="more"><summary>Going deeper: redaction, masking and rationale links</summary>
 <p>Redaction removes recognised secret-like values as evidence arrives. Optional masking can hide personal data such as e-mail and IP addresses in evidence or exports. Neither detects every sensitive value, so review what you collect and export.</p>
@@ -44,7 +47,7 @@
 </tbody></table>
 <p>A typical sequence: sample a deployment event into a change-management audit, ask why its approval is missing, and create a mapping rule once you know which deployment records support the control. Download the PDF or ZIP when you need to share a reviewed evidence pack.</p>
 <h3 id="evidence-review">Review events, questions and incidents</h3>
-<figure class="workflow-screenshot"><a aria-label="Open full-size screenshot" href="images/workflow-event.jpg" rel="noopener" target="_blank"><img alt="An event shows its source, action, outcome, mapped controls and rationale, with actions for mapping, sampling and questions." decoding="async" loading="lazy" src="images/workflow-event.jpg"/></a><figcaption>An event shows its source, action, outcome, mapped controls and rationale, with actions for mapping, sampling and questions.</figcaption></figure>
+<figure><a href="images/event-detail.jpg"><img alt="The full event page: audit sampling, the evidence snapshot, mapped controls with their rationale, artifacts, questions and the normalised payload." loading="lazy" src="images/event-detail.jpg"/></a><figcaption>The full event page: audit sampling, the evidence snapshot, mapped controls with their rationale, artifacts, questions and the normalised payload.</figcaption></figure>
 <p>A review pass looks like this: search with a sensible date range and source filter, open an event, read its timestamp, actor, system, action, outcome, severity and payload, and open its artefacts. Then act: add a manual control mapping with a clear rationale, ask a question, or sample the event into an audit.</p>
 <p>Mapping something is an assertion of relevance. Write the rationale clearly enough for an auditor to challenge it.</p>
 <details class="more"><summary>Going deeper: a quiet service or a broken collector?</summary>
@@ -58,6 +61,7 @@
 <p><strong>Incidents</strong> escalate an event to your organisation’s incident workflow through a configured webhook. KEEN saves the declaration once the receiver confirms it; investigation and resolution continue in your incident system.</p>
 <h3 id="questions-workflow">Ask and answer questions about evidence and risks</h3>
 <p>Questions can be attached to an evidence event, a risk, a PESTLE(E) item, a SWOT item or a story. They keep a reviewer’s uncertainty next to the material being reviewed.</p>
+<figure><a href="images/event-questions.jpg"><img alt="A question thread on an event: who asked, when, its answered state and the reply box for the author or an administrator." loading="lazy" src="images/event-questions.jpg"/></a><figcaption>A question thread on an event: who asked, when, its answered state and the reply box for the author or an administrator.</figcaption></figure>
 <ol class="steps">
 <li>Open the record and its Questions area. Your account needs access to the record and permission to create questions.</li>
 <li>Write a specific question, such as “Which restore test does this result refer to, and where is its completion record?”</li>
@@ -87,17 +91,23 @@
 </details>
 <h2 id="stories">Stories</h2>
 <p class="lead">A story gathers the pieces of one episode, such as an incident or a change: the events that happened, the risk they realised, the policy or asset they concern, and your notes on what was decided. It can be read as a timeline or arranged as a flow chart, and it can be questioned and sampled like any other record.</p>
+<figure><a href="images/stories-list.jpg"><img alt="The Stories page lists every story you can read, with its status, item count and author." loading="lazy" src="images/stories-list.jpg"/></a><figcaption>The Stories page lists every story you can read, with its status, item count and author.</figcaption></figure>
 <h4 id="start-a-story">Start a story</h4>
 <ul>
 <li>In the <strong>Events</strong> list, tick events (or right-click a row) and choose <strong>Create story</strong>. The selection survives paging and filtering until you clear it. <strong>Add to story</strong> appends the selection to an open story you can edit.</li>
 <li>On the histogram, zoom into a range and choose <strong>Story from window</strong>, or right-click a bar to take that bar alone. Write what happened in the window; it becomes the story’s first note, followed by the window’s events under the current filters, newest first, up to 200.</li>
 <li>Open <strong>Stories</strong> in the navigation to read, search or start a story from scratch.</li>
 </ul>
+<figure><a href="images/events-selection.jpg"><img alt="Tick events in the list and the selection bar offers a story title, Create story and Add to story." loading="lazy" src="images/events-selection.jpg"/></a><figcaption>Tick events in the list and the selection bar offers a story title, Create story and Add to story.</figcaption></figure>
+<figure><a href="images/visualisation-window-story.jpg"><img alt="Story from this window: zoom the histogram into a range, write what happened, and the story opens with the window’s events." loading="lazy" src="images/visualisation-window-story.jpg"/></a><figcaption>Story from this window: zoom the histogram into a range, write what happened, and the story opens with the window’s events.</figcaption></figure>
 <h4 id="build-the-story">Build the story</h4>
 <p>On the story page, search for further events, or for risks, documents, assets and objectives, and add notes as boxes of their own. Each item carries an optional label, a note and a time; an event uses its own time unless you set one.</p>
+<figure><a href="images/story-timeline.jpg"><img alt="A story’s Timeline: events, a risk and a decision note in time order, with the controls the story’s events map to." loading="lazy" src="images/story-timeline.jpg"/></a><figcaption>A story’s Timeline: events, a risk and a decision note in time order, with the controls the story’s events map to.</figcaption></figure>
+<figure><a href="images/story-flow.jpg"><img alt="The Flow chart: the same items as boxes, dragged into place and joined with labelled arrows, then saved as the story’s layout." loading="lazy" src="images/story-flow.jpg"/></a><figcaption>The Flow chart: the same items as boxes, dragged into place and joined with labelled arrows, then saved as the story’s layout.</figcaption></figure>
 <p>The <strong>Timeline</strong> orders items by time. The <strong>Flow chart</strong> shows the same items as boxes you drag into place and join with labelled arrows, for example from the sign-in to the export it led to.</p>
 <h4 id="share-the-story">Use the story</h4>
 <p>Sample a story into an audit like any other record; the sample carries the controls the story’s events map to in the audit’s framework. Ask questions against it, read its changelog to see how it was assembled, and discuss it in comments. Comments belong to the story; they do not change its version and they do not become diary evidence.</p>
+<figure><a href="images/story-comments.jpg"><img alt="Comments stay with the story without changing its version; the Changelog records how it was assembled." loading="lazy" src="images/story-comments.jpg"/></a><figcaption>Comments stay with the story without changing its version; the Changelog records how it was assembled.</figcaption></figure>
 <details class="more"><summary>Going deeper: who can see what in a story</summary>
 <p>Three permissions govern stories. <strong>stories.read</strong> views stories and adds comments. <strong>stories.manage</strong> creates stories and edits or deletes the ones you created. <strong>stories.admin</strong> edits or deletes any story.</p>
 <p>A story is a container, so each item is shown only to readers who can read the record itself: events need evidence access, risks their own read rule, and ISMS records ISMS read access. An item a reader cannot see appears as a placeholder without its identifier, label or note, so the shape of the story remains while its restricted content does not. Adding an item needs the same read access.</p>

@@ -1,6 +1,7 @@
 // Selecting events on the Events page to create a story or add to one.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { page, settle } from './support/page-fixture.mjs';
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -206,4 +207,11 @@ test('the selection stops at the number of events a story holds', async (t) => {
     'A story holds up to 200 events; the selection is full.',
   );
   assert.equal(ui.document.querySelectorAll('#rows [data-select-event]:checked').length, 200);
+});
+
+test('a hidden selection bar stays hidden despite its Bootstrap display class', async () => {
+  const html = await readFile(new URL('../public/events.html', import.meta.url), 'utf8');
+  assert.match(html, /id="selectionBar" class="[^"]*d-flex[^"]*"[^>]*hidden/);
+  const css = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /\[hidden\] \{\s*display: none !important;/);
 });

@@ -2,6 +2,7 @@
 // layout the page can save.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { loadUi } from './support/load-ui.mjs';
 
 // Values made in the page realm are compared as plain copies.
@@ -86,7 +87,7 @@ test('link geometry stops at the box edges and positions stay inside the canvas'
 });
 
 test('items render as boxes at their saved positions with links drawn between them', async (t) => {
-  const { host, node } = await canvas(t);
+  const { host, node, flow } = await canvas(t);
   assert.deepEqual(
     [...host.querySelectorAll('[data-item-id]')].map((n) => [
       n.dataset.kind,
@@ -112,6 +113,27 @@ test('items render as boxes at their saved positions with links drawn between th
     [['i1', 'i2', 'led to']],
   );
   assert.equal(host.querySelector('svg').getAttribute('width'), '760');
+  // A note's title repeats its label, so the box shows it once.
+  flow.load(
+    [
+      {
+        id: 'n1',
+        kind: 'note',
+        kind_label: 'Note',
+        label: 'Decision',
+        title: 'Decision',
+        x: 0,
+        y: 0,
+      },
+    ],
+    [],
+  );
+  assert.equal(node('n1').querySelector('.story-node-title').textContent, 'Decision');
+  assert.equal(node('n1').querySelector('.story-node-subtitle'), null);
+  // Clicks between boxes must reach the link lines drawn beneath the node layer.
+  const css = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /\.story-flow-nodes \{[^}]*pointer-events: none/);
+  assert.match(css, /\.story-node \{[^}]*pointer-events: auto/);
 });
 
 test('dragging a box moves it and reports a layout change once the pointer lifts', async (t) => {

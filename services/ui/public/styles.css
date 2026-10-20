@@ -1,5 +1,11 @@
 @import url('/vendor/mosp-design-system/styles.css');
 
+/* The hidden attribute wins over Bootstrap display utilities such as d-flex,
+   so a toolbar or notice that is hidden stays hidden. */
+[hidden] {
+  display: none !important;
+}
+
 .loading-state {
   min-height: 2rem;
 }
@@ -2028,8 +2034,11 @@ button.keen-filter-pill-chip:focus-visible {
 }
 .story-flow-nodes {
   position: relative;
+  /* Let clicks between the boxes reach the link lines drawn underneath. */
+  pointer-events: none;
 }
 .story-node {
+  pointer-events: auto;
   position: absolute;
   width: 200px;
   height: 90px;

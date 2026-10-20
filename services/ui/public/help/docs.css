@@ -357,12 +357,20 @@ details summary {
   margin-bottom: 0;
 }
 .callout-note {
-  border-left-color: var(--bs-info, #0dcaf0);
-  background: var(--bs-info-bg-subtle, #eaf8fb);
+  --docs-callout-ink: #0a6f82;
+  border-left-color: var(--docs-callout-ink);
+  background: color-mix(in srgb, var(--docs-callout-ink) 10%, var(--bs-body-bg, #fff));
 }
 .callout-caution {
-  border-left-color: var(--bs-warning, #ffc107);
-  background: var(--bs-warning-bg-subtle, #fff7e0);
+  --docs-callout-ink: #b7791f;
+  border-left-color: var(--docs-callout-ink);
+  background: color-mix(in srgb, var(--docs-callout-ink) 12%, var(--bs-body-bg, #fff));
+}
+:root[data-bs-theme='dark'] .callout-note {
+  --docs-callout-ink: #5fc9dd;
+}
+:root[data-bs-theme='dark'] .callout-caution {
+  --docs-callout-ink: #f0b547;
 }
 details.more {
   margin: 1.25rem 0;

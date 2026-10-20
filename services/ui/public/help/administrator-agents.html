@@ -30,6 +30,7 @@
 <li>Save the one-time credential somewhere safe; KEEN stores only a SHA-256 hash of it.</li>
 <li>Note the endpoint. Through the standard reverse proxy it is <code>https://keen.example.org/api/v1/otlp/logs</code>; direct API deployments use <code>/v1/otlp/logs</code>. TLS must terminate at a trusted reverse proxy.</li>
 </ol>
+<figure><a href="images/keen-agents.jpg"><img alt="KEEN Agents: register a collector with a credential lifetime, or create an enrollment profile for a fleet." loading="lazy" src="images/keen-agents.jpg"/></a><figcaption>KEEN Agents: register a collector with a credential lifetime, or create an enrollment profile for a fleet.</figcaption></figure>
 <p>For an autoscaling fleet, create an enrollment profile instead (see <a href="administrator-agents.html#agent-enrollment-profiles">below</a>). No Fernet integration key is needed for agent credentials; outbound API integration credentials keep their existing encryption mechanism.</p>
 <h3 id="agent-build-and-install-on-a-linux-server">Build and install on a Linux server</h3>
 <p>KEEN Agent is maintained in its own repository. Prefer the package and installation instructions shipped with that release; the manual build below shows what a packaged installation does for you. Keep the token, config and spool during an upgrade.</p>

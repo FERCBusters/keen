@@ -29,6 +29,7 @@
 </code></pre></details><a href="diagrams/evidence-flow.svg" rel="noopener" target="_blank">Open full-size diagram</a></figure>
 <h3 id="source-setup-sequence">Connect, collect, inspect, map</h3>
 <p>Whatever the source, the same four steps bring it into service. Do them with one small input first; widen later.</p>
+<figure><a href="images/sources-list.jpg"><img alt="The Sources page: events, mapped and unmapped counts and last-seen time for each source, with a shortcut to its unmapped events." loading="lazy" src="images/sources-list.jpg"/></a><figcaption>The Sources page: events, mapped and unmapped counts and last-seen time for each source, with a shortcut to its unmapped events.</figcaption></figure>
 <ol class="steps">
 <li><strong>Connect.</strong> Give KEEN access to the upstream service. Built-in adapters use credentials you save on the source; the API ingester builder uses reusable encrypted connections.</li>
 <li><strong>Collect.</strong> In <strong>Admin → Sources &amp; Evidence Mapping → Sources</strong>, define the server or account, then add the users, organisations, repositories, feeds or queries to read. For a custom API, configure and publish an ingester in the builder.</li>
@@ -39,6 +40,7 @@
 <div class="callout callout-tip"><p><strong>Forgejo, as a worked example.</strong> Start with a User collection and your account login, an Organisation collection and its login, or a Feed collection and its URL. The token decides which repositories KEEN can read. <a href="administrator-forgejo.html#source-forgejo">Forgejo setup</a> lists the settings and lookback.</p></div>
 <h3 id="connector-rollout">Bring a connector into service</h3>
 <p>A careful first rollout saves time later. This is the checklist administrators follow for a new adapter.</p>
+<figure><a href="images/define-source.jpg"><img alt="Define a source: choose the type, name it, enter its address and credentials, and save. Credentials are encrypted on the server." loading="lazy" src="images/define-source.jpg"/></a><figcaption>Define a source: choose the type, name it, enter its address and credentials, and save. Credentials are encrypted on the server.</figcaption></figure>
 <ol class="steps">
 <li>Choose one adapter and one small upstream input. Confirm outbound connectivity and TLS validation from the runtime, and grant a dedicated upstream identity access to that input only.</li>
 <li>Set the adapter’s enable flag and connection credentials in the server environment, then restart the affected services according to your deployment process.</li>
@@ -53,6 +55,7 @@
 </details>
 <h3 id="configuration-ownership">Know which configuration is authoritative</h3>
 <p>Most configuration lives in the web interface and in PostgreSQL. Framework metadata and nodes, evidence definitions and managed collection documents are edited in the web editors, and the database keeps their revisions. Keep bootstrap files as recovery material, and back up the database to keep current edits.</p>
+<figure><a href="images/source-catalogue.jpg"><img alt="Source catalogue and collection health: each adapter’s enablement, collection items, definitions and last-seen time, with a pause switch per source type." loading="lazy" src="images/source-catalogue.jpg"/></a><figcaption>Source catalogue and collection health: each adapter’s enablement, collection items, definitions and last-seen time, with a pause switch per source type.</figcaption></figure>
 <p>Some settings stay server-side: specialist-adapter credentials, adapter enablement and deployment settings. The API ingester builder stores reusable connection credentials encrypted in PostgreSQL, while its destination policy and encryption key are deployment settings.</p>
 <div class="callout callout-caution"><p><strong>Keep secrets out of content.</strong> Use least-privilege accounts and source-specific credentials, and keep secrets out of definition JSON, framework descriptions, uploaded sample records and operator logs. A version conflict when saving means someone else saved first: reload, compare and save again.</p></div>
 <details class="more"><summary>Going deeper: the Mitigator vocabulary file</summary>

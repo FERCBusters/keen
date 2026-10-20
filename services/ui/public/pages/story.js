@@ -87,7 +87,7 @@ function itemHtml(item) {
   return `<li class="story-timeline-item${item.withheld ? ' story-timeline-withheld' : ''}" data-item-id="${esc(item.id)}" data-kind="${esc(item.kind)}">
     <div class="story-timeline-time small-muted">${item.occurred_at ? esc(fmtTs(item.occurred_at)) : '<span class="fst-italic">no time</span>'}</div>
     <div class="story-timeline-body">
-      <span class="badge badge-soft me-1">${esc(item.kind_label)}</span>${item.label ? `<span class="fw-semibold">${esc(item.label)}</span> · ` : ''}${itemTitleHtml(item)}
+      <span class="badge badge-soft me-1">${esc(item.kind_label)}</span>${item.label && item.label !== item.title ? `<span class="fw-semibold">${esc(item.label)}</span> · ` : ''}${itemTitleHtml(item)}
       ${item.source ? `<span class="small-muted ms-1">${esc(item.source)}</span>` : ''}
       ${item.note ? `<p class="mb-0 story-note">${esc(item.note)}</p>` : ''}
       ${controls ? `<div class="mt-1">${controls}</div>` : ''}
@@ -128,7 +128,8 @@ function render() {
     ? ordered.map(itemHtml).join('')
     : '<li class="small-muted">No items yet. Add events from the Events screen or records below.</li>';
   flow.setEditable(story.can_edit);
-  flow.load(story.items || [], story.links || []);
+  // The flow chart receives the items in timeline order so Arrange by time follows it.
+  flow.load(ordered, story.links || []);
   layoutDirty = false;
   $('saveLayout').disabled = true;
   $('linkEditor').hidden = true;

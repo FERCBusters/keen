@@ -42,6 +42,7 @@ docker compose logs --tail=100 keen-api keen-worker keen-beat</pre>
 </details>
 <h2 id="3-configure-the-runtime">Configure the runtime</h2>
 <p>The definitive list of settings is <code>services/api/app/core/config.py</code>. Most fields use the <code>KEEN_</code> prefix; some connector secrets have explicit aliases. Apply the same relevant settings to API, worker and beat, and recreate a container after changing its environment: editing <code>.env</code> on the host changes nothing in a running container.</p>
+<figure><a href="images/admin-overview.jpg"><img alt="The Administration overview: workspace, access and system panes in the sidebar, and quick links to the common jobs." loading="lazy" src="images/admin-overview.jpg"/></a><figcaption>The Administration overview: workspace, access and system panes in the sidebar, and quick links to the common jobs.</figcaption></figure>
 <h3 id="core-and-authentication-settings">Core and authentication settings</h3>
 <table><thead><tr><th>Setting</th><th>Purpose</th></tr></thead><tbody>
 <tr><td><code>KEEN_DATABASE_URL</code>, <code>KEEN_REDIS_URL</code></td><td>PostgreSQL and Valkey connections.</td></tr>
@@ -76,6 +77,7 @@ docker compose logs --tail=100 keen-api keen-worker keen-beat</pre>
 </details>
 <h2 id="installation-features">Choose the features available in KEEN</h2>
 <p>Open <strong>Administration → Features</strong> to switch workspaces and tools on or off for the whole installation. Everything starts enabled, each switch saves immediately, and the status message confirms the change. Only administrators can change these settings.</p>
+<figure><a href="images/features.jpg"><img alt="Features: switch workspaces and subsections on or off for the whole installation; records and evidence are retained." loading="lazy" src="images/features.jpg"/></a><figcaption>Features: switch workspaces and subsections on or off for the whole installation; records and evidence are retained.</figcaption></figure>
 <p>A parent switch controls its children. Turning off ISMS makes SWOT, Objectives, documents, assets and its other subsections unavailable; turning off Risk management also turns off the Mitigator, CIA assessments, the risk register, PESTLE(E) and Interested parties. Child preferences are kept and return when the parent is enabled again.</p>
 <div class="callout callout-note"><p><strong>Availability, not confidentiality.</strong> These switches apply to everyone, administrators included, and the API rejects operations that belong to a disabled feature. Nothing is deleted: data, relationships and audit retention protections stay, and existing references can still appear in other enabled tools. A switch does not create a confidentiality boundary between users or erase information already downloaded.</p></div>
 <details class="more"><summary>Going deeper: individual switches and their side effects</summary>

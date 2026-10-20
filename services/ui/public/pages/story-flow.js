@@ -139,7 +139,7 @@ export function createFlowCanvas({ host, editable = false, onChange = () => {} }
   function nodeHtml(item) {
     // A withheld item arrives with no label or note, so its title stands alone.
     const title = item.label || item.title || item.kind_label;
-    const subtitle = item.label && item.title ? item.title : '';
+    const subtitle = item.label && item.title && item.title !== item.label ? item.title : '';
     const when = item.occurred_at
       ? `<div class="small-muted story-node-time">${esc(item.occurred_at)}</div>`
       : '';
