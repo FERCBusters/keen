@@ -60,6 +60,11 @@ const effectivenessTab = document.getElementById('sourceEffectivenessTab');
 const effectivenessRows = document.getElementById('sourceEffectivenessRows');
 const effectivenessMeta = document.getElementById('sourceEffectivenessMeta');
 const visualisationsTab = document.getElementById('sourceVisualisationsTab');
+const insightsTab = document.getElementById('sourceInsightsTab');
+const insightsEl = document.getElementById('sourceInsights');
+const insightsMeta = document.getElementById('sourceInsightsMeta');
+const insightsBadge = document.getElementById('sourceInsightsBadge');
+const insightsDays = document.getElementById('sourceInsightsDays');
 const pagerButtons = collectOffsetPagerButtons();
 
 let sourceMeta = {};
@@ -343,6 +348,155 @@ async function loadEffectiveness({ force = false } = {}) {
   }
 }
 
+const INSIGHT_STATUS = {
+  quiet: ['text-bg-warning', 'Quiet'],
+  active: ['text-bg-success', 'Active'],
+  insufficient: ['text-bg-secondary', 'No baseline yet'],
+  no_events: ['text-bg-secondary', 'No events'],
+};
+
+function fmtDuration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  if (total < 60) return 'under a minute';
+  const units = [
+    ['day', 86400],
+    ['hour', 3600],
+    ['minute', 60],
+  ];
+  const parts = [];
+  let rest = total;
+  for (const [name, size] of units) {
+    const value = Math.floor(rest / size);
+    rest -= value * size;
+    if (value) parts.push(`${value} ${name}${value === 1 ? '' : 's'}`);
+    if (parts.length === 2) break;
+  }
+  return parts.join(' ');
+}
+
+function eventFilterHref(overrides) {
+  return sourcePageHref(sourceName, { tab: 'events', offset: 0, ...overrides });
+}
+
+function dailyBarsHtml(daily) {
+  const series = Array.isArray(daily) ? daily : [];
+  const max = Math.max(1, ...series.map((d) => Number(d.count) || 0));
+  if (!series.length) return '';
+  return `<div class="source-insight-bars" role="img" aria-label="Events per day over the window, ${esc(series.length)} days, busiest day ${esc(max)} events">${series
+    .map((d) => {
+      const count = Number(d.count) || 0;
+      const height = count ? Math.max(6, Math.round((count / max) * 100)) : 2;
+      return `<a class="source-insight-bar${count ? '' : ' is-empty'}" style="height:${height}%" href="${esc(eventFilterHref({ start_date: d.date, end_date: d.date, q: '', unmapped: false }))}" title="${esc(d.date)}: ${esc(count)} event${count === 1 ? '' : 's'}"></a>`;
+    })
+    .join('')}</div>`;
+}
+
+function renderInsights(data) {
+  if (!insightsEl) return;
+  const status = String(data?.status || 'no_events');
+  const [badgeClass, badgeLabel] = INSIGHT_STATUS[status] || INSIGHT_STATUS.no_events;
+  if (insightsBadge) insightsBadge.hidden = status !== 'quiet';
+  if (insightsMeta)
+    insightsMeta.textContent = `${Number(data?.window_events || 0).toLocaleString()} events in the last ${Number(data?.days || 0)} days${data?.sampled ? ` (gap and summary statistics use the most recent ${Number(data.sample_size || 0).toLocaleString()})` : ''}.`;
+  const trend = data?.trend || {};
+  const trendText =
+    trend.change_pct === null || trend.change_pct === undefined
+      ? `${Number(trend.recent_7_days || 0)} in the last 7 days`
+      : `${Number(trend.recent_7_days || 0)} in the last 7 days, ${trend.change_pct >= 0 ? 'up' : 'down'} ${Math.abs(trend.change_pct)}% on the 7 days before`;
+  const facts = [
+    [
+      'Last event',
+      data?.last_seen
+        ? `${fmtTs(data.last_seen)} (${fmtDuration(data.since_last_seconds)} ago)`
+        : '—',
+    ],
+    [
+      'Usual rhythm',
+      data?.typical_gap_seconds !== null && data?.typical_gap_seconds !== undefined
+        ? `one every ${fmtDuration(data.typical_gap_seconds)}; gaps beyond ${fmtDuration(data.usual_longest_gap_seconds)} are unusual`
+        : 'needs at least 3 events in the window',
+    ],
+    ['Trend', trendText],
+  ];
+  const quiet = Array.isArray(data?.quiet_periods) ? data.quiet_periods : [];
+  const spikes = Array.isArray(data?.spikes) ? data.spikes : [];
+  const repeats = Array.isArray(data?.repeated_summaries) ? data.repeated_summaries : [];
+  const section = (title, body) =>
+    `<div class="mt-4"><div class="fw-bold mb-2">${title}</div>${body}</div>`;
+  insightsEl.innerHTML = `
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+      <span class="badge ${badgeClass}" id="sourceInsightStatus">${esc(badgeLabel)}</span>
+      <span id="sourceInsightMessage">${esc(data?.message || '')}</span>
+    </div>
+    <dl class="row mb-0 small">
+      ${facts.map(([k, v]) => `<dt class="col-sm-3 col-lg-2 small-muted fw-normal">${esc(k)}</dt><dd class="col-sm-9 col-lg-10">${esc(v)}</dd>`).join('')}
+    </dl>
+    ${dailyBarsHtml(data?.daily)}
+    <div class="small-muted">Events per day; select a bar to open that day’s events.</div>
+    ${section(
+      'Quiet periods',
+      quiet.length
+        ? `<table class="table table-sm mb-0"><thead><tr><th>From</th><th>To</th><th>Silence</th></tr></thead><tbody>${quiet
+            .map(
+              (p) =>
+                `<tr><td>${esc(fmtTs(p.start) || p.start)}</td><td>${esc(fmtTs(p.end) || p.end)}</td><td>${esc(p.label || fmtDuration(p.seconds))}</td></tr>`,
+            )
+            .join('')}</tbody></table>`
+        : '<div class="small-muted">No unusually long gaps between events in this window.</div>',
+    )}
+    ${section(
+      'Spikes',
+      spikes.length
+        ? `<table class="table table-sm mb-0"><thead><tr><th>Day</th><th>Events</th><th>Typical active day</th></tr></thead><tbody>${spikes
+            .map(
+              (sp) =>
+                `<tr><td><a href="${esc(eventFilterHref({ start_date: sp.date, end_date: sp.date, q: '', unmapped: false }))}">${esc(sp.date)}</a></td><td>${esc(sp.count)}${sp.ratio ? ` <span class="small-muted">(×${esc(sp.ratio)})</span>` : ''}</td><td>${esc(sp.baseline)}</td></tr>`,
+            )
+            .join('')}</tbody></table>`
+        : '<div class="small-muted">No day stands out against this source’s typical active day.</div>',
+    )}
+    ${section(
+      'Repeated summaries',
+      repeats.length
+        ? `<table class="table table-sm mb-0"><thead><tr><th>Summary</th><th>Count</th><th>Unmapped</th><th>Last seen</th></tr></thead><tbody>${repeats
+            .map(
+              (r) =>
+                `<tr><td class="wrap"><a href="${esc(withFramework(`/event.html?id=${encodeURIComponent(r.example_event_id || '')}`, framework))}" title="Open an example event">${esc(shorten(r.example || r.pattern || '', 160))}</a></td><td>${esc(r.count)} <span class="small-muted">(${esc(r.share_pct)}%)</span></td><td>${Number(r.unmapped_count) ? `<a href="${esc(eventFilterHref({ unmapped: true, q: '', start_date: '', end_date: '' }))}">${esc(r.unmapped_count)}</a>` : '0'}</td><td class="small-muted">${esc(fmtTs(r.last_seen) || '—')}</td></tr>`,
+            )
+            .join(
+              '',
+            )}</tbody></table><div class="small-muted mt-1">Numbers and identifiers are ignored when grouping. An unmapped repeat is a candidate for a mapping rule: open the example event to see suggested controls.</div>`
+        : '<div class="small-muted">No summary repeats three or more times in the sampled events.</div>',
+    )}`;
+}
+
+let insightsRequest = 0;
+
+async function loadInsights() {
+  if (!insightsEl || !sourceName) return;
+  const days = Number(insightsDays?.value || 90) || 90;
+  const request = ++insightsRequest;
+  insightsEl.innerHTML = '<div class="small-muted">Loading insights…</div>';
+  try {
+    const data = await apiGet(
+      `/api/v1/sources/${encodeURIComponent(sourceName)}/insights?framework=${encodeURIComponent(framework)}&days=${encodeURIComponent(days)}`,
+    );
+    if (request !== insightsRequest) return;
+    renderInsights(data);
+    const quietNotice = document.getElementById('sourceQuietNotice');
+    if (quietNotice && request === 1) {
+      const quiet = data?.status === 'quiet';
+      quietNotice.hidden = !quiet;
+      const message = document.getElementById('sourceQuietMessage');
+      if (quiet && message)
+        message.textContent = `${sourceLabel(sourceName, sourceMeta) || sourceName} has gone quiet. ${data.message || ''}`;
+    }
+  } catch (e) {
+    if (request !== insightsRequest) return;
+    insightsEl.innerHTML = '<div class="text-danger">Failed to load source insights.</div>';
+  }
+}
+
 function setActiveTabQuery(name) {
   const url = new URL(window.location.href);
   if (name && name !== 'events') url.searchParams.set('tab', name);
@@ -357,7 +511,9 @@ function activateInitialTab() {
       ? effectivenessTab
       : tab === 'visualisations' || tab === 'visualizations'
         ? visualisationsTab
-        : null;
+        : tab === 'insights'
+          ? insightsTab
+          : null;
   if (target && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(target).show();
 }
 
@@ -374,6 +530,7 @@ if (!sourceName) {
   await loadSourceMeta();
   await loadEvents();
   activateInitialTab();
+  loadInsights();
 }
 
 document.getElementById('sourceEventFilters')?.addEventListener('submit', (ev) => {
@@ -402,6 +559,17 @@ effectivenessTab?.addEventListener('shown.bs.tab', () => {
   loadEffectiveness();
 });
 visualisationsTab?.addEventListener('shown.bs.tab', () => setActiveTabQuery('visualisations'));
+insightsTab?.addEventListener('shown.bs.tab', () => setActiveTabQuery('insights'));
+insightsDays?.addEventListener('change', () => loadInsights());
+document.getElementById('sourceQuietOpen')?.addEventListener('click', () => {
+  if (insightsTab && window.bootstrap?.Tab)
+    window.bootstrap.Tab.getOrCreateInstance(insightsTab).show();
+  else insightsTab?.click();
+});
+document.getElementById('sourceInsightsForm')?.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  loadInsights();
+});
 document
   .getElementById('sourceEventsTab')
   ?.addEventListener('shown.bs.tab', () => setActiveTabQuery('events'));

@@ -29,6 +29,47 @@ function event(i, overrides = {}) {
   };
 }
 
+const insights = {
+  source: 'github',
+  days: 90,
+  status: 'quiet',
+  window_events: 6000,
+  sample_size: 5000,
+  sampled: true,
+  last_seen: '2026-05-01T00:00:00Z',
+  since_last_seconds: 3 * 86400,
+  typical_gap_seconds: 3600,
+  usual_longest_gap_seconds: 7200,
+  quiet_threshold_seconds: 14400,
+  message: 'No events for 3 days; it usually sends one every 1 hour.',
+  quiet_periods: [
+    {
+      start: '2026-04-01T00:00:00Z',
+      end: '2026-04-03T00:00:00Z',
+      seconds: 172800,
+      label: '2 days',
+    },
+  ],
+  daily: [
+    { date: '2026-04-29', count: 0 },
+    { date: '2026-04-30', count: 4 },
+    { date: '2026-05-01', count: 1 },
+  ],
+  spikes: [{ date: '2026-04-30', count: 4, baseline: 1, ratio: 4 }],
+  trend: { recent_7_days: 5, previous_7_days: 10, change_pct: -50 },
+  repeated_summaries: [
+    {
+      pattern: 'push # to <b>main</b>',
+      example: 'push 1 to <b>main</b>',
+      example_event_id: 'e7',
+      count: 3,
+      unmapped_count: 2,
+      share_pct: 60,
+      last_seen: '2026-05-01T00:00:00Z',
+    },
+  ],
+};
+
 async function sourcePage(t, options = {}) {
   const fail = options.fail || {};
   const ui = await page(t, 'source', {
@@ -55,6 +96,12 @@ async function sourcePage(t, options = {}) {
             }),
           ],
         };
+      }
+      if (p === '/api/v1/sources/github/insights') {
+        if (fail.insights) throw new Error('down');
+        return typeof options.insights === 'function'
+          ? options.insights(u)
+          : (options.insights ?? insights);
       }
       if (p === '/api/v1/sources/github/effectiveness-measures') {
         if (fail.effectiveness) throw new Error('down');
@@ -421,4 +468,79 @@ test('metric source links on the source page only allow web or KEEN URLs', async
     [...row.querySelectorAll('a')].find((a) => a.textContent === 'Report').getAttribute('href'),
   );
   assert.deepEqual(hrefs, ['#', '#', '#', 'https://reports.example/1']);
+});
+
+test('a quiet source shows a notice, marks the Insights tab and explains its rhythm', async (t) => {
+  const ui = await sourcePage(t);
+  await settle(() => ui.el('sourceInsightStatus'));
+  assert.ok(ui.calls.some((c) => c.url === '/api/v1/sources/github/insights?framework=A&days=90'));
+  assert.equal(ui.el('sourceQuietNotice').hidden, false);
+  assert.match(
+    ui.el('sourceQuietMessage').textContent,
+    /GitHub has gone quiet\. No events for 3 days/,
+  );
+  assert.equal(ui.el('status').style.display, 'none');
+  ui.el('sourceQuietOpen').click();
+  assert.equal(ui.el('sourceInsightsBadge').hidden, false);
+  assert.equal(ui.el('sourceInsightStatus').textContent, 'Quiet');
+  assert.match(
+    ui.el('sourceInsightsMeta').textContent,
+    /6,000 events in the last 90 days \(gap and summary statistics use the most recent 5,000\)/,
+  );
+  const text = ui.el('sourceInsights').textContent;
+  assert.match(text, /3 days ago/);
+  assert.match(text, /one every 1 hour; gaps beyond 2 hours are unusual/);
+  assert.match(text, /5 in the last 7 days, down 50% on the 7 days before/);
+  assert.match(text, /2 days/);
+  const bars = ui.el('sourceInsights').querySelectorAll('.source-insight-bar');
+  assert.equal(bars.length, 3);
+  assert.ok(bars[0].classList.contains('is-empty'));
+  assert.equal(bars[1].style.height, '100%');
+  assert.match(bars[1].getAttribute('href'), /start_date=2026-04-30&end_date=2026-04-30/);
+  const repeat = ui.el('sourceInsights').querySelector('a[title="Open an example event"]');
+  assert.equal(repeat.querySelector('b'), null);
+  assert.match(repeat.textContent, /push 1 to <b>main<\/b>/);
+  assert.match(repeat.getAttribute('href'), /event\.html\?id=e7&framework=A/);
+  assert.match(text, /spike|×4/);
+});
+test('active and empty sources show no notice; the window selector reloads insights', async (t) => {
+  const active = await sourcePage(t, {
+    insights: {
+      ...insights,
+      status: 'active',
+      message: 'Last event 10 minutes ago.',
+      quiet_periods: [],
+      spikes: [],
+      repeated_summaries: [],
+    },
+  });
+  await settle(() => active.el('sourceInsightStatus'));
+  assert.equal(active.el('sourceQuietNotice').hidden, true);
+  assert.equal(active.el('sourceInsightsBadge').hidden, true);
+  assert.match(
+    active.el('sourceInsights').textContent,
+    /No unusually long gaps.*No day stands out.*No summary repeats/s,
+  );
+  active.el('sourceInsightsDays').value = '30';
+  active.el('sourceInsightsDays').dispatchEvent(new active.window.Event('change'));
+  await settle(() => active.calls.some((c) => c.url.endsWith('/insights?framework=A&days=30')));
+  const empty = await sourcePage(t, {
+    insights: {
+      status: 'no_events',
+      message: 'This source has no events yet.',
+      daily: [],
+      trend: {},
+    },
+  });
+  await settle(() => empty.el('sourceInsightStatus'));
+  assert.equal(empty.el('sourceInsightStatus').textContent, 'No events');
+  assert.match(empty.el('sourceInsights').textContent, /needs at least 3 events/);
+  const failed = await sourcePage(t, { fail: { insights: true } });
+  await settle(() => failed.el('sourceInsights').textContent.includes('Failed'));
+  assert.equal(failed.el('status').style.display, 'none');
+});
+test('the insights tab deep link opens that tab', async (t) => {
+  const ui = await sourcePage(t, { query: '&source=github&tab=insights' });
+  await settle(() => ui.el('sourceInsightStatus'));
+  assert.ok(ui.el('sourceInsightsTab'));
 });

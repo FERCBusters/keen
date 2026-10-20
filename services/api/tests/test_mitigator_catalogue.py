@@ -145,10 +145,13 @@ def test_analysis_uses_library_links_and_reads_live_edits(db):
     assert "library_template_id" not in result["draft_risk"]
 
 
-def test_other_framework_does_not_receive_keen_af_library_links(db):
+def test_other_framework_matches_library_without_keen_af_links(db):
     slug = next(slug for slug in FRAMEWORKS if slug != "KEEN-AF:1.0")
     result = analyse_risk_mitigation(
         db, framework=slug, issue="Staff use unapproved AI tools"
     )
-    assert result["library_suggestions"] == []
+    # The scenarios still match on their wording; their KEEN-AF control links
+    # are dropped because those references do not exist in this framework.
+    assert result["library_suggestions"]
+    assert all(h["control_refs"] == [] for h in result["library_suggestions"])
     assert all(s["control"]["framework"] == slug for s in result["control_suggestions"])

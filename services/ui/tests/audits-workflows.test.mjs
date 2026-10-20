@@ -338,6 +338,10 @@ test('creating an audit selects scope from documents, clauses and their linked c
   const { ui, state } = await auditsPage(t);
   ui.el('showCreate').click();
   assert.equal(ui.el('createCard').style.display, '');
+  // The framework comes from the navigation picker and cannot be typed over.
+  assert.equal(ui.el('newFramework').readOnly, true);
+  assert.equal(ui.el('newFramework').value, 'A');
+  ui.el('newFramework').value = 'B';
   await settle(() => ui.el('newControlsList').querySelector('input'));
   assert.equal(ui.el('newControlsList').querySelectorAll('input').length, 2);
   assert.equal(
@@ -375,6 +379,7 @@ test('creating an audit selects scope from documents, clauses and their linked c
   await settle(() => state.posted.length === 1);
   assert.equal(state.posted[0].path, '/api/v1/audits');
   const body = state.posted[0].body;
+  assert.equal(body.framework_slug, 'A');
   assert.equal(body.title, 'Spring audit');
   assert.equal(body.audit_type, 'external');
   assert.equal(body.start_date, '2026-03-01');

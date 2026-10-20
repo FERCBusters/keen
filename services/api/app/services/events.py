@@ -452,6 +452,71 @@ def latest_evidence_event(*, after: Optional[datetime], limit: int, db: Session,
     return {"events": [_latest_event_payload(event) for event in events]}
 
 
+SUGGESTION_LIMIT = 8
+
+
+def event_control_suggestions(*, event_id: str, framework: str, db: Session, user):
+    """Rank in-scope controls against an event's wording, for proposing a rule.
+
+    The event's summary and activity fields are matched against the catalogue
+    text of the selected framework. Controls the event already maps to in that
+    framework are listed separately so a reviewer sees what is left to decide.
+    """
+    from app.services.control_suggestions import rank_controls
+
+    eid = _try_uuid(event_id)
+    if not eid:
+        raise DomainError(status_code=400, detail="event_id must be a UUID")
+    e = db.query(Event).filter(Event.id == eid).one_or_none()
+    if not e:
+        raise DomainError(status_code=404, detail="Event not found")
+    if e.source == "diary" and not is_diary_event_visible(db, user, eid):
+        raise DomainError(status_code=404, detail="Event not found")
+    fw = str(framework or "").strip()[:64]
+    if not fw:
+        raise DomainError(status_code=400, detail="framework is required")
+
+    mapped_refs = sorted(
+        {
+            ref
+            for (ref,) in db.query(ControlItem.ref)
+            .join(Mapping, Mapping.control_item_id == ControlItem.id)
+            .filter(Mapping.event_id == eid, ControlItem.framework_slug == fw)
+            .all()
+        }
+    )
+    candidates = (
+        db.query(ControlItem)
+        .filter(ControlItem.framework_slug == fw, ControlItem.in_scope.is_(True))
+        .order_by(ControlItem.ref, ControlItem.id)
+        .limit(5000)
+        .all()
+    )
+    activity = " ".join(
+        str(part or "").strip() for part in (e.action, e.system, e.outcome)
+    ).strip()
+    description = f"{activity} {e.summary or ''}".strip()[:4000]
+    ranked = rank_controls(
+        candidates,
+        description=description or (e.source or ""),
+        sample_summary=str(e.actor or "")[:4000],
+        limit=SUGGESTION_LIMIT + len(mapped_refs),
+    )
+    items = [row for row in ranked if row["ref"] not in mapped_refs][:SUGGESTION_LIMIT]
+    return {
+        "event_id": str(eid),
+        "framework": fw,
+        "unmapped": not mapped_refs,
+        "already_mapped": mapped_refs,
+        "items": items,
+        "note": (
+            "Suggestions match the event's wording against catalogue text. "
+            "Review each control before proposing a rule; nothing is mapped "
+            "until a rule is saved or a mapping is added."
+        ),
+    }
+
+
 def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session, user):
     eid = _try_uuid(event_id)
     if not eid:

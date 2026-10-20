@@ -176,6 +176,7 @@ const mitigatorCategory = document.getElementById('mitigatorCategory');
 const mitigatorSubcategory = document.getElementById('mitigatorSubcategory');
 const mitigatorClear = document.getElementById('mitigatorClear');
 const mitigatorAnalyse = document.getElementById('mitigatorAnalyse');
+const mitigatorThinking = document.getElementById('mitigatorThinking');
 const mitigatorResultsCard = document.getElementById('mitigatorResultsCard');
 const mitigatorResultsMeta = document.getElementById('mitigatorResultsMeta');
 const mitigatorSignals = document.getElementById('mitigatorSignals');
@@ -1739,7 +1740,7 @@ function renderInterestedPartySuggestionsSection(data) {
 
 function renderLibrarySuggestionsSection(data) {
   const items = data?.library_suggestions || [];
-  if (data?.framework !== 'KEEN-AF:1.0') return '';
+  if (!items.length) return '';
   const cards = items
     .map((item) => {
       const example = item.suggested_assessment || {};
@@ -1752,13 +1753,13 @@ function renderLibrarySuggestionsSection(data) {
       <p>${esc(item.threat_summary || '')}</p>
       <div class="small-muted">${esc(item.reason || '')}</div>
       <div class="small-muted">Matched: ${esc((item.matched_terms || []).join(', '))}</div>
-      <div class="small-muted">Suggested controls: ${esc((item.control_refs || []).join(', ') || 'None in this framework')}</div>
+      <div class="small-muted">Suggested controls in ${esc(data.framework || framework || 'this framework')}: ${esc((item.control_refs || []).join(', ') || 'none; the template’s links are to KEEN-AF controls')}</div>
       ${example.inherent_likelihood && example.inherent_impact ? `<div class="small-muted">Example inherent rating: ${esc(example.inherent_likelihood)} × ${esc(example.inherent_impact)}. Review before saving.</div>` : ''}
       ${canManageRisks ? `<a class="btn btn-sm btn-outline-primary mt-2" href="${esc(href)}">Review this template</a>` : ''}
     </div>`;
     })
     .join('');
-  return `<section><h2 class="h6">Reusable risk library</h2><p class="small-muted">Live library scenarios inform the KEEN Assurance Framework control suggestions. Templates are starting points, not existing assessments.</p><div class="vstack gap-2">${cards || '<p>No sufficiently specific library match. Try describing the threat, affected asset and consequence.</p>'}</div></section>`;
+  return `<section><h2 class="h6">Reusable risk library</h2><p class="small-muted">Library scenarios matched the wording of your issue. Templates are starting points, not existing assessments; their control links are reviewed under KEEN-AF:1.0.</p><div class="vstack gap-2">${cards}</div></section>`;
 }
 
 function renderMitigatorSuggestions(data) {
@@ -1817,15 +1818,26 @@ function mitigatorPayload() {
 async function analyseMitigator(ev) {
   ev?.preventDefault();
   if (!canViewRisks) return;
-  if (mitigatorAnalyse) mitigatorAnalyse.disabled = true;
+  let payload;
   try {
-    const data = await apiPost('/api/v1/risks/mitigator/analyse', mitigatorPayload());
+    payload = mitigatorPayload();
+  } catch (e) {
+    toast(status, `Failed to analyse mitigations: ${String(e)}`, 'danger');
+    return;
+  }
+  if (mitigatorAnalyse) mitigatorAnalyse.disabled = true;
+  if (mitigatorThinking) mitigatorThinking.hidden = false;
+  mitigatorForm?.setAttribute('aria-busy', 'true');
+  try {
+    const data = await apiPost('/api/v1/risks/mitigator/analyse', payload);
     renderMitigatorSuggestions(data);
     toast(status, 'Keen Mitigator analysis complete', 'success');
   } catch (e) {
     toast(status, `Failed to analyse mitigations: ${String(e)}`, 'danger');
   } finally {
     if (mitigatorAnalyse) mitigatorAnalyse.disabled = false;
+    if (mitigatorThinking) mitigatorThinking.hidden = true;
+    mitigatorForm?.removeAttribute('aria-busy');
   }
 }
 
@@ -1859,7 +1871,7 @@ async function createRiskFromMitigator() {
   if (mitigatorCreateRisk) mitigatorCreateRisk.disabled = true;
   try {
     const saved = await apiPost('/api/v1/risks', draft);
-    toast(status, 'Risk Register entry created from Keen Mitigator', 'success');
+    toast(status, 'Risk register entry created from Keen Mitigator', 'success');
     await loadAssets();
     await loadRisks();
     if (saved?.id) location.href = riskHref(saved.id);

@@ -412,6 +412,9 @@ class Event(Base):
 
     __table_args__ = (
         UniqueConstraint("source", "external_id", name="uq_event_source_external"),
+        # Source pages, source-filtered event lists and per-source insights all
+        # read one source over a time range.
+        Index("ix_events_source_timestamp", "source", "timestamp"),
     )
 
 

@@ -1725,11 +1725,27 @@ async function draftFromEvent() {
   refreshFieldChoices();
   const chosen = draftFields(event.normalized_payload);
   for (const condition of chosen) addFieldCondition(condition);
+  // Suggested controls ticked on the event page arrive as references; only
+  // references in the loaded framework catalogue become targets.
+  const requested = String(params.get('targets') || '')
+    .split(',')
+    .map((ref) => ref.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+  const catalogue = new Map(
+    [...$('control').options].filter((o) => o.value).map((o) => [o.value, o.dataset.kind]),
+  );
+  const added = requested.filter((ref) => catalogue.has(ref));
+  for (const ref of added)
+    addTarget({ framework: $('framework').value, ref, kind: catalogue.get(ref) });
   document.getElementById('hub-panel')?.removeAttribute('open');
   $('sample-details').textContent =
     'Draft from event ' +
     id +
-    '. Review every condition: clear System and remove Host for multiple servers; remove Client IP for multiple addresses. Transient identifiers and timestamps are omitted. Select framework targets before saving.';
+    '. Review every condition: clear System and remove Host for multiple servers; remove Client IP for multiple addresses. Transient identifiers and timestamps are omitted. ' +
+    (added.length
+      ? `${added.length} suggested target${added.length === 1 ? '' : 's'} added from the event page (${added.join(', ')}); confirm each one is appropriate before saving.`
+      : 'Select framework targets before saving.');
   const notice = $('draft-notice');
   notice.hidden = false;
   notice.textContent = $('sample-details').textContent;
@@ -1737,6 +1753,7 @@ async function draftFromEvent() {
   ruleSentence();
   // Reloading the editor must not unexpectedly recreate the draft.
   params.delete('from_event');
+  params.delete('targets');
   history.replaceState(null, '', location.pathname + '?' + params.toString() + '#evidence-config');
 }
 

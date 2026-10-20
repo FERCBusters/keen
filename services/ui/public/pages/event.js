@@ -504,6 +504,110 @@ document.getElementById('incidents')?.addEventListener('click', (ev) => {
   deleteIncident(btn.getAttribute('data-incident-delete') || '');
 });
 
+const SUGGESTED_PRESELECT = 3;
+
+function proposeRuleHref(eventId, refs) {
+  const p = new URLSearchParams();
+  p.set('framework', pageFramework);
+  p.set('from_event', eventId);
+  if (refs.length) p.set('targets', refs.join(','));
+  return '/admin.html?' + p.toString() + '#evidence-config';
+}
+
+function renderSuggestedControls(e, data) {
+  const list = document.getElementById('suggestedControlsList');
+  const meta = document.getElementById('suggestedControlsMeta');
+  const actions = document.getElementById('suggestedControlsActions');
+  const propose = document.getElementById('suggestedControlsPropose');
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const canPropose = !!me?.is_admin && !PRINT_MODE;
+  if (meta) {
+    meta.textContent = items.length
+      ? `Catalogue matches in ${data?.framework || pageFramework} for this event’s wording. Review each one; nothing is mapped until a rule is saved.`
+      : `No clear catalogue matches in ${data?.framework || pageFramework} for this event’s wording. Search the controls list or describe the evidence in the mapping editor.`;
+  }
+  if (!list) return;
+  list.replaceChildren();
+  items.forEach((item, index) => {
+    const row = document.createElement('label');
+    row.className = 'list-group-item d-flex gap-2 align-items-start';
+    if (canPropose) {
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.className = 'form-check-input mt-1 flex-shrink-0';
+      box.value = String(item.ref || '');
+      box.checked = index < SUGGESTED_PRESELECT;
+      box.setAttribute('aria-label', `Include ${item.ref || 'control'} in the proposed rule`);
+      row.append(box);
+    }
+    const body = document.createElement('div');
+    const title = document.createElement('div');
+    const link = document.createElement('a');
+    link.className = 'badge badge-soft me-2';
+    link.href = withFramework(
+      `/control.html?id=${encodeURIComponent(item.id || '')}`,
+      item.framework || pageFramework,
+    );
+    link.textContent = String(item.ref || 'Control');
+    const name = document.createElement('span');
+    name.textContent = String(item.title || '');
+    title.append(link, name);
+    const reason = document.createElement('div');
+    reason.className = 'small-muted';
+    reason.textContent = String(item.reason || '');
+    body.append(title, reason);
+    row.append(body);
+    list.append(row);
+  });
+  if (actions) actions.hidden = !(canPropose && items.length);
+  const sync = () => {
+    if (!propose) return;
+    const refs = [...list.querySelectorAll('input[type="checkbox"]:checked')].map((b) => b.value);
+    propose.href = proposeRuleHref(e.id, refs);
+    propose.textContent = refs.length
+      ? `Propose a rule with ${refs.length} ticked control${refs.length === 1 ? '' : 's'}`
+      : 'Propose a rule from this event';
+  };
+  list.addEventListener('change', sync);
+  sync();
+}
+
+async function loadSuggestedControls(e) {
+  const list = document.getElementById('suggestedControlsList');
+  const meta = document.getElementById('suggestedControlsMeta');
+  const button = document.getElementById('suggestedControlsLoad');
+  if (button) button.hidden = true;
+  if (meta) meta.textContent = 'Looking for matching controls…';
+  try {
+    const data = await apiGet(
+      `/api/v1/events/${encodeURIComponent(e.id)}/control-suggestions?framework=${encodeURIComponent(pageFramework)}`,
+    );
+    renderSuggestedControls(e, data);
+  } catch (err) {
+    if (meta) meta.textContent = 'Control suggestions are unavailable right now.';
+    if (list) list.replaceChildren();
+  }
+}
+
+function setupSuggestedControls(e, controls) {
+  const wrap = document.getElementById('suggestedControls');
+  const button = document.getElementById('suggestedControlsLoad');
+  const meta = document.getElementById('suggestedControlsMeta');
+  if (!wrap || PRINT_MODE || !e?.id) return;
+  wrap.hidden = false;
+  if (!(controls || []).length) {
+    loadSuggestedControls(e);
+    return;
+  }
+  if (meta)
+    meta.textContent =
+      'This event is mapped. Ask for suggestions to see other controls its wording resembles.';
+  if (button) {
+    button.hidden = false;
+    button.addEventListener('click', () => loadSuggestedControls(e), { once: true });
+  }
+}
+
 async function load() {
   if (!id) {
     toast(status, 'Missing event id.', 'danger');
@@ -633,6 +737,8 @@ async function load() {
         }
       }
     }
+
+    setupSuggestedControls(e, controls);
 
     // Diary notes + links (if present)
     renderDiaryEvidence(e);

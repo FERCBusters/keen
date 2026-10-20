@@ -225,6 +225,20 @@ def delete_event_incident(
     )
 
 
+@router.get("/v1/events/{event_id}/control-suggestions")
+def event_control_suggestions(
+    request: Request,
+    event_id: str,
+    framework: str = settings.default_framework_slug,
+    db: Session = Depends(get_db),
+):
+    "Rank in-scope controls against the event's wording, for proposing a rule."
+    user = _require_events_read(db, request)
+    return service.event_control_suggestions(
+        user=user, event_id=event_id, framework=framework, db=db
+    )
+
+
 @router.get("/v1/events/{event_id}")
 def get_event(
     request: Request,

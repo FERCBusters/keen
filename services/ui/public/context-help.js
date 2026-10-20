@@ -33,8 +33,14 @@ const topics = {
   events: [
     'Review evidence',
     'using-events.html',
-    'Check the event’s source connection, timestamp, structured fields and artifacts. Control mappings show where the event contributes evidence.',
-    'Create a mapping rule from an event, sample it into an audit, download a PDF or artifact ZIP, or ask a question. The guide explains each action. Use Visualisations on the Events list to explore the data.',
+    'Check the event’s source connection, timestamp, structured fields and artifacts. Control mappings show where the event contributes evidence. Suggested controls match the event’s wording against the catalogue; they are proposals for review, nothing is mapped until a rule is saved.',
+    'Create a mapping rule from an event, or tick suggested controls and propose a rule with them. Sample the event into an audit, download a PDF or artifact ZIP, or ask a question. The guide explains each action.',
+  ],
+  sourceInsights: [
+    'Source activity insights',
+    'using-events.html#source-insights',
+    'Insights compare recent activity with this source’s own history: how often it usually sends events, whether it has gone quiet, which days spiked and which summaries keep repeating.',
+    'A quiet source can mean a stalled collector, expired credentials or a genuinely idle system; check collection before drawing a control conclusion. Open a repeated unmapped summary to see suggested controls for a rule.',
   ],
   frameworks: [
     'Frameworks and scope',
@@ -57,8 +63,8 @@ const topics = {
   mitigator: [
     'KEEN Mitigator',
     'using-risks.html#mitigator',
-    'Describe a concern in natural language. Local language matching suggests controls, similar existing risks and related assessment signals. KEEN-AF scope also offers reusable library candidates.',
-    'Analyse scenario produces suggestions. Review matching terms, existing risks, control scope and ratings before saving an assessment.',
+    'Describe a concern in natural language. Local language matching suggests controls, similar existing risks, related assessment signals and reusable library scenarios in any framework.',
+    'Analyse scenario produces suggestions; the mascot turns while it runs. Review matching terms, existing risks, control scope and ratings, then Create risk register entry saves the draft as a risk.',
   ],
   risks: [
     'Risks and treatments',
@@ -198,6 +204,18 @@ const topics = {
     'The Statement of Applicability records which controls are in scope, why, and what supports each decision.',
     'Review scope decisions deliberately; excluded controls need a reason. The guide explains applicability and inherited evidence.',
   ],
+  adminOverview: [
+    'Administration',
+    'administrator.html',
+    'Administration is where KEEN is connected and shaped: the Workspace panes bring evidence in (agents, API ingesters, sources and mapping, frameworks, runners, diary, retention), Access manages users and groups, and System holds feature switches and the audit trail.',
+    'Most installations start with Frameworks, then Sources & evidence mapping. The administrator handbook has one chapter per pane.',
+  ],
+  features: [
+    'Features',
+    'administrator-deployment.html#installation-features',
+    'Feature switches hide whole workspaces or subsections for every user of this installation. Records, evidence and audit history are kept while a feature is off.',
+    'Changes save immediately and apply to everyone, including administrators. Parent switches control their subsections; user permissions still apply on top.',
+  ],
   accountSecurity: [
     'Account security',
     'using-account.html#local-account-security',
@@ -288,6 +306,7 @@ const tabs = {
   soaRisksTab: 'risks',
   controlEvidenceTab: 'events',
   sourceEventsTab: 'events',
+  sourceInsightsTab: 'sourceInsights',
 };
 // Tabs that recur across pages are recognised by their id's ending.
 const tabEndings = [
@@ -305,6 +324,8 @@ function activeTabTopic() {
   return own(tabs, id) || tabEndings.find(([ending]) => id.endsWith(ending))?.[1] || null;
 }
 const panes = {
+  'pane-overview': 'adminOverview',
+  'pane-features': 'features',
   'pane-evidence-config': 'sources',
   'pane-agents': 'agents',
   'pane-integrations': 'integrations',

@@ -25,6 +25,23 @@ async function fixture(t, options = {}) {
         return { ...event, ...options.event };
       }
       if (u.pathname === '/api/v1/events/e1/questions') return { threads: [] };
+      if (u.pathname === '/api/v1/events/e1/control-suggestions') {
+        if (options.suggestionsFail) throw new Error('down');
+        return {
+          framework: u.searchParams.get('framework'),
+          items: options.suggestions ?? [
+            {
+              id: 'c1',
+              ref: 'A.1',
+              title: 'Logging <b>&</b> monitoring',
+              reason: 'Catalogue words: alert.',
+            },
+            { id: 'c2', ref: 'A.2', title: 'Second', reason: 'r2' },
+            { id: 'c3', ref: 'A.3', title: 'Third', reason: 'r3' },
+            { id: 'c4', ref: 'A.4', title: 'Fourth', reason: 'r4' },
+          ],
+        };
+      }
       if (u.pathname === '/api/v1/audits/by-event/e1') return { items: [] };
       if (u.pathname === '/api/v1/audits') return { items: options.audits || [] };
       throw new Error('Unexpected GET ' + u);
@@ -122,4 +139,51 @@ test('rule rationale links use escaped text and encoded IDs for administrators o
   const reader = await fixture(t, { event: data, me: { is_admin: false } });
   assert.equal(reader.el('rationale').querySelector('a'), null);
   assert.match(reader.el('rationale').textContent, /auto by rule/);
+});
+
+test('an unmapped event shows suggested controls and a rule proposal with the ticked refs', async (t) => {
+  const ui = await fixture(t);
+  await settle(() => ui.el('suggestedControlsList').children.length === 4);
+  assert.equal(ui.el('suggestedControls').hidden, false);
+  assert.ok(ui.calls.some((c) => c.url === '/api/v1/events/e1/control-suggestions?framework=A'));
+  const rows = [...ui.el('suggestedControlsList').children];
+  assert.equal(rows[0].querySelector('b'), null);
+  assert.match(rows[0].textContent, /A\.1.*Logging <b>&<\/b> monitoring.*Catalogue words: alert\./);
+  assert.match(rows[0].querySelector('a').getAttribute('href'), /control\.html\?id=c1&framework=A/);
+  const boxes = rows.map((r) => r.querySelector('input[type="checkbox"]'));
+  assert.deepEqual(
+    boxes.map((b) => b.checked),
+    [true, true, true, false],
+  );
+  const propose = ui.el('suggestedControlsPropose');
+  assert.equal(ui.el('suggestedControlsActions').hidden, false);
+  assert.match(propose.href, /from_event=e1&targets=A\.1%2CA\.2%2CA\.3#evidence-config/);
+  assert.equal(propose.textContent, 'Propose a rule with 3 ticked controls');
+  boxes[0].checked = false;
+  boxes[1].checked = false;
+  boxes[2].checked = false;
+  boxes[0].dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  assert.equal(propose.textContent, 'Propose a rule from this event');
+  assert.ok(!propose.href.includes('targets='));
+});
+test('a mapped event offers suggestions on request; readers see them without a proposal', async (t) => {
+  const mapped = { controls: [{ id: 'c9', ref: 'Z.9', title: 'Mapped', framework: 'A' }] };
+  const ui = await fixture(t, { event: mapped });
+  assert.equal(ui.el('suggestedControlsLoad').hidden, false);
+  assert.ok(!ui.calls.some((c) => c.url.includes('/control-suggestions')));
+  ui.el('suggestedControlsLoad').click();
+  await settle(() => ui.el('suggestedControlsList').children.length === 4);
+  assert.equal(ui.el('suggestedControlsLoad').hidden, true);
+  const reader = await fixture(t, { me: { is_admin: false, can_question_events: true } });
+  await settle(() => reader.el('suggestedControlsList').children.length === 4);
+  assert.equal(reader.el('suggestedControlsList').querySelector('input'), null);
+  assert.equal(reader.el('suggestedControlsActions').hidden, true);
+});
+test('empty and failed suggestion loads are explained without a proposal', async (t) => {
+  const none = await fixture(t, { suggestions: [] });
+  await settle(() => none.el('suggestedControlsMeta').textContent.includes('No clear'));
+  assert.equal(none.el('suggestedControlsActions').hidden, true);
+  const failed = await fixture(t, { suggestionsFail: true });
+  await settle(() => failed.el('suggestedControlsMeta').textContent.includes('unavailable'));
+  assert.equal(failed.el('suggestedControlsList').children.length, 0);
 });

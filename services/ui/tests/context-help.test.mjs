@@ -97,6 +97,15 @@ test('admin help follows the selected pane and mapping tab', async (t) => {
   ui.document.querySelector('section').id = 'pane-evidence-config';
   ui.document.getElementById('hub-mapping').setAttribute('aria-selected', 'true');
   assert.equal(ui.api.resolveHelp(trigger).url, '/help/using-mapping.html');
+  // The overview introduces the whole area; Features has its own topic.
+  ui.document.querySelector('section').id = 'pane-overview';
+  assert.equal(ui.api.resolveHelp(trigger).title, 'Administration');
+  assert.equal(ui.api.resolveHelp(trigger).url, '/help/administrator.html');
+  ui.document.querySelector('section').id = 'pane-features';
+  assert.equal(
+    ui.api.resolveHelp(trigger).url,
+    '/help/administrator-deployment.html#installation-features',
+  );
 });
 
 test('every supported source help link resolves to a published guide', async (t) => {
@@ -186,6 +195,8 @@ test('page help follows the page and the active tab', async (t) => {
     ['isms', 'overviewTab', '/help/using-isms.html'],
     ['events', 'eventsVisualisationsTab', '/help/using-operations.html#visualisation-tabs'],
     ['events', 'eventsRegisterTab', '/help/using-events.html'],
+    ['source', 'sourceInsightsTab', '/help/using-events.html#source-insights'],
+    ['source', 'sourceEventsTab', '/help/using-events.html'],
     ['risks', 'riskVisualisationsTab', '/help/using-operations.html#visualisation-tabs'],
     ['account', 'security-tab', '/help/using-account.html#local-account-security'],
     ['account', 'preferences-tab', '/help/using-account.html'],
@@ -252,6 +263,9 @@ test('every help topic points at a published chapter and anchor', async (t) => {
     'meetings',
     'soa',
     'accountSecurity',
+    'adminOverview',
+    'features',
+    'sourceInsights',
   ];
   for (const key of keys) {
     trigger.dataset.helpTopic = key;

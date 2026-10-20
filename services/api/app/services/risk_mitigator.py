@@ -975,29 +975,30 @@ def analyse_risk_mitigation(
         .filter(ControlItem.framework_slug == framework, ControlItem.type != "clause")
         .all()
     )
-    library_suggestions = []
+    # Library scenarios match on their wording in every framework. Their control
+    # links are KEEN-AF references, so only references that exist in the selected
+    # framework are kept and can lift a control's score.
     library_by_ref: dict[str, list[dict[str, Any]]] = {}
-    if framework == "KEEN-AF:1.0":
-        entries = db.query(RiskLibraryEntry).all()
-        library_suggestions = rank_library(
-            entries, issue=issue, asset_name=asset_name, rules=rules
+    entries = db.query(RiskLibraryEntry).all()
+    library_suggestions = rank_library(
+        entries, issue=issue, asset_name=asset_name, rules=rules
+    )
+    valid_refs = {c.ref for c in controls}
+    for item in library_suggestions:
+        item["control_refs"] = [
+            ref for ref in item["control_refs"] if ref in valid_refs
+        ]
+        for ref in item["control_refs"]:
+            library_by_ref.setdefault(ref, []).append(item)
+    for item in library_suggestions[:3]:
+        signals.append(
+            {
+                "kind": "risk_library",
+                "label": item["name"],
+                "matched_terms": item["matched_terms"],
+                "reason": item["reason"],
+            }
         )
-        valid_refs = {c.ref for c in controls}
-        for item in library_suggestions:
-            item["control_refs"] = [
-                ref for ref in item["control_refs"] if ref in valid_refs
-            ]
-            for ref in item["control_refs"]:
-                library_by_ref.setdefault(ref, []).append(item)
-        for item in library_suggestions[:3]:
-            signals.append(
-                {
-                    "kind": "risk_library",
-                    "label": item["name"],
-                    "matched_terms": item["matched_terms"],
-                    "reason": item["reason"],
-                }
-            )
 
     suggestions: list[dict[str, Any]] = []
     lower_terms = [

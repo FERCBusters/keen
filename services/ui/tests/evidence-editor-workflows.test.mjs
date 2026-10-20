@@ -45,8 +45,10 @@ async function fixture(
     suggestions = [],
     frameworks = [{ slug: 'A', name: 'Framework A' }],
     active = 'F1',
+    targets = '',
   } = {},
 ) {
+  const options = { targets };
   const calls = [];
   const posts = [];
   async function apiPost(raw, body) {
@@ -91,7 +93,9 @@ async function fixture(
         '#evidence-config'
       : defaultView
         ? 'https://keen.example/admin.html#evidence-config'
-        : 'https://keen.example/admin.html?from_event=' + id,
+        : 'https://keen.example/admin.html?from_event=' +
+          id +
+          (options.targets ? '&targets=' + encodeURIComponent(options.targets) : ''),
     setup(window) {
       window.mappingSwitches = 0;
       window.addEventListener('keen-show-evidence-mapping', () => window.mappingSwitches++);
@@ -455,4 +459,23 @@ test('an active framework the picker does not list leaves its first framework', 
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(document.getElementById('ec-framework').value, 'A');
   assert.equal(calls.filter((call) => call.startsWith('/api/v1/controls')).length, 1);
+});
+
+test('ticked suggestions from the event page become targets when they exist in the catalogue', async (t) => {
+  const { document, window } = await fixture(t, {
+    controls: [
+      { ref: 'A1', title: 'Control A' },
+      { ref: 'A2', title: 'Control B', type: 'clause' },
+    ],
+    targets: 'A1, A2,ZZ9,<img src=x>',
+  });
+  const rows = [...document.getElementById('ec-targets').children].map((r) => r.textContent);
+  assert.equal(rows.length, 2);
+  assert.match(rows[0], /A1/);
+  assert.match(rows[1], /A2/);
+  assert.match(
+    document.getElementById('ec-draft-notice').textContent,
+    /2 suggested targets added from the event page \(A1, A2\)/,
+  );
+  assert.ok(!window.location.search.includes('targets'));
 });

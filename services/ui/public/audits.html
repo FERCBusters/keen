@@ -30,7 +30,7 @@
     <div id="createCard" class="card mb-3" style="display:none;">
       <div class="card-header">
         <div class="fw-bold">Start a new audit</div>
-        <div class="small-muted">The current framework selector is used by default.</div>
+        <div class="small-muted">The audit belongs to the framework selected in the top navigation.</div>
       </div>
       <div class="card-body">
         <form id="createForm" class="row g-3 align-items-end">
@@ -39,8 +39,9 @@
             <input id="newTitle" class="form-control" placeholder="e.g. ISO27001 surveillance audit May 2026" required />
           </div>
           <div class="col-12 col-md-6 col-lg-3">
-            <label class="form-label small-muted mb-1">Framework</label>
-            <input id="newFramework" class="form-control" />
+            <label class="form-label small-muted mb-1" for="newFramework">Framework</label>
+            <input id="newFramework" class="form-control" readonly aria-describedby="newFrameworkHint" />
+            <div id="newFrameworkHint" class="form-text">Audits use the framework selected in the top navigation. Switch it there to audit a different framework.</div>
           </div>
           <div class="col-12 col-md-6 col-lg-2">
             <label class="form-label small-muted mb-1">Audit type</label>
@@ -172,8 +173,9 @@
                     <input id="schedTitle" class="form-control" placeholder="e.g. Quarterly internal audit" required />
                   </div>
                   <div class="col-12 col-md-6">
-                    <label class="form-label small-muted mb-1">Framework</label>
-                    <input id="schedFramework" class="form-control" />
+                    <label class="form-label small-muted mb-1" for="schedFramework">Framework</label>
+                    <input id="schedFramework" class="form-control" readonly aria-describedby="schedFrameworkHint" />
+                    <div id="schedFrameworkHint" class="form-text">Uses the framework selected in the top navigation.</div>
                   </div>
                   <div class="col-12 col-md-6">
                     <label class="form-label small-muted mb-1">Audit type</label>

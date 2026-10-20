@@ -25,6 +25,7 @@ from app.db.models import (
     RiskAssetSubcategory,
     RiskCategory,
     RiskControlLink,
+    RiskLibraryEntry,
 )
 from app.services import risk_mitigator as mitigator
 
@@ -349,6 +350,32 @@ def test_controls_are_ranked_by_matching_terms_and_scope(contract_db, monkeypatc
     )
     assert [s["control"]["ref"] for s in other["control_suggestions"]] == ["KM-01"]
     assert other["library_suggestions"] == []
+
+
+def test_library_scenarios_match_in_every_framework(contract_db, monkeypatch):
+    # The template's control links are KEEN-AF references, so in another
+    # framework the scenario still matches on its wording and its links narrow
+    # to the references that exist there (none here).
+    contract_db.add(
+        RiskLibraryEntry(
+            name="Frobnicator theft",
+            threat_summary="A frobnicator is stolen from the warehouse",
+            suggested_assessment={"keen_af_control_refs": ["AST-1"]},
+        )
+    )
+    _control(contract_db, "KM-01", "Warehouse access", framework="B")
+    contract_db.flush()
+    result = _analyse(
+        contract_db,
+        monkeypatch,
+        issue="Frobnicator theft from the warehouse",
+        framework="B",
+    )
+    hit = next(
+        h for h in result["library_suggestions"] if h["name"] == "Frobnicator theft"
+    )
+    assert hit["control_refs"] == []
+    assert any(sig["kind"] == "risk_library" for sig in result["signals"])
 
 
 def test_controls_without_any_matching_terms_are_not_suggested(

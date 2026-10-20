@@ -657,6 +657,7 @@ test('Keen Mitigator validates input, sends the questionnaire and renders sugges
   assert.equal(ui.el('mitigatorWeightCValue').textContent, '60');
   ui.el('mitigatorForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => /Describe the potential issue first/.test(ui.el('status').textContent));
+  assert.equal(ui.el('mitigatorThinking').hidden, true);
   ui.el('mitigatorIssue').value = '  Payroll data could leak  ';
   ui.el('mitigatorAsset').value = 'Payroll DB';
   ui.el('mitigatorRtI').checked = true;
@@ -765,8 +766,18 @@ test('Keen Mitigator reports empty suggestions and partial creation failures', a
   });
   ui.el('mitigatorIssue').value = 'Leak';
   ui.el('mitigatorForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  // The mascot turns while the analysis runs, then stops.
+  assert.equal(ui.el('mitigatorThinking').hidden, false);
+  assert.equal(ui.el('mitigatorForm').getAttribute('aria-busy'), 'true');
   await settle(() => ui.el('mitigatorResultsCard').style.display === '');
+  assert.equal(ui.el('mitigatorThinking').hidden, true);
+  assert.equal(ui.el('mitigatorForm').hasAttribute('aria-busy'), false);
   assert.match(ui.el('mitigatorSuggestions').textContent, /No controls matched strongly enough/);
+  // Library scenarios appear in any framework; links that are not in it say so.
+  assert.match(
+    ui.el('mitigatorSuggestions').textContent,
+    /Reusable risk library[\s\S]*Suggested controls in A: AC-1[\s\S]*Review this template/,
+  );
   assert.match(ui.el('mitigatorSignals').textContent, /No extra rule signals were matched/);
   assert.equal(ui.el('mitigatorCreatePestle').disabled, true);
   // Declining to create a risk without controls sends nothing.

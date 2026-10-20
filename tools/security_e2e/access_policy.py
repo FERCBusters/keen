@@ -338,6 +338,7 @@ POLICY = {
     "GET /v1/events/export": EVENTS_READ,
     "GET /v1/events/facets": EVENTS_READ,
     "GET /v1/events/{event_id}": EVENTS_READ,
+    "GET /v1/events/{event_id}/control-suggestions": EVENTS_READ,
     "POST /v1/events/{event_id}/incident": all_of("incident.create", "events.read"),
     "DELETE /v1/events/{event_id}/incidents/{incident_id}": all_of(
         "incident.delete", "events.read"
@@ -378,6 +379,7 @@ POLICY = {
     "GET /v1/sources": EVENTS_READ,
     "GET /v1/sources/meta": EVENTS_READ,
     "GET /v1/sources/{source_name}/effectiveness-measures": ISMS_READ,
+    "GET /v1/sources/{source_name}/insights": EVENTS_READ,
     "GET /v1/statement-of-applicability": SIGNED_IN,
     "GET /v1/stats/controls": SIGNED_IN,
     "GET /v1/stories": STORIES_READ,

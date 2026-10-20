@@ -478,6 +478,28 @@
   flex: 0 0 auto;
 }
 
+/* The Mitigator's mascot turns while an analysis is running. */
+.keen-mitigator-thinking {
+  width: 1.75rem;
+  height: 1.75rem;
+  animation: keen-mitigator-spin 1.4s linear infinite;
+}
+@keyframes keen-mitigator-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .keen-mitigator-thinking {
+    animation: keen-mitigator-pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes keen-mitigator-pulse {
+    50% {
+      opacity: 0.35;
+    }
+  }
+}
+
 .mitigator-suggestion-card {
   border: 1px solid var(--bs-border-color);
   border-radius: 0.75rem;
@@ -2109,4 +2131,31 @@ button.keen-filter-pill-chip:focus-visible {
 #eventPanel.offcanvas {
   top: var(--ui-nav-height, var(--keen-nav-height, 0px));
   height: auto;
+}
+
+/* Source insights: one bar per day in the window. */
+.source-insight-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 64px;
+  margin-top: 0.75rem;
+  padding: 0 1px;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+.source-insight-bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  background: var(--bs-primary);
+  border-radius: 1px 1px 0 0;
+  opacity: 0.85;
+}
+.source-insight-bar.is-empty {
+  background: var(--bs-secondary-bg);
+  opacity: 1;
+}
+.source-insight-bar:hover,
+.source-insight-bar:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--bs-primary);
 }

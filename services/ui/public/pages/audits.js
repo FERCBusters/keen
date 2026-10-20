@@ -30,6 +30,13 @@ const cancelCreate = document.getElementById('cancelCreate');
 const createForm = document.getElementById('createForm');
 const newTitle = document.getElementById('newTitle');
 const newFramework = document.getElementById('newFramework');
+// Audits belong to the framework chosen in the top navigation; the form only shows it.
+function currentFrameworkLabel() {
+  const slug = getCurrentFramework() || '';
+  const option = document.getElementById('navFrameworkSelect')?.selectedOptions?.[0];
+  const name = option && option.value === slug ? option.textContent.trim() : '';
+  return name && name !== slug ? `${name} (${slug})` : slug;
+}
 const newType = document.getElementById('newType');
 const newStart = document.getElementById('newStart');
 const newEnd = document.getElementById('newEnd');
@@ -330,7 +337,7 @@ function renderCreateScope() {
 }
 
 async function loadCreateScope({ resetSelection = false } = {}) {
-  const fw = (newFramework?.value || getCurrentFramework() || '').trim();
+  const fw = (getCurrentFramework() || '').trim();
   if (!fw || createScopeFramework === fw) {
     renderCreateScope();
     return;
@@ -372,7 +379,7 @@ async function loadCreateScope({ resetSelection = false } = {}) {
 
 function showCreateCard() {
   if (!ensureAuditManage()) return;
-  if (newFramework) newFramework.value = getCurrentFramework();
+  if (newFramework) newFramework.value = currentFrameworkLabel();
   if (newType) newType.value = 'internal';
   setRichTextEditorValue(newExecutiveSummary, '');
   setRichTextEditorValue(newNotes, '');
@@ -1183,11 +1190,7 @@ async function loadScheduledAudits() {
 async function loadScheduledDocuments() {
   if (!featureEnabled(me, 'documents')) return;
   if (!schedDocuments) return;
-  const fw = (
-    document.getElementById('schedFramework')?.value ||
-    getCurrentFramework() ||
-    ''
-  ).trim();
+  const fw = (getCurrentFramework() || '').trim();
   if (!fw) return;
   schedDocuments.innerHTML = '<option>Loading ISMS documents…</option>';
   try {
@@ -1213,7 +1216,7 @@ function resetScheduleForm() {
   const fw = getCurrentFramework();
   const schedFramework = document.getElementById('schedFramework');
   const schedInterval = document.getElementById('schedInterval');
-  if (schedFramework) schedFramework.value = fw;
+  if (schedFramework) schedFramework.value = currentFrameworkLabel();
   if (schedStart) schedStart.value = _todayIsoDate();
   if (schedFuzzyYear) schedFuzzyYear.value = String(new Date().getFullYear());
   if (schedFuzzyMonth) schedFuzzyMonth.value = String(new Date().getMonth() + 1);
@@ -1245,13 +1248,6 @@ statusFilter?.addEventListener('change', loadAudits);
 newDocumentFilter?.addEventListener('input', renderCreateDocuments);
 newClauseFilter?.addEventListener('input', renderCreateClauses);
 newControlFilter?.addEventListener('input', renderCreateControls);
-newFramework?.addEventListener(
-  'input',
-  debounce(() => loadCreateScope({ resetSelection: true }), 350),
-);
-document
-  .getElementById('schedFramework')
-  ?.addEventListener('input', debounce(loadScheduledDocuments, 350));
 
 document.getElementById('reloadSchedules')?.addEventListener('click', loadScheduledAudits);
 document.getElementById('schedMonth')?.addEventListener('change', loadScheduledAudits);
@@ -1323,11 +1319,7 @@ scheduleForm?.addEventListener('submit', async (ev) => {
     }
     const body = {
       title: (document.getElementById('schedTitle')?.value || '').trim(),
-      framework_slug: (
-        document.getElementById('schedFramework')?.value ||
-        getCurrentFramework() ||
-        ''
-      ).trim(),
+      framework_slug: (getCurrentFramework() || '').trim(),
       audit_type: document.getElementById('schedType')?.value || 'internal',
       start_date: _scheduleStartForSubmit() || null,
       end_date: schedEnd?.value || null,
@@ -1374,7 +1366,7 @@ createForm?.addEventListener('submit', async (ev) => {
     syncRichTextEditors(document);
     const body = {
       title: (newTitle?.value || '').trim(),
-      framework_slug: (newFramework?.value || getCurrentFramework() || '').trim(),
+      framework_slug: (getCurrentFramework() || '').trim(),
       audit_type: newType?.value || 'internal',
       start_date: newStart?.value || null,
       end_date: newEnd?.value || null,

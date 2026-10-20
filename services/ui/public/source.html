@@ -27,10 +27,16 @@
     </div>
 
     <div id="status" class="alert alert-info" style="display:none;"></div>
+    <div id="sourceQuietNotice" class="alert alert-warning d-flex flex-wrap align-items-center gap-2 no-print" role="alert" hidden>
+      <i class="bi bi-moon-stars" aria-hidden="true"></i>
+      <span id="sourceQuietMessage"></span>
+      <button id="sourceQuietOpen" class="btn btn-sm btn-outline-dark ms-auto" type="button">View insights</button>
+    </div>
 
     <ul class="nav nav-tabs mb-3 no-print" id="sourceTabs" role="tablist">
       <li class="nav-item" role="presentation"><button class="nav-link active" id="sourceEventsTab" data-bs-toggle="tab" data-bs-target="#sourceEventsPane" type="button" role="tab" aria-controls="sourceEventsPane" aria-selected="true">Events</button></li>
       <li class="nav-item" role="presentation" id="sourceEffectivenessTabItem"><button class="nav-link" id="sourceEffectivenessTab" data-bs-toggle="tab" data-bs-target="#sourceEffectivenessPane" type="button" role="tab" aria-controls="sourceEffectivenessPane" aria-selected="false">Effectiveness Measures</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="sourceInsightsTab" data-bs-toggle="tab" data-bs-target="#sourceInsightsPane" type="button" role="tab" aria-controls="sourceInsightsPane" aria-selected="false">Insights <span id="sourceInsightsBadge" class="badge rounded-pill text-bg-warning ms-1" hidden>quiet</span></button></li>
       <li class="nav-item" role="presentation"><button class="nav-link" id="sourceVisualisationsTab" data-bs-toggle="tab" data-bs-target="#sourceVisualisationsPane" type="button" role="tab" aria-controls="sourceVisualisationsPane" aria-selected="false" data-feature="visualisations">Visualisations</button></li>
     </ul>
 
@@ -116,6 +122,29 @@
                 <tbody id="sourceEffectivenessRows"><tr><td colspan="4" class="p-4 small-muted">Open this tab to load source-related Effectiveness Measures.</td></tr></tbody>
               </table>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="sourceInsightsPane" role="tabpanel" aria-labelledby="sourceInsightsTab" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Activity insights</div>
+              <div class="small-muted" id="sourceInsightsMeta">Comparing recent activity with this source’s own history.</div>
+            </div>
+            <form class="d-flex align-items-center gap-2 no-print" id="sourceInsightsForm">
+              <label class="form-label small-muted mb-0" for="sourceInsightsDays">Window</label>
+              <select id="sourceInsightsDays" class="form-select form-select-sm" aria-label="Insight window">
+                <option value="30">30 days</option>
+                <option value="90" selected>90 days</option>
+                <option value="180">180 days</option>
+                <option value="365">365 days</option>
+              </select>
+            </form>
+          </div>
+          <div class="card-body" id="sourceInsights" aria-live="polite">
+            <div class="small-muted">Loading insights…</div>
           </div>
         </div>
       </section>

@@ -62,6 +62,7 @@ window.KEEN_DOC_LINKS = {
   'using.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
   'using.html#8-sources-questions-and-incidents':
     'using-events.html#8-sources-questions-and-incidents',
+  'using.html#source-insights': 'using-events.html#source-insights',
   'using.html#questions-workflow': 'using-events.html#questions-workflow',
   'using.html#incidents-workflow': 'using-events.html#incidents-workflow',
   'using.html#stories': 'using-events.html#stories',
@@ -313,6 +314,12 @@ window.KEEN_DOC_LINKS = {
     'developer-architecture.html#1-architecture-and-repository-map',
   'developer.html#2-follow-a-request-through-the-application':
     'developer-architecture.html#2-follow-a-request-through-the-application',
+  'developer.html#9-frontend-conventions-and-documentation':
+    'developer-architecture.html#9-frontend-conventions-and-documentation',
+  'developer.html#10-develop-and-verify-a-change':
+    'developer-architecture.html#10-develop-and-verify-a-change',
+  'developer.html#run-the-test-suite': 'developer-architecture.html#run-the-test-suite',
+  'developer.html#feature-availability': 'developer-architecture.html#feature-availability',
   'developer.html#3-identity-sessions-and-authorisation':
     'developer-security.html#3-identity-sessions-and-authorisation',
   'developer.html#oidc-and-hosted-mode': 'developer-security.html#oidc-and-hosted-mode',
@@ -320,7 +327,6 @@ window.KEEN_DOC_LINKS = {
   'developer.html#security-email-outbox': 'developer-security.html#security-email-outbox',
   'developer.html#4-frameworks-are-application-data':
     'developer-frameworks-rules.html#4-frameworks-are-application-data',
-  'developer.html#maintain-shared-help': 'developer-frameworks-rules.html#maintain-shared-help',
   'developer.html#5-evidence-definitions-and-managed-configuration':
     'developer-frameworks-rules.html#5-evidence-definitions-and-managed-configuration',
   'developer.html#rule-parsing-matching-and-preview':
@@ -341,13 +347,6 @@ window.KEEN_DOC_LINKS = {
   'developer.html#8-documents-people-and-assurance-records':
     'developer-isms.html#8-documents-people-and-assurance-records',
   'developer.html#swot-model': 'developer-isms.html#swot-model',
-  'developer.html#9-frontend-conventions-and-documentation':
-    'developer-development.html#9-frontend-conventions-and-documentation',
-  'developer.html#10-develop-and-verify-a-change':
-    'developer-development.html#10-develop-and-verify-a-change',
-  'developer.html#run-the-test-suite': 'developer-development.html#run-the-test-suite',
-  'developer.html#help-generation': 'developer-development.html#help-generation',
-  'developer.html#feature-availability': 'developer-development.html#feature-availability',
   'administrator-sources.html#elasticsearch-ingestion':
     'administrator-elasticsearch.html#elasticsearch-ingestion',
   'administrator-sources.html#imap-mail': 'administrator-imap.html#imap-mail',
@@ -418,6 +417,7 @@ window.KEEN_DOC_LINKS = {
   'adopter.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
   'adopter.html#8-sources-questions-and-incidents':
     'using-events.html#8-sources-questions-and-incidents',
+  'adopter.html#source-insights': 'using-events.html#source-insights',
   'adopter.html#questions-workflow': 'using-events.html#questions-workflow',
   'adopter.html#incidents-workflow': 'using-events.html#incidents-workflow',
   'adopter.html#stories': 'using-events.html#stories',
@@ -575,6 +575,7 @@ window.KEEN_DOC_LINKS = {
   'walkthroughs.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
   'walkthroughs.html#8-sources-questions-and-incidents':
     'using-events.html#8-sources-questions-and-incidents',
+  'walkthroughs.html#source-insights': 'using-events.html#source-insights',
   'walkthroughs.html#questions-workflow': 'using-events.html#questions-workflow',
   'walkthroughs.html#incidents-workflow': 'using-events.html#incidents-workflow',
   'walkthroughs.html#stories': 'using-events.html#stories',
@@ -738,6 +739,7 @@ window.KEEN_DOC_LINKS = {
   'operations.html#questions-and-incidents': 'using-events.html#questions-and-incidents',
   'operations.html#8-sources-questions-and-incidents':
     'using-events.html#8-sources-questions-and-incidents',
+  'operations.html#source-insights': 'using-events.html#source-insights',
   'operations.html#questions-workflow': 'using-events.html#questions-workflow',
   'operations.html#incidents-workflow': 'using-events.html#incidents-workflow',
   'operations.html#stories': 'using-events.html#stories',
@@ -1107,4 +1109,48 @@ window.KEEN_DOC_LINKS = {
     'administrator-maintenance.html#13-routine-assurance-checks',
   'redmine.html#11-dedicated-hosted-operations':
     'administrator-maintenance.html#11-dedicated-hosted-operations',
+  'developer-development.html':
+    'developer-architecture.html#9-frontend-conventions-and-documentation',
+  'developer-development.html#1-architecture-and-repository-map':
+    'developer-architecture.html#1-architecture-and-repository-map',
+  'developer-development.html#2-follow-a-request-through-the-application':
+    'developer-architecture.html#2-follow-a-request-through-the-application',
+  'developer-development.html#9-frontend-conventions-and-documentation':
+    'developer-architecture.html#9-frontend-conventions-and-documentation',
+  'developer-development.html#10-develop-and-verify-a-change':
+    'developer-architecture.html#10-develop-and-verify-a-change',
+  'developer-development.html#run-the-test-suite': 'developer-architecture.html#run-the-test-suite',
+  'developer-development.html#feature-availability':
+    'developer-architecture.html#feature-availability',
+  'developer-development.html#3-identity-sessions-and-authorisation':
+    'developer-security.html#3-identity-sessions-and-authorisation',
+  'developer-development.html#oidc-and-hosted-mode': 'developer-security.html#oidc-and-hosted-mode',
+  'developer-development.html#local-mfa-design': 'developer-security.html#local-mfa-design',
+  'developer-development.html#security-email-outbox':
+    'developer-security.html#security-email-outbox',
+  'developer-development.html#4-frameworks-are-application-data':
+    'developer-frameworks-rules.html#4-frameworks-are-application-data',
+  'developer-development.html#5-evidence-definitions-and-managed-configuration':
+    'developer-frameworks-rules.html#5-evidence-definitions-and-managed-configuration',
+  'developer-development.html#rule-parsing-matching-and-preview':
+    'developer-frameworks-rules.html#rule-parsing-matching-and-preview',
+  'developer-development.html#field-condition-schema':
+    'developer-frameworks-rules.html#field-condition-schema',
+  'developer-development.html#6-ingestion-artefacts-and-historical-mapping':
+    'developer-ingestion.html#6-ingestion-artefacts-and-historical-mapping',
+  'developer-development.html#historical-mapping-jobs':
+    'developer-ingestion.html#historical-mapping-jobs',
+  'developer-development.html#ingester-contract': 'developer-ingestion.html#ingester-contract',
+  'developer-development.html#adding-an-integration':
+    'developer-ingestion.html#adding-an-integration',
+  'developer-development.html#connection-scoped-ingestion':
+    'developer-ingestion.html#connection-scoped-ingestion',
+  'developer-development.html#agent-protocol': 'developer-otlp.html#agent-protocol',
+  'developer-development.html#the-receiver': 'developer-otlp.html#the-receiver',
+  'developer-development.html#test-ingestion': 'developer-otlp.html#test-ingestion',
+  'developer-development.html#7-risk-register-library-and-keen-assurance-framework':
+    'developer-isms.html#7-risk-register-library-and-keen-assurance-framework',
+  'developer-development.html#8-documents-people-and-assurance-records':
+    'developer-isms.html#8-documents-people-and-assurance-records',
+  'developer-development.html#swot-model': 'developer-isms.html#swot-model',
 };

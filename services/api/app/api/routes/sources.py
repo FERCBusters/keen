@@ -10,6 +10,7 @@ from app.db.models import User
 from app.db.session import get_db
 from app.security.permissions import has_permission
 from app.security.roles import is_effective_admin
+from app.services import source_insights as insights
 from app.services import sources as service
 
 router = Router()
@@ -46,6 +47,21 @@ def list_sources(
 def list_source_meta(request: Request, db: Session = Depends(get_db)):
     user = _require_events_read(db, request)
     return service.list_source_meta(user=user, db=db)
+
+
+@router.get("/v1/sources/{source_name}/insights")
+def source_insights(
+    source_name: str,
+    request: Request,
+    framework: str = settings.default_framework_slug,
+    days: int = insights.DEFAULT_DAYS,
+    db: Session = Depends(get_db),
+):
+    "Describe a source's recent activity relative to its own history."
+    user = _require_events_read(db, request)
+    return insights.source_insights(
+        source_name=source_name, framework=framework, days=days, db=db, user=user
+    )
 
 
 @router.get("/v1/sources/{source_name}/effectiveness-measures")

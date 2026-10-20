@@ -8,7 +8,8 @@ KEEN brings operational evidence, assurance frameworks, risk management and ISMS
 ## What you can do
 
 - **Collect evidence:** ingest logs, development activity, service updates and API records, receive webhooks, and record manual diary evidence with attachments.
-- **Map across frameworks:** define rules that associate events with controls in multiple frameworks, preview their matches, and apply saved rules to past evidence.
+- **Map across frameworks:** define rules that associate events with controls in multiple frameworks, preview their matches, and apply saved rules to past evidence. An event page suggests catalogue controls that match its wording, and a rule can be proposed from the ticked suggestions.
+- **Watch each source’s rhythm:** a source page compares recent activity with the source’s own history, flags a source that has gone quiet, and lists quiet periods, daily spikes and repeated summaries with their unmapped counts.
 - **Manage assurance:** set framework scope, maintain a Statement of Applicability, review related controls, and inspect the evidence behind coverage counts.
 - **Plan SWOT responses and objectives:** rate strengths, weaknesses, opportunities and threats, organise them in hierarchies, link organisational records and framework requirements, and use quadrant, status-board, timeline and relationship views. Include SWOT in audit scope, sampling, questions and changelogs.
 - **Choose available tools:** administrators enable or disable workspaces, ISMS subsections, questions and audit sampling under Administration → Features. Parent settings preserve child preferences and existing records.
