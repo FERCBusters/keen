@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.config import settings
 from app.core.references import control_justification as _control_justification
@@ -21,10 +21,13 @@ from app.db.models import (
     InterestedPartyName,
     InterestedPartyNature,
     PestleBusinessProcess,
+    PestleBusinessProcessRelevance,
+    PestleClauseRelevance,
     PestleItem,
     Risk,
     RiskAsset,
     RiskCategory,
+    RiskControlLink,
     RiskLibraryEntry,
 )
 from app.services.mitigator_catalogue import catalogue_tokens, rank_library
@@ -126,14 +129,22 @@ def _tokens(value: Any) -> set[str]:
     }
 
 
-def _contains_term(haystack: str, term: str) -> bool:
-    h = _norm_text(haystack)
-    t = _norm_text(term)
-    if not h or not t:
+@lru_cache(maxsize=4096)
+def _word_pattern(term_norm: str) -> re.Pattern[str]:
+    return re.compile(rf"(?<![a-z0-9]){re.escape(term_norm)}(?![a-z0-9])")
+
+
+def _contains_norm(haystack_norm: str, term_norm: str) -> bool:
+    """Containment for text both sides of which are already normalised."""
+    if not haystack_norm or not term_norm or term_norm not in haystack_norm:
         return False
-    if " " in t:
-        return t in h
-    return bool(re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", h))
+    if " " in term_norm:
+        return True
+    return bool(_word_pattern(term_norm).search(haystack_norm))
+
+
+def _contains_term(haystack: str, term: str) -> bool:
+    return _contains_norm(_norm_text(haystack), _norm_text(term))
 
 
 def _unique_strs(values: list[Any] | tuple[Any, ...] | set[Any] | None) -> list[str]:
@@ -300,24 +311,31 @@ def _term_score(
     title_norm = _norm_text(title)
     score = 0.0
     matched_terms: list[str] = []
+    for term, term_norm, term_tokens in _prepare_terms(tuple(terms)):
+        matched = _contains_norm(doc_norm, term_norm)
+        if not matched:
+            matched = any(tok in doc_norm for tok in term_tokens)
+        if not matched:
+            continue
+        matched_terms.append(term)
+        score += 10.0 if term_norm in title_norm else 4.0
+    return score, _unique_strs(matched_terms)
+
+
+@lru_cache(maxsize=64)
+def _prepare_terms(
+    terms: tuple[str, ...],
+) -> tuple[tuple[str, str, tuple[str, ...]], ...]:
+    """Normalise each term once: (term, normalised term, long tokens for fuzzy bridging)."""
+    prepared = []
     for term in terms:
         term_norm = _norm_text(term)
         if not term_norm:
             continue
-        matched = (
-            term_norm in doc_norm
-            if " " in term_norm
-            else _contains_term(doc_norm, term_norm)
+        prepared.append(
+            (term, term_norm, tuple(tok for tok in _tokens(term) if len(tok) >= 5))
         )
-        if not matched:
-            matched = any(
-                tok and tok in doc_norm for tok in _tokens(term) if len(tok) >= 5
-            )
-        if not matched:
-            continue
-        matched_terms.append(term)
-        score += 10.0 if term_norm and term_norm in title_norm else 4.0
-    return score, _unique_strs(matched_terms)
+    return tuple(prepared)
 
 
 def _detect_pestle_types(
@@ -550,7 +568,19 @@ def _search_pestle_items(
     pestle_hits: list[dict[str, Any]],
     limit: int = 8,
 ) -> list[dict[str, Any]]:
-    rows = db.query(PestleItem).filter(PestleItem.framework_slug == framework).all()
+    rows = (
+        db.query(PestleItem)
+        .options(
+            selectinload(PestleItem.business_process_links).joinedload(
+                PestleBusinessProcessRelevance.business_process
+            ),
+            selectinload(PestleItem.clause_links).joinedload(
+                PestleClauseRelevance.clause
+            ),
+        )
+        .filter(PestleItem.framework_slug == framework)
+        .all()
+    )
     hit_types = {str(hit.get("type") or "") for hit in pestle_hits}
     suggestions: list[dict[str, Any]] = []
     for row in rows:
@@ -665,7 +695,16 @@ def _risk_doc(row: Risk) -> str:
 def _search_existing_risks(
     db: Session, *, terms: list[str], limit: int = 6
 ) -> list[dict[str, Any]]:
-    rows = db.query(Risk).join(RiskAsset, RiskAsset.id == Risk.asset_id).all()
+    rows = (
+        db.query(Risk)
+        .join(RiskAsset, RiskAsset.id == Risk.asset_id)
+        .options(
+            joinedload(Risk.asset).joinedload(RiskAsset.category),
+            joinedload(Risk.asset).joinedload(RiskAsset.subcategory),
+            selectinload(Risk.control_links).joinedload(RiskControlLink.control),
+        )
+        .all()
+    )
     matches: list[dict[str, Any]] = []
     for row in rows:
         asset = getattr(row, "asset", None)
@@ -761,6 +800,7 @@ def _search_interested_parties(
         .join(
             InterestedPartyNature, InterestedPartyNature.id == InterestedParty.nature_id
         )
+        .options(joinedload(InterestedParty.name), joinedload(InterestedParty.nature))
         .filter(InterestedParty.framework_slug == framework)
         .all()
     )
@@ -1001,9 +1041,27 @@ def analyse_risk_mitigation(
         )
 
     suggestions: list[dict[str, Any]] = []
-    lower_terms = [
-        (term, _norm_text(term), _tokens(term)) for term in terms_for_matching
+    lower_terms = _prepare_terms(tuple(terms_for_matching))
+    # Normalised once here; the control loop below runs them against every
+    # control document.
+    risk_type_terms = [
+        (
+            rt,
+            risk_type_rules.get(rt) or {},
+            [
+                _norm_text(t)
+                for t in (risk_type_rules.get(rt) or {}).get("mitigation_words") or []
+                if _norm_text(t)
+            ],
+        )
+        for rt in selected_types
     ]
+    asset_terms = [
+        _norm_text(t)
+        for t in (matched_asset_cfg or {}).get("mitigation_words") or []
+        if _norm_text(t)
+    ]
+    issue_catalogue_tokens = catalogue_tokens(issue)
 
     for control in controls:
         doc = _control_doc(control)
@@ -1014,18 +1072,10 @@ def analyse_risk_mitigation(
         reasons: list[str] = []
 
         for term, term_norm, term_tokens in lower_terms:
-            if not term_norm:
-                continue
-            matched = False
-            if " " in term_norm:
-                matched = term_norm in doc_norm
-            else:
-                matched = _contains_term(doc_norm, term_norm)
+            matched = _contains_norm(doc_norm, term_norm)
             if not matched:
                 # Small fuzzy bridge for British/US spellings and compound titles.
-                matched = any(
-                    tok and tok in doc_norm for tok in term_tokens if len(tok) >= 5
-                )
+                matched = any(tok in doc_norm for tok in term_tokens)
             if not matched:
                 continue
             matched_terms.append(term)
@@ -1036,20 +1086,15 @@ def analyse_risk_mitigation(
 
         # Selected CIA types carry proportional weight if any of their mitigation
         # words appear in the control document.
-        for rt in selected_types:
-            cfg = risk_type_rules.get(rt) or {}
-            rt_terms = cfg.get("mitigation_words") or []
-            if any(_contains_term(doc_norm, t) for t in rt_terms):
+        for rt, cfg, rt_terms in risk_type_terms:
+            if any(_contains_norm(doc_norm, t) for t in rt_terms):
                 score += max(1.0, weights.get(rt, 0) / 10.0)
                 reasons.append(cfg.get("reason") or f"Relevant to {rt}.")
 
         if (
             category
             and matched_asset_cfg
-            and any(
-                _contains_term(doc_norm, t)
-                for t in matched_asset_cfg.get("mitigation_words") or []
-            )
+            and any(_contains_norm(doc_norm, t) for t in asset_terms)
         ):
             score += 6.0
             reasons.append(
@@ -1072,9 +1117,7 @@ def analyse_risk_mitigation(
             for hit in library_hits[:2]:
                 reasons.append(f"Linked by reusable risk scenario: {hit['name']}.")
                 matched_terms.extend(hit["matched_terms"])
-        direct_terms = sorted(
-            catalogue_tokens(issue) & catalogue_tokens(_control_doc(control))
-        )
+        direct_terms = sorted(issue_catalogue_tokens & catalogue_tokens(doc))
         if direct_terms:
             score += min(40.0, 8.0 * len(direct_terms))
             matched_terms.extend(direct_terms)

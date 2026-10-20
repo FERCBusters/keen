@@ -667,6 +667,48 @@ def test_related_registers_are_matched_and_drafts_avoid_duplicates(
     assert "Detected interested parties: Regulators" in note
 
 
+def test_related_registers_are_read_with_a_bounded_number_of_statements(
+    contract_db, monkeypatch
+):
+    """Register rows and their links load eagerly: the statement count stays flat
+    as the registers grow, instead of one round trip per risk, item or party."""
+    rows = _registers(contract_db)
+    for index in range(40):
+        risk = Risk(
+            asset_id=rows["related"].asset_id,
+            risk_types=["Confidentiality"],
+            threat_summary=f"Customer database leak scenario {index}",
+        )
+        contract_db.add(risk)
+        contract_db.flush()
+        contract_db.add(
+            RiskControlLink(
+                risk_id=risk.id,
+                control_item_id=rows["related"].control_links[0].control_item_id,
+                framework_slug="A",
+            )
+        )
+    contract_db.flush()
+    contract_db.expire_all()
+    statements = []
+    engine = contract_db.get_bind()
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    sqlalchemy.event.listen(engine, "before_cursor_execute", record)
+    try:
+        result = _analyse(
+            contract_db,
+            monkeypatch,
+            issue="The regulator may fine us after a customer database leak.",
+        )
+    finally:
+        sqlalchemy.event.remove(engine, "before_cursor_execute", record)
+    assert result["existing_matches"]["cia_risks"]
+    assert len(statements) <= 16, len(statements)
+
+
 def test_pestle_hits_default_to_board_strategy_without_process_rules(
     contract_db, monkeypatch
 ):
