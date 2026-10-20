@@ -30,6 +30,20 @@ RSS = (
 )
 
 
+# The fixtures carry absolute timestamps and the collectors keep a 14-day initial
+# lookback, so pin the clock a day after the newest fixture item.
+NOW = datetime(2026, 10, 10, 12, 0, 0)
+
+
+@pytest.fixture(autouse=True)
+def pinned_clock():
+    with (
+        patch.object(fg, "utc_now_naive", return_value=NOW),
+        patch.object(gt, "utc_now_naive", return_value=NOW),
+    ):
+        yield
+
+
 @pytest.fixture(params=[fg, gt], ids=["forgejo", "gitea"])
 def collector(request):
     return request.param

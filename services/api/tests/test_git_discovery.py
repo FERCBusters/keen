@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime
 from unittest.mock import Mock, patch
 
 from app.ingest import forgejo, gitea, gitlab
@@ -166,6 +167,10 @@ class GitDiscoveryTests(unittest.TestCase):
         ]
         with (
             patch.object(gitlab.settings, "gitlab_enabled", True),
+            # The event is dated absolutely and the initial lookback is 14 days.
+            patch.object(
+                gitlab, "utc_now_naive", return_value=datetime(2026, 10, 7, 12, 0, 0)
+            ),
             patch.object(gitlab, "is_safe_url", return_value=True),
             patch.object(
                 gitlab,
