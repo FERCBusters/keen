@@ -413,83 +413,26 @@ export function sanitizeRichTextHtml(source) {
   return out.innerHTML.trim();
 }
 
-function _inlineRichTextMarkdown(text) {
-  let out = esc(text || '');
-  // Small escaped markdown subset for legacy textarea values.
-  out = out.replace(
-    /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
-  );
-  out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
-  out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  out = out.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  return out;
-}
-
-export function legacyRichTextMarkdownToHtml(text, emptyHtml = '') {
+// Rich-text fields hold sanitised HTML. A value without any markup is plain
+// text: it is escaped and shown as paragraphs, with its line breaks kept.
+export function plainTextToRichTextHtml(text, emptyHtml = '') {
   const source = String(text || '')
     .replace(/\r\n?/g, '\n')
     .trim();
   if (!source) return emptyHtml;
-
-  const lines = source.split('\n');
-  const html = [];
-  let paragraph = [];
-  let list = [];
-
-  const flushParagraph = () => {
-    if (!paragraph.length) return;
-    html.push(`<p>${_inlineRichTextMarkdown(paragraph.join(' '))}</p>`);
-    paragraph = [];
-  };
-  const flushList = () => {
-    if (!list.length) return;
-    html.push(
-      `<ul>${list.map((item) => `<li>${_inlineRichTextMarkdown(item)}</li>`).join('')}</ul>`,
-    );
-    list = [];
-  };
-
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
-    const trimmed = line.trim();
-    if (!trimmed) {
-      flushParagraph();
-      flushList();
-      continue;
-    }
-    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
-    if (heading) {
-      flushParagraph();
-      flushList();
-      const level = heading[1].length;
-      html.push(`<h${level}>${_inlineRichTextMarkdown(heading[2].trim())}</h${level}>`);
-      continue;
-    }
-    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
-    if (bullet) {
-      flushParagraph();
-      list.push(bullet[1].trim());
-      continue;
-    }
-    flushList();
-    paragraph.push(trimmed);
-  }
-
-  flushParagraph();
-  flushList();
-  return html.join('\n') || emptyHtml;
+  return source
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${esc(paragraph.trim()).replaceAll('\n', '<br>')}</p>`)
+    .join('\n');
 }
 
 export function richTextEditorValue(raw) {
   const value = String(raw || '').trim();
   if (!value) return '';
   // HTML-like values reach editable.innerHTML in setRichTextEditorValue, so
-  // they pass through the shared allowlist sanitiser first; legacy Markdown is
-  // escaped while it is converted and needs no extra pass.
-  return isRichTextHtmlLike(value)
-    ? sanitizeRichTextHtml(value)
-    : legacyRichTextMarkdownToHtml(value);
+  // they pass through the shared allowlist sanitiser first; plain text is
+  // escaped while it is wrapped and needs no extra pass.
+  return isRichTextHtmlLike(value) ? sanitizeRichTextHtml(value) : plainTextToRichTextHtml(value);
 }
 
 export function renderRichTextContent(raw, emptyHtml = '<span class="small-muted">—</span>') {
@@ -497,7 +440,7 @@ export function renderRichTextContent(raw, emptyHtml = '<span class="small-muted
   if (!value) return emptyHtml;
   const html = isRichTextHtmlLike(value)
     ? sanitizeRichTextHtml(value)
-    : legacyRichTextMarkdownToHtml(value, emptyHtml);
+    : plainTextToRichTextHtml(value, emptyHtml);
   return html || emptyHtml;
 }
 

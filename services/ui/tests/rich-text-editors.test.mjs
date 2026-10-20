@@ -96,8 +96,8 @@ test('each marked textarea gets one editor that starts from its saved content', 
       'removeFormat',
     ],
   );
-  // Saved Markdown becomes the editor's HTML.
-  const html = '<h1>Scope</h1>\n<ul><li>Offices</li></ul>';
+  // Saved plain text becomes escaped paragraphs; it is not read as Markdown.
+  const html = '<p># Scope</p>\n<p>- Offices</p>';
   assert.equal(ui.el('scope').value, html);
   assert.deepEqual(scope.content, [html]);
   assert.equal(scope.editable.innerHTML, html);
@@ -166,9 +166,9 @@ test('editor content is copied into the form before saving and replaced on load'
 
   assert.equal(ui.el('scope').value, '<p>Typed in the editor</p>');
   ui.api.setRichTextEditorValue('locked', '**Reviewed**');
-  assert.equal(ui.el('locked').value, '<p><strong>Reviewed</strong></p>');
-  assert.equal(locked.content.at(-1), '<p><strong>Reviewed</strong></p>');
-  assert.equal(locked.editable.innerHTML, '<p><strong>Reviewed</strong></p>');
+  assert.equal(ui.el('locked').value, '<p>**Reviewed**</p>');
+  assert.equal(locked.content.at(-1), '<p>**Reviewed**</p>');
+  assert.equal(locked.editable.innerHTML, '<p>**Reviewed**</p>');
 });
 
 test('hostile HTML-like values never reach the editable as markup', async (t) => {
