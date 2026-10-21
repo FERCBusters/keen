@@ -19,9 +19,9 @@
         <h1 class="h3 mb-1 d-flex align-items-center gap-2">Keen Mitigator</h1>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
-        <a class="btn btn-outline-secondary" data-nav-fw="1" href="/risks.html"><i class="bi bi-shield-exclamation" aria-hidden="true"></i> CIA Triad risks</a>
-        <a class="btn btn-outline-secondary" data-nav-fw="1" href="/pestle.html"><i class="bi bi-globe2" aria-hidden="true"></i> PESTLE(E)</a>
+        <a class="btn btn-outline-secondary" data-nav-fw="1" href="/risks.html"><i class="bi bi-shield-exclamation" aria-hidden="true"></i> Risks</a>
         <a class="btn btn-outline-secondary" data-nav-fw="1" href="/interested_parties.html"><i class="bi bi-people" aria-hidden="true"></i> Interested Parties</a>
+        <a class="btn btn-primary" data-nav-fw="1" href="/risk-wizard.html"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a risk without help</a>
       </div>
     </div>
 
@@ -34,7 +34,7 @@
         <img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon">
         <div>
           <div class="fw-bold">Keen Mitigator</div>
-          <div class="small-muted">I'm the Mitigator, your friendly risk assessor that helps you define risks that map to CIA, PESTLE(E) and Interested Party signals, and their associated controls.</div>
+          <div class="small-muted">I'm the Mitigator, your friendly risk assessor. Describe what worries you and I will check whether a risk like it already exists, point you at library templates, and suggest the controls a new risk could link to.</div>
         </div>
       </div>
     </div>
@@ -43,20 +43,20 @@
         <div class="col-12">
           <label class="form-label" for="mitigatorIssue">What potential issue do you want to analyse?</label>
           <textarea id="mitigatorIssue" class="form-control" rows="4" maxlength="12000" required placeholder="E.g. A supplier API may expose customer records if credentials are misconfigured…"></textarea>
-          <div class="small-muted mt-1">Describe the scenario in natural language. Your words also match the reusable risk library; its templates link KEEN-AF controls, shown where they exist in the selected framework. Review all matches before saving.</div>
+          <div class="small-muted mt-1">Describe the scenario in plain words. Your words are matched against existing risks, PESTLE(E) factors, interested parties and the reusable risk library. Nothing is saved until you finish the risk wizard.</div>
         </div>
 
         <div class="col-12 col-lg-4">
-          <label class="form-label" for="mitigatorAsset">Affected asset, party or process</label>
+          <label class="form-label" for="mitigatorAsset">Affected asset, party or process <span class="small-muted">(if known)</span></label>
           <input id="mitigatorAsset" class="form-control" maxlength="256" placeholder="E.g. Customer records API, subscribers, supplier platform">
         </div>
         <div class="col-12 col-lg-4">
-          <label class="form-label" for="mitigatorCategory">Asset category</label>
-          <select id="mitigatorCategory" class="form-select" required></select>
+          <label class="form-label" for="mitigatorCategory">Asset category <span class="small-muted">(if known)</span></label>
+              <select id="mitigatorCategory" class="form-select"><option value="">Not sure yet</option></select>
         </div>
         <div class="col-12 col-lg-4">
-          <label class="form-label" for="mitigatorSubcategory">Asset subcategory</label>
-          <select id="mitigatorSubcategory" class="form-select" required></select>
+          <label class="form-label" for="mitigatorSubcategory">Asset subcategory <span class="small-muted">(if known)</span></label>
+              <select id="mitigatorSubcategory" class="form-select"><option value="">Not sure yet</option></select>
         </div>
 
         <div class="col-12">
@@ -103,7 +103,7 @@
         </div>
 
         <div class="col-12 d-flex flex-wrap gap-2 align-items-center justify-content-between">
-          <div class="small-muted">Recommendations are explainable suggestions; duplicate matches and final applicability still need human review.</div>
+          <div class="small-muted">Suggestions come from explainable rules; you decide what to keep in the risk wizard.</div>
           <div class="d-flex gap-2 align-items-center">
             <div id="mitigatorThinking" class="d-flex align-items-center gap-2 small-muted" role="status" aria-live="polite" hidden>
               <img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon-sm keen-mitigator-thinking">
@@ -118,27 +118,20 @@
   </div>
 
   <div id="mitigatorResultsCard" class="card mb-3" style="display:none;">
-    <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-      <div>
-        <div class="fw-bold">Keen Mitigator recommendations</div>
-        <div class="small-muted" id="mitigatorResultsMeta">—</div>
-      </div>
-      <div class="d-flex flex-wrap gap-2 no-print">
-        <button id="mitigatorCreateRisk" class="btn btn-primary" type="button">Create risk register entry</button>
-        <button id="mitigatorCreatePestle" class="btn btn-outline-primary" type="button">Create PESTLE(E) item</button>
-        <button id="mitigatorCreateInterested" class="btn btn-outline-primary" type="button">Create Interested Party</button>
-      </div>
-    </div>
-    <div class="card-body">
-      <div id="mitigatorSignals" class="mb-3"></div>
-      <div id="mitigatorSuggestions" class="vstack gap-2"></div>
-    </div>
+    <div class="card-header">
+            <div class="fw-bold">What the Mitigator found</div>
+            <div class="small-muted" id="mitigatorResultsMeta">—</div>
+          </div>
+          <div class="card-body">
+            <div id="mitigatorSignals" class="mb-3"></div>
+            <div id="mitigatorSuggestions" class="vstack gap-3"></div>
+          </div>
   </div>
 </section>
 
   </main>
 
   <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
-  <script type="module" src="/pages/risks.js"></script>
+  <script type="module" src="/pages/mitigator.js"></script>
 </body>
 </html>

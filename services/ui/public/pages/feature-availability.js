@@ -27,7 +27,7 @@ const pages = {
 
   '/risks.html': 'risk_cia',
   '/risk.html': 'risk_cia',
-  '/risk-register.html': 'risk_register',
+  '/risk-wizard.html': 'risk_cia',
   '/mitigator.html': 'mitigator',
   '/pestle.html': 'pestle',
   '/pestle-item.html': 'pestle',

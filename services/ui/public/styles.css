@@ -511,6 +511,54 @@
   font-weight: 500;
 }
 
+/* Keen Mitigator: the three numbered choices after an analysis. */
+.mitigator-choice {
+  background: var(--bs-body-bg);
+}
+
+.mitigator-choice-number {
+  align-items: center;
+  background: var(--bs-primary);
+  border-radius: 50%;
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-weight: 600;
+  height: 1.75rem;
+  justify-content: center;
+  width: 1.75rem;
+}
+
+/* Risk wizard: one question at a time. */
+.risk-wizard-steps {
+  padding-left: 0;
+}
+
+.risk-method-card {
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.risk-method-card:hover {
+  border-color: var(--bs-primary) !important;
+}
+
+.risk-method-card.selected {
+  border-color: var(--bs-primary) !important;
+  box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.15);
+}
+
+.risk-wizard-scroll {
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.risk-rating .form-range {
+  margin-bottom: 0.25rem;
+}
+
 .pestle-viz-box {
   min-height: 320px;
   overflow: hidden;

@@ -1194,12 +1194,67 @@ function downloadJson(filename, obj) {
   downloadBlob(filename, new Blob([json], { type: 'application/json' }));
 }
 
+// The chart on screen takes its colours and type from the page stylesheet and
+// theme; an exported file has neither, so the computed values are written
+// onto each element and the page background becomes a backdrop.
+const SVG_EXPORT_PROPERTIES = [
+  'fill',
+  'fill-opacity',
+  'stroke',
+  'stroke-width',
+  'stroke-opacity',
+  'stroke-linejoin',
+  'stroke-linecap',
+  'stroke-dasharray',
+  'paint-order',
+  'opacity',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'text-anchor',
+  'dominant-baseline',
+];
+
+function inlineSvgStyles(source, clone) {
+  const view = source.ownerDocument?.defaultView;
+  if (!view?.getComputedStyle) return;
+  const sourceNodes = [source, ...source.querySelectorAll('*')];
+  const cloneNodes = [clone, ...clone.querySelectorAll('*')];
+  sourceNodes.forEach((node, index) => {
+    const target = cloneNodes[index];
+    if (!target || node.tagName === 'title') return;
+    const computed = view.getComputedStyle(node);
+    if (computed.display === 'none' || computed.visibility === 'hidden') {
+      target.remove();
+      return;
+    }
+    for (const property of SVG_EXPORT_PROPERTIES) {
+      const value = computed.getPropertyValue(property);
+      if (value) target.style.setProperty(property, value);
+    }
+  });
+}
+
+function svgExportBackdrop(clone, view) {
+  const body = view?.getComputedStyle?.(document.body);
+  const colour = body?.backgroundColor;
+  if (!colour || colour === 'transparent' || colour === 'rgba(0, 0, 0, 0)') return;
+  const rect = clone.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('width', '100%');
+  rect.setAttribute('height', '100%');
+  rect.setAttribute('fill', colour);
+  rect.setAttribute('data-export-backdrop', '');
+  clone.insertBefore(rect, clone.firstChild);
+}
+
 function downloadCurrentSvg(filename) {
   const el = document.getElementById('viz');
   if (!el) return;
   const clone = el.cloneNode(true);
   // Ensure xmlns so the downloaded SVG opens cleanly.
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  inlineSvgStyles(el, clone);
+  svgExportBackdrop(clone, el.ownerDocument?.defaultView);
   const svgText = new XMLSerializer().serializeToString(clone);
   downloadBlob(filename, new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' }));
 }

@@ -56,15 +56,25 @@ def build(admin, payloads, cleanup, *, evidence_writes=False):
             "asset_name": short,
             "category_name": short[:100],
             "subcategory_name": short[:100],
+            "title": short,
             "risk_types": ["confidentiality"],
             "threat_summary": text,
             "note": text,
+            "treatment_plan": text,
             "risk_owner_role_id": seed.ids["org_role"],
         },
         "/api/v1/risks",
         "/risk.html?id={id}",
     )
-    seed.pages += [("risks", "/risks.html"), ("register", "/risk-register.html")]
+    # The dashboard renders the seeded risk on several tabs; the wizard renders
+    # it again in edit mode, and the library tab lists templates.
+    seed.pages += [
+        ("risks", "/risks.html"),
+        ("register", "/risks.html?tab=register"),
+        ("cia", "/risks.html?tab=cia"),
+        ("library", "/risks.html?tab=library"),
+        ("wizard", "/risk-wizard.html?id={id}".format(id=seed.ids["risk"])),
+    ]
     create(
         "pestle",
         "/api/v1/pestle/items",

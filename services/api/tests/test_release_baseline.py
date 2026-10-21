@@ -136,6 +136,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0015_risk_wizard",
         "0014_measure_source_type",
         "0013_events_source_timestamp",
         "0012_stories",

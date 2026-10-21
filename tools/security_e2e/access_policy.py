@@ -563,6 +563,7 @@ POLICY = {
     "DELETE /v1/risks/subcategories/{subcategory_id}": RISK_MANAGE,
     "PATCH /v1/risks/subcategories/{subcategory_id}": RISK_MANAGE,
     "GET /v1/risks/users": RISK_MANAGE,
+    "GET /v1/risks/parties": RISK_MANAGE,
     "DELETE /v1/risks/{risk_id}": RISK_MANAGE,
     "GET /v1/risks/{risk_id}": RISK_READ,
     "PATCH /v1/risks/{risk_id}": RISK_MANAGE,

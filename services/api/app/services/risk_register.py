@@ -27,6 +27,7 @@ from app.services.entity_changelog import (
 )
 from app.services.errors import DomainError
 from app.services.isms.link_diary import sync_entity_link_diary
+from app.services.pestle import _clean_lens, _clean_type
 from app.services.risks import (
     RiskUpsertPayload,
     _apply_payload,
@@ -74,10 +75,18 @@ class RegisterThresholds(BaseModel):
     high_max: int = Field(ge=3, le=24)
 
 
+LIBRARY_METHODS = {"risk", "pestle"}
+
+
 class LibraryInput(BaseModel):
     name: str = Field(min_length=1, max_length=256)
     threat_summary: str = Field(default="", max_length=12000)
-    risk_types: list[str] = Field(min_length=1)
+    # "risk" templates seed register entries; CIA associations are optional.
+    # "pestle" templates seed PESTLE(E) items and carry a type and lens.
+    method: str = Field(default="risk", max_length=16)
+    pestle_type: str = Field(default="", max_length=32)
+    lens: str = Field(default="", max_length=16)
+    risk_types: list[str] = Field(default_factory=list)
     treatment_guidance: str = Field(default="", max_length=20000)
     suggested_assessment: dict[str, Any] = Field(default_factory=dict)
     source_risk_id: uuid.UUID | None = None
@@ -243,19 +252,26 @@ def _library_out(row):
         "id": str(row.id),
         "name": row.name,
         "threat_summary": row.threat_summary,
-        "risk_types": row.risk_types,
+        "method": row.method or "risk",
+        "pestle_type": row.pestle_type or "",
+        "lens": row.lens or "",
+        "risk_types": row.risk_types or [],
         "treatment_guidance": row.treatment_guidance,
         "suggested_assessment": row.suggested_assessment or {},
     }
 
 
-def list_library(*, user, db: Session):
+def list_library(*, method: str = "", user, db: Session):
+    qry = db.query(RiskLibraryEntry)
+    wanted = (method or "").strip().lower()
+    if wanted:
+        if wanted not in LIBRARY_METHODS:
+            raise DomainError(400, "method must be risk or pestle")
+        qry = qry.filter(RiskLibraryEntry.method == wanted)
     return {
         "items": [
             _library_out(row)
-            for row in db.query(RiskLibraryEntry)
-            .order_by(func.lower(RiskLibraryEntry.name))
-            .all()
+            for row in qry.order_by(func.lower(RiskLibraryEntry.name)).all()
         ]
     }
 
@@ -297,10 +313,20 @@ def add_library(*, payload: LibraryInput, user, db: Session):
             suggestion["keen_af_control_refs"] = list(
                 dict.fromkeys(ref for (ref,) in refs)
             )
+    method = (payload.method or "risk").strip().lower()
+    if method not in LIBRARY_METHODS:
+        raise DomainError(400, "method must be risk or pestle")
+    pestle_type = lens = ""
+    if method == "pestle":
+        pestle_type = _clean_type(payload.pestle_type)
+        lens = _clean_lens(payload.lens)
     row = RiskLibraryEntry(
         name=name,
         threat_summary=payload.threat_summary.strip(),
-        risk_types=_clean_risk_types(payload.risk_types),
+        method=method,
+        pestle_type=pestle_type,
+        lens=lens,
+        risk_types=_clean_risk_types(payload.risk_types) if method == "risk" else [],
         treatment_guidance=payload.treatment_guidance.strip(),
         suggested_assessment=suggestion,
     )

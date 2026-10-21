@@ -68,6 +68,11 @@ _CHANGE_FIELD_LABELS = {
     "resource_user_ids": "Resource users",
     "source": "Source",
     "source_type": "Source type",
+    "interested_parties": "Affected parties",
+    "treatment_strategy": "Treatment decision",
+    "treatment_status": "Treatment status",
+    "treatment_plan": "Treatment plan",
+    "treatment_due_at": "Treatment due",
     "service": "Service",
     "service_asset_id": "Service",
     "task_action": "Task/Action",
@@ -495,16 +500,36 @@ def risk_changelog_state(
     owner = risk.owner
     asset_name = asset.name if asset else None
     threat = (risk.threat_summary or "").strip()
+    title = (risk.title or "").strip()
+    parties = []
+    for link in list(risk.party_links or []):
+        if link.interested_party_id and link.interested_party:
+            party = link.interested_party
+            parties.append(
+                f"{party.name.name if party.name else 'Interested party'}"
+                f" ({party.nature.name if party.nature else 'party'})"
+            )
+        elif link.person_id and link.person:
+            parties.append(f"{link.person.name} (person)")
+        elif link.vendor_id and link.vendor:
+            parties.append(f"{link.vendor.name} (vendor)")
     return {
         "id": str(risk.id),
         "framework": framework,
-        "display": (
-            f"{asset_name or 'Risk'} — {threat}" if threat else (asset_name or "Risk")
-        ),
+        "display": title
+        or (f"{asset_name or 'Risk'} — {threat}" if threat else (asset_name or "Risk")),
+        "title": title,
         "asset": asset_name,
         "category": category.name if category else None,
         "subcategory": subcategory.name if subcategory else None,
         "risk_types": list(risk.risk_types or []),
+        "interested_parties": parties,
+        "treatment_strategy": risk.treatment_strategy or "",
+        "treatment_status": risk.treatment_status or "open",
+        "treatment_plan": risk.treatment_plan or "",
+        "treatment_due_at": (
+            risk.treatment_due_at.isoformat() if risk.treatment_due_at else None
+        ),
         "owner": owner.username if owner else None,
         "owner_role": risk.owner_role.name if risk.owner_role else None,
         "owner_role_id": str(risk.risk_owner_role_id)

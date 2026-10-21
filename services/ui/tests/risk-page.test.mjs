@@ -22,6 +22,26 @@ function risk(overrides = {}) {
     register_residual_likelihood: 2,
     register_residual_impact: 3,
     note: 'Review quarterly',
+    interested_parties: [
+      {
+        kind: 'person',
+        id: 'p1',
+        label: 'Dana <b>Lee</b>',
+        detail: 'DPO',
+        href: '/isms.html?tab=people',
+      },
+      {
+        kind: 'vendor',
+        id: 'v1',
+        label: 'CloudCo',
+        detail: 'Hosting',
+        href: 'javascript:alert(1)',
+      },
+    ],
+    treatment_strategy: 'mitigate',
+    treatment_status: 'in_progress',
+    treatment_due_at: '2026-12-01',
+    treatment_plan: 'Restore <b>drills</b>',
     controls: [
       { id: 'c1', ref: 'A1', title: '<i>Backups</i>', in_scope: true },
       { id: 'c2', ref: 'A2', title: 'Restore tests', in_scope: false },
@@ -126,10 +146,27 @@ test('risk details render scores, types, controls and mitigator context as text'
     '<img src=x onerror=alert(1)>Payroll DB — Ransomware',
   );
   assert.equal(ui.el('riskMeta').textContent, 'A • updated 2026-04-01T00:00:00Z');
-  assert.match(ui.el('editRisk').getAttribute('href'), /risks\.html\?edit=r1&framework=A/);
+  assert.equal(ui.el('editRisk').getAttribute('href'), '/risk-wizard.html?id=r1&framework=A');
   assert.match(ui.el('riskVisualisation').getAttribute('href'), /tab=visualisations/);
   assert.equal(ui.el('riskTypes').querySelector('b'), null);
-  assert.equal(ui.el('riskTypes').querySelectorAll('.badge').length, 2);
+  // The kind badge, then one badge per security property.
+  assert.equal(ui.el('riskTypes').querySelectorAll('.badge').length, 3);
+  assert.match(ui.el('riskTypes').textContent, /CIA.*Confidentiality.*<b>Integrity<\/b>/s);
+  // Affected parties link only to paths inside KEEN; other hrefs are plain badges.
+  const parties = ui.el('riskParties');
+  assert.equal(parties.querySelector('b'), null);
+  assert.equal(
+    parties.querySelector('a').getAttribute('href'),
+    '/isms.html?tab=people&framework=A',
+  );
+  assert.equal(parties.querySelector('a').getAttribute('title'), 'DPO');
+  assert.equal(parties.querySelectorAll('a').length, 1);
+  assert.match(parties.textContent, /Dana <b>Lee<\/b>.*CloudCo/s);
+  assert.equal(ui.el('riskTreatment').querySelector('b'), null);
+  assert.match(
+    ui.el('riskTreatment').textContent,
+    /Mitigate \(In progress · due 2026-12-01\)Restore <b>drills<\/b>/,
+  );
   assert.equal(ui.el('riskOwner').textContent, 'dana');
   assert.match(ui.el('riskScore').innerHTML, /text-bg-danger[^>]*>16</);
   assert.match(ui.el('riskScore').textContent, /Inherent likelihood 4 × impact 4/);
@@ -172,7 +209,9 @@ test('risks without optional data show fallbacks and readers lose edit and sampl
   assert.equal(ui.el('threatSummary').textContent, 'No threat summary.');
   assert.equal(ui.el('riskNote').textContent, 'No note.');
   assert.equal(ui.el('riskCategory').textContent, '—');
-  assert.match(ui.el('riskTypes').textContent, /No risk type/);
+  assert.equal(ui.el('riskTypes').textContent.trim(), 'Risk');
+  assert.equal(ui.el('riskParties').textContent, '—');
+  assert.equal(ui.el('riskTreatment').textContent, 'Not decided yet (Open)');
   assert.match(ui.el('riskScore').innerHTML, /text-bg-success/);
   assert.equal(ui.el('riskMitigatorContextWrap').style.display, 'none');
   assert.match(ui.el('linkedControls').textContent, /No controls are mapped/);

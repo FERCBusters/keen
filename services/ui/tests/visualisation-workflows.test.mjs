@@ -109,6 +109,12 @@ async function viz(t, options = {}) {
     setup(window) {
       win = window;
       window.document.getElementById('embeddedVisualisationsPane').classList.add('active');
+      // A theme like the real page: light text on a dark background, and a
+      // caption the stylesheet hides.
+      const theme = window.document.createElement('style');
+      theme.textContent =
+        'body { background-color: rgb(24, 24, 32); } svg text { fill: rgb(250, 250, 250); } .hidden-caption { display: none; }';
+      window.document.head.append(theme);
       window.document.querySelector('[data-keen-visualisation-mount]').dataset.vizModes = 'all';
       window.open = (href, target, features) => {
         opened.push({ href, target, features });
@@ -499,6 +505,9 @@ test('the histogram exports what it shows, and saves a relative default range', 
 
   ui.el('vizExportCsv').click();
   ui.el('vizExportJson').click();
+  const hidden = ui.document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  hidden.setAttribute('class', 'hidden-caption');
+  ui.el('viz').append(hidden);
   ui.el('vizExportSvg').click();
   const [csv, json, svg] = ui.files;
   assert.deepEqual(
@@ -521,6 +530,15 @@ test('the histogram exports what it shows, and saves a relative default range', 
   const drawing = await svg.blob.text();
   assert.match(drawing, /^<svg[^>]* xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
   assert.equal((drawing.match(/<rect/g) || []).length >= 4, true);
+  // The file carries what the stylesheet and theme gave the chart on screen:
+  // text colours are written onto each element and the page background becomes
+  // a backdrop, so the drawing reads the same way outside KEEN.
+  assert.match(
+    drawing,
+    /<rect width="100%" height="100%" fill="rgb\(24, 24, 32\)" data-export-backdrop=""/,
+  );
+  assert.match(drawing, /<text[^>]*style="[^"]*fill: rgb\(250, 250, 250\)/);
+  assert.doesNotMatch(drawing, /<text[^>]*class="hidden-caption"/);
 
   // A window that ends today is saved as "the last N days".
   ui.el('saveDefaultViz').click();

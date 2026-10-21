@@ -1192,7 +1192,7 @@ function renderOverview() {
               <rect class="isms-flow-section-bg" x="355" y="48" width="426" height="230" rx="18"></rect>
               <text class="isms-flow-section-title" x="568" y="88" text-anchor="middle">Strategy and Planning</text>
               ${button({ label: 'Objectives', href: '/isms.html?tab=objectives', x: 384, y: 100, w: 110, h: 34 })}
-              ${button({ label: 'CIA Triad Risks', href: '/risks.html', x: 506, y: 100, w: 138, h: 34 })}
+              ${button({ label: 'Risks', href: '/risks.html', x: 506, y: 100, w: 138, h: 34 })}
               ${button({ label: 'PESTLE(E)', href: '/pestle.html', x: 656, y: 100, w: 96, h: 34 })}
               ${button({ label: 'Org Chart', href: '/isms.html?tab=org', x: 384, y: 146, w: 110, h: 34 })}
               ${button({ label: 'Interested Parties', href: '/interested_parties.html', x: 506, y: 146, w: 138, h: 34 })}
@@ -2792,6 +2792,8 @@ const measureExampleUpdate = mountMeasurementExamples($('effectivenessForm'), ()
   key: $('effMetricKey').value,
   framework,
   unit: $('effTargetUnit').value,
+  sourceType: $('effSourceType').value,
 }));
 $('effectivenessForm').addEventListener('input', measureExampleUpdate);
+$('effectivenessForm').addEventListener('change', measureExampleUpdate);
 $('effectivenessForm').addEventListener('reset', () => queueMicrotask(measureExampleUpdate));

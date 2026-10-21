@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – CIA Triad Risk</title>
+  <title>Keen – Risk</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css"/>
@@ -16,13 +16,13 @@
   <main class="container container-tight py-4">
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
-        <div class="small-muted mb-1"><a id="risksBreadcrumb" class="link-subtle" data-nav-fw="1" href="/risks.html">← CIA Triad Risks</a></div>
-        <h1 class="h4 mb-1" id="riskTitle">CIA Triad Risk</h1>
+        <div class="small-muted mb-1"><a id="risksBreadcrumb" class="link-subtle" data-nav-fw="1" href="/risks.html">← Risks</a></div>
+        <h1 class="h4 mb-1" id="riskTitle">Risk</h1>
         <div class="small-muted" id="riskMeta">—</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
         <button id="sampleRiskAudit" class="btn btn-outline-success" type="button" style="display:none;"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Sample into audit</button>
-        <a id="riskVisualisation" class="btn btn-outline-primary" data-nav-fw="1" href="/risks.html?tab=visualisations">CIA risk visualisation</a>
+        <a id="riskVisualisation" class="btn btn-outline-primary" data-nav-fw="1" href="/risks.html?tab=visualisations">Risk visualisations</a>
         <a id="editRisk" class="btn btn-primary" href="/risks.html" style="display:none;">Edit risk</a>
       </div>
     </div>
@@ -47,8 +47,8 @@
           <div class="card">
             <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
               <div>
-                <div class="fw-bold">CIA Triad risk scenario</div>
-                <div class="small-muted">Read-only risk view. Use Edit to change this scenario.</div>
+                <div class="fw-bold">Risk scenario</div>
+                <div class="small-muted">Read-only view. Use Edit to change it in the risk wizard.</div>
               </div>
               <div id="riskTypes" class="d-flex flex-wrap gap-1"></div>
             </div>
@@ -71,12 +71,20 @@
                   <div id="riskOwner">—</div>
                 </div>
                 <div class="col-12 col-lg-4">
-                  <div class="small-muted">Inherent risk</div>
+                  <div class="small-muted">Risk today (inherent)</div>
                   <div id="riskScore">—</div>
                 </div>
                 <div class="col-12 col-lg-4">
-                  <div class="small-muted">Residual risk</div>
+                  <div class="small-muted">After controls (residual)</div>
                   <div id="residualScore">—</div>
+                </div>
+                <div class="col-12 col-lg-6">
+                  <div class="small-muted">Who is affected</div>
+                  <div id="riskParties">—</div>
+                </div>
+                <div class="col-12 col-lg-6">
+                  <div class="small-muted">Treatment</div>
+                  <div id="riskTreatment">—</div>
                 </div>
                 <div class="col-12">
                   <div class="small-muted">Threat summary</div>
@@ -113,12 +121,12 @@
         <div id="questions" data-feature="questions" class="card mb-3">
           <div class="card-header">
             <div class="fw-bold">Questions</div>
-            <div class="small-muted">Ask auditors or owners questions about this CIA Triad risk scenario.</div>
+            <div class="small-muted">Ask auditors or owners questions about this risk.</div>
           </div>
           <div class="card-body">
             <div class="no-print mb-3">
               <label class="form-label" for="riskQuestionBody">Ask a question</label>
-              <textarea id="riskQuestionBody" class="form-control" rows="3" placeholder="Write a question about this CIA Triad risk scenario…"></textarea>
+              <textarea id="riskQuestionBody" class="form-control" rows="3" placeholder="Write a question about this risk…"></textarea>
               <div class="d-flex justify-content-end mt-2">
                 <button id="riskAskQuestion" class="btn btn-sm btn-primary" type="button">Ask question</button>
               </div>

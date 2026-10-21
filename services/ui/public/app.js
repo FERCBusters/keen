@@ -69,9 +69,10 @@ function _patchRiskNavDropdown() {
       Risks
     </a>
     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="riskAssessmentsDropdown">
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risks.html'))}">CIA risk assessments</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risk-register.html'))}">Risk register &amp; heatmap</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/pestle.html'))}">PESTLE(E) Impact Assessment</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risks.html'))}">Risks dashboard</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risk-wizard.html'))}">Add a risk</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risks.html?tab=register'))}">Register &amp; heatmap</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risks.html?tab=pestle'))}">PESTLE(E) method</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/interested_parties.html'))}">Interested Parties</a></li>
       <li><a class="dropdown-item d-inline-flex align-items-center gap-2" href="${esc(_withCurrentFramework('/mitigator.html'))}"><img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator</a></li>
     </ul>`;

@@ -1,12 +1,21 @@
 // Examples use the existing secret-authenticated effectiveness webhook.
-export function measurementExamples({ origin, key, framework, unit = '', value = 0 }) {
+// The payload names the measure's expected source so entries are attributed to
+// the same KEEN source the measure was configured with.
+export function measurementExamples({
+  origin,
+  key,
+  framework,
+  unit = '',
+  value = 0,
+  sourceType = 'other',
+}) {
   const endpoint =
     origin + '/api/v1/webhooks/isms/effectiveness-metrics/' + encodeURIComponent(key);
   const payload = {
     framework,
     value: Number(value) || 0,
     unit,
-    source_type: 'other',
+    source_type: String(sourceType || '').trim() || 'other',
     source_title: 'Scheduled measurement',
   };
   const json = JSON.stringify(payload, null, 2);

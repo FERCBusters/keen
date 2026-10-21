@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen – Add a risk</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <script src="/demo-notice.js" defer></script>
+</head>
+<body data-page="risk-wizard">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a id="wizardBreadcrumb" class="link-subtle" data-nav-fw="1" href="/risks.html">← Risks</a></div>
+        <h1 class="h3 mb-1" id="wizardTitle">Add a risk</h1>
+        <div class="small-muted" id="wizardIntro">Answer a few questions and KEEN will create the risk, and anything it needs along the way, for you.</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 no-print">
+        <a class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" id="wizardMitigatorLink" data-nav-fw="1" href="/mitigator.html"><img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon-sm"> Not sure? Ask the Mitigator</a>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ol class="risk-wizard-steps list-unstyled d-flex flex-wrap gap-2 mb-3 no-print" id="wizardSteps" aria-label="Steps"></ol>
+
+    <form id="wizardForm" class="card" novalidate>
+      <div class="card-body">
+        <!-- Step 1: method -->
+        <section class="risk-wizard-step" data-step="method">
+          <h2 class="h5">What kind of risk is this?</h2>
+          <p class="small-muted">Choose the one that sounds most like what you have in mind. You can change your mind before saving.</p>
+          <div class="row g-3" id="methodChoices"></div>
+          <div class="mt-4">
+            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+              <div>
+                <div class="fw-semibold">Start from a reusable template?</div>
+                <div class="small-muted">Templates from your risk library fill in the description, type and example ratings. You review everything before saving.</div>
+              </div>
+              <input id="templateSearch" class="form-control form-control-sm" type="search" placeholder="Search templates…" style="max-width:260px;" aria-label="Search templates">
+            </div>
+            <div id="templateList" class="list-group mt-2"></div>
+          </div>
+        </section>
+
+        <!-- Step 2: subject -->
+        <section class="risk-wizard-step" data-step="subject" hidden>
+          <div data-subject="asset">
+            <h2 class="h5">What is at risk?</h2>
+            <p class="small-muted">Every risk belongs to an asset: a system, a set of information, a place, a service, or people. Pick one you already have, or describe a new one and KEEN will add it to the asset register.</p>
+            <input id="assetSearch" class="form-control mb-2" type="search" placeholder="Search your assets, or type a new name…" aria-label="Search assets" autocomplete="off">
+            <div id="assetList" class="list-group mb-3"></div>
+            <div id="newAssetPanel" class="border rounded-3 p-3" hidden>
+              <div class="fw-semibold mb-2">Add “<span id="newAssetName"></span>” as a new asset</div>
+              <div class="row g-2">
+                <div class="col-12 col-md-6">
+                  <label class="form-label" for="newAssetCategory">What kind of asset is it?</label>
+                  <input id="newAssetCategory" class="form-control" list="assetCategoryOptions" maxlength="128" placeholder="e.g. Information, Software, People" autocomplete="off">
+                  <datalist id="assetCategoryOptions"></datalist>
+                  <div class="form-text">Choose an existing category or type a new one.</div>
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label" for="newAssetSubcategory">More specifically?</label>
+                  <input id="newAssetSubcategory" class="form-control" list="assetSubcategoryOptions" maxlength="128" placeholder="e.g. Customer records, Laptops" autocomplete="off">
+                  <datalist id="assetSubcategoryOptions"></datalist>
+                  <div class="form-text">Choose an existing subcategory or type a new one.</div>
+                </div>
+              </div>
+            </div>
+            <div id="selectedAssetSummary" class="alert alert-light border mt-3 py-2 mb-0" hidden></div>
+          </div>
+          <div data-subject="pestle" hidden>
+            <h2 class="h5">Which business processes does it touch?</h2>
+            <p class="small-muted">Optional. Tick the processes this factor could affect. Type a name to add a process KEEN does not know yet.</p>
+            <input id="processSearch" class="form-control mb-2" type="search" placeholder="Search business processes, or type a new name…" aria-label="Search business processes" autocomplete="off">
+            <div id="processList" class="list-group"></div>
+          </div>
+        </section>
+
+        <!-- Step 3: parties -->
+        <section class="risk-wizard-step" data-step="parties" hidden>
+          <h2 class="h5">Who is affected?</h2>
+          <p class="small-muted">Optional. Tick the people, suppliers or interested parties who would feel this risk — customers, regulators, staff, a vendor. If someone is missing, add them here and KEEN will record them as an interested party.</p>
+          <input id="partySearch" class="form-control mb-2" type="search" placeholder="Search interested parties, people and vendors, or type a new name…" aria-label="Search affected parties" autocomplete="off">
+          <div id="partyList" class="list-group mb-3"></div>
+          <div id="newPartyPanel" class="border rounded-3 p-3" hidden>
+            <div class="fw-semibold mb-2">Add “<span id="newPartyName"></span>” as a new interested party</div>
+            <label class="form-label" for="newPartyNature">What is their relationship to you?</label>
+            <input id="newPartyNature" class="form-control" list="partyNatureOptions" maxlength="256" placeholder="e.g. Customer, Regulator, Supplier, Staff" autocomplete="off">
+            <datalist id="partyNatureOptions"></datalist>
+            <button class="btn btn-outline-primary mt-2" id="addNewParty" type="button"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add this party</button>
+          </div>
+          <div id="selectedParties" class="d-flex flex-wrap gap-1 mt-3"></div>
+        </section>
+
+        <!-- Step 4: describe -->
+        <section class="risk-wizard-step" data-step="describe" hidden>
+          <h2 class="h5">Describe the risk</h2>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label" for="riskTitle">Give it a short name</label>
+              <input id="riskTitle" class="form-control" maxlength="256" placeholder="e.g. Laptop with customer data is lost" required>
+              <div class="form-text">This is how it appears in the register. One line is enough.</div>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="riskDescription">What could happen, and how?</label>
+              <textarea id="riskDescription" class="form-control" rows="4" maxlength="12000" placeholder="Describe the scenario in plain words: what goes wrong, what causes it, and what the consequences would be."></textarea>
+            </div>
+            <div class="col-12" data-method-only="cia">
+              <div class="form-label">Which parts of information security does it threaten?</div>
+              <div class="row g-2" id="ciaChoices"></div>
+            </div>
+            <div class="col-12" data-method-only="pestle">
+              <div class="form-label">Which kind of influence is it?</div>
+              <div class="d-flex flex-wrap gap-2" id="pestleTypeChoices"></div>
+            </div>
+            <div class="col-12 col-md-6" data-method-only="pestle">
+              <label class="form-label" for="pestleLens">Does it come from inside or outside the organisation?</label>
+              <select id="pestleLens" class="form-select"></select>
+            </div>
+            <div class="col-12 col-md-6" data-method-only="pestle">
+              <label class="form-label" for="pestleRelevance">How relevant is it overall?</label>
+              <select id="pestleRelevance" class="form-select"></select>
+            </div>
+            <div class="col-12" data-method-only="pestle">
+              <label class="form-label" for="pestleRationale">Why is it relevant (or not)?</label>
+              <textarea id="pestleRationale" class="form-control" rows="3" maxlength="20000" placeholder="A sentence or two on why this matters to your organisation."></textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="riskNote">Anything else worth noting? <span class="small-muted">(optional)</span></label>
+              <textarea id="riskNote" class="form-control" rows="2" maxlength="20000"></textarea>
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 5: rate -->
+        <section class="risk-wizard-step" data-step="rate" hidden>
+          <div data-method-not="pestle">
+            <h2 class="h5">How big is it?</h2>
+            <p class="small-muted">Rate how likely it is and how much it would hurt, first as things stand today and then assuming your planned controls work. The scores feed the register and the 5×5 heatmap.</p>
+            <div class="row g-3">
+              <div class="col-12 col-lg-6">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="fw-semibold mb-2">As things stand today <span class="small-muted">(inherent)</span></div>
+                  <div class="risk-rating" data-rating="inherent"></div>
+                </div>
+              </div>
+              <div class="col-12 col-lg-6">
+                <div class="border rounded-3 p-3 h-100">
+                  <div class="fw-semibold mb-2">After your controls <span class="small-muted">(residual)</span></div>
+                  <div class="risk-rating" data-rating="residual"></div>
+                </div>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="riskOwner">Who owns this risk?</label>
+                <select id="riskOwner" class="form-select"><option value="">Nobody yet</option></select>
+                <div class="form-text">A named person or an organisational role.</div>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="treatmentStrategy">What will you do about it?</label>
+                <select id="treatmentStrategy" class="form-select"></select>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="treatmentStatus">Where is the treatment up to?</label>
+                <select id="treatmentStatus" class="form-select"></select>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="treatmentDue">When should it be done by? <span class="small-muted">(optional)</span></label>
+                <input id="treatmentDue" class="form-control" type="date">
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="treatmentPlan">Treatment plan, or why you accept it <span class="small-muted">(optional)</span></label>
+                <textarea id="treatmentPlan" class="form-control" rows="3" maxlength="20000"></textarea>
+              </div>
+            </div>
+          </div>
+          <div data-method-only="pestle" hidden>
+            <h2 class="h5">Where does it bite?</h2>
+            <p class="small-muted">Optional. Tick the framework clauses this factor is relevant to and say how strongly. You can refine this later on the item's page.</p>
+            <input id="clauseSearch" class="form-control form-control-sm mb-2" type="search" placeholder="Filter clauses…" aria-label="Filter clauses">
+            <div id="clauseList" class="border rounded p-2 risk-wizard-scroll"></div>
+          </div>
+        </section>
+
+        <!-- Step 6: controls -->
+        <section class="risk-wizard-step" data-step="controls" hidden>
+          <h2 class="h5">Which controls help with it?</h2>
+          <p class="small-muted">Optional. Controls are the safeguards that reduce the risk — they are not risks themselves. Tick the ones that apply in <span id="controlsFramework">this framework</span>; suggested controls are pre-ticked for you to review.</p>
+          <div id="suggestedControlsNote" class="alert alert-light border py-2" hidden></div>
+          <input id="controlSearch" class="form-control form-control-sm mb-2" type="search" placeholder="Filter controls by reference or title…" aria-label="Filter controls">
+          <div id="controlList" class="border rounded p-2 risk-wizard-scroll"></div>
+          <div class="small-muted mt-2"><span id="controlCount">0</span> selected.</div>
+        </section>
+
+        <!-- Step 7: review -->
+        <section class="risk-wizard-step" data-step="review" hidden>
+          <h2 class="h5">Check and save</h2>
+          <p class="small-muted">Here is what KEEN will record. Use “Change” to go back to any step.</p>
+          <dl class="row mb-0" id="reviewSummary"></dl>
+        </section>
+
+        <!-- Done -->
+        <section class="risk-wizard-step" data-step="done" hidden>
+          <div class="text-center py-3">
+            <div class="display-6 text-success mb-2"><i class="bi bi-check-circle" aria-hidden="true"></i></div>
+            <h2 class="h5" id="doneTitle">Saved</h2>
+            <div class="small-muted" id="doneDetail"></div>
+            <div class="d-flex flex-wrap gap-2 justify-content-center mt-3" id="doneActions"></div>
+          </div>
+        </section>
+      </div>
+      <div class="card-footer d-flex flex-wrap gap-2 align-items-center justify-content-between no-print" id="wizardFooter">
+        <button class="btn btn-outline-secondary" id="backStep" type="button"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back</button>
+        <div class="small-muted" id="stepHint"></div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary" id="skipStep" type="button" hidden>Skip this step</button>
+          <button class="btn btn-primary" id="nextStep" type="submit">Next<i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></button>
+        </div>
+      </div>
+    </form>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/risk-wizard.js"></script>
+</body>
+</html>

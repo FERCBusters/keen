@@ -1075,6 +1075,11 @@ class Risk(Base):
     asset_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("risk_assets.id"), nullable=False, index=True
     )
+    # A short name for the register; the threat summary carries the detail.
+    title: Mapped[str] = mapped_column(
+        String(256), nullable=False, default="", server_default=""
+    )
+    # CIA associations; a general register entry has none.
     risk_types: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     risk_owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -1135,6 +1140,12 @@ class Risk(Base):
     control_links = relationship(
         "RiskControlLink", back_populates="risk", cascade="all, delete-orphan"
     )
+    party_links = relationship(
+        "RiskInterestedParty",
+        back_populates="risk",
+        cascade="all, delete-orphan",
+        order_by="RiskInterestedParty.created_at",
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -1180,6 +1191,61 @@ class RiskRegisterSettings(Base):
     high_max: Mapped[int] = mapped_column(Integer, nullable=False, default=16)
 
 
+class RiskInterestedParty(Base):
+    """Who a risk affects: an interested party, a person or a vendor.
+
+    Exactly one of the three references is set; the row disappears with the
+    risk or with the party it names.
+    """
+
+    __tablename__ = "risk_interested_parties"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    risk_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("risks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    interested_party_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("interested_parties.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    person_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_people.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    vendor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_vendors.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+
+    risk = relationship("Risk", back_populates="party_links")
+    interested_party = relationship("InterestedParty")
+    person = relationship("IsmsPerson")
+    vendor = relationship("IsmsVendor")
+
+    __table_args__ = (
+        CheckConstraint(
+            "(CASE WHEN interested_party_id IS NULL THEN 0 ELSE 1 END)"
+            " + (CASE WHEN person_id IS NULL THEN 0 ELSE 1 END)"
+            " + (CASE WHEN vendor_id IS NULL THEN 0 ELSE 1 END) = 1",
+            name="ck_risk_interested_parties_one_party",
+        ),
+    )
+
+
 class RiskLibraryEntry(Base):
     __tablename__ = "risk_library_entries"
     id: Mapped[uuid.UUID] = mapped_column(
@@ -1187,6 +1253,17 @@ class RiskLibraryEntry(Base):
     )
     name: Mapped[str] = mapped_column(String(256), nullable=False, unique=True)
     threat_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # "risk" templates seed register entries (with or without CIA types);
+    # "pestle" templates seed PESTLE(E) impact-assessment items.
+    method: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="risk", server_default="risk"
+    )
+    pestle_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="", server_default=""
+    )
+    lens: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="", server_default=""
+    )
     risk_types: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     treatment_guidance: Mapped[str] = mapped_column(Text, nullable=False, default="")
     suggested_assessment: Mapped[dict] = mapped_column(

@@ -79,8 +79,10 @@ async def import_register(
 
 
 @router.get("/v1/risks/library")
-def list_library(user=Depends(require_risk_read), db: Session = Depends(get_db)):
-    return service.list_library(user=user, db=db)
+def list_library(
+    user=Depends(require_risk_read), db: Session = Depends(get_db), method: str = ""
+):
+    return service.list_library(method=method, user=user, db=db)
 
 
 @router.post("/v1/risks/library", status_code=201)

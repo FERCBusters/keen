@@ -293,8 +293,6 @@ def test_new_risks_normalise_types_and_derive_scores_from_register_ratings(reg):
 @pytest.mark.parametrize(
     "overrides,status,detail",
     [
-        ({"risk_types": []}, 400, "At least one risk type is required"),
-        ({"risk_types": None}, 400, "At least one risk type is required"),
         (
             {"risk_types": ["Confidentiality", "Safety"]},
             400,
@@ -419,7 +417,8 @@ def test_risk_updates_change_only_the_fields_sent(reg):
 
     retyped = reg.manage("PATCH", path, {"risk_types": ["availability"]})
     assert retyped["risk_types"] == ["Availability"]
-    reg.manage("PATCH", path, {"risk_types": []}, status=400)
+    # Clearing the CIA associations makes it a general register entry.
+    assert reg.manage("PATCH", path, {"risk_types": []})["method"] == "general"
 
     # Older clients that still send the three-factor scores update the ratings.
     legacy = reg.manage(
@@ -441,7 +440,7 @@ def test_risk_updates_change_only_the_fields_sent(reg):
     assert final["note"] == HOSTILE
     changelog = reg.read("GET", f"{path}/changelog")
     actions = [item["action"] for item in changelog["items"]]
-    assert actions.count("updated") == 4 and actions[-1] == "created"
+    assert actions.count("updated") == 5 and actions[-1] == "created"
     note_change = next(
         change
         for item in changelog["items"]
@@ -1137,3 +1136,231 @@ def test_mitigator_analysis_validates_references_without_creating_records(reg):
     assert reg.db.query(RiskCategory).count() == 2
     assert reg.db.query(RiskAsset).count() == 0
     assert reg.db.query(Risk).count() == 0
+
+
+def test_a_general_risk_has_a_title_and_no_cia_associations(reg):
+    # A simple register entry needs no CIA types; its title names it.
+    created = _create(
+        reg,
+        title="  Payroll data leaves the building  ",
+        risk_types=[],
+        treatment_strategy="Mitigate",
+        treatment_status="in_progress",
+        treatment_plan="Encrypt exports",
+        treatment_due_at="2026-12-01",
+    )
+    assert created["title"] == "Payroll data leaves the building"
+    assert created["display"] == "Payroll data leaves the building"
+    assert created["method"] == "general"
+    assert created["risk_types"] == []
+    assert (
+        created["treatment_strategy"],
+        created["treatment_status"],
+        created["treatment_plan"],
+        created["treatment_due_at"],
+    ) == ("mitigate", "in_progress", "Encrypt exports", "2026-12-01")
+    # Without a title the register shows the asset and threat.
+    untitled = _create(reg, risk_types=None)
+    assert untitled["display"] == (
+        "Payroll database — Unauthorised export of salary records"
+    )
+    assert untitled["method"] == "general"
+    cia = _create(reg, risk_types=["availability", "Confidentiality"])
+    assert cia["method"] == "cia"
+    assert cia["risk_types"] == ["Availability", "Confidentiality"]
+    # Treatment choices come from the register's fixed lists.
+    for body, detail in (
+        ({"treatment_strategy": "ignore"}, "Invalid treatment strategy"),
+        ({"treatment_status": "done"}, "Invalid treatment status"),
+    ):
+        response = reg.manage("POST", "/v1/risks", _risk_body(**body), status=400)
+        assert response["detail"] == detail
+    # The title is searchable and travels through the register.
+    found = reg.read("GET", "/v1/risks", params={"framework": "A", "q": "leaves the"})
+    assert [r["id"] for r in found["items"]] == [created["id"]]
+    register = reg.read("GET", "/v1/risks/register", params={"framework": "A"})
+    assert {r["id"]: r["title"] for r in register["items"]}[created["id"]] == (
+        "Payroll data leaves the building"
+    )
+    changelog = reg.read("GET", f"/v1/risks/{created['id']}/changelog")
+    assert changelog["items"][0]["entity_title"] == "Payroll data leaves the building"
+
+
+def test_a_risk_names_the_parties_it_affects(reg):
+    from app.db.models import (
+        InterestedParty,
+        InterestedPartyName,
+        InterestedPartyNature,
+        IsmsPerson,
+        IsmsVendor,
+    )
+
+    db = reg.db
+    name = InterestedPartyName(name="Customers")
+    nature = InterestedPartyNature(name="External")
+    db.add_all([name, nature])
+    db.flush()
+    party = InterestedParty(framework_slug="A", name_id=name.id, nature_id=nature.id)
+    elsewhere = InterestedParty(
+        framework_slug="B", name_id=name.id, nature_id=nature.id
+    )
+    person = IsmsPerson(name="Dana", position="DPO", email="dana@example.test")
+    vendor = IsmsVendor(
+        name="Cloud host",
+        contact="support@cloud.example",
+        website="https://cloud.example",
+    )
+    db.add_all([party, elsewhere, person, vendor])
+    db.commit()
+
+    # A risk names interested parties from its own framework only.
+    response = reg.manage(
+        "POST",
+        "/v1/risks",
+        _risk_body(interested_parties=[{"interested_party_id": str(elsewhere.id)}]),
+        status=400,
+    )
+    assert response["detail"] == "Unknown interested party"
+
+    created = _create(
+        reg,
+        interested_parties=[
+            {"interested_party_id": str(party.id)},
+            {"person_id": str(person.id)},
+            {"vendor_id": str(vendor.id)},
+            {"vendor_id": str(vendor.id)},  # repeated references collapse
+            # A party that does not exist yet is created along the way, and a
+            # name with a nature that already exists is reused.
+            {"name": "Regulator", "nature": "External"},
+            {"name": "Customers", "nature": "external"},
+        ],
+    )
+    parties = created["interested_parties"]
+    # Labels carry a position or website, never an email address or contact.
+    assert [(p["kind"], p["label"], p["detail"]) for p in parties] == [
+        ("interested_party", "Customers", "External"),
+        ("person", "Dana", "DPO"),
+        ("vendor", "Cloud host", "https://cloud.example"),
+        ("interested_party", "Regulator", "External"),
+    ]
+    assert "dana@example.test" not in str(parties)
+    assert "support@cloud.example" not in str(parties)
+    assert parties[0]["id"] == str(party.id)
+    assert parties[0]["href"] == f"/interested_party.html?id={party.id}"
+    # The new interested party is a first-class record in the framework.
+    listed = reg.read("GET", "/v1/interested-parties", params={"framework": "A"})
+    assert sorted(p["name"]["name"] for p in listed["items"]) == [
+        "Customers",
+        "Regulator",
+    ]
+    regulator = next(p for p in listed["items"] if p["name"]["name"] == "Regulator")
+    assert regulator["id"] == parties[3]["id"]
+    # The change history names the parties, and a later edit replaces them.
+    changelog = reg.read("GET", f"/v1/risks/{created['id']}/changelog")
+    created_state = changelog["items"][0]
+    assert created_state["action"] == "created"
+    updated = reg.manage(
+        "PATCH",
+        f"/v1/risks/{created['id']}",
+        {"framework": "A", "interested_parties": [{"person_id": str(person.id)}]},
+    )
+    assert [p["kind"] for p in updated["interested_parties"]] == ["person"]
+    changelog = reg.read("GET", f"/v1/risks/{created['id']}/changelog")
+    change = next(
+        c
+        for c in changelog["items"][0]["changes"]
+        if c["field"] == "interested_parties"
+    )
+    assert change["label"] == "Affected parties"
+    assert change["after"] == ["Dana (person)"]
+    # An edit that does not mention parties leaves them alone.
+    reg.manage("PATCH", f"/v1/risks/{created['id']}", {"framework": "A", "note": "n"})
+    assert [
+        p["kind"]
+        for p in reg.read("GET", f"/v1/risks/{created['id']}")["interested_parties"]
+    ] == ["person"]
+    # Deleting the person removes the link but not the risk.
+    db.delete(db.get(IsmsPerson, person.id))
+    db.commit()
+    assert reg.read("GET", f"/v1/risks/{created['id']}")["interested_parties"] == []
+
+
+@pytest.mark.parametrize(
+    "party,detail",
+    [
+        ({}, "Each affected party names one interested party"),
+        ({"person_id": str(uuid.uuid4()), "name": "x", "nature": "y"}, "names one"),
+        ({"interested_party_id": str(uuid.uuid4())}, "Unknown interested party"),
+        ({"person_id": str(uuid.uuid4())}, "Unknown person"),
+        ({"vendor_id": str(uuid.uuid4())}, "Unknown vendor"),
+        ({"name": "Regulator"}, "A new interested party needs a nature"),
+    ],
+)
+def test_affected_parties_are_checked(reg, party, detail):
+    response = reg.manage(
+        "POST", "/v1/risks", _risk_body(interested_parties=[party]), status=400
+    )
+    assert detail in response["detail"]
+    # Nothing was created along the way.
+    assert reg.read("GET", "/v1/risks", params={"framework": "A"})["items"] == []
+    assert (
+        reg.read("GET", "/v1/interested-parties", params={"framework": "A"})["items"]
+        == []
+    )
+
+
+def test_the_wizard_lists_who_a_risk_can_affect(reg):
+    from app.db.models import (
+        InterestedParty,
+        InterestedPartyName,
+        InterestedPartyNature,
+        IsmsPerson,
+        IsmsVendor,
+    )
+
+    db = reg.db
+    name = InterestedPartyName(name="Customers")
+    other = InterestedPartyName(name="Staff")
+    nature = InterestedPartyNature(name="External")
+    internal = InterestedPartyNature(name="Internal")
+    db.add_all([name, other, nature, internal])
+    db.flush()
+    db.add_all(
+        [
+            InterestedParty(framework_slug="A", name_id=name.id, nature_id=nature.id),
+            InterestedParty(
+                framework_slug="B", name_id=other.id, nature_id=internal.id
+            ),
+            IsmsPerson(name="Dana", position="DPO", email="dana@example.test"),
+            IsmsVendor(name="Cloud host", contact="support@cloud.example"),
+        ]
+    )
+    db.commit()
+    options = reg.manage("GET", "/v1/risks/parties", params={"framework": "A"})
+    assert [(p["label"], p["detail"]) for p in options["interested_parties"]] == [
+        ("Customers", "External")
+    ]
+    # Names only: no addresses or contacts leave the directory through here.
+    assert options["people"] == [
+        {
+            "id": options["people"][0]["id"],
+            "kind": "person",
+            "label": "Dana",
+            "detail": "DPO",
+        }
+    ]
+    assert options["vendors"][0]["label"] == "Cloud host"
+    assert "contact" not in options["vendors"][0]
+    assert options["natures"] == ["External", "Internal"]
+    narrowed = reg.manage(
+        "GET", "/v1/risks/parties", params={"framework": "A", "q": "dan"}
+    )
+    assert (
+        narrowed["interested_parties"],
+        [p["label"] for p in narrowed["people"]],
+    ) == (
+        [],
+        ["Dana"],
+    )
+    # Reading risks is not enough to browse the directory.
+    reg.read("GET", "/v1/risks/parties", params={"framework": "A"}, status=403)

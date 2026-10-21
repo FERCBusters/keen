@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -19,14 +19,20 @@ from app.core.references import ref_sort_key as _ref_sort_key
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     ControlItem,
+    InterestedParty,
+    InterestedPartyName,
+    InterestedPartyNature,
     IsmsLicense,
     IsmsOrgNode,
     IsmsOrgNodeUser,
+    IsmsPerson,
+    IsmsVendor,
     Risk,
     RiskAsset,
     RiskAssetSubcategory,
     RiskCategory,
     RiskControlLink,
+    RiskInterestedParty,
     RiskLibraryEntry,
     User,
 )
@@ -39,6 +45,7 @@ from app.services.entity_changelog import (
     risk_changelog_state,
 )
 from app.services.errors import DomainError
+from app.services.interested_parties import _lookup_by_id_or_name
 from app.services.isms.link_diary import (
     remove_entity_link_diary,
     sync_entity_link_diary,
@@ -50,6 +57,8 @@ RISK_READ_PERMISSION = "risk.read"
 RISK_MANAGE_PERMISSION = "risk.manage"
 _RISK_TYPES = {"Confidentiality", "Integrity", "Availability"}
 _RISK_TYPE_CANON = {x.lower(): x for x in _RISK_TYPES}
+TREATMENT_STRATEGIES = {"", "mitigate", "accept", "avoid", "transfer"}
+TREATMENT_STATUSES = {"open", "in_progress", "awaiting_review", "closed"}
 
 
 def _split_filter_values(value: str | None) -> list[str]:
@@ -108,6 +117,17 @@ class RiskMitigatorAnalysePayload(BaseModel):
     limit: int | None = Field(default=10, ge=1, le=25)
 
 
+class RiskPartyRef(BaseModel):
+    """One party a risk affects: an existing record, or a new interested party."""
+
+    interested_party_id: uuid.UUID | None = None
+    person_id: uuid.UUID | None = None
+    vendor_id: uuid.UUID | None = None
+    # A new interested party, created (or reused) by name and nature.
+    name: str | None = Field(default=None, max_length=256)
+    nature: str | None = Field(default=None, max_length=256)
+
+
 class RiskUpsertPayload(BaseModel):
     asset_id: uuid.UUID | None = None
     asset_name: str | None = Field(default=None, max_length=256)
@@ -115,7 +135,13 @@ class RiskUpsertPayload(BaseModel):
     category_name: str | None = Field(default=None, max_length=128)
     subcategory_id: uuid.UUID | None = None
     subcategory_name: str | None = Field(default=None, max_length=128)
+    title: str | None = Field(default=None, max_length=256)
     risk_types: list[str] | None = None
+    interested_parties: list[RiskPartyRef] | None = Field(default=None, max_length=100)
+    treatment_strategy: str | None = Field(default=None, max_length=32)
+    treatment_status: str | None = Field(default=None, max_length=32)
+    treatment_plan: str | None = Field(default=None, max_length=20000)
+    treatment_due_at: date | None = None
     risk_owner_role_id: uuid.UUID | None = None
     risk_owner_user_id: uuid.UUID | None = None
     risk_owner_username: str | None = Field(default=None, max_length=128)
@@ -223,7 +249,9 @@ def _clean_score(raw: int | None, *, default: int = 1, label: str = "score") -> 
     return n
 
 
-def _clean_risk_types(raw: list[str] | None) -> list[str]:
+def _clean_risk_types(raw: list[str] | None, *, required: bool = False) -> list[str]:
+    """CIA associations in canonical order; a general risk has none."""
+
     out: list[str] = []
     seen: set[str] = set()
     for item in raw or []:
@@ -239,7 +267,7 @@ def _clean_risk_types(raw: list[str] | None) -> list[str]:
         if value not in seen:
             seen.add(value)
             out.append(value)
-    if not out:
+    if required and not out:
         raise DomainError(status_code=400, detail="At least one risk type is required")
     return out
 
@@ -712,6 +740,186 @@ def _risk_controls(
     return rows
 
 
+def risk_display(risk: Risk) -> str:
+    """The name a risk is known by: its title, else its asset and threat."""
+
+    title = (risk.title or "").strip()
+    if title:
+        return title
+    asset_name = risk.asset.name if risk.asset else ""
+    threat = (risk.threat_summary or "").strip()
+    if asset_name and threat:
+        return f"{asset_name} — {threat[:120]}"
+    return asset_name or threat[:120] or "Risk"
+
+
+def _party_link_out(link: RiskInterestedParty) -> dict[str, Any] | None:
+    """Describe one affected party; None once the party record is gone."""
+
+    if link.interested_party_id:
+        party = link.interested_party
+        if party is None:
+            return None
+        return {
+            "kind": "interested_party",
+            "id": str(link.interested_party_id),
+            "label": party.name.name if party.name else "Interested party",
+            "detail": party.nature.name if party.nature else "",
+            "href": f"/interested_party.html?id={link.interested_party_id}",
+        }
+    if link.person_id:
+        person = link.person
+        if person is None:
+            return None
+        return {
+            "kind": "person",
+            "id": str(link.person_id),
+            "label": person.name,
+            "detail": person.position or "",
+            "href": "/isms.html?tab=people",
+        }
+    vendor = link.vendor
+    if vendor is None:
+        return None
+    return {
+        "kind": "vendor",
+        "id": str(link.vendor_id),
+        "label": vendor.name,
+        "detail": vendor.website or "",
+        "href": "/isms.html?tab=vendors",
+    }
+
+
+def _risk_parties_out(risk: Risk) -> list[dict[str, Any]]:
+    out = []
+    for link in list(risk.party_links or []):
+        item = _party_link_out(link)
+        if item is not None:
+            out.append(item)
+    return out
+
+
+def _replace_party_links(
+    db: Session,
+    risk: Risk,
+    refs: list[RiskPartyRef],
+    *,
+    framework: str,
+    user: User | None,
+) -> None:
+    """Replace who the risk affects; a new interested party is created inline.
+
+    Each reference names exactly one existing interested party, person or
+    vendor, or a new interested party by name and nature, which is reused when
+    one with that name and nature already exists in the framework.
+    """
+
+    links: list[RiskInterestedParty] = []
+    seen: set[tuple[str, uuid.UUID]] = set()
+
+    def add(kind: str, row_id: uuid.UUID) -> None:
+        if (kind, row_id) in seen:
+            return
+        seen.add((kind, row_id))
+        links.append(
+            RiskInterestedParty(
+                risk_id=risk.id, created_at=_utcnow(), **{f"{kind}_id": row_id}
+            )
+        )
+
+    for ref in refs:
+        chosen = [
+            value
+            for value in (ref.interested_party_id, ref.person_id, ref.vendor_id)
+            if value
+        ]
+        named = bool((ref.name or "").strip())
+        if len(chosen) + int(named) != 1:
+            raise DomainError(
+                400,
+                "Each affected party names one interested party, person or vendor,"
+                " or a new interested party by name and nature",
+            )
+        if ref.interested_party_id:
+            party = db.get(InterestedParty, ref.interested_party_id)
+            # Interested parties belong to a framework; a risk names its own.
+            if party is None or party.framework_slug != framework:
+                raise DomainError(400, "Unknown interested party")
+            add("interested_party", ref.interested_party_id)
+        elif ref.person_id:
+            if not db.get(IsmsPerson, ref.person_id):
+                raise DomainError(400, "Unknown person")
+            add("person", ref.person_id)
+        elif ref.vendor_id:
+            if not db.get(IsmsVendor, ref.vendor_id):
+                raise DomainError(400, "Unknown vendor")
+            add("vendor", ref.vendor_id)
+        else:
+            if not (ref.nature or "").strip():
+                raise DomainError(400, "A new interested party needs a nature")
+            name = _lookup_by_id_or_name(
+                db,
+                InterestedPartyName,
+                name=ref.name,
+                user=user,
+                create=True,
+                label="name",
+            )
+            nature = _lookup_by_id_or_name(
+                db,
+                InterestedPartyNature,
+                name=ref.nature,
+                user=user,
+                create=True,
+                label="nature",
+            )
+            party = (
+                db.query(InterestedParty)
+                .filter(
+                    InterestedParty.framework_slug == framework,
+                    InterestedParty.name_id == name.id,
+                    InterestedParty.nature_id == nature.id,
+                )
+                .one_or_none()
+            )
+            if party is None:
+                now = _utcnow()
+                party = InterestedParty(
+                    framework_slug=framework,
+                    name_id=name.id,
+                    nature_id=nature.id,
+                    note="",
+                    created_by_user_id=getattr(user, "id", None),
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(party)
+                db.flush()
+                record_entity_changelog(
+                    db,
+                    entity_type="interested_party",
+                    entity_id=party.id,
+                    action="created",
+                    before=None,
+                    after={
+                        "id": str(party.id),
+                        "framework": framework,
+                        "name": name.name,
+                        "nature": nature.name,
+                        "display": f"{name.name} ({nature.name})",
+                    },
+                    user=user,
+                    request_method="POST",
+                    request_path="/v1/risks",
+                )
+            add("interested_party", party.id)
+
+    for link in list(risk.party_links):
+        db.delete(link)
+    risk.party_links = links
+    db.flush()
+
+
 def _risk_out(
     db: Session,
     risk: Risk,
@@ -748,9 +956,19 @@ def _risk_out(
         "asset_entity": _asset_out(asset),
         "category": _category_out(category),
         "subcategory": _subcategory_out(subcategory),
+        "title": risk.title or "",
+        "display": risk_display(risk),
+        "method": "cia" if risk.risk_types else "general",
         "risk_types": list(risk.risk_types or []),
+        "interested_parties": _risk_parties_out(risk),
         "risk_owner": risk_owner_out(risk),
         "threat_summary": risk.threat_summary or "",
+        "treatment_strategy": risk.treatment_strategy or "",
+        "treatment_status": risk.treatment_status or "open",
+        "treatment_plan": risk.treatment_plan or "",
+        "treatment_due_at": (
+            risk.treatment_due_at.isoformat() if risk.treatment_due_at else None
+        ),
         "register_likelihood": risk.register_likelihood,
         "register_impact": risk.register_impact,
         "register_residual_likelihood": risk.register_residual_likelihood,
@@ -796,8 +1014,33 @@ def _apply_payload(
             require_asset=True,
         )
 
+    if is_create or "title" in fields:
+        risk.title = _clean_text(
+            payload.title, max_len=256, required=False, label="title"
+        )
+
     if is_create or "risk_types" in fields:
         risk.risk_types = _clean_risk_types(payload.risk_types)
+
+    if is_create or "treatment_strategy" in fields:
+        strategy = (payload.treatment_strategy or "").strip().lower()
+        if strategy not in TREATMENT_STRATEGIES:
+            raise DomainError(400, "Invalid treatment strategy")
+        risk.treatment_strategy = strategy
+    if is_create or "treatment_status" in fields:
+        status = (payload.treatment_status or "open").strip().lower()
+        if status not in TREATMENT_STATUSES:
+            raise DomainError(400, "Invalid treatment status")
+        risk.treatment_status = status
+    if is_create or "treatment_plan" in fields:
+        risk.treatment_plan = _clean_text(
+            payload.treatment_plan,
+            max_len=20000,
+            required=False,
+            label="treatment_plan",
+        )
+    if is_create or "treatment_due_at" in fields:
+        risk.treatment_due_at = payload.treatment_due_at
 
     if is_create or fields & {
         "risk_owner_user_id",
@@ -1239,6 +1482,70 @@ def list_risk_owner_users(*, user, db: Session):
     }
 
 
+def list_risk_party_options(*, framework: str, q: str = "", user, db: Session):
+    """Who a risk can affect, for the risk wizard: interested parties in the
+    framework, people from the ISMS directory and vendors, by name only."""
+
+    fw = _clean_framework(framework)
+    needle = _clean_text(q, max_len=256, required=False, label="q").lower()
+
+    def matches(*values: str | None) -> bool:
+        return not needle or any(needle in (v or "").lower() for v in values)
+
+    parties = (
+        db.query(InterestedParty)
+        .join(InterestedPartyName, InterestedPartyName.id == InterestedParty.name_id)
+        .filter(InterestedParty.framework_slug == fw)
+        .order_by(func.lower(InterestedPartyName.name))
+        .limit(500)
+        .all()
+    )
+    people = db.query(IsmsPerson).order_by(func.lower(IsmsPerson.name)).limit(500).all()
+    vendors = (
+        db.query(IsmsVendor).order_by(func.lower(IsmsVendor.name)).limit(500).all()
+    )
+    natures = (
+        db.query(InterestedPartyNature)
+        .order_by(func.lower(InterestedPartyNature.name))
+        .limit(200)
+        .all()
+    )
+    return {
+        "framework": fw,
+        "interested_parties": [
+            {
+                "id": str(p.id),
+                "kind": "interested_party",
+                "label": p.name.name if p.name else "",
+                "detail": p.nature.name if p.nature else "",
+            }
+            for p in parties
+            if matches(p.name.name if p.name else "", p.nature.name if p.nature else "")
+        ],
+        "people": [
+            {
+                "id": str(person.id),
+                "kind": "person",
+                "label": person.name,
+                "detail": person.position or "",
+            }
+            for person in people
+            if matches(person.name, person.position)
+        ],
+        "vendors": [
+            {
+                "id": str(vendor.id),
+                "kind": "vendor",
+                "label": vendor.name,
+                "detail": "",
+            }
+            for vendor in vendors
+            if matches(vendor.name)
+        ],
+        "natures": [nature.name for nature in natures],
+    }
+
+
 def list_my_owned_risks(
     *,
     framework: str = settings.default_framework_slug,
@@ -1319,6 +1626,7 @@ def list_risks(
         like = f"%{sq.lower()}%"
         qry = qry.filter(
             or_(
+                func.lower(Risk.title).like(like),
                 func.lower(RiskAsset.name).like(like),
                 func.lower(Risk.threat_summary).like(like),
                 func.lower(Risk.note).like(like),
@@ -1509,6 +1817,10 @@ def create_risk(
     db.add(risk)
     db.flush()
     fw = _clean_framework(payload.framework)
+    if payload.interested_parties is not None:
+        _replace_party_links(
+            db, risk, payload.interested_parties, framework=fw, user=user
+        )
     if payload.controls is not None:
         controls = (
             payload.controls + template_refs
@@ -1576,6 +1888,10 @@ def update_risk(*, risk_id: str, payload: RiskUpsertPayload, user, db: Session):
     fw = _clean_framework(payload.framework)
     before_risk = risk_changelog_state(db, risk.id, framework=fw)
     _apply_payload(db, risk, payload, is_create=False)
+    if payload.interested_parties is not None:
+        _replace_party_links(
+            db, risk, payload.interested_parties, framework=fw, user=user
+        )
     if payload.controls is not None:
         _replace_control_links(
             db, risk, framework=fw, control_values=payload.controls, user=user

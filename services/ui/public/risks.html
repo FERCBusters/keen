@@ -3,71 +3,70 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – Risk Assessments</title>
+  <title>Keen – Risks</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css"/>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<script src="/demo-notice.js" defer></script>
+  <script src="/demo-notice.js" defer></script>
 </head>
 <body data-page="risks">
   <div id="navbar"></div>
 
-  <main class="container container-tight py-4">
+  <main class="container-fluid py-4">
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
-        <h1 class="h3 mb-1">Risk Assessments</h1>
-        <div class="small-muted">Assess the same risks shown in the register and 5×5 heatmap, including CIA associations and linked controls.</div>
+        <h1 class="h3 mb-1">Risks</h1>
+        <div class="small-muted">Every risk in one place: the register and heatmap, information-security (CIA) risks, PESTLE(E) factors and the reusable library.</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
-        <a class="btn btn-outline-primary" data-nav-fw="1" href="/risk-register.html">Register &amp; heatmap</a>
-        <a class="btn btn-outline-primary" data-nav-fw="1" href="/pestle.html"><i class="bi bi-globe2" aria-hidden="true"></i> PESTLE(E)</a>
-        <button id="newRisk" class="btn btn-primary" type="button">New risk scenario</button>
+        <a class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" id="mitigatorLink" data-nav-fw="1" href="/mitigator.html" data-feature="mitigator"><img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon-sm"> Ask the Mitigator</a>
+        <a class="btn btn-outline-primary" id="interestedPartiesLink" data-nav-fw="1" href="/interested_parties.html" data-feature="interested_parties"><i class="bi bi-people" aria-hidden="true"></i> Interested Parties</a>
+        <a id="newRisk" class="btn btn-primary" data-nav-fw="1" href="/risk-wizard.html"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a risk</a>
       </div>
     </div>
 
     <div id="status" class="alert alert-info" style="display:none;"></div>
 
     <ul class="nav nav-tabs mb-3 no-print" id="riskPageTabs" role="tablist">
-      <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="risksListTab" data-bs-toggle="tab" data-bs-target="#risksListPane" type="button" role="tab" aria-controls="risksListPane" aria-selected="true">Risks</button>
-      </li>
-
-      <li class="nav-item" role="presentation" id="riskVisualisationsTabItem">
-        <button class="nav-link" id="riskVisualisationsTab" data-bs-toggle="tab" data-bs-target="#riskVisualisationsPane" type="button" role="tab" aria-controls="riskVisualisationsPane" aria-selected="false" data-feature="visualisations">Visualisations</button>
-      </li>
-
-      <li class="nav-item" role="presentation" id="controlsWithoutRisksTabItem">
-        <button class="nav-link" id="controlsWithoutRisksTab" data-bs-toggle="tab" data-bs-target="#controlsWithoutRisksPane" type="button" role="tab" aria-controls="controlsWithoutRisksPane" aria-selected="false">Controls without Risks</button>
-      </li>
-      <li class="nav-item" role="presentation" id="newRiskScenarioTabItem">
-        <button class="nav-link" id="newRiskScenarioTab" data-bs-toggle="tab" data-bs-target="#newRiskScenarioPane" type="button" role="tab" aria-controls="newRiskScenarioPane" aria-selected="false">New risk scenario</button>
-      </li>
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="risksListTab" data-bs-toggle="tab" data-bs-target="#risksListPane" type="button" role="tab" aria-controls="risksListPane" aria-selected="true">Risks</button></li>
+      <li class="nav-item" role="presentation" id="registerTabItem" data-feature="risk_register"><button class="nav-link" id="registerTab" data-bs-toggle="tab" data-bs-target="#registerPane" type="button" role="tab" aria-controls="registerPane" aria-selected="false">Register &amp; heatmap</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="ciaTab" data-bs-toggle="tab" data-bs-target="#ciaPane" type="button" role="tab" aria-controls="ciaPane" aria-selected="false">CIA risks</button></li>
+      <li class="nav-item" role="presentation" id="pestleTabItem" data-feature="pestle"><button class="nav-link" id="pestleTab" data-bs-toggle="tab" data-bs-target="#pestlePane" type="button" role="tab" aria-controls="pestlePane" aria-selected="false">PESTLE(E) method</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="libraryTab" data-bs-toggle="tab" data-bs-target="#libraryPane" type="button" role="tab" aria-controls="libraryPane" aria-selected="false">Risk library</button></li>
+      <li class="nav-item" role="presentation" id="riskVisualisationsTabItem"><button class="nav-link" id="riskVisualisationsTab" data-bs-toggle="tab" data-bs-target="#riskVisualisationsPane" type="button" role="tab" aria-controls="riskVisualisationsPane" aria-selected="false" data-feature="visualisations">Visualisations</button></li>
+      <li class="nav-item" role="presentation" id="controlsWithoutRisksTabItem"><button class="nav-link" id="controlsWithoutRisksTab" data-bs-toggle="tab" data-bs-target="#controlsWithoutRisksPane" type="button" role="tab" aria-controls="controlsWithoutRisksPane" aria-selected="false">Controls without risks</button></li>
     </ul>
 
     <div class="tab-content" id="riskPageTabContent">
+      <!-- All risks -->
       <section class="tab-pane fade show active" id="risksListPane" role="tabpanel" aria-labelledby="risksListTab" tabindex="0">
         <div class="card mb-3 no-print" data-mosp-filter-section="risk-filters" data-mosp-filter-title="Risk filters">
           <div class="card-body" data-mosp-filter-body>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-              <input id="q" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search asset, category, subcategory, threat or note…">
+              <input id="q" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search name, asset, category, scenario or note…">
               <select id="categoryFilter" class="form-select form-select-sm" style="min-width:160px;"><option value="">All categories</option></select>
               <select id="subcategoryFilter" class="form-select form-select-sm" style="min-width:180px;"><option value="">All subcategories</option></select>
-              <select id="typeFilter" class="form-select form-select-sm" style="min-width:170px;">
-                <option value="">All risk types</option>
-                <option value="Confidentiality">Confidentiality</option>
-                <option value="Integrity">Integrity</option>
-                <option value="Availability">Availability</option>
+              <select id="methodFilter" class="form-select form-select-sm" style="min-width:160px;" aria-label="Kind of risk">
+                <option value="">All kinds</option>
+                <option value="general">Simple risks</option>
+                <option value="cia">CIA risks</option>
+              </select>
+              <select id="treatmentFilter" class="form-select form-select-sm" style="min-width:170px;" aria-label="Treatment status">
+                <option value="">Any treatment status</option>
+                <option value="open">Open</option>
+                <option value="in_progress">In progress</option>
+                <option value="awaiting_review">Awaiting review</option>
+                <option value="closed">Closed</option>
               </select>
               <button id="reload" class="btn btn-sm btn-outline-primary" type="button">Reload</button>
             </div>
           </div>
         </div>
-
         <div class="card">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
-              <div class="fw-bold">Risk scenarios</div>
+              <div class="fw-bold">All risks</div>
               <div class="small-muted" id="resultMeta">—</div>
             </div>
           </div>
@@ -76,24 +75,169 @@
               <table id="riskTable" class="table table-hover align-middle mb-0" data-sortable>
                 <thead>
                   <tr>
-                    <th>Asset</th>
-                    <th style="width:130px;">Category</th>
-                    <th style="width:160px;">Subcategory</th>
-                    <th style="width:190px;">Type</th>
+                    <th>Risk</th>
+                    <th style="width:170px;">Asset</th>
+                    <th style="width:150px;">Kind</th>
+                    <th style="width:170px;">Affects</th>
                     <th style="width:140px;">Owner</th>
-                    <th class="text-end sort-desc" style="width:110px;" data-sort-dir="desc">Risk</th>
-                    <th class="text-end" style="width:110px;">Residual</th>
-                    <th style="width:120px;">Controls</th>
-                    <th style="width:120px;" class="no-print">Actions</th>
+                    <th class="text-end sort-desc" style="width:100px;" data-sort-dir="desc">Today</th>
+                    <th class="text-end" style="width:110px;">After controls</th>
+                    <th style="width:150px;">Treatment</th>
+                    <th style="width:100px;">Controls</th>
+                    <th style="width:150px;" class="no-print">Actions</th>
                   </tr>
                 </thead>
-                <tbody id="rows"><tr class="table-loading-row"><td colspan="9" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risks…</span></div></td></tr></tbody>
+                <tbody id="rows"><tr class="table-loading-row"><td colspan="10" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risks…</span></div></td></tr></tbody>
               </table>
             </div>
           </div>
         </div>
       </section>
 
+      <!-- Register & heatmap -->
+      <section class="tab-pane fade" id="registerPane" role="tabpanel" aria-labelledby="registerTab" tabindex="0">
+        <div class="row g-3">
+          <div class="col-12 col-xl-4">
+            <section class="card mb-3">
+              <div class="card-header fw-semibold">5×5 heatmap</div>
+              <div class="card-body">
+                <p class="small-muted">Cells show how many rated risks sit at each likelihood and impact. Choose today's ratings or the ratings after controls. Thresholds apply to the whole register.</p>
+                <div class="d-flex gap-3 mb-2">
+                  <label><input checked name="scoreMode" type="radio" value="inherent"> Today (inherent)</label>
+                  <label><input name="scoreMode" type="radio" value="residual"> After controls (residual)</label>
+                </div>
+                <div class="table-responsive"><table aria-label="Risk register heatmap" class="table table-sm table-bordered text-center align-middle" id="heatmap"></table></div>
+                <div class="small-muted">Impact increases left to right; likelihood increases bottom to top.</div>
+                <form class="row g-2 mt-2 no-print" id="thresholdForm">
+                  <div class="col-4"><label class="form-label" for="lowMax">Low through</label><input class="form-control" id="lowMax" max="24" min="1" required type="number"></div>
+                  <div class="col-4"><label class="form-label" for="moderateMax">Moderate through</label><input class="form-control" id="moderateMax" max="24" min="2" required type="number"></div>
+                  <div class="col-4"><label class="form-label" for="highMax">High through</label><input class="form-control" id="highMax" max="24" min="3" required type="number"></div>
+                  <div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit">Save thresholds</button> <span class="small-muted">Scores above the high threshold are critical.</span></div>
+                </form>
+              </div>
+            </section>
+          </div>
+          <div class="col-12 col-xl-8" style="min-width:0">
+            <section class="card mb-3">
+              <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <strong>Risk and treatment register</strong>
+                <input class="form-control form-control-sm" id="registerSearch" placeholder="Filter by name, scenario or asset" style="max-width:300px;" type="search" aria-label="Filter the register">
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Risk</th><th>Asset / kind</th><th>Owner</th><th>Today</th><th>After controls</th><th>Treatment</th><th>Controls</th><th class="no-print"></th></tr></thead><tbody id="registerRows"></tbody></table></div>
+                <div class="small-muted p-2" id="registerMeta"></div>
+              </div>
+            </section>
+            <details class="card mb-3 no-print">
+              <summary class="card-header">Export and import</summary>
+              <div class="card-body">
+                <p>Export the current register as CSV. Import creates new risks and can assign controls by reference in the selected framework. The entire file is rejected if a row fails validation.</p>
+                <div class="d-flex flex-wrap gap-2 align-items-end">
+                  <a class="btn btn-outline-primary" href="#" id="exportRegister">Export CSV</a>
+                  <form class="d-flex flex-wrap gap-2 align-items-end" id="importForm"><div><label class="form-label" for="importFile">Import CSV</label><input accept=".csv,text/csv" class="form-control" id="importFile" required type="file"></div><button class="btn btn-outline-primary" type="submit">Import risks</button></form>
+                </div>
+                <div class="small-muted mt-2">Columns: asset, category, subcategory, threat_summary, risk_types (semicolon-separated CIA, or blank), owner_username, four register ratings (1–5), treatment fields, and controls (semicolon-separated refs). Up to 1,000 rows or 2 MB.</div>
+              </div>
+            </details>
+            <section class="card no-print" id="ratingCard" style="display:none">
+              <div class="card-header fw-semibold" id="ratingTitle">Rate risk</div>
+              <div class="card-body">
+                <form class="row g-3" id="ratingForm">
+                  <div class="col-12"><div class="alert alert-light border mb-0">These are the same ratings the risk wizard, the register and the heatmap use.</div></div>
+                  <div class="col-md-3"><label class="form-label" for="inherentLikelihood">Likelihood today</label><select class="form-select" id="inherentLikelihood"></select></div>
+                  <div class="col-md-3"><label class="form-label" for="inherentImpact">Impact today</label><select class="form-select" id="inherentImpact"></select></div>
+                  <div class="col-md-3"><label class="form-label" for="residualLikelihood">Likelihood after controls</label><select class="form-select" id="residualLikelihood"></select></div>
+                  <div class="col-md-3"><label class="form-label" for="residualImpact">Impact after controls</label><select class="form-select" id="residualImpact"></select></div>
+                  <div class="col-md-3"><label class="form-label" for="treatmentStrategy">Treatment decision</label><select class="form-select" id="treatmentStrategy"></select></div>
+                  <div class="col-md-3"><label class="form-label" for="treatmentStatus">Treatment status</label><select class="form-select" id="treatmentStatus"></select></div>
+                  <div class="col-md-3"><label class="form-label" for="treatmentDue">Due date</label><input class="form-control" id="treatmentDue" type="date"></div>
+                  <div class="col-12"><label class="form-label" for="treatmentPlan">Treatment plan and acceptance rationale</label><textarea class="form-control" id="treatmentPlan" rows="3"></textarea></div>
+                  <div class="col-12 d-flex flex-wrap gap-2"><button class="btn btn-primary" type="submit">Save rating &amp; treatment</button><button class="btn btn-outline-primary" id="addToLibrary" type="button">Save as a template</button><a class="btn btn-outline-secondary" href="#" id="editScenario">Edit in the wizard</a></div>
+                </form>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- CIA risks -->
+      <section class="tab-pane fade" id="ciaPane" role="tabpanel" aria-labelledby="ciaTab" tabindex="0">
+        <div class="card mb-3 no-print" data-mosp-filter-section="cia-filters" data-mosp-filter-title="CIA filters">
+          <div class="card-body" data-mosp-filter-body>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+              <select id="typeFilter" class="form-select form-select-sm" style="min-width:170px;">
+                <option value="">All CIA types</option>
+                <option value="Confidentiality">Confidentiality</option>
+                <option value="Integrity">Integrity</option>
+                <option value="Availability">Availability</option>
+              </select>
+              <a class="btn btn-sm btn-outline-primary" id="newCiaRisk" data-nav-fw="1" href="/risk-wizard.html?method=cia"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a CIA risk</a>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="fw-bold">Information-security risks</div>
+            <div class="small-muted" id="ciaMeta">Risks that threaten the confidentiality, integrity or availability of information.</div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0" data-sortable>
+                <thead><tr><th>Risk</th><th style="width:170px;">Asset</th><th style="width:220px;">CIA</th><th style="width:140px;">Owner</th><th class="text-end" style="width:100px;">Today</th><th class="text-end" style="width:110px;">After controls</th><th style="width:100px;">Controls</th><th style="width:120px;" class="no-print">Actions</th></tr></thead>
+                <tbody id="ciaRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PESTLE(E) -->
+      <section class="tab-pane fade" id="pestlePane" role="tabpanel" aria-labelledby="pestleTab" tabindex="0">
+        <div class="card mb-3 no-print" data-mosp-filter-section="pestle-filters" data-mosp-filter-title="PESTLE(E) filters">
+          <div class="card-body" data-mosp-filter-body>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+              <input id="pestleQ" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search factors or rationale…">
+              <select id="pestleTypeFilter" class="form-select form-select-sm" style="min-width:170px;"><option value="">All types</option></select>
+              <select id="pestleLensFilter" class="form-select form-select-sm" style="min-width:150px;"><option value="">All lenses</option></select>
+              <a class="btn btn-sm btn-outline-primary" id="newPestleRisk" data-nav-fw="1" href="/risk-wizard.html?method=pestle"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a PESTLE(E) factor</a>
+              <a class="btn btn-sm btn-outline-secondary" id="pestleWorkspaceLink" data-nav-fw="1" href="/pestle.html">Processes &amp; visualisations</a>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="fw-bold">PESTLE(E) factors</div>
+            <div class="small-muted" id="pestleMeta">Political, economic, social, technological, legal, environmental and ethical influences, scored for relevance to your processes and clauses.</div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0" data-sortable>
+                <thead><tr><th style="width:140px;">Type</th><th style="width:110px;">Lens</th><th>Factor</th><th style="width:130px;">Relevance</th><th style="width:140px;">Processes</th><th style="width:120px;">Clauses</th><th style="width:120px;" class="no-print">Actions</th></tr></thead>
+                <tbody id="pestleRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Library -->
+      <section class="tab-pane fade" id="libraryPane" role="tabpanel" aria-labelledby="libraryTab" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Reusable risk library</div>
+              <div class="small-muted">Templates for any kind of risk. A template fills in the wizard; you still review and rate the risk for your organisation.</div>
+            </div>
+            <div class="d-flex gap-2 align-items-center no-print">
+              <select id="libraryMethodFilter" class="form-select form-select-sm" aria-label="Kind of template"><option value="">All kinds</option><option value="risk">Risks</option><option value="pestle">PESTLE(E) factors</option></select>
+              <input id="librarySearch" class="form-control form-control-sm" type="search" placeholder="Search templates…" style="min-width:220px;" aria-label="Search templates">
+            </div>
+          </div>
+          <div class="card-body p-0"><div class="list-group list-group-flush" id="libraryList"></div></div>
+        </div>
+      </section>
+
+      <!-- Visualisations -->
       <section class="tab-pane fade" id="riskVisualisationsPane" role="tabpanel" aria-labelledby="riskVisualisationsTab" tabindex="0">
         <div class="card mb-3 no-print" data-mosp-filter-section="risk-visualisation-filters" data-mosp-filter-title="Risk visualisation filters">
           <div class="card-body" data-mosp-filter-body>
@@ -104,21 +248,20 @@
               <input id="riskVizTopControls" type="number" class="form-control form-control-sm" min="5" max="200" value="15" style="width:90px;">
               <div class="btn-group btn-group-sm" role="group" aria-label="Risk visualisation score weighting">
                 <input class="btn-check" type="radio" name="riskVizScoreMode" id="riskVizScoreResidual" value="residual" autocomplete="off" checked>
-                <label class="btn btn-outline-secondary" for="riskVizScoreResidual">Residual risk</label>
+                <label class="btn btn-outline-secondary" for="riskVizScoreResidual">After controls</label>
                 <input class="btn-check" type="radio" name="riskVizScoreMode" id="riskVizScoreInherent" value="inherent" autocomplete="off">
-                <label class="btn btn-outline-secondary" for="riskVizScoreInherent">Inherent risk</label>
+                <label class="btn btn-outline-secondary" for="riskVizScoreInherent">Today</label>
               </div>
               <button id="reloadRiskVisualisations" class="btn btn-sm btn-outline-primary" type="button">Reload</button>
             </div>
           </div>
         </div>
-
         <div class="row g-3">
           <div class="col-12">
             <div class="card">
               <div class="card-header">
                 <div class="fw-bold">Risks → Controls graph</div>
-                <div class="small-muted" id="riskControlsGraphMeta">Framework-specific Risk/control mappings. Link thickness follows residual risk score.</div>
+                <div class="small-muted" id="riskControlsGraphMeta">Framework-specific risk/control mappings. Link thickness follows the residual risk score.</div>
               </div>
               <div id="riskControlsGraph" class="card-body pestle-viz-box pestle-viz-box-lg small-muted">Loading visualisation…</div>
             </div>
@@ -127,7 +270,7 @@
             <div class="card">
               <div class="card-header">
                 <div class="fw-bold">Risks × Controls heatmap</div>
-                <div class="small-muted" id="riskControlsHeatmapMeta">Cells show framework-specific control mappings, weighted by residual risk score.</div>
+                <div class="small-muted" id="riskControlsHeatmapMeta">Cells show framework-specific control mappings, weighted by the residual risk score.</div>
               </div>
               <div id="riskControlsHeatmap" class="card-body small-muted">Loading visualisation…</div>
             </div>
@@ -135,8 +278,9 @@
         </div>
       </section>
 
+      <!-- Controls without risks -->
       <section class="tab-pane fade" id="controlsWithoutRisksPane" role="tabpanel" aria-labelledby="controlsWithoutRisksTab" tabindex="0">
-        <div class="card mb-3 no-print" data-mosp-filter-section="controls-without-risks-filters" data-mosp-filter-title="Controls without Risks filters">
+        <div class="card mb-3 no-print" data-mosp-filter-section="controls-without-risks-filters" data-mosp-filter-title="Controls without risks filters">
           <div class="card-body" data-mosp-filter-body>
             <div class="d-flex flex-wrap gap-2 align-items-center">
               <input id="controlsWithoutRisksQ" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search control ref, title or type…">
@@ -144,117 +288,23 @@
             </div>
           </div>
         </div>
-
         <div class="card">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
-              <div class="fw-bold">Controls without Risks</div>
-              <div class="small-muted" id="controlsWithoutRisksMeta">Controls not currently associated with any risk scenario for this framework.</div>
+              <div class="fw-bold">Controls without risks</div>
+              <div class="small-muted" id="controlsWithoutRisksMeta">Controls not currently associated with any risk for this framework.</div>
             </div>
           </div>
           <div class="card-body p-0">
             <div class="table-responsive">
               <table id="controlsWithoutRisksTable" class="table table-hover align-middle mb-0" data-sortable>
-                <thead>
-                  <tr>
-                    <th style="width:120px;">Ref</th>
-                    <th>Title</th>
-                    <th style="width:110px;">Scope</th>
-                    <th style="width:120px;" class="no-print">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="controlsWithoutRisksRows"><tr class="table-loading-row"><td colspan="5" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading controls…</span></div></td></tr></tbody>
+                <thead><tr><th style="width:120px;">Ref</th><th>Title</th><th style="width:110px;">Scope</th><th style="width:120px;" class="no-print">Actions</th></tr></thead>
+                <tbody id="controlsWithoutRisksRows"><tr class="table-loading-row"><td colspan="4" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading controls…</span></div></td></tr></tbody>
               </table>
             </div>
           </div>
         </div>
       </section>
-
-      <section class="tab-pane fade" id="newRiskScenarioPane" role="tabpanel" aria-labelledby="newRiskScenarioTab" tabindex="0">
-        <div id="editorCard" class="card mb-3 no-print" style="display:none;">
-          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div>
-              <div class="fw-bold" id="editorTitle">New risk</div>
-              <div class="small-muted">A risk scenario belongs to one asset. Type an asset name; matching existing assets can be selected and reused for another distinct threat/risk-type row with different controls. Assess likelihood and impact from 1 to 5. The risk register and heatmap use these same scores.</div>
-            </div>
-          </div>
-          <div class="card-body">
-            <form id="riskForm" class="row g-3">
-              <input id="riskId" type="hidden">
-              <input id="assetId" type="hidden">
-              <div class="col-12">
-                <label class="form-label" for="asset">Asset name</label>
-                <input id="asset" class="form-control" maxlength="256" required autocomplete="off" list="assetOptions" placeholder="Type an asset or process name, e.g. design tools">
-                <datalist id="assetOptions"></datalist>
-                <div class="small-muted mt-1">Start typing a new asset name, or choose a matching existing asset to add another risk scenario to that asset.</div>
-              </div>
-              <div id="selectedAssetSummary" class="col-12" style="display:none;">
-                <div class="alert alert-light border py-2 mb-0 small"></div>
-              </div>
-              <div class="col-12 col-lg-6 asset-detail-field">
-                <label class="form-label" for="category">Asset category</label>
-                <select id="category" class="form-select" required></select>
-              </div>
-              <div class="col-12 col-lg-6 asset-detail-field">
-                <label class="form-label" for="subcategory">Asset subcategory</label>
-                <select id="subcategory" class="form-select" required></select>
-                <div class="small-muted mt-1">Manage asset categories and subcategories in ISMS → Org & Assets → Assets.</div>
-              </div>
-
-              <div class="col-12 col-lg-6">
-                <label class="form-label">Risk type</label>
-                <div class="d-flex flex-wrap gap-3">
-                  <div class="form-check"><input class="form-check-input risk-type" id="rtC" value="Confidentiality" type="checkbox"><label class="form-check-label" for="rtC">Confidentiality</label></div>
-                  <div class="form-check"><input class="form-check-input risk-type" id="rtI" value="Integrity" type="checkbox"><label class="form-check-label" for="rtI">Integrity</label></div>
-                  <div class="form-check"><input class="form-check-input risk-type" id="rtA" value="Availability" type="checkbox"><label class="form-check-label" for="rtA">Availability</label></div>
-                </div>
-              </div>
-              <div class="col-12 col-lg-6">
-                <label class="form-label" for="owner">Risk owner</label>
-                <select id="owner" class="form-select"><option value="">No owner</option></select>
-              </div>
-
-              <div class="col-12">
-                <label class="form-label" for="threatSummary">Threat summary</label>
-                <textarea id="threatSummary" class="form-control" rows="3" maxlength="12000" placeholder="Describe the threat scenario…"></textarea>
-              </div>
-
-              <div class="col-12"><div class="row g-2 align-items-end">
-                <div class="col-md-2"><label class="form-label" for="inherentLikelihood">Inherent likelihood</label><input id="inherentLikelihood" class="form-control score-input" type="number" min="1" max="5" value="1" required></div>
-                <div class="col-md-2"><label class="form-label" for="inherentImpact">Inherent impact</label><input id="inherentImpact" class="form-control score-input" type="number" min="1" max="5" value="1" required></div>
-                <div class="col-md-2"><div class="small-muted mb-1">Inherent score</div><div id="riskScorePreview" class="score-pill">1</div></div>
-                <div class="col-md-2"><label class="form-label" for="residualLikelihood">Residual likelihood</label><input id="residualLikelihood" class="form-control score-input" type="number" min="1" max="5" value="1" required></div>
-                <div class="col-md-2"><label class="form-label" for="residualImpact">Residual impact</label><input id="residualImpact" class="form-control score-input" type="number" min="1" max="5" value="1" required></div>
-                <div class="col-md-2"><div class="small-muted mb-1">Residual score</div><div id="residualScorePreview" class="score-pill">1</div></div>
-              </div><div class="form-text">Likelihood × impact determines the same 5×5 scores shown in the risk register and heatmap.</div></div>
-
-              <div class="col-12">
-                <label class="form-label" for="controls">Controls for current framework</label>
-                <select id="controls" class="form-select" multiple size="10"></select>
-                <div class="small-muted mt-1">These mappings apply only to the currently selected framework. The same risk can have different control mappings under another framework.</div>
-              </div>
-              <div class="col-12" id="templateControlsCard" hidden>
-                <div class="border rounded p-3"><div class="form-check"><input id="templateIncludeControls" class="form-check-input" type="checkbox" checked><label class="form-check-label fw-semibold" for="templateIncludeControls">Also link the template’s KEEN Assurance Framework controls</label></div>
-                  <div id="templateControlsList" class="small-muted mt-1"></div>
-                </div>
-              </div>
-
-              <div class="col-12">
-                <label class="form-label" for="note">Note</label>
-                <textarea id="note" class="form-control" rows="3" maxlength="20000"></textarea>
-              </div>
-
-              <div class="col-12 d-flex flex-wrap gap-2 align-items-center justify-content-between">
-                <button id="deleteRisk" class="btn btn-outline-danger" type="button" style="display:none;">Delete risk</button>
-                <div class="ms-auto d-flex gap-2">
-                  <button id="saveRisk" class="btn btn-primary" type="submit">Save risk</button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      </section>
-
     </div>
   </main>
 

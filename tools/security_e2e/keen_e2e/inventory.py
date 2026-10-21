@@ -64,7 +64,7 @@ FALLBACK_PAGES = [
     "source.html",
     "risks.html",
     "risk.html",
-    "risk-register.html",
+    "risk-wizard.html",
     "pestle.html",
     "pestle_item.html",
     "interested_parties.html",

@@ -358,25 +358,73 @@ def test_library_entries_capture_reusable_scenarios(reg):  # noqa: F811
         {"name": "Unsafe", "risk_types": ["Safety"]},
         status=400,
     )
-    reg.manage(
-        "POST", "/v1/risks/library", {"name": "Empty", "risk_types": []}, status=422
+    # A template for a general register entry carries no CIA associations.
+    general = reg.manage(
+        "POST",
+        "/v1/risks/library",
+        {"name": "Key person leaves", "risk_types": []},
+        status=201,
     )
+    assert (general["method"], general["risk_types"]) == ("risk", [])
     reg.manage(
         "POST",
         "/v1/risks/library",
         {"name": "", "risk_types": ["Integrity"]},
         status=422,
     )
+    # PESTLE(E) templates record their type and lens and never CIA types.
+    pestle = reg.manage(
+        "POST",
+        "/v1/risks/library",
+        {
+            "name": "New privacy regulation",
+            "method": "pestle",
+            "pestle_type": "legal",
+            "lens": "external",
+            "risk_types": ["Confidentiality"],
+            "threat_summary": "Legislation changes retention duties",
+        },
+        status=201,
+    )
+    assert (pestle["method"], pestle["pestle_type"], pestle["lens"]) == (
+        "pestle",
+        "Legal",
+        "External",
+    )
+    assert pestle["risk_types"] == []
+    for body, detail in (
+        ({"method": "swot"}, "method must be risk or pestle"),
+        ({"method": "pestle", "pestle_type": "Cosmic"}, "type must be a valid PESTLE"),
+        ({"method": "pestle", "pestle_type": "Legal"}, "lens is required"),
+        (
+            {"method": "pestle", "pestle_type": "Legal", "lens": "Sideways"},
+            "lens must be Internal or External",
+        ),
+    ):
+        refused = reg.manage(
+            "POST", "/v1/risks/library", {"name": "Bad", **body}, status=400
+        )
+        assert detail in refused["detail"], body
 
     names = [item["name"] for item in reg.read("GET", "/v1/risks/library")["items"]]
-    assert sorted(names) == sorted(["Backup failure", HOSTILE])
+    assert sorted(names) == sorted(
+        ["Backup failure", "Key person leaves", "New privacy regulation", HOSTILE]
+    )
+    # The library can be read for one method at a time.
+    assert [
+        item["name"]
+        for item in reg.read("GET", "/v1/risks/library", params={"method": "pestle"})[
+            "items"
+        ]
+    ] == ["New privacy regulation"]
+    reg.read("GET", "/v1/risks/library", params={"method": "swot"}, status=400)
 
     assert reg.manage("DELETE", f"/v1/risks/library/{plain['id']}", status=204) is None
     reg.manage("DELETE", f"/v1/risks/library/{plain['id']}", status=404)
     reg.manage("DELETE", "/v1/risks/library/not-a-uuid", status=422)
-    assert [item["id"] for item in reg.read("GET", "/v1/risks/library")["items"]] == [
-        created["id"]
-    ]
+    assert sorted(
+        item["id"] for item in reg.read("GET", "/v1/risks/library")["items"]
+    ) == sorted([created["id"], general["id"], pestle["id"]])
 
 
 # --- CSV import and export -----------------------------------------------------------

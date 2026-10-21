@@ -15,6 +15,15 @@ import {
   canSampleIntoAudit,
   openAuditSampleModal,
 } from '/app.js';
+import {
+  methodBadgeHtml,
+  methodOf,
+  partyBadgesHtml,
+  treatmentLabel,
+  treatmentStatusLabel,
+  riskDisplayTitle,
+  riskWizardHref,
+} from '/pages/risk-common.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -33,6 +42,8 @@ const riskCategory = document.getElementById('riskCategory');
 const riskSubcategory = document.getElementById('riskSubcategory');
 const riskOwner = document.getElementById('riskOwner');
 const riskScore = document.getElementById('riskScore');
+const riskParties = document.getElementById('riskParties');
+const riskTreatment = document.getElementById('riskTreatment');
 const residualScore = document.getElementById('residualScore');
 const threatSummary = document.getElementById('threatSummary');
 const riskNote = document.getElementById('riskNote');
@@ -222,9 +233,9 @@ function setText(el, value, fallback = '—') {
 function renderTypes(risk) {
   const types = Array.isArray(risk?.risk_types) ? risk.risk_types : [];
   if (!riskTypes) return;
-  riskTypes.innerHTML = types.length
-    ? types.map((t) => `<span class="badge badge-soft">${esc(t)}</span>`).join('')
-    : '<span class="small-muted">No risk type</span>';
+  riskTypes.innerHTML =
+    methodBadgeHtml(methodOf(risk)) +
+    types.map((t) => ` <span class="badge badge-soft">${esc(t)}</span>`).join('');
 }
 
 function renderMitigatorContext(risk) {
@@ -300,7 +311,7 @@ function renderRisk(risk) {
   currentRisk = risk;
   const asset = risk?.asset || risk?.asset_entity?.name || 'Risk';
   const threat = String(risk?.threat_summary || '').trim();
-  if (riskTitle) riskTitle.textContent = threat ? `${asset} — ${threat}` : asset;
+  if (riskTitle) riskTitle.textContent = riskDisplayTitle(risk);
   if (riskMeta) {
     const bits = [
       risk?.framework || framework,
@@ -317,10 +328,7 @@ function renderRisk(risk) {
     );
   if (sampleRiskAudit) sampleRiskAudit.style.display = canSampleIntoAudit(me, 'risk') ? '' : 'none';
   if (editRisk) {
-    editRisk.href = withFramework(
-      `/risks.html?edit=${encodeURIComponent(risk?.id || id)}`,
-      risk?.framework || framework,
-    );
+    editRisk.href = riskWizardHref(risk?.framework || framework, { id: risk?.id || id });
     editRisk.style.display = canManageRisks ? '' : 'none';
   }
 
@@ -337,6 +345,12 @@ function renderRisk(risk) {
     const detail = `Residual likelihood ${Number(risk?.register_residual_likelihood || 0)} × impact ${Number(risk?.register_residual_impact || 0)}`;
     residualScore.innerHTML = `${scoreBadge(risk?.residual_risk_score, detail)} <span class="small-muted ms-1">${esc(detail)}</span>`;
   }
+  if (riskParties)
+    riskParties.innerHTML = partyBadgesHtml(risk?.interested_parties, risk?.framework || framework);
+  if (riskTreatment) {
+    const due = risk?.treatment_due_at ? ` · due ${esc(risk.treatment_due_at)}` : '';
+    riskTreatment.innerHTML = `${esc(treatmentLabel(risk?.treatment_strategy))} <span class="small-muted">(${esc(treatmentStatusLabel(risk?.treatment_status))}${due})</span>${risk?.treatment_plan ? `<div class="small whitespace-pre-wrap mt-1">${esc(risk.treatment_plan)}</div>` : ''}`;
+  }
   setText(threatSummary, threat, 'No threat summary.');
   setText(riskNote, risk?.note, 'No note.');
   renderMitigatorContext(risk);
@@ -349,9 +363,7 @@ sampleRiskAudit?.addEventListener('click', () => {
     me,
     entityType: 'risk',
     entityId: risk?.id || id,
-    title: risk
-      ? `${risk.asset || 'Risk'}${risk.threat_summary ? ` — ${risk.threat_summary}` : ''}`
-      : 'CIA Triad risk',
+    title: risk ? riskDisplayTitle(risk) : 'Risk',
     framework: risk?.framework || framework,
     statusEl: status,
   });

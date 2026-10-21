@@ -140,6 +140,7 @@ function renderMeasure(row) {
       key: measure.metric_key,
       framework: measure.framework || framework,
       unit: measure.target_unit || '',
+      sourceType: measure.source_type || 'other',
     }));
   }
   $('metricKey').innerHTML = measure.metric_key ? `<code>${esc(measure.metric_key)}</code>` : '—';

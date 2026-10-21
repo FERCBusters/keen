@@ -224,6 +224,10 @@ test('administrators see measurement integration examples for the metric key', a
     /curl --fail-with-body --show-error 'https:\/\/keen\.example\/api\/v1\/webhooks\/isms\/effectiveness-metrics\/patch-latency'/,
   );
   assert.match(code[0], /KEEN_METRICS_SECRET:\?Set KEEN_METRICS_SECRET/);
+  // The example payload names the measure's expected source, so the entries it
+  // creates are attributed the same way as entries recorded by hand.
+  assert.match(code[0], /"source_type": "jira"/);
+  assert.match(code[1], /\\"source_type\\": \\"jira\\"/);
   assert.match(code[1], /urlopen\(request, timeout=30\)/);
   assert.match(details.textContent, /Example value is 0/);
   details.querySelector('button').click();

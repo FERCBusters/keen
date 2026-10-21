@@ -168,6 +168,17 @@ def list_risk_owner_users(
     return service.list_risk_owner_users(user=user, db=db)
 
 
+@router.get("/v1/risks/parties")
+def list_risk_party_options(
+    framework: str = settings.default_framework_slug,
+    q: str = "",
+    user=Depends(require_risk_manage),
+    db: Session = Depends(get_db),
+):
+    "Interested parties, people and vendors a risk can name as affected."
+    return service.list_risk_party_options(framework=framework, q=q, user=user, db=db)
+
+
 @router.get("/v1/me/risks")
 def list_my_owned_risks(
     framework: str = settings.default_framework_slug,

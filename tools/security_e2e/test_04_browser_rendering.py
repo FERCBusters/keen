@@ -108,7 +108,16 @@ def test_hostile_text_is_inert_for_read_only_roles(
 ):
     session = accounts(role)
     allowed = {
-        "risk_reader": ("risk", "risks", "register", "pestle", "party", "objective"),
+        "risk_reader": (
+            "risk",
+            "risks",
+            "register",
+            "cia",
+            "library",
+            "pestle",
+            "party",
+            "objective",
+        ),
         "isms_reader": ("objective", "document", "meeting", "isms"),
         "audit_reader": ("audit", "audits"),
     }[role]

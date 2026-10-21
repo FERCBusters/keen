@@ -787,6 +787,15 @@ test('a measure is edited with its target, and the target can be cleared', async
   );
   assert.equal(ui.el('effMeasure'), null);
   assert.equal(ui.el('effMetric'), null);
+  // The integration examples follow the chosen expected source.
+  const examples = ui.el('effectivenessForm').querySelector('details');
+  examples.open = true;
+  await settle(() => examples.querySelector('code').textContent);
+  assert.match(examples.querySelector('code').textContent, /"source_type": "ci"/);
+  ui.el('effSourceType').value = 'other';
+  ui.el('effSourceType').dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  assert.match(examples.querySelector('code').textContent, /"source_type": "other"/);
+  ui.el('effSourceType').value = 'ci';
   ui.el('effTargetValue').value = '';
   ui.submit('effectivenessForm');
   await ui.statusIs('Effectiveness measure updated');

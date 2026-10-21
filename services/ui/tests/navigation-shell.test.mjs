@@ -119,9 +119,10 @@ test('risk and ISMS pages are grouped into menus that keep the framework', async
     'Help',
   ]);
   assert.deepEqual(ui.menu('riskAssessmentsDropdown'), [
-    ['CIA risk assessments', '/risks.html?framework=A'],
-    ['Risk register & heatmap', '/risk-register.html?framework=A'],
-    ['PESTLE(E) Impact Assessment', '/pestle.html?framework=A'],
+    ['Risks dashboard', '/risks.html?framework=A'],
+    ['Add a risk', '/risk-wizard.html?framework=A'],
+    ['Register & heatmap', '/risks.html?tab=register&framework=A'],
+    ['PESTLE(E) method', '/risks.html?tab=pestle&framework=A'],
     ['Interested Parties', '/interested_parties.html?framework=A'],
     ['Keen Mitigator', '/mitigator.html?framework=A'],
   ]);
