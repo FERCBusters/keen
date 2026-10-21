@@ -359,3 +359,180 @@ def test_a_cancelled_stop_still_reports_its_cancellation():
             await asyncio.sleep(0)
 
     asyncio.run(scenario())
+
+
+def test_subscriber_client_is_created_once_with_decoded_responses():
+    # The subscriber connection is created lazily, once, and decodes replies so
+    # the listener can parse message payloads as text.
+    bus = nt.RedisNotificationBus("redis://127.0.0.1:1/0")
+    with patch.object(nt.Redis, "from_url", return_value=MagicMock()) as from_url:
+        first = bus._sub_client()
+        assert bus._sub_client() is first
+    from_url.assert_called_once_with("redis://127.0.0.1:1/0", decode_responses=True)
+    assert bus._pub is None
+
+
+def test_start_is_idempotent_while_the_listener_runs():
+    # A second start keeps the running listener; nothing is spawned twice.
+    async def scenario():
+        bus = nt.RedisNotificationBus("redis://127.0.0.1:1/0")
+        hold = asyncio.Event()
+
+        async def listener(hub):
+            await hold.wait()
+
+        with patch.object(bus, "_listen_loop", listener):
+            await bus.start(_quiet_hub())
+            first = bus._task
+            await bus.start(_quiet_hub())
+            assert bus._task is first
+            hold.set()
+            await bus.stop()
+        assert bus._task is None
+
+    asyncio.run(scenario())
+
+
+def test_stop_closes_both_clients_and_survives_close_failures():
+    # Shutdown closes the subscriber and publisher connections and drops them
+    # even when a close call fails.
+    async def scenario():
+        bus = nt.RedisNotificationBus("redis://127.0.0.1:1/0")
+        sub = MagicMock()
+        sub.close = AsyncMock(side_effect=ConnectionError("gone"))
+        pub = MagicMock()
+        pub.close = AsyncMock()
+        bus._sub, bus._pub = sub, pub
+        await bus.stop()
+        sub.close.assert_awaited_once()
+        pub.close.assert_awaited_once()
+        assert (bus._sub, bus._pub, bus._task) == (None, None, None)
+
+        bus._pub = MagicMock()
+        bus._pub.close = AsyncMock(side_effect=RuntimeError("already closed"))
+        await bus.stop()
+        assert bus._pub is None
+
+    asyncio.run(scenario())
+
+
+def test_listener_ignores_non_dict_frames_and_stops_at_the_stop_signal():
+    # Frames that are not dictionaries are skipped, and a message arriving
+    # after the stop signal is never forwarded.
+    async def scenario():
+        hub = _quiet_hub()
+        bus = nt.RedisNotificationBus("redis://127.0.0.1:1/0")
+        admin = {"type": "message", "data": json.dumps({"scope": "admin"})}
+
+        class PubSub:
+            def __init__(self):
+                self.close_calls = 0
+
+            async def subscribe(self, channel):
+                return None
+
+            async def listen(self):
+                yield "pong"
+                yield None
+                yield admin
+                bus._stop.set()
+                yield admin
+
+            async def close(self):
+                self.close_calls += 1
+                raise ConnectionError("broker gone")
+
+        pubsub = PubSub()
+        redis = MagicMock()
+        redis.pubsub.return_value = pubsub
+        with patch.object(bus, "_sub_client", return_value=redis):
+            await bus._listen_loop(hub)
+        hub.broadcast_admin.assert_awaited_once_with({"scope": "admin"})
+        assert pubsub.close_calls == 1
+
+    asyncio.run(scenario())
+
+
+def test_cancellation_during_a_read_ends_the_listener_quietly():
+    # Cancelling the listener while it waits on the broker ends the loop
+    # through its own exit path, so the task finishes without an error.
+    async def scenario():
+        hub = _quiet_hub()
+        bus = nt.RedisNotificationBus("redis://127.0.0.1:1/0")
+        reading = asyncio.Event()
+
+        class PubSub:
+            def __init__(self):
+                self.closed = False
+
+            async def subscribe(self, channel):
+                return None
+
+            async def listen(self):
+                reading.set()
+                await asyncio.Event().wait()
+                yield {}
+
+            async def close(self):
+                self.closed = True
+
+        pubsub = PubSub()
+        redis = MagicMock()
+        redis.pubsub.return_value = pubsub
+        with patch.object(bus, "_sub_client", return_value=redis):
+            task = asyncio.create_task(bus._listen_loop(hub))
+            await reading.wait()
+            task.cancel()
+            await asyncio.wait({task})
+        assert task.done() and not task.cancelled()
+        assert task.exception() is None
+        assert pubsub.closed is True
+        hub.broadcast_admin.assert_not_awaited()
+
+    asyncio.run(scenario())
+
+
+def test_publisher_client_is_created_once_and_publish_failures_stay_silent():
+    # The publisher connection is created lazily once; without a fallback hub
+    # a failed publish of a count is absorbed so the request completes.
+    async def scenario():
+        bus = nt.RedisNotificationBus("redis://127.0.0.1:1/0")
+        client = MagicMock()
+        client.publish = AsyncMock(side_effect=ConnectionError("down"))
+        with patch.object(nt.Redis, "from_url", return_value=client) as from_url:
+            assert bus._pub_client() is client
+            assert bus._pub_client() is client
+            await bus.publish_admin_open_count(1)
+            await bus.publish_user_unread_replies("u1", 1)
+        from_url.assert_called_once_with("redis://127.0.0.1:1/0", decode_responses=True)
+        assert client.publish.await_count == 2
+
+    asyncio.run(scenario())
+
+
+def test_listener_retries_when_the_subscriber_cannot_be_created():
+    # A failure before a pubsub object exists still backs off and retries.
+    async def scenario():
+        bus = nt.RedisNotificationBus("redis://127.0.0.1:1/0")
+        attempts = {"n": 0}
+
+        def failing_client():
+            attempts["n"] += 1
+            if attempts["n"] >= 2:
+                bus._stop.set()
+            raise ConnectionError("no broker")
+
+        waits = []
+
+        async def tracked_sleep(delay):
+            waits.append(delay)
+
+        with (
+            patch.object(bus, "_sub_client", failing_client),
+            patch.object(asyncio, "sleep", tracked_sleep),
+        ):
+            await bus._listen_loop(_quiet_hub())
+        assert attempts["n"] == 2
+        assert waits == [1.0, 2.0]
+
+    asyncio.run(scenario())

@@ -607,3 +607,24 @@ def test_register_import_rejects_oversized_and_undecodable_files(reg):  # noqa: 
     assert response["detail"].startswith("Import failed at row header:")
     _import(reg, _csv("A,B,C,D,Integrity,,,,,,,,,,,"), framework="A B", status=400)
     assert reg.db.query(Risk).count() == 0
+
+
+def test_library_entries_from_risks_without_keen_af_links_carry_no_control_refs(
+    reg,  # noqa: F811
+):
+    """A source risk linked to no KEEN-AF controls suggests no control references."""
+    source = _create(reg, framework="KEEN-AF:1.0")
+
+    created = reg.manage(
+        "POST",
+        "/v1/risks/library",
+        {
+            "name": "Unlinked scenario",
+            "risk_types": ["Integrity"],
+            "suggested_assessment": {"inherent_impact": 3},
+            "source_risk_id": source["id"],
+        },
+        status=201,
+    )
+
+    assert created["suggested_assessment"] == {"inherent_impact": 3}

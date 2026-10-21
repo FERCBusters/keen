@@ -1232,3 +1232,225 @@ def test_unusable_settings_fall_back_and_actors_come_from_the_creator(db, env):
         if r.url.path == "/api/pages" and "filter[updated_at:gt]" in r.url.params
     )
     assert "filter[book_id]" not in listing.url.params
+
+
+def test_a_mapping_scoped_to_another_book_slug_never_matches():
+    # A book slug on the mapping is a hard scope: pages from any other book,
+    # even with the same page slug, stay unmapped.
+    mapping = bs._parse_page_mappings(
+        {
+            "page_mappings": [
+                {
+                    "match": {"book_slug": "hr-docs", "slug": "access-control-policy"},
+                    "map_to": ["A.9"],
+                }
+            ]
+        }
+    )[0]
+    assert mapping.matches(PAGE_LIST_ITEM, PAGE_FULL) is False
+    assert mapping.matches(dict(PAGE_LIST_ITEM, book_slug="HR-Docs"), {}) is True
+
+
+def test_mappings_without_usable_targets_or_book_ids_are_tolerated():
+    # Targets that are neither text nor a list are skipped, and a book id that
+    # is no number leaves the mapping unscoped by book id.
+    mappings = bs._parse_page_mappings(
+        {
+            "page_mappings": [
+                {"match": {"slug": "a"}, "map_to": 7},
+                {"match": {"slug": "b"}, "map_to": {"ref": "A.1"}},
+                {"match": {"slug": "c", "book_id": "seven"}, "map_to": ["A.2"]},
+            ]
+        }
+    )
+    assert [m.match_slug for m in mappings] == ["c"]
+    assert mappings[0].match_book_id is None
+    assert mappings[0].matches({"slug": "c", "book_id": 99}, {}) is True
+
+
+def test_cursor_is_reused_when_present_and_created_once_when_absent(db):
+    existing = SimpleNamespace(name="bookstack:pages", last_ts=None, meta={})
+    db.query.return_value.filter.return_value.one_or_none.return_value = existing
+    assert bs._get_cursor(db) is existing
+    db.add.assert_not_called()
+
+    db.query.return_value.filter.return_value.one_or_none.return_value = None
+    created = bs._get_cursor(db)
+    assert isinstance(created, bs.IngestionCursor)
+    assert created.last_ts is None and created.meta == {}
+    db.add.assert_called_once_with(created)
+    db.flush.assert_called_once()
+
+
+def test_system_info_is_empty_when_the_endpoint_fails_or_is_malformed():
+    # Instance metadata is optional: an upstream failure, an invalid body or a
+    # list payload all leave the collector with no system information.
+    def failing(request):
+        return httpx.Response(503, text="maintenance")
+
+    def not_json(request):
+        return httpx.Response(200, text="<html>login</html>")
+
+    def listed_body(request):
+        return httpx.Response(200, json=["Docs", "https://docs.example.com"])
+
+    for handler in (failing, not_json, listed_body):
+        client = httpx.Client(
+            transport=httpx.MockTransport(handler), base_url="https://docs.example.com"
+        )
+        assert bs._get_system_info(client) == {}
+
+
+def test_page_listing_stops_at_the_configured_page_budget():
+    # max_pages bounds how far the listing walks even while the upstream keeps
+    # returning full pages.
+    items = [listed(i, f"page-{i}", f"Page {i}", 7) for i in range(1, 7)]
+    api = BookStackApi(list_items=items, full_pages={})
+    client = httpx.Client(
+        transport=httpx.MockTransport(api.handler), base_url="https://docs.example.com"
+    )
+    out = bs._list_pages(
+        client,
+        since_ts=None,
+        until_ts=None,
+        book_id=7,
+        book_slug=None,
+        count=2,
+        include_drafts=False,
+        include_templates=False,
+        max_pages=4,
+    )
+    assert [p["id"] for p in out] == [1, 2, 3, 4]
+    assert [r.url.params["offset"] for r in api.requests] == ["0", "2"]
+
+
+def test_single_page_lookups_need_a_selector_and_a_result():
+    # Blank selectors never reach the API, and an empty listing is no page.
+    api = BookStackApi(list_items=[PAGE_LIST_ITEM], full_pages={})
+    client = httpx.Client(
+        transport=httpx.MockTransport(api.handler), base_url="https://docs.example.com"
+    )
+    assert bs._find_page_by_slug(client, "  ", book_id=7, book_slug=None) is None
+    assert bs._find_page_by_title(client, "", book_id=7, book_slug=None) is None
+    assert api.requests == []
+
+    assert bs._find_page_by_slug(client, "missing", book_id=7, book_slug=None) is None
+    assert bs._find_page_by_title(client, "Missing", book_id=7, book_slug=None) is None
+    assert len(api.requests) == 2
+
+    found = bs._find_page_by_title(
+        client, "Access Control Policy", book_id=None, book_slug="isms"
+    )
+    assert found["id"] == 11 and found["book_slug"] == "isms"
+
+
+def test_an_ambiguous_reference_attaches_no_mapping(db):
+    # Two controls sharing a reference make the target ambiguous; evidence is
+    # never attached to a guess, so nothing is created or committed.
+    first, second = MagicMock(), MagicMock()
+    for item in (first, second):
+        item.ref = "A.9"
+        item.type = "annex_control"
+    query_control = MagicMock()
+    query_control.filter.return_value.all.return_value = [first, second]
+    db.query.side_effect = [query_control]
+    created = bs._ensure_and_add_mappings(
+        db,
+        event_id="ev-1",
+        refs=["A.9"],
+        confidence=0.7,
+        method="config",
+        rationale="r",
+    )
+    assert created == 0
+    db.add.assert_not_called()
+    db.commit.assert_not_called()
+
+
+def test_config_mappings_skip_events_without_page_details_or_matches(db):
+    ev = MagicMock()
+    ev.source = "bookstack"
+    ev.normalized_payload = {}
+    ev.raw_pointer = {}
+    mapping = MagicMock()
+    mapping.matches.return_value = False
+    with (
+        patch.object(bs, "load_bookstack_config", return_value={}),
+        patch.object(bs, "_parse_page_mappings", return_value=[mapping]),
+        patch.object(bs, "_ensure_and_add_mappings") as add,
+    ):
+        # No page fields on the event: nothing to match against.
+        assert bs.apply_bookstack_config_mappings(db, ev) == 0
+        mapping.matches.assert_not_called()
+
+        ev.normalized_payload = {"bookstack": {"page_slug": "other"}}
+        assert bs.apply_bookstack_config_mappings(db, ev) == 0
+        mapping.matches.assert_called_once()
+        add.assert_not_called()
+
+
+def test_pattern_and_title_mappings_honour_their_own_book_scope(db, env):
+    # A mapping naming its own book is looked up there, ahead of the top-level
+    # book scope, so a page in another book is captured and mapped.
+    cfg = {
+        "label": "scoped",
+        "book": {"id": 7},
+        "page_mappings": [
+            {"match": {"book_id": 8, "slug_regex": "^supplier-"}, "map_to": ["A.5.19"]},
+            {"match": {"book": {"id": 8}, "title": "HR Handbook"}, "map_to": ["A.6.3"]},
+        ],
+    }
+
+    run = seeded_run(db, env, cfg, SEEDED_PAGES)
+
+    assert run.pages == [52, 53]
+    assert run.mapped == [("ev-52", ["A.5.19"]), ("ev-53", ["A.6.3"])]
+    lookups = {
+        (r.url.params.get("filter[name]"), r.url.params.get("filter[book_id]"))
+        for r in run.requests
+        if r.url.path == "/api/pages" and "filter[name]" in r.url.params
+    }
+    assert lookups == {("HR Handbook", "8")}
+    pattern_listings = {
+        r.url.params.get("filter[book_id]")
+        for r in run.requests
+        if r.url.path == "/api/pages"
+        and "filter[name]" not in r.url.params
+        and "filter[updated_at:gt]" not in r.url.params
+    }
+    assert pattern_listings == {"8"}
+
+
+def test_title_mappings_without_any_book_scope_search_the_instance(db, env):
+    cfg = {
+        "label": "instance",
+        "page_mappings": [{"match": {"title": "Asset Register"}, "map_to": ["A.5.9"]}],
+    }
+
+    run = seeded_run(db, env, cfg, SEEDED_PAGES)
+
+    assert (run.pages, run.mapped) == ([61], [("ev-61", ["A.5.9"])])
+    (lookup,) = [
+        r
+        for r in run.requests
+        if r.url.path == "/api/pages" and "filter[name]" in r.url.params
+    ]
+    assert "filter[book_id]" not in lookup.url.params
+
+
+def test_a_title_pattern_that_misses_rejects_the_page():
+    mapping = bs._parse_page_mappings(
+        {"page_mappings": [{"match": {"title_regex": "^Backup"}, "map_to": ["A.1"]}]}
+    )[0]
+    assert mapping.matches(PAGE_LIST_ITEM, PAGE_FULL) is False
+    assert mapping.matches(dict(PAGE_LIST_ITEM, name="Backup Policy"), {}) is True
+
+
+def test_preview_text_is_empty_when_tag_stripping_times_out():
+    # Hostile HTML that exhausts the regex budget yields no preview, so the
+    # collector stores the snapshot without blocking on the pattern.
+    slow = MagicMock()
+    slow.sub.side_effect = TimeoutError()
+    with patch.object(bs, "_TAG_RE", slow):
+        assert bs._strip_html_to_text("<p>text</p>") == ""
+    slow.sub.assert_called_once()

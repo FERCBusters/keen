@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as d3 from 'd3';
 import { page, settle } from './support/page-fixture.mjs';
 
 // SWOT workflows on saved items, the workspace list and the Excel export.
@@ -40,6 +41,7 @@ async function detail(t, { item = swot(), get, ...options } = {}) {
         state.detailLoads += 1;
         return copy(state.item);
       }
+      if (u.pathname.startsWith('/api/v1/questions/entities/')) state.questionLoads += 1;
       if (get) {
         const answer = await get(u);
         if (answer !== undefined) return answer;
@@ -49,10 +51,7 @@ async function detail(t, { item = swot(), get, ...options } = {}) {
       if (u.pathname.endsWith('/changelog')) return { items: [] };
       if (u.pathname === '/api/v1/isms/swot-choices/objective') return { items: [] };
       if (u.pathname === '/api/v1/isms/swot-choices/document') return { items: [CHOICE] };
-      if (u.pathname.startsWith('/api/v1/questions/entities/')) {
-        state.questionLoads += 1;
-        return { threads: [] };
-      }
+      if (u.pathname.startsWith('/api/v1/questions/entities/')) return { threads: [] };
       throw new Error('Unexpected GET ' + u);
     },
   });
@@ -403,4 +402,149 @@ test('leaving a new item with unsaved edits asks for confirmation', async (t) =>
   ui.el('itemForm').dispatchEvent(new ui.window.Event('input', { bubbles: true }));
 
   assert.equal(leave(), true);
+});
+
+// --- Refused actions, sampling and load failures -------------------------------------
+
+test('refused unlinking, questions, replies and deletion are reported and leave the item as it was', async (t) => {
+  const refuse = async () => {
+    throw new Error('Item changed; reload');
+  };
+  const ui = await detail(t, {
+    item: swot({
+      links: [{ ...CHOICE, target_type: 'document' }],
+    }),
+    me: { user_id: 'u7', is_admin: true, can_create_questions: true },
+    get: (u) =>
+      u.pathname.startsWith('/api/v1/questions/entities/')
+        ? {
+            threads: [
+              {
+                id: 'q1',
+                status: 'unanswered',
+                created_by_user_id: 'u7',
+                posts: [{ author_username: 'erin', body: 'Why?' }],
+              },
+            ],
+          }
+        : undefined,
+    globals: { confirm: () => true },
+    post: refuse,
+    remove: refuse,
+  });
+  const reported = () => ui.el('status').textContent === 'Error: Item changed; reload';
+  const reset = () => (ui.el('status').textContent = '');
+
+  ui.el('relatedList').querySelector('[data-unlink-id="d1"]').click();
+  await settle(reported);
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+  assert.ok(ui.el('relatedList').querySelector('[data-unlink-id="d1"]'));
+  reset();
+
+  ui.el('questionBody').value = 'Who owns this?';
+  submit(ui, 'questionForm');
+  await settle(reported);
+  assert.equal(ui.el('questionBody').value, 'Who owns this?');
+  reset();
+
+  const reply = ui.el('questionList').querySelector('[data-reply-thread="q1"]');
+  reply.elements.body.value = 'Facilities';
+  reply.dispatchEvent(new ui.window.Event('submit', { bubbles: true, cancelable: true }));
+  await settle(reported);
+  reset();
+
+  ui.el('deleteItem').click();
+  await settle(reported);
+  assert.equal(ui.el('pageTitle').textContent, 'Flood exposure');
+  assert.deepEqual(
+    ui.calls.filter((c) => c.method === 'DELETE').map((c) => c.url),
+    [
+      '/api/v1/isms/swot/s1/links/document/d1?expected_version=2',
+      '/api/v1/isms/swot/s1?expected_version=2',
+    ],
+  );
+});
+
+test('a SWOT item is sampled into an audit with a link back to it', async (t) => {
+  const ui = await detail(t, {
+    me: { is_admin: true, features: { enabled: { sampling: true } } },
+    get: (u) =>
+      u.pathname === '/api/v1/audits'
+        ? { items: [{ id: 'au1', title: 'Annual audit', status: 'open' }] }
+        : undefined,
+    post: async () => ({}),
+  });
+  assert.equal(ui.el('sample').hidden, false);
+  ui.el('sample').click();
+  await settle(() => ui.el('entityAuditSampleSelect')?.value === 'au1');
+  assert.equal(ui.el('entityAuditSampleTitle').textContent, 'Sample “Flood exposure” into audit');
+  ui.el('entityAuditSampleSubmit').click();
+  await settle(() => ui.calls.some((c) => c.method === 'POST'));
+  const post = ui.calls.find((c) => c.method === 'POST');
+  assert.equal(post.url, '/api/v1/audits/au1/evidence');
+  assert.deepEqual(copy(post.body), {
+    entity_type: 'isms_swot',
+    entity_id: 's1',
+    evidence_url: '/swot.html?id=s1&framework=A',
+    title: 'Flood exposure',
+    notes: '',
+  });
+});
+
+test('an item that cannot be loaded is reported, and an invalid field returns to Details', async (t) => {
+  const shown = [];
+  const ui = await page(t, 'isms-swot', {
+    htmlName: 'swot',
+    query: '&id=s1&tab=related',
+    setup(window) {
+      window.bootstrap = {
+        Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+      };
+    },
+    get: async (u) => {
+      if (u.pathname === '/api/v1/isms/swot/s1') throw new Error('404 Not found');
+      throw new Error('Unexpected GET ' + u);
+    },
+  });
+  await settle(() => ui.el('status').textContent === 'Error: 404 Not found');
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+  assert.deepEqual(shown, []);
+
+  ui.el('title').dispatchEvent(new ui.window.Event('invalid', { bubbles: false }));
+  assert.deepEqual(shown, ['detailsTab']);
+});
+
+test('a new item draws its draft relationships when the visualisation tab opens', async (t) => {
+  const ui = await page(t, 'isms-swot', {
+    htmlName: 'swot',
+    query: '&new=1',
+    setup(window) {
+      window.d3 = d3;
+    },
+    get: async (u) => {
+      if (u.pathname === '/api/v1/isms/meta') return { users: [], controls: [], clauses: [] };
+      if (u.pathname === '/api/v1/isms/swot') return { items: [], total: 0 };
+      if (u.pathname === '/api/v1/isms/swot-choices/objective') return { items: [] };
+      if (u.pathname === '/api/v1/isms/swot-choices/document') return { items: [CHOICE] };
+      throw new Error('Unexpected GET ' + u);
+    },
+  });
+  await settle(() => ui.el('linkItem').options.length >= 1);
+  ui.el('title').value = 'Draft <title>';
+  ui.el('linkType').value = 'document';
+  ui.el('linkType').dispatchEvent(new ui.window.Event('change'));
+  await settle(() => ui.el('linkItem').options.length === 2);
+  ui.el('linkItem').value = 'd1';
+  submit(ui, 'linkForm');
+
+  ui.el('visualisationTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+
+  const graph = ui.el('graph');
+  assert.ok(graph.querySelector('svg'));
+  assert.match(graph.textContent, /Draft <title>/);
+  assert.equal(
+    graph.querySelector('svg a').getAttribute('aria-label'),
+    'Document: Continuity plan',
+  );
+  assert.equal(ui.calls.filter((c) => c.method !== 'GET').length, 0);
 });

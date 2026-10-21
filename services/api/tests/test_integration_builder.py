@@ -611,3 +611,97 @@ def test_demo_blocks_integration_mutations(monkeypatch, method):
 def test_demo_allows_integration_inspection(monkeypatch):
     monkeypatch.setattr(api.settings, "demo_mode", True)
     api.integration_demo_guard(SimpleNamespace(method="GET"))
+
+
+# Definition validation: every rejected shape names the rule it breaks, so a
+# collector that could escape the connection or mis-map evidence never saves.
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/detail/1?x=1", "/detail/1#frag", "detail/1", "//other.example/detail"],
+)
+def test_enrichment_paths_stay_relative_without_query_or_fragment(path):
+    with pytest.raises(ValueError, match="relative path without query or fragment"):
+        Definition(enrichments=[{"name": "detail", "path": path}])
+    assert Definition(enrichments=[{"name": "detail", "path": "/detail/1"}])
+
+
+@pytest.mark.parametrize(
+    "path", ["issues", "//attacker.example/issues", "https://attacker.example/"]
+)
+def test_request_paths_stay_relative_to_the_connection(path):
+    with pytest.raises(ValueError, match="relative to the connection"):
+        Definition(path=path)
+
+
+@pytest.mark.parametrize("path", ["/issues?state=open", "/issues#open"])
+def test_query_and_fragment_belong_in_the_query_mapping(path):
+    with pytest.raises(ValueError, match="Put query parameters in Query"):
+        Definition(path=path)
+
+
+@pytest.mark.parametrize(
+    "header",
+    ["Authorization", "cookie", "HOST", "Proxy-Authorization", "Content-Length"],
+)
+def test_reserved_headers_cannot_be_set_by_a_definition(header):
+    with pytest.raises(ValueError, match="reserved headers are not editable"):
+        Definition(headers={header: "value"})
+    assert Definition(headers={"Accept": "application/json"}).headers
+
+
+def test_evidence_mappings_need_the_core_fields_and_only_known_ones():
+    with pytest.raises(ValueError, match="id, timestamp and summary mappings"):
+        Definition(fields={"id": {"path": "/id"}, "summary": {"path": "/t"}})
+    with pytest.raises(ValueError, match="Unknown evidence field"):
+        Definition(
+            fields={
+                "id": {"path": "/id"},
+                "timestamp": {"path": "/t"},
+                "summary": {"path": "/s"},
+                "secret": {"path": "/token"},
+            }
+        )
+
+
+def test_measurements_need_a_measure_and_value_period_mappings():
+    core = {
+        "id": {"path": "/id"},
+        "timestamp": {"path": "/t"},
+        "summary": {"path": "/s"},
+    }
+    with pytest.raises(ValueError, match="Measurements require a measure"):
+        Definition(output="measurement", fields=core)
+    with pytest.raises(ValueError, match="Measurements require a measure"):
+        Definition(output="measurement", measure_id="m-1", fields=core)
+    complete = Definition(
+        output="measurement",
+        measure_id="m-1",
+        fields={
+            **core,
+            "value": {"path": "/v"},
+            "period_start": {"path": "/from"},
+            "period_end": {"path": "/to"},
+        },
+    )
+    assert complete.output == "measurement"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"records_path": "results"},
+        {"pagination": {"mode": "cursor", "next_path": "next"}},
+        {
+            "fields": {
+                "id": {"path": "id"},
+                "timestamp": {"path": "/t"},
+                "summary": {"path": "/s"},
+            }
+        },
+    ],
+)
+def test_field_paths_are_json_pointers(change):
+    with pytest.raises(ValueError, match="JSON pointers"):
+        Definition(**change)

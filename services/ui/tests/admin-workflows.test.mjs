@@ -121,7 +121,10 @@ async function admin(t, options = {}) {
           if (fail.groups) throw new Error('Groups offline');
           return structuredClone(state.data.groups);
         }
-        if (path === '/api/v1/admin/permissions') return structuredClone(state.data.permissions);
+        if (path === '/api/v1/admin/permissions') {
+          if (fail.permissions) throw new Error('Permissions offline');
+          return structuredClone(state.data.permissions);
+        }
         if (path.startsWith('/api/v1/admin/groups/')) {
           if (fail.group) throw new Error('Group gone');
           return {
@@ -142,7 +145,8 @@ async function admin(t, options = {}) {
             effective_permission_codes: ['audits.view', 'admin.audit_trail'],
           };
         }
-        if (path === '/api/v1/controls')
+        if (path === '/api/v1/controls') {
+          if (fail.controls) throw new Error('Controls offline');
           return {
             items: [
               { id: 'c-a51', ref: 'A.5.1', title: 'Policies', type: 'annex_control' },
@@ -156,6 +160,7 @@ async function admin(t, options = {}) {
               })),
             ],
           };
+        }
         if (path === '/api/v1/admin/entity-changelog') {
           if (fail.changelog) throw new Error('Changelog offline');
           return { items: [], total: options.changelogTotal ?? 30 };
@@ -894,4 +899,37 @@ test('tabs follow the address hash and update it when changed', async (t) => {
   assert.equal(el('admin-navigation-toggle').getAttribute('aria-expanded'), 'false');
   assert.match(el('admin-navigation-toggle').textContent, /· Menu$/);
   assert.equal(el('admin-output-card').hidden, true);
+});
+
+test('the access dialog opens with empty lists when groups and permissions are unavailable', async (t) => {
+  FakeModal.shown = [];
+  const { el, ui } = await admin(t, { fail: { groups: true, permissions: true, controls: true } });
+  assert.match(el('groupsStatus').textContent, /Failed to load groups: Error: Groups offline/);
+  el('usersRows').querySelector('[data-access]').click();
+  await settle(() => FakeModal.shown.includes('userAccessModal'));
+  assert.equal(el('userAccessGroups').options.length, 0);
+  assert.equal(el('userAccessPerms').options.length, 0);
+  assert.equal(el('userAccessEffective').textContent, 'audits.view, admin.audit_trail');
+  // Without the control catalogue the diary search finds nothing.
+  el('controlSearch').value = 'a.5';
+  el('controlSearch').dispatchEvent(new ui.window.Event('input'));
+  assert.equal(el('controlResults').querySelectorAll('[data-id]').length, 0);
+});
+
+test('groups that inherit their role are labelled so in the access dialog', async (t) => {
+  FakeModal.shown = [];
+  const { el, state } = await admin(t);
+  state.data.groups = [{ id: 'g3', name: 'Readers', role: 'inherit', member_count: 0 }];
+  el('usersRows').querySelector('[data-access]').click();
+  await settle(() => FakeModal.shown.includes('userAccessModal'));
+  assert.deepEqual(
+    [...el('userAccessGroups').options].map((o) => o.textContent),
+    ['Admins', 'Auditors (Normal)'],
+  );
+  // The lists are fetched once; a later dialog reuses them.
+  const fetched = state.calls.filter((c) => c.method === 'GET' && c.url === '/api/v1/admin/groups');
+  el('groupsRefresh')?.click();
+  await settle(() => el('groupsRows').textContent.includes('Readers'));
+  assert.match(el('groupsRows').textContent, /Inherit/);
+  assert.ok(fetched.length >= 1);
 });

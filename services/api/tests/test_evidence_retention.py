@@ -82,6 +82,53 @@ class StorageTests(unittest.TestCase):
         client.delete_object.assert_called_once_with(Bucket="evidence", Key="old")
 
 
+class WorkerLoopTests(unittest.TestCase):
+    """The retention entry point and its time budget, without a database."""
+
+    def test_database_failure_is_recorded_and_storage_cleanup_continues(self):
+        from unittest.mock import MagicMock
+
+        session = MagicMock()
+        session.__enter__.return_value = session
+        session.__exit__.return_value = False
+        with (
+            patch.object(r, "SessionLocal", return_value=session),
+            patch.object(r, "database_batch", side_effect=RuntimeError("lock lost")),
+            patch.object(r, "storage_batch", return_value=True) as storage,
+        ):
+            self.assertTrue(r.run_retention())
+        storage.assert_called_once()
+        session.commit.assert_called_once()
+        (statement, params), _ = session.execute.call_args
+        self.assertIn("evidence_purge_jobs", str(statement))
+        self.assertEqual(
+            params["error"], "Database cleanup failed (RuntimeError); worker will retry"
+        )
+        self.assertNotIn("lock lost", params["error"])
+
+    def test_results_of_both_batches_decide_whether_more_work_remains(self):
+        with (
+            patch.object(r, "database_batch", return_value=False),
+            patch.object(r, "storage_batch", return_value=False),
+        ):
+            self.assertFalse(r.run_retention())
+        with (
+            patch.object(r, "database_batch", return_value=True),
+            patch.object(r, "storage_batch", return_value=False),
+        ):
+            self.assertTrue(r.run_retention())
+
+    def test_storage_batch_yields_after_its_time_budget(self):
+        from unittest.mock import MagicMock
+
+        with (
+            patch.object(r.time, "monotonic", side_effect=[0.0, 10.5]),
+            patch.object(r, "SessionLocal", MagicMock()) as sessions,
+        ):
+            self.assertTrue(r.storage_batch())
+        sessions.assert_not_called()
+
+
 class RetentionDatabaseTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

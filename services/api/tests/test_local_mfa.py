@@ -650,13 +650,13 @@ class LocalMfaTests(unittest.TestCase):
             self.assertTrue(any("password was changed" in x for x in subjects))
             self.assertTrue(any("password was reset" in x for x in subjects))
 
-    def webauthn_registration(self, start=True):
+    def webauthn_registration(self, start=True, private=None, cid=None):
         if start:
             self.start()
         options = self.post("webauthn/register-options").json()
-        private = ec.generate_private_key(ec.SECP256R1())
+        private = private or ec.generate_private_key(ec.SECP256R1())
         public = private.public_key().public_numbers()
-        cid = os.urandom(32)
+        cid = cid or os.urandom(32)
         cose = cbor2.dumps(
             {
                 1: 2,
@@ -773,6 +773,99 @@ class LocalMfaTests(unittest.TestCase):
                 self.post("webauthn/verify", {"credential": assertion}).status_code, 400
             )
             self.assertEqual(self.post("finish").status_code, 403)
+
+    def test_verification_and_management_steps_need_their_own_stage(self):
+        # Management-only steps are refused during verification, and
+        # verification steps are refused during management.
+        self.start()
+        refused = self.post("verify-code", {"code": "123456"})
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn("Start a second-factor verification first", refused.text)
+        self.assertEqual(self.post("webauthn/options").status_code, 400)
+        confirm = self.post("totp/confirm", {"code": "123456"})
+        self.assertEqual(confirm.status_code, 400)
+        self.assertIn("Start authenticator setup first", confirm.text)
+        with self.Session() as db:
+            self.assertIsNone(db.get(User, self.uid).mfa_totp_secret)
+            self.assertFalse(db.get(User, self.uid).mfa_enabled)
+
+    def test_a_second_authenticator_needs_the_first_removed(self):
+        self.enrol()
+        refused = self.post("totp/start")
+        self.assertEqual(refused.status_code, 409)
+        self.assertIn("Remove the existing authenticator", refused.text)
+        self.assertEqual(
+            self.post(
+                "totp/confirm", {"code": pyotp.TOTP(self.secret).now()}
+            ).status_code,
+            400,
+        )
+        with self.Session() as db:
+            row = db.query(MfaChallenge).filter_by(user_id=self.uid).one()
+            self.assertNotIn("totp_secret", row.data)
+
+    def test_security_key_verification_needs_a_registered_key_and_a_challenge(self):
+        self.enrol()
+        self.start("login")
+        refused = self.post("webauthn/options")
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn("No security key or passkey is registered", refused.text)
+        # Without an issued challenge no assertion can verify.
+        private = ec.generate_private_key(ec.SECP256R1())
+        cid = os.urandom(32)
+        stray = self.assertion(private, cid, {"challenge": mfa.b64(os.urandom(32))})
+        self.assertEqual(
+            self.post("webauthn/verify", {"credential": stray}).status_code, 400
+        )
+        self.assertEqual(self.post("finish").status_code, 403)
+
+    def test_an_assertion_from_an_unregistered_key_is_refused(self):
+        private, cid, credential = self.webauthn_registration()
+        self.assertEqual(
+            self.post("webauthn/register", {"credential": credential}).status_code, 200
+        )
+        self.redis.flushall()
+        self.start("login")
+        options = self.post("webauthn/options").json()
+        other = ec.generate_private_key(ec.SECP256R1())
+        foreign = self.assertion(other, os.urandom(32), options)
+        self.assertEqual(
+            self.post("webauthn/verify", {"credential": foreign}).status_code, 400
+        )
+        self.assertEqual(self.post("finish").status_code, 403)
+        # The ceremony is consumed: the genuine key needs a fresh challenge.
+        genuine = self.assertion(private, cid, options)
+        self.assertEqual(
+            self.post("webauthn/verify", {"credential": genuine}).status_code, 400
+        )
+
+    def test_at_most_ten_security_keys_and_no_duplicate_registrations(self):
+        private, cid, credential = self.webauthn_registration()
+        self.assertEqual(
+            self.post("webauthn/register", {"credential": credential}).status_code, 200
+        )
+        # Re-registering the same authenticator in a fresh ceremony is a conflict.
+        _, _, again = self.webauthn_registration(start=False, private=private, cid=cid)
+        duplicate = self.post("webauthn/register", {"credential": again})
+        self.assertEqual(duplicate.status_code, 409, duplicate.text)
+        with self.Session() as db:
+            self.assertEqual(
+                db.query(MfaCredential).filter_by(user_id=self.uid).count(), 1
+            )
+            for index in range(9):
+                db.add(
+                    MfaCredential(
+                        user_id=self.uid,
+                        credential_id=mfa.b64(os.urandom(32)),
+                        public_key=mfa.b64(b"synthetic-public-key"),
+                        sign_count=0,
+                        name=f"Key {index}",
+                    )
+                )
+            db.commit()
+        refused = self.post("webauthn/register-options")
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn("maximum of ten", refused.text)
 
 
 class SecurityIpTests(unittest.TestCase):

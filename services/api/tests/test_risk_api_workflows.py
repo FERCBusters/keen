@@ -1352,3 +1352,185 @@ def test_the_wizard_lists_who_a_risk_can_affect(reg):
     )
     # Reading risks is not enough to browse the directory.
     reg.read("GET", "/v1/risks/parties", params={"framework": "A"}, status=403)
+
+
+# --- Bounds the schema does not already enforce ------------------------------------
+
+
+def test_party_searches_need_a_bounded_query_and_a_framework(reg, monkeypatch):
+    """A search term over 256 characters is refused; an empty framework is refused."""
+    too_long = reg.manage(
+        "GET",
+        "/v1/risks/parties",
+        params={"framework": "A", "q": "x" * 257},
+        status=400,
+    )
+    assert too_long["detail"] == "q is too long"
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "default_framework_slug", "")
+    blank = reg.manage("GET", "/v1/risks/parties", params={"framework": ""}, status=400)
+    assert blank["detail"] == "framework is required"
+
+
+# --- Licences and ownership on assets -------------------------------------------------
+
+
+def test_assets_take_an_existing_licence_by_id_and_drop_a_blank_licence_name(reg):
+    licence = IsmsLicense(name="Site licence", description="")
+    reg.db.add(licence)
+    reg.db.commit()
+    create = "/v1/risks/assets"
+
+    licensed = reg.manage(
+        "POST",
+        create,
+        {
+            "name": "Mail gateway",
+            "category_name": "Software",
+            "subcategory_name": "SaaS",
+            "license_id": str(licence.id),
+        },
+    )
+    assert licensed["license_entity"] == {"id": str(licence.id), "name": "Site licence"}
+    assert reg.db.query(IsmsLicense).count() == 1
+
+    cleared = reg.manage(
+        "PATCH",
+        f"{create}/{licensed['id']}",
+        {"name": "Mail gateway", "license_name": "   "},
+    )
+    assert (cleared["license"], cleared["license_id"]) == ("", None)
+    assert reg.db.query(IsmsLicense).count() == 1
+
+
+def test_asset_edits_move_ownership_between_organisational_nodes(reg):
+    team = _org_node(reg.db, "Finance", node_type="team")
+    other = _org_node(reg.db, "Operations", node_type="team")
+    create = "/v1/risks/assets"
+    asset = reg.manage(
+        "POST",
+        create,
+        {
+            "name": "Ledger",
+            "category_name": "Software",
+            "subcategory_name": "SaaS",
+            "owner_org_node_id": str(team.id),
+        },
+    )
+    assert asset["owner_org_node"]["name"] == "Finance"
+
+    moved = reg.manage(
+        "PATCH",
+        f"{create}/{asset['id']}",
+        {
+            "name": "Ledger",
+            "owner_org_node_id": str(other.id),
+            "register_held_by_org_node_id": str(team.id),
+        },
+    )
+    assert moved["owner_org_node"] == {
+        "id": str(other.id),
+        "name": "Operations",
+        "node_type": "team",
+    }
+    assert moved["register_held_by_org_node"]["name"] == "Finance"
+    unknown = reg.manage(
+        "PATCH",
+        f"{create}/{asset['id']}",
+        {"name": "Ledger", "owner_org_node_id": str(uuid.uuid4())},
+        status=400,
+    )
+    assert "org" in unknown["detail"].lower()
+    assert reg.db.get(RiskAsset, uuid.UUID(asset["id"])).owner_org_node_id == other.id
+
+
+# --- Parties whose records are gone ---------------------------------------------------
+
+
+def test_affected_parties_whose_records_are_gone_are_left_out(reg):
+    """A link to a deleted vendor or interested party is omitted from the risk."""
+    from app.db.models import (
+        InterestedParty,
+        InterestedPartyName,
+        InterestedPartyNature,
+        IsmsVendor,
+        RiskInterestedParty,
+    )
+
+    db = reg.db
+    name = InterestedPartyName(name="Customers")
+    nature = InterestedPartyNature(name="External")
+    db.add_all([name, nature])
+    db.flush()
+    party = InterestedParty(name_id=name.id, nature_id=nature.id)
+    vendor = IsmsVendor(name="Cloud host", website="https://cloud.example")
+    db.add_all([party, vendor])
+    db.commit()
+    created = _create(
+        reg,
+        interested_parties=[
+            {"interested_party_id": str(party.id)},
+            {"vendor_id": str(vendor.id)},
+        ],
+    )
+    assert [p["kind"] for p in created["interested_parties"]] == [
+        "interested_party",
+        "vendor",
+    ]
+
+    db.delete(db.get(IsmsVendor, vendor.id))
+    db.delete(db.get(InterestedParty, party.id))
+    db.commit()
+    db.expire_all()
+
+    assert reg.read("GET", f"/v1/risks/{created['id']}")["interested_parties"] == []
+    # Whatever the database did with the link rows, the risk itself remains.
+    assert db.query(RiskInterestedParty).filter_by(
+        risk_id=uuid.UUID(created["id"])
+    ).count() in (0, 2)
+    assert db.get(Risk, uuid.UUID(created["id"])) is not None
+
+
+# --- Library templates for the KEEN framework ---------------------------------------
+
+
+def test_a_keen_af_risk_from_a_template_links_the_template_controls(reg):
+    """Without explicit controls, a KEEN-AF risk takes its template's control links."""
+    from app.db.models import RiskLibraryEntry
+
+    db = reg.db
+    db.add(Framework(slug="KEEN-AF:1.0"))
+    db.commit()
+    _control(db, "NET-1", framework="KEEN-AF:1.0", kind="custom")
+    template = RiskLibraryEntry(
+        name="Network exposure",
+        threat_summary="Example risk",
+        suggested_assessment={"keen_af_control_refs": ["NET-1", "REMOVED"]},
+    )
+    db.add(template)
+    db.commit()
+
+    created = _create(
+        reg, framework="KEEN-AF:1.0", library_template_id=str(template.id)
+    )
+
+    assert created["control_count"] == 1
+    linked = reg.read(
+        "GET",
+        f"/v1/risks/{created['id']}/controls",
+        params={"framework": "KEEN-AF:1.0"},
+    )
+    assert [c["ref"] for c in linked["items"]] == ["NET-1"]
+
+
+def test_a_risk_without_a_title_or_threat_is_known_by_its_asset(reg):
+    """The display name falls back to the asset when no threat is recorded."""
+    created = _create(reg, threat_summary=None)
+
+    assert created["display"] == "Payroll database"
+    titled = reg.manage(
+        "PATCH", f"/v1/risks/{created['id']}", {"framework": "A", "title": "Leak"}
+    )
+    assert titled["display"] == "Leak"

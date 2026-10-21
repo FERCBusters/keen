@@ -317,3 +317,36 @@ test('the Stories link follows Audits and is offered once', () => {
   );
   assert.deepEqual([...a.withStoriesLink(undefined).map((link) => link.key)], ['stories']);
 });
+
+test('changelog values show blanks, booleans and long objects as inert text', () => {
+  const cyclic = { name: 'loop' };
+  cyclic.self = cyclic;
+  const big = { notes: 'x'.repeat(1300) };
+  const html = a.entityChangelogHtml([
+    {
+      summary: 'Settings changed',
+      changed_by_username: 'root',
+      changes: [
+        { field: 'enabled', before: false, after: true },
+        { field: 'owner', before: null, after: '' },
+        { field: 'config', before: { a: '<b>1</b>' }, after: big },
+        { field: 'loop', before: cyclic, after: 'ok' },
+      ],
+    },
+  ]);
+  const doc = ui.document;
+  doc.body.innerHTML = html;
+  const cells = [...doc.querySelectorAll('tbody tr')].map((row) => [
+    row.cells[1].textContent,
+    row.cells[2].textContent,
+  ]);
+  assert.deepEqual(cells[0], ['No', 'Yes']);
+  assert.deepEqual(cells[1], ['—', '—']);
+  assert.match(cells[2][0], /"a": "<b>1<\/b>"/);
+  assert.equal(doc.querySelector('b'), null);
+  // Long objects are cut at 1200 characters; an unserialisable one falls back to its string form.
+  assert.ok(cells[2][1].endsWith('…'));
+  assert.equal(cells[2][1].length, 1201);
+  assert.equal(cells[3][0], '[object Object]');
+  assert.equal(doc.querySelectorAll('pre.changelog-json').length, 3);
+});

@@ -84,3 +84,48 @@ test('untrusted labels, values and titles remain text', async (t) => {
   assert.equal(document.querySelector('img,[onclick],[onerror]'), null);
   assert.match(document.querySelector('.keen-filter-pill-inline').textContent, /<img/);
 });
+
+test('opening the picker resets the search and shows the dialog', async (t) => {
+  const shows = [];
+  const ui = await loadUi('pages/filter-pill-multiselect.js', {
+    html: '<label for="filter">Source</label><select id="filter"><option value="">All</option><option value="ossec">OSSEC</option><option value="journal">Journal</option></select>',
+    globals: {
+      bootstrap: {
+        Modal: { getOrCreateInstance: (el) => ({ show: () => shows.push(el.id) }) },
+      },
+    },
+  });
+  t.after(() => ui.close());
+  const select = ui.document.getElementById('filter');
+  const instance = ui.api.enhanceFilterPillMultiSelect(select, { selectedValues: ['ossec'] });
+  const search = ui.document.querySelector('.keen-filter-pill-search');
+  search.value = 'jour';
+  search.dispatchEvent(new ui.window.Event('input'));
+  assert.equal(ui.document.querySelectorAll('.keen-filter-pill-grid [data-value]').length, 1);
+
+  ui.document.querySelector('.keen-filter-pill-open').click();
+  assert.deepEqual(shows, ['filterFilterPillModal']);
+  assert.equal(search.value, '');
+  assert.equal(ui.document.querySelectorAll('.keen-filter-pill-grid [data-value]').length, 2);
+  // Chosen values can be dropped from the dialog's own list as well.
+  ui.document.querySelector('.keen-filter-pill-modal [data-remove-value="ossec"]').click();
+  assert.deepEqual(Array.from(instance.getValues()), []);
+});
+
+test('values are read from a multiple select or a plain field without a picker', async (t) => {
+  const ui = await loadUi('pages/filter-pill-multiselect.js', {
+    html:
+      '<select id="many" multiple><option value="a" selected>A</option><option value="" selected>Blank</option><option value="b" selected>B</option><option value="c">C</option></select>' +
+      '<input id="plain" value=" x, ,y ">',
+  });
+  t.after(() => ui.close());
+  assert.deepEqual(
+    Array.from(ui.api.selectedFilterPillValues(ui.document.getElementById('many'))),
+    ['a', 'b'],
+  );
+  assert.deepEqual(
+    Array.from(ui.api.selectedFilterPillValues(ui.document.getElementById('plain'))),
+    ['x', 'y'],
+  );
+  assert.deepEqual(Array.from(ui.api.selectedFilterPillValues('missing')), []);
+});

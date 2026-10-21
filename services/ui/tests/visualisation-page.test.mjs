@@ -250,3 +250,32 @@ test('the clause-to-control graph describes the catalogue and takes no event sco
     'ci',
   );
 });
+
+test('a saved address opens the charts tab, and leaving it drops the marker', async (t) => {
+  const shown = [];
+  const ui = await page(t, 'visualisation', {
+    htmlName: 'events',
+    scripts: [d3],
+    query: '&tab=visualisations',
+    setup(window) {
+      window.bootstrap = {
+        Tab: {
+          getOrCreateInstance: (button) => ({ show: () => shown.push(button.id) }),
+        },
+      };
+    },
+    get: async (u) => {
+      if (u.pathname === '/api/v1/charts/event_volume_timeseries') return daySeries;
+      throw new Error('Unexpected GET ' + u);
+    },
+  });
+  // The page asks Bootstrap to show the tab; the real tab then reports it.
+  assert.deepEqual(shown, ['eventsVisualisationsTab']);
+  ui.el('eventsVisualisationsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /Loaded\./.test(ui.el('status').textContent));
+  assert.equal(new URL(ui.window.location.href).searchParams.get('tab'), 'visualisations');
+
+  ui.el('eventsRegisterTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  assert.equal(new URL(ui.window.location.href).searchParams.has('tab'), false);
+  assert.equal(new URL(ui.window.location.href).searchParams.get('framework'), 'A');
+});

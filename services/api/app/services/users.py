@@ -33,8 +33,6 @@ from app.services.errors import DomainError
 
 def _bump_user_authz(db: Session, user_ids) -> None:
     ids = sorted({uid for uid in (user_ids or []) if uid})
-    if not ids:
-        return
     db.query(User).filter(User.id.in_(ids)).update(
         {User.authz_version: User.authz_version + 1},
         synchronize_session=False,

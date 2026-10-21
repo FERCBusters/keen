@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.db.models import ManagedConfiguration
 
 # Imported fixtures: the assembled application and empty shipped settings.
-from tests.test_assembled_authority_regressions import keen  # noqa: F401
+from tests.test_assembled_authority_regressions import keen, unsafe  # noqa: F401
 from tests.test_evidence_definitions_api import defs  # noqa: F401
 
 RISKLEDGER_ORG = "00000000-0000-4000-8000-000000000001"
@@ -145,6 +145,26 @@ REFUSED = [
         {"organizations": [{"org": "customer"}]},
         "Risk Ledger requires a valid UUID identifier",
     ),
+    (
+        "elasticsearch",
+        {"queries": [{"name": "audit"}]},
+        "Enter an index, alias or data stream pattern",
+    ),
+    (
+        "github",
+        {"repos": {"owner": "acme", "repo": "app"}},
+        "repos must be a list of up to 500 objects",
+    ),
+    (
+        "github",
+        {"repos": [{"owner": "acme", "repo": "app"}, {"owner": "acme", "repo": "app"}]},
+        "repos needs distinct nonempty identities",
+    ),
+    (
+        "taiga",
+        {"projects": [{"id": -3}]},
+        "Taiga project ID must be a positive integer",
+    ),
 ]
 
 
@@ -173,6 +193,10 @@ def test_settings_that_cannot_run_are_refused(defs, name, document, detail):  # 
         ("redmine", {"projects": [{"project": "infra"}]}),
         ("taiga", {"projects": [{"id": 12}]}),
         ("bookstack", {"selected_pages": [{"id": 4, "book_id": 2}]}),
+        (
+            "bookstack",
+            {"page_mappings": [{"match": {"slug": "backup"}, "map_to": ["A.1"]}]},
+        ),
     ],
 )
 def test_runnable_settings_are_saved_with_a_revision(defs, name, document):  # noqa: F811
@@ -196,6 +220,29 @@ def test_unknown_sources_and_demo_feeds_are_refused(defs, monkeypatch):  # noqa:
     )
     demo = defs.put_document("rss", {"feeds": [{"url": "https://feeds.example/a"}]}, 0)
     assert demo.status_code == 403
+
+
+def test_source_wide_settings_need_a_known_adapter_and_a_bounded_document(defs):  # noqa: F811
+    """Adapter settings refuse unknown adapters and documents over 2 MB.
+
+    The size check protects the database row and every later reader; it runs
+    before the credential walk so a huge document is never scanned.
+    """
+    unknown = defs.admin.put(
+        "/v1/admin/adapter-settings/ftp",
+        json={"version": 0, "settings": {"poll_minutes": 5}},
+        headers=unsafe(defs.admin),
+    )
+    assert (unknown.status_code, unknown.json()["detail"]) == (404, "Unknown adapter")
+
+    oversized = defs.admin.put(
+        "/v1/admin/adapter-settings/jenkins",
+        json={"version": 0, "settings": {"note": "x" * 2_000_001}},
+        headers=unsafe(defs.admin),
+    )
+    assert oversized.status_code == 400
+    assert oversized.json()["detail"] == "Configuration exceeds 2 MB"
+    assert defs.db.get(ManagedConfiguration, "jenkins") is None
 
 
 def test_feeds_with_credentials_in_yaml_stay_out_of_the_web_editor(defs):  # noqa: F811

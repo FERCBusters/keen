@@ -1282,3 +1282,581 @@ test('readers get no story controls on the histogram', async (t) => {
   assert.equal(menu.defaultPrevented, false);
   assert.equal(ui.el('histStoryPanel').hidden, true);
 });
+
+// --- Stories: empty windows and refused saves ----------------------------------------
+
+test('a window with no events and no note is refused, and a failed save is reported', async (t) => {
+  const assigned = [];
+  let postFail = false;
+  const posted = [];
+  const ui = await viz(t, {
+    mode: 'histogram',
+    me: { can_view_events: true, can_manage_stories: true },
+    series: daySeries,
+    globals: { location: storyLocation(assigned) },
+    get: async () => ({ total: 0, items: [] }),
+    post: async (u, body) => {
+      posted.push(JSON.parse(JSON.stringify(body)));
+      if (postFail) throw new Error('Stories offline');
+      return { id: 'story-3' };
+    },
+  });
+  await settle(() => bars(ui).length === 4);
+  const panel = ui.el('histStoryPanel');
+  bars(ui)[0].dispatchEvent(
+    new ui.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+  );
+  assert.equal(panel.hidden, false);
+  panel.querySelector('[data-window-create]').click();
+  await settle(() => /No events in this window/.test(ui.el('status').textContent));
+  assert.equal(
+    ui.el('status').textContent,
+    'No events in this window; add an annotation to start a story anyway.',
+  );
+  assert.equal(ui.el('status').dataset.alert, 'warning');
+  assert.deepEqual(posted, []);
+
+  // An annotation alone starts the story; a refused save stays on the page.
+  postFail = true;
+  panel.querySelector('[data-window-note]').value = 'Nothing happened here';
+  panel.querySelector('[data-window-title]').value = '';
+  panel.querySelector('[data-window-create]').click();
+  await settle(() => /Failed to create the story/.test(ui.el('status').textContent));
+  assert.equal(ui.el('status').textContent, 'Failed to create the story: Error: Stories offline');
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].items[0].kind, 'note');
+  assert.match(posted[0].title, /^Events from /);
+  assert.deepEqual(assigned, []);
+});
+
+// --- Plain clicks navigate in the same tab -----------------------------------------
+
+// The page reads its state from the address, so the stand-in location carries
+// the page's query and records where plain clicks send the tab.
+function navLocation(assigned, query = '') {
+  const search = `?framework=A${query}`;
+  const href = `https://keen.example/sources.html${search}`;
+  return {
+    origin: 'https://keen.example',
+    search,
+    get href() {
+      return href;
+    },
+    set href(value) {
+      assigned.push(value);
+    },
+    assign: (u) => assigned.push(u),
+  };
+}
+
+test('graph marks clicked without a modifier open their pages in this tab', async (t) => {
+  const assigned = [];
+  const relationships = {
+    graph_kind: 'clause_control_relationship',
+    nodes: [
+      { id: 'clause:k1', type: 'source', node_kind: 'clause', label: '5.1', clause_id: 'k1' },
+      { id: 'control:c1', type: 'control', node_kind: 'control', label: 'A1', control_id: 'c1' },
+    ],
+    links: [{ source: 'clause:k1', target: 'control:c1', value: 1, link_kind: 'relationship' }],
+  };
+  const ui = await viz(t, {
+    mode: 'graph',
+    graph: (u) => (u.pathname.endsWith('/clause_control') ? relationships : twoSources),
+    globals: { location: navLocation(assigned, '&mode=graph') },
+  });
+  ui.click(ui.titled('#viz g.node-source', 'GitHub\nMapped events: 8'));
+  ui.click(ui.document.querySelector('#viz g.node-control'));
+  ui.click(ui.titled('#viz .links path', 'Okta → A1\nMapped events: 1'));
+  assert.deepEqual(assigned, [
+    '/source.html?source=github&framework=A',
+    '/control.html?id=A1-id&framework=A',
+    `/events.html?framework=A&source=okta&control=A1&${range}`,
+  ]);
+  assert.deepEqual(ui.opened, []);
+
+  // Relationship edges lead to the control; clause nodes lead to the clause.
+  ui.el('vizSelect').value = 'graph_clause_control';
+  ui.el('vizSelect').dispatchEvent(new ui.window.Event('change'));
+  await settle(() => ui.titled('#viz .links path', '5.1 → A1\nLink count: 1'));
+  ui.click(ui.titled('#viz .links path', '5.1 → A1\nLink count: 1'));
+  ui.click(ui.document.querySelector('#viz g.node-source'));
+  assert.deepEqual(assigned.slice(3), [
+    '/control.html?id=c1&framework=A',
+    '/clause.html?id=k1&framework=A',
+  ]);
+});
+
+test('heatmap labels open sources and controls, and clause cells filter by clause', async (t) => {
+  const assigned = [];
+  const ui = await viz(t, {
+    mode: 'heatmap',
+    graph: (u) => (u.pathname.endsWith('/clause_source') ? clauseSources : twoSources),
+    globals: { location: navLocation(assigned, '&mode=heatmap') },
+  });
+  const axisText = (label) =>
+    [...ui.document.querySelectorAll('#viz .viz-axis text')].find(
+      (el) => el.firstChild?.textContent === label,
+    );
+  ui.click(axisText('A2'));
+  ui.click(axisText('Okta'));
+  ui.click(ui.titled('#viz .viz-axis rect', 'GitHub'));
+  ui.click(ui.titled('#viz rect.heat-cell', 'GitHub → A2\nMapped events: 2'));
+  assert.deepEqual(assigned, [
+    '/control.html?id=A2-id&framework=A',
+    '/source.html?source=okta&framework=A',
+    '/source.html?source=github&framework=A',
+    `/events.html?framework=A&source=github&control=A2&${range}`,
+  ]);
+
+  ui.el('vizSelect').value = 'heatmap_clause_events';
+  ui.el('vizSelect').dispatchEvent(new ui.window.Event('change'));
+  await settle(() => ui.titled('#viz rect.heat-cell', 'GitHub → 5.1\nMapped events: 4'));
+  ui.click(ui.titled('#viz rect.heat-cell', 'GitHub → 5.1\nMapped events: 4'), { ctrlKey: true });
+  ui.click(axisText('5.1'));
+  assert.equal(ui.opened[0].href, `/events.html?framework=A&source=github&clause=5.1&${range}`);
+  assert.equal(assigned.at(-1), '/clause.html?id=k1&framework=A');
+});
+
+// --- Saved defaults ----------------------------------------------------------------
+
+test('a saved relative range counts back from today, and a malformed one falls back', async (t) => {
+  const relative = await viz(t, {
+    graph: twoSources,
+    me: { is_admin: true, preferences: { default_visualisation: { date_range: { days: 3 } } } },
+  });
+  assert.deepEqual(
+    [relative.el('dateFrom').value, relative.el('dateTo').value, relative.el('histDays').value],
+    [isoDay(Date.now() - 2 * DAY), today, '3'],
+  );
+  assert.ok(
+    relative.calls.some(
+      (c) =>
+        c.url ===
+        `/api/v1/graph/control_source?framework=A&start_date=${isoDay(Date.now() - 2 * DAY)}&end_date=${today}`,
+    ),
+  );
+
+  const malformed = await viz(t, {
+    graph: twoSources,
+    me: {
+      is_admin: true,
+      preferences: {
+        default_visualisation: { date_range: { start_date: 'yesterday', end_date: '' } },
+      },
+    },
+  });
+  assert.deepEqual(
+    [malformed.el('dateFrom').value, malformed.el('dateTo').value],
+    [weekAgo, today],
+  );
+});
+
+test('a saved control focus reopens the control sunburst, and Reset restores a saved focus', async (t) => {
+  const ui = await viz(t, {
+    mode: 'graph',
+    graph: twoSources,
+    me: {
+      is_admin: true,
+      preferences: {
+        default_visualisation: {
+          mode: 'sunburst_control',
+          date_range: { days: 7 },
+          sunburst_focus: { control_id: 'A2-id' },
+        },
+      },
+    },
+  });
+  // The address chose the graph; the saved default waits for Reset.
+  assert.equal(ui.el('vizSelect').value, 'graph');
+  ui.el('vizReset').click();
+  await settle(() => ui.el('vizSelect').value === 'sunburst_control' && centre(ui)[0] === 'A2');
+  assert.deepEqual(centre(ui).slice(0, 2), ['A2', 'All › A2']);
+
+  const direct = await viz(t, {
+    graph: twoSources,
+    me: {
+      is_admin: true,
+      preferences: {
+        default_visualisation: {
+          mode: 'sunburst_control',
+          date_range: { days: 7 },
+          sunburst_focus: { control_id: 'A1-id' },
+        },
+      },
+    },
+  });
+  assert.deepEqual(centre(direct).slice(0, 2), ['A1', 'All › A1']);
+  // A focus on a control that is no longer there leaves the whole chart in view.
+  const gone = await viz(t, {
+    graph: twoSources,
+    me: {
+      is_admin: true,
+      preferences: {
+        default_visualisation: {
+          mode: 'sunburst_control',
+          sunburst_focus: { control_id: 'missing' },
+        },
+      },
+    },
+  });
+  assert.equal(centre(gone)[0], 'All');
+});
+
+// --- Sunburst edge cases -----------------------------------------------------------
+
+test('a sunburst without mapped events says so', async (t) => {
+  const ui = await viz(t, {
+    mode: 'sunburst_source',
+    graph: { nodes: twoSources.nodes.map((n) => ({ ...n, mapped_events: 0 })), links: [] },
+  });
+  assert.equal(ui.el('viz').textContent, 'No mapped events yet.');
+  assert.equal(ui.document.querySelectorAll('#viz path.sunburst-arc').length, 0);
+  assert.equal(
+    ui.el('topSources').textContent.trim(),
+    'No mapped source evidence in this date range.',
+  );
+});
+
+test('long names are shortened on the wedge and in the breadcrumb', async (t) => {
+  const longName = 'An extraordinarily long source label that keeps going and going';
+  const ui = await viz(t, {
+    mode: 'sunburst_source',
+    graph: graph([
+      { key: 'long', label: longName, controls: { A1: 6 } },
+      { key: 'okta', label: 'Okta', controls: { A1: 1 } },
+    ]),
+  });
+  const labels = [...ui.document.querySelectorAll('#viz .sunburst-label')].map(
+    (n) => n.firstChild?.textContent,
+  );
+  assert.ok(labels.includes(`${longName.slice(0, 16)}…`));
+  assert.ok(!labels.includes(longName));
+  // The tooltip keeps the whole name.
+  ui.click(arc(ui, `${longName}\nMapped events: 6`));
+  const breadcrumb = centre(ui)[1];
+  assert.equal(centre(ui)[0], longName);
+  assert.ok(breadcrumb.includes('…'));
+  assert.ok(breadcrumb.startsWith('All › An extraordinarily'));
+  assert.ok(breadcrumb.endsWith(longName.slice(-27)));
+  assert.ok(breadcrumb.length < `All › ${longName}`.length);
+});
+
+test('tiny controls merge into Other on the control sunburst and list their events', async (t) => {
+  const ui = await viz(t, {
+    mode: 'sunburst_control',
+    graph: graph([
+      { key: 'github', label: 'GitHub', controls: { A1: 500, C1: 1, C2: 1 } },
+      { key: 'okta', label: 'Okta', controls: { A2: 500, C3: 1 } },
+    ]),
+  });
+  const other = arc(ui, 'Other\nMerged: 3 segments\nMapped events: 3');
+  assert.ok(other);
+  ui.click(other, { shiftKey: true });
+  const panel = ui.el('sunburstOtherPanel');
+  assert.match(panel.textContent, /Controls merged into "Other"/);
+  assert.match(panel.textContent, /3 segments • 3 events/);
+  assert.equal(panel.querySelector('thead th').textContent, 'Control');
+  const links = [...panel.querySelectorAll('tbody a')];
+  assert.deepEqual(links.map((a) => a.textContent).sort(), ['C1', 'C2', 'C3']);
+  assert.equal(
+    links.find((a) => a.textContent === 'C3').getAttribute('href'),
+    `/events.html?framework=A&control=C3&${range}`,
+  );
+});
+
+// --- Clipboard, exports and zoom controls -------------------------------------------
+
+test('without a clipboard the link is copied through a hidden field, or the failure is shown', async (t) => {
+  const ui = await viz(t, { mode: 'graph', graph: twoSources });
+  Object.defineProperty(ui.window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: async () => {
+        throw new Error('Clipboard blocked');
+      },
+    },
+  });
+  const fields = () => ui.document.querySelectorAll('textarea[readonly]').length;
+  const before = fields();
+  let selected = '';
+  ui.document.execCommand = (command) => {
+    const field = ui.document.querySelector('textarea[readonly]');
+    selected = command === 'copy' ? field.value : '';
+    return true;
+  };
+  ui.el('copyVizLink').click();
+  await settle(() => ui.el('status').textContent === 'Copied link to clipboard.');
+  assert.equal(new URL(selected).searchParams.get('mode'), 'graph');
+  assert.equal(fields(), before);
+
+  delete ui.document.execCommand;
+  ui.el('copyVizLink').click();
+  await settle(() => ui.el('status').textContent === 'Could not copy link.');
+  assert.equal(ui.el('status').dataset.alert, 'warning');
+  assert.deepEqual(ui.copied, []);
+});
+
+test('a share link leaves out the range when the dates are blank', async (t) => {
+  const ui = await viz(t, { mode: 'histogram', series: daySeries });
+  await settle(() => ui.series.length === 1);
+  for (const id of ['dateFrom', 'dateTo', 'dateFromDmy', 'dateToDmy']) ui.el(id).value = '';
+  // A new breakdown reloads the chart; without dates the server is asked for days.
+  ui.el('vizBreakdown').dispatchEvent(new ui.window.Event('change'));
+  await settle(() => ui.series.length === 2);
+  assert.deepEqual(ui.series[1], {
+    framework: 'A',
+    days: '7',
+    breakdown: 'source',
+    interval: 'day',
+  });
+  assert.match(ui.el('vizCaption').textContent, /Daily volume for the last 7 days\./);
+
+  ui.el('copyVizLink').click();
+  await settle(() => ui.copied.length === 1);
+  const shared = new URL(ui.copied[0]).searchParams;
+  assert.deepEqual([shared.has('from'), shared.has('to'), shared.get('days')], [false, false, '7']);
+});
+
+test('a failed download is reported for each export format', async (t) => {
+  const ui = await viz(t, { mode: 'histogram', series: daySeries });
+  await settle(() => bars(ui).length === 4);
+  URL.createObjectURL = () => {
+    throw new Error('No blob URLs here');
+  };
+  for (const id of ['vizExportCsv', 'vizExportJson', 'vizExportSvg']) {
+    ui.el('status').textContent = '';
+    ui.el(id).click();
+    assert.equal(ui.el('status').textContent, 'Export failed: Error: No blob URLs here', id);
+    assert.equal(ui.el('status').dataset.alert, 'danger');
+  }
+  assert.deepEqual(ui.files, []);
+});
+
+test('Reset zoom leaves every zoom level at once', async (t) => {
+  const start = '2026-10-02T00:00:00.000Z';
+  const end = '2026-10-02T03:00:00.000Z';
+  const ui = await viz(t, {
+    mode: 'histogram',
+    query: `&hstart=${start}&hend=${end}&hint=hour`,
+    series: (u) => (u.searchParams.get('interval') === 'hour' ? hourSeries(start, end) : daySeries),
+  });
+  await settle(() => bars(ui).length === 3);
+  assert.ok(!ui.el('histResetZoom').classList.contains('d-none'));
+  ui.el('histResetZoom').click();
+  await settle(() => bars(ui).length === 4);
+  assert.equal(ui.series.at(-1).interval, 'day');
+  assert.equal('start_ts' in ui.series.at(-1), false);
+  assert.ok(ui.el('histResetZoom').classList.contains('d-none'));
+  assert.ok(ui.el('histBack').classList.contains('d-none'));
+  const search = new URL(ui.window.location.href).searchParams;
+  assert.deepEqual(
+    [search.get('hstart'), search.get('hend'), search.get('hint')],
+    [null, null, null],
+  );
+  // A second press has nothing to leave.
+  const requests = ui.series.length;
+  ui.el('histResetZoom').click();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(ui.series.length, requests);
+});
+
+// Drags the histogram brush from one x position to another, as a pointer would.
+function dragBrush(ui, fromX, toX) {
+  const overlay = ui.document.querySelector('#viz .hist-main-brush .overlay');
+  const init = (clientX) => ({
+    bubbles: true,
+    cancelable: true,
+    view: ui.window,
+    clientX,
+    clientY: 200,
+  });
+  overlay.dispatchEvent(new ui.window.MouseEvent('mousedown', init(fromX)));
+  ui.window.dispatchEvent(new ui.window.MouseEvent('mousemove', init(toX)));
+  ui.window.dispatchEvent(new ui.window.MouseEvent('mouseup', init(toX)));
+}
+
+test('dragging over bars zooms into those buckets at the next finer interval', async (t) => {
+  const ui = await viz(t, {
+    mode: 'histogram',
+    series: (u) =>
+      u.searchParams.get('interval') === 'hour'
+        ? hourSeries(u.searchParams.get('start_ts'), u.searchParams.get('end_ts'))
+        : daySeries,
+  });
+  await settle(() => bars(ui).length === 4);
+  ui.el('histZoomMode').click();
+  // The chart is 900px wide with a 54px left margin; the first band spans
+  // roughly 54–468 and the second 468–882.
+  dragBrush(ui, 80, 180);
+  await settle(() => ui.series.length === 2);
+  assert.deepEqual(ui.series[1], {
+    framework: 'A',
+    start_date: weekAgo,
+    end_date: today,
+    breakdown: 'source',
+    interval: 'hour',
+    start_ts: '2026-10-01T00:00:00.000Z',
+    end_ts: '2026-10-02T00:00:00.000Z',
+  });
+  await settle(() => bars(ui).length === 3);
+  assert.ok(!ui.el('histBack').classList.contains('d-none'));
+  const search = new URL(ui.window.location.href).searchParams;
+  assert.deepEqual(
+    [search.get('hstart'), search.get('hend'), search.get('hint')],
+    ['2026-10-01T00:00:00.000Z', '2026-10-02T00:00:00.000Z', 'hour'],
+  );
+
+  // A drag across both days covers both; the hint keeps hour resolution.
+  ui.el('histBack').click();
+  await settle(() => bars(ui).length === 4);
+  dragBrush(ui, 80, 600);
+  await settle(() => ui.series.length === 3);
+  assert.deepEqual(
+    [ui.series[2].start_ts, ui.series[2].end_ts, ui.series[2].interval],
+    ['2026-10-01T00:00:00.000Z', '2026-10-03T00:00:00.000Z', 'hour'],
+  );
+});
+
+test('a drag that fails to load reports the zoom failure', async (t) => {
+  let hourRequests = 0;
+  const ui = await viz(t, {
+    mode: 'histogram',
+    series: (u) => {
+      if (u.searchParams.get('interval') === 'hour') {
+        hourRequests += 1;
+        throw new Error('Zoom offline');
+      }
+      return daySeries;
+    },
+  });
+  await settle(() => bars(ui).length === 4);
+  ui.el('histZoomMode').click();
+  dragBrush(ui, 80, 180);
+  await settle(() => hourRequests === 1);
+  await settle(() => /Failed to load histogram zoom/.test(ui.el('status').textContent));
+  assert.equal(ui.el('status').textContent, 'Failed to load histogram zoom: Error: Zoom offline');
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+});
+
+// --- Auto-apply, resize and the gaps filter ----------------------------------------
+
+test('with auto-apply, edited heatmap and graph limits redraw without fetching', async (t) => {
+  const ui = await viz(t, {
+    mode: 'heatmap',
+    graph: manySources,
+    me: { is_admin: true, preferences: { auto_apply_filters: true } },
+  });
+  const graphCalls = () => ui.calls.filter((c) => c.url.startsWith('/api/v1/graph/')).length;
+  const before = graphCalls();
+  const rows = () =>
+    new Set(
+      [...ui.document.querySelectorAll('#viz rect.heat-cell')].map(
+        (cell) => cell.querySelector(':scope > title').textContent.split(' → ')[0],
+      ),
+    ).size;
+  assert.equal(rows(), 13);
+  ui.el('heatmapTopSources').value = '1';
+  ui.el('heatmapTopSources').dispatchEvent(new ui.window.Event('input'));
+  assert.equal(rows(), 5);
+
+  ui.el('vizSelect').value = 'graph';
+  ui.el('vizSelect').dispatchEvent(new ui.window.Event('change'));
+  const links = () => ui.document.querySelectorAll('#viz .links path').length;
+  assert.equal(links(), manySources.links.length);
+  ui.el('graphMinEdge').value = '100';
+  ui.el('graphMinEdge').dispatchEvent(new ui.window.Event('input'));
+  assert.equal(links(), 3);
+  // A heatmap limit typed while the graph shows changes nothing.
+  ui.el('heatmapTopControls').value = '2';
+  ui.el('heatmapTopControls').dispatchEvent(new ui.window.Event('input'));
+  assert.equal(links(), 3);
+  assert.equal(graphCalls(), before);
+});
+
+test('resizing the window redraws the chart it shows', async (t) => {
+  const ui = await viz(t, { mode: 'graph', graph: twoSources });
+  ui.el('viz').innerHTML = '';
+  assert.equal(ui.document.querySelectorAll('#viz g.node-source').length, 0);
+  ui.window.dispatchEvent(new ui.window.Event('resize'));
+  assert.equal(ui.document.querySelectorAll('#viz g.node-source').length, 2);
+});
+
+test('typing in the gaps filter of an open panel loads the controls first', async (t) => {
+  const ui = await viz(t, {
+    mode: 'graph',
+    graph: twoSources,
+    stats: () => ({
+      items: [
+        { id: 'c2', ref: 'A2', title: 'Backups', in_scope: true, evidence_count: 0 },
+        { id: 'c3', ref: 'A3', title: 'Crypto', in_scope: true, evidence_count: 0 },
+      ],
+    }),
+  });
+  assert.ok(!ui.calls.some((c) => c.url.startsWith('/api/v1/stats/controls')));
+  ui.el('coverageGapsPanel').classList.add('show');
+  ui.el('gapQ').value = 'crypto';
+  ui.el('gapQ').dispatchEvent(new ui.window.Event('input'));
+  await settle(() => ui.el('gaps').querySelectorAll('.gap-item').length === 1);
+  assert.equal(ui.calls.filter((c) => c.url.startsWith('/api/v1/stats/controls')).length, 1);
+  assert.match(ui.el('gaps').textContent, /A3\s+Crypto/);
+});
+
+test('at second resolution a drag within one bucket zooms no further', async (t) => {
+  const start = '2026-10-02T00:00:00Z';
+  const end = '2026-10-02T00:00:10Z';
+  const seconds = (s, e) => ({
+    interval: 'second',
+    start_ts: s,
+    end_ts: e,
+    items: Array.from({ length: 10 }, (_, i) => ({
+      bucket: `2026-10-02T00:00:0${i}Z`,
+      total: 1,
+      mapped: 1,
+      unmapped: 0,
+      by_source: { github: 1 },
+    })).filter(
+      (it) => Date.parse(it.bucket) >= Date.parse(s) && Date.parse(it.bucket) < Date.parse(e),
+    ),
+    sources: [{ source: 'github', label: 'GitHub', total: 10 }],
+  });
+  const ui = await viz(t, {
+    mode: 'histogram',
+    query: `&hstart=${start}&hend=${end}&hint=second`,
+    series: (u) =>
+      u.searchParams.get('interval') === 'second'
+        ? seconds(u.searchParams.get('start_ts'), u.searchParams.get('end_ts'))
+        : daySeries,
+  });
+  await settle(() => bars(ui).length === 10);
+  ui.el('histZoomMode').click();
+  // Ten bands of about 83px start at x=54: a drag inside the first band.
+  dragBrush(ui, 60, 100);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(ui.series.length, 1);
+  assert.equal(bars(ui).length, 10);
+
+  // Two seconds can still be selected together.
+  dragBrush(ui, 60, 200);
+  await settle(() => ui.series.length === 2);
+  assert.deepEqual(
+    [ui.series[1].start_ts, ui.series[1].end_ts, ui.series[1].interval],
+    ['2026-10-02T00:00:00.000Z', '2026-10-02T00:00:02.000Z', 'second'],
+  );
+  await settle(() => bars(ui).length === 2);
+});
+
+test('a histogram without source metadata exports the raw per-source columns', async (t) => {
+  const ui = await viz(t, {
+    mode: 'histogram',
+    series: { interval: 'day', items: daySeries.items, sources: [] },
+  });
+  await settle(() => /Loaded\./.test(ui.el('status').textContent));
+  await settle(() => ui.el('vizCaption').textContent.includes('Daily volume from'));
+  assert.deepEqual(legend(ui), []);
+  ui.el('vizExportCsv').click();
+  await settle(() => ui.files.length === 1);
+  assert.equal(
+    await ui.files[0].blob.text(),
+    'bucket,total,github,okta\n2026-10-01,5,3,2\n2026-10-02,4,1,3\n',
+  );
+});

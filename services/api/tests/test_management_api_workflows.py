@@ -597,3 +597,332 @@ def test_audit_report_download_sanitises_stored_filename(api, monkeypatch):
     assert "%E5%93%81%E8%B3%AA" in response.headers["content-disposition"]
     api.identity["user"] = api.reader
     assert api.client.get(f"/api/v1/audits/{row.id}/report").status_code == 403
+
+
+def test_objective_list_filters_and_partial_updates(api):
+    # The objective list refuses unknown statuses, searches requirement, goal
+    # and metric text, and a partial update changes only the named fields.
+    def by_status(value):
+        return api.client.get(
+            "/api/v1/isms/objectives", params={"framework": "A", "status": value}
+        )
+
+    first = request(
+        api,
+        "POST",
+        "isms/objectives",
+        {"requirement": "Protect records", "goal": "Encrypt backups"},
+    )
+    request(
+        api,
+        "POST",
+        "isms/objectives",
+        {"requirement": "Train staff", "goal": "Annual", "metric": "Attendance"},
+    )
+    assert by_status("finished").status_code == 400
+    assert request(api, "GET", "isms/objectives", q="  backups ")["total"] == 1
+    assert request(api, "GET", "isms/objectives", q="attendance")["total"] == 1
+    assert request(api, "GET", "isms/objectives", q="nothing here")["total"] == 0
+    path = "isms/objectives/" + first["id"]
+    changed = request(
+        api,
+        "PATCH",
+        path,
+        {
+            "start_date": "2026-01-15",
+            "status": " in_progress ",
+            "owner_user_id": str(api.admin.id),
+            "completion_target_date": "  2026-09-30  ",
+        },
+    )
+    assert changed["start_date"] == "2026-01-15"
+    assert changed["status"] == "in_progress"
+    assert changed["owner_user_id"] == str(api.admin.id)
+    assert changed["completion_target_date"] == "2026-09-30"
+    assert changed["requirement"] == "Protect records"
+    assert [i["id"] for i in by_status("in_progress").json()["items"]] == [first["id"]]
+    assert request(api, "PATCH", path, {"status": ""})["status"] == "not_started"
+    assert by_status("defined").json()["total"] == 2
+    request(api, "PATCH", path, {"status": "finished"}, status=400)
+    assert request(api, "GET", path)["status"] == "not_started"
+
+
+def test_meeting_detail_and_schedule_updates(api):
+    # A meeting can be read back and its date, times and sanitised minutes
+    # updated independently of its attendees.
+    meeting = request(
+        api, "POST", "isms/meetings", {"title": "Review", "date": "2026-01-01"}
+    )
+    path = "isms/meetings/" + meeting["id"]
+    assert request(api, "GET", path)["title"] == "Review"
+    changed = request(
+        api,
+        "PATCH",
+        path,
+        {
+            "date": "2026-02-02",
+            "start_time": "09:30:00",
+            "end_time": "10:15:00",
+            "agenda_minutes_notes": "<p>Agreed</p><script>alert(1)</script>",
+        },
+    )
+    assert changed["date"] == "2026-02-02"
+    assert changed["start_time"] == "09:30:00"
+    assert changed["end_time"] == "10:15:00"
+    assert "<script" not in changed["agenda_minutes_notes"]
+    assert "Agreed" in changed["agenda_minutes_notes"]
+    # A null date is ignored and a null time clears the field.
+    cleared = request(api, "PATCH", path, {"date": None, "end_time": None})
+    assert cleared["date"] == "2026-02-02" and cleared["end_time"] is None
+
+
+def test_meeting_people_without_a_directory_record_are_listed_by_name(api):
+    # An attendee recorded by name alone appears in the attendee list and
+    # contributes no person identifier.
+    from app.db.models import IsmsMeetingPerson
+
+    meeting = request(
+        api, "POST", "isms/meetings", {"title": "Review", "date": "2026-01-01"}
+    )
+    api.db.add(
+        IsmsMeetingPerson(
+            meeting_id=uuid.UUID(meeting["id"]),
+            attendance_type="attendee",
+            name="External auditor",
+            email="auditor@example.test",
+        )
+    )
+    api.db.commit()
+    detail = request(api, "GET", "isms/meetings/" + meeting["id"])
+    assert detail["attendees"] == [
+        {
+            "id": None,
+            "person_id": None,
+            "name": "External auditor",
+            "email": "auditor@example.test",
+        }
+    ]
+    assert detail["attendee_person_ids"] == []
+
+
+def test_effectiveness_measures_are_scoped_to_their_framework(api):
+    # Measures and their metrics are invisible, immutable and undeletable
+    # through another framework.
+    measure = request(
+        api,
+        "POST",
+        "isms/effectiveness-measures",
+        {"summary": "Agent coverage", "description": "Count"},
+    )
+    path = "isms/effectiveness-measures/" + measure["id"]
+    entry = request(
+        api, "POST", path + "/metrics", {"metric_value": 1, "source_type": "other"}
+    )
+    metric_path = "isms/effectiveness-metrics/" + entry["id"]
+    request(api, "PATCH", path, {"summary": "Renamed"}, framework="B", status=404)
+    request(api, "DELETE", path, framework="B", status=404)
+    request(api, "GET", path + "/metrics", framework="B", status=404)
+    request(api, "GET", metric_path, framework="B", status=404)
+    request(api, "PATCH", metric_path, {"metric_value": 2}, framework="B", status=404)
+    request(api, "DELETE", metric_path, framework="B", status=404)
+    assert request(api, "GET", path)["summary"] == "Agent coverage"
+    assert request(api, "GET", metric_path)["metric_value"] == 1
+    assert request(api, "GET", metric_path)["measure"]["id"] == measure["id"]
+
+
+def test_metric_detail_withholds_a_measure_from_another_framework(api):
+    # The detail serializer names the requested framework and no measure when
+    # the entry's measure belongs elsewhere.
+    from app.db.models import IsmsEffectivenessMetricEntry
+    from app.services.isms.effectiveness import _metric_entry_detail_out
+
+    measure = request(
+        api,
+        "POST",
+        "isms/effectiveness-measures",
+        {"summary": "Agent coverage", "description": "Count"},
+    )
+    entry = request(
+        api,
+        "POST",
+        f"isms/effectiveness-measures/{measure['id']}/metrics",
+        {"metric_value": 1, "source_type": "other"},
+    )
+    row = api.db.get(IsmsEffectivenessMetricEntry, uuid.UUID(entry["id"]))
+    out = _metric_entry_detail_out(api.db, row, "B")
+    assert out["framework"] == "B" and out["measure"] is None
+    assert out["id"] == entry["id"]
+
+
+def test_metric_periods_with_one_bound_are_described(api):
+    # A period with only a start or only an end is still labelled.
+    measure = request(
+        api,
+        "POST",
+        "isms/effectiveness-measures",
+        {"summary": "Agent coverage", "description": "Count"},
+    )
+    path = f"isms/effectiveness-measures/{measure['id']}/metrics"
+    from_start = request(
+        api,
+        "POST",
+        path,
+        {"metric_value": 1, "source_type": "other", "period_start": "2026-01-01"},
+    )
+    assert from_start["period"] == "from 2026-01-01"
+    to_end = request(
+        api,
+        "POST",
+        path,
+        {"metric_value": 1, "source_type": "other", "period_end": "2026-01-31"},
+    )
+    assert to_end["period"] == "to 2026-01-31"
+
+
+def test_isms_changelog_rejects_unknown_types_and_malformed_identifiers(api):
+    request(api, "GET", "isms/widget/" + str(uuid.uuid4()) + "/changelog", status=400)
+    request(api, "GET", "isms/objective/not-a-uuid/changelog", status=400)
+    objective = request(
+        api, "POST", "isms/objectives", {"requirement": "R", "goal": "G"}
+    )
+    history = request(api, "GET", f"isms/objective/{objective['id']}/changelog")
+    assert [item["action"] for item in history["items"]] == ["created"]
+
+
+def test_control_relationship_view_skips_orphaned_and_unlisted_links(api):
+    # Links whose record was deleted, whose type is unknown or whose type has
+    # no list in the view are left out without failing the request.
+    from app.db.models import IsmsEntityControlLink
+
+    objective = request(
+        api,
+        "POST",
+        "isms/objectives",
+        {"requirement": "R", "goal": "G", "controls": [str(api.controls[0].id)]},
+    )
+    for entity_type, entity_id in [
+        ("objective", uuid.uuid4()),
+        ("retired_record", uuid.uuid4()),
+        ("access_control_matrix", uuid.uuid4()),
+    ]:
+        api.db.add(
+            IsmsEntityControlLink(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                framework_slug="A",
+                control_item_id=api.controls[0].id,
+                created_by_user_id=api.admin.id,
+            )
+        )
+    entry = request(
+        api,
+        "POST",
+        "isms/access-control-matrix",
+        {
+            "task_action": "Deploy",
+            "service_asset_id": request(
+                api,
+                "POST",
+                "isms/assets",
+                {"asset": "S", "category_name": "C", "subcategory_name": "D"},
+            )["id"],
+            "aws_account_ids": [
+                request(
+                    api,
+                    "POST",
+                    "isms/aws-accounts",
+                    {"name": "H", "account_id": "1"},
+                )["id"]
+            ],
+        },
+    )
+    api.db.add(
+        IsmsEntityControlLink(
+            entity_type="access_control_matrix",
+            entity_id=uuid.UUID(entry["id"]),
+            framework_slug="A",
+            control_item_id=api.controls[0].id,
+            created_by_user_id=api.admin.id,
+        )
+    )
+    api.db.commit()
+    view = request(api, "GET", f"controls/{api.controls[0].id}/isms")
+    assert [item["id"] for item in view["objectives"]] == [objective["id"]]
+    assert view["total"] == 1
+
+
+def test_serializers_tolerate_missing_rows_and_refuse_unknown_entity_types():
+    # Optional relations serialise to an empty value, and the entity dispatcher
+    # refuses a type it does not know.
+    from app.services.errors import DomainError
+    from app.services.isms import serializers
+
+    assert serializers._control_out(None) == {}
+    assert serializers._clause_out(None) == {}
+    assert serializers._business_process_out(None) is None
+    assert serializers._asset_category_out(None) is None
+    assert serializers._asset_subcategory_out(None) is None
+    assert serializers._aws_account_out(None) is None
+    assert serializers._metric_entry_value_display(None) == ""
+    assert serializers._metric_entry_out(None) is None
+    with pytest.raises(DomainError) as refused:
+        serializers._entity_out(None, "widget", object(), "A")
+    assert refused.value.status_code == 400
+
+
+def test_isms_access_requires_an_active_user_record(api):
+    # Anonymous callers and deactivated accounts have no ISMS access, whatever
+    # permissions the account once held.
+    from app.services.isms.access import _can_manage_isms, _can_read_isms
+
+    assert _can_read_isms(api.db, None) is False
+    assert _can_manage_isms(api.db, None) is False
+    api.admin.is_active = False
+    api.db.commit()
+    assert _can_read_isms(api.db, api.admin) is False
+    assert _can_manage_isms(api.db, api.admin) is False
+    api.admin.is_active = True
+    api.db.commit()
+    assert _can_manage_isms(api.db, api.admin) is True
+
+
+def test_link_helpers_deduplicate_references_and_ignore_blank_names(api):
+    # Repeated control or clause references produce one link each; blank
+    # licence names resolve to no licence; a None list leaves links untouched.
+    from app.db.models import (
+        IsmsEntityClauseLink,
+        IsmsEntityControlLink,
+        IsmsLicense,
+        IsmsObjective,
+        IsmsObjectiveResourceUser,
+    )
+    from app.services.isms import mutations
+    from app.services.isms.schemas import IsmsLinksPayload
+
+    objective = request(
+        api, "POST", "isms/objectives", {"requirement": "R", "goal": "G"}
+    )
+    oid = uuid.UUID(objective["id"])
+    control = api.controls[0]
+    mutations._apply_links(
+        api.db,
+        "objective",
+        oid,
+        "A",
+        IsmsLinksPayload(
+            controls=[control.ref, str(control.id), control.ref],
+            clauses=[api.clause.ref, str(api.clause.id)],
+        ),
+        api.admin,
+    )
+    assert api.db.query(IsmsEntityControlLink).filter_by(entity_id=oid).count() == 1
+    assert api.db.query(IsmsEntityClauseLink).filter_by(entity_id=oid).count() == 1
+    assert mutations._license_by_name(api.db, "   ") is None
+    assert mutations._license_or_create_by_name(api.db, "") is None
+    assert mutations._license_or_create_by_name(api.db, None) is None
+    assert api.db.query(IsmsLicense).count() == 0
+    row = api.db.get(IsmsObjective, oid)
+    mutations._replace_objective_resources(api.db, row, [api.admin.id])
+    assert api.db.query(IsmsObjectiveResourceUser).count() == 1
+    mutations._replace_objective_resources(api.db, row, None)
+    assert api.db.query(IsmsObjectiveResourceUser).count() == 1

@@ -300,3 +300,76 @@ def test_incidents_are_deleted_only_with_permission_and_on_their_own_event(incid
     assert incident.stored() == []
     deleted = incident.db.query(AuditLog).filter_by(path="/action/incident_deleted")
     assert deleted.count() == 1
+
+
+def test_an_unsigned_webhook_carries_no_signature_header(incident, monkeypatch):
+    monkeypatch.setattr(settings, "incident_webhook_signing_secret", "")
+    response = incident.create()
+    assert response.status_code == 200, response.text
+    (sent,) = incident.receiver.requests
+    assert "x-keen-signature" not in {k.lower() for k in sent.headers}
+    assert sent.headers["x-team"] == "soc"
+
+
+def test_webhook_text_and_header_configuration_are_bounded_and_tolerant():
+    # Outbound text is capped after cleaning, header configuration that is
+    # not a JSON object of usable names yields no extra headers, and an
+    # unconfigured destination fails validation before any request.
+    assert incidents.sanitize_plain_text("abcdef", max_chars=3) == "abc"
+    assert incidents.sanitize_plain_text("  \x00ab\r\ncd  ", max_chars=10) == "ab\ncd"
+    assert incidents._parse_json_headers(None) == {}
+    assert incidents._parse_json_headers("") == {}
+    assert incidents._parse_json_headers("[1, 2]") == {}
+    assert incidents._parse_json_headers("not json") == {}
+    assert incidents._parse_json_headers(
+        json.dumps({"X-Ok": "1", "Dropped": None, " ": "x", "Tab\tName": "x"})
+    ) == {"X-Ok": "1"}
+    config = incidents.IncidentWebhookConfig(
+        url="", headers={}, signing_secret="", signature_header="X", timeout_seconds=1
+    )
+    with pytest.raises(ValueError, match="not configured"):
+        config.validate()
+
+
+def test_action_records_bound_their_metadata_and_client_details(incident):
+    # Semantic action records keep hostile or oversized request details within
+    # the audit columns and tolerate metadata that cannot be serialised.
+    from app.services.activity_log import record_action
+    from app.services.context import ChangeContext
+
+    class Unprintable:
+        def __str__(self):
+            raise RuntimeError("no text form")
+
+    context = ChangeContext(
+        method="POST",
+        path="/v1/events/x/incident",
+        client_ip="203.0.113.9",
+        user_agent="A" * 300,
+        referer="https://keen.example/" + "r" * 600,
+    )
+    record_action(
+        incident.db,
+        context,
+        incident.reporter,
+        "incident_tested",
+        {"event_id": "e1", "skipped": None, "broken": Unprintable()},
+    )
+    record_action(
+        incident.db, context, None, "incident_tested", {"event_id": "e1", "n": 2}
+    )
+    record_action(incident.db, context, None, "incident_tested")
+    incident.db.commit()
+    rows = (
+        incident.db.query(AuditLog)
+        .filter_by(path="/action/incident_tested")
+        .order_by(AuditLog.id)
+        .all()
+    )
+    assert sorted((r.username or "", r.query_string or "") for r in rows) == [
+        ("", ""),
+        ("", "event_id=e1&n=2"),
+        (incident.reporter.username, ""),
+    ]
+    assert all(len(r.user_agent) == 256 and len(r.referer) == 512 for r in rows)
+    assert all(r.client_ip == "203.0.113.9" and r.method == "ACTION" for r in rows)

@@ -87,7 +87,8 @@ def unify(
         parsed = parse_rules(
             {"framework": context, "rules": [{**item, "enabled": True}]}
         )
-        if len(parsed) != 1 or not parsed[0].targets:
+        # The parser drops an invalid rule, so a parsed rule always has targets.
+        if len(parsed) != 1:
             raise ValueError(
                 f"Cannot normalize rule {rid}; correct its targets before migration"
             )

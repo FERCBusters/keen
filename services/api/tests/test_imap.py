@@ -680,3 +680,295 @@ def test_quoted_printable_bodies_are_decoded_and_redacted():
         100,
     )
     assert (text, truncated) == ("token=REDACTED café", False)
+
+
+def test_configuration_rejects_non_text_hosts_and_non_numeric_limits():
+    # A hostname that is no string and port or body limits that are no whole
+    # numbers are refused before any network use, with a safe message.
+    with pytest.raises(ValueError, match="hostname must be text"):
+        configuration({"host": ["mail.example"], "username": "user"})
+    for change in ({"port": "99a"}, {"body_max_chars": "4000.5"}, {"port": -1}):
+        with pytest.raises(ValueError, match="must be integers"):
+            configuration({"host": "mail.example", "username": "user", **change})
+
+
+class _Stdin:
+    def __init__(self, raw):
+        self.buffer = _Reader(raw)
+
+
+class _Reader:
+    def __init__(self, raw):
+        self.raw = raw
+
+    def read(self, limit):
+        return self.raw[:limit]
+
+
+class _Stdout:
+    def __init__(self):
+        self.text = []
+        self.buffer = self
+
+    def write(self, data):
+        self.text.append(data if isinstance(data, str) else data.decode())
+
+
+def _run_worker_main(monkeypatch, raw, collect):
+    limits, alarms, out = [], [], _Stdout()
+    monkeypatch.setattr(
+        worker.resource, "setrlimit", lambda kind, value: limits.append((kind, value))
+    )
+    monkeypatch.setattr(worker.signal, "alarm", alarms.append)
+    monkeypatch.setattr(worker.sys, "stdin", _Stdin(raw))
+    monkeypatch.setattr(worker.sys, "stdout", out)
+    monkeypatch.setattr(worker, "collect", collect)
+    code = 0
+    try:
+        worker.main()
+    except SystemExit as stop:
+        code = stop.code
+    return code, "".join(out.text), limits, alarms
+
+
+def test_worker_process_limits_itself_then_relays_a_bounded_result(monkeypatch):
+    # The worker drops core dumps, caps memory, CPU and descriptors, bounds
+    # every phase with an alarm and hands the collected mailbox back as JSON.
+    calls = []
+
+    def collect(config, cursor, cidrs):
+        calls.append((config, cursor, cidrs))
+        return {"uidvalidity": 1, "last_uid": 3, "items": []}
+
+    request = json.dumps(
+        {
+            "configuration": {"host": "mail.example"},
+            "cursor": {"uidvalidity": 1, "last_uid": 2},
+            "allowed_cidrs": ["10.0.0.0/8"],
+        }
+    ).encode()
+    code, output, limits, alarms = _run_worker_main(monkeypatch, request, collect)
+    assert code == 0
+    assert json.loads(output) == {"uidvalidity": 1, "last_uid": 3, "items": []}
+    assert calls == [
+        ({"host": "mail.example"}, {"uidvalidity": 1, "last_uid": 2}, ["10.0.0.0/8"])
+    ]
+    assert dict(limits) == {
+        worker.resource.RLIMIT_CORE: (0, 0),
+        worker.resource.RLIMIT_AS: (256 * 1024 * 1024, 256 * 1024 * 1024),
+        worker.resource.RLIMIT_CPU: (8, 8),
+        worker.resource.RLIMIT_NOFILE: (32, 32),
+    }
+    assert alarms == [50, worker.COLLECTION_TIMEOUT, 5]
+
+
+def test_worker_refuses_oversized_input_without_collecting(monkeypatch):
+    def collect(*args):
+        pytest.fail("oversized input must never reach the network")
+
+    code, output, _, alarms = _run_worker_main(monkeypatch, b"{" * 32769, collect)
+    assert code == 1
+    assert json.loads(output) == {
+        "error": "IMAP collection failed a connection, protocol or resource check"
+    }
+    assert alarms == [50]
+
+
+def test_worker_failures_and_oversized_output_report_only_a_generic_error(
+    monkeypatch,
+):
+    # Neither exception detail nor an over-large result leaves the worker.
+    request = json.dumps(
+        {"configuration": {}, "cursor": None, "allowed_cidrs": []}
+    ).encode()
+
+    def failing(*args):
+        raise ValueError("server said: password secret-DO-NOT-LEAK")
+
+    code, output, _, _ = _run_worker_main(monkeypatch, request, failing)
+    assert code == 1 and "DO-NOT-LEAK" not in output
+    assert json.loads(output)["error"].startswith("IMAP collection failed")
+
+    def huge(*args):
+        return {"items": ["x" * (worker.MAX_OUTPUT_BYTES + 1)]}
+
+    code, output, _, _ = _run_worker_main(monkeypatch, request, huge)
+    assert code == 1 and len(output) < 200
+    assert json.loads(output)["error"].startswith("IMAP collection failed")
+
+
+def test_fetch_rejects_oversized_configuration_before_spawning(monkeypatch):
+    monkeypatch.setattr(
+        imap.subprocess, "Popen", lambda *a, **k: pytest.fail("no child process")
+    )
+    with pytest.raises(ValueError, match="configuration exceeds limit"):
+        imap.fetch({"host": "mail.example", "username": "u" * 40000}, None)
+
+
+def test_fetch_parses_a_successful_worker_and_refuses_a_failed_one(monkeypatch):
+    # The parent trusts only a zero exit status with a bounded body; any other
+    # exit yields the generic error and never exposes the child's output.
+    real = subprocess.Popen
+    scripts = iter(
+        [
+            "import sys;sys.stdin.buffer.read();"
+            'sys.stdout.write(\'{"uidvalidity":1,"last_uid":9,"items":[]}\')',
+            "import sys;sys.stdin.buffer.read();"
+            'sys.stdout.write(\'{"error":"detail-DO-NOT-LEAK"}\');sys.exit(1)',
+        ]
+    )
+
+    def popen(*args, **kw):
+        return real([sys.executable, "-c", next(scripts)], **kw)
+
+    monkeypatch.setattr(imap.subprocess, "Popen", popen)
+    assert imap.fetch({"host": "mail.example"}, None) == {
+        "uidvalidity": 1,
+        "last_uid": 9,
+        "items": [],
+    }
+    with pytest.raises(ValueError) as failure:
+        imap.fetch({"host": "mail.example"}, None)
+    assert "DO-NOT-LEAK" not in str(failure.value)
+    assert "IMAP collection failed" in str(failure.value)
+
+
+def test_environment_and_demo_connections_never_poll(contract_db, monkeypatch):
+    # Environment-managed IMAP and demo deployments skip collection with a
+    # clear reason before credentials are touched.
+    monkeypatch.setattr(settings, "imap_enabled", True)
+    monkeypatch.setattr(settings, "demo_mode", True)
+    monkeypatch.setattr(imap, "fetch", lambda *a: pytest.fail("no network"))
+    peers = [
+        sc.Connection(
+            "env:imap", "imap", "Environment", {}, {}, None, True, "environment"
+        ),
+        sc.Connection(
+            "named",
+            "imap",
+            "Named",
+            {"host": "mail.example", "username": "reader"},
+            {"password": "p"},
+            {},
+        ),
+    ]
+    monkeypatch.setattr(sc, "connections", lambda *args: peers)
+    results = imap.ingest_imap_all(contract_db)
+    assert [r["reason"] for r in results] == [
+        "Create a named IMAP connection",
+        "IMAP is disabled in demo environments",
+    ]
+    assert all(r["skipped"] for r in results)
+    assert contract_db.query(IngestionCursor).count() == 0
+
+
+@pytest.mark.parametrize("password", ["", "p" * 4097, "pass\x00word", "pässword"])
+def test_unusable_passwords_are_refused_before_polling(
+    contract_db, monkeypatch, password
+):
+    monkeypatch.setattr(settings, "imap_enabled", True)
+    monkeypatch.setattr(settings, "demo_mode", False)
+    monkeypatch.setattr(imap, "fetch", lambda *a: pytest.fail("no network"))
+    peer = sc.Connection(
+        "named",
+        "imap",
+        "Named",
+        {"host": "mail.example", "username": "reader"},
+        {"password": password},
+        {},
+    )
+    monkeypatch.setattr(sc, "connections", lambda *args: [peer])
+    (result,) = imap.ingest_imap_all(contract_db)
+    assert result["ok"] is False
+    assert result["error"].startswith("IMAP requires a printable ASCII password")
+    assert password not in json.dumps(result) or password == ""
+    assert contract_db.query(IngestionCursor).count() == 0
+
+
+def test_a_first_run_that_fails_still_records_its_backoff(contract_db, monkeypatch):
+    monkeypatch.setattr(settings, "imap_enabled", True)
+    monkeypatch.setattr(settings, "demo_mode", False)
+    peer = sc.Connection(
+        "fresh",
+        "imap",
+        "Fresh",
+        {"host": "mail.example", "username": "reader"},
+        {"password": "p"},
+        {},
+    )
+    monkeypatch.setattr(sc, "connections", lambda *a: [peer])
+
+    def failed(*a):
+        raise ValueError("synthetic-secret")
+
+    monkeypatch.setattr(imap, "fetch", failed)
+    (result,) = imap.ingest_imap_all(contract_db)
+    assert result["ok"] is False and "synthetic-secret" not in json.dumps(result)
+    cursor = contract_db.query(IngestionCursor).one()
+    assert cursor.meta["failures"] == 1
+    assert cursor.meta["retry_after"] > cursor.meta["last_poll_at"]
+    assert "last_uid" not in cursor.meta
+
+
+def test_a_cursor_removed_during_the_poll_is_recreated(monkeypatch):
+    # Removing the connection's cursor while the worker runs must not lose the
+    # outcome: both a failure and a success re-create the row before writing.
+    monkeypatch.setattr(settings, "imap_enabled", True)
+    monkeypatch.setattr(settings, "demo_mode", False)
+    peer = sc.Connection(
+        "racy",
+        "imap",
+        "Racy",
+        {"host": "mail.example", "username": "reader"},
+        {"password": "p"},
+        {},
+    )
+    monkeypatch.setattr(sc, "connections", lambda *a: [peer])
+
+    class Vanishing:
+        """Every lookup finds no cursor, as after a concurrent removal."""
+
+        def __init__(self):
+            self.added = []
+
+        def query(self, *a):
+            return self
+
+        def filter_by(self, **kw):
+            return self
+
+        def one_or_none(self):
+            return None
+
+        def add(self, row):
+            self.added.append(row)
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+        def get_bind(self):
+            return SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
+
+        def scalar(self, *a):
+            return None
+
+    db = Vanishing()
+
+    def failed(*a):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(imap, "fetch", failed)
+    (result,) = imap.ingest_imap_all(db)
+    assert result["ok"] is False
+    assert len(db.added) == 2 and db.added[1].meta["failures"] == 1
+
+    db = Vanishing()
+    monkeypatch.setattr(
+        imap, "fetch", lambda *a: {"reset_required": True, "uidvalidity": 8}
+    )
+    (result,) = imap.ingest_imap_all(db)
+    assert result["ok"] is False and "UIDVALIDITY changed" in result["error"]
+    assert len(db.added) == 2 and db.added[1].meta["reset_required"] is True

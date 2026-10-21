@@ -159,6 +159,34 @@ def test_daily_bucket_budget_rejects_wide_windows_before_work(keen, monkeypatch)
         assert response.status_code == 400, (params, response.text)
 
 
+def test_control_statistics_report_an_unsupported_range_as_a_bad_request(
+    keen, monkeypatch
+):
+    # Date arithmetic that overflows for an absurd window becomes a 400 for the
+    # caller; a caller without events.read never reaches the evidence query.
+    from app.services import stats
+
+    client = keen.client(keen.user("events.read"))
+    monkeypatch.setattr(
+        stats, "_stats_controls", Mock(side_effect=OverflowError("date overflow"))
+    )
+    response = client.get(
+        "/v1/stats/controls",
+        params={"start_date": "0001-01-01", "end_date": "0001-01-02"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "The requested date range is not supported"
+    plain = keen.client(keen.user())
+    assert plain.get("/v1/stats/controls").status_code == 200
+    stats._stats_controls.assert_called_once()
+    # Anonymous and inactive callers share the anonymous cache scope.
+    inactive = keen.user()
+    inactive.is_active = False
+    assert stats._event_visibility_cache_scope(None) == "anonymous"
+    assert stats._event_visibility_cache_scope(inactive) == "anonymous"
+    assert stats._event_visibility_cache_scope(keen.user()) == "authenticated"
+
+
 # --- Evidence aggregates follow events.read -----------------------------------
 
 

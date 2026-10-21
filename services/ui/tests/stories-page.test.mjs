@@ -134,3 +134,64 @@ test('an author starts a story and lands on its page', async (t) => {
   ui.el('cancelCreate').click();
   assert.equal(ui.el('createCard').hidden, true);
 });
+
+test('paging moves through the register and is written to the address', async (t) => {
+  const requests = [];
+  const ui = await page(t, 'stories', {
+    me: { can_view_stories: true },
+    get: async (url) => {
+      requests.push(url.search);
+      const offset = Number(url.searchParams.get('offset'));
+      return {
+        items: [{ ...STORIES[0], id: 's' + offset, title: 'Story ' + offset }],
+        total: 120,
+        limit: 50,
+        offset,
+      };
+    },
+  });
+  await settle(() => ui.el('meta').textContent === '1–50 of 120');
+  assert.equal(ui.el('prev').disabled, true);
+  assert.equal(ui.el('next').disabled, false);
+
+  ui.el('next').click();
+  await settle(() => ui.el('meta').textContent === '51–100 of 120');
+  assert.equal(new URL(ui.window.location.href).searchParams.get('offset'), '50');
+  assert.equal(ui.el('prev').disabled, false);
+  ui.el('next').click();
+  await settle(() => ui.el('meta').textContent === '101–120 of 120');
+  assert.equal(ui.el('next').disabled, true);
+  ui.el('prev').click();
+  await settle(() => ui.el('meta').textContent === '51–100 of 120');
+  assert.deepEqual(requests, [
+    '?limit=50&offset=0',
+    '?limit=50&offset=50',
+    '?limit=50&offset=100',
+    '?limit=50&offset=50',
+  ]);
+  assert.match(ui.document.querySelector('#rows a').textContent, /Story 50/);
+});
+
+test('a register that cannot load says so, and a refused story is reported', async (t) => {
+  const ui = await page(t, 'stories', {
+    me: { can_manage_stories: true },
+    get: async () => {
+      throw new Error('Stories offline');
+    },
+    post: async () => {
+      throw new Error('Title in use');
+    },
+  });
+  await settle(() => ui.el('meta').textContent === '—');
+  assert.equal(ui.el('status').textContent, 'Failed to load stories: Error: Stories offline');
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+
+  ui.el('showCreate').click();
+  ui.el('createTitle').value = 'Incident 42';
+  ui.el('createForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(
+    () => ui.el('status').textContent === 'Failed to create the story: Error: Title in use',
+  );
+  assert.equal(ui.el('createTitle').value, 'Incident 42');
+  assert.equal(ui.el('createCard').hidden, false);
+});

@@ -21,7 +21,10 @@ async function events(t, { me, post, globals, stories = [] } = {}) {
       if (u.pathname === '/api/v1/controls') return { items: [] };
       if (u.pathname === '/api/v1/events/facets') return { sources: [], controls: [] };
       if (u.pathname === '/api/v1/events') return { total: 2, items: EVENTS };
-      if (u.pathname === '/api/v1/stories') return { items: stories };
+      if (u.pathname === '/api/v1/stories') {
+        if (stories === null) throw new Error('Stories offline');
+        return { items: stories };
+      }
       if (u.pathname === '/api/v1/stories/s1') return { id: 's1', version: 7 };
       throw new Error('Unexpected GET ' + u);
     },
@@ -207,6 +210,46 @@ test('the selection stops at the number of events a story holds', async (t) => {
     'A story holds up to 200 events; the selection is full.',
   );
   assert.equal(ui.document.querySelectorAll('#rows [data-select-event]:checked').length, 200);
+});
+
+test('story failures are reported and the selection is kept for another try', async (t) => {
+  const { ui, check } = await events(t, {
+    me: { can_manage_stories: true },
+    stories: null,
+    post: async () => {
+      throw new Error('Stories offline');
+    },
+  });
+  const row = ui.document.querySelector('#rows tr[data-event-id="e1"]');
+  row.dispatchEvent(new ui.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  // "Create a story" moves the viewer to the title field.
+  ui.el('rowMenu').querySelector('[data-menu-action="create"]').click();
+  assert.equal(ui.el('rowMenu').hidden, true);
+  const title = ui.el('selectionBar').querySelector('[data-story-title]');
+  assert.equal(ui.document.activeElement, title);
+
+  ui.el('selectionBar').querySelector('[data-create-story]').click();
+  await settle(() => ui.el('status').textContent.startsWith('Failed to create the story'));
+  assert.equal(ui.el('status').textContent, 'Failed to create the story: Error: Stories offline');
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+  assert.equal(ui.el('selectionBar').hidden, false);
+  assert.equal(ui.document.querySelectorAll('#rows [data-select-event]:checked').length, 1);
+
+  const target = ui.el('selectionBar').querySelector('[data-story-target]');
+  target.dispatchEvent(new ui.window.Event('focus'));
+  await settle(() => ui.el('status').textContent.startsWith('Failed to list stories'));
+  assert.equal(target.options.length, 1);
+
+  check('e2');
+  target.add(new ui.window.Option('Mine', 's1'));
+  target.value = 's1';
+  ui.el('selectionBar').querySelector('[data-add-to-story]').click();
+  await settle(() => ui.el('status').textContent.startsWith('Failed to add to the story'));
+  assert.equal(ui.el('status').textContent, 'Failed to add to the story: Error: Stories offline');
+  assert.equal(
+    ui.el('selectionBar').querySelector('[data-selection-count]').textContent,
+    '2 selected',
+  );
 });
 
 test('a hidden selection bar stays hidden despite its Bootstrap display class', async () => {

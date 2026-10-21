@@ -47,7 +47,7 @@ result=0
 # the current total; raise it as coverage rises.
 poetry run python -m pytest tests -ra --tb=short \
   --junitxml="$report_dir/pytest.xml" \
-  --cov=app --cov-branch --cov-fail-under=94 --cov-report=term:skip-covered \
+  --cov=app --cov-branch --cov-fail-under=98 --cov-report=term:skip-covered \
   --cov-report="xml:$report_dir/backend-coverage.xml" \
   --cov-report="json:$report_dir/backend-coverage.json" \
   --cov-report="html:$report_dir/backend-coverage" || result=1

@@ -110,7 +110,7 @@ async function auditPage(t, options = {}) {
   const state = { audit: options.audit || baseAudit(), patched: [], put: null, posted: [] };
   const fail = options.fail || {};
   const ui = await page(t, 'audit', {
-    query: '&id=a1',
+    query: options.query ?? '&id=a1',
     scripts: [d3],
     me: options.me || { is_admin: true, user_id: 'u1' },
     globals: { NodeFilter, ...(options.globals || {}) },
@@ -183,7 +183,7 @@ async function auditPage(t, options = {}) {
           return {
             timestamp: '2026-01-02T00:00:00Z',
             source: 'auth',
-            artifacts: [
+            artifacts: options.artifacts || [
               { id: 'art1', content_type: 'text/plain', captured_at: '2026-01-02T00:00:00Z' },
               { id: 'art2', content_type: 'image/png' },
             ],
@@ -205,6 +205,7 @@ async function auditPage(t, options = {}) {
     },
     post: async (u, b) => {
       state.posted.push({ path: u.pathname, body: plain(b) });
+      if (options.postFail) throw new Error('Post rejected');
       if (u.pathname === '/api/v1/isms/people') {
         state.people = [
           { id: 'p1', name: 'Dana', email: 'dana@example.test' },
@@ -216,6 +217,7 @@ async function auditPage(t, options = {}) {
     },
     remove: async (u) => {
       state.removed = (state.removed || []).concat(u.pathname);
+      if (options.removeFail) throw new Error('Delete rejected');
       return { ok: true };
     },
   });
@@ -903,7 +905,7 @@ function readZip(bytes) {
   return files;
 }
 
-async function auditZipExport(t, responses, audit = baseAudit()) {
+async function auditZipExport(t, responses, audit = baseAudit(), artifacts = undefined) {
   const fetched = [];
   let zip = null;
   const ctx = new Proxy({}, { get: (_, k) => (k in {} ? undefined : () => {}), set: () => true });
@@ -917,6 +919,7 @@ async function auditZipExport(t, responses, audit = baseAudit()) {
   const captured = [];
   const { ui } = await auditPage(t, {
     audit,
+    artifacts,
     me: {
       is_admin: true,
       user_id: 'u1',
@@ -1059,4 +1062,178 @@ test('audit ZIP export reports a missing renderer without leaving the button dis
   await settle(() => /html2canvas is not available/.test(ui.el('status').textContent));
   assert.equal(ui.el('btnAuditZip').disabled, false);
   assert.equal(ui.document.querySelector('.export-capture'), null);
+});
+
+test('an audit with nothing attached yet says so in every section', async (t) => {
+  const { ui } = await auditPage(t, {
+    audit: baseAudit({
+      audit_type: 'internal',
+      final_report: null,
+      attendees: [],
+      findings: [],
+      evidence: [],
+    }),
+  });
+  assert.match(ui.el('meta').textContent, /A · Internal · Open/);
+  assert.equal(ui.el('reportInfo').textContent, 'No final report uploaded.');
+  assert.equal(ui.el('attendees').textContent, 'No people listed yet.');
+  assert.equal(ui.el('findings').textContent, 'No findings yet.');
+  assert.match(
+    ui.el('evidence').textContent,
+    /^No evidence sampled yet\. Use the “Sample into audit” button/,
+  );
+  assert.deepEqual(
+    ['kpiEvidence', 'kpiPeople', 'kpiFindings'].map((id) => ui.el(id).textContent),
+    ['0', '0', '0'],
+  );
+});
+
+test('without an audit id the page needs audit permission, and then an id', async (t) => {
+  const denied = await auditPage(t, { query: '', me: { user_id: 'u1' } });
+  assert.equal(denied.ui.el('status').textContent, 'Audit access required.');
+  assert.equal(denied.ui.el('status').dataset.alert, 'danger');
+  assert.equal(
+    denied.ui.calls.some((c) => c.url.startsWith('/api/v1/audits/') && !c.url.includes('/users')),
+    false,
+  );
+
+  const missing = await auditPage(t, { query: '', me: { can_view_audits: true, user_id: 'u1' } });
+  assert.equal(missing.ui.el('status').textContent, 'Missing audit id');
+  assert.equal(
+    missing.ui.calls.some((c) => /^\/api\/v1\/audits\/[^/?]+(\?|$)/.test(c.url)),
+    false,
+  );
+});
+
+test('refused findings, evidence links, people and deletion are reported in place', async (t) => {
+  const { ui, state } = await auditPage(t, {
+    postFail: true,
+    removeFail: true,
+    globals: { confirm: () => true },
+  });
+  const failed = () => /^Failed: Error: (Post|Delete) rejected$/.test(ui.el('status').textContent);
+  const reset = () => (ui.el('status').textContent = '');
+
+  ui.el('findingTitle').value = 'Improve logging';
+  ui.el('findingForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(failed);
+  assert.equal(ui.el('findingTitle').value, 'Improve logging');
+  reset();
+
+  ui.el('urlEvidence').value = 'https://evidence.example/item';
+  ui.el('urlEvidenceForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(failed);
+  assert.equal(ui.el('urlEvidence').value, 'https://evidence.example/item');
+  reset();
+
+  ui.el('attendeeName').value = 'Erin';
+  ui.el('attendeeEmail').value = 'erin@example.test';
+  ui.el('attendeeEmail').dispatchEvent(new ui.window.Event('input'));
+  ui.el('attendeeCreatePerson').click();
+  await settle(() => /Could not add Person/.test(ui.el('status').textContent));
+  assert.equal(ui.el('status').textContent, 'Could not add Person: Error: Post rejected');
+  assert.equal(ui.el('attendeePersonId').value, '');
+  reset();
+
+  ui.el('deleteAudit').click();
+  await settle(failed);
+  assert.deepEqual(state.removed, ['/api/v1/audits/a1']);
+  assert.equal(ui.el('title').textContent, baseAudit().title);
+  assert.deepEqual(
+    state.posted.map((p) => p.path),
+    ['/api/v1/audits/a1/findings', '/api/v1/audits/a1/evidence', '/api/v1/isms/people'],
+  );
+});
+
+test('a template schedule with a malformed date is not saved, and a refused one is reported', async (t) => {
+  let valid = true;
+  const { ui, state } = await auditPage(t, {
+    audit: baseAudit({ status: 'template', schedule_recurrence: 'yearly' }),
+    patchFail: true,
+    vendor: { wireIsoDateTextField: () => ({ syncHiddenFromText: () => valid }) },
+  });
+  ui.el('tmplScheduleStart').value = '2026-09-09';
+  valid = false;
+  ui.el('templateScheduleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => ui.el('status').textContent.includes('configured date format'));
+  assert.equal(
+    ui.el('status').textContent,
+    'Enter schedule dates using the configured date format.',
+  );
+  assert.equal(ui.el('status').dataset.alert, 'warning');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(state.patched, []);
+
+  valid = true;
+  ui.el('templateScheduleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => ui.el('status').textContent === 'Failed: Error: Patch rejected');
+  assert.equal(state.patched.length, 1);
+  assert.equal(state.patched[0].path, '/api/v1/audits/scheduled/a1');
+});
+
+test('unticking a document or SWOT item removes it from the scope that is saved', async (t) => {
+  const { ui, state } = await auditPage(t);
+  const toggle = (selector, checked) => {
+    const box = ui.document.querySelector(selector);
+    box.checked = checked;
+    box.dispatchEvent(new ui.window.Event('change'));
+  };
+  toggle('[data-document-id="d1"]', true);
+  assert.equal(ui.el('documentScopeCount').textContent, '1 selected');
+  toggle('[data-document-id="d1"]', false);
+  assert.equal(ui.el('documentScopeCount').textContent, '0 selected');
+  toggle('[data-swot-scope="s2"]', true);
+  toggle('[data-swot-scope="s2"]', false);
+  toggle('[data-swot-scope="s1"]', false);
+
+  ui.el('saveScope').click();
+
+  await settle(() => state.put);
+  assert.deepEqual(state.put.documents, []);
+  assert.deepEqual(state.put.swot_ids, []);
+  await settle(() => /Scope saved/.test(ui.el('status').textContent));
+  await idle(ui);
+});
+
+test('audit ZIP names follow the served type when the download name is missing or malformed', async (t) => {
+  const responses = {
+    '/api/v1/audits/a1/report/download': [
+      'final',
+      {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'attachment; filename*=plain.pdf',
+      },
+    ],
+    '/api/v1/artifacts/art1/download?sample_export=1': [
+      'gif',
+      {
+        'Content-Type': 'image/gif',
+        'Content-Disposition': "attachment; filename*=UTF-8''%E0%A4%A",
+      },
+    ],
+    '/api/v1/artifacts/art2/download?sample_export=1': ['webp', { 'Content-Type': 'image/webp' }],
+    '/api/v1/artifacts/art3/download?sample_export=1': [
+      'zip',
+      { 'Content-Type': 'application/zip' },
+    ],
+    '/api/v1/artifacts/art4/download?sample_export=1': [
+      'bin',
+      { 'Content-Type': 'application/octet-stream' },
+    ],
+  };
+  const { names } = await auditZipExport(t, responses, baseAudit(), [
+    { id: 'art1', content_type: 'image/gif' },
+    { id: 'art2', content_type: 'image/webp' },
+    { id: 'art3', content_type: 'application/zip' },
+    { id: 'art4', content_type: 'application/octet-stream' },
+  ]);
+  // A filename* without a charset is used as written; one that cannot be decoded
+  // keeps its encoded form; otherwise the name comes from the artifact and type.
+  assert.deepEqual(names.slice(1), [
+    'final-report/plain.pdf',
+    'sampled-evidence/001 2026-01-02T00-00-00Z auth ev1/%E0%A4%A',
+    'sampled-evidence/001 2026-01-02T00-00-00Z auth ev1/artifact-art2.webp',
+    'sampled-evidence/001 2026-01-02T00-00-00Z auth ev1/artifact-art3.zip',
+    'sampled-evidence/001 2026-01-02T00-00-00Z auth ev1/artifact-art4',
+  ]);
 });

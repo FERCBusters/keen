@@ -586,3 +586,187 @@ def test_a_relationship_is_removed_only_at_the_current_version(keen):
     )
     text = str(history)
     assert str(objective.id) not in text and objective.goal not in text
+
+
+def test_list_filters_reject_unknown_values_and_narrow_results(keen):
+    # Each list filter either narrows the result set or is refused with a clear
+    # validation error; a relationship filter needs both halves.
+    manager = keen.client(keen.user("isms.manage", "isms.read"))
+    root = create(manager, title="Ageing firewall", description="Patch backlog")
+    child = create(manager, title="Vendor exit", parent_id=root["id"], status="planned")
+    assert manager.get("/v1/isms/swot?kind=hazard").status_code == 400
+    assert manager.get("/v1/isms/swot?status=finished").status_code == 400
+    assert manager.get("/v1/isms/swot?status=planned").json()["total"] == 1
+    assert [
+        i["id"] for i in manager.get("/v1/isms/swot?status=planned").json()["items"]
+    ] == [child["id"]]
+    assert manager.get("/v1/isms/swot?q=backlog").json()["total"] == 1
+    assert manager.get("/v1/isms/swot?q=BACKLOG").json()["items"][0]["id"] == root["id"]
+    assert manager.get("/v1/isms/swot?q=nothing-matches").json()["total"] == 0
+    listed = manager.get(f"/v1/isms/swot?parent_id={root['id']}").json()
+    assert [i["id"] for i in listed["items"]] == [child["id"]]
+    assert manager.get("/v1/isms/swot?target_type=objective").status_code == 400
+    assert manager.get(f"/v1/isms/swot?target_id={root['id']}").status_code == 400
+
+
+def test_control_filter_applies_without_a_clause_filter(keen):
+    # A control filter on its own narrows the list; the clause filter stays off.
+    from app.db.models import ControlItem, Framework
+
+    client = keen.client(keen.user("isms.manage", "isms.read"))
+    keen.db.add(Framework(slug="swot-only-control", name="Only control"))
+    keen.db.flush()
+    keen.db.add(
+        ControlItem(
+            framework_slug="swot-only-control",
+            ref="A.9",
+            title="Access",
+            type="annex_control",
+        )
+    )
+    keen.db.commit()
+    create(client)
+    mapped = client.post(
+        "/v1/isms/swot?framework=swot-only-control",
+        json={"title": "Mapped", "controls": ["A.9"]},
+        headers=unsafe(client),
+    )
+    assert mapped.status_code == 200, mapped.text
+    listed = client.get("/v1/isms/swot?framework=swot-only-control&control=A.9").json()
+    assert [i["id"] for i in listed["items"]] == [mapped.json()["id"]]
+
+
+def test_blank_title_unknown_owner_and_foreign_parent_are_refused(keen):
+    # Whitespace titles, owners who are not active users and parents in another
+    # quadrant are rejected before anything is written.
+    from uuid import uuid4
+
+    client = keen.client(keen.user("isms.manage"))
+    inactive = keen.user()
+    inactive.is_active = False
+    keen.db.commit()
+    strength = create(client, title="Strong team", kind="strength")
+    for payload in [
+        {"title": "   "},
+        {"title": "Owned", "owner_user_id": str(uuid4())},
+        {"title": "Owned", "owner_user_id": str(inactive.id)},
+        {"title": "Orphan", "parent_id": str(uuid4())},
+        {"title": "Wrong quadrant", "kind": "threat", "parent_id": strength["id"]},
+    ]:
+        response = client.post("/v1/isms/swot", json=payload, headers=unsafe(client))
+        assert response.status_code == 400, response.text
+    assert keen.db.query(IsmsSwot).count() == 1
+    owner = keen.user()
+    owned = create(client, title="Owned", owner_user_id=str(owner.id))
+    assert owned["owner_user_id"] == str(owner.id)
+
+
+def test_moving_a_subtree_respects_the_depth_limit(keen):
+    # Re-parenting an item measures the height of its descendants: a chain that
+    # fits on its own is refused once a new parent would push it past 12 levels.
+    import uuid
+
+    client = keen.client(keen.user("isms.manage"))
+    chain = [create(client, title="Level 1")]
+    for level in range(2, 13):
+        chain.append(create(client, title=f"Level {level}", parent_id=chain[-1]["id"]))
+    new_root = create(client, title="New root")
+    path = "/v1/isms/swot/" + chain[0]["id"]
+    refused = client.patch(
+        path,
+        json={"parent_id": new_root["id"], "expected_version": 1},
+        headers=unsafe(client),
+    )
+    assert refused.status_code == 400
+    assert "depth" in refused.json()["detail"]
+    keen.db.expire_all()
+    assert keen.db.get(IsmsSwot, uuid.UUID(chain[0]["id"])).parent_id is None
+    # The last two levels can move under the new root because their height fits.
+    moved = client.patch(
+        "/v1/isms/swot/" + chain[10]["id"],
+        json={"parent_id": new_root["id"], "expected_version": 1},
+        headers=unsafe(client),
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["parent_id"] == new_root["id"]
+    keen.db.expire_all()
+    assert keen.db.get(IsmsSwot, uuid.UUID(chain[11]["id"])).parent_id == uuid.UUID(
+        chain[10]["id"]
+    )
+
+
+def test_relationship_additions_are_idempotent_and_bounded(keen):
+    # Adding an existing relationship again bumps the version without a second
+    # row, and an item refuses its 201st relationship.
+    import uuid
+    from uuid import uuid4
+
+    from app.db.models import IsmsObjective
+
+    manager = keen.client(keen.user("isms.manage"))
+    objective = IsmsObjective(goal="Repeatable goal")
+    keen.db.add(objective)
+    keen.db.commit()
+    item = create(manager)
+    path = f"/v1/isms/swot/{item['id']}/links"
+    body = {"target_type": "objective", "target_id": str(objective.id)}
+    first = manager.post(
+        path, json={**body, "expected_version": 1}, headers=unsafe(manager)
+    )
+    assert first.status_code == 200, first.text
+    second = manager.post(
+        path, json={**body, "expected_version": 2}, headers=unsafe(manager)
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["version"] == 3
+    swot_id = uuid.UUID(item["id"])
+    assert keen.db.query(IsmsSwotLink).filter_by(swot_id=swot_id).count() == 1
+    for _ in range(199):
+        keen.db.add(
+            IsmsSwotLink(swot_id=swot_id, target_type="document", target_id=uuid4())
+        )
+    keen.db.commit()
+    other = IsmsObjective(goal="One too many")
+    keen.db.add(other)
+    keen.db.commit()
+    refused = manager.post(
+        path,
+        json={
+            "target_type": "objective",
+            "target_id": str(other.id),
+            "expected_version": 3,
+        },
+        headers=unsafe(manager),
+    )
+    assert refused.status_code == 400
+    assert "200" in refused.json()["detail"]
+    assert keen.db.query(IsmsSwotLink).filter_by(swot_id=swot_id).count() == 200
+
+
+def test_change_link_records_history_without_request_context(keen):
+    # A relationship change made outside an HTTP request still records history.
+    from app.db.models import IsmsObjective
+    from app.services.isms import swot as service
+
+    user = keen.user("isms.manage")
+    objective = IsmsObjective(goal="Direct goal")
+    keen.db.add(objective)
+    keen.db.commit()
+    item = create(keen.client(user))
+    result = service.change_link(
+        item_id=item["id"],
+        payload=service.LinkPayload(
+            target_type="objective", target_id=objective.id, expected_version=1
+        ),
+        remove=False,
+        user=user,
+        db=keen.db,
+        context=None,
+    )
+    assert result == {"ok": True, "version": 2}
+    entry = (
+        keen.db.query(EntityChangelog)
+        .filter_by(entity_type="isms_swot", action="relationship_added")
+        .one()
+    )
+    assert entry.request_path is None

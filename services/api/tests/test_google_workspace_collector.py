@@ -483,3 +483,134 @@ def test_reports_discovery_tracks_service_activity_calls():
     service = MagicMock()
     service.activities.return_value.list.return_value = MagicMock(page="req")
     assert gws._pick({}, []) == ""
+
+
+def _service(*pages):
+    service = MagicMock()
+    service.activities.return_value.list.return_value = MagicMock(
+        execute=MagicMock(side_effect=[{"items": list(items)} for items in pages])
+    )
+    service.activities.return_value.list_next.return_value = None
+    return service
+
+
+def test_naive_timestamps_pass_through_unchanged():
+    naive = datetime(2026, 10, 9, 12)
+    assert gws._to_utc_naive(naive) is naive
+
+
+def test_a_zone_aware_cursor_sets_the_start_time_and_floor(db):
+    # Cursors read back with a zone are normalised, so the start time sent to
+    # Google and the overlap floor both follow the stored instant.
+    existing = MagicMock(last_ts=datetime(2026, 10, 10, 0, 0, 0, tzinfo=timezone.utc))
+    db.query.return_value.filter.return_value.one_or_none.return_value = existing
+    service = _service([ACTIVITY])
+    with patch.object(gws, "store_event_with_artifact") as store:
+        result = gws.ingest_google_workspace_stream(
+            db, service, {"application": "login"}, {"overlap_seconds": 60}
+        )
+    call = service.activities.return_value.list.call_args.kwargs
+    assert call["startTime"] == "2026-10-09T23:59:00Z"
+    # The 12:00 activity lies before the floor, so it is neither stored nor
+    # allowed to move the cursor backwards.
+    store.assert_not_called()
+    assert result["created_events"] == 0 and result["fetched_items"] == 1
+    assert existing.last_ts == datetime(2026, 10, 10, 0, 0, 0)
+    assert result["cursor_last_ts"] == "2026-10-10T00:00:00"
+
+
+def test_named_events_are_collected_separately_and_capped_to_the_newest(db):
+    older = {
+        **ACTIVITY,
+        "id": {"time": "2026-10-09T11:00:00.000Z", "uniqueQualifier": "uq-0"},
+    }
+    service = _service([older, ACTIVITY], [older, ACTIVITY])
+    stored = []
+    with patch.object(
+        gws,
+        "store_event_with_artifact",
+        side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
+    ):
+        result = gws.ingest_google_workspace_stream(
+            db,
+            service,
+            {
+                "application": "login",
+                "event_names": [" LOGIN_FAILURE ", "", "LOGOUT"],
+                "max_items": 1,
+            },
+            {},
+        )
+    # One request per named event; each stops at the item cap.
+    names = [
+        c.kwargs["eventName"]
+        for c in service.activities.return_value.list.call_args_list
+    ]
+    assert names == ["LOGIN_FAILURE", "LOGOUT"]
+    assert result["fetched_items"] == 1 and result["created_events"] == 1
+    assert len(stored) == 1
+
+
+def test_activities_without_a_time_are_stamped_on_arrival(db):
+    before = datetime.now(timezone.utc).replace(tzinfo=None)
+    untimed = {**{k: v for k, v in ACTIVITY.items() if k != "id"}, "actor": "ops"}
+    service = _service([untimed])
+    stored = []
+    with patch.object(
+        gws,
+        "store_event_with_artifact",
+        side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
+    ):
+        result = gws.ingest_google_workspace_stream(
+            db, service, {"application": "login"}, {}
+        )
+    assert result["created_events"] == 1
+    (call,) = stored
+    assert call["timestamp"] >= before
+    assert len(call["external_id"]) == 32
+    # An actor that is no object is unknown; it is never coerced from text.
+    assert call["actor"] is None
+
+
+def test_repeated_deliveries_of_one_activity_count_once(db):
+    service = _service([ACTIVITY, ACTIVITY])
+    with patch.object(
+        gws,
+        "store_event_with_artifact",
+        side_effect=[{"deduped": False}, {"deduped": True}],
+    ):
+        result = gws.ingest_google_workspace_stream(
+            db, service, {"application": "login"}, {}
+        )
+    assert result["fetched_items"] == 2 and result["created_events"] == 1
+    assert result["cursor_last_ts"] == "2026-10-09T12:00:00"
+
+
+def test_all_notes_when_no_streams_are_configured(db):
+    for streams in ([], "login", None):
+        with (
+            patch.object(gws.settings, "google_workspace_enabled", True),
+            patch.object(
+                gws,
+                "load_google_workspace_config",
+                return_value={"impersonate": "admin@example.com", "streams": streams},
+            ),
+            patch.object(gws, "_reports_service") as reports,
+        ):
+            (result,) = gws.ingest_google_workspace_all(db)
+        assert result["ok"] is True and result["created_events"] == 0
+        assert result["note"] == "no streams configured"
+        reports.assert_not_called()
+
+
+def test_an_empty_window_leaves_a_new_cursor_without_a_timestamp(db):
+    service = _service([])
+    with patch.object(gws, "store_event_with_artifact") as store:
+        result = gws.ingest_google_workspace_stream(
+            db, service, {"application": "login"}, {}
+        )
+    store.assert_not_called()
+    assert result["fetched_items"] == 0 and result["created_events"] == 0
+    assert result["cursor_last_ts"] is None
+    cursor = db.add.call_args.args[0]
+    assert cursor.last_ts is None and cursor.updated_at is not None

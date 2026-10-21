@@ -1113,6 +1113,76 @@ def test_diary_entries_map_controls_and_store_attachments(admin):
     admin.call("POST", "/v1/admin/diary", {"summary": "  "}, status=400)
 
 
+def test_posting_the_same_diary_entry_again_adds_no_mappings_or_duplicate_files(admin):
+    """A repeated entry is the same event, so its control mappings stay single."""
+    db = admin.db
+    control = _control(db, "A.5.1")
+    body = {
+        "summary": "Backups restored",
+        "timestamp": "2026-10-01T09:30:00Z",
+        "controls": ["A.5.1"],
+        "framework": "A",
+    }
+
+    def post():
+        response = admin.client.post(
+            "/v1/admin/diary",
+            headers=unsafe(admin.client),
+            data=body,
+            files=[("attachments", ("README", io.BytesIO(b"notes"), "text/plain"))],
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    first, second = post(), post()
+
+    assert second["event_id"] == first["event_id"]
+    assert (first["manual_mappings_created"], second["manual_mappings_created"]) == (
+        1,
+        0,
+    )
+    event_id = uuid.UUID(first["event_id"])
+    assert [
+        m.control_item_id for m in db.query(Mapping).filter_by(event_id=event_id)
+    ] == [control.id]
+    # The file is held once, and a file without an extension gets a neutral one.
+    stored = [
+        a.storage_uri
+        for a in db.query(Artifact).filter_by(event_id=event_id)
+        if a.kind == "diary_attachment"
+    ]
+    assert len(stored) == 1 and stored[0].endswith("attachment-1.bin")
+    assert (first["attachments_created"], second["attachments_created"]) == (1, 0)
+
+    # A different file added to the same entry is numbered after the first.
+    response = admin.client.post(
+        "/v1/admin/diary",
+        headers=unsafe(admin.client),
+        data=body,
+        files=[("attachments", ("log.txt", io.BytesIO(b"other"), "text/plain"))],
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["attachments_created"] == 1
+    assert sorted(
+        a.storage_uri.rsplit("/", 1)[-1]
+        for a in db.query(Artifact).filter_by(event_id=event_id)
+        if a.kind == "diary_attachment"
+    ) == ["attachment-1.bin", "attachment-2.txt"]
+
+
+def test_a_diary_edit_must_be_a_json_object(admin):
+    created = admin.call("POST", "/v1/admin/diary", {"summary": "Policy signed"})
+    response = admin.client.patch(
+        f"/v1/admin/diary/{created['event_id']}",
+        headers=unsafe(admin.client),
+        json=["summary", "changed"],
+    )
+    assert response.status_code == 400
+    event = admin.db.get(Event, uuid.UUID(created["event_id"]))
+    admin.db.refresh(event)
+    assert event.summary == "diary: Policy signed"
+
+
 def test_diary_choices_name_the_exact_control_or_clause(admin):
     db = admin.db
 

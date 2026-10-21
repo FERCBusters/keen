@@ -403,27 +403,13 @@ function updateSourceColorRow(src) {
   if (!sourceColorsBody || !src) return;
   const picker = sourceColorsBody.querySelector(`[data-src-color="${CSS.escape(src)}"]`);
   const hexInp = sourceColorsBody.querySelector(`[data-src-hex="${CSS.escape(src)}"]`);
-  const badge = sourceColorsBody.querySelector(`[data-src-override-badge="${CSS.escape(src)}"]`);
-  const preview = sourceColorsBody.querySelector(`[data-src-preview="${CSS.escape(src)}"]`);
   const def = picker?.getAttribute('data-default') || '';
   const defaultColor = normalizeHex(def);
   const overrideColor = normalizeHex(sourceColorOverrides[src] || '');
   const effective = overrideColor || defaultColor || '#000000';
-  const fg = idealTextColor(effective);
-  const border = fg === '#FFFFFF' ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.14)';
 
   if (picker) picker.value = effective;
   if (hexInp) hexInp.value = overrideColor || defaultColor || '';
-  if (preview) {
-    preview.textContent = effective;
-    preview.style.background = effective;
-    preview.style.color = fg;
-    preview.style.borderColor = border;
-  }
-  if (badge) {
-    const show = !!(overrideColor && defaultColor && overrideColor !== defaultColor);
-    badge.style.display = show ? '' : 'none';
-  }
 }
 
 let sourceColorsEventsBound = false;
@@ -738,13 +724,9 @@ async function loadMyQuestions() {
     }
   } catch (err) {
     if (myQuestionsTableWrap) myQuestionsTableWrap.style.display = 'none';
-    if (myQuestionsStatus) {
-      myQuestionsStatus.className = 'alert alert-danger';
-      myQuestionsStatus.style.display = '';
-      myQuestionsStatus.textContent = `Failed to load questions: ${String(err)}`;
-    } else {
-      toast(status, `Failed to load questions: ${String(err)}`, 'danger');
-    }
+    myQuestionsStatus.className = 'alert alert-danger';
+    myQuestionsStatus.style.display = '';
+    myQuestionsStatus.textContent = `Failed to load questions: ${String(err)}`;
   }
 }
 
@@ -831,13 +813,9 @@ async function loadMyAudits() {
     myAuditsLoaded = true;
   } catch (err) {
     if (myAuditsTableWrap) myAuditsTableWrap.style.display = 'none';
-    if (myAuditsStatus) {
-      myAuditsStatus.className = 'alert alert-danger';
-      myAuditsStatus.style.display = '';
-      myAuditsStatus.textContent = `Failed to load audits: ${String(err)}`;
-    } else {
-      toast(status, `Failed to load audits: ${String(err)}`, 'danger');
-    }
+    myAuditsStatus.className = 'alert alert-danger';
+    myAuditsStatus.style.display = '';
+    myAuditsStatus.textContent = `Failed to load audits: ${String(err)}`;
   }
 }
 
@@ -928,13 +906,9 @@ async function loadMyRisks() {
     myRisksLoaded = true;
   } catch (err) {
     if (myRisksTableWrap) myRisksTableWrap.style.display = 'none';
-    if (myRisksStatus) {
-      myRisksStatus.className = 'alert alert-danger';
-      myRisksStatus.style.display = '';
-      myRisksStatus.textContent = `Failed to load risks: ${String(err)}`;
-    } else {
-      toast(status, `Failed to load risks: ${String(err)}`, 'danger');
-    }
+    myRisksStatus.className = 'alert alert-danger';
+    myRisksStatus.style.display = '';
+    myRisksStatus.textContent = `Failed to load risks: ${String(err)}`;
   }
 }
 
@@ -1031,13 +1005,9 @@ async function loadMyMeetings() {
     myIsmsMeetingsLoaded = true;
   } catch (err) {
     if (myMeetingsTableWrap) myMeetingsTableWrap.style.display = 'none';
-    if (myMeetingsStatus) {
-      myMeetingsStatus.className = 'alert alert-danger';
-      myMeetingsStatus.style.display = '';
-      myMeetingsStatus.textContent = `Failed to load ISMS meetings: ${String(err)}`;
-    } else {
-      toast(status, `Failed to load ISMS meetings: ${String(err)}`, 'danger');
-    }
+    myMeetingsStatus.className = 'alert alert-danger';
+    myMeetingsStatus.style.display = '';
+    myMeetingsStatus.textContent = `Failed to load ISMS meetings: ${String(err)}`;
   }
 }
 
@@ -1090,13 +1060,9 @@ async function loadMyIsmsObjectives() {
     myIsmsObjectivesLoaded = true;
   } catch (err) {
     if (myIsmsObjectivesTableWrap) myIsmsObjectivesTableWrap.style.display = 'none';
-    if (myIsmsObjectivesStatus) {
-      myIsmsObjectivesStatus.className = 'alert alert-danger';
-      myIsmsObjectivesStatus.style.display = '';
-      myIsmsObjectivesStatus.textContent = `Failed to load ISMS objectives: ${String(err)}`;
-    } else {
-      toast(status, `Failed to load ISMS objectives: ${String(err)}`, 'danger');
-    }
+    myIsmsObjectivesStatus.className = 'alert alert-danger';
+    myIsmsObjectivesStatus.style.display = '';
+    myIsmsObjectivesStatus.textContent = `Failed to load ISMS objectives: ${String(err)}`;
   }
 }
 
@@ -1144,13 +1110,9 @@ async function loadMyIsmsRole() {
     myIsmsRoleLoaded = true;
   } catch (err) {
     if (myIsmsRoleTableWrap) myIsmsRoleTableWrap.style.display = 'none';
-    if (myIsmsRoleStatus) {
-      myIsmsRoleStatus.className = 'alert alert-danger';
-      myIsmsRoleStatus.style.display = '';
-      myIsmsRoleStatus.textContent = `Failed to load ISMS roles: ${String(err)}`;
-    } else {
-      toast(status, `Failed to load ISMS roles: ${String(err)}`, 'danger');
-    }
+    myIsmsRoleStatus.className = 'alert alert-danger';
+    myIsmsRoleStatus.style.display = '';
+    myIsmsRoleStatus.textContent = `Failed to load ISMS roles: ${String(err)}`;
   }
 }
 
@@ -1214,13 +1176,9 @@ async function loadMyIsmsAssets() {
     myIsmsAssetsLoaded = true;
   } catch (err) {
     if (myIsmsAssetsTableWrap) myIsmsAssetsTableWrap.style.display = 'none';
-    if (myIsmsAssetsStatus) {
-      myIsmsAssetsStatus.className = 'alert alert-danger';
-      myIsmsAssetsStatus.style.display = '';
-      myIsmsAssetsStatus.textContent = `Failed to load ISMS assets: ${String(err)}`;
-    } else {
-      toast(status, `Failed to load ISMS assets: ${String(err)}`, 'danger');
-    }
+    myIsmsAssetsStatus.className = 'alert alert-danger';
+    myIsmsAssetsStatus.style.display = '';
+    myIsmsAssetsStatus.textContent = `Failed to load ISMS assets: ${String(err)}`;
   }
 }
 

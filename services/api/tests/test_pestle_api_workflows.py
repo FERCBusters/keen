@@ -518,3 +518,55 @@ def test_visualisations_summarise_items_and_links(pestle):
     empty = pestle.read("GET", "/v1/pestle/visualisations", framework="C")
     assert empty["items"] == [] and empty["clause_links"] == []
     pestle.read("GET", "/v1/pestle/visualisations", framework="A B", status=400)
+
+
+def test_clause_links_skip_blank_entries_and_keep_the_first_of_duplicates(pestle):
+    from app.db.models import PestleClauseRelevance
+
+    item = _item(pestle)
+    path = f"/v1/pestle/items/{item['id']}/clauses"
+    linked = pestle.manage(
+        "PATCH",
+        path,
+        {
+            "items": [
+                {"relevance_code": "high"},
+                {"clause_id": str(pestle.context.id), "relevance_code": "high"},
+                {"clause_id": str(pestle.context.id), "relevance_code": "low"},
+                {"clause_id": str(pestle.improvement.id), "relevance_code": "low"},
+            ]
+        },
+    )
+    codes = {row["clause"]["ref"]: row["relevance"]["code"] for row in linked["items"]}
+    assert codes == {"4.1": "high", "4.2": "na", "10": "low"}
+    assert (
+        pestle.db.query(PestleClauseRelevance)
+        .filter_by(pestle_item_id=uuid.UUID(item["id"]))
+        .count()
+        == 2
+    )
+
+
+def test_pestle_access_and_text_helpers_guard_their_bounds(pestle, monkeypatch):
+    # Anonymous and deactivated callers have no PESTLE access; the text and
+    # framework cleaners refuse oversized or missing values.
+    from app.core.config import settings
+    from app.services import pestle as service
+    from app.services.errors import DomainError
+
+    assert service._can_read_pestle(pestle.db, None) is False
+    assert service._can_manage_pestle(pestle.db, None) is False
+    pestle.manager.is_active = False
+    pestle.db.commit()
+    assert service._can_read_pestle(pestle.db, pestle.manager) is False
+    assert service._can_manage_pestle(pestle.db, pestle.manager) is False
+    pestle.manager.is_active = True
+    pestle.db.commit()
+    assert service._can_manage_pestle(pestle.db, pestle.manager) is True
+    with pytest.raises(DomainError, match="item is too long"):
+        service._clean_text("x" * 11, max_len=10, label="item")
+    monkeypatch.setattr(settings, "default_framework_slug", "")
+    with pytest.raises(DomainError, match="framework is required"):
+        service._clean_framework("  ")
+    with pytest.raises(DomainError, match="Invalid framework"):
+        service._clean_framework("bad slug")

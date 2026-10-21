@@ -514,3 +514,207 @@ test('question threads show replies the author may send, and failures are report
   login.querySelector('[data-cancel-item]').click();
   assert.equal(login.querySelector('[data-item-form]').hidden, true);
 });
+
+test('every refused change is reported and leaves the page as it was', async (t) => {
+  const refuse = async () => {
+    throw new Error('409 This story changed. Reload before saving.');
+  };
+  const detail = story({ can_edit: true });
+  const ui = await open(t, {
+    me: { can_manage_stories: true, can_admin_stories: true },
+    detail,
+    comments: [
+      {
+        id: 'k1',
+        body: 'Mine',
+        created_by: 'me',
+        created_at: '2026-05-03T10:00:00',
+        can_delete: true,
+      },
+    ],
+    globals: { confirm: () => true },
+    get: async (url) => {
+      if (url.pathname === '/api/v1/stories/s1') return detail;
+      if (url.pathname === '/api/v1/stories/s1/comments')
+        return {
+          items: [
+            {
+              id: 'k1',
+              body: 'Mine',
+              created_by: 'me',
+              created_at: '2026-05-03T10:00:00',
+              can_delete: true,
+            },
+          ],
+        };
+      if (url.pathname === '/api/v1/stories/s1/changelog') return { items: [] };
+      if (url.pathname === '/api/v1/questions/entities/story/s1') return { threads: [] };
+      if (url.pathname === '/api/v1/events') throw new Error('Search index offline');
+      throw new Error('Unexpected GET ' + url);
+    },
+    post: refuse,
+    patch: refuse,
+    put: refuse,
+    remove: refuse,
+  });
+  const reported = () =>
+    ui.el('status').textContent === '409 This story changed. Reload before saving.';
+  const reset = () => (ui.el('status').textContent = '');
+
+  // Cancelling an edit closes the form without a request.
+  ui.el('edit').click();
+  ui.el('cancelEdit').click();
+  assert.equal(ui.el('storyForm').hidden, true);
+
+  ui.el('addKind').value = 'note';
+  ui.el('addKind').dispatchEvent(new ui.window.Event('change'));
+  ui.el('noteLabel').value = 'Decision';
+  ui.el('noteText').value = 'Rotate keys';
+  ui.el('addNote').click();
+  await settle(reported);
+  assert.equal(ui.el('noteText').value, 'Rotate keys');
+  reset();
+
+  ui.el('addKind').value = 'event';
+  ui.el('addKind').dispatchEvent(new ui.window.Event('change'));
+  ui.el('addSearch').value = 'alert';
+  ui.el('findItems').click();
+  await settle(() => /Search failed/.test(ui.el('candidates').textContent));
+  assert.equal(
+    ui.el('candidates').textContent.trim(),
+    'Search failed: Error: Search index offline',
+  );
+  // A candidate the API refuses stays in the list.
+  ui.el('candidates').innerHTML =
+    '<li class="list-group-item"><button type="button" data-add-kind="event" data-add-id="e9">Add</button></li>';
+  ui.el('candidates').querySelector('[data-add-id="e9"]').click();
+  await settle(reported);
+  assert.ok(ui.el('candidates').querySelector('[data-add-id="e9"]'));
+  reset();
+
+  const login = ui.document.querySelector('[data-item-id="i-login"]');
+  login.querySelector('[data-edit-item]').click();
+  const form = login.querySelector('[data-item-form]');
+  form.dispatchEvent(new ui.window.Event('submit', { bubbles: true, cancelable: true }));
+  await settle(reported);
+  assert.equal(form.hidden, false);
+  reset();
+  login.querySelector('[data-remove-item]').click();
+  await settle(reported);
+  assert.ok(ui.document.querySelector('#timeline [data-item-id="i-login"]'));
+  reset();
+
+  ui.el('commentBody').value = 'Agreed';
+  ui.el('commentForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(reported);
+  assert.equal(ui.el('commentBody').value, 'Agreed');
+  reset();
+  ui.el('comments').querySelector('[data-delete-comment="k1"]').click();
+  await settle(reported);
+  assert.ok(ui.el('comments').querySelector('[data-delete-comment="k1"]'));
+  reset();
+
+  ui.el('questionBody').value = 'Why?';
+  ui.el('questionForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(reported);
+  assert.equal(ui.el('questionBody').value, 'Why?');
+  reset();
+
+  ui.el('saveLayout').disabled = false;
+  ui.el('saveLayout').click();
+  await settle(reported);
+  reset();
+
+  ui.el('deleteStory').click();
+  await settle(reported);
+  assert.equal(ui.el('storyTitle').textContent, 'Payroll <export>');
+});
+
+test('an author samples the story into an audit with a link back to it', async (t) => {
+  const posted = [];
+  const ui = await open(t, {
+    me: {
+      can_manage_stories: true,
+      can_manage_audits: true,
+      features: { enabled: { sampling: true } },
+    },
+    detail: story({ can_edit: true }),
+    get: async (url) => {
+      if (url.pathname === '/api/v1/stories/s1') return story({ can_edit: true });
+      if (url.pathname === '/api/v1/stories/s1/comments') return { items: [] };
+      if (url.pathname === '/api/v1/stories/s1/changelog') return { items: [] };
+      if (url.pathname === '/api/v1/questions/entities/story/s1') return { threads: [] };
+      if (url.pathname === '/api/v1/audits')
+        return {
+          items: [{ id: 'au1', title: 'Annual audit', status: 'open', created_by_user_id: 'u1' }],
+        };
+      throw new Error('Unexpected GET ' + url);
+    },
+    post: async (url, body) => {
+      posted.push([url.pathname, plain(body)]);
+      return {};
+    },
+  });
+  ui.el('sample').click();
+  await settle(() => ui.el('entityAuditSampleSelect')?.value === 'au1');
+  assert.equal(ui.el('entityAuditSampleTitle').textContent, 'Sample “Payroll <export>” into audit');
+  ui.el('entityAuditSampleSubmit').click();
+  await settle(() => posted.length === 1);
+  assert.deepEqual(posted[0], [
+    '/api/v1/audits/au1/evidence',
+    {
+      entity_type: 'story',
+      entity_id: 's1',
+      evidence_url: '/story.html?id=s1&framework=A',
+      title: 'Payroll <export>',
+      notes: '',
+    },
+  ]);
+});
+
+test('a selected link can be removed, unsaved layout changes hold the page, and a tab opens from the address', async (t) => {
+  const shown = [];
+  const ui = await page(t, 'story', {
+    query: '&id=s1&tab=comments',
+    me: { user_id: 'u1', can_view_stories: true, can_manage_stories: true },
+    setup(window) {
+      window.bootstrap = {
+        Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+      };
+    },
+    get: async (url) => {
+      if (url.pathname === '/api/v1/stories/s1') return story({ can_edit: true });
+      if (url.pathname === '/api/v1/stories/s1/comments') return { items: [] };
+      if (url.pathname === '/api/v1/stories/s1/changelog') return { items: [] };
+      if (url.pathname === '/api/v1/questions/entities/story/s1') return { threads: [] };
+      throw new Error('Unexpected GET ' + url);
+    },
+  });
+  await settle(() => ui.el('storyTitle').textContent !== 'Loading…');
+  assert.deepEqual(shown, ['commentsTab']);
+
+  // Leaving with a clean layout is allowed.
+  const clean = new ui.window.Event('beforeunload', { cancelable: true });
+  ui.window.dispatchEvent(clean);
+  assert.equal(clean.defaultPrevented, false);
+
+  const flowNode = (id) => ui.document.querySelector(`#flow [data-item-id="${id}"]`);
+  const pointer = (type, target) =>
+    target.dispatchEvent(
+      new ui.window.MouseEvent(type, { bubbles: true, clientX: 0, clientY: 0, button: 0 }),
+    );
+  ui.el('linkMode').click();
+  pointer('pointerdown', flowNode('i-export'));
+  pointer('pointerdown', flowNode('i-note'));
+  assert.equal(ui.el('linkEditor').hidden, false);
+  assert.equal(ui.el('flow').querySelectorAll('.story-link').length, 2);
+  ui.el('removeLink').click();
+  assert.equal(ui.el('linkEditor').hidden, true);
+  assert.equal(ui.el('flow').querySelectorAll('.story-link').length, 1);
+
+  // A changed layout asks before the page is left.
+  const dirty = new ui.window.Event('beforeunload', { cancelable: true });
+  ui.window.dispatchEvent(dirty);
+  assert.equal(dirty.defaultPrevented, true);
+  assert.equal(ui.el('saveLayout').disabled, false);
+});

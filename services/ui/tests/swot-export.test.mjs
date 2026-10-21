@@ -142,3 +142,50 @@ test('PDF paginates long text and preserves the final lines', async () => {
     pdfUi.close();
   }
 });
+
+test('PDF wraps long paragraphs at word boundaries and splits unbroken runs', async () => {
+  const drawn = [];
+  const ctx = {
+    fillRect() {},
+    fillText(text) {
+      drawn.push(text);
+    },
+    // Each character is 11 units wide, so 1120 units hold 101 characters.
+    measureText(text) {
+      return { width: Array.from(text).length * 11 };
+    },
+  };
+  const pdfUi = await loadUi('pages/swot-export.js', {
+    globals: { TextEncoder, Blob },
+    setup(window) {
+      const create = window.document.createElement.bind(window.document);
+      window.document.createElement = (name) =>
+        name === 'canvas'
+          ? {
+              getContext: () => ctx,
+              toBlob: (callback) => callback(new Blob([new Uint8Array([255, 216, 255, 217])])),
+            }
+          : create(name);
+    },
+  });
+  try {
+    const words = Array.from({ length: 40 }, (_, i) => `word${i}`).join(' ');
+    const run = 'x'.repeat(250);
+    await pdfUi.api.buildSwotPdf(
+      [{ id: '1', title: 'Wrapped', kind: 'threat', description: `${words}\n${run}` }],
+      'F1',
+    );
+    const wrapped = drawn.filter((line) => /word\d/.test(line));
+    assert.ok(wrapped.length >= 3);
+    // Every character of the paragraph survives, with breaks only between words.
+    assert.equal(wrapped.join(' '), `Description: ${words}`);
+    for (const line of wrapped) assert.ok(line.length <= 101, line);
+    const runs = drawn.filter((line) => /^x+$/.test(line));
+    assert.deepEqual(
+      runs.map((line) => line.length),
+      [101, 101, 48],
+    );
+  } finally {
+    pdfUi.close();
+  }
+});

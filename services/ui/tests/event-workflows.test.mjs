@@ -104,10 +104,15 @@ async function eventPage(t, options = {}) {
     setup(window) {
       window.bootstrap = bootstrap;
       window.confirm = options.confirm ?? (() => true);
+      options.setup?.(window);
     },
     get: async (u) => {
       const p = u.pathname;
-      if (p === '/api/v1/events/e1') return structuredClone(state.event);
+      if (p === '/api/v1/me') return structuredClone(options.me || { is_admin: true });
+      if (p === '/api/v1/events/e1') {
+        if (options.eventFail) throw new Error('Event <b>offline</b>');
+        return structuredClone(state.event);
+      }
       if (p === '/api/v1/events/e1/questions') {
         if (options.questionsFail) throw new Error('<b>Q offline</b>');
         return {
@@ -169,7 +174,8 @@ async function eventPage(t, options = {}) {
           ],
         };
       }
-      if (p === '/api/v1/controls')
+      if (p === '/api/v1/controls') {
+        if (options.controlsFail) throw new Error('Controls offline');
         return {
           items: [
             { id: 'c1', ref: 'A1', title: 'Access' },
@@ -178,6 +184,7 @@ async function eventPage(t, options = {}) {
             { id: 'x', title: 'no ref' },
           ],
         };
+      }
       throw new Error('Unexpected GET ' + u);
     },
     patch: async (u, b) => {
@@ -581,4 +588,126 @@ test('incident creation requires a title and reports failures', async (t) => {
     () => ui.el('incidentStatus').textContent === 'Failed to create incident: Error: Post refused',
   );
   assert.equal(ui.el('incidentSubmit').disabled, false);
+});
+
+test('actions on an event that failed to load are refused with a warning', async (t) => {
+  const { ui, state } = await eventPage(t, { eventFail: true });
+  assert.equal(ui.el('status').textContent, 'Failed to load event: Error: Event <b>offline</b>');
+  assert.equal(ui.el('status').querySelector('b'), null);
+  for (const [button, message] of [
+    ['btnSampleAudit', 'Event not loaded yet'],
+    ['btnCreateIncident', 'Event not loaded yet.'],
+    ['questionSubmit', 'Event not loaded yet'],
+  ]) {
+    ui.el('status').textContent = '';
+    ui.el(button).click();
+    assert.equal(ui.el('status').textContent, message, button);
+    assert.equal(ui.el('status').dataset.alert, 'warning');
+  }
+  ui.el('incidentSubmit').click();
+  assert.equal(ui.el('incidentStatus').textContent, 'Event not loaded yet.');
+  assert.deepEqual([state.posted, state.patched, state.removed], [[], [], []]);
+});
+
+test('sampling into an audit needs the audits.manage permission', async (t) => {
+  const { ui, state } = await eventPage(t, {
+    me: { can_view_events: true, can_create_incidents: true },
+  });
+  assert.equal(ui.el('btnSampleAudit').style.display, 'none');
+  ui.el('btnSampleAudit').click();
+  assert.equal(ui.el('status').textContent, 'audits.manage permission required.');
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+  assert.ok(!state.posted.some((p) => p.path.includes('/audits')));
+});
+
+test('an event without a source or a framework in the address still links its register', async (t) => {
+  const { ui } = await eventPage(t, {
+    event: diaryEvent({
+      source: '',
+      source_url: 'https://upstream.example/items/1',
+      controls: [{ id: 'c1', ref: 'A1', title: 'Access', framework: 'B', rationale: 'manual' }],
+    }),
+    setup(window) {
+      window.history.replaceState(null, '', '/event.html?id=e1');
+    },
+  });
+  assert.equal(ui.el('srcBadge').textContent, '—');
+  assert.equal(ui.el('bySource').getAttribute('href'), '/events.html?framework=A');
+  // The framework comes from the mapped control when the address has none.
+  ui.el('btnSampleAudit').click();
+  assert.equal(ui.el('auditSampleCreate').getAttribute('href'), '/audits.html?new=1&framework=B');
+  assert.equal(ui.el('openSource').getAttribute('href'), 'https://upstream.example/items/1');
+  assert.equal(ui.el('openSource').style.display, '');
+
+  const unsafe = await eventPage(t, {
+    event: diaryEvent({ source_url: 'javascript:alert(1)' }),
+  });
+  assert.equal(unsafe.ui.el('openSource').style.display, 'none');
+  assert.notEqual(unsafe.ui.el('openSource').getAttribute('href'), 'javascript:alert(1)');
+});
+
+test('the diary editor falls back to the stored summary and JSON details', async (t) => {
+  const { ui } = await eventPage(t, {
+    event: diaryEvent({
+      summary: 'DIARY: Weekly <b>check</b>',
+      normalized_payload: { details: { reviewer: 'dana', score: 3 } },
+    }),
+    controlsFail: true,
+  });
+  ui.el('btnEditDiary').click();
+  await settle(() => ui.el('editDiaryModal').dataset.shown === '1');
+  assert.equal(ui.el('editDiarySummary').value, 'Weekly <b>check</b>');
+  assert.deepEqual(JSON.parse(ui.el('editDiaryDetails').value), { reviewer: 'dana', score: 3 });
+  // Without the control catalogue, the search offers nothing and stays usable.
+  ui.el('editControlSearch').value = 'acc';
+  ui.el('editControlSearch').dispatchEvent(new ui.window.Event('input'));
+  assert.equal(ui.el('editControlResults').querySelectorAll('[data-add]').length, 0);
+
+  const plain = await eventPage(t, {
+    event: diaryEvent({ summary: 'diary:', normalized_payload: { details: {} } }),
+    globals: {
+      bootstrap: {
+        Modal: {
+          getOrCreateInstance() {
+            throw new Error('No modal API');
+          },
+        },
+      },
+    },
+  });
+  plain.ui.el('btnEditDiary').click();
+  await settle(() => plain.ui.el('editDiaryModal').style.display === '');
+  assert.equal(plain.ui.el('editDiarySummary').value, '');
+  assert.equal(plain.ui.el('editDiaryDetails').value, '');
+});
+
+test('a thread that is neither answered nor reviewing is shown as unanswered', async (t) => {
+  const { ui } = await eventPage(t, {
+    threads: [{ id: 't9', status: 'open', created_by_username: 'erin', posts: [] }],
+  });
+  const badge = ui.el('thread-t9').querySelector('.badge.text-bg-warning');
+  assert.equal(badge.textContent, 'unanswered');
+});
+
+test('the print view loads the viewer directly, masks the page and prints once', async (t) => {
+  let prints = 0;
+  const { ui, state } = await eventPage(t, {
+    query: '&id=e1&print=1',
+    me: { is_admin: true, user: 'root', sample_pdf_footer: 'Confidential <b>' },
+    event: diaryEvent({ artifacts: [] }),
+    setup(window) {
+      window.print = () => prints++;
+    },
+  });
+  assert.ok(ui.document.body.classList.contains('print-view'));
+  assert.ok(ui.calls.some((c) => c.method === 'GET' && c.url === '/api/v1/me'));
+  // The print window never marks questions seen on the viewer's behalf.
+  assert.ok(!state.posted.some((p) => p.path.endsWith('/mark-seen')));
+  await settle(() => prints === 1);
+  assert.match(ui.document.title, /^Keen Event - e1/);
+  assert.equal(ui.el('pdfFooter').textContent, 'Confidential <b>');
+  assert.equal(ui.el('pdfFooter').querySelector('b'), null);
+  assert.equal(ui.el('pdfHeader').dataset.enabled, '1');
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(prints, 1);
 });

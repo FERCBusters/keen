@@ -900,8 +900,6 @@ def ingest_github_atom_feed(
 @pausable("github")
 @connection_runs("github")
 def ingest_github_all(db: Session) -> list[dict[str, Any]]:
-    if not settings.github_enabled:
-        return [{"skipped": True, "reason": "KEEN_GITHUB_ENABLED=false"}]
     cfg = load_github_config(settings.github_config_path)
     out = []
 

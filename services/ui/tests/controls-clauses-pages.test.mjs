@@ -36,14 +36,65 @@ async function controlsPage(t, options = {}) {
     },
     post: async (u, b) => {
       posted.push({ path: u.pathname, body: JSON.parse(JSON.stringify(b)) });
+      if (options.postFail) throw new Error('Saved searches offline');
       return { ok: true };
     },
+    vendor: options.vendor,
   });
   await settle(
     () => ui.el('kpiEventsMapped').textContent !== '…' && ui.el('rows').querySelector('td'),
   );
   return { ui, posted };
 }
+
+test('a saved search that cannot be stored reports why', async (t) => {
+  const { ui, posted } = await controlsPage(t, {
+    postFail: true,
+    globals: { prompt: () => 'Gaps' },
+  });
+  ui.el('saveSearch').click();
+  await settle(() => posted.length === 1);
+  await settle(
+    () => ui.el('status').textContent === 'Failed to save: Error: Saved searches offline',
+  );
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+});
+
+test('the front search opens the events list, or a saved search by its name', async (t) => {
+  const visited = [];
+  const { ui } = await controlsPage(t, {
+    globals: {
+      location: {
+        origin: 'https://keen.example',
+        pathname: '/controls.html',
+        search: '?framework=A',
+        get href() {
+          return 'https://keen.example/controls.html?framework=A';
+        },
+        set href(value) {
+          visited.push(value);
+        },
+      },
+    },
+    vendor: {
+      resolveSavedSearchUrl: (name) =>
+        name === 'Weekly review' ? '/events.html?source=diary&q=review' : null,
+    },
+  });
+  const submit = () =>
+    ui.el('frontSearch').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  ui.el('frontQ').value = '  deploy <b>  ';
+  submit();
+  ui.el('frontQ').value = '';
+  submit();
+  ui.el('frontQ').value = 'Weekly review';
+  submit();
+  assert.deepEqual(visited, [
+    '/events.html?q=deploy+%3Cb%3E&framework=A',
+    '/events.html?framework=A',
+    '/events.html?source=diary&q=review&framework=A',
+  ]);
+});
 
 const refs = (ui) =>
   [...ui.el('rows').querySelectorAll('tr td:first-child a')].map((a) => a.textContent);

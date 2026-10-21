@@ -787,17 +787,6 @@ function _prepareAuditCloneForPdf(clone) {
 
   clone.querySelectorAll('button, a.btn, .no-print').forEach((el) => el.remove());
   clone.querySelectorAll('#status').forEach((el) => el.remove());
-  clone.querySelectorAll('#clausesList, #controlsList').forEach((el) => {
-    el.style.maxHeight = 'none';
-    el.style.overflow = 'visible';
-  });
-  clone.querySelectorAll('[style]').forEach((el) => {
-    const st = el.getAttribute('style') || '';
-    if (/max-height\s*:\s*340px/i.test(st)) {
-      el.style.maxHeight = 'none';
-      el.style.overflow = 'visible';
-    }
-  });
   clone.querySelectorAll('a').forEach((el) => {
     el.style.textDecoration = 'none';
   });

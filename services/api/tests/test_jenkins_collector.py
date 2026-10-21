@@ -5,8 +5,8 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from app.ingest import jenkins as jk
+from sqlalchemy.dialects import postgresql
 
 
 @contextlib.contextmanager
@@ -194,3 +194,48 @@ def test_load_config():
     with patch.object(jk, "load_document", return_value={"jobs": []}) as document:
         assert jk.load_jenkins_config("fixture.yml") == {"jobs": []}
     document.assert_called_once_with("jenkins", "fixture.yml")
+
+
+def test_cursor_lookup_reuses_an_existing_row(db):
+    existing = MagicMock(last_ts=None)
+    db.query.return_value.filter.return_value.one_or_none.return_value = existing
+    assert jk._get_or_create_cursor(db, "jenkins:deploy") is existing
+    db.execute.assert_not_called()
+    db.flush.assert_not_called()
+
+
+def test_cursor_creation_upserts_then_reads_the_row(db):
+    # Overlapping runs may both create the cursor; the insert ignores a
+    # conflict and the row is read back afterwards.
+    created = MagicMock(last_ts=None)
+    db.query.return_value.filter.return_value.one.return_value = created
+    assert jk._get_or_create_cursor(db, "jenkins:deploy") is created
+    (statement,) = [c.args[0] for c in db.execute.call_args_list]
+    compiled = statement.compile()
+    values = {
+        k: v.value for k, v in compiled.binds.items() if k in {"name", "metadata"}
+    }
+    assert values["name"] == jk.namespace("jenkins:deploy")
+    assert values["metadata"] == {}
+    assert "ON CONFLICT (name) DO NOTHING" in str(
+        statement.compile(dialect=postgresql.dialect())
+    )
+    db.flush.assert_called_once()
+
+
+def test_deduplicated_builds_count_for_nothing_but_advance_the_cursor(db):
+    job = {"builds": [build(2, "SUCCESS", timestamp=1_760_000_005_000), build(1)]}
+    with serving(lambda request: __import__("httpx").Response(200, json=job)):
+        cursor = MagicMock(last_ts=None)
+        with (
+            patch.object(jk.settings, "jenkins_base_url", "https://jenkins.example"),
+            patch.object(jk, "_get_or_create_cursor", return_value=cursor),
+            patch.object(
+                jk,
+                "store_event_with_artifact",
+                side_effect=[{"deduped": False}, {"deduped": True}],
+            ),
+        ):
+            result = jk.ingest_jenkins_job(db, "deploy", None, None)
+    assert result["created_events"] == 1
+    assert cursor.last_ts == jk.utc_from_timestamp_naive(1_760_000_005_000 / 1000)

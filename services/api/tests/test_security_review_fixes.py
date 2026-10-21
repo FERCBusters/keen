@@ -1,6 +1,7 @@
 """Security boundary regressions using disposable databases and synthetic identities."""
 
 import asyncio
+import uuid as uuid_module
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
@@ -428,6 +429,145 @@ def test_http_self_service_requires_authentication_and_csrf(db, user, monkeypatc
         assert response.status_code == 400, response.text
     finally:
         main.app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.parametrize(
+    "email",
+    ["plain-address", "two@at@example.org", "a b@example.org", '"quoted"@example.org'],
+)
+def test_malformed_sso_addresses_are_refused_before_any_write(db, user, mail, email):
+    with pytest.raises(DomainError) as refused:
+        send(db, user, mail, email)
+    assert refused.value.status_code == 400
+    assert mail == [] and db.query(SsoEmailChallenge).count() == 0
+
+
+def test_inactive_accounts_cannot_manage_sso_addresses(db, user, mail):
+    user.is_active = False
+    db.commit()
+    with pytest.raises(DomainError) as refused:
+        send(db, user, mail)
+    assert refused.value.status_code == 403
+    with pytest.raises(DomainError) as removal:
+        sso_emails.remove_address(
+            sso_emails.Address(email="alias@example.org"), req(user), user, db
+        )
+    assert removal.value.status_code == 403
+    assert mail == []
+
+
+@pytest.mark.parametrize(
+    "session",
+    [None, {}, {"user_id": "x"}, {"user_id": "x", "created_at": "yesterday"}],
+)
+def test_recent_signin_treats_unusable_sessions_as_stale(user, monkeypatch, session):
+    # A missing session, or one without a parseable sign-in time, never counts
+    # as a recent sign-in.
+    monkeypatch.setattr(sso_emails_operations, "get_valkey", lambda: None)
+    monkeypatch.setattr(sso_emails_operations, "get_session", lambda *a: session)
+    with pytest.raises(DomainError) as refused:
+        sso_emails_operations.recent_signin("sid", user)
+    assert refused.value.status_code == 403
+
+
+def test_verification_requests_are_rate_limited_per_account(user, monkeypatch):
+    # Five verification emails an hour per account; the sixth is refused and
+    # another account keeps its own allowance.
+    import fakeredis
+
+    store = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(sso_emails_operations, "get_valkey", lambda: store)
+    for _ in range(5):
+        sso_emails_operations.limit(user)
+    with pytest.raises(DomainError) as refused:
+        sso_emails_operations.limit(user)
+    assert refused.value.status_code == 429
+    other = User(username="other", password_hash="synthetic", is_active=True)
+    other.id = uuid_module.uuid4()
+    sso_emails_operations.limit(other)
+
+
+def test_an_address_already_verified_needs_no_new_email(db, user, mail):
+    token = send(db, user, mail)
+    confirm(db, user, token)
+    result = sso_emails.request_address(
+        sso_emails.Address(email="Alias@Example.org"), req(user), user, db
+    )
+    assert result == {"ok": True, "already_verified": True}
+    assert len(mail) == 1 and db.query(SsoEmailChallenge).count() == 0
+
+
+def test_an_account_holds_at_most_ten_sso_addresses(db, user, mail):
+    for index in range(10):
+        db.add(UserSsoEmail(email=f"alias{index}@example.org", user_id=user.id))
+    db.commit()
+    with pytest.raises(DomainError) as refused:
+        send(db, user, mail, "eleventh@example.org")
+    assert refused.value.status_code == 400
+    assert mail == [] and db.query(SsoEmailChallenge).count() == 0
+    sso_emails.remove_address(
+        sso_emails.Address(email="alias0@example.org"), req(user), user, db
+    )
+    send(db, user, mail, "eleventh@example.org")
+    assert len(mail) == 1
+
+
+def test_confirming_an_address_the_account_already_holds_adds_nothing(db, user, mail):
+    token = send(db, user, mail)
+    db.add(UserSsoEmail(email="alias@example.org", user_id=user.id))
+    db.commit()
+    assert confirm(db, user, token) == {"ok": True, "email": "alias@example.org"}
+    assert db.query(UserSsoEmail).count() == 1
+    assert db.query(SsoEmailChallenge).count() == 0
+
+
+def test_a_concurrent_claim_of_the_address_is_reported_as_a_conflict(
+    db, user, mail, monkeypatch
+):
+    # When the commit itself collides with another account's claim, the
+    # caller sees a conflict and the session is rolled back.
+    from sqlalchemy.exc import IntegrityError
+
+    token = send(db, user, mail)
+    rolled_back = []
+    real_rollback = db.rollback
+
+    def failing_commit():
+        raise IntegrityError("INSERT", {}, Exception("duplicate key"))
+
+    def rollback():
+        rolled_back.append(True)
+        real_rollback()
+
+    monkeypatch.setattr(db, "commit", failing_commit)
+    monkeypatch.setattr(db, "rollback", rollback)
+    with pytest.raises(DomainError) as refused:
+        confirm(db, user, token)
+    assert refused.value.status_code == 409
+    assert "duplicate" not in refused.value.detail
+    assert rolled_back == [True]
+    monkeypatch.undo()
+    assert db.query(UserSsoEmail).count() == 0
+
+
+def test_removing_an_unknown_address_sends_no_notification(db, user, mail, monkeypatch):
+    from app.services import security_notifications
+
+    sent = []
+    monkeypatch.setattr(
+        security_notifications, "enqueue", lambda *a, **kw: sent.append(a[2])
+    )
+    sso_emails.remove_address(
+        sso_emails.Address(email="never@example.org"), req(user), user, db
+    )
+    assert sent == []
+    token = send(db, user, mail)
+    confirm(db, user, token)
+    sso_emails.remove_address(
+        sso_emails.Address(email="alias@example.org"), req(user), user, db
+    )
+    assert sent == ["sso-email-added", "sso-email-removed"]
+    assert db.query(UserSsoEmail).count() == 0
 
 
 def test_migration_upgrade_and_downgrade():

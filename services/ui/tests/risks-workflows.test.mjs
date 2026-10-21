@@ -186,7 +186,10 @@ async function dashboard(t, options = {}) {
     },
     get: async (u) => {
       const p = u.pathname;
-      if (p === '/api/v1/risks/categories') return { items: categories };
+      if (p === '/api/v1/risks/categories') {
+        if (options.categoriesFail) throw new Error('Categories offline');
+        return { items: categories };
+      }
       if (p === '/api/v1/risks') {
         state.riskQueries.push(Object.fromEntries(u.searchParams));
         if (options.listFail) throw new Error('List offline');
@@ -203,7 +206,10 @@ async function dashboard(t, options = {}) {
           residual: [{ likelihood: 2, impact: 2, count: 1 }],
         };
       }
-      if (p === '/api/v1/risks/library') return { items: library };
+      if (p === '/api/v1/risks/library') {
+        if (options.libraryFail) throw new Error('Library offline');
+        return { items: library };
+      }
       if (p === '/api/v1/pestle/meta')
         return {
           types: ['Political', 'Legal'],
@@ -212,7 +218,8 @@ async function dashboard(t, options = {}) {
         };
       if (p === '/api/v1/pestle/items') {
         state.pestleQueries.push(Object.fromEntries(u.searchParams));
-        return { items: pestleItems, framework: 'A' };
+        if (options.pestleFail) throw new Error('Factors offline');
+        return { items: options.pestleItems ?? pestleItems, framework: 'A' };
       }
       if (p === '/api/v1/risks/controls-without-risks') {
         if (options.uncoveredFail) throw new Error('Uncovered offline');
@@ -246,6 +253,7 @@ async function dashboard(t, options = {}) {
     },
     remove: async (u) => {
       state.removed.push(u.pathname);
+      if (options.removeFail) throw new Error('Delete refused');
       return { ok: true };
     },
   });
@@ -741,4 +749,88 @@ test('risk visualisations explain when no mappings exist', async (t) => {
   });
   await settle(() => /No risk\/control mappings/.test(ui.el('riskControlsHeatmap').textContent));
   assert.match(ui.el('riskControlsGraph').textContent, /No risk\/control mappings/);
+});
+
+// --- Load and action failures on each tab -----------------------------------------------------
+
+test('CIA, PESTLE(E), library and category load failures are reported on their tabs', async (t) => {
+  const cia = await dashboard(t, { query: '&tab=cia', listFail: true, categoriesFail: true });
+  await settle(() => /Failed to load CIA risks\./.test(cia.ui.el('ciaRows').textContent));
+  assert.equal(cia.ui.el('ciaRows').querySelector('td').getAttribute('colspan'), '8');
+  assert.match(cia.ui.el('status').textContent, /Failed to load CIA risks: Error: List offline/);
+  // The category filter could not load either; the register still answers.
+  assert.equal(
+    cia.ui.calls.some((c) => c.url.startsWith('/api/v1/risks/categories')),
+    true,
+  );
+
+  const pestle = await dashboard(t, { query: '&tab=pestle', pestleFail: true });
+  await settle(() =>
+    /Failed to load PESTLE\(E\) factors\./.test(pestle.ui.el('pestleRows').textContent),
+  );
+  assert.equal(pestle.ui.el('pestleRows').querySelector('td').getAttribute('colspan'), '7');
+  assert.equal(
+    pestle.ui.el('status').textContent,
+    'Failed to load PESTLE(E) factors: Error: Factors offline',
+  );
+
+  const library = await dashboard(t, { query: '&tab=library', libraryFail: true });
+  await settle(() => /Could not load the risk library/.test(library.ui.el('status').textContent));
+  assert.equal(
+    library.ui.el('status').textContent,
+    'Could not load the risk library: Error: Library offline',
+  );
+});
+
+test('a refused template deletion and a refused CSV import are reported', async (t) => {
+  const { ui, state } = await dashboard(t, {
+    query: '&tab=library',
+    removeFail: true,
+    postFail: true,
+    globals: { confirm: () => true },
+  });
+  await settle(() => ui.el('libraryList').querySelector('[data-delete-library="tpl1"]'));
+  ui.el('libraryList').querySelector('[data-delete-library="tpl1"]').click();
+  await settle(() => /Could not delete the template/.test(ui.el('status').textContent));
+  assert.equal(ui.el('status').textContent, 'Could not delete the template: Error: Delete refused');
+  assert.deepEqual(state.removed, ['/api/v1/risks/library/tpl1']);
+  assert.ok(ui.el('libraryList').querySelector('[data-delete-library="tpl1"]'));
+
+  Object.defineProperty(ui.el('importFile'), 'files', {
+    value: [new File(['asset,category'], 'risks.csv', { type: 'text/csv' })],
+    configurable: true,
+  });
+  ui.el('importForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => /Could not import the CSV/.test(ui.el('status').textContent));
+  assert.equal(ui.el('status').textContent, 'Could not import the CSV: Error: Rejected');
+  assert.equal(state.posted.at(-1).path, '/api/v1/risks/register/import.csv');
+});
+
+test('risks with the same score sort by name, and factor badges follow their relevance', async (t) => {
+  const tied = riskRows.map((r) => ({ ...r, risk_score: 9 }));
+  const { ui } = await dashboard(t, {
+    risks: tied,
+    query: '&tab=pestle',
+    pestleItems: [
+      { ...pestleItems[0], id: 'pi1', overall_relevance: { code: 'medium', label: '2 Medium' } },
+      { ...pestleItems[0], id: 'pi2', overall_relevance: { code: 'low', label: '3 Low' } },
+      { ...pestleItems[0], id: 'pi3', overall_relevance: null },
+    ],
+  });
+  await settle(() => ui.el('pestleRows').querySelectorAll('tr').length === 3);
+  assert.deepEqual(
+    [...ui.el('pestleRows').querySelectorAll('.badge')]
+      .filter((b) => !b.classList.contains('text-bg-info'))
+      .map((b) => [b.textContent, b.className]),
+    [
+      ['2 Medium', 'badge text-bg-warning'],
+      ['3 Low', 'badge text-bg-success'],
+      ['N/A', 'badge text-bg-light border'],
+    ],
+  );
+  // Equal scores fall back to the display name: "Laptop" before "Payroll".
+  const names = [...ui.el('rows').querySelectorAll('tr')].map((tr) => tr.textContent);
+  assert.ok(names.length === 2);
+  assert.ok(names[0].includes('Laptop'), names[0]);
+  assert.ok(names[1].includes('Payroll'), names[1]);
 });

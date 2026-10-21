@@ -176,6 +176,9 @@ def test_saved_search_urls_are_normalised(raw, expected):
         "https://evil.example/",
         "//evil.example/x",
         "/x?" + "q=1&" * 600,
+        "/events.html\\..\\evil",
+        "/events.html?q=a\tb",
+        "/events.html?q=a\x7fb",
     ],
 )
 def test_unsafe_or_oversized_saved_search_urls_are_rejected(raw):
@@ -228,6 +231,12 @@ def test_unsafe_or_oversized_saved_search_urls_are_rejected(raw):
             "https://example.test/payload",
         ),
         (None, None, None),
+        # Nested mappings without an absolute web link yield nothing.
+        (
+            {"first": {"url": "relative/path", "link": 7}, "second": {"note": "x"}},
+            {"inner": {"href": "ftp://files.example/x"}},
+            None,
+        ),
     ],
 )
 def test_event_source_urls_must_be_absolute_web_links(raw_pointer, payload, expected):
@@ -308,3 +317,55 @@ def test_diary_links_allow_only_web_and_mail_links():
         assert error.value.detail == detail
     with pytest.raises(DomainError):
         presentation.normalize_diary_links([{"url": "javascript:alert(1)"}])
+
+
+def test_feed_labels_need_a_list_of_feeds(rss_config):
+    # A configuration whose feeds key is not a list produces no labels.
+    rss_config.write_text("feeds:\n  url: https://news.example/feed\n  label: One\n")
+    assert presentation.rss_labels_by_feed_url() == {}
+
+
+@pytest.mark.parametrize(
+    "event,expected",
+    [
+        # A Loki pointer that is not a mapping is ignored.
+        (SimpleNamespace(source="loki", system=None, raw_pointer=["bad"]), None),
+        (
+            SimpleNamespace(
+                source="loki", system=None, raw_pointer={"loki": ["not", "a", "map"]}
+            ),
+            None,
+        ),
+        # A wrapped payload that is not a mapping falls back to the system.
+        (
+            SimpleNamespace(
+                source="webhook:enroll",
+                system="enroll",
+                normalized_payload={"payload": "web-9"},
+            ),
+            "enroll",
+        ),
+        (
+            SimpleNamespace(
+                source="webhook:enroll",
+                system="enroll",
+                normalized_payload={"payload": {"new": {"host": ""}}},
+            ),
+            "enroll",
+        ),
+    ],
+)
+def test_event_identifiers_ignore_malformed_pointers(event, expected):
+    assert presentation.event_identifier(event) == expected
+
+
+def test_saved_search_urls_drop_nameless_parameters():
+    assert (
+        presentation.normalize_saved_search_url("/events.html?=stray&q=ssh&=x")
+        == "/events.html?q=ssh"
+    )
+
+
+def test_diary_links_of_an_unexpected_type_are_dropped():
+    assert presentation.normalize_diary_links(42) == []
+    assert presentation.normalize_diary_links(True) == []

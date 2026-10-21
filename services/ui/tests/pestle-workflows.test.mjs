@@ -518,3 +518,65 @@ test('audit managers can sample items without event access, unlike plain readers
   });
   assert.equal(disabled.ui.el('pestleRows').querySelector('[data-sample-pestle]'), null);
 });
+
+test('visualisation labels follow a dark hex page background and equal relevance sorts by clause', async (t) => {
+  const { ui } = await pestlePage(t, {
+    query: '&tab=visualisations',
+    tabs: fakeTabs(),
+    visualisations: {
+      ...visualisations,
+      clause_links: [
+        // Two links of equal relevance sort by clause reference; an unknown relevance
+        // weighs as low and is labelled N/A.
+        {
+          item_id: 'p1',
+          clause_id: 'cl10',
+          clause_ref: '4.10',
+          item: 'Second',
+          relevance_code: 'medium',
+        },
+        {
+          item_id: 'p1',
+          clause_id: 'cl2',
+          clause_ref: '4.2',
+          item: 'Second',
+          relevance_code: 'medium',
+        },
+        {
+          item_id: 'p2',
+          clause_id: 'cl2',
+          clause_ref: '4.2',
+          item: 'Mystery',
+          relevance_code: 'unusual',
+        },
+      ],
+    },
+  });
+  const real = ui.window.getComputedStyle.bind(ui.window);
+  // The design system paints the page with a hex colour the heatmap must read.
+  ui.window.getComputedStyle = (el, pseudo) =>
+    el === ui.window.document.body ? { backgroundColor: '#123' } : real(el, pseudo);
+  ui.el('pestleVisualisationsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('pestleClauseNetwork').querySelector('svg'));
+  // The forced initial render used the white default; redraw against the dark page.
+  ui.el('pestleLensTypeViz').innerHTML = '';
+  ui.el('businessProcessName').value = 'Logistics';
+  ui.el('addBusinessProcess').click();
+  await settle(() => ui.el('status').textContent === 'Business process added');
+  ui.el('pestleVisualisationsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('pestleLensTypeViz').querySelector('svg g text'));
+  const axisLabel = ui.el('pestleLensTypeViz').querySelector('svg g text');
+  assert.equal(axisLabel.getAttribute('fill'), '#f8fafc');
+  assert.equal(axisLabel.getAttribute('stroke'), 'rgb(17, 34, 51)');
+
+  const svg = ui.el('pestleClauseNetwork').querySelector('svg');
+  const linkTitles = [...svg.querySelectorAll('path > title')].map((x) => x.textContent);
+  assert.deepEqual(linkTitles, [
+    '4.2 → Second\nRelevance: Medium',
+    '4.10 → Second\nRelevance: Medium',
+    '4.2 → Mystery\nRelevance: N/A',
+  ]);
+  const nodes = [...svg.querySelectorAll('.interested-party-bipartite-node')];
+  assert.match(nodes[0].querySelector('text').textContent, /^4\.2 \(2\)/);
+  assert.equal(nodes[0].style.cursor, 'pointer');
+});

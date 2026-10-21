@@ -487,3 +487,50 @@ def test_visualisations_summarise_controls_and_communications(parties):
     assert len(empty["items"]) == len(view["items"])
     assert all(item["controls"] == [] for item in empty["items"])
     assert empty["bipartite_graphs"]["party_controls"]["links"] == []
+
+
+def test_party_requests_need_a_framework_when_no_default_is_configured(
+    parties, monkeypatch
+):
+    """An empty framework is refused once the deployment names no default."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "default_framework_slug", "")
+
+    blank = parties.read("GET", "/v1/interested-parties", status=400, framework="")
+
+    assert blank["detail"] == "framework is required"
+    invalid = parties.read("GET", "/v1/interested-parties", status=400, framework="A B")
+    assert invalid["detail"] == "Invalid framework"
+
+
+def test_serialisers_and_graph_links_tolerate_missing_records(parties):
+    """Missing rows serialise as empty objects and never enter a graph."""
+    from app.services import interested_parties as service
+
+    assert service._control_out(None) == {}
+    assert service._communication_out(None) == {}
+    assert service._party_changelog_state(parties.db, uuid.uuid4()) is None
+    assert service._party_changelog_state(parties.db, str(uuid.uuid4())) is None
+
+    graph = service._new_bipartite_graph(
+        key="party_controls",
+        title="Parties and controls",
+        left_label="Parties",
+        right_label="Controls",
+        empty="None",
+    )
+    before = dict(graph)
+    service._add_bipartite_link(
+        graph, left={"id": "", "label": "Nobody"}, right={"id": "c1", "label": "C"}
+    )
+    service._add_bipartite_link(
+        graph, left={"id": "p1", "label": "Party"}, right={"id": None, "label": "C"}
+    )
+    assert service._finalise_bipartite_graph(dict(graph)) == (
+        service._finalise_bipartite_graph(before)
+    )
+    service._add_bipartite_link(
+        graph, left={"id": "p1", "label": "Party"}, right={"id": "c1", "label": "C"}
+    )
+    assert graph["_links"][("p1", "c1")]["count"] == 1

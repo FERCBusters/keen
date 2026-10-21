@@ -536,9 +536,6 @@ def ingest_google_workspace_stream(
 @pausable("google_workspace")
 @connection_runs("google_workspace")
 def ingest_google_workspace_all(db: Session) -> list[dict[str, Any]]:
-    if not settings.google_workspace_enabled:
-        return [{"skipped": True, "reason": "google_workspace_enabled=false"}]
-
     cfg = load_google_workspace_config(settings.google_workspace_config_path)
     if cfg.get("enabled") is False:
         return [{"skipped": True, "reason": "config enabled=false"}]

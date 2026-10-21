@@ -142,6 +142,46 @@ def test_preferences_are_validated_and_saved_with_patch_semantics(keen):  # noqa
     }
 
 
+def test_landing_pages_are_normalised_to_a_keen_path(keen):  # noqa: F811
+    client = keen.client(keen.user())
+    saved = _json(
+        client.patch(
+            "/v1/me/preferences",
+            headers=unsafe(client),
+            json={"landing_page": "events.html?=orphan&framework=A&offset=5"},
+        )
+    )
+    # A relative page gains its leading slash; nameless parameters and
+    # pagination are dropped.
+    assert saved["landing_page"] == "/events.html?framework=A"
+
+
+@pytest.mark.parametrize(
+    "oidc, proxy, upstream, expected",
+    [
+        (True, True, "https://sso.example/logout", "/api/v1/auth/oidc/logout"),
+        (False, True, "https://sso.example/logout", "https://sso.example/logout"),
+        (False, True, "", None),
+        (False, False, "https://sso.example/logout", None),
+    ],
+)
+def test_sign_out_follows_the_sign_in_method(  # noqa: F811
+    keen, monkeypatch, oidc, proxy, upstream, expected
+):
+    from app.services import me as me_service
+
+    monkeypatch.setattr(me_service.settings, "oidc_enabled", oidc)
+    monkeypatch.setattr(me_service.settings, "trust_remote_user", proxy)
+    monkeypatch.setattr(me_service.settings, "upstream_logout_url", upstream)
+    client = keen.client(keen.user())
+
+    me = _json(client.get("/v1/me"))
+
+    assert me["logout_url"] == expected
+    # Behind a proxy without an upstream address, KEEN cannot end the session.
+    assert me["logout_enabled"] is (not (proxy and not oidc) or expected is not None)
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -167,6 +207,8 @@ def test_preferences_are_validated_and_saved_with_patch_semantics(keen):  # noqa
         {"default_visualisation": {"sunburst_focus": {"control_id": "not-a-uuid"}}},
         {"landing_page": "https://evil.example/"},
         {"landing_page": "//evil.example/"},
+        # An empty authority leaves a path that begins with two slashes.
+        {"landing_page": "////evil.example/"},
         {"landing_page": "/login.html"},
         {"landing_page": "/admin.html"},
         {"theme": "neon"},

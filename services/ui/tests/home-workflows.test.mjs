@@ -24,13 +24,22 @@ const listOf = (items, total = items.length) => ({ items, total });
 // Every API route must be declared by the test; unknown paths fail the request.
 async function home(
   t,
-  { routes = {}, me = { is_admin: true }, reduced = true, setup, globals, htmlName = 'index' } = {},
+  {
+    routes = {},
+    me = { is_admin: true },
+    reduced = true,
+    setup,
+    globals,
+    vendor,
+    htmlName = 'index',
+  } = {},
 ) {
   const intervals = [];
   const ui = await page(t, 'home', {
     htmlName,
     me,
     globals,
+    vendor,
     setup(window) {
       window.matchMedia = () => ({
         matches: reduced,
@@ -870,4 +879,127 @@ test('a stale cached home page reloads once with a revision marker, then explain
   assert.equal(replaced.length, 1);
   const alert = looping.document.querySelector('[role="alert"].alert-warning');
   assert.match(alert.textContent, /from different UI versions/);
+});
+
+test('a long evidence line scrolls across the ticker before the next item', async (t) => {
+  let clock = 1000;
+  const frames = [];
+  const ui = await home(t, {
+    reduced: false,
+    me: { can_view_events: true },
+    globals: { performance: { now: () => clock } },
+    setup(window) {
+      // The link overflows its box by 400px; frames advance a fake clock past the duration.
+      Object.defineProperty(window.HTMLAnchorElement.prototype, 'scrollWidth', {
+        configurable: true,
+        get() {
+          return this.id === 'latestEvidenceTickerLink' ? 500 : 0;
+        },
+      });
+      Object.defineProperty(window.HTMLAnchorElement.prototype, 'clientWidth', {
+        configurable: true,
+        get() {
+          return this.id === 'latestEvidenceTickerLink' ? 100 : 0;
+        },
+      });
+      window.requestAnimationFrame = (fn) => {
+        frames.push(clock);
+        clock += 5000;
+        return window.setTimeout(() => fn(clock), 0);
+      };
+    },
+    routes: {
+      '/api/v1/events': listOf([]),
+      '/api/v1/sources': listOf([]),
+      '/api/v1/evidence/latest': {
+        events: [{ id: 'e1', source: 'github', summary: 'A very long summary of a push' }],
+      },
+    },
+  });
+  const link = ui.el('latestEvidenceTickerLink');
+  await settle(() => ui.el('latestEvidenceTickerText').textContent.startsWith('github'));
+  await settle(() => link.scrollLeft === 400);
+  assert.ok(frames.length >= 1);
+});
+
+test('the ticker forgets the oldest shown events after a hundred, so they can appear again', async (t) => {
+  const batch = Array.from({ length: 101 }, (_, i) => ({
+    id: 'e' + (i + 1),
+    source: 'src' + (i + 1),
+    summary: 'Summary ' + (i + 1),
+    created_at: `2026-10-01T10:${String(i % 60).padStart(2, '0')}:00Z`,
+  }));
+  const responses = [
+    { events: batch },
+    {
+      events: [
+        { id: 'e1', source: 'src1', summary: 'Again 1' },
+        { id: 'e2', source: 'src2', summary: 'Again 2' },
+      ],
+    },
+  ];
+  const ui = await home(t, {
+    me: { can_view_events: true },
+    routes: {
+      '/api/v1/events': listOf([]),
+      '/api/v1/sources': listOf([]),
+      '/api/v1/evidence/latest': () => responses.shift() || { events: [] },
+    },
+  });
+  const text = () => ui.el('latestEvidenceTickerText').textContent;
+  // A hundred items pass through the ticker at the compressed delays.
+  const patient = async (check) => {
+    for (let i = 0; i < 2000 && !check(); i++) await new Promise((r) => setTimeout(r, 5));
+    assert.ok(check(), 'The ticker did not reach the expected item');
+  };
+  await patient(() => text() === 'src101 :: Summary 101');
+  const before = ui.calls.length;
+  await ui.intervals[0].fn();
+  // The first event has dropped out of memory and is shown again. Remembering it
+  // again makes room by forgetting the next oldest, so that one follows it.
+  await patient(() => text() === 'src1 :: Again 1');
+  await patient(() => text() === 'src2 :: Again 2');
+  assert.equal(ui.calls.length, before + 1);
+});
+
+test('without a chosen framework the home page uses the catalogue default', async (t) => {
+  const ui = await home(t, {
+    vendor: { getCurrentFramework: () => '' },
+    routes: { '/api/v1/risks': listOf([{ id: 'r1' }]) },
+  });
+  assert.equal(getsTo(ui, '/api/v1/frameworks').length >= 1, true);
+  assert.match(
+    ui.document.querySelector('[data-kind="risks"] a').getAttribute('href'),
+    /framework=A$/,
+  );
+  ui.document.querySelector('[data-kind="risks"] .js-entry-zoom').click();
+  await settle(() => ui.zoomCard('risk', 'r1'));
+  assert.equal(getsTo(ui, '/api/v1/risks')[0].url.includes('framework=A'), true);
+});
+
+test('risk and interested-party cards fall back to generic titles when fields are missing', async (t) => {
+  const ui = await home(t, {
+    routes: {
+      '/api/v1/risks': listOf([{ id: 'r1' }]),
+      '/api/v1/interested-parties': listOf([
+        { id: 'i1', name: { name: 'Regulator' }, nature: { name: 'Statutory' } },
+        { id: 'i2' },
+      ]),
+    },
+  });
+  ui.document.querySelector('[data-kind="risks"] .js-entry-zoom').click();
+  await settle(() => ui.zoomCard('risk', 'r1'));
+  assert.equal(
+    ui.canvas().querySelector('[data-kind="risk"] .home-node-title').textContent,
+    'Risk',
+  );
+  await goHome(ui);
+  ui.document.querySelector('[data-kind="interested_parties"] .js-entry-zoom').click();
+  await settle(() => ui.zoomCard('interested_party', 'i2'));
+  assert.deepEqual(
+    [...ui.canvas().querySelectorAll('[data-kind="interested_party"] .home-node-title')].map(
+      (n) => n.textContent,
+    ),
+    ['Regulator – Statutory', 'Interested Party'],
+  );
 });

@@ -661,3 +661,242 @@ def test_load_config(collector):
         name = "load_" + prefix(collector) + "config"
         assert getattr(collector, name)("fixture.yml") == {"feeds": [1]}
     doc.assert_called_once_with(source(collector), "fixture.yml")
+
+
+def test_fetch_rss_refuses_unsafe_urls_and_non_feed_bodies(collector):
+    # An unsafe feed address is refused before any request, and an HTML login
+    # page in place of a feed is reported as such.
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, text="<html><body>Sign in</body></html>")
+
+    with (
+        configured(collector, token="", auth_mode=""),
+        serving(collector, handler, safe=False),
+    ):
+        with pytest.raises(ValueError, match="unsafe"):
+            collector._fetch_rss("https://host.example/team/repo.rss")
+    assert requests == []
+    with configured(collector, token="", auth_mode=""), serving(collector, handler):
+        with pytest.raises(RuntimeError, match="did not look like RSS"):
+            collector._fetch_rss("https://host.example/team/repo.rss")
+    assert len(requests) == 1
+
+
+def test_fetch_api_activities_refuses_unsafe_base_and_ends_on_invalid_pages(
+    collector,
+):
+    pages = []
+
+    def handler(request):
+        pages.append(request.url.params["page"])
+        if request.url.params["page"] == "1":
+            return httpx.Response(200, json=[{"id": 1}, {"id": 2}])
+        return httpx.Response(200, json={"message": "unexpected"})
+
+    with serving(collector, handler, safe=False):
+        with pytest.raises(ValueError, match="unsafe"):
+            collector._fetch_api_activities(
+                base_url="https://host.example", owner="team", repo="repo"
+            )
+    assert pages == []
+    with serving(collector, handler):
+        # A full first page is followed by a body that is no list; what was
+        # read so far is kept and pagination stops.
+        items = collector._fetch_api_activities(
+            base_url="https://host.example", owner="team", repo="repo", limit=2
+        )
+    assert items == [{"id": 1}, {"id": 2}]
+    assert pages == ["1", "2"]
+
+
+def test_rss_fallback_honours_the_cursor_and_labels_summaries(collector):
+    db = MagicMock()
+    existing = MagicMock(last_ts=datetime(2026, 10, 8, 0, 0, 0), meta={})
+    db.query.return_value.filter.return_value.one_or_none.return_value = existing
+    feed = (
+        "<rss><channel>"
+        "<item><title>alice pushed</title><pubDate>Thu, 08 Oct 2026 00:00:00 GMT"
+        "</pubDate><guid>g1</guid></item>"
+        "<item><title>bob merged pull request #2</title>"
+        "<pubDate>Fri, 09 Oct 2026 06:00:00 GMT</pubDate><guid>g2</guid></item>"
+        "</channel></rss>"
+    )
+
+    def handler(request):
+        if request.url.path.endswith("/activities/feeds"):
+            return httpx.Response(403)
+        return httpx.Response(
+            200, headers={"content-type": "application/rss+xml"}, text=feed
+        )
+
+    stored = []
+    with (
+        configured(collector, token="", auth_mode=""),
+        serving(collector, handler),
+        patch.object(
+            collector,
+            "store_event_with_artifact",
+            side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
+        ),
+    ):
+        result = feed_fn(collector)(
+            db, feed_url="https://host.example/team/repo.rss", label="Core"
+        )
+    # The item at the cursor timestamp was seen already; only the newer one
+    # is stored, with the label leading its summary and naming its system.
+    assert result["mode"] == "rss_fallback" and result["created_events"] == 1
+    (event,) = stored
+    assert event["summary"] == (
+        f"[Core] {source(collector)} host.example: bob merged pull request #2"
+    )
+    assert event["system"] == "Core"
+    assert event["action"] == "pull_merged"
+    assert existing.last_ts == datetime(2026, 10, 9, 6, 0, 0)
+
+
+def test_discover_repositories_stops_after_a_thousand_pages(collector):
+    def handler(request):
+        page = int(request.url.params["page"])
+        return httpx.Response(
+            200, json=[{"name": f"repo-{page}", "owner": {"login": "team"}}]
+        )
+
+    with configured(collector, auth_mode=""), serving(collector, handler):
+        with pytest.raises(ValueError, match="exceeded 1000 pages"):
+            collector._discover_repositories(
+                "https://host.example", "organizations", "team"
+            )
+
+
+def test_ingest_all_reports_failed_discovery_and_skips_unusable_feeds(collector):
+    # A failing account is reported under its scope while the remaining feeds
+    # still run; feeds without an address, or repeated ones, run once at most.
+    db = MagicMock()
+    feeds = []
+    feed_name = feed_fn(collector).__name__
+
+    def feed(db, *, feed_url, label=None):
+        feeds.append((feed_url, label))
+        return {"feed": feed_url, "created_events": 0}
+
+    with (
+        configured(
+            collector,
+            enabled=True,
+            base_url="https://host.example",
+            config_path="fixture.yml",
+            demo_mode=True,
+        ),
+        connections_env(collector),
+        patch.object(
+            collector,
+            "load_document",
+            return_value={
+                "organizations": [{"org": "team"}],
+                "users": [{"user": "alice"}],
+                "feeds": [
+                    {"label": "no address"},
+                    {"feed": "https://host.example/a/b.rss", "label": "A"},
+                    {"url": "https://host.example/a/b.rss", "label": "dup"},
+                ],
+            },
+        ),
+        patch.object(collector, feed_name, side_effect=feed),
+        patch.object(
+            collector,
+            "_discover_repositories",
+            side_effect=[
+                RuntimeError("Collection failed: upstream returned HTTP 404"),
+                [{"name": "tool", "owner": {"login": "alice"}}],
+            ],
+        ),
+    ):
+        results = all_fn(collector)(db)
+    errors = [r for r in results if r.get("error")]
+    assert [(r["scope"], r["account"]) for r in errors] == [("organizations", "team")]
+    assert errors[0]["error"].startswith("Collection failed")
+    assert feeds == [
+        ("https://host.example/a/b.rss", "A"),
+        ("https://host.example/alice/tool.rss", None),
+    ]
+
+
+def test_store_api_activity_items_without_actor_or_text_and_deduplicated(collector):
+    # An activity whose user is no object and that carries neither title nor
+    # content still stores with a bare summary; a deduplicated row counts for
+    # nothing and never moves the cursor beyond newer rows already seen.
+    db = MagicMock()
+    cur = MagicMock(last_ts=None)
+    items = [
+        dict(ACTIVITY, id=9),
+        dict(ACTIVITY, id=8),
+        dict(
+            ACTIVITY,
+            id=7,
+            created="2026-10-09T11:00:00Z",
+            act_user="alice",
+            title=None,
+            content=None,
+        ),
+    ]
+    with patch.object(
+        collector,
+        "store_event_with_artifact",
+        side_effect=[{"deduped": True}, {"deduped": False}, {"deduped": False}],
+    ) as store:
+        result = collector._store_api_activity_items(
+            db,
+            cur,
+            all_items=items,
+            cursor_name="cursor-name",
+            feed_url="https://host.example/team/repo.rss",
+            host="host.example",
+            owner="team",
+            repo="repo",
+            label=None,
+            since=datetime(2026, 10, 7),
+            cursor_last=None,
+            mode="api",
+        )
+    assert result["created_events"] == 2
+    older, newer, _same_time = (c.kwargs for c in store.call_args_list)
+    assert older["actor"] is None
+    assert older["summary"] == f"{source(collector)} host.example team/repo commit_repo"
+    assert newer["summary"].endswith("by alice alice pushed")
+    assert cur.last_ts == datetime(2026, 10, 9, 12, 0, 0)
+
+
+def test_rss_fallback_counts_only_new_rows_and_keeps_the_newest_time(collector):
+    db = MagicMock()
+    db.query.return_value.filter.return_value.one_or_none.return_value = None
+    feed = (
+        "<rss><channel>"
+        "<item><title>newest</title><pubDate>Fri, 09 Oct 2026 06:00:00 GMT"
+        "</pubDate><guid>g2</guid></item>"
+        "<item><title>older</title><pubDate>Thu, 08 Oct 2026 00:00:00 GMT"
+        "</pubDate><guid>g1</guid></item>"
+        "</channel></rss>"
+    )
+
+    def handler(request):
+        if request.url.path.endswith("/activities/feeds"):
+            return httpx.Response(403)
+        return httpx.Response(
+            200, headers={"content-type": "application/rss+xml"}, text=feed
+        )
+
+    with (
+        configured(collector, token="", auth_mode=""),
+        serving(collector, handler),
+        patch.object(
+            collector,
+            "store_event_with_artifact",
+            side_effect=[{"deduped": False}, {"deduped": True}],
+        ),
+    ):
+        result = feed_fn(collector)(db, feed_url="https://host.example/team/repo.rss")
+    assert result["created_events"] == 1
+    assert result["cursor_last_ts"] == "2026-10-09T06:00:00"

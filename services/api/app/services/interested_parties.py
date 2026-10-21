@@ -494,9 +494,10 @@ def _lookup_by_id_or_name(
     row_id: uuid.UUID | None = None,
     name: str | None = None,
     user: User | None = None,
-    create: bool = False,
     label: str = "name",
 ) -> InterestedPartyName | InterestedPartyNature:
+    """An existing lookup row by id, or by name; a new name is created."""
+
     if row_id:
         row = db.query(model).filter(model.id == row_id).one_or_none()
         if not row:
@@ -506,8 +507,6 @@ def _lookup_by_id_or_name(
     row = db.query(model).filter(func.lower(model.name) == value.lower()).one_or_none()
     if row:
         return row
-    if not create:
-        raise DomainError(status_code=400, detail=f"Unknown {label}")
     row = model(
         name=value,
         created_by_user_id=getattr(user, "id", None),
@@ -607,7 +606,7 @@ def list_interested_party_names(*, q: str | None = None, user, db: Session):
 
 def create_interested_party_name(*, payload: LookupPayload, user, db: Session):
     row = _lookup_by_id_or_name(
-        db, InterestedPartyName, name=payload.name, user=user, create=True, label="name"
+        db, InterestedPartyName, name=payload.name, user=user, label="name"
     )
     db.commit()
     db.refresh(row)
@@ -678,7 +677,6 @@ def create_interested_party_nature(*, payload: LookupPayload, user, db: Session)
         InterestedPartyNature,
         name=payload.name,
         user=user,
-        create=True,
         label="nature",
     )
     db.commit()
@@ -915,7 +913,6 @@ def create_interested_party(
         row_id=payload.name_id,
         name=payload.name,
         user=user,
-        create=True,
         label="name",
     )
     nature = _lookup_by_id_or_name(
@@ -924,7 +921,6 @@ def create_interested_party(
         row_id=payload.nature_id,
         name=payload.nature,
         user=user,
-        create=True,
         label="nature",
     )
     existing = (
@@ -1008,7 +1004,6 @@ def update_interested_party(
             row_id=payload.name_id,
             name=payload.name,
             user=user,
-            create=True,
             label="name",
         ).id
     if payload.nature_id or payload.nature:
@@ -1018,7 +1013,6 @@ def update_interested_party(
             row_id=payload.nature_id,
             name=payload.nature,
             user=user,
-            create=True,
             label="nature",
         ).id
     duplicate = (

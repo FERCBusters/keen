@@ -121,3 +121,18 @@ def test_compose_workers_and_python_capability_policy():
     assert not http.get("ports") and not http.get("profiles")
     builds = yaml.safe_load((root / "docker-compose.build.yml").read_text())["services"]
     assert builds["keen-http-worker"]["build"] == builds["keen-api"]["build"]
+
+
+@pytest.mark.parametrize(
+    "configured,expected",
+    [(120, 120), (0, 60), (None, 60), ("", 60), ("many", 60), (-5, 1)],
+)
+def test_event_counter_refresh_interval_tolerates_bad_settings(
+    monkeypatch, configured, expected
+):
+    # The beat interval falls back to a minute when the cache TTL is unset or
+    # unusable and never drops below one second.
+    from app.worker.celery_app import _event_counter_refresh_seconds
+
+    monkeypatch.setattr(settings, "aggregate_cache_ttl_seconds", configured)
+    assert _event_counter_refresh_seconds() == expected

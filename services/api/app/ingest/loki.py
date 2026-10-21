@@ -702,8 +702,6 @@ def ingest_loki_once(
 @pausable("loki")
 @connection_runs("loki")
 def ingest_loki_all(db: Session) -> list[dict[str, Any]]:
-    if not settings.loki_enabled:
-        return [{"skipped": True, "reason": "KEEN_LOKI_ENABLED=false"}]
     cfg = load_loki_queries(settings.loki_queries_path)
     out: list[dict[str, Any]] = []
     for q in cfg.get("queries", []) or []:

@@ -23,13 +23,17 @@ async function events(t, options = {}) {
       options.setup?.(window);
     },
     get: async (u) => {
-      if (u.pathname === '/api/v1/sources/meta') return { items: [{ source: 'ci', label: 'CI' }] };
+      if (u.pathname === '/api/v1/sources/meta') {
+        if (options.sourcesFail) throw new Error('Sources unavailable');
+        return { items: [{ source: 'ci', label: 'CI' }] };
+      }
       if (u.pathname === '/api/v1/controls') {
         if (options.controlsFail) throw new Error('Controls unavailable');
         return { items: [{ ref: 'A.1', title: 'Access', type: 'control' }] };
       }
       if (u.pathname === '/api/v1/events/facets') {
         requests.facets.push(u.searchParams);
+        if (options.facetsFail) throw new Error('Facets unavailable');
         return (
           options.facets ?? {
             sources: [{ source: 'ci', count: 3 }],
@@ -492,4 +496,20 @@ test('with automatic filtering, a changed text filter applies at once', async (t
   condition(ui, 0).querySelector('[data-condition-remove]').click();
   await settle(() => ui.requests.events.length === 3);
   assert.deepEqual(ui.lastEvents().getAll('f'), []);
+});
+
+test('without the source register or facets the chosen sources stay and the list loads', async (t) => {
+  const ui = await events(t, { sourcesFail: true, facetsFail: true, query: '&source=ci,diary' });
+  await settle(() => ui.requests.facets.length === 1);
+  assert.deepEqual(chosenChips(ui, 'source'), [
+    ['ci', 'ci'],
+    ['diary', 'diary'],
+  ]);
+  assert.deepEqual(filterChips(ui, 'source'), [
+    ['ci', 'ci'],
+    ['diary', 'diary'],
+  ]);
+  assert.equal(ui.lastEvents().get('source'), 'ci,diary');
+  assert.equal(ui.document.querySelectorAll('#rows tr[data-event-id]').length, 1);
+  assert.equal(ui.el('status').dataset.alert, undefined);
 });

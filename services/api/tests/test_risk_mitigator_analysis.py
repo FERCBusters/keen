@@ -731,3 +731,40 @@ def test_short_issue_titles_use_the_first_sentence():
     assert mitigator._short_issue_title("?!") == "?!"
     title = mitigator._short_issue_title("word " * 100)
     assert len(title) == 180 and title.endswith("…")
+
+
+# --- Formatting helpers ----------------------------------------------------------
+
+
+def test_blank_matching_terms_are_dropped_before_matching():
+    """A rule term that is only whitespace never matches anything."""
+    prepared = mitigator._prepare_terms(("   ", "Volcano", "third party"))
+
+    assert [term for term, _, _ in prepared] == ["Volcano", "third party"]
+    assert prepared[0][1] == "volcano"
+    # Long tokens bridge fuzzy matches; their order is not significant.
+    assert sorted(prepared[1][2]) == ["party", "third"]
+
+
+def test_control_documents_include_metadata_and_tags_when_present():
+    """Search text covers a control's metadata and tags so either can match."""
+    from types import SimpleNamespace
+
+    control = SimpleNamespace(
+        ref="A.1",
+        framework_slug="",
+        title="Backups",
+        type="custom",
+        meta={"owner": "ops"},
+        tags={"domain": "resilience"},
+    )
+    document = mitigator._control_doc(control)
+
+    assert "A.1" in document and "Backups" in document
+    assert "{'owner': 'ops'}" in document
+    assert "{'domain': 'resilience'}" in document
+
+
+def test_missing_catalogue_rows_serialise_as_empty_objects():
+    assert mitigator._control_out(None) == {}
+    assert mitigator._clause_summary(None) == {}

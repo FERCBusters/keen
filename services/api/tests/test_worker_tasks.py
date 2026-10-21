@@ -612,3 +612,164 @@ def test_dispatch_imap_task_gates_and_queues():
     imap_delay.assert_called_once_with("conn-1")
     # Environment-managed connections never get queued.
     assert [call.args[0] for call in imap_delay.call_args_list] == ["conn-1"]
+
+
+class _BrokenControl:
+    """A catalogue row whose attributes fail when the payload is built."""
+
+    framework_slug = "KEEN-AF:1.0"
+    type = "annex_control"
+    ref = "A.1"
+    title = "T"
+
+    @property
+    def in_scope(self):
+        raise RuntimeError("catalogue unavailable")
+
+
+def test_reply_webhook_reports_missing_thread_or_post():
+    # A reply fanout for a post that no longer exists reports the gap instead
+    # of building a payload from missing rows.
+    config = fake_webhook_config()
+    feature_state = feature_gate(True)
+    db = make_db({"EventQuestionThread": THREAD, "EventQuestionPost": None})
+    with (
+        running_session([db]),
+        patch("app.services.features.state", lambda d: feature_state),
+        webhook_harness(config),
+        patch.object(wt, "send_question_reply_webhooks") as send_reply,
+    ):
+        assert wt.send_question_reply_webhooks_task(THREAD.id, POST.id) == {
+            "enabled": False,
+            "error": "thread/post not found",
+        }
+    send_reply.assert_not_called()
+    db.close.assert_called_once()
+
+
+def test_reply_webhook_payload_lists_attachments_and_controls():
+    # A reply carries the post's attachments and the event's control mappings.
+    config = fake_webhook_config()
+    feature_state = feature_gate(True)
+    poster = MagicMock(username="bob", role="normal")
+    db = make_db(
+        {
+            "EventQuestionThread": THREAD,
+            "EventQuestionPost": POST,
+            "Event": EVENT,
+            "User": [USER, poster],
+            "ControlItem_rows": [control("A.5.1"), control("A.5.2")],
+        },
+        join_rows=[
+            (
+                MagicMock(post_id="p1", created_at=datetime(2026, 10, 1)),
+                MagicMock(
+                    id="a2",
+                    meta={"filename": "screenshot.png"},
+                    content_type="image/png",
+                    size_bytes=42,
+                ),
+            )
+        ],
+    )
+    built: dict = {}
+    with (
+        running_session([db]),
+        patch("app.services.features.state", lambda d: feature_state),
+        webhook_harness(config),
+        patch.object(wt, "send_question_reply_webhooks", return_value={}),
+        patch.object(
+            wt, "build_generic_payload", side_effect=lambda **kw: built.update(kw) or kw
+        ),
+    ):
+        wt.send_question_reply_webhooks_task(THREAD.id, POST.id)
+    assert built["post"]["attachments"] == [
+        {
+            "artifact_id": "a2",
+            "filename": "screenshot.png",
+            "content_type": "image/png",
+            "size_bytes": 42,
+            "download_url": "/api/v1/artifacts/a2/download",
+        }
+    ]
+    assert [c["ref"] for c in built["controls"]] == ["A.5.1", "A.5.2"]
+    assert built["controls"][0]["in_scope"] is True
+
+
+@pytest.mark.parametrize(
+    "task_name,send_attr",
+    [
+        ("send_question_webhooks_task", "send_question_created_webhooks"),
+        ("send_question_reply_webhooks_task", "send_question_reply_webhooks"),
+    ],
+)
+def test_webhook_payloads_tolerate_malformed_artifact_metadata_and_catalogue_errors(
+    task_name, send_attr
+):
+    # Artifact metadata that is not an object yields no filename, and a failing
+    # control lookup leaves the controls list empty; the fanout still happens.
+    config = fake_webhook_config()
+    feature_state = feature_gate(True)
+    db = make_db(
+        {
+            "EventQuestionThread": THREAD,
+            "EventQuestionPost": POST,
+            "Event": EVENT,
+            "User": [USER, MagicMock(username="bob", role="normal")],
+            "ControlItem_rows": [_BrokenControl()],
+        },
+        join_rows=[
+            (
+                MagicMock(post_id="p1", created_at=datetime(2026, 10, 1)),
+                MagicMock(
+                    id="a3",
+                    meta="not-an-object",
+                    content_type="text/plain",
+                    size_bytes=7,
+                ),
+            )
+        ],
+    )
+    built: dict = {}
+    with (
+        running_session([db]),
+        patch("app.services.features.state", lambda d: feature_state),
+        webhook_harness(config),
+        patch.object(wt, send_attr, return_value={"enabled": True}) as send,
+        patch.object(
+            wt, "build_generic_payload", side_effect=lambda **kw: built.update(kw) or kw
+        ),
+    ):
+        assert getattr(wt, task_name)(THREAD.id, POST.id) == {"enabled": True}
+    send.assert_called_once()
+    assert built["post"]["attachments"][0]["filename"] is None
+    assert built["post"]["attachments"][0]["artifact_id"] == "a3"
+    assert built["controls"] == []
+
+
+def test_ingest_imap_connection_task_binds_a_session_to_one_connection():
+    # The per-connection IMAP task hands its own session and the connection id
+    # to the collector and closes the session afterwards.
+    with (
+        running_session([]) as sessions,
+        patch("app.ingest.imap.ingest_imap_all", return_value=RESULT) as ingest,
+    ):
+        assert wt.ingest_imap_connection_task("conn-7") == RESULT
+    ingest.assert_called_once_with(sessions[0], connection_id="conn-7")
+    assert sessions[0].__exit__.call_count == 1
+
+
+def test_dispatch_imap_task_queues_nothing_without_enabled_connections():
+    dbs = [MagicMock()]
+    with (
+        patch.object(wt.settings, "imap_enabled", True),
+        patch.object(wt.settings, "demo_mode", False),
+        patch("app.services.ingestion_pause.is_paused", lambda db, source: False),
+        patch("app.ingest.connections.connections", return_value=[]),
+        patch("app.ingest.connections.deployment_settings.demo_mode", False),
+        patch("app.ingest.connections.deployment_settings.imap_enabled", True),
+        running_session(dbs),
+        patch.object(wt.ingest_imap_connection_task, "delay") as imap_delay,
+    ):
+        assert wt.dispatch_imap_task() == {"queued": 0}
+    imap_delay.assert_not_called()

@@ -13,8 +13,6 @@ from xml.etree import ElementTree as ET
 
 import httpx
 
-from app.security.redaction import redact_url
-
 
 def _to_utc_naive(dt: datetime) -> datetime:
     if dt.tzinfo is None:
@@ -41,10 +39,6 @@ def _parse_rfc822_ts(value: str | None) -> datetime | None:
         return _to_utc_naive(dt)
     except Exception:
         return None
-
-
-def _redacted_url(url: Any) -> str:
-    return redact_url(str(url))
 
 
 def _response_status_error(resp: httpx.Response) -> str | None:

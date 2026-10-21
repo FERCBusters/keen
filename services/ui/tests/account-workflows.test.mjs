@@ -138,6 +138,7 @@ async function account(t, options = {}) {
       confirm: (m) => (state.prompts.push(m), options.confirm ?? true),
       ...options.globals,
     },
+    vendor: options.vendor,
     setup(window) {
       // The design system's navbar exposes this hook for the question bell.
       window.keenRefreshBell = () => (state.bell += 1);
@@ -161,6 +162,7 @@ async function account(t, options = {}) {
           options.saved ?? [{ id: 's1', name: 'Unmapped', url: '/events.html?unmapped=true' }],
         );
       }
+      if (u.pathname === '/api/v1/frameworks-down') throw new Error('Catalogue offline');
       if (state.lists[u.pathname]) {
         if (fail[u.pathname]) throw new Error('Offline');
         return { items: structuredClone(state.lists[u.pathname]) };
@@ -765,4 +767,54 @@ test('the default landing page is offered as Home', async (t) => {
   ui.el('prefsForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => state.patched.length === 1);
   assert.equal(state.patched[0].body.landing_page, '/');
+});
+
+test('a framework catalogue that cannot load still offers the saved default framework', async (t) => {
+  const { ui } = await account(t, {
+    preferences: { default_framework: '<b>LEGACY</b>' },
+    // The catalogue endpoint comes from the UI configuration; this one is down.
+    vendor: { getUiConfig: () => ({ framework: { endpoint: '/api/v1/frameworks-down' } }) },
+  });
+  await settle(() => ui.el('prefDefaultFramework').disabled === false);
+  assert.deepEqual(
+    [...ui.el('prefDefaultFramework').options].map((o) => [o.value, o.textContent]),
+    [
+      ['', 'Use system default'],
+      ['<b>LEGACY</b>', '<b>LEGACY</b>'],
+    ],
+  );
+  assert.equal(ui.el('prefDefaultFramework').querySelector('b'), null);
+  assert.equal(ui.el('prefDefaultFramework').value, '<b>LEGACY</b>');
+
+  const unsaved = await account(t, {
+    vendor: { getUiConfig: () => ({ framework: { endpoint: '/api/v1/frameworks-down' } }) },
+  });
+  await settle(() => unsaved.ui.el('prefDefaultFramework').disabled === false);
+  assert.deepEqual(
+    [...unsaved.ui.el('prefDefaultFramework').options].map((o) => o.value),
+    [''],
+  );
+});
+
+test('Refresh fetches my questions again and shows a later failure in the card', async (t) => {
+  const fail = {};
+  const { ui, state } = await account(t, { query: '#questions', tabs: fakeTabs(), fail });
+  await settle(() => ui.el('myQuestionsTbody').querySelectorAll('tr').length === 3);
+  const requests = () => state.gets.filter((g) => g.startsWith('/api/v1/me/questions')).length;
+  assert.equal(requests(), 1);
+
+  // Re-showing the tab reuses the loaded list; Refresh asks again.
+  showTab(ui, 'my-questions-tab');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(requests(), 1);
+  ui.el('myQuestionsRefresh').click();
+  await settle(() => requests() === 2);
+  await settle(() => ui.el('myQuestionsTbody').querySelectorAll('tr').length === 3);
+  assert.equal(state.bell, 2);
+
+  fail['/api/v1/me/questions'] = true;
+  ui.el('myQuestionsRefresh').click();
+  await settle(() => ui.el('myQuestionsStatus').textContent.includes('Offline'));
+  assert.equal(ui.el('myQuestionsStatus').textContent, 'Failed to load questions: Error: Offline');
+  assert.equal(ui.el('myQuestionsTableWrap').style.display, 'none');
 });

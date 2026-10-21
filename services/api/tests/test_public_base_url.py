@@ -86,3 +86,83 @@ def test_processes_refuse_to_start_without_a_public_origin(module):
 
     started = start({**env, "KEEN_PUBLIC_BASE_URL": "https://keen.example.com"})
     assert started.returncode == 0, started.stderr
+
+
+# Other settings validators: each refuses values outside its allowed set with a
+# message naming the variable, so a misconfigured deployment fails at start-up.
+
+
+def test_demo_mode_needs_an_aware_expiry_and_an_https_consultation_link():
+    from datetime import datetime, timezone
+
+    expires = datetime(2027, 1, 1, tzinfo=timezone.utc)
+    assert Settings(demo_mode=True, demo_expires_at=expires).demo_mode is True
+    with pytest.raises(ValidationError, match="timezone-aware expiry"):
+        Settings(demo_mode=True)
+    with pytest.raises(ValidationError, match="timezone-aware expiry"):
+        Settings(demo_mode=True, demo_expires_at=datetime(2027, 1, 1))
+    for link in (
+        "http://mig5.net/",
+        "https://",
+        "https://user@mig5.net/",
+        "javascript:alert(1)",
+    ):
+        with pytest.raises(ValidationError, match="must be HTTPS"):
+            Settings(
+                demo_mode=True, demo_expires_at=expires, demo_consultation_url=link
+            )
+    # Outside demo mode the link is not checked, so a plain deployment starts.
+    assert Settings(demo_consultation_url="http://ignored.example/").demo_mode is False
+
+
+def test_mfa_policy_must_name_a_known_scope():
+    for value in ("optional", "admins", "all"):
+        assert Settings(mfa_policy=value).mfa_policy == value
+    for value in ("Admins", "everyone", ""):
+        with pytest.raises(ValidationError, match="MFA policy must be"):
+            Settings(mfa_policy=value)
+
+
+def test_artifact_storage_backend_is_normalised_or_refused():
+    assert Settings(artifact_storage_backend=" S3 ").artifact_storage_backend == "s3"
+    for value in ("", "minio", "filesystem"):
+        with pytest.raises(ValidationError, match="KEEN_ARTIFACT_STORAGE_BACKEND"):
+            Settings(artifact_storage_backend=value)
+
+
+def test_s3_compatibility_mode_accepts_hyphenated_spelling_and_refuses_others():
+    assert Settings(s3_compatibility_mode="S3-Compatible").s3_compatibility_mode == (
+        "s3_compatible"
+    )
+    assert Settings(s3_compatibility_mode="").s3_compatibility_mode == "auto"
+    with pytest.raises(ValidationError) as refused:
+        Settings(s3_compatibility_mode="minio")
+    assert "KEEN_S3_COMPATIBILITY_MODE must be one of: auto, aws, s3_compatible" in str(
+        refused.value
+    )
+
+
+def test_event_data_masking_mode_is_normalised_or_refused():
+    assert Settings(event_data_masking=" Samples ").event_data_masking == "samples"
+    assert Settings(event_data_masking="").event_data_masking == "false"
+    with pytest.raises(ValidationError, match="KEEN_EVENT_DATA_MASKING must be"):
+        Settings(event_data_masking="yes")
+
+
+def test_scheduled_audit_lead_time_is_a_whole_number_of_days():
+    assert (
+        Settings(scheduled_audit_create_days_ahead=0).scheduled_audit_create_days_ahead
+        == 0
+    )
+    assert (
+        Settings(
+            scheduled_audit_create_days_ahead="7"
+        ).scheduled_audit_create_days_ahead
+        == 7
+    )
+    with pytest.raises(ValidationError, match="non-negative integer"):
+        Settings(scheduled_audit_create_days_ahead=-1)
+    # The validator itself refuses text when called with an unparsed value.
+    with pytest.raises(ValueError, match="non-negative integer"):
+        Settings.validate_scheduled_audit_create_days_ahead("soon")
+    assert Settings.validate_scheduled_audit_create_days_ahead(None) == 0

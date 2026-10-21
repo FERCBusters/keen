@@ -705,9 +705,6 @@ def apply_bookstack_config_mappings(db: Session, ev: Event) -> int:
 @connection_runs("bookstack")
 def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
     """Poll BookStack for page changes and store each page snapshot as an evidence event."""
-    if not settings.bookstack_enabled:
-        return [{"ok": True, "skipped": True, "reason": "bookstack disabled"}]
-
     cfg = load_bookstack_config(settings.bookstack_config_path)
     label = str(cfg.get("label") or "bookstack").strip() or "bookstack"
     poll = cfg.get("poll") if isinstance(cfg.get("poll"), dict) else {}

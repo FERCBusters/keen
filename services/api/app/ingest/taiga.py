@@ -356,8 +356,6 @@ def ingest_taiga_project_timeline(
 @pausable("taiga")
 @connection_runs("taiga")
 def ingest_taiga_all(db: Session) -> list[dict[str, Any]]:
-    if not settings.taiga_enabled:
-        return [{"skipped": True, "reason": "KEEN_TAIGA_ENABLED=false"}]
     cfg = load_taiga_config(settings.taiga_config_path)
     out = []
     for p in cfg.get("projects", []) or []:

@@ -163,3 +163,37 @@ def test_apply_user_source_overrides():
     assert sm.apply_user_source_overrides(meta, {"taiga": "pink"}) is meta
     assert sm.apply_user_source_overrides(meta, None) is meta
     assert sm.apply_user_source_overrides(meta, []) is meta
+
+
+def test_environment_overrides_apply_to_configured_sources_at_load(monkeypatch):
+    # KEEN_SOURCE_NAME_* and KEEN_SOURCE_COLOR_* win over catalogue values for
+    # configured sources; blank names, unusable colours and keys without a
+    # source name are ignored, so the metadata stays usable.
+    sm._configured_source_meta.cache_clear()
+    documents = {
+        "taiga": {"ui_name": "Tracker", "ui_color": "#00aa00"},
+        "jenkins": {"ui_name": "CI"},
+        # A providers section that is no mapping contributes nothing.
+        "webhooks": {"providers": ["alarm-monitor"]},
+    }
+    broken_session = MagicMock()
+    broken_session.__enter__ = MagicMock(side_effect=RuntimeError("db is down"))
+    monkeypatch.setenv("KEEN_SOURCE_NAME_TAIGA", " Tickets ")
+    monkeypatch.setenv("KEEN_SOURCE_COLOR_TAIGA", "0f0f0f")
+    monkeypatch.setenv("KEEN_SOURCE_NAME_JENKINS", "   ")
+    monkeypatch.setenv("KEEN_SOURCE_COLOR_JENKINS", "not-a-colour")
+    monkeypatch.setenv("KEEN_SOURCE_NAME_", "nameless")
+    monkeypatch.setenv("KEEN_SOURCE_COLOR_", "#123456")
+    monkeypatch.setenv("KEEN_SOURCE_NAME_DIARY", "Journal")
+    with (
+        patch.object(sm, "load_document", lambda src, path: documents.get(src, {})),
+        patch("app.db.session.SessionLocal", lambda: broken_session),
+    ):
+        meta = sm._configured_source_meta(7)
+    assert meta["taiga"] == {"label": "Tickets", "color": "#0F0F0F"}
+    assert meta["jenkins"] == {"label": "CI"}
+    # Sources that only exist in the environment are resolved at lookup time.
+    assert "diary" not in meta and "" not in meta
+    assert not [key for key in meta if key.startswith("webhook:")]
+    with patch.object(sm, "_configured_source_meta", return_value=meta):
+        assert sm.get_source_meta("diary").label == "Journal"

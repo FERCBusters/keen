@@ -41,14 +41,19 @@ async function clausePage(t, options = {}) {
   const ui = await page(t, 'clause', {
     query: options.query ?? '&id=k1',
     me: options.me || { is_admin: true },
+    setup: options.setup,
     get: async (u) => {
       const p = u.pathname;
       if (p === '/api/v1/clauses/k1/controls') {
         if (fail.clause) throw new Error('Clause offline');
         return { clause: structuredClone(state.clause), items: structuredClone(state.linked) };
       }
-      if (p === '/api/v1/clauses/k1/changelog') return { items: options.changelog || [] };
-      if (p === '/api/v1/controls')
+      if (p === '/api/v1/clauses/k1/changelog') {
+        if (fail.changelog) throw new Error('Log offline');
+        return { items: options.changelog || [] };
+      }
+      if (p === '/api/v1/controls') {
+        if (fail.controls) throw new Error('Catalogue offline');
         return {
           items: [
             { id: 'c1', ref: 'A1', title: 'Access' },
@@ -57,6 +62,7 @@ async function clausePage(t, options = {}) {
             { id: 'k9', ref: '9', type: 'clause' },
           ],
         };
+      }
       if (p === '/api/v1/clauses/k1/pestle') {
         if (fail.pestle) throw new Error('PESTLE offline');
         return {
@@ -350,4 +356,29 @@ test('clause load failures and a missing id are reported', async (t) => {
     },
   });
   assert.equal(missing.el('status').textContent, 'Missing clause id.');
+});
+
+test('a deep-linked tab is shown through the tab component, and a failed changelog is reported in its pane', async (t) => {
+  const shown = [];
+  const { ui } = await clausePage(t, {
+    query: '&id=k1&tab=changelog',
+    fail: { changelog: true },
+    setup(window) {
+      window.bootstrap = {
+        Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+      };
+    },
+  });
+  assert.deepEqual(shown, ['clauseChangelogTab']);
+  await settle(() => /Failed to load changelog/.test(ui.el('clauseChangelog').textContent));
+  assert.equal(ui.el('clauseChangelog').textContent.trim(), 'Failed to load changelog.');
+});
+
+test('a control catalogue that cannot load is reported when editing linked controls', async (t) => {
+  const { ui } = await clausePage(t, { fail: { controls: true } });
+  ui.el('editLinkedControls').click();
+  await settle(() => /Failed to load controls/.test(ui.el('status').textContent));
+  assert.equal(ui.el('status').textContent, 'Failed to load controls: Error: Catalogue offline');
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+  assert.equal(ui.el('adminControlsList').querySelector('select'), null);
 });

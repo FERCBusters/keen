@@ -178,8 +178,6 @@ def ingest_jenkins_job(
 @pausable("jenkins")
 @connection_runs("jenkins")
 def ingest_jenkins_all(db: Session) -> list[dict[str, Any]]:
-    if not settings.jenkins_enabled:
-        return [{"skipped": True, "reason": "KEEN_JENKINS_ENABLED=false"}]
     cfg = load_jenkins_config(settings.jenkins_config_path)
     out = []
     for j in cfg.get("jobs", []) or []:

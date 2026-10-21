@@ -76,3 +76,78 @@ test('profile revocation is explicit and revoked profiles have no reactivation c
   await controller.refresh(true);
   assert.equal(host.querySelector('[data-create]').disabled, true);
 });
+
+test('creation errors are shown as the server’s detail, and the key can be revealed or copied', async (t) => {
+  let failure = null;
+  const copied = [];
+  const ui = await loadUi('pages/agent-enrollment.js', {
+    html: '<section id="host"></section>',
+    setup(window) {
+      Object.defineProperty(window.navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (text) => {
+            if (failure === 'clipboard') throw new Error('denied');
+            copied.push(text);
+          },
+        },
+      });
+    },
+    vendor: {
+      apiGet: async () => ({ profiles: [] }),
+      apiPost: async () => {
+        if (failure) throw new Error(failure);
+        return {
+          profile: { id: 'p', name: 'Fleet', state: 'active', token_days: 1, allowed_cidrs: [] },
+          bootstrap_key: 'ke_secret',
+        };
+      },
+    },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  const controller = ui.api.enrollmentProfiles(host, async () => {});
+  await controller.refresh(false);
+  assert.match(
+    host.textContent,
+    /No enrollment profiles\. Individual agents can still be registered separately\./,
+  );
+  const status = () => host.querySelector('[data-status]').textContent;
+  const submit = () => host.querySelector('form').onsubmit({ preventDefault() {} });
+  host.querySelector('#ep-name').value = 'Fleet';
+  host.querySelector('#ep-days').value = '1';
+
+  // A malformed label is refused before any request.
+  host.querySelector('#ep-labels').value = 'environment';
+  await submit();
+  assert.equal(status(), 'Use key=value for each label.');
+  host.querySelector('#ep-labels').value = '';
+
+  failure = '{"detail":"Name already in use"}';
+  await submit();
+  assert.equal(status(), 'Name already in use');
+  failure = '{"detail":[{"msg":"token_days too large"}]}';
+  await submit();
+  assert.equal(status(), 'Check the profile settings.');
+  failure = 'Network down';
+  await submit();
+  assert.equal(status(), 'Network down');
+  assert.equal(host.querySelector('[data-create]').disabled, false);
+
+  failure = null;
+  await submit();
+  const secret = host.querySelector('#ep-secret');
+  assert.equal(secret.value, 'ke_secret');
+  host.querySelector('[data-reveal]').onclick();
+  assert.equal(secret.type, 'text');
+  assert.equal(host.querySelector('[data-reveal]').textContent, 'Hide key');
+  host.querySelector('[data-reveal]').onclick();
+  assert.equal(secret.type, 'password');
+  assert.equal(host.querySelector('[data-reveal]').textContent, 'Show key');
+  await host.querySelector('[data-copy]').onclick();
+  assert.deepEqual(copied, ['ke_secret']);
+  assert.equal(status(), 'Bootstrap key copied.');
+  failure = 'clipboard';
+  await host.querySelector('[data-copy]').onclick();
+  assert.equal(status(), 'Use Show key to copy it manually.');
+});

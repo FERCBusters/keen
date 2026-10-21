@@ -617,3 +617,180 @@ test('SWOT question authors can reply to their own threads only', async (t) => {
     body: { body: 'Thanks, resolved' },
   });
 });
+
+test('a kanban drag starts only from the card, not its controls, and drop targets clear when left', async (t) => {
+  const ui = await loadUi('pages/planning-views.js', {
+    vendor: { withFramework: (url) => url },
+    html: '<main id="host"></main>',
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  const moves = [];
+  ui.api.renderBoard(
+    host,
+    [{ id: 'one', title: 'Train operators', kind: 'threat', significance: 3, status: 'planned' }],
+    { view: 'kanban', framework: 'F1', onMove: (...args) => moves.push(args) },
+  );
+  const card = host.querySelector('[data-drag-id="one"]');
+  const select = card.querySelector('select');
+  const transfer = { setData() {}, effectAllowed: '', dropEffect: '' };
+  const drag = (type, target, extra = {}) => {
+    const event = new ui.window.Event(type, { bubbles: true, cancelable: true });
+    Object.assign(event, { dataTransfer: transfer }, extra);
+    target.dispatchEvent(event);
+    return event;
+  };
+  // Dragging the status menu is not a card move.
+  const fromSelect = drag('dragstart', select);
+  assert.equal(fromSelect.defaultPrevented, true);
+  assert.equal(card.classList.contains('planning-dragging'), false);
+  const column = host.querySelector('[data-column="in_progress"]');
+  drag('dragover', column);
+  assert.equal(column.classList.contains('planning-drop-target'), false);
+
+  // Dragging the card itself highlights the column under it until the pointer leaves.
+  drag('dragstart', card);
+  assert.equal(card.classList.contains('planning-dragging'), true);
+  drag('dragover', column);
+  assert.equal(column.classList.contains('planning-drop-target'), true);
+  drag('dragleave', column, { relatedTarget: column.querySelector('h2') });
+  assert.equal(column.classList.contains('planning-drop-target'), true);
+  drag('dragleave', column, { relatedTarget: host });
+  assert.equal(column.classList.contains('planning-drop-target'), false);
+  drag('dragover', column);
+  drag('drop', column);
+  assert.deepEqual(moves, [['one', 'in_progress']]);
+  assert.equal(host.querySelector('.planning-dragging, .planning-drop-target'), null);
+});
+
+test('the timeline needs D3, and plots target-only items as diamonds', async (t) => {
+  const without = await loadUi('pages/planning-views.js', {
+    vendor: { withFramework: (url) => url },
+    html: '<main id="host"></main>',
+  });
+  t.after(without.close);
+  const bare = without.document.getElementById('host');
+  without.api.renderTimeline(
+    bare,
+    [{ id: 'one', title: 'Dated', kind: 'threat', target_date: '2026-11-01' }],
+    'F1',
+  );
+  assert.equal(bare.textContent, 'Timeline unavailable. Use the board to view dates.');
+  assert.equal(bare.querySelector('svg'), null);
+
+  const ui = await loadUi('pages/planning-views.js', {
+    vendor: { withFramework: (url) => url },
+    html: '<main id="host"></main>',
+    setup(window) {
+      window.d3 = d3;
+    },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  ui.api.renderTimeline(
+    host,
+    [
+      {
+        id: 'done',
+        title: 'Completed work',
+        kind: 'strength',
+        status: 'completed',
+        start_date: '2026-10-01',
+        target_date: '2026-10-20',
+      },
+      { id: 'target', title: 'Target only', kind: 'threat', target_date: '2026-11-01' },
+    ],
+    'F1',
+  );
+  assert.equal(host.querySelectorAll('rect').length, 1);
+  assert.equal(host.querySelector('rect').getAttribute('fill'), '#198754');
+  const diamonds = [...host.querySelectorAll('path[fill="#6f42c1"]')];
+  assert.equal(diamonds.length, 1);
+  assert.match(diamonds[0].getAttribute('transform'), /^translate\(/);
+  assert.match(host.textContent, /2 items with target dates are plotted; 0 without/);
+});
+
+test('the graph lists controls and clauses as records and breaks unbroken words', async (t) => {
+  const ui = await loadUi('pages/planning-views.js', {
+    vendor: { withFramework: (url, fw) => `${url}&framework=${fw}` },
+    html: '<main id="host"></main>',
+    setup(window) {
+      window.d3 = d3;
+    },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  const long = 'x'.repeat(120);
+  ui.api.renderGraph(
+    host,
+    {
+      title: long,
+      significance: 2,
+      controls: [{ id: 'c 1', ref: 'A.5.1', title: 'Policies' }],
+      clauses: [{ id: 'k1', ref: '4.1' }],
+    },
+    'A',
+  );
+  const links = [...host.querySelectorAll('svg a')].map((a) => [
+    a.getAttribute('aria-label'),
+    a.getAttribute('href'),
+  ]);
+  assert.deepEqual(links, [
+    ['Control: A.5.1 Policies', '/control.html?id=c%201&framework=A'],
+    ['Clause: 4.1 ', '/clause.html?id=k1&framework=A'],
+  ]);
+  // A word longer than the column is split so every character stays visible.
+  const rootLines = [...host.querySelectorAll('svg text')[0].querySelectorAll('tspan')].map(
+    (x) => x.textContent,
+  );
+  assert.deepEqual(rootLines, ['x'.repeat(38), 'x'.repeat(38), 'x'.repeat(38), 'x'.repeat(6)]);
+});
+
+test('a second status change while one is saving is ignored, and a failed refresh is reported', async (t) => {
+  let release;
+  let listFails = false;
+  const ui = await page(t, 'isms-swot', {
+    get(url) {
+      if (url.pathname === '/api/v1/isms/meta') return { controls: [], clauses: [] };
+      if (url.pathname === '/api/v1/isms/swot') {
+        if (listFails) throw new Error('List offline');
+        return {
+          items: [
+            {
+              id: 's1',
+              title: 'Continuity',
+              kind: 'threat',
+              significance: 4,
+              status: 'defined',
+              version: 3,
+            },
+          ],
+          total: 1,
+        };
+      }
+      throw Error('Unexpected GET ' + url);
+    },
+    patch: () => new Promise((resolve, reject) => (release = reject)),
+  });
+  const doc = ui.window.document;
+  await settle(() => doc.querySelector('[data-status-id="s1"]'));
+  const move = (status) => {
+    const select = doc.querySelector('[data-status-id="s1"]');
+    select.value = status;
+    select.dispatchEvent(new ui.window.Event('change'));
+  };
+  move('planned');
+  await settle(() => release);
+  assert.equal(doc.getElementById('planningView').getAttribute('aria-busy'), 'true');
+  move('completed');
+  // The board is redrawn from the stored status and nothing else is sent.
+  assert.equal(doc.querySelector('[data-status-id="s1"]').value, 'defined');
+  assert.equal(ui.calls.filter((c) => c.method === 'PATCH').length, 1);
+
+  listFails = true;
+  release(new Error('Status refused'));
+  await settle(() => ui.el('status').textContent === 'Error: List offline');
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+  assert.equal(doc.getElementById('planningView').hasAttribute('aria-busy'), false);
+  assert.equal(doc.querySelector('[data-status-id="s1"]').value, 'defined');
+});

@@ -39,12 +39,9 @@ _VIZ_MODES = {"graph", "heatmap", "sunburst_source", "sunburst_control", "histog
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-def _normalize_source_colors(raw: dict | None) -> dict[str, str]:
-    """Validate/normalize a user-supplied source->hex mapping."""
-    if raw is None:
-        return {}
-    if not isinstance(raw, dict):
-        raise DomainError(status_code=400, detail="source_colors must be an object")
+def _normalize_source_colors(raw: dict[str, str]) -> dict[str, str]:
+    """Validate/normalize a user-supplied source->hex mapping; the request
+    schema has already established that it is a mapping of strings."""
     if len(raw) > 500:
         raise DomainError(status_code=400, detail="source_colors is too large")
     out: dict[str, str] = {}
@@ -101,10 +98,6 @@ def _validate_default_visualisation(raw: dict | None) -> dict | None:
     """
     if raw is None:
         return None
-    if not isinstance(raw, dict):
-        raise DomainError(
-            status_code=400, detail="default_visualisation must be an object"
-        )
 
     mode = _validate_visualisation_mode(raw.get("mode"))
     out: dict = {"mode": mode}
@@ -225,12 +218,8 @@ def _validate_landing_page(raw: str | None, *, is_admin: bool) -> str:
             continue
         if k == "offset":
             continue
-        if val is None:
-            continue
-        vv = str(val)
-        if vv == "":
-            continue
-        pairs.append((k, vv))
+        # Blank values are dropped by parse_qsl itself.
+        pairs.append((k, val))
 
     query = urlencode(pairs, doseq=True)
     out = path + (("?" + query) if query else "")
@@ -564,8 +553,6 @@ def upsert_my_saved_search(
     name = (payload.name or "").strip()
     if not name:
         raise DomainError(status_code=400, detail="name is required")
-    if len(name) > 128:
-        raise DomainError(status_code=400, detail="name is too long")
 
     url = _normalize_saved_search_url(payload.url)
 

@@ -60,6 +60,7 @@ const clauseTree = {
 async function controlPage(t, options = {}) {
   const state = { control: options.control || baseControl(), patched: [], posted: [], removed: [] };
   const fail = options.fail || {};
+  const empty = options.empty || {};
   const ui = await page(t, 'control', {
     query: options.query ?? '&id=c1',
     me: options.me || { is_admin: true },
@@ -70,6 +71,7 @@ async function controlPage(t, options = {}) {
     ],
     setup(window) {
       window.CSS = { escape: (v) => String(v).replace(/[^a-zA-Z0-9_-]/g, (c) => '\\' + c) };
+      options.setup?.(window);
     },
     get: async (u) => {
       const p = u.pathname;
@@ -77,7 +79,8 @@ async function controlPage(t, options = {}) {
         if (fail.control) throw new Error('Control offline');
         return structuredClone(state.control);
       }
-      if (p === '/api/v1/controls/c1/cross-framework')
+      if (p === '/api/v1/controls/c1/cross-framework') {
+        if (fail.cross) throw new Error('Links offline');
         return {
           items: [
             {
@@ -90,14 +93,19 @@ async function controlPage(t, options = {}) {
             },
           ],
         };
-      if (p === '/api/v1/controls' && u.searchParams.get('framework') === 'B')
+      }
+      if (p === '/api/v1/controls' && u.searchParams.get('framework') === 'B') {
+        if (fail.sourceControls) throw new Error('Catalogue B offline');
         return {
           items: [
             { id: 'b7', ref: 'B7', title: '<b>Backup</b>' },
             { id: 'b8', ref: 'B8', type: 'control' },
           ],
         };
-      if (p === '/api/v1/controls/c1/risks')
+      }
+      if (p === '/api/v1/controls/c1/risks') {
+        if (fail.risks) throw new Error('Risks forbidden');
+        if (empty.risks) return { items: [] };
         return {
           items: [
             {
@@ -114,8 +122,10 @@ async function controlPage(t, options = {}) {
             { id: 'r2', asset: 'Laptop', risk_score: 9, residual_risk_score: 0 },
           ],
         };
+      }
       if (p === '/api/v1/controls/c1/interested-parties') {
         if (fail.parties) throw new Error('IP offline');
+        if (empty.parties) return { items: [] };
         return {
           items: [
             {
@@ -131,7 +141,8 @@ async function controlPage(t, options = {}) {
           ],
         };
       }
-      if (p === '/api/v1/controls/c1/isms')
+      if (p === '/api/v1/controls/c1/isms') {
+        if (fail.isms) throw new Error('ISMS offline');
         return {
           swot: [{ id: 's1', title: 'Strength <b>x</b>', updated_at: '2026-01-01' }],
           objectives: [{ requirement: 'Reduce incidents' }],
@@ -141,7 +152,9 @@ async function controlPage(t, options = {}) {
           effectiveness_measures: [{ id: 'm1', summary: 'MTTR' }],
           meetings: [{ id: 'mt1', title: 'Review' }, { title: 'No id' }],
         };
-      if (p === '/api/v1/controls/c1/changelog')
+      }
+      if (p === '/api/v1/controls/c1/changelog') {
+        if (fail.changelog) throw new Error('Changelog offline');
         return {
           items: [
             {
@@ -152,11 +165,14 @@ async function controlPage(t, options = {}) {
             },
           ],
         };
+      }
       if (p === '/api/v1/clauses') {
         if (fail.clauses) throw new Error('Clauses offline');
+        if (empty.clauseTree) return { items: [], tree: [] };
         return clauseTree;
       }
-      if (p === '/api/v1/events/facets')
+      if (p === '/api/v1/events/facets') {
+        if (fail.facets) throw new Error('Facets offline');
         return {
           sources: [
             { source: 'github', count: 2 },
@@ -164,8 +180,10 @@ async function controlPage(t, options = {}) {
             { source: 'none', count: 0 },
           ],
         };
+      }
       if (p === '/api/v1/events') {
         if (fail.events) throw new Error('Events offline');
+        if (empty.events) return { total: 0, items: [] };
         return {
           total: 120,
           items: [
@@ -183,16 +201,19 @@ async function controlPage(t, options = {}) {
     },
     patch: async (u, b) => {
       state.patched.push({ path: u.pathname, body: plain(b) });
+      if (fail.patch) throw new Error('Patch refused');
       if (u.pathname.endsWith('/justification')) state.control.justification = b.justification;
       if (u.pathname.endsWith('/upstream-url')) state.control.upstream_url = b.upstream_url;
       return { ok: true };
     },
     post: async (u, b) => {
       state.posted.push({ path: u.pathname, body: plain(b) });
+      if (fail.post) throw new Error('Post refused');
       return { ok: true };
     },
     remove: async (u) => {
       state.removed.push(u.pathname);
+      if (fail.remove) throw new Error('Delete refused');
       return { ok: true };
     },
   });
@@ -560,4 +581,129 @@ test('a control page without an id explains the missing parameter', async (t) =>
     },
   });
   assert.equal(ui.el('status').textContent, 'Missing control id.');
+});
+
+test('a control with nothing linked says so in every tab', async (t) => {
+  const { ui } = await controlPage(t, {
+    control: baseControl({ clauses: [] }),
+    empty: { risks: true, parties: true, events: true, clauseTree: true },
+    fail: { facets: true },
+  });
+  assert.equal(ui.el('clausesView').textContent, 'No clauses linked to this control.');
+  assert.equal(ui.el('clausesCount').textContent, '0');
+  assert.equal(ui.el('rows').textContent, 'No evidence matches your filters.');
+  await settle(() => /No risks mapped/.test(ui.el('risksView').textContent));
+  assert.equal(ui.el('risksCount').textContent, '0');
+  ui.el('controlInterestedPartiesTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() =>
+    /No Interested Parties mapped/.test(ui.el('interestedPartiesView').textContent),
+  );
+  // Without the facets the source filter keeps whatever it had.
+  assert.equal(ui.el('status').dataset.alert, undefined);
+  ui.el('editClauseApplicability').click();
+  await settle(() => /No clauses are loaded/.test(ui.el('adminClausesList').textContent));
+  assert.equal(ui.el('adminClausesList').querySelector('select'), null);
+});
+
+test('failed or forbidden link lookups are contained in their own panels', async (t) => {
+  const { ui } = await controlPage(t, {
+    fail: { risks: true, isms: true, changelog: true, cross: true },
+  });
+  await settle(() => ui.el('risksCard').style.display === 'none');
+  assert.equal(
+    ui.el('crossFrameworkLinks').textContent,
+    'Could not load control links: Error: Links offline',
+  );
+  ui.el('controlIsmsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /Failed to load ISMS references/.test(ui.el('controlIsmsView').textContent));
+  ui.el('controlChangelogTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /Failed to load changelog/.test(ui.el('controlChangelog').textContent));
+  // The evidence table is unaffected.
+  assert.match(ui.el('rows').textContent, /pushed/);
+});
+
+test('refused saves and link changes are reported and leave the controls usable', async (t) => {
+  const { ui, state } = await controlPage(t, {
+    fail: { patch: true, post: true, remove: true, sourceControls: true },
+    globals: { confirm: () => true },
+  });
+  ui.el('saveControlJustification').click();
+  await settle(
+    () => ui.el('status').textContent === 'Failed to save justification: Error: Patch refused',
+  );
+  assert.equal(ui.el('saveControlJustification').disabled, false);
+
+  ui.el('editClauseApplicability').click();
+  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  ui.el('saveClauseLinks').click();
+  await settle(
+    () => ui.el('status').textContent === 'Failed to save clauses: Error: Patch refused',
+  );
+  assert.equal(ui.el('saveClauseLinks').disabled, false);
+  ui.el('controlUpstreamUrl').value = 'https://guidance.example/new';
+  ui.el('saveControlUpstreamUrl').click();
+  await settle(
+    () => ui.el('status').textContent === 'Failed to save control URL: Error: Patch refused',
+  );
+  assert.equal(ui.el('saveControlUpstreamUrl').disabled, false);
+  assert.equal(state.patched.length, 3);
+
+  ui.el('crossFrameworkSource').value = 'B';
+  ui.el('crossFrameworkSource').dispatchEvent(new ui.window.Event('change'));
+  await settle(() => /Could not load source controls/.test(ui.el('status').textContent));
+  assert.equal(ui.el('crossFrameworkControl').options.length, 1);
+  ui.el('crossFrameworkControl').add(new ui.window.Option('B7', 'b7'));
+  ui.el('crossFrameworkControl').value = 'b7';
+  ui.el('crossFrameworkForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(
+    () => ui.el('status').textContent === 'Could not link controls: Error: Post refused',
+  );
+  ui.el('crossFrameworkView').value = 'B';
+  ui.el('crossFrameworkView').dispatchEvent(new ui.window.Event('change'));
+  ui.el('crossFrameworkLinks').querySelector('[data-remove-cross-link]').click();
+  await settle(
+    () => ui.el('status').textContent === 'Could not remove control link: Error: Delete refused',
+  );
+  assert.deepEqual(state.removed, ['/api/v1/controls/c1/cross-framework/x1']);
+});
+
+test('a saved guidance URL becomes the Guidance link, and a failed saved search is reported', async (t) => {
+  const { ui, state } = await controlPage(t, {
+    control: baseControl({ upstream_url: null }),
+    globals: { prompt: () => 'My search' },
+  });
+  assert.equal(ui.el('ctrlLinks').querySelector('a'), null);
+  ui.el('editClauseApplicability').click();
+  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  ui.el('controlUpstreamUrl').value = 'https://guidance.example/a51 ';
+  ui.el('saveControlUpstreamUrl').click();
+  await settle(() => ui.el('ctrlLinks').querySelector('a'));
+  assert.equal(state.patched[0].body.upstream_url, 'https://guidance.example/a51');
+  const guidance = ui.el('ctrlLinks').querySelector('a');
+  assert.equal(guidance.getAttribute('href'), 'https://guidance.example/a51');
+  assert.equal(guidance.getAttribute('rel'), 'noopener noreferrer');
+  assert.equal(guidance.textContent.trim(), 'Guidance');
+
+  const refused = await controlPage(t, {
+    fail: { post: true },
+    globals: { prompt: () => 'My search' },
+  });
+  refused.ui.el('saveSearch').click();
+  await settle(() => refused.state.posted.length === 1);
+  await settle(() => refused.ui.el('status').textContent === 'Failed to save: Error: Post refused');
+  assert.equal(refused.ui.el('status').dataset.alert, 'danger');
+});
+
+test('a deep-linked tab is shown through Bootstrap when it is available', async (t) => {
+  const shown = [];
+  const { ui } = await controlPage(t, {
+    query: '&id=c1&tab=isms',
+    setup(window) {
+      window.bootstrap = {
+        Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+      };
+    },
+  });
+  assert.deepEqual(shown, ['controlIsmsTab']);
+  assert.ok(ui.el('controlIsmsView').querySelector('table'));
 });

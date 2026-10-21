@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import uuid
@@ -300,8 +301,6 @@ def _validate_clause_evidence_url(raw: str | None) -> str | None:
     value = (raw or "").strip()
     if not value:
         return None
-    if len(value) > 2048:
-        raise DomainError(status_code=400, detail="evidence URL is too long")
     # Browsers read a backslash as "/" and drop tabs and newlines, so such a path
     # can resolve off-site while looking local.
     if "\\" in value or any(ord(c) < 32 or ord(c) == 127 for c in value):
@@ -323,9 +322,8 @@ def _validate_clause_evidence_url(raw: str | None) -> str | None:
 
 
 def _validate_clause_evidence_title(raw: str | None, fallback_url: str) -> str:
+    # The request schema bounds the title's length.
     title = (raw or "").strip()
-    if len(title) > 256:
-        raise DomainError(status_code=400, detail="Evidence title is too long")
     return title or fallback_url
 
 
@@ -943,8 +941,6 @@ def admin_create_permission(
         raise DomainError(
             status_code=400, detail="Permission code cannot contain whitespace"
         )
-    if len(code) > 128:
-        raise DomainError(status_code=400, detail="Permission code too long")
 
     existing = db.query(Permission).filter(Permission.code == code).one_or_none()
     if existing:
@@ -995,8 +991,6 @@ def admin_create_group(*, payload: GroupCreatePayload, user, db: Session) -> Gro
     name = normalize_group_name(payload.name)
     if not name:
         raise DomainError(status_code=400, detail="Group name is required")
-    if len(name) > 64:
-        raise DomainError(status_code=400, detail="Group name too long")
 
     if db.query(Group.id).filter(Group.name == name).first():
         raise DomainError(status_code=400, detail="Group name already exists")
@@ -1088,8 +1082,6 @@ def admin_update_group(
         name = normalize_group_name(payload.name)
         if not name:
             raise DomainError(status_code=400, detail="Group name is required")
-        if len(name) > 64:
-            raise DomainError(status_code=400, detail="Group name too long")
         existing = (
             db.query(Group.id).filter(Group.name == name, Group.id != gid).first()
         )
@@ -1538,9 +1530,8 @@ async def admin_diary(
         links=links,
         timestamp=ts,
     )
-    eid = _try_uuid(res.get("event_id") or "")
-    if not eid:
-        return res
+    # The store returns the event, new or already recorded, in every case.
+    eid = uuid.UUID(res["event_id"])
 
     # Manual control mappings (chosen explicitly in the UI)
     created_mappings = 0
@@ -1571,16 +1562,28 @@ async def admin_diary(
     if uploads:
         base_dt = ts or datetime.now(timezone.utc)
         date_part = base_dt.date().isoformat()
-        for i, up in enumerate(uploads[:10]):
-            # FormData may contain plain strings as well; ignore those.
-            if not hasattr(up, "read"):
-                continue
+        # A repeated entry is the same event: a file it already holds is kept
+        # once, and new files are numbered after the existing ones.
+        held = {
+            digest
+            for (digest,) in db.query(Artifact.sha256).filter(
+                Artifact.event_id == eid,
+                Artifact.kind.in_(("diary_image", "diary_attachment")),
+            )
+        }
+        number = len(held)
+        for up in uploads[:10]:
             try:
                 data = await up.read()
             except Exception:
                 continue
             if not data:
                 continue
+            digest = hashlib.sha256(data).hexdigest()
+            if digest in held:
+                continue
+            held.add(digest)
+            number += 1
             ctype_up = getattr(up, "content_type", None) or "application/octet-stream"
             kind = (
                 "diary_image" if ctype_up.startswith("image/") else "diary_attachment"
@@ -1591,7 +1594,7 @@ async def admin_diary(
                 ext = ext[:12]
             if not ext:
                 ext = ".bin"
-            key = f"diary/{date_part}/{eid}/attachment-{i + 1}{ext}"
+            key = f"diary/{date_part}/{eid}/attachment-{number}{ext}"
             stored = put_bytes(key=key, data=data, content_type=ctype_up)
             art = Artifact(
                 event_id=eid,
@@ -1637,9 +1640,6 @@ def admin_update_diary(
         raise DomainError(status_code=404, detail="Event not found")
     if (e.source or "") != "diary":
         raise DomainError(status_code=400, detail="Only diary events can be edited")
-
-    if not isinstance(body, dict):
-        raise DomainError(status_code=400, detail="Invalid JSON payload")
 
     editor = getattr(context.actor, "username", None)
 

@@ -477,14 +477,18 @@ def test_one_failing_stage_never_stops_the_others(gh, monkeypatch):
 
 
 def test_collection_is_skipped_while_the_source_is_disabled(gh, monkeypatch):
+    # The scheduled entry point declines before reading configuration or
+    # contacting GitHub.
     monkeypatch.setattr(settings, "github_enabled", False)
     monkeypatch.setattr(
         github, "load_github_config", lambda path: pytest.fail("config was read")
     )
 
-    results = github.ingest_github_all.__wrapped__.__wrapped__(gh.db)
+    results = github.ingest_github_all(gh.db)
 
-    assert results == [{"skipped": True, "reason": "KEEN_GITHUB_ENABLED=false"}]
+    assert results == [
+        {"source": "github", "skipped": True, "reason": "Source type is disabled"}
+    ]
     assert gh.fake.requests == []
 
 
@@ -915,3 +919,85 @@ def test_feed_entries_without_dates_or_repository_links_are_handled(gh):
 )
 def test_event_summaries_name_what_github_reports(event, summary):
     assert github._summarize_event(event) == summary
+
+
+def test_load_config_reads_the_managed_document(monkeypatch):
+    seen = []
+
+    def load_document(name, path):
+        seen.append((name, path))
+        return {"orgs": []}
+
+    monkeypatch.setattr(github, "load_document", load_document)
+    assert github.load_github_config("fixture.yml") == {"orgs": []}
+    assert seen == [("github", "fixture.yml")]
+
+
+def test_a_token_whose_login_is_unusable_falls_back_to_the_org_dashboard(
+    gh, monkeypatch
+):
+    # /user answering without a usable login leaves no username, so the run
+    # reads the public organisation events.
+    monkeypatch.setattr(settings, "github_token", TOKEN)
+    gh.fake.routes[("api.github.com", "/user")] = httpx.Response(
+        200, json={"login": "   ", "id": 1}
+    )
+    gh.fake.routes[("api.github.com", "/orgs/acme/events")] = httpx.Response(
+        200, json=[]
+    )
+
+    result = github.ingest_github_org_events(gh.db, "acme")
+
+    assert result["mode"] == "org"
+    assert gh.fake.paths()[-1] == ("api.github.com", "/orgs/acme/events")
+
+
+def test_repository_enumeration_stops_at_a_malformed_page(gh):
+    # A repository listing that is no list ends enumeration; the repositories
+    # already read are kept and no further page is requested.
+    pages = []
+
+    def repos(request):
+        pages.append(request.url.params["page"])
+        if request.url.params["page"] == "1":
+            return httpx.Response(200, json=[{"full_name": "acme/app"}])
+        return httpx.Response(200, json={"message": "unexpected"})
+
+    gh.fake.routes[("api.github.com", "/orgs/acme/repos")] = repos
+
+    with github._client() as client:
+        listed = github._list_org_repos(client, "acme", per_page=1, max_pages=5)
+
+    assert listed == [{"full_name": "acme/app"}]
+    assert pages == ["1", "2"]
+
+
+def test_audit_summaries_name_the_repository_an_entry_concerns(audit):
+    moment = _recently()
+    audit.serve([{**_audit(1, moment, user="alice"), "repo": "acme/app"}])
+
+    github.ingest_github_org_auditlog(audit.db, "acme")
+
+    (event,) = audit.events()
+    # The actor is named once, so a target equal to the actor is left out.
+    assert event.summary == "github org acme org.add_member repo=acme/app by alice"
+
+
+def test_feed_entries_without_any_link_store_no_repository(gh):
+    feed = "https://feeds.example/bare.atom"
+    gh.fake.routes[("feeds.example", "/bare.atom")] = httpx.Response(
+        200,
+        text=(
+            '<feed xmlns="http://www.w3.org/2005/Atom">'
+            "<entry><id>tag:github.com,2008:push/9</id><title>no link</title>"
+            "<updated>2099-01-03T00:00:00Z</updated></entry></feed>"
+        ),
+    )
+
+    result = github.ingest_github_atom_feed(gh.db, feed)
+
+    assert result["created_events"] == 1
+    (event,) = gh.events()
+    pointer = event.raw_pointer["github"]
+    assert pointer["link"] is None and pointer.get("repo") is None
+    assert event.summary == "github feed: no link"

@@ -13,7 +13,7 @@ fi
 # coverage rises.
 node services/ui/tests/node_modules/c8/bin/c8.js \
   --all --include='services/ui/public/app.js' --include='services/ui/public/pages/**/*.js' \
-  --check-coverage --lines 96 --branches 72 --functions 97 \
+  --check-coverage --lines 99 --branches 76 --functions 98 \
   --reporter=text-summary --reporter=json-summary --reporter=lcov --reporter=html \
   --reports-dir="$report_dir/frontend-coverage" \
   node --experimental-vm-modules --test \

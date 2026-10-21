@@ -387,6 +387,12 @@ test('the layout dialog previews both orientations and remembers the choice', as
   $('pdfOptLandscape').checked = true;
   $('pdfOptLandscape').dispatchEvent(new ui.window.Event('change'));
   assert.equal(option('landscape').classList.contains('selected'), true);
+  // The radio buttons choose a layout as the preview cards do.
+  $('pdfOptPortrait').checked = true;
+  $('pdfOptPortrait').dispatchEvent(new ui.window.Event('change'));
+  assert.equal(option('portrait').classList.contains('selected'), true);
+  $('pdfOptLandscape').checked = true;
+  $('pdfOptLandscape').dispatchEvent(new ui.window.Event('change'));
   $('pdfOptionsGenerate').click();
   await first;
 
@@ -635,8 +641,47 @@ with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as z:
   );
   assert.equal(button.disabled, false);
   assert.equal(button.textContent, 'Download all artifacts as evidence');
+  // The banner clears on its own once the download has started.
+  assert.equal(ui.document.getElementById('status').style.display, '');
+  ui.runTimers(2800);
+  assert.equal(ui.document.getElementById('status').style.display, 'none');
   ui.runTimers(10000);
   assert.deepEqual(ui.revoked, ['blob:keen/1']);
+});
+
+test('artifacts of unknown type are numbered apart inside the ZIP', async (t) => {
+  const ui = await exportPage(
+    t,
+    {},
+    { fetch: async () => new Response(new TextEncoder().encode('raw'), { headers: {} }) },
+  );
+  await ui.exporter.downloadArtifactsZip({
+    ...event,
+    artifacts: [
+      { id: 'a7', content_type: 'application/x-unknown' },
+      { id: 'a7', content_type: 'application/x-unknown' },
+      { id: 'a7', content_type: 'application/x-unknown' },
+    ],
+  });
+  const zip = Buffer.from(await ui.blobs.at(-1).arrayBuffer());
+  const listing = spawnSync(
+    'python3',
+    [
+      '-c',
+      `import io,json,sys,zipfile
+with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as z:
+ print(json.dumps([i.filename for i in z.infolist()]))
+`,
+    ],
+    { input: zip, timeout: 5000 },
+  );
+  assert.equal(listing.status, 0, listing.stderr.toString());
+  assert.deepEqual(JSON.parse(listing.stdout.toString()), [
+    stem + '-evidence.pdf',
+    stem + '-artifact-a7',
+    stem + '-artifact-a7 (2)',
+    stem + '-artifact-a7 (3)',
+  ]);
 });
 
 test('a failed artifact download stops the ZIP and releases its body', async (t) => {

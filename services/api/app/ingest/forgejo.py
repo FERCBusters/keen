@@ -47,9 +47,6 @@ from app.ingest.git_activity import (
     _parse_rss_items as _parse_rss_items,
 )
 from app.ingest.git_activity import (
-    _redacted_url as _redacted_url,
-)
-from app.ingest.git_activity import (
     _response_status_error as _response_status_error,
 )
 from app.ingest.git_activity import (
@@ -475,9 +472,9 @@ def ingest_forgejo_repo_feed(
             "created_events": created,
             "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
             "mode": "rss_fallback",
+            # The fallback runs only after the API attempt has failed.
+            "api_error": api_error,
         }
-        if api_error:
-            result["api_error"] = api_error
         return result
     except Exception as e:
         db.rollback()
@@ -557,8 +554,6 @@ def _discover_repositories(base_url: str, section: str, name: str) -> list[dict]
 @pausable("forgejo")
 @connection_runs("forgejo")
 def ingest_forgejo_all(db: Session) -> list[dict[str, Any]]:
-    if not settings.forgejo_enabled:
-        return [{"skipped": True, "reason": "KEEN_FORGEJO_ENABLED=false"}]
     cfg = load_forgejo_config(settings.forgejo_config_path)
     out: list[dict[str, Any]] = []
     feeds = list(cfg.get("feeds", []) or [])

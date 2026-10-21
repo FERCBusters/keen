@@ -60,6 +60,7 @@ async function pestleItem(t, options = {}) {
     query: options.query ?? '&id=p1',
     me: options.me || { is_admin: true, user: 'root' },
     globals: options.globals,
+    setup: options.setup,
     get: async (u) => {
       const p = u.pathname;
       if (p === '/api/v1/pestle/meta') {
@@ -115,6 +116,7 @@ async function pestleItem(t, options = {}) {
     },
     post: async (u, b) => {
       state.posted.push({ path: u.pathname, body: plain(b) });
+      if (options.postFail) throw new Error('Rejected');
       if (u.pathname === '/api/v1/pestle/items') {
         state.item = { ...item(), ...b, id: 'p1', related_controls: [] };
         return structuredClone(state.item);
@@ -123,6 +125,7 @@ async function pestleItem(t, options = {}) {
     },
     remove: async (u) => {
       state.removed.push(u.pathname);
+      if (options.removeFail) throw new Error('Rejected');
       return { ok: true };
     },
   });
@@ -465,4 +468,84 @@ test('audit managers without event access can sample a PESTLE(E) item', async (t
     },
   });
   await settle(() => ui.el('samplePestleAudit').style.display === '');
+});
+
+test('a new item opens its deep-linked tab and every pane asks for a save first', async (t) => {
+  const shown = [];
+  const { ui } = await pestleItem(t, {
+    query: '&tab=questions',
+    item: null,
+    setup(window) {
+      window.bootstrap = {
+        Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+      };
+    },
+  });
+  assert.deepEqual(shown, ['pestleQuestionsTab']);
+  assert.equal(ui.el('pestleQuestions').textContent.trim(), 'Save the item first.');
+  tab(ui, 'pestleChangelogTab');
+  assert.equal(ui.el('pestleChangelog').textContent.trim(), 'Save the item first.');
+  tab(ui, 'pestleRelevanceTab');
+  assert.match(ui.el('businessProcessRelevanceList').textContent, /Save the item first/);
+  assert.match(ui.el('clauseRelevanceList').textContent, /Save the item first/);
+  // The address keeps the tab and never names an item that does not exist yet.
+  const search = new URL(ui.window.location.href).searchParams;
+  assert.equal(search.get('tab'), 'relevance');
+  assert.equal(search.has('id'), false);
+  assert.equal(
+    ui.calls.some((c) => c.url.startsWith('/api/v1/pestle/items/')),
+    false,
+  );
+});
+
+test('a refused deletion is reported and the button is usable again', async (t) => {
+  const { ui, state } = await pestleItem(t, { globals: { confirm: () => true }, removeFail: true });
+  ui.el('deletePestleItem').click();
+  await settle(() => /Failed to delete PESTLE\(E\) item/.test(ui.el('status').textContent));
+  assert.equal(ui.el('status').textContent, 'Failed to delete PESTLE(E) item: Error: Rejected');
+  assert.equal(ui.el('deletePestleItem').disabled, false);
+  assert.deepEqual(state.removed, ['/api/v1/pestle/items/p1']);
+  assert.equal(ui.el('pestleItemTitle').textContent, item().item);
+});
+
+test('refused question actions are reported and leave the thread list in place', async (t) => {
+  const { ui } = await pestleItem(t, {
+    globals: { confirm: () => true },
+    postFail: true,
+    patchFail: true,
+    removeFail: true,
+    threads: [{ id: 't1', status: 'unanswered', created_by_username: 'erin', posts: [] }],
+  });
+  tab(ui, 'pestleQuestionsTab');
+  await settle(() => ui.el('thread-t1'));
+  // A thread with no answer yet carries the unanswered badge.
+  assert.match(ui.el('thread-t1').querySelector('.badge').textContent, /unanswered/);
+  const failed = () => ui.el('status').textContent === 'Error: Rejected';
+  const reset = () => (ui.el('status').textContent = '');
+
+  ui.el('pestleQuestionBody').value = 'Who owns this?';
+  ui.el('pestleAskQuestion').click();
+  await settle(failed);
+  assert.equal(ui.el('pestleAskQuestion').disabled, false);
+  assert.equal(ui.el('pestleAskQuestion').textContent, 'Ask question');
+  reset();
+
+  ui.el('pestleReplyBody-t1').value = 'Legal team';
+  ui.document.querySelector('[data-action="reply-pestle-question"][data-thread="t1"]').click();
+  await settle(failed);
+  reset();
+
+  const select = ui.document.querySelector(
+    '[data-action="set-pestle-question-status"][data-thread="t1"]',
+  );
+  select.value = 'answered';
+  select.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  await settle(failed);
+  reset();
+
+  const del = ui.document.querySelector('[data-action="delete-pestle-question"][data-thread="t1"]');
+  del.click();
+  await settle(failed);
+  assert.equal(del.disabled, false);
+  assert.ok(ui.el('thread-t1'));
 });

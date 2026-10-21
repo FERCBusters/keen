@@ -978,3 +978,593 @@ def test_the_bookstack_catalogue_waits_while_bookstack_is_disabled(
     assert refused.status_code == 409
     assert refused.json()["detail"] == "BookStack ingestion is disabled"
     assert catalogue.upstream.requests == []
+
+
+# --- Ingester checks on single entries --------------------------------------------
+
+
+UNINGESTIBLE = [
+    (
+        "elasticsearch",
+        "queries",
+        {"name": "audit"},
+        "Enter an index, alias or data stream pattern",
+    ),
+    (
+        "riskledger",
+        "organizations",
+        {"org": "customer"},
+        "Risk Ledger requires a valid UUID identifier",
+    ),
+    (
+        "bookstack",
+        "selected_pages",
+        {"id": "7"},
+        "Select a BookStack page from the catalogue",
+    ),
+    ("loki", "queries", {"name": "auth"}, "Enter a LogQL query"),
+    ("taiga", "projects", {"id": -3}, "Taiga project ID must be a positive integer"),
+]
+
+
+@pytest.mark.parametrize(
+    "adapter,section,entry,detail",
+    UNINGESTIBLE,
+    ids=[adapter for adapter, *_ in UNINGESTIBLE],
+)
+def test_entries_the_ingester_would_reject_are_refused_as_definitions(
+    defs, adapter, section, entry, detail
+):
+    """A definition is refused when its collection entry cannot be ingested.
+
+    The entry check runs before either document is touched, so the collection
+    document and the rules keep their versions.
+    """
+    refused = defs.definition(
+        "item", adapter=adapter, section=section, entry=entry, rule=_rule("item")
+    )
+
+    assert refused.status_code == 400, refused.text
+    assert refused.json()["detail"] == detail
+    assert (defs.versions()[adapter], defs.versions()["rules"]) == (0, 0)
+
+
+INGESTIBLE = [
+    ("rss", "feeds", {"url": "https://news.example/feed"}, "https://news.example/feed"),
+    ("github", "repos", {"owner": "acme", "repo": "app"}, "acme/app"),
+    (
+        "loki",
+        "queries",
+        {"name": "auth", "logql": '{job="auth"}', "event": {"source": "loki"}},
+        "auth",
+    ),
+    (
+        "cloudwatch_logs",
+        "queries",
+        {"name": "trail", "log_group": "/aws/trail"},
+        "trail",
+    ),
+    (
+        "google_workspace",
+        "streams",
+        {"name": "logins", "application": "login"},
+        "logins",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "adapter,section,entry,key", INGESTIBLE, ids=[a for a, *_ in INGESTIBLE]
+)
+def test_entries_the_ingester_accepts_publish_with_their_collection_identity(
+    defs, adapter, section, entry, key
+):
+    """Entries that pass every ingester check publish under a stable identity."""
+    saved = defs.definition(
+        "item", adapter=adapter, section=section, entry=entry, rule=_rule("item")
+    )
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["rule"]["when"] == {
+        "source": adapter,
+        "collector": _collector(adapter, section, key),
+    }
+    assert defs.document(adapter)["document"] == {section: [entry]}
+    (listed,) = defs.admin.get("/v1/admin/evidence-definitions").json()["collectors"]
+    assert (listed["adapter"], listed["section"], listed["key"]) == (
+        adapter,
+        section,
+        key,
+    )
+
+
+# --- Rule identity, repeated saves and duplicate IDs ----------------------------
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        {
+            "id": "all-ci",
+            "when": "jenkins",
+            "map_to": [{"framework": FW, "ref": "A.1"}],
+        },
+        _rule("other", source="jenkins"),
+    ],
+    ids=["conditions-not-an-object", "id-differs-from-url"],
+)
+def test_source_wide_definitions_need_a_rule_identity(defs, rule):
+    """A source-wide definition needs the URL's rule ID and an object of conditions."""
+    refused = defs.definition("all-ci", section="source", entry={}, rule=rule)
+
+    assert refused.status_code == 400, refused.text
+    assert refused.json()["detail"] == "Rule identity is required"
+    assert defs.versions()["rules"] == 0
+
+
+def test_saving_a_definition_again_replaces_its_rule_in_place(defs):
+    """Editing a definition replaces the existing rule; the rule count stays the same."""
+    assert defs.definition(rule=_rule("deploys", action="deploy")).status_code == 200
+    source_wide = defs.definition(
+        "all-ci",
+        section="source",
+        entry={},
+        rule=_rule("all-ci", source="jenkins"),
+        rules_version=1,
+    )
+    assert source_wide.status_code == 200, source_wide.text
+
+    edited = defs.definition(
+        entry={"name": "deploy"},
+        entry_key="deploy",
+        rule=_rule("deploys", action="rollback"),
+        connector_version=1,
+        rules_version=2,
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["rule"]["when"]["action"] == "rollback"
+    rewritten = defs.definition(
+        "all-ci",
+        section="source",
+        entry={},
+        rule={**_rule("all-ci", source="jenkins"), "description": "Every CI event"},
+        rules_version=3,
+    )
+    assert rewritten.status_code == 200, rewritten.text
+
+    rules = {
+        r["id"]: r for r in defs.admin.get("/v1/admin/mapping-rules").json()["items"]
+    }
+    assert set(rules) == {"deploys", "all-ci"}
+    assert rules["deploys"]["when"]["action"] == "rollback"
+    assert rules["all-ci"]["description"] == "Every CI event"
+    assert defs.document("jenkins")["document"] == {"jobs": [{"name": "deploy"}]}
+    assert (defs.versions()["jenkins"], defs.versions()["rules"]) == (2, 4)
+
+
+@pytest.fixture
+def duplicated_rules(defs, monkeypatch):
+    """Shipped YAML whose rules reuse an ID, as a hand-edited file can."""
+    rule = {
+        "id": "dup",
+        "when": {"source": "jenkins"},
+        "map_to": [{"framework": FW, "ref": "A.1"}],
+    }
+    unreadable = {"id": "broken", "when": "jenkins", "map_to": []}
+    path = defs.tmp_path / "duplicated-rules.yml"
+    path.write_text(yaml.safe_dump({"rules": [rule, rule, unreadable]}))
+    monkeypatch.setattr(settings, "rules_path", str(path))
+    return rule
+
+
+def test_rules_collection_cannot_read_are_left_out_of_the_editor(
+    defs, duplicated_rules
+):
+    """A rule the collection parser skips is absent from the rule listing."""
+    listed = defs.admin.get("/v1/admin/mapping-rules").json()
+
+    assert [r["id"] for r in listed["items"]] == ["dup", "dup"]
+    assert listed["version"] == 0
+
+
+def test_duplicate_rule_ids_in_yaml_block_every_rule_edit(defs, duplicated_rules):
+    """Rules with duplicate IDs are resolved in YAML before any editor save."""
+    refusals = [
+        (
+            defs.definition(
+                "all-ci",
+                section="source",
+                entry={},
+                rule=_rule("all-ci", source="jenkins"),
+            ),
+            "Existing rules have duplicate IDs",
+        ),
+        (defs.definition(), "Existing rules have duplicate IDs"),
+        (
+            defs.admin.put(
+                "/v1/admin/mapping-rules/deploys",
+                json={"version": 0, "rule": _rule("deploys", source="jenkins")},
+                headers=unsafe(defs.admin),
+            ),
+            "Existing rules have duplicate IDs; resolve in YAML before editing",
+        ),
+        (
+            defs.admin.get("/v1/admin/mapping-rules/dup/revisions"),
+            "Duplicate rule IDs; resolve before editing",
+        ),
+    ]
+    for response, detail in refusals:
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"] == detail
+    missing = defs.admin.get("/v1/admin/mapping-rules/absent/revisions")
+    assert (missing.status_code, missing.json()["detail"]) == (404, "Rule not found")
+    assert (defs.versions()["jenkins"], defs.versions()["rules"]) == (0, 0)
+
+
+# --- Listings skip entries without an identity -----------------------------------
+
+
+def test_collection_entries_without_an_identity_are_left_out_of_listings(defs):
+    """An entry with no stable identity cannot be linked, so listings omit it."""
+    defs.shipped("jenkins", {"jobs": [{"label": "unnamed"}, {"name": "nightly"}]})
+    defs.db.add(
+        SourceConnection(
+            id="jenkins-prod",
+            source="jenkins",
+            name="Production CI",
+            inputs={"jobs": [{"label": "unnamed"}, {"name": "release"}]},
+            version=1,
+        )
+    )
+    defs.db.commit()
+
+    listed = defs.admin.get("/v1/admin/evidence-definitions").json()["collectors"]
+
+    assert [(c["key"], c.get("connection_id")) for c in listed] == [
+        ("nightly", None),
+        ("release", "jenkins-prod"),
+    ]
+
+
+def test_source_wide_definitions_for_file_managed_connections_carry_no_collector(
+    defs, monkeypatch
+):
+    """A source-wide rule on a deployment-managed connection names the connection only."""
+    connections = defs.tmp_path / "connections.yml"
+    connections.write_text(
+        yaml.safe_dump(
+            {
+                "connections": [
+                    {
+                        "id": "ci",
+                        "source": "jenkins",
+                        "name": "CI from file",
+                        "configuration": {"base_url": "https://ci.example"},
+                        "inputs": {"jobs": [{"name": "nightly"}]},
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setenv("KEEN_SOURCE_CONNECTIONS_FILE", str(connections))
+
+    saved = defs.definition(
+        "all-ci",
+        section="source",
+        entry={},
+        rule=_rule("all-ci", source="jenkins"),
+        connection_id="file:ci",
+    )
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["rule"]["when"] == {
+        "source": "jenkins",
+        "connection_id": "file:ci",
+    }
+    assert defs.versions()["rules"] == 1
+
+
+def test_demo_environments_show_supplier_sources_as_disabled(defs, monkeypatch):
+    """Demo mode reports Redmine, Risk Ledger and IMAP as disabled whatever Docker says."""
+    from datetime import datetime, timezone
+
+    for name in ("redmine_enabled", "riskledger_enabled", "imap_enabled"):
+        monkeypatch.setattr(settings, name, True)
+    monkeypatch.setattr(settings, "demo_mode", True)
+    monkeypatch.setattr(
+        settings, "demo_expires_at", datetime(2999, 1, 1, tzinfo=timezone.utc)
+    )
+
+    catalogue = defs.admin.get("/v1/admin/source-catalogue")
+
+    assert catalogue.status_code == 200, catalogue.text
+    enabled = {item["adapter"]: item["enabled"] for item in catalogue.json()["items"]}
+    assert (enabled["redmine"], enabled["riskledger"], enabled["imap"]) == (
+        False,
+        False,
+        False,
+    )
+    assert (enabled["keen-agent"], enabled["api-ingesters"]) == (False, False)
+
+
+# --- Restoring collection revisions -----------------------------------------------
+
+
+def _restore(defs, name, revision, version):
+    return defs.admin.post(
+        f"/v1/admin/configuration-revisions/{name}/{revision}/restore",
+        json={"version": version},
+        headers=unsafe(defs.admin),
+    )
+
+
+def test_restoring_a_collection_revision_recreates_it_as_a_new_revision(defs):
+    """A restored collection document is validated and saved as its own revision."""
+    first = {"jobs": [{"name": "nightly"}]}
+    assert defs.put_document("jenkins", first, version=0).status_code == 200
+    assert defs.put_document("jenkins", {"jobs": []}, version=1).status_code == 200
+
+    restored = _restore(defs, "jenkins", 1, 2)
+
+    assert restored.status_code == 200, restored.text
+    assert restored.json() == {"version": 3}
+    assert defs.document("jenkins")["document"] == first
+    assert defs.revisions("jenkins") == [3, 2, 1]
+
+
+def test_restoring_a_revision_cannot_orphan_a_published_definition(defs):
+    """Restoring an older collection document keeps items that rules depend on."""
+    assert defs.put_document("jenkins", {"jobs": []}, version=0).status_code == 200
+    assert defs.definition(connector_version=1).status_code == 200
+
+    refused = _restore(defs, "jenkins", 1, 2)
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == (
+        "A collection item has framework mappings. Remove those rules before "
+        "deleting or renaming it."
+    )
+    assert defs.document("jenkins") == {
+        "name": "jenkins",
+        "version": 2,
+        "document": {"jobs": [{"name": "deploy"}]},
+        "origin": "database",
+    }
+
+
+# --- Conflicting writes -----------------------------------------------------------
+
+
+@pytest.fixture
+def conflicting_commit(monkeypatch):
+    """Make the commit that records a configuration revision collide.
+
+    A concurrent save of the same configuration row produces an integrity error
+    at commit time; the request must roll back and report a conflict.
+    """
+    from app.db.models import ManagedConfigurationRevision
+    from sqlalchemy.exc import IntegrityError
+    from sqlalchemy.orm import Session
+
+    original = Session.commit
+
+    def commit(self):
+        if any(isinstance(row, ManagedConfigurationRevision) for row in self.new):
+            raise IntegrityError(
+                "INSERT INTO managed_configurations", {}, Exception("duplicate key")
+            )
+        return original(self)
+
+    monkeypatch.setattr(Session, "commit", commit)
+
+
+def test_a_colliding_collection_save_rolls_back_and_reports_a_conflict(
+    defs, conflicting_commit
+):
+    refused = defs.put_document("jenkins", {"jobs": [{"name": "deploy"}]}, version=0)
+
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"] == (
+        "Configuration changed in another session. Reload before saving."
+    )
+    assert defs.document("jenkins") == {
+        "name": "jenkins",
+        "version": 0,
+        "document": {},
+        "origin": "shipped YAML",
+    }
+    assert defs.revisions("jenkins") == []
+
+
+def test_a_colliding_definition_save_rolls_back_both_documents(
+    defs, conflicting_commit
+):
+    refused = defs.definition()
+
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"] == (
+        "Configuration changed in another session. Reload before saving."
+    )
+    assert (defs.versions()["jenkins"], defs.versions()["rules"]) == (0, 0)
+    listing = defs.admin.get("/v1/admin/evidence-definitions").json()
+    assert (listing["collectors"], listing["rules"]) == ([], [])
+    assert defs.queued == []
+
+
+# --- Removing an evidence connection ----------------------------------------------
+
+
+def _removal_preview(defs, key):
+    return defs.admin.get(f"/v1/admin/evidence-connections/{key}/removal")
+
+
+@pytest.mark.parametrize(
+    "key,detail",
+    [
+        ("api:absent", "Connection not found"),
+        ("collector:absent", "API ingester not found"),
+        ("builtin:ftp", "Unknown connection"),
+        ("ldap:directory", "Unknown connection"),
+    ],
+)
+def test_removal_previews_name_the_missing_connection_kind(defs, key, detail):
+    """Each connection kind reports its own absence; unknown kinds are refused."""
+    missing = _removal_preview(defs, key)
+
+    assert missing.status_code == 404, missing.text
+    assert missing.json()["detail"] == detail
+
+
+def test_webhook_removal_previews_cover_every_provider_source(defs):
+    """Removing the webhooks connection owns one source per provider."""
+    defs.shipped(
+        "webhooks",
+        {
+            "providers": {
+                "alerts": {"secret_header": "X-Hook", "secret_env": "KEEN_ALERTS"},
+                "pager": {"secret_header": "X-Hook", "secret_env": "KEEN_PAGER"},
+            }
+        },
+    )
+    hooks = defs.definition(
+        "alerts",
+        adapter="webhooks",
+        section="source",
+        entry={},
+        rule=_rule("alerts", source="webhook:alerts"),
+    )
+    assert hooks.status_code == 200, hooks.text
+    others = defs.definition(
+        "all-ci",
+        section="source",
+        entry={},
+        rule=_rule("all-ci", source="jenkins"),
+        rules_version=1,
+    )
+    assert others.status_code == 200, others.text
+
+    plan = _removal_preview(defs, "builtin:webhooks")
+
+    assert plan.status_code == 200, plan.text
+    body = plan.json()
+    assert body["sources"] == ["webhook:alerts", "webhook:pager"]
+    assert [d["id"] for d in body["definitions"]] == ["alerts"]
+    assert (body["collections"], body["blocked"], body["kind"]) == (2, None, "builtin")
+
+
+def test_an_api_connection_stays_while_a_moved_collector_runs_its_published_revision(
+    defs,
+):
+    """A collector moved to another connection can still run a revision published here."""
+    from app.db.models import (
+        IntegrationCollector,
+        IntegrationConnection,
+        IntegrationRevision,
+    )
+
+    defs.db.add_all(
+        [
+            IntegrationConnection(
+                id="old",
+                name="Old API",
+                base_url="https://old.example",
+                auth_kind="none",
+            ),
+            IntegrationConnection(
+                id="new",
+                name="New API",
+                base_url="https://new.example",
+                auth_kind="none",
+            ),
+        ]
+    )
+    # Connections exist before the collectors that reference them.
+    defs.db.flush()
+    defs.db.add_all(
+        [
+            IntegrationCollector(
+                id="checks",
+                name="Checks",
+                connection_id="new",
+                draft={},
+                live_revision=1,
+            ),
+            IntegrationRevision(
+                collector_id="checks", revision=1, connection_id="old", definition={}
+            ),
+            # A collector still on this connection does not block its removal.
+            IntegrationCollector(
+                id="kept", name="Kept", connection_id="old", draft={}, live_revision=1
+            ),
+            IntegrationRevision(
+                collector_id="kept", revision=1, connection_id="old", definition={}
+            ),
+        ]
+    )
+    defs.db.commit()
+
+    plan = _removal_preview(defs, "api:old")
+
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["blocked"] == (
+        "Another collector still has a published revision using this connection. "
+        "Republish it with its new connection first."
+    )
+    assert plan.json()["collectors"] == [{"id": "kept", "name": "Kept"}]
+    removal = defs.admin.post(
+        "/v1/admin/evidence-connections/api:old/remove",
+        json={"fingerprint": plan.json()["fingerprint"]},
+        headers=unsafe(defs.admin),
+    )
+    assert removal.status_code == 409
+    assert removal.json()["detail"] == plan.json()["blocked"]
+    defs.db.expire_all()
+    assert defs.db.get(IntegrationConnection, "old") is not None
+
+
+def test_removing_a_shipped_connection_records_first_managed_revisions(
+    defs, monkeypatch
+):
+    """Removing a connection known only from YAML creates its first database rows."""
+    defs.shipped("jenkins", {"poll_minutes": 15, "jobs": [{"name": "nightly"}]})
+    rules = defs.tmp_path / "shipped-rules.yml"
+    rules.write_text(
+        yaml.safe_dump(
+            {
+                "rules": [
+                    {
+                        "id": "all-ci",
+                        "when": {"source": "jenkins"},
+                        "map_to": [{"framework": FW, "ref": "A.1"}],
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setattr(settings, "rules_path", str(rules))
+    plan = _removal_preview(defs, "builtin:jenkins").json()
+    assert [d["id"] for d in plan["definitions"]] == ["all-ci"]
+
+    removed = defs.admin.post(
+        "/v1/admin/evidence-connections/builtin:jenkins/remove",
+        json={"fingerprint": plan["fingerprint"]},
+        headers=unsafe(defs.admin),
+    )
+
+    assert removed.status_code == 200, removed.text
+    assert removed.json() == {
+        "deleted_definitions": 1,
+        "deleted_automatic_mappings": 0,
+        "retained_evidence": True,
+    }
+    assert defs.document("jenkins") == {
+        "name": "jenkins",
+        "version": 1,
+        "document": {"poll_minutes": 15, "jobs": []},
+        "origin": "database",
+    }
+    assert defs.admin.get("/v1/admin/mapping-rules").json() == {
+        "version": 1,
+        "items": [],
+    }
+    assert defs.revisions("jenkins") == [1] and defs.revisions("rules") == [1]

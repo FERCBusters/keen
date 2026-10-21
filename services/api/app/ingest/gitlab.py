@@ -1,18 +1,18 @@
-from app.core.datetime_utils import utc_now_naive
-from app.security.errors import collection_error
-from app.services.ingestion_pause import pausable
-
 """GitLab project activity collection for user-owned projects and groups/subgroups."""
+
 import hashlib
 import json
 from datetime import timedelta
 from urllib.parse import quote
 
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
 from app.ingest.common import is_safe_url, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.forgejo import _parse_iso_ts
 from app.ingest.http import client as ingestion_client
+from app.security.errors import collection_error
+from app.services.ingestion_pause import pausable
 
 
 def _pages(client, base, path, params=None):
@@ -105,8 +105,6 @@ def _project_events(db, client, base, section, key, project, label):
 @pausable("gitlab")
 @connection_runs("gitlab")
 def ingest_gitlab_all(db):
-    if not settings.gitlab_enabled:
-        return [{"skipped": True, "reason": "KEEN_GITLAB_ENABLED=false"}]
     base = settings.gitlab_base_url.rstrip("/")
     if not is_safe_url(base):
         return [{"error": "Configure a safe HTTPS KEEN_GITLAB_BASE_URL"}]

@@ -449,3 +449,217 @@ def test_findings_keep_to_the_audit_framework(aud):
             aud.client, "PATCH", f"/findings/{missing}", json={"title": "x"}
         )
         assert response.status_code in (400, 404)
+
+
+# --- Sample, attendee and finding identifiers ------------------------------------
+
+
+def test_sample_edits_need_a_real_sample_and_change_only_named_fields(aud):
+    # Sample edits and removals refuse malformed or unknown identifiers, and a
+    # partial edit changes only the fields it names.
+    sample = aud.call(
+        aud.client,
+        "POST",
+        "/evidence",
+        json={"evidence_url": "https://evidence.example/a", "title": "Link"},
+    ).json()
+    for method in ("PATCH", "DELETE"):
+        kwargs = {"json": {"title": "x"}} if method == "PATCH" else {}
+        malformed = aud.call(aud.client, method, "/evidence/not-a-uuid", **kwargs)
+        assert malformed.status_code == 400
+        assert malformed.json()["detail"] == "evidence_id must be a UUID"
+        unknown = aud.call(aud.client, method, f"/evidence/{uuid.uuid4()}", **kwargs)
+        assert unknown.status_code == 404
+        assert unknown.json()["detail"] == "Evidence not found"
+    path = f"/evidence/{sample['id']}"
+    changed = aud.call(
+        aud.client,
+        "PATCH",
+        path,
+        json={"evidence_url": "https://evidence.example/b", "title": " Renamed "},
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["evidence_url"] == "https://evidence.example/b"
+    assert changed.json()["title"] == "Renamed"
+    cleared = aud.call(aud.client, "PATCH", path, json={"title": "  "}).json()
+    assert cleared["title"] is None
+    assert cleared["evidence_url"] == "https://evidence.example/b"
+    assert (
+        aud.call(aud.client, "PATCH", path, json={"notes": "<p>Seen</p>"}).json()[
+            "notes"
+        ]
+        == "<p>Seen</p>"
+    )
+    assert aud.call(aud.client, "DELETE", path).status_code == 200
+    assert aud.detail()["evidence"] == []
+
+
+def test_resampling_a_record_with_notes_keeps_one_sample_with_the_new_notes(aud):
+    target = {"entity_type": "risk", "entity_id": str(aud.risk.id)}
+    first = aud.call(aud.client, "POST", "/evidence", json=target).json()
+    again = aud.call(
+        aud.client, "POST", "/evidence", json={**target, "notes": "<p>Checked</p>"}
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["id"] == first["id"]
+    (sample,) = aud.detail()["evidence"]
+    assert sample["notes"] == "<p>Checked</p>"
+
+
+def test_attendee_and_finding_removal_refuse_malformed_identifiers(aud):
+    for path, detail in (
+        ("/attendees/not-a-uuid", "attendee_id must be a UUID"),
+        ("/findings/not-a-uuid", "finding_id must be a UUID"),
+    ):
+        refused = aud.call(aud.client, "DELETE", path)
+        assert refused.status_code == 400
+        assert refused.json()["detail"] == detail
+    invalid_kind = aud.call(
+        aud.client, "POST", "/findings", json={"kind": "catastrophe", "title": "Gap"}
+    )
+    assert invalid_kind.status_code == 400
+    assert invalid_kind.json()["detail"] == "Invalid finding kind"
+    assert aud.detail()["findings"] == []
+
+
+def test_domain_operations_refuse_callers_without_audit_authority(aud):
+    # The service layer enforces audit permissions on its own, so a caller
+    # that bypasses the HTTP dependencies is still refused.
+    from app.services.audits import access, operations
+    from app.services.audits.schemas import AuditCreatePayload
+    from app.services.errors import DomainError
+
+    reader = aud.keen.user("audits.read")
+    with pytest.raises(DomainError) as refused:
+        operations.create_audit(
+            payload=AuditCreatePayload(title="Blocked", framework_slug=FW),
+            db=aud.db,
+            user=reader,
+        )
+    assert refused.value.status_code == 403
+    assert aud.db.query(Audit).filter_by(title="Blocked").count() == 0
+    with pytest.raises(DomainError) as denied:
+        access.require_audit_admin(aud.db, reader)
+    assert denied.value.status_code == 403
+    audit_id = uuid.UUID(aud.audit_id)
+    for user in (None, "owner", object()):
+        assert access.can_read_audits(aud.db, user) is False
+        assert access.can_manage_audits(aud.db, user) is False
+        assert access.is_audit_attendee(aud.db, user, audit_id) is False
+    retired = aud.keen.user("audits.admin")
+    retired.is_active = False
+    aud.db.commit()
+    assert access.can_read_audits(aud.db, retired) is False
+    assert access.can_manage_audits(aud.db, retired) is False
+    assert access.is_audit_attendee(aud.db, retired, audit_id) is False
+    with pytest.raises(DomainError) as unknown:
+        access.require_sample_source_access(
+            aud.db, aud.owner, "ledger_entry", uuid.uuid4()
+        )
+    assert unknown.value.status_code == 403
+
+
+def test_sample_references_describe_missing_records_without_leaking(aud):
+    # Every sampled record type resolves to a 404 when required and to a
+    # neutral placeholder otherwise; half-specified references are refused.
+    from app.services.audits.samples import (
+        audit_sample_entity_reference,
+        entity_href,
+    )
+    from app.services.audits.validation import AUDIT_SAMPLE_ENTITY_LABELS
+    from app.services.errors import DomainError
+
+    assert entity_href("ledger_entry", uuid.uuid4(), FW) == "/audits.html"
+    assert (
+        audit_sample_entity_reference(
+            aud.db, framework=FW, entity_type=None, entity_id=None
+        )
+        is None
+    )
+    assert (
+        audit_sample_entity_reference(
+            aud.db, framework=FW, entity_type="  ", entity_id=uuid.uuid4()
+        )
+        is None
+    )
+    with pytest.raises(DomainError) as half:
+        audit_sample_entity_reference(
+            aud.db, framework=FW, entity_type="risk", entity_id=None
+        )
+    assert half.value.status_code == 400
+    with pytest.raises(DomainError) as half_id:
+        audit_sample_entity_reference(
+            aud.db, framework=FW, entity_type="", entity_id=uuid.uuid4()
+        )
+    assert half_id.value.status_code == 400
+    for entity_type, label in AUDIT_SAMPLE_ENTITY_LABELS.items():
+        missing = uuid.uuid4()
+        with pytest.raises(DomainError) as gone:
+            audit_sample_entity_reference(
+                aud.db, framework=FW, entity_type=entity_type, entity_id=missing
+            )
+        assert gone.value.status_code == 404, entity_type
+        placeholder = audit_sample_entity_reference(
+            aud.db,
+            framework=FW,
+            entity_type=entity_type,
+            entity_id=missing,
+            required=False,
+        )
+        assert placeholder["title"] == label
+        assert placeholder["subtitle"] == "This sampled item no longer exists."
+        assert placeholder["href"] == entity_href(entity_type, missing, FW)
+        assert placeholder["controls"] == []
+
+
+def test_swot_scope_refuses_unknown_items_and_keeps_the_current_scope(aud):
+    from app.db.models import AuditSwotScope, IsmsSwot
+
+    item = IsmsSwot(title="Known", kind="threat", significance=3, status="defined")
+    aud.db.add(item)
+    aud.db.commit()
+    manager = aud.keen.client(aud.keen.user("audits.admin", "isms.manage"))
+    accepted = aud.call(manager, "PUT", "/scope", json={"swot_ids": [str(item.id)]})
+    assert accepted.status_code == 200, accepted.text
+    refused = aud.call(
+        manager,
+        "PUT",
+        "/scope",
+        json={"swot_ids": [str(item.id), str(uuid.uuid4())]},
+    )
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == "Unknown SWOT scope item"
+    aud.db.expire_all()
+    assert [
+        s.swot_id
+        for s in aud.db.query(AuditSwotScope).filter_by(
+            audit_id=uuid.UUID(aud.audit_id)
+        )
+    ] == [item.id]
+
+
+def test_resampling_an_event_without_details_keeps_notes_and_link(aud):
+    # A repeat sample of the same event with no notes or link leaves those
+    # fields as they were; the title falls back to the event summary.
+    first = aud.call(
+        aud.client,
+        "POST",
+        "/evidence",
+        json={
+            "event_id": str(aud.event.id),
+            "title": "First look",
+            "notes": "<p>Reviewed</p>",
+            "evidence_url": "https://evidence.example/report",
+        },
+    ).json()
+    again = aud.call(
+        aud.client, "POST", "/evidence", json={"event_id": str(aud.event.id)}
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["id"] == first["id"]
+    (sample,) = aud.detail()["evidence"]
+    assert (sample["title"], sample["notes"], sample["evidence_url"]) == (
+        aud.event.summary,
+        "<p>Reviewed</p>",
+        "https://evidence.example/report",
+    )

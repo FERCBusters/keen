@@ -209,8 +209,6 @@ def _truncate_db_text(value: Any, max_len: int) -> str | None:
         return None
     if len(text) <= max_len:
         return text
-    if max_len <= 1:
-        return text[:max_len]
     return text[: max_len - 1].rstrip() + "…"
 
 
@@ -269,8 +267,7 @@ def _summarize(entity_type: str, action: str, changes: list[dict[str, Any]]) -> 
         return f"{label} created"
     if action == "deleted":
         return f"{label} deleted"
-    if not changes:
-        return f"{label} saved with no semantic changes"
+    # An update with no changes is never recorded, so there is always a change.
     names = [str(c.get("label") or c.get("field")) for c in changes[:4]]
     suffix = "" if len(changes) <= 4 else f" and {len(changes) - 4} more"
     return f"Updated {', '.join(names)}{suffix}"

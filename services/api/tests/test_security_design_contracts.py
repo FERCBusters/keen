@@ -761,6 +761,56 @@ def test_login_issuers_capture_account_session_version(
     assert sessions.get_session(redis, sid)["session_version"] == 7
 
 
+def test_login_completion_replaces_the_old_session_and_tolerates_bookkeeping_failures(
+    production_client, contract_db, monkeypatch
+):
+    # Signing in revokes the session the browser arrived with; a store failure
+    # on that revocation or on the last-login timestamp never blocks sign-in.
+    from app.services import security_notifications
+
+    _, redis, _, user = production_client
+    monkeypatch.setattr(login_operations, "get_valkey", lambda: redis)
+    monkeypatch.setattr(
+        security_notifications, "record_login", lambda *args, **kwargs: None
+    )
+    stale = sessions.create_session(
+        redis, user_id=str(user.id), ttl_seconds=600, auth_method="local"
+    )
+    sid = login_operations.complete_sso_login(
+        contract_db,
+        user,
+        provider=SimpleNamespace(key="google"),
+        id_token=None,
+        existing_sid=stale,
+        client_ip="203.0.113.5",
+    )
+    assert sessions.get_session(redis, stale) is None
+    assert sessions.get_session(redis, sid)["auth_method"] == "google"
+
+    monkeypatch.setattr(
+        login_operations,
+        "delete_session",
+        lambda *args: (_ for _ in ()).throw(ConnectionError("store down")),
+    )
+    attempts = []
+    real_commit = contract_db.commit
+
+    def flaky_commit():
+        attempts.append(True)
+        if len(attempts) == 1:
+            raise RuntimeError("timestamp write failed")
+        real_commit()
+
+    monkeypatch.setattr(contract_db, "commit", flaky_commit)
+    fresh, profile = login_operations.complete_local_login(
+        contract_db, user, existing_sid=sid, client_ip="203.0.113.5"
+    )
+    assert fresh != sid
+    assert sessions.get_session(redis, fresh)["user_id"] == str(user.id)
+    assert profile["user"] == user.username
+    assert len(attempts) >= 2
+
+
 def test_admin_source_types_expose_display_labels(
     production_client, contract_db, monkeypatch
 ):

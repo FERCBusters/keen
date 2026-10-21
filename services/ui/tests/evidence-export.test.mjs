@@ -133,6 +133,13 @@ with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as z:
     parseContentDispositionFilename("attachment; filename*=UTF-8''%E5%93%81%E8%B3%AA.json"),
     '品質.json',
   );
+  // An undecodable encoded name is kept as sent; a bare filename* is used whole.
+  assert.equal(
+    parseContentDispositionFilename("attachment; filename*=UTF-8''bad%E5%.json"),
+    'bad%E5%.json',
+  );
+  assert.equal(parseContentDispositionFilename('attachment; filename*="plain.json"'), 'plain.json');
+  assert.equal(parseContentDispositionFilename('inline'), '');
 });
 
 test('PDF capture masks visible attribute values and leaves live inputs unchanged', async (t) => {

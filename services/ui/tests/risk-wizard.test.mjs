@@ -134,8 +134,10 @@ async function wizard(t, options = {}) {
       if (p === '/api/v1/pestle/meta') return pestleMeta;
       if (p === '/api/v1/pestle/business-processes')
         return { items: [{ id: 'bp1', name: 'Payroll run' }] };
-      if (p === '/api/v1/clauses')
+      if (p === '/api/v1/clauses') {
+        if (options.clausesFail) throw new Error('Clauses offline');
         return { items: [{ id: 'cl1', ref: '6.1.2', title: 'Risk assessment' }] };
+      }
       if (p === '/api/v1/risks/r1') {
         if (options.riskFail) throw new Error('Risk gone');
         return existingRisk;
@@ -682,4 +684,82 @@ test('load problems and permissions are explained', async (t) => {
   );
   assert.equal(noPestle.ui.el('wizardMitigatorLink').hidden, true);
   assert.ok(!noPestle.state.gets.some((g) => g.startsWith('/api/v1/pestle')));
+});
+
+test('a template asset the register lacks is typed in as new, with a category of its own', async (t) => {
+  const { ui, state } = await wizard(t, { assets: [assets[1]] });
+  ui.el('templateList').querySelector('[data-template="tpl1"]').click();
+  next(ui);
+  assert.equal(visibleStep(ui), 'subject');
+  // The template's example asset is offered as the name of a new asset.
+  assert.equal(ui.el('assetSearch').value, 'Payroll DB');
+  input(ui, 'assetSearch', 'Payroll DB');
+  await tick();
+  assert.equal(ui.el('newAssetPanel').hidden, false);
+  input(ui, 'newAssetCategory', 'Facilities');
+  input(ui, 'newAssetSubcategory', 'Server rooms');
+  assert.match(
+    ui.el('selectedAssetSummary').textContent,
+    /A new asset Payroll DB will be added under Facilities › Server rooms/,
+  );
+  next(ui);
+  ui.el('skipStep').click();
+  next(ui);
+  next(ui);
+  assert.equal(visibleStep(ui), 'controls');
+  check(ui, '[data-control="c1"]');
+  check(ui, '[data-control="c2"]');
+  assert.equal(ui.el('controlCount').textContent, '2');
+  check(ui, '[data-control="c2"]', false);
+  assert.equal(ui.el('controlCount').textContent, '1');
+
+  // Stepping back to the subject redraws it with the new asset still chosen.
+  ui.document.querySelector('[data-goto-step="subject"]').click();
+  assert.equal(visibleStep(ui), 'subject');
+  assert.match(ui.el('selectedAssetSummary').textContent, /A new asset Payroll DB/);
+  assert.equal(ui.el('assetList').querySelector('[data-asset="a1"]'), null);
+  for (const step of ['parties', 'describe', 'rate', 'controls', 'review']) {
+    next(ui);
+    assert.equal(visibleStep(ui), step);
+  }
+  assert.match(reviewText(ui), /Controls A\.5\.1/);
+  next(ui);
+  await settle(() => state.posted.length === 1);
+  const body = state.posted[0].body;
+  assert.equal(body.asset_name, 'Payroll DB');
+  assert.equal(body.category_name, 'Facilities');
+  assert.equal('category_id' in body, false);
+  assert.equal(body.subcategory_name, 'Server rooms');
+  assert.deepEqual(body.controls, ['c1']);
+});
+
+test('a PESTLE(E) clause can be unticked, and a clause list that cannot load is empty', async (t) => {
+  const { ui } = await wizard(t, { query: '&method=pestle' });
+  next(ui);
+  ui.el('skipStep').click();
+  ui.el('riskDescription').value = 'Privacy law tightens retention';
+  const legal = ui.document.querySelector('input[name="pestleType"][value="Legal"]');
+  legal.checked = true;
+  legal.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  next(ui);
+  assert.equal(visibleStep(ui), 'rate');
+  check(ui, '[data-clause="cl1"]');
+  const level = ui.el('clauseList').querySelector('[data-clause-level="cl1"]');
+  assert.equal(level.disabled, false);
+  check(ui, '[data-clause="cl1"]', false);
+  assert.equal(level.disabled, true);
+  next(ui);
+  assert.doesNotMatch(reviewText(ui), /Relevant clauses 6\.1\.2/);
+
+  const offline = await wizard(t, { query: '&method=pestle', clausesFail: true });
+  next(offline.ui);
+  offline.ui.el('skipStep').click();
+  offline.ui.el('riskDescription').value = 'Privacy law tightens retention';
+  const type = offline.ui.document.querySelector('input[name="pestleType"][value="Legal"]');
+  type.checked = true;
+  type.dispatchEvent(new offline.ui.window.Event('change', { bubbles: true }));
+  next(offline.ui);
+  assert.equal(visibleStep(offline.ui), 'rate');
+  assert.equal(offline.ui.el('clauseList').querySelector('[data-clause]'), null);
+  assert.equal(offline.ui.el('status').textContent, '');
 });

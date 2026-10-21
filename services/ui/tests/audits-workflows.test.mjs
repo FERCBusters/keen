@@ -88,6 +88,7 @@ async function auditsPage(t, options = {}) {
     scripts: options.noD3 ? [] : [d3],
     me: options.me || { is_admin: true, user_id: 'u1' },
     globals: options.globals,
+    vendor: options.vendor,
     get: async (u) => {
       const p = u.pathname;
       if (p === '/api/v1/audits/users') {
@@ -183,6 +184,7 @@ async function auditsPage(t, options = {}) {
     },
     remove: async (u) => {
       state.removed.push(u.pathname);
+      if (options.removeFail) throw new Error('Delete refused');
       return { ok: true };
     },
   });
@@ -490,4 +492,74 @@ test('attendee and document lookups degrade with warnings', async (t) => {
     [...ui.el('schedAttendeeUserId').options].map((o) => o.value),
     [''],
   );
+});
+
+test('unticking a clause leaves the create scope, and without a framework no catalogue is fetched', async (t) => {
+  const { ui } = await auditsPage(t);
+  ui.el('showCreate').click();
+  await settle(() => ui.document.querySelector('[data-new-clause-id="k41"]'));
+  const clause = ui.document.querySelector('[data-new-clause-id="k41"]');
+  clause.checked = true;
+  clause.dispatchEvent(new ui.window.Event('change'));
+  assert.equal(ui.el('newClauseCount').textContent, '1 clauses');
+  assert.equal(ui.el('newControlCount').textContent, '1 controls');
+  clause.checked = false;
+  clause.dispatchEvent(new ui.window.Event('change'));
+  assert.equal(ui.el('newClauseCount').textContent, '0 clauses');
+  // The linked control stays ticked until the auditor unticks it.
+  assert.equal(ui.el('newControlCount').textContent, '1 controls');
+
+  const unscoped = await auditsPage(t, { vendor: { getCurrentFramework: () => '' } });
+  unscoped.ui.el('showCreate').click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(unscoped.ui.el('createCard').style.display, '');
+  assert.equal(
+    unscoped.ui.calls.some((c) => c.url.startsWith('/api/v1/controls')),
+    false,
+  );
+  assert.equal(unscoped.ui.el('newClausesList').querySelector('input'), null);
+});
+
+test('a refused audit or template deletion is reported and the row stays', async (t) => {
+  const { ui, state } = await auditsPage(t, {
+    removeFail: true,
+    globals: { confirm: () => true },
+  });
+  ui.document.querySelector('[data-delete-audit="a2"]').click();
+  await settle(() => ui.el('status').textContent === 'Failed: Error: Delete refused');
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+  assert.match(ui.el('rows').textContent, /Spring/);
+  ui.el('status').textContent = '';
+
+  ui.document.querySelector('[data-delete-schedule="s1"]').click();
+  await settle(() => ui.el('status').textContent === 'Failed: Error: Delete refused');
+  assert.match(ui.el('scheduledRows').textContent, /Quarterly/);
+  assert.deepEqual(state.removed, ['/api/v1/audits/a2', '/api/v1/audits/scheduled/s1']);
+});
+
+test('a schedule with a malformed end or until date is not sent, and a refused one is reported', async (t) => {
+  const invalid = new Set();
+  const { ui, state } = await auditsPage(t, {
+    postFail: true,
+    vendor: {
+      wireIsoDateTextField: (input) => ({ syncHiddenFromText: () => !invalid.has(input.id) }),
+    },
+  });
+  ui.el('schedTitle').value = 'Supplier review';
+  ui.el('schedStart').value = '2026-05-01';
+  for (const field of ['schedEnd', 'schedUntil']) {
+    invalid.clear();
+    invalid.add(field);
+    ui.el('scheduleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+    assert.equal(ui.el('status').textContent, 'Enter dates using the configured date format.');
+    assert.equal(ui.el('status').dataset.alert, 'warning');
+  }
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(state.posted.length, 0);
+
+  invalid.clear();
+  ui.el('scheduleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => ui.el('status').textContent === 'Failed: Error: Rejected');
+  assert.equal(state.posted[0].path, '/api/v1/audits/scheduled');
+  assert.equal(ui.el('schedTitle').value, 'Supplier review');
 });

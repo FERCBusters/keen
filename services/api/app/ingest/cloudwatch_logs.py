@@ -200,10 +200,6 @@ def _summarize_json(parsed: Any, line: str) -> tuple[str, dict[str, Any]]:
         if summary:
             return summary, extracted
 
-        # Fall back to a message field if present
-        if isinstance(msg, str) and msg.strip():
-            return _truncate(msg, 340), extracted
-
     return _truncate(line, 340), extracted
 
 
@@ -392,8 +388,6 @@ def ingest_cloudwatch_logs_once(
         page += 1
         if next_token:
             params["nextToken"] = next_token
-        elif "nextToken" in params:
-            params.pop("nextToken", None)
 
         resp = client.filter_log_events(**params)
         events = resp.get("events") or []
@@ -416,14 +410,15 @@ def ingest_cloudwatch_logs_once(
             log_stream = str(e.get("logStreamName") or "")
             ingestion_time_ms = e.get("ingestionTime")
 
-            # Stable de-dupe key per source. Prefer AWS eventId when reasonable.
-            ext_id = (
-                event_id
-                if 0 < len(event_id) <= 120
-                else _fingerprint(log_group, event_id)
-            )
-            if not ext_id:
+            # Stable de-dupe key per source: AWS's eventId when it fits, a digest
+            # of a long one, and for an event without one, a digest of where and
+            # when it was logged and what it said.
+            if not event_id:
                 ext_id = _fingerprint(log_group, log_stream, str(ts_ms), msg)
+            elif len(event_id) <= 120:
+                ext_id = event_id
+            else:
+                ext_id = _fingerprint(log_group, event_id)
 
             parsed = _try_parse_json_line(msg)
             actor = _extract_actor(parsed) if parsed is not None else None
@@ -585,9 +580,6 @@ def ingest_cloudwatch_logs_once(
 @pausable("cloudwatch_logs")
 @connection_runs("cloudwatch_logs")
 def ingest_cloudwatch_logs_all(db: Session) -> list[dict[str, Any]]:
-    if not settings.cloudwatch_logs_enabled:
-        return [{"skipped": True, "reason": "KEEN_CLOUDWATCH_LOGS_ENABLED=false"}]
-
     cfg = load_cloudwatch_logs_config(settings.cloudwatch_logs_config_path)
     defaults = cfg.get("defaults", {}) or {}
 

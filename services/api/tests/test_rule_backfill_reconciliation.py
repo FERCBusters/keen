@@ -193,3 +193,113 @@ def test_queue_accepts_cleanup_when_new_source_has_no_events(setup, monkeypatch)
     result = _queue_rule_backfill(db, rule(source="new-source"), 1)
     assert result["status"] == "queued"
     enqueue.assert_called_once_with(result["id"])
+
+
+def test_unchanged_rule_adopts_the_new_rules_version(setup):
+    # Editing another rule bumps the configuration version; a job for a rule
+    # whose document is unchanged continues under the new version.
+    db, controls, event, mapping, job, clear = setup
+    task = job(rule())
+    config = db.get(ManagedConfiguration, "rules")
+    other = rule(("other",))
+    other["id"] = "unrelated"
+    config.version = 2
+    config.document = {"rules": [rule(), other]}
+    db.commit()
+    assert rule_backfill.process_batch(task.id) is False
+    assert task.status == "completed" and task.rules_version == 2
+    assert {m.control_item_id for m in db.query(Mapping)} == {controls["keep"].id}
+
+
+def test_connection_scope_limits_the_examined_events(setup):
+    # A rule bound to one connection ignores evidence from other connections.
+    db, controls, event, mapping, job, clear = setup
+    event.connection_id = "primary"
+    other = Event(
+        source="test",
+        external_id="elsewhere",
+        connection_id="secondary",
+        timestamp=datetime(2026, 1, 3),
+        created_at=datetime(2026, 1, 3),
+        summary="elsewhere",
+    )
+    db.add(other)
+    task = job(rule(connection_id="primary"))
+    assert rule_backfill.process_batch(task.id) is False
+    assert task.examined == 1 and task.total_estimate == 1
+    assert [m.event_id for m in db.query(Mapping)] == [event.id]
+
+
+def test_a_job_whose_rule_cannot_be_parsed_fails_loudly(setup):
+    # A saved document that parses to no rule is an error, never a silent
+    # completion that would leave the job looking finished.
+    db, controls, event, mapping, job, clear = setup
+    disabled = rule()
+    disabled["enabled"] = False
+    task = job(disabled)
+    with pytest.raises(ValueError, match="cannot be parsed"):
+        rule_backfill.process_batch(task.id)
+    assert db.query(Mapping).count() == 0
+
+
+def test_existing_mapping_to_the_same_control_is_left_alone(setup):
+    # A manual mapping already covering the rule's target is kept as-is and
+    # the batch creates nothing for that pair.
+    db, controls, event, mapping, job, clear = setup
+    manual = mapping("keep", method="manual", mapped_by="alice")
+    task = job(rule())
+    assert rule_backfill.process_batch(task.id) is False
+    rows = db.query(Mapping).all()
+    assert [m.id for m in rows] == [manual.id]
+    assert rows[0].method == "manual"
+    assert task.matched == 1 and task.created_mappings == 0
+    clear.assert_not_called()
+
+
+def test_cache_invalidation_failure_is_logged_without_failing_the_batch(
+    setup, monkeypatch, caplog
+):
+    # The committed mappings stand even when the stats cache cannot be cleared.
+    import logging
+
+    db, controls, event, mapping, job, clear = setup
+    clear.side_effect = ConnectionError("valkey down")
+    task = job(rule())
+    with caplog.at_level(logging.WARNING, logger="app.worker.rule_backfill"):
+        assert rule_backfill.process_batch(task.id) is False
+    assert task.status == "completed" and task.created_mappings == 1
+    assert db.query(Mapping).count() == 1
+    assert any("stats cache" in record.message for record in caplog.records)
+
+
+def test_recover_jobs_returns_queued_and_stale_running_jobs_only(setup):
+    # Recovery requeues queued jobs and running jobs that stopped updating; a
+    # job still making progress and finished jobs are left alone.
+    from datetime import timedelta
+
+    from app.core.datetime_utils import utc_now_naive
+
+    db, controls, event, mapping, job, clear = setup
+    now = utc_now_naive()
+
+    def add(status, updated_at, created_at):
+        row = RuleBackfillJob(
+            rule_id="edited",
+            source="test",
+            rule_document=rule(),
+            rules_version=1,
+            cutoff=datetime(2026, 2, 1),
+            status=status,
+            created_at=created_at,
+            updated_at=updated_at,
+        )
+        db.add(row)
+        return row
+
+    queued = add("queued", now, now - timedelta(minutes=1))
+    stale = add("running", now - timedelta(minutes=10), now - timedelta(minutes=9))
+    add("running", now, now - timedelta(minutes=8))
+    add("completed", now - timedelta(hours=1), now - timedelta(hours=2))
+    add("failed", now - timedelta(hours=1), now - timedelta(hours=2))
+    db.commit()
+    assert rule_backfill.recover_jobs() == [stale.id, queued.id]

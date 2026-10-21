@@ -47,6 +47,9 @@ async function editor(t, server = {}) {
     saveBackfill: null,
     startBackfill: null,
     preview: { examined: 1, matched: 1, examples: [], nonmatches: [] },
+    samples: [],
+    suggestions: [],
+    integrations: [],
     confirm: true,
     ...server,
   };
@@ -82,10 +85,12 @@ async function editor(t, server = {}) {
   const get = tracked('GET', async (url) => {
     const path = url.pathname,
       query = url.searchParams;
-    if (path === '/api/v1/admin/evidence-event-samples') return { sources: [], items: [] };
+    if (path === '/api/v1/admin/evidence-event-samples')
+      return { sources: [], items: structuredClone(state.samples) };
     if (path === '/api/v1/admin/source-catalogue')
       return { items: state.sources.map((adapter) => ({ adapter, enabled: true })) };
-    if (path === '/api/v1/admin/integrations') return { collectors: [] };
+    if (path === '/api/v1/admin/integrations')
+      return { collectors: structuredClone(state.integrations) };
     if (path === '/api/v1/admin/source-connections')
       return { connections: structuredClone(state.connections), types: [] };
     if (path === '/api/v1/admin/evidence-definitions') return definitions();
@@ -128,7 +133,10 @@ async function editor(t, server = {}) {
   const post = tracked('POST', async (url, body) => {
     const path = url.pathname;
     if (path === '/api/v1/admin/mapping-rules/preview') return structuredClone(state.preview);
-    if (path === '/api/v1/admin/control-suggestions') return { items: [] };
+    if (path === '/api/v1/admin/control-suggestions') {
+      if (state.failSuggestions) throw new Error(state.failSuggestions);
+      return { items: structuredClone(state.suggestions) };
+    }
     const restore = path.match(
       /^\/api\/v1\/admin\/mapping-rules\/([^/]+)\/revisions\/(\d+)\/restore$/,
     );
@@ -141,7 +149,10 @@ async function editor(t, server = {}) {
       return { rules_version: state.rulesVersion };
     }
     const backfill = path.match(/^\/api\/v1\/admin\/mapping-rules\/([^/]+)\/backfill$/);
-    if (backfill) return { backfill: structuredClone(state.startBackfill) };
+    if (backfill) {
+      if (state.failBackfill) throw new Error(state.failBackfill);
+      return { backfill: structuredClone(state.startBackfill) };
+    }
     const cancel = path.match(/^\/api\/v1\/admin\/rule-backfills\/([^/]+)\/cancel$/);
     if (cancel) {
       const sequence = state.jobs[decodeURIComponent(cancel[1])];
@@ -153,6 +164,7 @@ async function editor(t, server = {}) {
   const put = tracked('PUT', async (url, body) => {
     const path = url.pathname;
     if (path.startsWith('/api/v1/admin/evidence-definitions/')) {
+      if (state.failSave) throw new Error(state.failSave);
       const rule = structuredClone(body.rule);
       state.rules = [...state.rules.filter((item) => item.id !== rule.id), rule];
       const item = state.collectors.find(
@@ -1190,4 +1202,298 @@ test('exporting rules downloads the selected source’s YAML', async (t) => {
     'Could not export mapping rules. Check your session and permissions.',
   );
   assert.equal(ui.$('export-rules').disabled, false);
+});
+
+// --- Step checks, samples, previews and refused saves --------------------------------
+
+test('each step refuses to move on until its part of the rule is complete', async (t) => {
+  const url = 'https://status.example/feed.xml';
+  const ui = await editor(t, {
+    sources: ['rss'],
+    collectors: [collection('rss', 'feeds', url, { name: 'Status page', url })],
+  });
+  await ui.openInput('rss', 'env:rss', 'feeds', collectorId('rss', 'feeds', url));
+  // Unusable collection settings keep the editor on the first step.
+  ui.$('definition-extra').value = '[1]';
+  await ui.click('next-step');
+  assert.equal(ui.$('step-number').textContent, '1');
+  assert.equal(ui.$('status').textContent, 'Additional collection settings must be a JSON object.');
+  assert.equal(ui.$('status').getAttribute('role'), 'alert');
+
+  ui.$('definition-extra').value = '{}';
+  await ui.click('next-step');
+  assert.equal(ui.$('step-number').textContent, '2');
+  assert.equal(ui.$('status').hidden, true);
+
+  // The description comes before the controls.
+  ui.$('description').value = '   ';
+  await ui.click('next-step');
+  assert.equal(ui.$('step-number').textContent, '2');
+  assert.equal(
+    ui.$('status').textContent,
+    'Describe what this evidence demonstrates before continuing.',
+  );
+  assert.equal(ui.document.activeElement, ui.$('description'));
+  ui.$('description').value = 'Status page incidents';
+  await ui.click('next-step');
+  assert.equal(
+    ui.$('status').textContent,
+    'Add at least one framework control or clause before continuing.',
+  );
+  ui.$('control').value = 'A1';
+  ui.$('add-target').click();
+  await ui.click('next-step');
+  assert.equal(ui.$('step-number').textContent, '3');
+  assert.equal(ui.$('status').hidden, true);
+});
+
+test('Use this event fills the identifying fields and proposes a rule id', async (t) => {
+  const ui = await editor(t, {
+    samples: [
+      {
+        id: 'e1',
+        source: 'keen-agent',
+        system: 'Build Farm',
+        action: 'deploy.finished',
+        outcome: 'OK',
+        actor: 'alice',
+        severity: 2,
+        summary: 'Deployed <b>keen</b>',
+      },
+    ],
+  });
+  await ui.openInput('keen-agent');
+  assert.equal(ui.$('sample').options.length, 2);
+  // Nothing happens until an event is chosen.
+  await ui.click('use-sample');
+  assert.equal(ui.$('when-action').value, '');
+  await ui.choose('sample', '0');
+  assert.equal(
+    ui.$('sample-details').textContent,
+    'Which system? (optional): Build Farm · What happened? (action): deploy.finished · ' +
+      'What was the result? (outcome): OK · Who did it? (actor): alice · Severity number: 2',
+  );
+  await ui.click('use-sample');
+  assert.deepEqual(
+    ['system', 'action', 'outcome', 'actor'].map((f) => ui.$('when-' + f).value),
+    ['Build Farm', 'deploy.finished', 'OK', ''],
+  );
+  assert.equal(ui.$('rule-id').value, 'keen-agent_build_farm_deploy_finished_ok');
+  assert.equal(
+    ui.$('preview-results').textContent,
+    'Review the filled fields, select framework targets, then preview matches.',
+  );
+  assert.equal(ui.$('preview-results').querySelector('b'), null);
+  // A rule id the administrator typed is kept.
+  ui.$('rule-id').value = 'my_rule';
+  ui.$('when-outcome').value = '';
+  await ui.click('use-sample');
+  assert.equal(ui.$('rule-id').value, 'my_rule');
+  assert.equal(ui.$('when-outcome').value, 'OK');
+});
+
+test('the preview lists matching and non-matching samples as text', async (t) => {
+  const ui = await editor(t, {
+    preview: {
+      examined: 3,
+      matched: 1,
+      note: 'Newest first.',
+      examples: [{ summary: hostile, targets: { A: ['A1', 'A2'], B: ['B9'] } }],
+      nonmatches: [
+        { summary: 'Quiet night', reasons: ['Outcome differs.', 'Actor differs.'] },
+        { summary: 'Blank entry' },
+      ],
+    },
+  });
+  await ui.openInput('keen-agent');
+  ui.$('description').value = 'Agent evidence';
+  await ui.click('preview');
+  const results = [...ui.$('preview-results').children].map((p) => [p.className, p.textContent]);
+  assert.deepEqual(results, [
+    ['', '1 of 3 recent keen-agent events matched. Newest first.'],
+    ['alert alert-success py-2 mb-2', `✓ Matches: ${hostile} → A: A1, A2; B: B9`],
+    [
+      'alert alert-warning py-2 mb-2',
+      '— Does not match: Quiet night. Outcome differs. Actor differs.',
+    ],
+    [
+      'alert alert-warning py-2 mb-2',
+      '— Does not match: Blank entry. Review the additional filters.',
+    ],
+  ]);
+  assert.equal(ui.$('preview-results').querySelector('img'), null);
+});
+
+test('a field condition without a chosen field cannot be previewed', async (t) => {
+  const ui = await editor(t);
+  await ui.openInput('keen-agent');
+  ui.$('description').value = 'Agent evidence';
+  ui.$('field-add').click();
+  const row = ui.$('field-rows').lastElementChild;
+  row.fieldInputs.value.value = 'sshd';
+  assert.equal(row.fieldInputs.path.value, '');
+  await ui.click('preview');
+  assert.equal(ui.$('preview-results').textContent, 'Choose an event field.');
+  assert.deepEqual(ui.writes, []);
+});
+
+test('saving needs a preview of this version, and no evidence asks for confirmation', async (t) => {
+  const ui = await editor(t, {
+    preview: { examined: 0, matched: 0, examples: [], nonmatches: [] },
+    confirm: false,
+  });
+  await ui.openInput('keen-agent');
+  ui.$('description').value = 'Agent evidence';
+  ui.$('control').value = 'A1';
+  ui.$('add-target').click();
+  await ui.click('save-rule');
+  assert.equal(
+    ui.$('status').textContent,
+    'Preview this version of the rule before saving, or choose Advanced → Predefine before evidence is available.',
+  );
+  assert.deepEqual(ui.writes, []);
+
+  await ui.click('preview');
+  await ui.click('save-rule');
+  assert.deepEqual(ui.confirmations, [
+    'There is no recent evidence for this source. Save the rule without a sample match?',
+  ]);
+  assert.deepEqual(
+    ui.writes.map((w) => w.method),
+    ['POST'],
+  );
+
+  // Editing the rule after the preview makes the preview stale again.
+  ui.state.confirm = true;
+  ui.$('description').value = 'Agent evidence, revised';
+  await ui.click('save-rule');
+  assert.match(ui.$('status').textContent, /Preview this version/);
+  await ui.click('preview');
+  ui.state.failSave = '{"detail":[{"msg":"Rule id is taken"},{"msg":"Pick another"}]}';
+  await ui.click('save-rule');
+  assert.equal(ui.$('status').textContent, 'Rule id is taken; Pick another');
+  assert.equal(ui.$('status').getAttribute('role'), 'alert');
+  ui.state.failSave = '{"detail":"Rules changed in another session"}';
+  await ui.click('save-rule');
+  assert.equal(ui.$('status').textContent, 'Rules changed in another session');
+  ui.state.failSave = '{not json';
+  await ui.click('save-rule');
+  assert.equal(ui.$('status').textContent, '{not json');
+});
+
+test('a legacy summary regex is saved unchanged without a structured condition', async (t) => {
+  const ui = await editor(t, {
+    rules: [
+      {
+        id: 'legacy',
+        description: 'Legacy summary rule',
+        when: { source: 'keen-agent', summary_regex: '^(?:gills|systemd)$' },
+        map_to: [{ framework: 'A', ref: 'A1' }],
+      },
+    ],
+  });
+  ui.$('rules').querySelector('button').click();
+  await ui.idle();
+  const row = ui.$('field-rows').firstElementChild;
+  assert.equal(row.fieldInputs.op.value, 'regex');
+  assert.equal(row.fieldInputs.value.value, '^(?:gills|systemd)$');
+  await ui.click('preview');
+  const [preview] = ui.writes;
+  assert.deepEqual(preview.body.rule.when, {
+    source: 'keen-agent',
+    summary_regex: '^(?:gills|systemd)$',
+  });
+  assert.equal('fields' in preview.body.rule.when, false);
+
+  // A removed pattern drops the legacy field altogether.
+  row.fieldInputs.value.value = '';
+  await ui.click('preview');
+  assert.deepEqual(ui.writes.at(-1).body.rule.when, { source: 'keen-agent' });
+});
+
+test('control suggestions need a description, say when nothing fits and report failures', async (t) => {
+  const ui = await editor(t, { suggestions: [] });
+  await ui.openInput('keen-agent');
+  await ui.click('suggest-controls');
+  assert.equal(ui.$('status').textContent, 'Choose a framework and describe the evidence first.');
+  assert.equal(ui.$('status').getAttribute('role'), 'status');
+  assert.deepEqual(ui.writes, []);
+
+  ui.$('description').value = 'Deployment approvals';
+  await ui.click('suggest-controls');
+  assert.equal(
+    ui.$('control-suggestions').textContent,
+    'No clear matches in this framework. Search the control list or try a more specific description.',
+  );
+  assert.deepEqual(ui.writes.at(-1).body, {
+    framework: 'A',
+    description: 'Deployment approvals',
+    sample_summary: '',
+  });
+
+  ui.state.suggestions = [{ ref: 'A1', title: 'Control A', reason: 'Mentions approvals.' }];
+  await ui.click('suggest-controls');
+  const [button] = ui.$('control-suggestions').querySelectorAll('button');
+  assert.equal(button.querySelector('strong').textContent, 'A1 · Control A');
+  // Typing in the description clears stale suggestions.
+  ui.$('description').dispatchEvent(new ui.window.Event('input'));
+  assert.equal(ui.$('control-suggestions').children.length, 0);
+
+  ui.state.failSuggestions = 'Suggestions are unavailable';
+  await ui.click('suggest-controls');
+  assert.equal(ui.$('status').textContent, 'Suggestions are unavailable');
+  assert.equal(ui.$('control-suggestions').children.length, 0);
+});
+
+test('a refused historical run is reported, and only enabled live integrations are sources', async (t) => {
+  const ui = await editor(t, {
+    rules: rules(1),
+    failBackfill: 'Backfill already running',
+    integrations: [
+      { id: 'okta', name: 'Okta sign-ins', enabled: true, live_revision: 3 },
+      { id: 'draft', name: 'Draft integration', enabled: true, live_revision: null },
+      { id: 'paused', name: 'Paused integration', enabled: false, live_revision: 2 },
+    ],
+  });
+  const adapters = [...ui.$('definition-adapter').options].map((o) => [o.value, o.textContent]);
+  assert.ok(
+    adapters.some(([value, text]) => value === 'integration:okta' && text === 'Okta sign-ins'),
+  );
+  assert.ok(!adapters.some(([value]) => value === 'integration:draft'));
+  assert.ok(!adapters.some(([value]) => value === 'integration:paused'));
+
+  ui.$('rules').querySelector('button').click();
+  await ui.idle();
+  await ui.click('backfill-start');
+  assert.deepEqual(ui.confirmations, [
+    'Evaluate all previous keen-agent evidence against saved rule rule-01? This runs in the background.',
+  ]);
+  assert.equal(ui.$('status').textContent, 'Backfill already running');
+  assert.equal(ui.$('status').getAttribute('role'), 'alert');
+
+  // A refused deletion from the editor is reported the same way.
+  ui.state.failDelete = 'Rules changed in another session. Reload before saving.';
+  await ui.click('delete-rule');
+  assert.equal(ui.$('status').textContent, ui.state.failDelete);
+  assert.equal(ui.$('editor').hidden, false);
+});
+
+test('a webhook definition names its provider and locks a saved one', async (t) => {
+  const provider = { ui_name: 'Pager', badge_color: '#123456', secret_header: 'X-Sig' };
+  const fresh = await editor(t, { sources: ['webhooks', 'keen-agent'] });
+  await fresh.openInput('webhooks', 'env:webhooks', 'providers');
+  assert.equal(fresh.field('provider_name').value, '');
+  assert.equal(fresh.field('provider_name').readOnly, false);
+  assert.equal(fresh.$('when-source').value, 'webhook:');
+
+  const saved = await editor(t, {
+    sources: ['webhooks', 'keen-agent'],
+    collectors: [collection('webhooks', 'providers', 'pager', provider)],
+  });
+  await saved.openInput('webhooks', 'env:webhooks', 'providers');
+  assert.equal(saved.$('definition-entry').value, collectorId('webhooks', 'providers', 'pager'));
+  assert.equal(saved.field('provider_name').value, 'pager');
+  assert.equal(saved.field('provider_name').readOnly, true);
+  assert.equal(saved.field('ui_name').value, 'Pager');
+  assert.equal(saved.$('when-source').value, 'webhook:pager');
 });

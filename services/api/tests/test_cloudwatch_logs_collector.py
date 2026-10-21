@@ -222,6 +222,58 @@ def test_once_streams_events_and_paginates(db):
     assert result["cursor_last_ts"].startswith("2025-10-09T")
 
 
+def test_events_without_an_aws_event_id_keep_distinct_identities(db):
+    """Each id-less event is stored on its own; only a true repeat is a duplicate."""
+    events = [
+        {"timestamp": MS, "logStreamName": "web-1", "eventId": "", "message": "one"},
+        {"timestamp": MS, "logStreamName": "web-2", "eventId": "", "message": "one"},
+        {
+            "timestamp": MS + 1,
+            "logStreamName": "web-1",
+            "eventId": "",
+            "message": "two",
+        },
+        # The same stream, time and message is the same event seen again.
+        {"timestamp": MS, "logStreamName": "web-1", "eventId": "", "message": "one"},
+        {
+            "timestamp": MS,
+            "logStreamName": "web-1",
+            "eventId": "x" * 121,
+            "message": "long",
+        },
+    ]
+    fake = fake_boto_client()
+    fake["client"].filter_log_events.return_value = {"events": events}
+    identities = []
+
+    def execute(stmt):
+        identities.append(stmt.compile().params["external_id"])
+        result = MagicMock()
+        result.scalar.return_value = None
+        return result
+
+    db.execute.side_effect = execute
+    set_cursor(db, MagicMock(last_ts=None))
+    with configured(), fake["factory"]:
+        cl.ingest_cloudwatch_logs_once(db, "prod-logs", {"log_group": "/prod/app"}, {})
+
+    # Events are stored in time order, so compare the keys as a multiset.
+    def key(stream, ts, message):
+        return cl._fingerprint("/prod/app", stream, str(ts), message)
+
+    assert sorted(identities) == sorted(
+        [
+            key("web-1", MS, "one"),
+            key("web-1", MS, "one"),  # the repeat shares its key
+            key("web-2", MS, "one"),
+            key("web-1", MS + 1, "two"),
+            # A long AWS id is digested to a fixed-length key.
+            cl._fingerprint("/prod/app", "x" * 121),
+        ]
+    )
+    assert len(set(identities)) == 4
+
+
 def test_once_deduped_event_still_advances_cursor_and_skips_bad_timestamps(db):
     pages = [
         {
@@ -381,3 +433,150 @@ def test_all_config_variants(db):
         r.get("name") == "boom" and "error" in r for r in [results[-1], results[-2]]
     )
     assert "not-a-dict" not in [r.get("name") for r in results]
+
+
+def test_load_config_reads_the_managed_document():
+    with patch.object(cl, "load_document", return_value={"queries": []}) as document:
+        assert cl.load_cloudwatch_logs_config("fixture.yml") == {"queries": []}
+    document.assert_called_once_with("cloudwatch_logs", "fixture.yml")
+
+
+def test_rule_matches_without_usable_targets_touch_no_catalogue(db):
+    # Blank plain references and frameworks whose entries are all unusable are
+    # dropped before any control lookup or mapping insert.
+    ev = MagicMock(
+        source="cloudwatch_logs",
+        connection_id="conn",
+        system="s",
+        actor="a",
+        action="log_event",
+        outcome="info",
+        severity=3,
+        summary="s",
+        raw_pointer={},
+        normalized_payload={},
+    )
+    with (
+        patch.object(cl, "load_rules", return_value={"rules": True}),
+        patch.object(
+            cl,
+            "evaluate_by_framework",
+            return_value={"soc2": ["   ", {"ref": "A.1", "kind": "chapter"}, 7]},
+        ),
+        patch.object(cl, "_ensure_control_items") as ensure,
+    ):
+        assert cl._apply_rules_and_store_mappings(db, ev) == 0
+    ensure.assert_not_called()
+    db.execute.assert_not_called()
+
+
+def test_once_ignores_malformed_event_defaults_and_keeps_ingestion_time(db):
+    # Event defaults that are no object fall back to the query name and the
+    # standard action; the ingestion time AWS reports is kept with the event.
+    fake = fake_boto_client()
+    fake["client"].filter_log_events.return_value = {
+        "events": [
+            {
+                "timestamp": MS,
+                "eventId": "ev1",
+                "message": "hello",
+                "ingestionTime": MS + 250,
+            }
+        ]
+    }
+    inserted = []
+
+    def execute(stmt):
+        inserted.append({k: v.value for k, v in stmt.compile().binds.items()})
+        result = MagicMock()
+        result.scalar.return_value = "ev-row"
+        return result
+
+    db.execute.side_effect = execute
+    set_cursor(db, MagicMock(last_ts=None))
+    with configured(), fake["factory"]:
+        result = cl.ingest_cloudwatch_logs_once(
+            db, "named-query", {"log_group": "g", "event": "system=prod"}, {}
+        )
+    assert result["created_events"] == 1
+    (event,) = inserted
+    assert event["system"] == "named-query"
+    assert event["action"] == "log_event"
+    assert event["outcome"] is None and event["severity"] is None
+    assert event["normalized_payload"]["cloudwatch"]["ingestion_time_ms"] == MS + 250
+
+
+def test_all_treats_a_query_list_that_is_no_list_as_empty(db):
+    with (
+        patch.object(cl.settings, "cloudwatch_logs_enabled", True),
+        patch.object(
+            cl,
+            "load_cloudwatch_logs_config",
+            return_value={"queries": {"log_group": "/g"}},
+        ),
+        patch.object(cl, "ingest_cloudwatch_logs_once") as once,
+    ):
+        assert cl.ingest_cloudwatch_logs_all(db) == []
+    once.assert_not_called()
+
+
+def test_once_continues_from_a_naive_cursor_with_overlap(db):
+    # A cursor stored without a zone is read as UTC and the window starts a
+    # little before it, so late-arriving rows are not missed.
+    fake = fake_boto_client()
+    captured = {}
+
+    def paginate(**params):
+        captured.update(params)
+        return {"events": []}
+
+    fake["client"].filter_log_events.side_effect = paginate
+    cursor = MagicMock(last_ts=datetime(2026, 10, 9, 12, 0, 0))
+    set_cursor(db, cursor)
+    with configured(), fake["factory"]:
+        result = cl.ingest_cloudwatch_logs_once(
+            db, "name", {"log_group": "g"}, {"overlap_seconds": 30}
+        )
+    expected = datetime(2026, 10, 9, 11, 59, 30, tzinfo=timezone.utc)
+    assert captured["startTime"] == int(expected.timestamp() * 1000)
+    assert result["start"] == expected.isoformat()
+    assert cursor.last_ts.tzinfo is not None
+
+
+def test_unresolved_or_conflicting_mappings_are_not_counted(db):
+    ev = MagicMock(
+        source="cloudwatch_logs",
+        connection_id="conn",
+        system="s",
+        actor="a",
+        action="log_event",
+        outcome="info",
+        severity=3,
+        summary="s",
+        raw_pointer={},
+        normalized_payload={},
+    )
+    control = MagicMock(id="ci-1")
+    executed = []
+
+    def execute(stmt):
+        executed.append(stmt)
+        result = MagicMock()
+        result.scalar.return_value = None  # the mapping exists already
+        return result
+
+    db.execute.side_effect = execute
+    with (
+        patch.object(cl, "load_rules", return_value={"rules": True}),
+        patch.object(
+            cl,
+            "evaluate_by_framework",
+            return_value={"soc2": ["A.1", {"ref": "A.9", "kind": "clause"}]},
+        ),
+        patch.object(
+            cl, "_ensure_control_items", return_value={("A.1", None): control}
+        ),
+    ):
+        assert cl._apply_rules_and_store_mappings(db, ev) == 0
+    # Only the resolved target reaches the insert; the conflict adds nothing.
+    assert len(executed) == 1

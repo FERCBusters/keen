@@ -794,3 +794,82 @@ def test_event_samples_list_sources_then_expose_one_source_fields(lab):
         )
         assert response.status_code == 400, collector
         assert response.json()["detail"] == "Invalid collection item"
+
+
+# --- Backfill queueing edge cases ----------------------------------------------
+
+
+def test_saving_a_paused_rule_queues_no_backfill_even_when_asked(lab):
+    """A paused rule maps nothing, so applying it to older evidence is skipped."""
+    lab.event("deploy")
+
+    saved = lab.put({**_rule(action="deploy"), "enabled": False}, apply_existing=True)
+
+    assert saved["backfill"] is None
+    assert lab.db.query(RuleBackfillJob).count() == 0
+    assert lab.queued == []
+
+
+def test_a_queued_backfill_survives_an_unavailable_broker(lab, monkeypatch):
+    """The job row is committed before the broker is asked; beat retries it later."""
+    lab.event("deploy")
+
+    def unavailable(job_id):
+        raise ConnectionError("broker down")
+
+    monkeypatch.setattr(tasks.backfill_rule_task, "delay", unavailable)
+
+    saved = lab.put(_rule(action="deploy"), apply_existing=True)
+
+    assert saved["backfill"]["status"] == "queued"
+    job = lab.db.get(RuleBackfillJob, uuid.UUID(saved["backfill"]["id"]))
+    assert (job.status, job.rule_id) == ("queued", "deploys")
+    listed = lab.admin.get("/v1/admin/rule-backfills").json()["items"]
+    assert [item["id"] for item in listed] == [saved["backfill"]["id"]]
+
+
+def test_preview_samples_are_bounded_to_ten_matches_and_ten_mismatches(lab):
+    """Previews examine up to 200 events and show ten examples of each outcome."""
+    for _ in range(12):
+        lab.event("deploy", commit=False)
+        lab.event("rollback", commit=False)
+    lab.db.commit()
+
+    body = _preview(lab, _rule(action="deploy"))
+
+    assert (body["examined"], body["matched"]) == (24, 12)
+    assert len(body["examples"]) == 10
+    assert len(body["nonmatches"]) == 10
+    assert {item["action"] for item in body["nonmatches"]} == {"rollback"}
+
+
+def test_rule_history_with_duplicate_ids_cannot_be_restored(lab):
+    """Recorded snapshots holding one ID twice are resolved before a restore."""
+    from app.db.models import ManagedConfigurationRevision
+
+    lab.put(_rule("deploys", action="deploy"))
+    current = lab.version()
+    duplicated = {
+        "rules": [
+            {**_rule("deploys", action="deploy"), "enabled": True},
+            {**_rule("deploys", action="rollback"), "enabled": True},
+        ]
+    }
+    lab.db.add(
+        ManagedConfigurationRevision(name="rules", version=0, document=duplicated)
+    )
+    lab.db.commit()
+
+    history = lab.admin.get("/v1/admin/mapping-rules/deploys/revisions")
+    restore = lab.admin.post(
+        f"/v1/admin/mapping-rules/deploys/revisions/{current}/restore",
+        json={"version": current},
+        headers=unsafe(lab.admin),
+    )
+
+    for response in (history, restore):
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"] == (
+            "Duplicate rule IDs in recorded history; resolve before restoring"
+        )
+    assert lab.version() == current

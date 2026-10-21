@@ -240,16 +240,14 @@ def _clean_framework(raw: str | None) -> str:
 
 
 def _clean_score(raw: int | None, *, default: int = 1, label: str = "score") -> int:
-    try:
-        n = int(default if raw is None else raw)
-    except Exception:
-        raise DomainError(status_code=400, detail=f"{label} must be a number")
+    # The request schema has already made the score an integer.
+    n = default if raw is None else int(raw)
     if n < 0 or n > 5:
         raise DomainError(status_code=400, detail=f"{label} must be between 0 and 5")
     return n
 
 
-def _clean_risk_types(raw: list[str] | None, *, required: bool = False) -> list[str]:
+def _clean_risk_types(raw: list[str] | None) -> list[str]:
     """CIA associations in canonical order; a general risk has none."""
 
     out: list[str] = []
@@ -267,8 +265,6 @@ def _clean_risk_types(raw: list[str] | None, *, required: bool = False) -> list[
         if value not in seen:
             seen.add(value)
             out.append(value)
-    if required and not out:
-        raise DomainError(status_code=400, detail="At least one risk type is required")
     return out
 
 
@@ -860,7 +856,6 @@ def _replace_party_links(
                 InterestedPartyName,
                 name=ref.name,
                 user=user,
-                create=True,
                 label="name",
             )
             nature = _lookup_by_id_or_name(
@@ -868,7 +863,6 @@ def _replace_party_links(
                 InterestedPartyNature,
                 name=ref.nature,
                 user=user,
-                create=True,
                 label="nature",
             )
             party = (

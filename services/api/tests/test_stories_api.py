@@ -769,3 +769,111 @@ def test_the_service_checks_permissions_itself(world):
     assert service.readable_story(world.db, nobody, story["id"]) is None
     assert service.readable_story(world.db, reader, story["id"]).title == "Service"
     assert service.readable_story(world.db, reader, "not-a-uuid") is None
+
+
+def test_story_edits_change_named_fields_and_keep_items_to_their_action(world):
+    # A story edit updates the summary alone when that is all it names, and
+    # items cannot be smuggled into a story edit.
+    author = world.client("stories.manage", "events.read")
+    story = world.create(
+        author, summary="Before", items=[world.item("event", world.login)]
+    )
+    path = f"/v1/stories/{story['id']}"
+    refused = author.patch(
+        path,
+        json={"items": [world.item("event", world.export)], "expected_version": 1},
+        headers=unsafe(author),
+    )
+    assert refused.status_code == 400
+    assert "items action" in refused.json()["detail"]
+    changed = author.patch(
+        path,
+        json={"summary": "  After  ", "expected_version": 1},
+        headers=unsafe(author),
+    )
+    assert changed.status_code == 200, changed.text
+    assert (changed.json()["summary"], changed.json()["title"]) == (
+        "After",
+        story["title"],
+    )
+    assert len(changed.json()["items"]) == 1
+    (item,) = changed.json()["items"]
+    noted = author.patch(
+        f"{path}/items/{item['id']}",
+        json={"note": "  Reviewed by the on-call engineer  ", "expected_version": 2},
+        headers=unsafe(author),
+    )
+    assert noted.status_code == 200, noted.text
+    assert noted.json()["items"][0]["note"] == "Reviewed by the on-call engineer"
+    assert noted.json()["items"][0]["label"] == item["label"]
+    # An author-set time with an offset is stored in UTC.
+    timed = author.patch(
+        f"{path}/items/{item['id']}",
+        json={"occurred_at": "2026-05-02T09:30:00+10:00", "expected_version": 3},
+        headers=unsafe(author),
+    )
+    assert timed.status_code == 200, timed.text
+    assert timed.json()["items"][0]["occurred_at"].startswith("2026-05-01T23:30:00")
+    plain = author.patch(
+        f"{path}/items/{item['id']}",
+        json={"occurred_at": "2026-05-03T08:00:00", "expected_version": 4},
+        headers=unsafe(author),
+    )
+    assert plain.json()["items"][0]["occurred_at"].startswith("2026-05-03T08:00:00")
+
+
+def test_an_event_item_needs_an_existing_event(world):
+    author = world.client("stories.manage", "events.read")
+    story = world.create(author)
+    missing = author.post(
+        f"/v1/stories/{story['id']}/items",
+        json={
+            "items": [{"kind": "event", "entity_id": str(uuid.uuid4())}],
+            "expected_version": 1,
+        },
+        headers=unsafe(author),
+    )
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == "Event not found"
+    assert world.db.query(StoryItem).count() == 0
+
+
+def test_a_story_holds_a_bounded_number_of_comments(world):
+    from app.db.models import StoryComment
+
+    author = world.client("stories.manage")
+    story = world.create(author)
+    reader_user = world.keen.user("stories.read")
+    reader = world.keen.client(reader_user)
+    story_id = uuid.UUID(story["id"])
+    for index in range(service.MAX_COMMENTS):
+        world.db.add(
+            StoryComment(
+                story_id=story_id,
+                body=f"Comment {index}",
+                created_by_user_id=reader_user.id,
+            )
+        )
+    world.db.commit()
+    refused = reader.post(
+        f"/v1/stories/{story['id']}/comments",
+        json={"body": "One more"},
+        headers=unsafe(reader),
+    )
+    assert refused.status_code == 400
+    assert str(service.MAX_COMMENTS) in refused.json()["detail"]
+    assert (
+        world.db.query(StoryComment).filter_by(story_id=story_id).count()
+        == service.MAX_COMMENTS
+    )
+
+
+def test_text_and_author_helpers_guard_their_bounds(world):
+    from app.services.errors import DomainError
+
+    with pytest.raises(DomainError, match="note is too long"):
+        service._text("x" * 11, max_len=10, label="note")
+    assert service._text("  a   b  ", max_len=10, label="title") == "a b"
+    assert service._username(world.db, None) is None
+    author = world.keen.user("stories.manage")
+    assert service._username(world.db, author.id) == author.username

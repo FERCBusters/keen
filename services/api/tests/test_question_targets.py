@@ -931,3 +931,226 @@ def test_attachments_are_accepted_only_when_their_content_fits_their_type(
             "Invalid file type: file content does not match declared content-type",
         )
         assert stored == [] and qa.rows(EventQuestionThread) == []
+
+
+# --- Malformed identifiers and empty records -------------------------------------
+
+
+def test_evidence_question_routes_refuse_malformed_event_identifiers(qa):
+    """Each evidence question route checks the event ID before any lookup."""
+    _, client = qa.member("question.create", "events.read")
+    base = "/v1/events/not-a-uuid/questions"
+
+    for response in (
+        client.get(base),
+        client.post(base, json={"body": "Hello?"}, headers=unsafe(client)),
+        client.post(base + "/mark-seen", headers=unsafe(client)),
+    ):
+        assert response.status_code == 400, response.text
+        assert response.json()["detail"] == "Invalid event id"
+    marked = client.post(
+        qa.path("risk", "not-a-uuid") + "/mark-seen", headers=unsafe(client)
+    )
+    assert (marked.status_code, marked.json()["detail"]) == (400, "Invalid entity id")
+    assert qa.rows(EventQuestionThread) == []
+
+
+def test_a_record_without_questions_lists_an_empty_thread_set(qa):
+    _, client = qa.member("risk.read")
+
+    listed = client.get(qa.path("risk"))
+
+    assert listed.status_code == 200, listed.text
+    assert listed.json() == {
+        "target_type": "risk",
+        "target_id": str(qa.risk.id),
+        "threads": [],
+    }
+
+
+def test_blank_record_questions_create_nothing(qa):
+    _, client = qa.member("question.create", "risk.read")
+
+    blank = qa.ask(client, "risk", body="   ")
+
+    assert (blank.status_code, blank.json()["detail"]) == (400, "Body is required")
+    assert qa.rows(EventQuestionThread) == []
+
+
+def test_evidence_threads_that_lost_their_event_are_unreachable(qa):
+    """A thread recorded as evidence without an event refuses replies and is hidden."""
+    author, client = qa.member("question.create", "events.read")
+    orphan = EventQuestionThread(
+        target_type="event",
+        event_id=None,
+        target_id=None,
+        created_by_user_id=author.id,
+        status="unanswered",
+    )
+    qa.db.add(orphan)
+    qa.db.commit()
+
+    refused = qa.reply(client, orphan.id, "Anyone?")
+
+    assert (refused.status_code, refused.json()["detail"]) == (404, "Event not found")
+    assert client.get("/v1/me/questions").json() == {"items": []}
+    assert qa.rows(EventQuestionPost) == []
+
+
+# --- Labels and links for every target shape ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "target_type,ref,title,label",
+    [
+        ("story", "", "Quarterly review", "Story: Quarterly review"),
+        ("risk", "Payroll", "", "CIA Triad risk: Payroll"),
+        ("isms_swot", "", "", "SWOT item"),
+        (None, "", "", "Evidence"),
+    ],
+    ids=["title-only", "ref-only", "neither", "default-type"],
+)
+def test_question_labels_use_whichever_parts_the_target_recorded(
+    target_type, ref, title, label
+):
+    thread = EventQuestionThread(
+        target_type=target_type, target_ref=ref, target_title=title
+    )
+    assert questions._question_target_label(thread) == label
+
+
+def test_questions_without_a_target_link_to_the_question_list():
+    thread = EventQuestionThread(id=uuid.uuid4(), target_type="risk")
+    assert questions._question_target_url(thread) == "/questions.html"
+    story = EventQuestionThread(
+        id=uuid.uuid4(), target_type="story", target_id=uuid.uuid4()
+    )
+    assert questions._question_target_url(story) == (
+        f"/story.html?id={story.target_id}&tab=questions&thread={story.id}"
+    )
+
+
+# --- Best-effort notifications ---------------------------------------------------
+
+
+def test_questions_are_saved_when_realtime_and_webhook_delivery_fail(qa, monkeypatch):
+    """Realtime pushes and webhook queueing are best effort; the write stands."""
+
+    async def failing(*args, **kwargs):
+        raise RuntimeError("bus unavailable")
+
+    monkeypatch.setattr(notification_bus, "publish_admin_open_count", failing)
+    monkeypatch.setattr(notification_bus, "publish_user_unread_replies", failing)
+    for task in (
+        tasks.send_question_webhooks_task,
+        tasks.send_question_reply_webhooks_task,
+    ):
+        monkeypatch.setattr(
+            task, "delay", Mock(side_effect=ConnectionError("broker down"))
+        )
+    author, client = qa.member("question.create", "events.read")
+
+    asked = client.post(
+        f"/v1/events/{qa.event.id}/questions",
+        data={"body": "See attached"},
+        files=[("attachments", ("report.pdf", PDF, "application/pdf"))],
+        headers=unsafe(client),
+    )
+    assert asked.status_code == 200, asked.text
+    thread_id = asked.json()["thread_id"]
+    answered = qa.reply(qa.admin, thread_id, "Planned work")
+    assert answered.status_code == 200, answered.text
+    seen = client.post(
+        f"/v1/events/{qa.event.id}/questions/mark-seen", headers=unsafe(client)
+    )
+    assert seen.status_code == 200, seen.text
+
+    (thread,) = client.get(f"/v1/events/{qa.event.id}/questions").json()["threads"]
+    assert [post["body"] for post in thread["posts"]] == [
+        "See attached",
+        "Planned work",
+    ]
+    (attachment,) = thread["posts"][0]["attachments"]
+    assert (attachment["filename"], attachment["content_type"]) == (
+        "report.pdf",
+        "application/pdf",
+    )
+    assert seen.json() == {"marked": 1, "unread_count": 0}
+    assert qa.published == []
+
+
+def test_the_admin_queue_describes_evidence_questions_by_their_event(qa):
+    _, client = qa.member("question.create", "events.read")
+    asked = client.post(
+        f"/v1/events/{qa.event.id}/questions",
+        json={"body": "Was this expected?"},
+        headers=unsafe(client),
+    )
+    assert asked.status_code == 200, asked.text
+
+    (item,) = qa.admin.get("/v1/admin/questions").json()["items"]
+
+    assert (item["event_id"], item["event_summary"], item["event_source"]) == (
+        str(qa.event.id),
+        "Root account sign-in",
+        "cloud-logs",
+    )
+    assert item["event_timestamp"] == "2026-05-01T09:30:00"
+    assert item["target_label"] == "Evidence: cloud-logs — Root account sign-in"
+    assert item["target_url"] == (
+        f"/event.html?id={qa.event.id}&thread={item['thread_id']}#questions"
+    )
+
+
+# --- The notification socket ------------------------------------------------------
+
+
+def _socket(qa, client):
+    from tests.test_assembled_authority_regressions import BASE
+
+    # The absolute address keeps the browser-style session cookie in scope.
+    address = BASE.replace("https://", "wss://") + "/ws/notifications"
+    return client.websocket_connect(address, headers={"Origin": BASE})
+
+
+def test_administrators_receive_the_open_count_when_their_socket_opens(qa, monkeypatch):
+    from app import main
+    from app.db import session as database
+
+    monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
+    _, client = qa.member("question.create", "risk.read")
+    assert qa.ask(client, "risk").status_code == 200
+
+    with _socket(qa, qa.admin) as socket:
+        first, second = socket.receive_json(), socket.receive_json()
+    with _socket(qa, client) as socket:
+        only = socket.receive_json()
+
+    assert first == {
+        "scope": "admin",
+        "type": "questions.open_count",
+        "open_count": 1,
+    }
+    assert (second["scope"], second["type"], second["unread_count"]) == (
+        "user",
+        "questions.unread_replies_count",
+        0,
+    )
+    assert (only["scope"], only["unread_count"]) == ("user", 0)
+
+
+def test_the_notification_socket_closes_while_questions_are_switched_off(
+    qa, monkeypatch
+):
+    from app import main
+    from app.db import session as database
+    from starlette.websockets import WebSocketDisconnect
+
+    monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
+    qa.switch(questions=False)
+
+    with pytest.raises(WebSocketDisconnect) as closed:
+        with _socket(qa, qa.admin):
+            pass
+
+    assert closed.value.code == 1008

@@ -227,14 +227,19 @@ async function bookstack(t, options = {}) {
         return { items: [{ id: 7, name: 'Handbook' }] };
       }
       if (p === '/api/v1/isms/bookstack-catalog' && u.searchParams.get('kind') === 'pages') {
+        if (options.pagesFail) throw new Error('Pages down');
         const offset = Number(u.searchParams.get('offset'));
         return offset
           ? { items: [{ id: 12, name: 'Page 12' }], next_offset: null }
           : { items: [{ id: 11, name: 'Page <i>11</i>' }], next_offset: 1 };
       }
-      if (p === '/api/v1/controls') return { items: [{ id: 'c1', ref: 'A1', title: 'Access' }] };
+      if (p === '/api/v1/controls') {
+        if (options.requirementsFail) throw new Error('Framework down');
+        return { items: [{ id: 'c1', ref: 'A1', title: 'Access' }] };
+      }
       if (p === '/api/v1/clauses') return { items: [{ id: 'k5', ref: '5.2', title: 'Policy' }] };
-      if (p === '/api/v1/isms/bookstack-sections')
+      if (p === '/api/v1/isms/bookstack-sections') {
+        if (options.sectionsFail) throw new Error('Sections down');
         return {
           items: options.sections ?? [
             {
@@ -261,6 +266,7 @@ async function bookstack(t, options = {}) {
             },
           ],
         };
+      }
       if (p === '/api/v1/audits') return { items: [{ id: 'au1', title: 'Audit', status: 'open' }] };
       throw new Error('Unexpected GET ' + u);
     },
@@ -271,6 +277,7 @@ async function bookstack(t, options = {}) {
     },
     patch: async (u) => {
       state.patched.push(u.pathname + u.search);
+      if (options.patchFail) throw new Error('Archive refused');
       return { ok: true };
     },
   });
@@ -369,6 +376,50 @@ test('BookStack readers only see captured versions; disabled or failing catalogu
       empty.ui.el('bookstackStatus').textContent,
     ),
   );
+});
+
+test('each BookStack lookup that fails is reported without hiding the rest of the section', async (t) => {
+  const sections = await bookstack(t, { sectionsFail: true });
+  assert.equal(
+    sections.ui.el('bookstackStatus').textContent,
+    'Could not load policy evidence: Error: Sections down',
+  );
+  assert.equal(sections.ui.el('bookstackStatus').dataset.alert, 'danger');
+  // The capture form still works for the next attempt.
+  assert.equal(sections.ui.el('policyDocument').options.length, 2);
+
+  const requirements = await bookstack(t, { requirementsFail: true });
+  assert.equal(
+    requirements.ui.el('bookstackStatus').textContent,
+    'Could not load framework requirements: Error: Framework down',
+  );
+  assert.deepEqual(
+    [...requirements.ui.el('targetRequirement').options].map((o) => o.value),
+    [''],
+  );
+
+  const pages = await bookstack(t, { pagesFail: true });
+  pages.ui.el('bookSelect').value = '7';
+  pages.ui.el('bookSelect').dispatchEvent(new pages.ui.window.Event('change'));
+  await settle(() =>
+    /Could not load BookStack pages/.test(pages.ui.el('bookstackStatus').textContent),
+  );
+  assert.equal(
+    pages.ui.el('bookstackStatus').textContent,
+    'Could not load BookStack pages: Error: Pages down',
+  );
+
+  const archive = await bookstack(t, { patchFail: true });
+  archive.ui.el('sectionRows').querySelector('[data-archive="s1"]').click();
+  await settle(() =>
+    /Could not update policy evidence/.test(archive.ui.el('bookstackStatus').textContent),
+  );
+  assert.equal(
+    archive.ui.el('bookstackStatus').textContent,
+    'Could not update policy evidence: Error: Archive refused',
+  );
+  assert.deepEqual(archive.state.patched, ['/api/v1/isms/bookstack-sections/s1?archived=true']);
+  assert.equal(archive.ui.el('sectionRows').querySelectorAll('tr').length, 2);
 });
 
 // ------------------------------------------------------------------- Agents

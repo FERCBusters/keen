@@ -264,6 +264,71 @@ def test_profile_and_nonce_validation(fleet):
     )
 
 
+def test_profile_expiry_must_be_a_future_instant_with_a_timezone(fleet):
+    # The expiry is stored as UTC; naive or past values are refused.
+    c, f, _, _ = fleet
+    for value in ["2030-01-01T10:00:00", "2000-01-01T10:00:00+00:00"]:
+        refused = c.post(
+            "/v1/admin/agent-enrollment-profiles",
+            json={"name": "bad", "expires_at": value},
+        )
+        assert refused.status_code == 422, refused.text
+    accepted = c.post(
+        "/v1/admin/agent-enrollment-profiles",
+        json={"name": "zoned", "expires_at": "2030-01-01T10:00:00+10:00"},
+    )
+    assert accepted.status_code == 201, accepted.text
+    with f() as db:
+        row = db.get(AgentEnrollmentProfile, accepted.json()["profile"]["id"])
+        assert row.expires_at.isoformat() == "2030-01-01T00:00:00"
+    open_ended = c.post(
+        "/v1/admin/agent-enrollment-profiles",
+        json={"name": "open", "expires_at": None},
+    )
+    assert open_ended.status_code == 201, open_ended.text
+    assert open_ended.json()["profile"]["expires_at"] is None
+
+
+def test_unknown_profiles_actions_and_credentials_are_refused(fleet):
+    c, f, p, manual = fleet
+    import uuid
+
+    assert action(c, p, "disable").status_code == 404
+    assert (
+        c.post(f"/v1/admin/agent-enrollment-profiles/{uuid.uuid4()}/pause").status_code
+        == 404
+    )
+    for authorization in [
+        "Bearer not-a-bootstrap-key",
+        "Basic " + p["bootstrap_key"],
+        "Bearer " + p["bootstrap_key"][:-1],
+        "",
+    ]:
+        refused = c.post(
+            "/v1/agents/enroll",
+            json={"name": "web-01", "nonce": secrets.token_urlsafe(32)},
+            headers={"Authorization": authorization} if authorization else {},
+        )
+        assert refused.status_code in {401, 422}, authorization
+    with f() as db:
+        assert (
+            db.query(KeenAgent)
+            .filter_by(enrollment_profile_id=p["profile"]["id"])
+            .count()
+            == 0
+        )
+        assert db.get(AgentEnrollmentProfile, p["profile"]["id"]).state == "active"
+    # A manually created agent has no profile and cannot renew itself.
+    renewal = c.post(
+        "/v1/agents/renew",
+        json={"nonce": secrets.token_urlsafe(32)},
+        headers=manual,
+    )
+    assert renewal.status_code == 403
+    assert "administrator" in renewal.json()["detail"]
+    assert c.post("/v1/otlp/logs", json=record(), headers=manual).status_code == 200
+
+
 def revocation_request(ident, token):
     return Request(
         {
