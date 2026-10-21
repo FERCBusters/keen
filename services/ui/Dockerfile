@@ -27,7 +27,7 @@ COPY services/ui/scripts ./scripts
 COPY services/ui/public ./public
 RUN npm run build
 
-FROM nginx:1.30.4-alpine
+FROM nginx:1.30.6-alpine
 
 COPY services/ui/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=vendor /build/dist/ /usr/share/nginx/html/
