@@ -773,7 +773,6 @@ def _party_out(
 ) -> dict[str, Any]:
     return {
         "id": str(row.id),
-        "framework": row.framework_slug,
         "name": getattr(row.name, "name", "") or "",
         "nature": getattr(row.nature, "name", "") or "",
         "label": f"{getattr(row.name, 'name', '') or ''} — {getattr(row.nature, 'name', '') or ''}",
@@ -801,7 +800,6 @@ def _search_interested_parties(
             InterestedPartyNature, InterestedPartyNature.id == InterestedParty.nature_id
         )
         .options(joinedload(InterestedParty.name), joinedload(InterestedParty.nature))
-        .filter(InterestedParty.framework_slug == framework)
         .all()
     )
     existing_matches: list[dict[str, Any]] = []

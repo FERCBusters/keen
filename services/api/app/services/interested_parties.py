@@ -231,9 +231,11 @@ def _communication_out(row: InterestedPartyCommunication | None) -> dict[str, An
 
 
 def _party_controls(
-    db: Session, party_id: uuid.UUID, framework: str
+    db: Session, party_id: uuid.UUID, framework: str | None
 ) -> list[ControlItem]:
-    rows = (
+    """The controls linked to a party in one framework, or in every framework."""
+
+    qry = (
         db.query(ControlItem)
         .join(
             InterestedPartyControlLink,
@@ -241,28 +243,31 @@ def _party_controls(
         )
         .filter(
             InterestedPartyControlLink.interested_party_id == party_id,
-            InterestedPartyControlLink.framework_slug == framework,
-            ControlItem.framework_slug == framework,
+            InterestedPartyControlLink.framework_slug == ControlItem.framework_slug,
         )
-        .all()
     )
-    return sorted(rows, key=lambda c: _ref_sort_key(c.ref))
+    if framework:
+        qry = qry.filter(InterestedPartyControlLink.framework_slug == framework)
+    rows = qry.all()
+    return sorted(rows, key=lambda c: (c.framework_slug, _ref_sort_key(c.ref)))
 
 
 def _party_out(
     db: Session,
     row: InterestedParty,
     *,
+    framework: str | None = None,
     include_controls: bool = True,
     include_communications: bool = True,
 ) -> dict[str, Any]:
-    controls = (
-        _party_controls(db, row.id, row.framework_slug) if include_controls else []
-    )
+    """Describe a party; its controls are those linked in ``framework`` (every
+    framework when none is given), and ``framework`` says which that is."""
+
+    controls = _party_controls(db, row.id, framework) if include_controls else []
     comms = list(row.communications or []) if include_communications else []
     return {
         "id": str(row.id),
-        "framework": row.framework_slug,
+        "framework": framework or "",
         "name": _name_out(row.name),
         "name_id": str(row.name_id),
         "nature": _nature_out(row.nature),
@@ -445,13 +450,17 @@ def _party_changelog_state(
     out = _party_out(db, party, include_controls=True, include_communications=True)
     return {
         "id": out["id"],
-        "framework": out["framework"],
         "display": out["label"],
         "name": out["name"].get("name"),
         "nature": out["nature"].get("name"),
         "note": out.get("note") or "",
         "controls": [
-            {"id": c["id"], "ref": c.get("ref"), "title": c.get("title")}
+            {
+                "id": c["id"],
+                "framework": c.get("framework"),
+                "ref": c.get("ref"),
+                "title": c.get("title"),
+            }
             for c in out.get("controls", [])
         ],
         "communications": [
@@ -534,18 +543,20 @@ def _controls_for_payload(
 
 
 def _replace_control_links(
-    db: Session, party: InterestedParty, controls: list[ControlItem]
+    db: Session, party: InterestedParty, framework: str, controls: list[ControlItem]
 ) -> None:
+    """Replace the party's links in one framework; other frameworks keep theirs."""
+
     db.query(InterestedPartyControlLink).filter(
         InterestedPartyControlLink.interested_party_id == party.id,
-        InterestedPartyControlLink.framework_slug == party.framework_slug,
+        InterestedPartyControlLink.framework_slug == framework,
     ).delete(synchronize_session=False)
     now = _utcnow()
     for control in controls:
         db.add(
             InterestedPartyControlLink(
                 interested_party_id=party.id,
-                framework_slug=party.framework_slug,
+                framework_slug=framework,
                 control_item_id=control.id,
                 created_at=now,
             )
@@ -737,13 +748,12 @@ def interested_parties_visualisations(
         .join(
             InterestedPartyNature, InterestedPartyNature.id == InterestedParty.nature_id
         )
-        .filter(InterestedParty.framework_slug == fw)
         .order_by(
             func.lower(InterestedPartyNature.name), func.lower(InterestedPartyName.name)
         )
         .all()
     )
-    items = [_party_out(db, r) for r in rows]
+    items = [_party_out(db, r, framework=fw) for r in rows]
     nature_counts: dict[str, int] = {}
     with_whom_counts: dict[str, int] = {}
     event_counts: dict[str, int] = {}
@@ -852,7 +862,6 @@ def list_interested_parties(
         .join(
             InterestedPartyNature, InterestedPartyNature.id == InterestedParty.nature_id
         )
-        .filter(InterestedParty.framework_slug == fw)
     )
     if q:
         needle = f"%{q.strip()}%"
@@ -892,7 +901,7 @@ def list_interested_parties(
         "total": total,
         "limit": limit,
         "offset": offset,
-        "items": [_party_out(db, r) for r in rows],
+        "items": [_party_out(db, r, framework=fw) for r in rows],
     }
 
 
@@ -921,7 +930,6 @@ def create_interested_party(
     existing = (
         db.query(InterestedParty)
         .filter(
-            InterestedParty.framework_slug == fw,
             InterestedParty.name_id == name.id,
             InterestedParty.nature_id == nature.id,
         )
@@ -934,7 +942,6 @@ def create_interested_party(
         )
     now = _utcnow()
     row = InterestedParty(
-        framework_slug=fw,
         name_id=name.id,
         nature_id=nature.id,
         note=(
@@ -948,7 +955,7 @@ def create_interested_party(
     )
     db.add(row)
     db.flush()
-    _replace_control_links(db, row, _controls_for_payload(db, payload.controls, fw))
+    _replace_control_links(db, row, fw, _controls_for_payload(db, payload.controls, fw))
     if payload.communications is not None:
         _replace_communications(db, row, payload.communications)
     record_entity_changelog(
@@ -964,11 +971,19 @@ def create_interested_party(
     )
     db.commit()
     db.refresh(row)
-    return _party_out(db, row)
+    return _party_out(db, row, framework=fw)
 
 
-def get_interested_party(*, party_id: str, user, db: Session):
-    return _party_out(db, _party_or_404(db, party_id))
+def get_interested_party(
+    *,
+    party_id: str,
+    framework: str = settings.default_framework_slug,
+    user,
+    db: Session,
+):
+    return _party_out(
+        db, _party_or_404(db, party_id), framework=_clean_framework(framework)
+    )
 
 
 def update_interested_party(
@@ -981,17 +996,9 @@ def update_interested_party(
 ):
     row = _party_or_404(db, party_id)
     before = _party_changelog_state(db, row)
-    fw = _clean_framework(payload.framework or row.framework_slug)
-    if (
-        fw != row.framework_slug
-        and db.query(InterestedPartyControlLink)
-        .filter(InterestedPartyControlLink.interested_party_id == row.id)
-        .first()
-    ):
-        raise DomainError(
-            status_code=400, detail="Cannot change framework while controls are linked"
-        )
-    row.framework_slug = fw
+    # The party is organisation-wide; the framework says which control links
+    # the payload describes and which the response shows.
+    fw = _clean_framework(payload.framework)
     if payload.note is not None:
         row.note = _clean_text(payload.note, max_len=4000, label="note")
     if payload.name_id or payload.name:
@@ -1018,7 +1025,6 @@ def update_interested_party(
         db.query(InterestedParty)
         .filter(
             InterestedParty.id != row.id,
-            InterestedParty.framework_slug == row.framework_slug,
             InterestedParty.name_id == row.name_id,
             InterestedParty.nature_id == row.nature_id,
         )
@@ -1034,7 +1040,7 @@ def update_interested_party(
     db.flush()
     if payload.controls is not None:
         _replace_control_links(
-            db, row, _controls_for_payload(db, payload.controls, row.framework_slug)
+            db, row, fw, _controls_for_payload(db, payload.controls, fw)
         )
     if payload.communications is not None:
         _replace_communications(db, row, payload.communications)
@@ -1051,7 +1057,7 @@ def update_interested_party(
     )
     db.commit()
     db.refresh(row)
-    return _party_out(db, row)
+    return _party_out(db, row, framework=fw)
 
 
 def delete_interested_party(
@@ -1077,30 +1083,35 @@ def delete_interested_party(
     return {"ok": True, "id": str(rid)}
 
 
-def interested_party_controls(*, party_id: str, user, db: Session):
+def interested_party_controls(
+    *,
+    party_id: str,
+    framework: str = settings.default_framework_slug,
+    user,
+    db: Session,
+):
     row = _party_or_404(db, party_id)
+    fw = _clean_framework(framework)
     return {
         "id": str(row.id),
-        "framework": row.framework_slug,
-        "controls": [
-            _control_out(c) for c in _party_controls(db, row.id, row.framework_slug)
-        ],
+        "framework": fw,
+        "controls": [_control_out(c) for c in _party_controls(db, row.id, fw)],
     }
 
 
 def update_interested_party_controls(
     *,
     party_id: str,
+    framework: str = settings.default_framework_slug,
     payload: ControlLinksPayload,
     context: ChangeContext,
     user,
     db: Session,
 ):
     row = _party_or_404(db, party_id)
+    fw = _clean_framework(framework)
     before = _party_changelog_state(db, row)
-    _replace_control_links(
-        db, row, _controls_for_payload(db, payload.controls, row.framework_slug)
-    )
+    _replace_control_links(db, row, fw, _controls_for_payload(db, payload.controls, fw))
     row.updated_at = _utcnow()
     db.add(row)
     record_entity_changelog(
@@ -1116,7 +1127,7 @@ def update_interested_party_controls(
     )
     db.commit()
     db.refresh(row)
-    return _party_out(db, row)
+    return _party_out(db, row, framework=fw)
 
 
 def interested_party_communications(*, party_id: str, user, db: Session):
@@ -1200,7 +1211,6 @@ def control_interested_parties(
         .filter(
             InterestedPartyControlLink.control_item_id == control.id,
             InterestedPartyControlLink.framework_slug == fw,
-            InterestedParty.framework_slug == fw,
         )
         .order_by(
             func.lower(InterestedPartyNature.name), func.lower(InterestedPartyName.name)
@@ -1211,7 +1221,9 @@ def control_interested_parties(
         "control": _control_out(control),
         "framework": fw,
         "items": [
-            _party_out(db, r, include_controls=False, include_communications=True)
+            _party_out(
+                db, r, framework=fw, include_controls=False, include_communications=True
+            )
             for r in rows
         ],
     }

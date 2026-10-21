@@ -233,7 +233,7 @@ def _interested_party_summary(
 ) -> dict[str, Any]:
     return {
         "id": str(row.id),
-        "framework": row.framework_slug,
+        "framework": framework,
         "name": {
             "id": str(row.name.id) if row.name else None,
             "name": row.name.name if row.name else None,
@@ -379,7 +379,6 @@ def statement_of_applicability(
                 InterestedPartyNature,
                 InterestedPartyNature.id == InterestedParty.nature_id,
             )
-            .filter(InterestedParty.framework_slug == fw)
             .order_by(InterestedPartyNature.name.asc(), InterestedPartyName.name.asc())
             .all()
         )

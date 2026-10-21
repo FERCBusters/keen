@@ -533,25 +533,9 @@ def _registers(db):
     db.add_all([regulators, enforcement, investors])
     db.flush()
     party = InterestedParty(
-        framework_slug="A",
-        name_id=regulators.id,
-        nature_id=enforcement.id,
-        note="National regulator",
+        name_id=regulators.id, nature_id=enforcement.id, note="National regulator"
     )
-    db.add_all(
-        [
-            party,
-            InterestedParty(
-                framework_slug="A", name_id=investors.id, nature_id=enforcement.id
-            ),
-            InterestedParty(
-                framework_slug="B",
-                name_id=regulators.id,
-                nature_id=enforcement.id,
-                note="National regulator",
-            ),
-        ]
-    )
+    db.add_all([party, InterestedParty(name_id=investors.id, nature_id=enforcement.id)])
     category = RiskCategory(name="Data")
     db.add(category)
     db.flush()

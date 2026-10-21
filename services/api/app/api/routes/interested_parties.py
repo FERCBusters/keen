@@ -183,10 +183,13 @@ def create_interested_party(
 @router.get("/v1/interested-parties/{party_id}")
 def get_interested_party(
     party_id: str,
+    framework: str = settings.default_framework_slug,
     user=Depends(require_interested_parties_read),
     db: Session = Depends(get_db),
 ):
-    return service.get_interested_party(party_id=party_id, user=user, db=db)
+    return service.get_interested_party(
+        party_id=party_id, framework=framework, user=user, db=db
+    )
 
 
 @router.patch("/v1/interested-parties/{party_id}")
@@ -221,10 +224,13 @@ def delete_interested_party(
 @router.get("/v1/interested-parties/{party_id}/controls")
 def interested_party_controls(
     party_id: str,
+    framework: str = settings.default_framework_slug,
     user=Depends(require_interested_parties_read),
     db: Session = Depends(get_db),
 ):
-    return service.interested_party_controls(party_id=party_id, user=user, db=db)
+    return service.interested_party_controls(
+        party_id=party_id, framework=framework, user=user, db=db
+    )
 
 
 @router.patch("/v1/interested-parties/{party_id}/controls")
@@ -232,11 +238,13 @@ def update_interested_party_controls(
     party_id: str,
     payload: ControlLinksPayload,
     request: Request,
+    framework: str = settings.default_framework_slug,
     user=Depends(require_interested_parties_manage),
     db: Session = Depends(get_db),
 ):
     return service.update_interested_party_controls(
         party_id=party_id,
+        framework=framework,
         payload=payload,
         context=change_context(request),
         user=user,

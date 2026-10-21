@@ -264,7 +264,11 @@ def test_interested_party_communications_controls_and_changelog(api):
     request(
         api, "DELETE", "interested-parties/natures/" + party["nature"]["id"], status=400
     )
-    request(api, "PATCH", path, {"framework": "B"}, status=400)
+    # The party is one organisation-wide record; each framework keeps its own
+    # control links, so a control from B cannot be linked under A.
+    viewed_in_b = request(api, "PATCH", path, {"framework": "B"})
+    assert (viewed_in_b["framework"], viewed_in_b["controls"]) == ("B", [])
+    assert len(request(api, "GET", path)["controls"]) == 1
     request(
         api,
         "PATCH",
@@ -272,6 +276,16 @@ def test_interested_party_communications_controls_and_changelog(api):
         {"controls": [str(api.controls[1].id)]},
         status=400,
     )
+    linked_in_b = request(
+        api,
+        "PATCH",
+        path + "/controls",
+        {"controls": [str(api.controls[1].id)]},
+        framework="B",
+    )
+    assert [c["framework"] for c in linked_in_b["controls"]] == ["B"]
+    assert len(request(api, "GET", path + "/controls")["controls"]) == 1
+    assert len(request(api, "GET", path + "/controls", framework="B")["controls"]) == 1
     request(api, "PATCH", path + "/communications", {"items": []})
     assert request(api, "GET", path + "/communications")["items"] == []
     request(api, "PATCH", path + "/controls", {"controls": []})

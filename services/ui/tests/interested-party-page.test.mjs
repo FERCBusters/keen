@@ -59,7 +59,11 @@ async function partyPage(t, options = {}) {
             { id: 'c2', ref: 'A2', title: '<i>Comms</i>' },
           ],
         };
-      if (p === '/api/v1/interested-parties/ip1') return structuredClone(state.party);
+      if (p === '/api/v1/interested-parties/ip1') {
+        // The party is organisation-wide; the page asks for this framework's links.
+        assert.equal(u.searchParams.get('framework'), 'A');
+        return structuredClone(state.party);
+      }
       if (p === '/api/v1/interested-parties/ip1/changelog')
         return { items: [{ summary: 'Party created', changes: [] }] };
       if (p === '/api/v1/audits') return { items: [{ id: 'au1', title: 'Audit', status: 'open' }] };
@@ -94,7 +98,10 @@ async function partyPage(t, options = {}) {
 test('interested party details render selected lookups, controls and communications safely', async (t) => {
   const { ui } = await partyPage(t);
   assert.equal(ui.el('partyTitle').textContent, 'Regulator <script> — Legal');
-  assert.equal(ui.el('partyMeta').textContent, 'Framework A • Updated 2026-06-01T00:00:00Z');
+  assert.equal(
+    ui.el('partyMeta').textContent,
+    'Organisation-wide • controls shown for A • Updated 2026-06-01T00:00:00Z',
+  );
   assert.equal(ui.el('partyName').value, 'n2');
   assert.equal(ui.el('partyNature').value, 't2');
   assert.equal(ui.el('partyNote').value, 'Quarterly');
@@ -172,7 +179,7 @@ test('communications can be added, removed and saved', async (t) => {
 test('a new interested party is created before its communications are saved', async (t) => {
   const { ui, state } = await partyPage(t, { query: '' });
   assert.equal(ui.el('partyTitle').textContent, 'New interested party');
-  assert.equal(ui.el('partyMeta').textContent, 'Framework A');
+  assert.equal(ui.el('partyMeta').textContent, 'Organisation-wide • controls for A');
   assert.equal(ui.el('deleteParty').style.display, 'none');
   assert.match(ui.el('communicationsList').textContent, /No communications have been added yet/);
   ui.el('partyChangelogTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));

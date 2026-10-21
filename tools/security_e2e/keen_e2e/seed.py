@@ -70,7 +70,6 @@ def build(admin, payloads, cleanup, *, evidence_writes=False):
     # it again in edit mode, and the library tab lists templates.
     seed.pages += [
         ("risks", "/risks.html"),
-        ("register", "/risks.html?tab=register"),
         ("cia", "/risks.html?tab=cia"),
         ("library", "/risks.html?tab=library"),
         ("wizard", "/risk-wizard.html?id={id}".format(id=seed.ids["risk"])),

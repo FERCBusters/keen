@@ -138,7 +138,10 @@ def _register_out(db, row, framework):
 
 
 def register_heatmap(*, user, db: Session):
-    result = {}
+    """Rated risks per likelihood and impact cell, with the severity thresholds
+    that colour the cells."""
+
+    result = {"thresholds": _settings(db)}
     for key, likelihood, impact in (
         ("inherent", Risk.register_likelihood, Risk.register_impact),
         ("residual", Risk.register_residual_likelihood, Risk.register_residual_impact),

@@ -1200,27 +1200,15 @@ def test_a_risk_names_the_parties_it_affects(reg):
     nature = InterestedPartyNature(name="External")
     db.add_all([name, nature])
     db.flush()
-    party = InterestedParty(framework_slug="A", name_id=name.id, nature_id=nature.id)
-    elsewhere = InterestedParty(
-        framework_slug="B", name_id=name.id, nature_id=nature.id
-    )
+    party = InterestedParty(name_id=name.id, nature_id=nature.id)
     person = IsmsPerson(name="Dana", position="DPO", email="dana@example.test")
     vendor = IsmsVendor(
         name="Cloud host",
         contact="support@cloud.example",
         website="https://cloud.example",
     )
-    db.add_all([party, elsewhere, person, vendor])
+    db.add_all([party, person, vendor])
     db.commit()
-
-    # A risk names interested parties from its own framework only.
-    response = reg.manage(
-        "POST",
-        "/v1/risks",
-        _risk_body(interested_parties=[{"interested_party_id": str(elsewhere.id)}]),
-        status=400,
-    )
-    assert response["detail"] == "Unknown interested party"
 
     created = _create(
         reg,
@@ -1327,18 +1315,18 @@ def test_the_wizard_lists_who_a_risk_can_affect(reg):
     db.flush()
     db.add_all(
         [
-            InterestedParty(framework_slug="A", name_id=name.id, nature_id=nature.id),
-            InterestedParty(
-                framework_slug="B", name_id=other.id, nature_id=internal.id
-            ),
+            InterestedParty(name_id=name.id, nature_id=nature.id),
+            InterestedParty(name_id=other.id, nature_id=internal.id),
             IsmsPerson(name="Dana", position="DPO", email="dana@example.test"),
             IsmsVendor(name="Cloud host", contact="support@cloud.example"),
         ]
     )
     db.commit()
     options = reg.manage("GET", "/v1/risks/parties", params={"framework": "A"})
+    # Interested parties are organisation-wide, so every one is offered.
     assert [(p["label"], p["detail"]) for p in options["interested_parties"]] == [
-        ("Customers", "External")
+        ("Customers", "External"),
+        ("Staff", "Internal"),
     ]
     # Names only: no addresses or contacts leave the directory through here.
     assert options["people"] == [

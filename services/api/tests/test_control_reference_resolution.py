@@ -172,6 +172,7 @@ def test_isms_records_and_parties_link_the_control_by_reference(catalogue):
         "PATCH",
         f"/v1/interested-parties/{party['id']}/controls",
         {"controls": ["5.1"]},
+        framework="A",
     )
     assert [c["id"] for c in relinked["controls"]] == [control]
 

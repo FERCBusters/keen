@@ -180,8 +180,7 @@ class DemoTeardown:
         interested_party_ids = (
             self.ids(
                 self.db.query(InterestedParty.id).filter(
-                    InterestedParty.name_id.in_(interested_party_name_ids),
-                    InterestedParty.framework_slug == self.framework,
+                    InterestedParty.name_id.in_(interested_party_name_ids)
                 )
             )
             if interested_party_name_ids

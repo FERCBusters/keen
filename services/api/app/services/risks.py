@@ -841,9 +841,7 @@ def _replace_party_links(
                 " or a new interested party by name and nature",
             )
         if ref.interested_party_id:
-            party = db.get(InterestedParty, ref.interested_party_id)
-            # Interested parties belong to a framework; a risk names its own.
-            if party is None or party.framework_slug != framework:
+            if not db.get(InterestedParty, ref.interested_party_id):
                 raise DomainError(400, "Unknown interested party")
             add("interested_party", ref.interested_party_id)
         elif ref.person_id:
@@ -876,7 +874,6 @@ def _replace_party_links(
             party = (
                 db.query(InterestedParty)
                 .filter(
-                    InterestedParty.framework_slug == framework,
                     InterestedParty.name_id == name.id,
                     InterestedParty.nature_id == nature.id,
                 )
@@ -885,7 +882,6 @@ def _replace_party_links(
             if party is None:
                 now = _utcnow()
                 party = InterestedParty(
-                    framework_slug=framework,
                     name_id=name.id,
                     nature_id=nature.id,
                     note="",
@@ -903,7 +899,6 @@ def _replace_party_links(
                     before=None,
                     after={
                         "id": str(party.id),
-                        "framework": framework,
                         "name": name.name,
                         "nature": nature.name,
                         "display": f"{name.name} ({nature.name})",
@@ -1483,8 +1478,8 @@ def list_risk_owner_users(*, user, db: Session):
 
 
 def list_risk_party_options(*, framework: str, q: str = "", user, db: Session):
-    """Who a risk can affect, for the risk wizard: interested parties in the
-    framework, people from the ISMS directory and vendors, by name only."""
+    """Who a risk can affect, for the risk wizard: the organisation's interested
+    parties, people from the ISMS directory and vendors, by name only."""
 
     fw = _clean_framework(framework)
     needle = _clean_text(q, max_len=256, required=False, label="q").lower()
@@ -1495,7 +1490,6 @@ def list_risk_party_options(*, framework: str, q: str = "", user, db: Session):
     parties = (
         db.query(InterestedParty)
         .join(InterestedPartyName, InterestedPartyName.id == InterestedParty.name_id)
-        .filter(InterestedParty.framework_slug == fw)
         .order_by(func.lower(InterestedPartyName.name))
         .limit(500)
         .all()

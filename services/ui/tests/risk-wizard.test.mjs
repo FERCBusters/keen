@@ -123,9 +123,13 @@ async function wizard(t, options = {}) {
       if (p === '/api/v1/controls') return { items: controls };
       if (p === '/api/v1/risks/library') return { items: library };
       if (p === '/api/v1/risks/parties') return parties;
-      if (p === '/api/v1/risks/register') {
+      if (p === '/api/v1/risks/register/heatmap') {
         if (options.registerFail) throw new Error('offline');
-        return { items: [], total: 0, thresholds: { low_max: 4, moderate_max: 9, high_max: 16 } };
+        return {
+          inherent: [],
+          residual: [],
+          thresholds: { low_max: 4, moderate_max: 9, high_max: 16 },
+        };
       }
       if (p === '/api/v1/pestle/meta') return pestleMeta;
       if (p === '/api/v1/pestle/business-processes')

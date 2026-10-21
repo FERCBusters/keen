@@ -1,7 +1,7 @@
-// The Risks dashboard: every risk, the register and heatmap, CIA risks,
-// PESTLE(E) factors, the reusable library, risk/control visualisations and the
-// controls that no risk mentions yet. Creating and editing happens in the risk
-// wizard; rating and treatment can also be adjusted from the register tab.
+// The Risks dashboard: every risk with its 5×5 heatmap and rating card, CIA
+// risks, PESTLE(E) factors, the reusable library, risk/control visualisations
+// and the controls that no risk mentions yet. Creating and editing happens in
+// the risk wizard; rating and treatment can also be adjusted in place.
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
   initNavbar,
@@ -65,6 +65,8 @@ const canViewPestle = !!(
   canViewRisks
 );
 const canSampleAudits = canSampleIntoAudit(me, 'risk');
+// Ratings, thresholds and the heatmap belong to the register feature.
+const registerEnabled = featureEnabled(me, 'risk_register');
 
 const params = new URLSearchParams(location.search);
 const requestedTab = params.get('tab') || '';
@@ -80,16 +82,13 @@ const RISK_TYPE_FILTER_OPTIONS = RISK_TYPES.map((value) => ({ value, label: valu
 
 let categories = [];
 let currentItems = [];
-let registerRisks = [];
-let registerOffset = 0;
-let registerTotal = 0;
 let thresholds = { low_max: 4, moderate_max: 9, high_max: 16 };
 let heatmapCounts = { inherent: [], residual: [] };
-let selectedRegisterRisk = null;
+let selectedRisk = null;
 let library = [];
 let pestleItems = [];
 let pestleMeta = null;
-let loaded = { register: false, cia: false, pestle: false, library: false, controlsWithout: false };
+let loaded = { heatmap: false, cia: false, pestle: false, library: false, controlsWithout: false };
 
 function notify(message, kind = 'danger') {
   toast(status, message, kind);
@@ -193,9 +192,10 @@ function markDefaultRiskSort() {
   riskHeader.classList.add('sort-desc');
 }
 
-function actionsHtml(r) {
+function actionsHtml(r, { rate = false } = {}) {
   return `<div class="d-flex flex-wrap gap-1">
     <a class="btn btn-sm btn-outline-secondary" href="${esc(riskHref(r.id, framework))}">Open</a>
+    ${rate && registerEnabled ? `<button class="btn btn-sm btn-outline-primary" type="button" data-rate="${esc(r.id)}">${canManageRisks ? 'Rate / treat' : 'Rating'}</button>` : ''}
     ${canSampleAudits ? `<button class="btn btn-sm btn-outline-success" type="button" data-sample-risk="${esc(r.id)}" title="Sample into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>` : ''}
     ${canManageRisks ? `<a class="btn btn-sm btn-outline-primary" href="${esc(riskWizardHref(framework, { id: r.id }))}">Edit</a>` : ''}
   </div>`;
@@ -227,14 +227,22 @@ function renderRows(items) {
       <td>${methodBadgeHtml(methodOf(r))}${(r.risk_types || []).length ? `<div class="mt-1">${riskTypeBadgesHtml(r.risk_types)}</div>` : ''}</td>
       <td>${partyBadgesHtml(r.interested_parties, framework)}</td>
       <td>${userPillHtml(r.risk_owner)}</td>
-      <td class="text-end" data-sort="${esc(Number(r.risk_score || 0))}">${scoreBadge(r.risk_score)}</td>
-      <td class="text-end" data-sort="${esc(Number(r.residual_risk_score || 0))}">${scoreBadge(r.residual_risk_score)}</td>
+      <td class="text-end" data-sort="${esc(Number(r.risk_score || 0))}">${ratingBadge(r, 'inherent')}</td>
+      <td class="text-end" data-sort="${esc(Number(r.residual_risk_score || 0))}">${ratingBadge(r, 'residual')}</td>
       <td>${esc(treatmentLabel(r.treatment_strategy))}<div class="small-muted">${esc(treatmentStatusLabel(r.treatment_status))}${r.treatment_due_at ? ` · due ${esc(r.treatment_due_at)}` : ''}</div></td>
       <td data-sort="${esc(Number(r.control_count || 0))}">${controlsCountHtml(r)}</td>
-      <td class="no-print">${actionsHtml(r)}</td>
+      <td class="no-print">${actionsHtml(r, { rate: true })}</td>
     </tr>`,
     )
     .join('');
+}
+
+// A rated risk shows its score in its severity band; an unrated one says so.
+function ratingBadge(r, kind) {
+  const likelihood = kind === 'inherent' ? r.register_likelihood : r.register_residual_likelihood;
+  const impact = kind === 'inherent' ? r.register_impact : r.register_residual_impact;
+  if (likelihood == null || impact == null) return severityBadge(null, thresholds);
+  return severityBadge(Number(likelihood) * Number(impact), thresholds);
 }
 
 function wireSampleButtons(root, lookup) {
@@ -273,6 +281,10 @@ async function loadRisks() {
     renderRows(currentItems);
     markDefaultRiskSort();
     wireSampleButtons($('rows'), (id) => currentItems.find((x) => String(x.id) === String(id)));
+    if (selectedRisk) {
+      const fresh = currentItems.find((x) => x.id === selectedRisk.id);
+      if (fresh) selectRisk(fresh, { scroll: false });
+    }
     $('resultMeta').textContent =
       `${currentItems.length} of ${Number(data?.total || currentItems.length)} risks shown; control mappings for ${data?.framework || framework || 'the current framework'}.`;
   } catch (e) {
@@ -323,21 +335,12 @@ async function loadCiaRisks() {
   }
 }
 
-// --- Register & heatmap -------------------------------------------------------------------
+// --- Heatmap, thresholds and the rating card ------------------------------------------------
 
 function ratingOptions(id) {
   $(id).innerHTML =
     '<option value="">Not assessed</option>' +
     Array.from({ length: 5 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
-}
-
-function filteredRegisterRisks() {
-  const q = $('registerSearch').value.trim().toLowerCase();
-  return registerRisks.filter((r) =>
-    `${riskDisplayTitle(r)} ${r.asset} ${r.threat_summary} ${(r.risk_types || []).join(' ')}`
-      .toLowerCase()
-      .includes(q),
-  );
 }
 
 function renderHeatmap() {
@@ -367,65 +370,32 @@ function severityBadgeColor(score) {
   return span.firstElementChild?.style?.backgroundColor || '#eef0f4';
 }
 
-function renderRegister() {
-  $('registerRows').innerHTML =
-    filteredRegisterRisks()
-      .map(
-        (r) => `<tr>
-    <td>${riskCellHtml(r)}</td>
-    <td>${esc(r.asset)}<div class="mt-1">${methodBadgeHtml(methodOf(r))} ${riskTypeBadgesHtml(r.risk_types)}</div></td>
-    <td>${userPillHtml(r.risk_owner)}</td>
-    <td>${severityBadge(r.register_inherent_score, thresholds)}</td><td>${severityBadge(r.register_residual_score, thresholds)}</td>
-    <td>${esc(treatmentLabel(r.treatment_strategy))}<div class="small-muted">${esc(treatmentStatusLabel(r.treatment_status))}${r.treatment_due_at ? ` · due ${esc(r.treatment_due_at)}` : ''}</div></td>
-    <td>${esc(String(r.control_count || 0))}</td>
-    <td class="no-print"><button class="btn btn-sm btn-outline-primary" data-rate="${esc(r.id)}" type="button">${canManageRisks ? 'Rate / treat' : 'Details'}</button></td></tr>`,
-      )
-      .join('') || '<tr><td colspan="8" class="small-muted p-3">No risks match.</td></tr>';
-  $('registerMeta').innerHTML =
-    `${registerRisks.length} of ${registerTotal} risks shown ${registerTotal > registerRisks.length ? '<button class="btn btn-sm btn-outline-primary ms-2" type="button" id="moreRisks">Load more</button>' : ''}`;
-  $('moreRisks')?.addEventListener('click', loadMoreRegister);
-  renderHeatmap();
+function showThresholds() {
+  for (const [key, id] of Object.entries({
+    low_max: 'lowMax',
+    moderate_max: 'moderateMax',
+    high_max: 'highMax',
+  }))
+    $(id).value = thresholds[key];
 }
 
-async function loadMoreRegister() {
-  try {
-    const data = await apiGet(
-      `${base}/register?framework=${encodeURIComponent(framework)}&limit=200&offset=${registerOffset}`,
-    );
-    registerRisks.push(...data.items);
-    registerOffset += data.items.length;
-    registerTotal = data.total;
-    thresholds = data.thresholds;
-    for (const [key, id] of Object.entries({
-      low_max: 'lowMax',
-      moderate_max: 'moderateMax',
-      high_max: 'highMax',
-    }))
-      $(id).value = thresholds[key];
-    renderRegister();
-  } catch (e) {
-    notify(`Could not load the risk register: ${String(e)}`);
-  }
-}
-
+// The heatmap carries the thresholds that band every score on the page.
 async function loadHeatmap() {
+  if (!registerEnabled) return;
   try {
-    heatmapCounts = await apiGet(`${base}/register/heatmap`);
+    const data = await apiGet(`${base}/register/heatmap`);
+    heatmapCounts = data;
+    if (data.thresholds) thresholds = data.thresholds;
+    showThresholds();
     renderHeatmap();
+    loaded.heatmap = true;
   } catch (e) {
     notify(`Could not load the risk heatmap: ${String(e)}`);
   }
 }
 
-async function reloadRegister() {
-  registerRisks = [];
-  registerOffset = 0;
-  await Promise.all([loadMoreRegister(), loadHeatmap()]);
-  loaded.register = true;
-}
-
-function selectRegisterRisk(r) {
-  selectedRegisterRisk = r;
+function selectRisk(r, { scroll = true } = {}) {
+  selectedRisk = r;
   $('ratingCard').style.display = '';
   $('ratingTitle').textContent = riskDisplayTitle(r);
   for (const [id, key] of Object.entries({
@@ -442,9 +412,14 @@ function selectRegisterRisk(r) {
   $('editScenario').href = riskWizardHref(framework, { id: r.id });
   if (!canManageRisks)
     $('ratingForm')
-      .querySelectorAll('input, textarea, select, button')
+      .querySelectorAll('input, textarea, select')
       .forEach((el) => (el.disabled = true));
-  $('ratingCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (scroll) $('ratingCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeRating() {
+  selectedRisk = null;
+  $('ratingCard').style.display = 'none';
 }
 
 // --- PESTLE(E) --------------------------------------------------------------------------------
@@ -547,7 +522,7 @@ function renderLibrary() {
       </div>`;
         })
         .join('')
-    : `<div class="list-group-item small-muted">${library.length ? 'No templates match.' : 'No templates yet. From the register, open a risk and choose “Save as a template”.'}</div>`;
+    : `<div class="list-group-item small-muted">${library.length ? 'No templates match.' : 'No templates yet. On the Risks tab, choose Rate / treat on a risk and then “Save as a template”.'}</div>`;
 }
 
 async function loadLibrary() {
@@ -615,7 +590,6 @@ function setTabQuery(tabName) {
 
 const TAB_LOADERS = {
   risks: null,
-  register: () => (loaded.register ? null : reloadRegister()),
   cia: () => (loaded.cia ? null : loadCiaRisks()),
   pestle: () => (loaded.pestle ? null : loadPestle()),
   library: () => (loaded.library ? null : loadLibrary()),
@@ -629,7 +603,6 @@ const TAB_LOADERS = {
 };
 const TAB_BUTTONS = {
   risks: 'risksListTab',
-  register: 'registerTab',
   cia: 'ciaTab',
   pestle: 'pestleTab',
   library: 'libraryTab',
@@ -674,19 +647,19 @@ $('libraryMethodFilter').addEventListener('change', renderLibrary);
 $('librarySearch').addEventListener('input', debounce(renderLibrary, 150));
 $('controlsWithoutRisksQ').addEventListener('input', debounce(loadControlsWithoutRisks, 250));
 $('reloadControlsWithoutRisks').addEventListener('click', loadControlsWithoutRisks);
-$('registerSearch').addEventListener('input', renderRegister);
 document
   .querySelectorAll('input[name="scoreMode"]')
   .forEach((input) => input.addEventListener('change', renderHeatmap));
-$('registerRows').addEventListener('click', (e) => {
+$('rows').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-rate]');
   if (!btn) return;
-  const r = registerRisks.find((item) => item.id === btn.dataset.rate);
-  if (r) selectRegisterRisk(r);
+  const r = currentItems.find((item) => item.id === btn.dataset.rate);
+  if (r) selectRisk(r);
 });
+$('closeRating').addEventListener('click', closeRating);
 $('ratingForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!selectedRegisterRisk || !canManageRisks) return;
+  if (!selectedRisk || !canManageRisks) return;
   const val = (id) => ($(id).value ? Number($(id).value) : null);
   const payload = {
     register_likelihood: val('inherentLikelihood'),
@@ -699,12 +672,9 @@ $('ratingForm').addEventListener('submit', async (e) => {
     treatment_plan: $('treatmentPlan').value,
   };
   try {
-    await apiPatch(`${base}/${encodeURIComponent(selectedRegisterRisk.id)}/register`, payload);
-    const id = selectedRegisterRisk.id;
-    await reloadRegister();
-    selectRegisterRisk(registerRisks.find((r) => r.id === id) || selectedRegisterRisk);
+    await apiPatch(`${base}/${encodeURIComponent(selectedRisk.id)}/register`, payload);
     loaded.cia = false;
-    await loadRisks();
+    await Promise.all([loadRisks(), loadHeatmap()]);
     notify('Rating and treatment saved.', 'success');
   } catch (err) {
     notify(`Could not save the rating: ${String(err)}`);
@@ -719,14 +689,16 @@ $('thresholdForm').addEventListener('submit', async (e) => {
       moderate_max: Number($('moderateMax').value),
       high_max: Number($('highMax').value),
     });
-    renderRegister();
+    renderHeatmap();
+    renderRows(currentItems);
+    wireSampleButtons($('rows'), (id) => currentItems.find((x) => String(x.id) === String(id)));
     notify('Risk thresholds saved.', 'success');
   } catch (err) {
     notify(`Could not save thresholds: ${String(err)}`);
   }
 });
 $('addToLibrary').addEventListener('click', async () => {
-  const r = selectedRegisterRisk;
+  const r = selectedRisk;
   if (!r || !canManageRisks) return;
   const name = prompt('Name this reusable template', riskDisplayTitle(r).slice(0, 100));
   if (!name) return;
@@ -777,7 +749,7 @@ $('importForm').addEventListener('submit', async (e) => {
       body,
     );
     $('importForm').reset();
-    await Promise.all([reloadRegister(), loadRisks()]);
+    await Promise.all([loadRisks(), loadHeatmap()]);
     notify(`${response.created} risks imported.`, 'success');
   } catch (err) {
     notify(`Could not import the CSV: ${String(err)}`);
@@ -828,13 +800,16 @@ if (!canViewRisks) {
     for (const id of ['newRisk', 'newCiaRisk', 'newPestleRisk', 'thresholdForm', 'importForm'])
       if ($(id)) $(id).style.display = 'none';
   }
+  // Without the register feature the list takes the heatmap's room.
+  if (!registerEnabled) $('riskListColumn').classList.remove('col-xl-8');
   try {
     categories = (await apiGet(`${base}/categories`))?.items || [];
     renderCategoryFilters();
   } catch (e) {
     notify(`Could not load asset categories: ${String(e)}`);
   }
-  await loadRisks();
+  await Promise.all([loadRisks(), loadHeatmap()]);
+  if (requestedTab === 'register') setTabQuery('risks');
   if (requestedTab && TAB_BUTTONS[requestedTab] && requestedTab !== 'risks') {
     showTab($(TAB_BUTTONS[requestedTab]));
     await TAB_LOADERS[requestedTab]?.();

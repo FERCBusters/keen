@@ -930,9 +930,8 @@ async function loadOptions() {
     apiGet('/api/v1/risks/library'),
     apiGet(`/api/v1/risks/parties?framework=${encodeURIComponent(framework)}`),
     getFrameworkCatalog().catch(() => ({ items: [] })),
-    apiGet(`/api/v1/risks/register?framework=${encodeURIComponent(framework)}&limit=1`).catch(
-      () => null,
-    ),
+    // The heatmap carries the severity thresholds the rating step bands with.
+    apiGet('/api/v1/risks/register/heatmap').catch(() => null),
   ]);
   categories = categoryData?.items || [];
   assets = assetData?.items || [];

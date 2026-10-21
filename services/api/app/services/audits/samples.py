@@ -238,14 +238,7 @@ def audit_sample_entity_reference(
             subtitle = f"{row.type} · {row.lens}".strip(" ·")
             controls = pestle_sample_controls(db, row.id, framework)
     elif entity_type == "interested_party":
-        row = (
-            db.query(InterestedParty)
-            .filter(
-                InterestedParty.id == entity_id,
-                InterestedParty.framework_slug == framework,
-            )
-            .one_or_none()
-        )
+        row = db.get(InterestedParty, entity_id)
         if row:
             name = getattr(getattr(row, "name", None), "name", "") or "Interested party"
             nature = (

@@ -136,6 +136,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0016_parties_org_wide",
         "0015_risk_wizard",
         "0014_measure_source_type",
         "0013_events_source_timestamp",
@@ -337,6 +338,195 @@ def test_measure_method_text_is_folded_into_the_description():
             command.downgrade(config, "0013_events_source_timestamp")
             assert {"effectiveness_measure", "metric"} <= columns(conn)
             assert "source_type" not in columns(conn)
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_interested_parties_recorded_per_framework_are_merged():
+    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires PostgreSQL integration database")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "parties_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+
+    def columns(conn):
+        return set(
+            conn.scalars(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = :schema "
+                    "AND table_name = 'interested_parties'"
+                ),
+                {"schema": schema},
+            )
+        )
+
+    ids = {key: uuid.uuid4() for key in ("name", "nature", "a", "b", "c", "staff")}
+    control = {fw: uuid.uuid4() for fw in ("A", "B")}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0015_risk_wizard")
+            run = lambda sql, **params: conn.execute(text(sql), params)  # noqa: E731
+            for fw in ("A", "B"):
+                run(
+                    "INSERT INTO frameworks (id, slug, created_at) VALUES (:id, :fw, now())",
+                    id=uuid.uuid4(),
+                    fw=fw,
+                )
+                run(
+                    "INSERT INTO control_items (id, framework_slug, type, ref, title,"
+                    " created_at) VALUES (:id, :fw, 'control', '1', 'Control', now())",
+                    id=control[fw],
+                    fw=fw,
+                )
+            run(
+                "INSERT INTO interested_party_names (id, name) VALUES (:n, 'Customers'),"
+                " (:s, 'Staff')",
+                n=ids["name"],
+                s=ids["staff"],
+            )
+            run(
+                "INSERT INTO interested_party_natures (id, name) VALUES (:id, 'External')",
+                id=ids["nature"],
+            )
+            # The same party recorded in three frameworks, and one that is unique.
+            for key, fw, note, created in (
+                ("a", "A", "Retail customers", "2026-01-01"),
+                ("b", "B", "Retail customers", "2026-02-01"),
+                ("c", "C", "Enterprise accounts too", "2026-03-01"),
+            ):
+                run(
+                    "INSERT INTO interested_parties (id, framework_slug, name_id,"
+                    " nature_id, note, created_at, updated_at) VALUES (:id, :fw, :name,"
+                    " :nature, :note, :created, now())",
+                    id=ids[key],
+                    fw=fw,
+                    name=ids["name"],
+                    nature=ids["nature"],
+                    note=note,
+                    created=created,
+                )
+            run(
+                "INSERT INTO interested_parties (id, framework_slug, name_id, nature_id,"
+                " note, created_at, updated_at) VALUES (:id, 'A', :name, :nature, '',"
+                " now(), now())",
+                id=ids["staff"],
+                name=ids["staff"],
+                nature=ids["nature"],
+            )
+            for key, fw in (("a", "A"), ("b", "B"), ("c", "B")):
+                run(
+                    "INSERT INTO interested_party_control_links (interested_party_id,"
+                    " framework_slug, control_item_id, created_at) VALUES (:p, :fw, :c,"
+                    " now())",
+                    p=ids[key],
+                    fw=fw,
+                    c=control[fw],
+                )
+            run(
+                "INSERT INTO interested_party_communications (id, interested_party_id,"
+                " event, \"when\", with_whom, methods) VALUES (:id, :p, 'Incident',"
+                " 'Within 24 hours', 'Individual member', '[]')",
+                id=uuid.uuid4(),
+                p=ids["b"],
+            )
+            category, subcategory, asset, risk = (uuid.uuid4() for _ in range(4))
+            run(
+                "INSERT INTO risk_categories (id, name) VALUES (:id, 'Data')",
+                id=category,
+            )
+            run(
+                "INSERT INTO risk_asset_subcategories (id, category_id, name) VALUES"
+                " (:id, :c, 'PII')",
+                id=subcategory,
+                c=category,
+            )
+            run(
+                "INSERT INTO risk_assets (id, name, category_id, subcategory_id) VALUES"
+                " (:id, 'Payroll', :c, :s)",
+                id=asset,
+                c=category,
+                s=subcategory,
+            )
+            run("INSERT INTO risks (id, asset_id) VALUES (:id, :a)", id=risk, a=asset)
+            # The risk names the party twice through its duplicates.
+            for key in ("a", "b"):
+                run(
+                    "INSERT INTO risk_interested_parties (id, risk_id,"
+                    " interested_party_id, created_at) VALUES (:id, :r, :p, now())",
+                    id=uuid.uuid4(),
+                    r=risk,
+                    p=ids[key],
+                )
+            run(
+                "INSERT INTO entity_changelogs (id, entity_type, entity_id, action,"
+                " summary, changes, changed_at) VALUES (:id, 'interested_party', :p,"
+                " 'created', 'Created', '[]', now())",
+                id=uuid.uuid4(),
+                p=ids["c"],
+            )
+            conn.commit()
+
+            command.upgrade(config, "0016_parties_org_wide")
+            assert "framework_slug" not in columns(conn)
+            parties = conn.execute(
+                text("SELECT id, note FROM interested_parties ORDER BY created_at")
+            ).all()
+            assert [row[0] for row in parties] == [ids["a"], ids["staff"]]
+            assert parties[0][1] == "Retail customers\n\nEnterprise accounts too"
+            links = conn.execute(
+                text(
+                    "SELECT framework_slug, control_item_id FROM"
+                    " interested_party_control_links WHERE interested_party_id = :p"
+                    " ORDER BY framework_slug"
+                ),
+                {"p": ids["a"]},
+            ).all()
+            assert links == [("A", control["A"]), ("B", control["B"])]
+            assert (
+                conn.scalar(
+                    text(
+                        "SELECT interested_party_id FROM interested_party_communications"
+                    )
+                )
+                == ids["a"]
+            )
+            assert conn.execute(
+                text("SELECT interested_party_id FROM risk_interested_parties")
+            ).all() == [(ids["a"],)]
+            assert (
+                conn.scalar(text("SELECT entity_id FROM entity_changelogs")) == ids["a"]
+            )
+            with pytest.raises(Exception, match="uq_interested_parties_name_nature"):
+                run(
+                    "INSERT INTO interested_parties (id, name_id, nature_id, note,"
+                    " created_at, updated_at) VALUES (:id, :name, :nature, '', now(),"
+                    " now())",
+                    id=uuid.uuid4(),
+                    name=ids["name"],
+                    nature=ids["nature"],
+                )
+            conn.rollback()
+
+            command.downgrade(config, "0015_risk_wizard")
+            assert "framework_slug" in columns(conn)
+            assert conn.execute(
+                text(
+                    "SELECT id, framework_slug FROM interested_parties ORDER BY created_at"
+                )
+            ).all() == [(ids["a"], "A"), (ids["staff"], "")]
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

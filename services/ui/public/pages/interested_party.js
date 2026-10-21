@@ -110,8 +110,8 @@ function renderChrome() {
   if (title) title.textContent = label;
   if (metaEl)
     metaEl.textContent = currentItem
-      ? `Framework ${currentItem.framework || framework} • Updated ${fmtTs(currentItem.updated_at) || '—'}`
-      : `Framework ${framework}`;
+      ? `Organisation-wide • controls shown for ${framework} • Updated ${fmtTs(currentItem.updated_at) || '—'}`
+      : `Organisation-wide • controls for ${framework}`;
   if (partyId) partyId.value = itemId || '';
   if (partyNote) partyNote.value = currentItem?.note || '';
   if (samplePartyAudit)
@@ -221,7 +221,11 @@ async function loadItem() {
     renderCommunications();
     return;
   }
-  currentItem = await apiGet(`/api/v1/interested-parties/${encodeURIComponent(itemId)}`);
+  // The party is organisation-wide; the framework chooses which control links
+  // the page shows and edits.
+  currentItem = await apiGet(
+    `/api/v1/interested-parties/${encodeURIComponent(itemId)}?framework=${encodeURIComponent(framework)}`,
+  );
   communications = (currentItem.communications || []).map((x) => ({ ...x }));
   fillSelects();
   renderChrome();
@@ -312,7 +316,7 @@ samplePartyAudit?.addEventListener('click', () => {
     entityType: 'interested_party',
     entityId: currentItem?.id || itemId,
     title: label,
-    framework: currentItem?.framework || framework,
+    framework,
     statusEl: status,
   });
 });

@@ -111,7 +111,6 @@ def test_hostile_text_is_inert_for_read_only_roles(
         "risk_reader": (
             "risk",
             "risks",
-            "register",
             "cia",
             "library",
             "pestle",

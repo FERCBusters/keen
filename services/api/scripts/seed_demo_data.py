@@ -737,11 +737,7 @@ class DemoSeeder:
             )
             party = self.upsert(
                 InterestedParty,
-                {
-                    "framework_slug": self.framework,
-                    "name_id": name.id,
-                    "nature_id": nature.id,
-                },
+                {"name_id": name.id, "nature_id": nature.id},
                 {"note": spec["note"], "created_by_user_id": self.user.id},
             )
             self.link_interested_party_controls(party, spec["controls"])

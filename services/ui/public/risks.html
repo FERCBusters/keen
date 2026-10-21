@@ -30,7 +30,6 @@
 
     <ul class="nav nav-tabs mb-3 no-print" id="riskPageTabs" role="tablist">
       <li class="nav-item" role="presentation"><button class="nav-link active" id="risksListTab" data-bs-toggle="tab" data-bs-target="#risksListPane" type="button" role="tab" aria-controls="risksListPane" aria-selected="true">Risks</button></li>
-      <li class="nav-item" role="presentation" id="registerTabItem" data-feature="risk_register"><button class="nav-link" id="registerTab" data-bs-toggle="tab" data-bs-target="#registerPane" type="button" role="tab" aria-controls="registerPane" aria-selected="false">Register &amp; heatmap</button></li>
       <li class="nav-item" role="presentation"><button class="nav-link" id="ciaTab" data-bs-toggle="tab" data-bs-target="#ciaPane" type="button" role="tab" aria-controls="ciaPane" aria-selected="false">CIA risks</button></li>
       <li class="nav-item" role="presentation" id="pestleTabItem" data-feature="pestle"><button class="nav-link" id="pestleTab" data-bs-toggle="tab" data-bs-target="#pestlePane" type="button" role="tab" aria-controls="pestlePane" aria-selected="false">PESTLE(E) method</button></li>
       <li class="nav-item" role="presentation"><button class="nav-link" id="libraryTab" data-bs-toggle="tab" data-bs-target="#libraryPane" type="button" role="tab" aria-controls="libraryPane" aria-selected="false">Risk library</button></li>
@@ -39,7 +38,7 @@
     </ul>
 
     <div class="tab-content" id="riskPageTabContent">
-      <!-- All risks -->
+      <!-- All risks: the register, its heatmap and the rating card -->
       <section class="tab-pane fade show active" id="risksListPane" role="tabpanel" aria-labelledby="risksListTab" tabindex="0">
         <div class="card mb-3 no-print" data-mosp-filter-section="risk-filters" data-mosp-filter-title="Risk filters">
           <div class="card-body" data-mosp-filter-body>
@@ -63,50 +62,17 @@
             </div>
           </div>
         </div>
-        <div class="card">
-          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div>
-              <div class="fw-bold">All risks</div>
-              <div class="small-muted" id="resultMeta">—</div>
-            </div>
-          </div>
-          <div class="card-body p-0">
-            <div class="table-responsive">
-              <table id="riskTable" class="table table-hover align-middle mb-0" data-sortable>
-                <thead>
-                  <tr>
-                    <th>Risk</th>
-                    <th style="width:170px;">Asset</th>
-                    <th style="width:150px;">Kind</th>
-                    <th style="width:170px;">Affects</th>
-                    <th style="width:140px;">Owner</th>
-                    <th class="text-end sort-desc" style="width:100px;" data-sort-dir="desc">Today</th>
-                    <th class="text-end" style="width:110px;">After controls</th>
-                    <th style="width:150px;">Treatment</th>
-                    <th style="width:100px;">Controls</th>
-                    <th style="width:150px;" class="no-print">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="rows"><tr class="table-loading-row"><td colspan="10" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risks…</span></div></td></tr></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Register & heatmap -->
-      <section class="tab-pane fade" id="registerPane" role="tabpanel" aria-labelledby="registerTab" tabindex="0">
         <div class="row g-3">
-          <div class="col-12 col-xl-4">
+          <div class="col-12 col-xl-4" id="heatmapColumn" data-feature="risk_register">
             <section class="card mb-3">
               <div class="card-header fw-semibold">5×5 heatmap</div>
               <div class="card-body">
-                <p class="small-muted">Cells show how many rated risks sit at each likelihood and impact. Choose today's ratings or the ratings after controls. Thresholds apply to the whole register.</p>
+                <p class="small-muted">Cells show how many rated risks sit at each likelihood and impact. Choose today's ratings or the ratings after controls. Thresholds apply to every risk.</p>
                 <div class="d-flex gap-3 mb-2">
                   <label><input checked name="scoreMode" type="radio" value="inherent"> Today (inherent)</label>
                   <label><input name="scoreMode" type="radio" value="residual"> After controls (residual)</label>
                 </div>
-                <div class="table-responsive"><table aria-label="Risk register heatmap" class="table table-sm table-bordered text-center align-middle" id="heatmap"></table></div>
+                <div class="table-responsive"><table aria-label="Risk heatmap" class="table table-sm table-bordered text-center align-middle" id="heatmap"></table></div>
                 <div class="small-muted">Impact increases left to right; likelihood increases bottom to top.</div>
                 <form class="row g-2 mt-2 no-print" id="thresholdForm">
                   <div class="col-4"><label class="form-label" for="lowMax">Low through</label><input class="form-control" id="lowMax" max="24" min="1" required type="number"></div>
@@ -116,22 +82,10 @@
                 </form>
               </div>
             </section>
-          </div>
-          <div class="col-12 col-xl-8" style="min-width:0">
-            <section class="card mb-3">
-              <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <strong>Risk and treatment register</strong>
-                <input class="form-control form-control-sm" id="registerSearch" placeholder="Filter by name, scenario or asset" style="max-width:300px;" type="search" aria-label="Filter the register">
-              </div>
-              <div class="card-body p-0">
-                <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Risk</th><th>Asset / kind</th><th>Owner</th><th>Today</th><th>After controls</th><th>Treatment</th><th>Controls</th><th class="no-print"></th></tr></thead><tbody id="registerRows"></tbody></table></div>
-                <div class="small-muted p-2" id="registerMeta"></div>
-              </div>
-            </section>
             <details class="card mb-3 no-print">
               <summary class="card-header">Export and import</summary>
               <div class="card-body">
-                <p>Export the current register as CSV. Import creates new risks and can assign controls by reference in the selected framework. The entire file is rejected if a row fails validation.</p>
+                <p>Export every risk as CSV. Import creates new risks and can assign controls by reference in the selected framework. The entire file is rejected if a row fails validation.</p>
                 <div class="d-flex flex-wrap gap-2 align-items-end">
                   <a class="btn btn-outline-primary" href="#" id="exportRegister">Export CSV</a>
                   <form class="d-flex flex-wrap gap-2 align-items-end" id="importForm"><div><label class="form-label" for="importFile">Import CSV</label><input accept=".csv,text/csv" class="form-control" id="importFile" required type="file"></div><button class="btn btn-outline-primary" type="submit">Import risks</button></form>
@@ -139,11 +93,42 @@
                 <div class="small-muted mt-2">Columns: asset, category, subcategory, threat_summary, risk_types (semicolon-separated CIA, or blank), owner_username, four register ratings (1–5), treatment fields, and controls (semicolon-separated refs). Up to 1,000 rows or 2 MB.</div>
               </div>
             </details>
+          </div>
+          <div class="col-12 col-xl-8" id="riskListColumn" style="min-width:0">
+            <div class="card mb-3">
+              <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                <div>
+                  <div class="fw-bold">All risks</div>
+                  <div class="small-muted" id="resultMeta">—</div>
+                </div>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table id="riskTable" class="table table-hover align-middle mb-0" data-sortable>
+                    <thead>
+                      <tr>
+                        <th>Risk</th>
+                        <th style="width:170px;">Asset</th>
+                        <th style="width:150px;">Kind</th>
+                        <th style="width:170px;">Affects</th>
+                        <th style="width:140px;">Owner</th>
+                        <th class="text-end sort-desc" style="width:120px;" data-sort-dir="desc">Today</th>
+                        <th class="text-end" style="width:130px;">After controls</th>
+                        <th style="width:150px;">Treatment</th>
+                        <th style="width:100px;">Controls</th>
+                        <th style="width:190px;" class="no-print">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="rows"><tr class="table-loading-row"><td colspan="10" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risks…</span></div></td></tr></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
             <section class="card no-print" id="ratingCard" style="display:none">
               <div class="card-header fw-semibold" id="ratingTitle">Rate risk</div>
               <div class="card-body">
                 <form class="row g-3" id="ratingForm">
-                  <div class="col-12"><div class="alert alert-light border mb-0">These are the same ratings the risk wizard, the register and the heatmap use.</div></div>
+                  <div class="col-12"><div class="alert alert-light border mb-0">These are the same ratings the risk wizard and the heatmap use.</div></div>
                   <div class="col-md-3"><label class="form-label" for="inherentLikelihood">Likelihood today</label><select class="form-select" id="inherentLikelihood"></select></div>
                   <div class="col-md-3"><label class="form-label" for="inherentImpact">Impact today</label><select class="form-select" id="inherentImpact"></select></div>
                   <div class="col-md-3"><label class="form-label" for="residualLikelihood">Likelihood after controls</label><select class="form-select" id="residualLikelihood"></select></div>
@@ -152,7 +137,7 @@
                   <div class="col-md-3"><label class="form-label" for="treatmentStatus">Treatment status</label><select class="form-select" id="treatmentStatus"></select></div>
                   <div class="col-md-3"><label class="form-label" for="treatmentDue">Due date</label><input class="form-control" id="treatmentDue" type="date"></div>
                   <div class="col-12"><label class="form-label" for="treatmentPlan">Treatment plan and acceptance rationale</label><textarea class="form-control" id="treatmentPlan" rows="3"></textarea></div>
-                  <div class="col-12 d-flex flex-wrap gap-2"><button class="btn btn-primary" type="submit">Save rating &amp; treatment</button><button class="btn btn-outline-primary" id="addToLibrary" type="button">Save as a template</button><a class="btn btn-outline-secondary" href="#" id="editScenario">Edit in the wizard</a></div>
+                  <div class="col-12 d-flex flex-wrap gap-2"><button class="btn btn-primary" type="submit">Save rating &amp; treatment</button><button class="btn btn-outline-primary" id="addToLibrary" type="button">Save as a template</button><a class="btn btn-outline-secondary" href="#" id="editScenario">Edit in the wizard</a><button class="btn btn-outline-secondary" id="closeRating" type="button">Close</button></div>
                 </form>
               </div>
             </section>

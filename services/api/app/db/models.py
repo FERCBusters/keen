@@ -1503,12 +1503,15 @@ class InterestedPartyNature(Base):
 
 
 class InterestedParty(Base):
+    """A party with a stake in the organisation, such as customers or a
+    regulator. The record is organisation-wide; only its control links belong
+    to a framework."""
+
     __tablename__ = "interested_parties"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    framework_slug: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     name_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("interested_party_names.id"),
@@ -1549,10 +1552,7 @@ class InterestedParty(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "framework_slug",
-            "name_id",
-            "nature_id",
-            name="uq_interested_parties_framework_name_nature",
+            "name_id", "nature_id", name="uq_interested_parties_name_nature"
         ),
     )
 

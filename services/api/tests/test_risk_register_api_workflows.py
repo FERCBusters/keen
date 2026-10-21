@@ -257,6 +257,8 @@ def test_register_lists_risks_with_thresholds_and_a_heatmap(reg):  # noqa: F811
     heatmap = reg.read("GET", "/v1/risks/register/heatmap")
     assert heatmap["inherent"] == [{"likelihood": 5, "impact": 4, "count": 2}]
     assert heatmap["residual"] == [{"likelihood": 2, "impact": 1, "count": 1}]
+    # The thresholds that band the cells travel with the counts.
+    assert heatmap["thresholds"] == {"low_max": 4, "moderate_max": 9, "high_max": 16}
 
     saved = reg.manage(
         "PATCH",

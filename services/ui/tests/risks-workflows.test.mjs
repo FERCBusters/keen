@@ -66,16 +66,23 @@ const riskRows = [
     control_count: 0,
   },
 ];
-const registerRows = riskRows.map((r) => ({
-  ...r,
+// r1 is rated today and after controls; r2 is rated today only.
+riskRows[0] = {
+  ...riskRows[0],
   register_likelihood: 3,
   register_impact: 3,
   register_residual_likelihood: 2,
   register_residual_impact: 2,
-  register_inherent_score: r.id === 'r1' ? 9 : 16,
-  register_residual_score: r.id === 'r1' ? 4 : null,
-  treatment_plan: r.id === 'r1' ? 'Restore drills' : '',
-}));
+  treatment_plan: 'Restore drills',
+};
+riskRows[1] = {
+  ...riskRows[1],
+  register_likelihood: 4,
+  register_impact: 4,
+  register_residual_likelihood: null,
+  register_residual_impact: null,
+  treatment_plan: '',
+};
 const graph = {
   nodes: [
     {
@@ -185,20 +192,17 @@ async function dashboard(t, options = {}) {
         if (options.listFail) throw new Error('List offline');
         return { items: options.risks ?? riskRows, total: 2, framework: 'A' };
       }
-      if (p === '/api/v1/risks/register') {
-        const offset = Number(u.searchParams.get('offset') || 0);
-        const items = options.register ?? registerRows;
+      if (p === '/api/v1/risks/register/heatmap') {
+        if (options.heatmapFail) throw new Error('Heatmap offline');
         return {
-          items: items.slice(offset, offset + 200),
-          total: options.registerTotal ?? items.length,
           thresholds,
-        };
-      }
-      if (p === '/api/v1/risks/register/heatmap')
-        return {
-          inherent: [{ likelihood: 3, impact: 3, count: 2 }],
+          inherent: [
+            { likelihood: 3, impact: 3, count: 1 },
+            { likelihood: 4, impact: 4, count: 1 },
+          ],
           residual: [{ likelihood: 2, impact: 2, count: 1 }],
         };
+      }
       if (p === '/api/v1/risks/library') return { items: library };
       if (p === '/api/v1/pestle/meta')
         return {
@@ -250,8 +254,8 @@ async function dashboard(t, options = {}) {
   return { ui, state };
 }
 
-const rowTexts = (ui, id) =>
-  [...ui.el(id).querySelectorAll('tr')].map((tr) => tr.textContent.replace(/\s+/g, ' ').trim());
+const cell = (ui, l, i) =>
+  ui.el('heatmap').querySelector(`td[title^="Likelihood ${l}, impact ${i}"]`);
 
 // --- All risks ------------------------------------------------------------------------------------
 
@@ -283,6 +287,12 @@ test('the dashboard lists every risk with its kind, parties, treatment and safe 
     /Mitigate.*In progress.*due 2026-12-01/s,
   );
   assert.match(rows[0].querySelectorAll('td')[7].textContent, /Not decided yet/);
+  // Scores sit in their severity band; an unrated residual says so.
+  assert.equal(rows[1].querySelectorAll('td')[5].textContent.trim(), '9 · Moderate');
+  assert.equal(rows[1].querySelectorAll('td')[6].textContent.trim(), '4 · Low');
+  assert.equal(rows[0].querySelectorAll('td')[5].textContent.trim(), '16 · High');
+  assert.equal(rows[0].querySelectorAll('td')[6].textContent.trim(), 'Needs rating');
+  assert.equal(rows[1].querySelector('[data-rate="r1"]').textContent, 'Rate / treat');
   // Open goes to the risk page, Edit to the wizard.
   assert.equal(
     rows[1].querySelector('a.btn-outline-secondary').getAttribute('href'),
@@ -356,42 +366,33 @@ test('an empty register explains itself and a failed load is reported', async (t
   assert.match(failed.ui.el('status').textContent, /Failed to load risks: Error: List offline/);
 });
 
-// --- Register & heatmap -----------------------------------------------------------------------
+// --- Heatmap, thresholds and the rating card ----------------------------------------------
 
-test('the register tab shows severity bands, a heatmap, and lets managers rate, treat and set thresholds', async (t) => {
+test('the Risks tab carries the heatmap and lets managers rate, treat and set thresholds in place', async (t) => {
   const prompts = { answer: '', seen: [] };
   const { ui, state } = await dashboard(t, {
-    query: '&tab=register',
     globals: {
       prompt: (message, suggested) => (prompts.seen.push([message, suggested]), prompts.answer),
     },
   });
-  await settle(() => ui.el('registerRows').querySelectorAll('tr').length === 2);
-  const rows = rowTexts(ui, 'registerRows');
-  assert.match(rows[0], /Payroll held to ransom.*9 · Moderate.*4 · Low.*Mitigate/);
-  assert.match(rows[1], /Laptop.*16 · High.*Needs rating.*Not decided yet/);
-  assert.equal(ui.el('registerRows').querySelector('img'), null);
+  await settle(() => cell(ui, 3, 3));
   // The heatmap counts rated risks per cell for today's ratings, then after controls.
-  const cell = (l, i) =>
-    ui.el('heatmap').querySelector(`td[title^="Likelihood ${l}, impact ${i}"]`);
-  assert.equal(cell(3, 3).textContent, '2');
-  assert.equal(cell(2, 2).textContent, '·');
+  assert.equal(cell(ui, 3, 3).textContent, '1');
+  assert.equal(cell(ui, 4, 4).textContent, '1');
+  assert.equal(cell(ui, 2, 2).textContent, '·');
   ui.document.querySelector('input[name="scoreMode"][value="residual"]').checked = true;
   ui.document
     .querySelector('input[name="scoreMode"][value="residual"]')
     .dispatchEvent(new ui.window.Event('change'));
-  assert.equal(cell(2, 2).textContent, '1');
+  assert.equal(cell(ui, 2, 2).textContent, '1');
   assert.deepEqual(
     [ui.el('lowMax').value, ui.el('moderateMax').value, ui.el('highMax').value],
     ['4', '9', '16'],
   );
-  assert.match(ui.window.location.search, /tab=register/);
+  assert.equal(ui.el('ratingCard').style.display, 'none');
 
-  // Rating a risk sends only its register fields; the lists refresh afterwards.
-  ui.el('registerSearch').value = 'payroll';
-  ui.el('registerSearch').dispatchEvent(new ui.window.Event('input'));
-  assert.equal(ui.el('registerRows').querySelectorAll('tr').length, 1);
-  ui.el('registerRows').querySelector('[data-rate="r1"]').click();
+  // Rating a risk sends only its register fields; the list and heatmap refresh afterwards.
+  ui.el('rows').querySelector('[data-rate="r1"]').click();
   assert.equal(ui.el('ratingCard').style.display, '');
   assert.equal(ui.el('ratingTitle').textContent, 'Payroll held to ransom');
   assert.equal(ui.el('editScenario').getAttribute('href'), '/risk-wizard.html?id=r1&framework=A');
@@ -414,18 +415,22 @@ test('the register tab shows severity bands, a heatmap, and lets managers rate, 
     },
   });
   await settle(() => ui.el('status').textContent === 'Rating and treatment saved.');
+  assert.equal(
+    ui.calls.filter((c) => c.url.startsWith('/api/v1/risks/register/heatmap')).length,
+    2,
+  );
+  // The card stays open on the same risk after the refresh.
+  assert.equal(ui.el('ratingTitle').textContent, 'Payroll held to ransom');
 
   ui.el('lowMax').value = '3';
   ui.el('thresholdForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => state.patched.length === 2);
   assert.deepEqual(state.patched[1].body, { low_max: 3, moderate_max: 9, high_max: 16 });
-  // Re-banding: 4 is no longer Low.
-  await settle(() => /4 · Moderate/.test(ui.el('registerRows').textContent));
+  // Re-banding: 4 is no longer Low, on the list as well as the heatmap.
+  await settle(() => /4 · Moderate/.test(ui.el('rows').textContent));
 
   // Saving a template from the rating card keeps the risk's kind and ratings.
-  ui.el('registerSearch').value = '';
-  ui.el('registerSearch').dispatchEvent(new ui.window.Event('input'));
-  ui.el('registerRows').querySelector('[data-rate="r2"]').click();
+  ui.el('rows').querySelector('[data-rate="r2"]').click();
   prompts.answer = 'Lost laptop';
   ui.el('addToLibrary').click();
   await settle(() => state.posted.some((p) => p.path === '/api/v1/risks/library'));
@@ -435,27 +440,17 @@ test('the register tab shows severity bands, a heatmap, and lets managers rate, 
   assert.equal(saved.method, 'risk');
   assert.deepEqual(saved.risk_types, []);
   assert.equal(saved.source_risk_id, 'r2');
-  assert.equal(saved.suggested_assessment.inherent_likelihood, 3);
+  assert.equal(saved.suggested_assessment.inherent_likelihood, 4);
+  ui.el('closeRating').click();
+  assert.equal(ui.el('ratingCard').style.display, 'none');
 });
 
-test('large registers load further pages, and CSV import reports its count', async (t) => {
-  const many = Array.from({ length: 250 }, (_, i) => ({
-    ...registerRows[0],
-    id: 'r' + i,
-    title: 'Risk ' + i,
-    display: 'Risk ' + i,
-  }));
-  const { ui, state } = await dashboard(t, { query: '&tab=register', register: many });
-  await settle(() => ui.el('moreRisks'));
-  assert.match(ui.el('registerMeta').textContent, /200 of 250 risks shown/);
-  ui.el('moreRisks').click();
-  await settle(() => /250 of 250/.test(ui.el('registerMeta').textContent));
-  assert.equal(ui.el('registerRows').querySelectorAll('tr').length, 250);
+test('CSV import reports its count and refreshes the list and heatmap', async (t) => {
+  const { ui, state } = await dashboard(t);
   assert.equal(
     ui.el('exportRegister').getAttribute('href'),
     '/api/v1/risks/register/export.csv?framework=A',
   );
-
   Object.defineProperty(ui.el('importFile'), 'files', {
     value: [new File(['asset,category'], 'risks.csv', { type: 'text/csv' })],
     configurable: true,
@@ -464,37 +459,52 @@ test('large registers load further pages, and CSV import reports its count', asy
   await settle(() => ui.el('status').textContent === '3 risks imported.');
   assert.equal(state.posted[0].path, '/api/v1/risks/register/import.csv');
   assert.equal(state.posted[0].body.file, 'risks.csv');
+  assert.equal(
+    ui.calls.filter((c) => c.url.startsWith('/api/v1/risks/register/heatmap')).length,
+    2,
+  );
+  // An old register link lands on the Risks tab.
+  const old = await dashboard(t, { query: '&tab=register' });
+  assert.doesNotMatch(old.ui.window.location.search, /tab=/);
 });
 
-test('readers see the register without rating, threshold or import controls', async (t) => {
-  const { ui, state } = await dashboard(t, {
-    query: '&tab=register',
-    me: { can_view_risks: true },
-  });
-  await settle(() => ui.el('registerRows').querySelectorAll('tr').length === 2);
+test('readers see the heatmap and ratings without rating, threshold or import controls', async (t) => {
+  const { ui, state } = await dashboard(t, { me: { can_view_risks: true } });
+  await settle(() => cell(ui, 3, 3));
   assert.equal(ui.el('thresholdForm').style.display, 'none');
   assert.equal(ui.el('importForm').style.display, 'none');
   assert.equal(ui.el('newRisk').style.display, 'none');
   assert.equal(ui.document.querySelector('#rows a.btn-outline-primary'), null);
   assert.equal(ui.document.querySelector('[data-sample-risk]'), null);
-  ui.el('registerRows').querySelector('[data-rate="r1"]').click();
-  assert.equal(ui.el('registerRows').querySelector('[data-rate="r1"]').textContent, 'Details');
+  const button = ui.el('rows').querySelector('[data-rate="r1"]');
+  assert.equal(button.textContent, 'Rating');
+  button.click();
   assert.equal(ui.el('inherentLikelihood').disabled, true);
+  assert.equal(ui.el('closeRating').disabled, false);
   ui.el('ratingForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   ui.el('thresholdForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(state.patched.length, 0);
 });
 
-test('register mutation failures are reported', async (t) => {
+test('without the register feature the heatmap and rating buttons are absent', async (t) => {
   const { ui } = await dashboard(t, {
-    query: '&tab=register',
+    me: { is_admin: true, features: { enabled: { risk_register: false } } },
+  });
+  assert.equal(ui.el('rows').querySelector('[data-rate]'), null);
+  assert.ok(!ui.calls.some((c) => c.url.startsWith('/api/v1/risks/register/heatmap')));
+  assert.equal(ui.el('heatmapColumn').hasAttribute('data-feature-hidden'), true);
+  assert.equal(ui.el('riskListColumn').classList.contains('col-xl-8'), false);
+});
+
+test('rating, threshold, template and heatmap failures are reported', async (t) => {
+  const { ui } = await dashboard(t, {
     patchFail: true,
     postFail: true,
     globals: { prompt: () => 'x' },
   });
-  await settle(() => ui.el('registerRows').querySelectorAll('tr').length === 2);
-  ui.el('registerRows').querySelector('[data-rate="r1"]').click();
+  await settle(() => cell(ui, 3, 3));
+  ui.el('rows').querySelector('[data-rate="r1"]').click();
   ui.el('ratingForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => /Could not save the rating: Error: Refused/.test(ui.el('status').textContent));
   ui.el('thresholdForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
@@ -502,6 +512,12 @@ test('register mutation failures are reported', async (t) => {
   ui.el('addToLibrary').click();
   await settle(() =>
     /Could not save the template: Error: Rejected/.test(ui.el('status').textContent),
+  );
+  const failed = await dashboard(t, { heatmapFail: true });
+  await settle(() =>
+    /Could not load the risk heatmap: Error: Heatmap offline/.test(
+      failed.ui.el('status').textContent,
+    ),
   );
 });
 

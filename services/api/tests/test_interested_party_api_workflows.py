@@ -177,13 +177,16 @@ def test_parties_are_created_with_lookups_controls_and_communications(parties):
     }
     assert (created["control_count"], created["communication_count"]) == (2, 1)
 
-    # The same name and nature reuse their lookups case-insensitively.
-    second = _party(
-        parties, name=HOSTILE.upper(), nature="DATA SUBJECTS", framework="B"
+    # The same name and nature reuse their lookups case-insensitively, and a
+    # party is one record for the organisation whichever framework is viewed.
+    duplicate = parties.manage(
+        "POST",
+        "/v1/interested-parties",
+        {"framework": "B", "name": HOSTILE.upper(), "nature": "DATA SUBJECTS"},
+        status=400,
     )
-    assert (second["name_id"], second["nature_id"]) == (
-        created["name_id"],
-        created["nature_id"],
+    assert duplicate["detail"] == (
+        "Interested party with this name and nature already exists"
     )
     by_id = _party(parties, name=None, name_id=created["name_id"], nature="Owners")
     assert by_id["name_id"] == created["name_id"]
@@ -235,7 +238,9 @@ def test_parties_are_updated_relinked_and_deleted(parties):
     path = f"/v1/interested-parties/{party['id']}"
 
     renamed = parties.manage(
-        "PATCH", path, {"name": "Clients", "nature": "Account holders", "note": ""}
+        "PATCH",
+        path,
+        {"framework": "A", "name": "Clients", "nature": "Account holders", "note": ""},
     )
     assert (renamed["name"]["name"], renamed["nature"]["name"], renamed["note"]) == (
         "Clients",
@@ -243,14 +248,23 @@ def test_parties_are_updated_relinked_and_deleted(parties):
         "",
     )
     assert renamed["control_count"] == 1  # controls not sent, so unchanged
-    response = parties.manage("PATCH", path, {"framework": "B"}, status=400)
-    assert response["detail"] == "Cannot change framework while controls are linked"
+    # The party is one record for the organisation; a framework in the payload
+    # says which framework's control links are described and shown.
+    in_b = parties.manage("PATCH", path, {"framework": "B"})
+    assert (in_b["framework"], in_b["control_count"]) == ("B", 0)
+    assert parties.read("GET", path, framework="A")["control_count"] == 1
 
-    controls = parties.manage("PATCH", f"{path}/controls", {"controls": ["A.5.10"]})
+    # Control links are replaced per framework; the framework is named with
+    # the request, since the party itself belongs to none.
+    controls = parties.manage(
+        "PATCH", f"{path}/controls", {"controls": ["A.5.10"]}, framework="A"
+    )
     assert [c["ref"] for c in controls["controls"]] == ["A.5.10"]
-    assert [c["ref"] for c in parties.read("GET", f"{path}/controls")["controls"]] == [
-        "A.5.10"
-    ]
+    assert [
+        c["ref"]
+        for c in parties.read("GET", f"{path}/controls", framework="A")["controls"]
+    ] == ["A.5.10"]
+    parties.manage("PATCH", f"{path}/controls", {"controls": ["A.5.10"]}, status=400)
     routine = {
         "event": "Business as Usual",
         "when": "Routine",
@@ -311,7 +325,8 @@ def test_parties_are_listed_with_filters(parties):
         parties, name="Staff", nature="Employees", note="Includes contractors"
     )
     regulators = _party(parties, name="Regulators", nature="Enforcement")
-    _party(parties, framework="B", name="Elsewhere", nature="Other")
+    # A party created while viewing another framework is the same list.
+    elsewhere = _party(parties, framework="B", name="Zed", nature="Other")
 
     def ids(**params):
         return [
@@ -322,7 +337,7 @@ def test_parties_are_listed_with_filters(parties):
         ]
 
     # Ordered by nature, then name.
-    assert ids() == [customers["id"], staff["id"], regulators["id"]]
+    assert ids() == [customers["id"], staff["id"], regulators["id"], elsewhere["id"]]
     assert ids(q="contractor") == [staff["id"]]
     assert ids(q="ENFORCE") == [regulators["id"]]
     assert ids(name_id=f"{staff['name_id']},{regulators['name_id']}") == [
@@ -339,7 +354,7 @@ def test_parties_are_listed_with_filters(parties):
     page = parties.read(
         "GET", "/v1/interested-parties", framework="A", limit=1, offset=2
     )
-    assert [p["id"] for p in page["items"]] == [regulators["id"]] and page["total"] == 3
+    assert [p["id"] for p in page["items"]] == [regulators["id"]] and page["total"] == 4
 
     by_control = parties.read(
         "GET",
@@ -467,8 +482,8 @@ def test_visualisations_summarise_controls_and_communications(parties):
     assert comms["stats"]["right_count"] == 2
     shared = next(node for node in comms["nodes"]["right"] if node["count"] == 2)
     assert shared["label"] == "Business as Usual → Sender"
+    # Another framework lists the same parties with no control links of its own.
     empty = parties.read("GET", "/v1/interested-parties/visualisations", framework="C")
-    assert (
-        empty["items"] == []
-        and empty["bipartite_graphs"]["party_controls"]["links"] == []
-    )
+    assert len(empty["items"]) == len(view["items"])
+    assert all(item["controls"] == [] for item in empty["items"])
+    assert empty["bipartite_graphs"]["party_controls"]["links"] == []

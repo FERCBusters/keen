@@ -499,9 +499,7 @@ def test_sampled_records_are_described_with_their_controls(audits):
             pestle_item_id=pestle.id, clause_id=audits.leaf.id, relevance_id=high.id
         )
     )
-    party = InterestedParty(
-        framework_slug=fw, name_id=name.id, nature_id=nature.id, note="Retail"
-    )
+    party = InterestedParty(name_id=name.id, nature_id=nature.id, note="Retail")
     swot = IsmsSwot(title="Strong team", kind="strength", description="Experienced")
     objective = IsmsObjective(
         requirement="Protect data", goal="No breaches", metric="Incidents"

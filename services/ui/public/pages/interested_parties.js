@@ -194,7 +194,7 @@ function renderParties() {
         title: party
           ? `${party.name?.name || ''} — ${party.nature?.name || ''}`
           : 'Interested party',
-        framework: party?.framework || framework,
+        framework,
         statusEl: status,
       });
     }),
