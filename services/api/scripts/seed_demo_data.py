@@ -5,14 +5,23 @@ Intended location:
     services/api/scripts/seed_demo_data.py
 
 Typical use from the project root:
-    docker compose exec api python scripts/seed_demo_data.py
+    docker compose exec api python scripts/seed_demo_data.py --all-frameworks
 
 Or, from inside the API container's services/api working directory:
     python scripts/seed_demo_data.py --framework iso_27001_2022 --prefix Demo
 
+The ISMS dataset is written against ISO 27001:2022. --all-frameworks adds
+reviewed examples for SOC 2, PCI DSS, the KEEN Assurance Framework and Cyber
+Essentials. The frameworks a run seeds join the organisation's framework
+selection, and a run that seeds the ISMS dataset makes ISO 27001:2022 the
+organisation default.
+
 The script writes directly through KEEN's SQLAlchemy models. It is deliberately
 idempotent for the demo records it creates: re-running it updates matching rows
-instead of creating a fresh copy, provided the same --prefix is used.
+instead of creating a fresh copy, provided the same --prefix is used. Linking a
+control to a document creates an automatic diary entry with a stored artefact,
+as it does in the application, so a run writes those artefacts to the configured
+evidence storage; --dry-run leaves them out.
 """
 
 from __future__ import annotations
@@ -62,6 +71,7 @@ from app.db.models import (  # noqa: E402
     IsmsDocument,
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry,
+    IsmsEntityClauseLink,
     IsmsEntityControlLink,
     IsmsLicense,
     IsmsMeeting,
@@ -72,9 +82,6 @@ from app.db.models import (  # noqa: E402
     IsmsOrgNode,
     Mapping,
     PestleBusinessProcess,
-    PestleBusinessProcessRelevance,
-    PestleClauseRelevance,
-    PestleItem,
     PestleRelevanceLevel,
     Risk,
     RiskAsset,
@@ -84,6 +91,7 @@ from app.db.models import (  # noqa: E402
     User,
 )
 from app.db.session import SessionLocal  # noqa: E402
+from app.services.control_refs import CLAUSE_ROW_TYPE  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 
@@ -206,25 +214,58 @@ class DemoSeeder:
         self.stats[f"{stat_name}.created"] += 1
         return row
 
-    def _control(self, ref: str) -> ControlItem | None:
-        variants = {ref, ref.strip()}
-        if ref.startswith("A."):
-            variants.add(ref[2:])
-        elif re.match(r"^\d+\.\d+", ref):
-            variants.add(f"A.{ref}")
-        for candidate in variants:
-            row = (
-                self.db.query(ControlItem)
-                .filter(
-                    ControlItem.framework_slug == self.framework,
-                    ControlItem.ref == candidate,
-                )
-                .first()
+    @staticmethod
+    def risk_ratings(
+        likelihood: int, impact: int, residual_likelihood: int, residual_impact: int
+    ) -> dict[str, int]:
+        """Register ratings with the score columns KEEN derives from them."""
+        return {
+            "register_likelihood": likelihood,
+            "register_impact": impact,
+            "register_residual_likelihood": residual_likelihood,
+            "register_residual_impact": residual_impact,
+            "threat_score": 1,
+            "vulnerability_score": likelihood,
+            "impact_score": impact,
+            "residual_vulnerability_score": residual_likelihood,
+            "residual_impact_score": residual_impact,
+            "risk_score": likelihood * impact,
+            "residual_risk_score": residual_likelihood * residual_impact,
+        }
+
+    @property
+    def seeded_frameworks(self) -> list[str]:
+        """The frameworks this run writes examples for, in catalogue order."""
+        from demo_catalogue import CATALOGUE
+
+        return list(CATALOGUE) if self.config.all_frameworks else [self.framework]
+
+    def _control(self, ref: str, framework: str | None = None) -> ControlItem | None:
+        framework = framework or self.framework
+        ref = ref.strip()
+        query = self.db.query(ControlItem).filter(
+            ControlItem.framework_slug == framework
+        )
+        row = query.filter(ControlItem.ref == ref).first()
+        alternative = (
+            ref[2:]
+            if ref.startswith("A.")
+            else f"A.{ref}"
+            if re.match(r"^\d+\.\d+", ref)
+            else None
+        )
+        if row is None and alternative:
+            # Annex A references resolve with or without their "A." prefix. The
+            # exact reference wins, and the alternative never resolves to a
+            # clause, so "A.8.2" cannot become clause 8.2.
+            row = query.filter(
+                ControlItem.ref == alternative, ControlItem.type != CLAUSE_ROW_TYPE
+            ).first()
+        if row is None:
+            self.warnings["missing controls"].add(
+                ref if framework == self.framework else f"{framework} {ref}"
             )
-            if row:
-                return row
-        self.warnings["missing controls"].add(ref)
-        return None
+        return row
 
     def _clause(self, ref: str) -> FrameworkClause | None:
         row = (
@@ -239,16 +280,21 @@ class DemoSeeder:
             self.warnings["missing clauses"].add(ref)
         return row
 
-    def link_risk_controls(self, risk: Risk, refs: Iterable[str]) -> None:
+    def link_risk_controls(
+        self, risk: Risk, refs: Iterable[str], framework: str | None = None
+    ) -> None:
+        framework = framework or self.framework
+        if framework not in self.seeded_frameworks:
+            return
         for ref in refs:
-            control = self._control(ref)
+            control = self._control(ref, framework)
             if not control:
                 continue
             self.ensure_link(
                 RiskControlLink,
                 {
                     "risk_id": risk.id,
-                    "framework_slug": self.framework,
+                    "framework_slug": framework,
                     "control_item_id": control.id,
                 },
             )
@@ -270,10 +316,17 @@ class DemoSeeder:
             )
 
     def link_isms_controls(
-        self, entity_type: str, entity_id: Any, refs: Iterable[str]
+        self,
+        entity_type: str,
+        entity_id: Any,
+        refs: Iterable[str],
+        framework: str | None = None,
     ) -> None:
+        framework = framework or self.framework
+        if framework not in self.seeded_frameworks:
+            return
         for ref in refs:
-            control = self._control(ref)
+            control = self._control(ref, framework)
             if not control:
                 continue
             self.ensure_link(
@@ -281,8 +334,26 @@ class DemoSeeder:
                 {
                     "entity_type": entity_type,
                     "entity_id": entity_id,
-                    "framework_slug": self.framework,
+                    "framework_slug": framework,
                     "control_item_id": control.id,
+                },
+                {"created_by_user_id": self.user.id},
+            )
+
+    def link_isms_clauses(
+        self, entity_type: str, entity_id: Any, refs: Iterable[str]
+    ) -> None:
+        for ref in refs:
+            clause = self._clause(ref)
+            if not clause:
+                continue
+            self.ensure_link(
+                IsmsEntityClauseLink,
+                {
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "framework_slug": self.framework,
+                    "clause_id": clause.id,
                 },
                 {"created_by_user_id": self.user.id},
             )
@@ -361,11 +432,15 @@ class DemoSeeder:
     def seed_assets(
         self, licenses: dict[str, IsmsLicense], org_nodes: dict[str, IsmsOrgNode]
     ) -> dict[str, RiskAsset]:
+        from demo_catalogue import ensure_vendor
+
         category_specs = {
             "hosting": "Hosting Platform",
             "data": "Information Asset",
             "application": "Application Service",
             "people": "People and Operations",
+            "endpoints": "End-user Devices",
+            "premises": "Premises",
         }
         categories = {
             key: self.upsert(RiskCategory, {"name": self.label(name)})
@@ -376,6 +451,14 @@ class DemoSeeder:
             "customer_data": ("data", "Customer Data Store"),
             "web_app": ("application", "Web Application"),
             "ops_team": ("people", "Operations Team"),
+            "backup": ("hosting", "Backup and Recovery"),
+            "source_code": ("data", "Source Code"),
+            "identity": ("application", "Identity Services"),
+            "payments": ("application", "Payment Services"),
+            "collaboration": ("application", "Collaboration Services"),
+            "governance": ("people", "Governance"),
+            "laptops": ("endpoints", "Laptops and Mobile Devices"),
+            "offices": ("premises", "Offices"),
         }
         subcategories = {
             key: self.upsert(
@@ -391,6 +474,7 @@ class DemoSeeder:
                 "subcategory": "cloud",
                 "license": "commercial",
                 "owner": "platform_engineer",
+                "vendor": "Example Hosting",
                 "description": "Primary managed hosting environment used by the demo service.",
             },
             "data_store": {
@@ -417,12 +501,81 @@ class DemoSeeder:
                 "owner": "service_desk",
                 "description": "Operational team that triages alerts, requests, and incidents.",
             },
+            "backups": {
+                "name": "Backup Storage",
+                "category": "hosting",
+                "subcategory": "backup",
+                "license": "commercial",
+                "owner": "platform_engineer",
+                "vendor": "Example Hosting",
+                "description": "Immutable off-site backup vault in a separate hosting account, with object locking.",
+            },
+            "source_code": {
+                "name": "Source Code Repositories",
+                "category": "data",
+                "subcategory": "source_code",
+                "license": "internal",
+                "owner": "platform_engineer",
+                "description": "Git repositories for the customer portal, infrastructure code and runbooks.",
+            },
+            "identity": {
+                "name": "Identity Provider (SSO)",
+                "category": "application",
+                "subcategory": "identity",
+                "license": "commercial",
+                "owner": "security_lead",
+                "vendor": "Example Identity Services",
+                "description": "Single sign-on and multi-factor authentication for staff access to internal and SaaS systems.",
+            },
+            "payments": {
+                "name": "Payment Gateway Integration",
+                "category": "application",
+                "subcategory": "payments",
+                "license": "commercial",
+                "owner": "security_lead",
+                "vendor": "Example Payments",
+                "description": "Hosted payment fields and tokenisation; card numbers never reach the organisation's own systems.",
+            },
+            "collaboration": {
+                "name": "Email and Collaboration Suite",
+                "category": "application",
+                "subcategory": "collaboration",
+                "license": "commercial",
+                "owner": "service_desk",
+                "description": "Email, calendars and shared drives for all staff, administered centrally.",
+            },
+            "laptops": {
+                "name": "Staff Laptops",
+                "category": "endpoints",
+                "subcategory": "laptops",
+                "license": "commercial",
+                "owner": "service_desk",
+                "vendor": "Example Device Supply",
+                "description": "Managed laptops issued to staff and contractors; disk-encrypted and enrolled in device management.",
+            },
+            "office": {
+                "name": "Head Office",
+                "category": "premises",
+                "subcategory": "offices",
+                "license": None,
+                "owner": "isms_owner",
+                "description": "Shared office with a badge-controlled entrance and a locked communications room.",
+            },
+            "isms_programme": {
+                "name": "ISMS Programme",
+                "category": "people",
+                "subcategory": "governance",
+                "license": None,
+                "owner": "isms_owner",
+                "description": "The information security management system: policies, objectives, risk treatment and internal audit.",
+            },
         }
         assets: dict[str, RiskAsset] = {}
         for key, spec in asset_specs.items():
             category = categories[spec["category"]]
             subcategory = subcategories[spec["subcategory"]]
-            license_obj = licenses[spec["license"]]
+            license_obj = licenses[spec["license"]] if spec["license"] else None
+            vendor = ensure_vendor(self, spec["vendor"]) if spec.get("vendor") else None
             owner = org_nodes[spec["owner"]]
             assets[key] = self.upsert(
                 RiskAsset,
@@ -432,8 +585,9 @@ class DemoSeeder:
                     "subcategory_id": subcategory.id,
                 },
                 {
-                    "license": license_obj.name,
-                    "license_id": license_obj.id,
+                    "license": license_obj.name if license_obj else "",
+                    "license_id": license_obj.id if license_obj else None,
+                    "vendor_id": vendor.id if vendor else None,
                     "owner_org_node_id": owner.id,
                     "register_held_by_org_node_id": org_nodes["isms_owner"].id,
                     "description": spec["description"],
@@ -496,161 +650,6 @@ class DemoSeeder:
                 {"created_by_user_id": self.user.id},
             )
         return pestle_processes
-
-    def seed_risks(self, assets: dict[str, RiskAsset]) -> dict[str, Risk]:
-        specs = {
-            "admin_access": {
-                "asset": "platform",
-                "risk_types": ["confidentiality", "integrity", "availability"],
-                "summary": "Misconfigured hosting permissions allow unauthorised administrative access.",
-                "scores": (4, 4, 5, 20, 2, 3, 6),
-                "controls": ["A.5.15", "A.5.16", "A.8.2", "A.8.15"],
-            },
-            "data_exposure": {
-                "asset": "data_store",
-                "risk_types": ["confidentiality"],
-                "summary": "Customer or audit evidence data is exposed through weak access review or retention controls.",
-                "scores": (4, 3, 5, 15, 2, 3, 6),
-                "controls": ["A.5.34", "A.8.3", "A.8.12", "A.8.24"],
-            },
-            "release_defect": {
-                "asset": "web_app",
-                "risk_types": ["integrity", "availability"],
-                "summary": "Release or dependency defect disrupts evidence ingestion or audit workflows.",
-                "scores": (3, 3, 4, 12, 2, 2, 4),
-                "controls": ["A.8.8", "A.8.9", "A.8.25", "A.8.28"],
-            },
-            "key_person": {
-                "asset": "service_desk",
-                "risk_types": ["availability"],
-                "summary": "Key operations staff are unavailable during incident response or audit preparation.",
-                "scores": (3, 3, 3, 9, 2, 2, 4),
-                "controls": ["A.5.3", "A.5.30", "A.6.3", "A.6.5"],
-            },
-        }
-        risks: dict[str, Risk] = {}
-        for key, spec in specs.items():
-            t, v, i, score, rv, ri, rscore = spec["scores"]
-            risk = self.upsert(
-                Risk,
-                {
-                    "asset_id": assets[spec["asset"]].id,
-                    "threat_summary": spec["summary"],
-                },
-                {
-                    "risk_types": spec["risk_types"],
-                    "risk_owner_user_id": self.user.id,
-                    "threat_score": t,
-                    "vulnerability_score": v,
-                    "impact_score": i,
-                    "risk_score": score,
-                    "residual_vulnerability_score": rv,
-                    "residual_impact_score": ri,
-                    "residual_risk_score": rscore,
-                    "register_likelihood": min(5, max(1, v)),
-                    "register_impact": min(5, max(1, i)),
-                    "register_residual_likelihood": min(5, max(1, rv)),
-                    "register_residual_impact": min(5, max(1, ri)),
-                    "note": "Fictional demo risk; not a real assessment.",
-                    "mitigator_context": {"seed": "demo", "prefix": self.prefix},
-                    "created_by_user_id": self.user.id,
-                },
-            )
-            self.link_risk_controls(risk, spec["controls"])
-            risks[key] = risk
-        return risks
-
-    def seed_pestle(self, processes: dict[str, IsmsBusinessProcess]) -> None:
-        high = self.relevance_levels["high"]
-        medium = self.relevance_levels["medium"]
-        specs = [
-            (
-                "Political",
-                "External",
-                "Public-sector cyber assurance expectations increase evidence obligations.",
-                "New assurance requirements may require clearer control ownership, documented evidence, and audit-ready reporting.",
-                ["onboarding", "service"],
-                ["4.1", "4.2", "6.1"],
-            ),
-            (
-                "Economical",
-                "External",
-                "Supplier price rises pressure tooling and monitoring coverage.",
-                "Budget changes may reduce monitoring depth unless control effectiveness is clearly measured.",
-                ["supplier", "service"],
-                ["4.2", "6.1", "8.1"],
-            ),
-            (
-                "Social",
-                "External",
-                "Customers expect clear privacy notices and rapid incident communication.",
-                "Customer trust is affected by the speed and transparency of security communication.",
-                ["onboarding", "incident"],
-                ["4.2", "7.4", "8.2"],
-            ),
-            (
-                "Technological",
-                "Internal",
-                "Cloud platform changes introduce configuration drift risk.",
-                "Managed hosting changes must be detected and linked to access review, logging, and hardening controls.",
-                ["service", "incident"],
-                ["6.1", "8.1", "8.3"],
-            ),
-            (
-                "Legal",
-                "External",
-                "Retention and breach-notification obligations require reliable records.",
-                "Evidence must support investigation timelines, legal retention, and notification decisions.",
-                ["incident", "supplier"],
-                ["4.2", "8.2", "9.1"],
-            ),
-            (
-                "Environmental",
-                "External",
-                "Regional outage or office disruption affects support operations.",
-                "Continuity assumptions should be tested through tabletop and restore exercises.",
-                ["service", "incident"],
-                ["6.1", "8.1", "8.3"],
-            ),
-            (
-                "Ethical",
-                "Internal",
-                "AI-assisted administration requires transparency and human review.",
-                "Use of assistive tooling should not bypass approval, review, or accountability controls.",
-                ["service", "supplier"],
-                ["5.1", "5.3", "7.3"],
-            ),
-        ]
-        for typ, lens, item, rationale, process_keys, clause_refs in specs:
-            row = self.upsert(
-                PestleItem,
-                {"framework_slug": self.framework, "item": self.label(item)},
-                {
-                    "type": typ,
-                    "lens": lens,
-                    "overall_relevance_id": high.id,
-                    "rationale": rationale,
-                    "created_by_user_id": self.user.id,
-                },
-            )
-            for key in process_keys:
-                self.ensure_link(
-                    PestleBusinessProcessRelevance,
-                    {
-                        "pestle_item_id": row.id,
-                        "business_process_id": processes[key].id,
-                    },
-                    {"relevance_id": medium.id},
-                )
-            for ref in clause_refs:
-                clause = self._clause(ref)
-                if not clause:
-                    continue
-                self.ensure_link(
-                    PestleClauseRelevance,
-                    {"pestle_item_id": row.id, "clause_id": clause.id},
-                    {"relevance_id": high.id},
-                )
 
     def seed_interested_parties(self) -> None:
         specs = [
@@ -863,55 +862,6 @@ class DemoSeeder:
                 )
             self.link_isms_controls("access_control_matrix", entry.id, spec["controls"])
 
-    def seed_documents(self) -> dict[str, IsmsDocument]:
-        specs = {
-            "security_policy": (
-                "Information Security Policy",
-                "policy",
-                "Sets the organisation's ISMS principles, roles, and control expectations.",
-                ["A.5.1", "A.5.2", "A.5.4"],
-            ),
-            "access_procedure": (
-                "Access Control Procedure",
-                "procedure",
-                "Defines account lifecycle, approval, review, and privileged access handling.",
-                ["A.5.15", "A.5.16", "A.5.18", "A.8.2"],
-            ),
-            "incident_process": (
-                "Incident Response Process",
-                "process",
-                "Describes preparation, triage, response, communication, and lessons learned.",
-                ["A.5.24", "A.5.25", "A.5.26", "A.5.27"],
-            ),
-            "supplier_standard": (
-                "Supplier Management Standard",
-                "standard",
-                "Defines supplier due diligence, assurance, contractual security, and review cadence.",
-                ["A.5.19", "A.5.20", "A.5.21", "A.5.22"],
-            ),
-            "secure_dev_guideline": (
-                "Secure Development Guideline",
-                "guideline",
-                "Provides secure coding, review, dependency, and release guidance.",
-                ["A.8.25", "A.8.27", "A.8.28", "A.8.29"],
-            ),
-        }
-        docs: dict[str, IsmsDocument] = {}
-        for key, (title, doc_type, description, controls) in specs.items():
-            doc = self.upsert(
-                IsmsDocument,
-                {"title": self.label(title)},
-                {
-                    "document_type": doc_type,
-                    "description": description,
-                    "external_url": f"https://example.invalid/keen-demo/{key}",
-                    "created_by_user_id": self.user.id,
-                },
-            )
-            self.link_isms_controls("document", doc.id, controls)
-            docs[key] = doc
-        return docs
-
     def _scope_audit_controls(self, audit: Audit, refs: Iterable[str]) -> None:
         for ref in refs:
             control = self._control(ref)
@@ -989,7 +939,7 @@ class DemoSeeder:
             "management_review": {
                 "summary": "Management review confirms priority control evidence gaps",
                 "days_ago": 12,
-                "controls": ["A.5.1", "A.5.35", "A.5.36"],
+                "controls": ["A.5.1", "A.5.35", "A.5.36", "9.3"],
                 "details": {
                     "meeting": "Monthly ISMS review",
                     "decision": "Prioritise access review and supplier assurance evidence before the next audit.",
@@ -1038,56 +988,69 @@ class DemoSeeder:
                 },
             },
         }
-        events: dict[str, Event] = {}
-        for key, spec in specs.items():
-            timestamp = datetime.combine(
-                self.seed_date - timedelta(days=int(spec["days_ago"])),
-                time(11, 30),
-            )
-            summary = self.label(spec["summary"])
-            external_id = f"{self.account_code('DIARY')}-{key}"[:128]
-            payload = {
-                "summary": summary,
-                "details": spec["details"],
-                "author": self.user.username,
-                "links": [
+        return {
+            key: self.seed_diary_entry(
+                key,
+                spec["summary"],
+                int(spec["days_ago"]),
+                spec["details"],
+                spec["controls"],
+                links=[
                     {
                         "text": "Demo diary evidence link",
                         "url": "https://example.invalid/keen-demo/diary",
                     }
                 ],
-            }
-            event = self.upsert(
-                Event,
-                {"source": "diary", "external_id": external_id},
-                {
-                    "timestamp": timestamp,
-                    "system": "manual",
-                    "actor": self.user.username,
-                    "action": "diary_entry",
-                    "outcome": "info",
-                    "severity": 2,
-                    "summary": f"diary: {summary}",
-                    "raw_pointer": {"seed": "demo", "prefix": self.prefix},
-                    "normalized_payload": payload,
-                },
             )
-            for ref in spec["controls"]:
-                control = self._control(ref)
-                if not control:
-                    continue
-                self.ensure_link(
-                    Mapping,
-                    {"event_id": event.id, "control_item_id": control.id},
-                    {
-                        "confidence": 1.0,
-                        "method": "manual",
-                        "rationale": "seeded demo diary mapping",
-                        "mapped_by": self.user.username,
-                    },
-                )
-            events[key] = event
-        return events
+            for key, spec in specs.items()
+        }
+
+    def seed_diary_entry(
+        self,
+        key: str,
+        summary: str,
+        days_ago: int,
+        details: dict[str, Any],
+        controls: Iterable[str],
+        *,
+        at: tuple[int, int] = (11, 30),
+        links: list[dict[str, str]] | None = None,
+    ) -> Event:
+        """A diary entry as a person records it, mapped by hand to controls."""
+        summary = self.label(summary)
+        payload: dict[str, Any] = {
+            "summary": summary,
+            "details": details,
+            "author": self.user.username,
+        }
+        if links:
+            payload["links"] = links
+        event = self.upsert(
+            Event,
+            {
+                "source": "diary",
+                "external_id": f"{self.account_code('DIARY')}-{key}"[:128],
+            },
+            {
+                "timestamp": datetime.combine(
+                    self.seed_date - timedelta(days=days_ago), time(*at)
+                ),
+                "system": "manual",
+                "actor": self.user.username,
+                "action": "diary_entry",
+                "outcome": "info",
+                "severity": 2,
+                "summary": f"diary: {summary}",
+                "raw_pointer": {
+                    "diary": {"author": self.user.username},
+                    "seed": "demo",
+                    "prefix": self.prefix,
+                },
+                "normalized_payload": payload,
+            },
+        )
+        self.map_event(event, controls)
+        return event
 
     def _seed_source_event(
         self,
@@ -1121,21 +1084,33 @@ class DemoSeeder:
                 "normalized_payload": normalized_payload,
             },
         )
-        for ref in controls:
-            control = self._control(ref)
+        self.map_event(event, controls)
+        return event
+
+    def map_event(
+        self, event: Event, refs: Iterable[str], framework: str | None = None
+    ) -> None:
+        """Map an event to controls; diary entries carry manual mappings."""
+        framework = framework or self.framework
+        if framework not in self.seeded_frameworks:
+            return
+        manual = event.source == "diary"
+        for ref in refs:
+            control = self._control(ref, framework)
             if not control:
                 continue
             self.ensure_link(
                 Mapping,
                 {"event_id": event.id, "control_item_id": control.id},
                 {
-                    "confidence": 0.82,
-                    "method": "seeded-demo",
-                    "rationale": f"Seeded {source} demonstration event mapped to {ref}",
+                    "confidence": 1.0 if manual else 0.82,
+                    "method": "manual" if manual else "seeded-demo",
+                    "rationale": "seeded demo diary mapping"
+                    if manual
+                    else f"Seeded {event.source} demonstration event mapped to {ref}",
                     "mapped_by": self.user.username,
                 },
             )
-        return event
 
     def _demo_event_timestamp(self, days_ago: int, hour: int, minute: int) -> datetime:
         return datetime.combine(
@@ -2052,12 +2027,19 @@ class DemoSeeder:
             f"Seeding KEEN demo data as user {self.user.username!r} "
             f"for framework {self.framework!r} with prefix {self.prefix!r}."
         )
-        from demo_catalogue import CATALOGUE, seed_catalogue
+        from demo_catalogue import seed_catalogue, select_frameworks
 
+        frameworks = self.seeded_frameworks
         if not self.config.all_frameworks and self.framework != "iso_27001_2022":
-            seed_catalogue(self, [self.framework])
+            seed_catalogue(self, frameworks)
+            select_frameworks(self, frameworks)
             return
         from app.ingest.demo_rss import seed_preset
+        from demo_documents import seed_documents, seed_link_diary
+        from demo_evidence import seed_evidence, seed_further_mappings
+        from demo_pestle import seed_pestle
+        from demo_risks import seed_risks
+        from demo_stories import seed_stories
 
         seed_preset(self.db)
         self.ensure_relevance_levels()
@@ -2066,20 +2048,23 @@ class DemoSeeder:
         assets = self.seed_assets(licenses, org_nodes)
         accounts = self.seed_hosting_accounts()
         processes = self.seed_business_processes()
-        self.seed_risks(assets)
-        self.seed_pestle(processes)
         self.seed_interested_parties()
+        risks = seed_risks(self, assets, org_nodes)
+        seed_pestle(self, processes)
         self.seed_access_matrix(assets, accounts, org_nodes)
-        docs = self.seed_documents()
+        docs = seed_documents(self)
         diary_events = self.seed_diary_events()
-        self.seed_source_events()
+        events = {**diary_events, **self.seed_source_events(), **seed_evidence(self)}
+        seed_further_mappings(self, events)
         self.seed_audits(docs, diary_events)
         self.seed_effectiveness_measures()
-        self.seed_objectives()
+        objectives = self.seed_objectives()
         self.seed_meetings(docs)
-        seed_catalogue(
-            self, list(CATALOGUE) if self.config.all_frameworks else [self.framework]
-        )
+        seed_catalogue(self, frameworks)
+        seed_link_diary(self)
+        seed_stories(self, events, docs, assets, risks, objectives)
+        # The ISMS dataset is written against ISO 27001, so it leads.
+        select_frameworks(self, frameworks, default="iso_27001_2022")
 
     def print_summary(self) -> None:
         print("\nSummary:")
@@ -2098,8 +2083,8 @@ def parse_args() -> DemoConfig:
     )
     parser.add_argument(
         "--framework",
-        default=settings.default_framework_slug,
-        help="Framework slug to use for control/clause mappings. Defaults to KEEN settings.default_framework_slug.",
+        default="iso_27001_2022",
+        help="Framework slug to use for control/clause mappings. ISO 27001:2022, the default, also seeds the full ISMS dataset; another framework seeds its reviewed examples alone.",
     )
     parser.add_argument(
         "--prefix",
@@ -2119,7 +2104,7 @@ def parse_args() -> DemoConfig:
     parser.add_argument(
         "--all-frameworks",
         action="store_true",
-        help="Seed reviewed examples across ISO 27001, KEEN Assurance and Cyber Essentials (base ISMS uses ISO 27001).",
+        help="Seed reviewed examples across ISO 27001, SOC 2, PCI DSS, KEEN Assurance and Cyber Essentials (the ISMS dataset uses ISO 27001).",
     )
     parser.add_argument(
         "--allow-non-demo",

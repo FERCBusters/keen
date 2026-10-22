@@ -19,8 +19,15 @@ from app.db.models import (
 from app.services.isms.common import _record, _utcnow
 from app.services.isms.swot import summary
 
-# Each tuple explicitly reviews applicability in ISO, KEEN Assurance and CE.
-FRAMEWORKS = ("iso_27001_2022", "KEEN-AF:1.0", "CYBER-ESSENTIALS:2026")
+# Each tuple explicitly reviews applicability in ISO, KEEN Assurance, CE, SOC 2
+# and PCI DSS; None records that no control in that framework applies.
+FRAMEWORKS = (
+    "iso_27001_2022",
+    "KEEN-AF:1.0",
+    "CYBER-ESSENTIALS:2026",
+    "soc2_tsc",
+    "pci_dss_v4",
+)
 SPECS = (
     (
         "team",
@@ -31,7 +38,7 @@ SPECS = (
         None,
         "Fictional team members have rehearsed incident roles and share practical knowledge.",
         "Maintain cross-training and review lessons after every exercise.",
-        ("A.6.3", "SAT-1", None),
+        ("A.6.3", "SAT-1", None, "CC1.4", "12.6"),
     ),
     (
         "access",
@@ -42,7 +49,7 @@ SPECS = (
         None,
         "Fictional administrators use strong authentication and documented access reviews.",
         "Validate exceptions and retain review evidence each quarter.",
-        ("A.5.18", "IAC-7", "A7.16"),
+        ("A.5.18", "IAC-7", "A7.16", "CC6.3", "8.4"),
     ),
     (
         "manual",
@@ -53,7 +60,7 @@ SPECS = (
         None,
         "Demonstration reviews rely on spreadsheets and repeated requests for evidence.",
         "Automate collection for the priority control set and measure timely coverage.",
-        ("A.5.9", "GOV-11", "A4.6"),
+        ("A.5.9", "GOV-11", "A4.6", "CC4.1", None),
     ),
     (
         "supplier",
@@ -64,7 +71,7 @@ SPECS = (
         None,
         "Fictional supplier reviews contain outstanding assurance and contract actions.",
         "Assign action owners and review supplier evidence before renewal.",
-        ("A.5.19", "TPM-2", None),
+        ("A.5.19", "TPM-2", None, "CC9.2", "12.8"),
     ),
     (
         "technology",
@@ -75,7 +82,7 @@ SPECS = (
         None,
         "New tools may improve evidence quality and reduce repetitive assurance work.",
         "Evaluate small, measurable pilots with security and privacy review.",
-        ("A.8.8", "VPM-2", "A6.4"),
+        ("A.8.8", "VPM-2", "A6.4", "CC7.1", "6.3"),
     ),
     (
         "ai",
@@ -86,7 +93,7 @@ SPECS = (
         "technology",
         "A fictional pilot could help reviewers organise synthetic evidence and identify gaps.",
         "Use synthetic data only; keep human approval and measure precision before adoption.",
-        ("A.5.1", "GOV-11", None),
+        ("A.5.1", "GOV-11", None, "CC5.3", None),
     ),
     (
         "pandemic",
@@ -97,7 +104,7 @@ SPECS = (
         None,
         "A fictional pandemic scenario tests people and supplier continuity assumptions.",
         "Exercise continuity arrangements and track the two dependent scenarios below.",
-        ("A.5.30", "BCD-2", None),
+        ("A.5.30", "BCD-2", None, "CC9.1", None),
     ),
     (
         "absence",
@@ -108,7 +115,7 @@ SPECS = (
         "pandemic",
         "Multiple responders may be unavailable at once during a prolonged incident.",
         "Cross-train deputies and rehearse the reduced-staff incident-response procedure.",
-        ("A.6.3", "SAT-1", None),
+        ("A.6.3", "SAT-1", None, "CC1.4", None),
     ),
     (
         "supply",
@@ -119,7 +126,7 @@ SPECS = (
         "pandemic",
         "Fictional device replacement and hosting support may be delayed by wider disruption.",
         "Review alternative suppliers and document acceptable recovery lead times.",
-        ("A.5.21", "TPM-2", None),
+        ("A.5.21", "TPM-2", None, "CC9.2", "12.8"),
     ),
 )
 

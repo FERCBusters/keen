@@ -16,12 +16,14 @@ These scripts keep a staging KEEN installation in a known golden state, run
 - `nginx-site.example` and `Caddyfile.example` are TLS fronts for the host.
 
 The golden state is the demonstration ISMS dataset from
-`services/api/scripts/seed_demo_data.py`, across all frameworks: organisation
-roles, assets, risks, PESTLE items, interested parties, documents, meetings,
-objectives, audits, effectiveness measures and evidence events. Real data
-matters to the suite: list pages, search, charts and aggregates take code paths
-that an empty installation never reaches, and downloads and PDF previews need
-stored files.
+`services/api/scripts/seed_demo_data.py`, across all frameworks (ISO 27001,
+SOC 2, PCI DSS, the KEEN Assurance Framework and Cyber Essentials, with ISO
+27001 as the organisation default): organisation roles, assets, risks, PESTLE
+items, interested parties, documents, meetings, objectives, audits,
+effectiveness measures, stories and evidence events, including the automatic
+diary entries for document control links. Real data matters to the suite: list
+pages, search, charts and aggregates take code paths that an empty installation
+never reaches, and downloads and PDF previews need stored files.
 
 ## One-time host setup
 

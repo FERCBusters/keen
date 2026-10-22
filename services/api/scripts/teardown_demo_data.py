@@ -8,9 +8,16 @@ Typical use:
     docker compose exec api python scripts/teardown_demo_data.py --dry-run
     docker compose exec api python scripts/teardown_demo_data.py --yes
 
-This deliberately does not delete user accounts, frameworks, defined controls, or
-framework clauses. It targets records created by the seed script for the supplied
---prefix, plus relationships from those sample records.
+Teardown finds records by their prefixed titles, so an installation outside
+demo mode also needs --allow-non-demo, as seeding it does.
+
+This deliberately does not delete user accounts, frameworks, defined controls,
+framework clauses or configuration such as the organisation's framework
+selection. It targets records created by the seed script for the supplied
+--prefix, plus relationships from those sample records and the automatic link
+diary entries of the sample records, whose stored files are queued for deletion
+from evidence storage. Change history stays, as it does whenever a record is
+deleted.
 """
 
 from __future__ import annotations
@@ -40,6 +47,9 @@ from app.db.models import (  # noqa: E402
     AuditScopedClause,
     AuditScopedControl,
     AuditScopedIsmsDocument,
+    AuditSwotScope,
+    Base,
+    BookStackSectionEvidence,
     Event,
     EventIncident,
     EventQuestionThread,
@@ -54,6 +64,7 @@ from app.db.models import (  # noqa: E402
     IsmsAwsAccount,
     IsmsBusinessProcess,
     IsmsDocument,
+    IsmsDocumentFolder,
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry,
     IsmsEntityClauseLink,
@@ -65,6 +76,10 @@ from app.db.models import (  # noqa: E402
     IsmsObjective,
     IsmsObjectiveResourceUser,
     IsmsOrgNode,
+    IsmsPerson,
+    IsmsSwot,
+    IsmsSwotLink,
+    IsmsVendor,
     Mapping,
     PestleBusinessProcess,
     PestleBusinessProcessRelevance,
@@ -75,10 +90,37 @@ from app.db.models import (  # noqa: E402
     RiskAssetSubcategory,
     RiskCategory,
     RiskControlLink,
+    RiskInterestedParty,
+    Story,
+    StoryComment,
+    StoryItem,
+    StoryLink,
 )
 from app.db.session import SessionLocal  # noqa: E402
+from app.security.diary_visibility import (  # noqa: E402
+    DIARY_SOURCE,
+    link_entry_external_id,
+)
+from app.services.evidence_retention import queue_object  # noqa: E402
 from sqlalchemy import or_  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
+
+RETENTION_HOLDS = Base.metadata.tables["audit_event_retention_holds"]
+# Record types as the ISMS link tables name them, with the found collection
+# that holds the seeded records of each type.
+ISMS_LINKED_RECORDS = {
+    "document": "documents",
+    "objective": "objectives",
+    "effectiveness_measure": "measures",
+    "meeting": "meetings",
+    "access_control_matrix": "access",
+    "asset": "assets",
+    "swot": "swot",
+    "org_node": "org_nodes",
+}
+# Saving a record's framework links in the app maintains an automatic diary
+# entry for it, so any seeded record of these types may have one.
+LINK_ENTRY_RECORDS = {**ISMS_LINKED_RECORDS, "risk": "risks"}
 
 
 @dataclass(frozen=True)
@@ -103,237 +145,218 @@ class DemoTeardown:
     def framework(self) -> str:
         return self.config.framework.strip() or settings.default_framework_slug
 
-    @property
-    def like_prefix(self) -> str:
-        return f"{self.prefix} %"
-
     def account_code(self, suffix: str) -> str:
         base = re.sub(r"[^A-Z0-9]", "", self.prefix.upper()) or "DEMO"
         suffix = re.sub(r"[^A-Z0-9-]", "", suffix.upper()) or "GEN"
         return f"{base[:12]}-{suffix}"[:32]
 
+    def starts_with(self, column: Any, text: str) -> Any:
+        """``column`` starts with ``text``, read literally."""
+        escaped = re.sub(r"([\\%_])", r"\\\1", text)
+        return column.like(escaped + "%", escape="\\")
+
+    def labelled(self, column: Any) -> Any:
+        return self.starts_with(column, self.prefix + " ")
+
     def ids(self, query: Any) -> list[Any]:
         return [row[0] for row in query.all()]
 
-    def delete_where(self, model: type, *criteria: Any) -> int:
+    def labelled_ids(self, model: type, column: Any) -> list[Any]:
+        return self.ids(self.db.query(model.id).filter(self.labelled(column)))
+
+    def delete_where(self, model: Any, *criteria: Any) -> int:
         if not criteria:
             return 0
-        count = self.db.query(model).filter(*criteria).delete(synchronize_session=False)
+        table = getattr(model, "__table__", model)
+        result = self.db.execute(table.delete().where(*criteria))
+        count = int(result.rowcount or 0)
         if count:
-            self.stats[getattr(model, "__tablename__", model.__name__)] += count
-        return int(count or 0)
+            self.stats[table.name] += count
+        return count
 
-    def delete_ids(self, model: type, column: Any, ids: Iterable[Any]) -> int:
+    def delete_ids(self, model: Any, column: Any, ids: Iterable[Any]) -> int:
         values = list(ids or [])
         if not values:
             return 0
         return self.delete_where(model, column.in_(values))
-
-    def prefixed_ids(self, model: type, column: Any) -> list[Any]:
-        return self.ids(self.db.query(model.id).filter(column.like(self.like_prefix)))
 
     def run(self) -> None:
         print(
             f"Removing KEEN demo data for framework {self.framework!r} "
             f"with prefix {self.prefix!r}."
         )
+        found = self.find()
+        self.delete_stories(found)
+        self.delete_audit_dependents(found)
+        self.delete_event_dependents(found["events"])
+        self.delete_isms_dependents(found)
+        self.delete_ids(RiskControlLink, RiskControlLink.risk_id, found["risks"])
+        self.delete_ids(
+            RiskInterestedParty, RiskInterestedParty.risk_id, found["risks"]
+        )
+        self.delete_pestle_dependents(found)
+        self.delete_interested_party_dependents(found["parties"])
+        self.delete_parents(found)
 
-        audit_ids = self.prefixed_ids(Audit, Audit.title)
-        document_ids = self.prefixed_ids(IsmsDocument, IsmsDocument.title)
-        objective_ids = self.prefixed_ids(IsmsObjective, IsmsObjective.goal)
-        meeting_ids = self.prefixed_ids(IsmsMeeting, IsmsMeeting.title)
-        measure_ids = self.ids(
-            self.db.query(IsmsEffectivenessMeasure.id).filter(
+    def find(self) -> dict[str, list[Any]]:
+        db = self.db
+        found = {
+            "audits": self.labelled_ids(Audit, Audit.title),
+            "documents": self.labelled_ids(IsmsDocument, IsmsDocument.title),
+            "folders": self.labelled_ids(IsmsDocumentFolder, IsmsDocumentFolder.name),
+            "objectives": self.labelled_ids(IsmsObjective, IsmsObjective.goal),
+            "meetings": self.labelled_ids(IsmsMeeting, IsmsMeeting.title),
+            "access": self.labelled_ids(
+                IsmsAccessControlMatrixEntry, IsmsAccessControlMatrixEntry.task_action
+            ),
+            "org_nodes": self.labelled_ids(IsmsOrgNode, IsmsOrgNode.name),
+            "licences": self.labelled_ids(IsmsLicense, IsmsLicense.name),
+            "isms_processes": self.labelled_ids(
+                IsmsBusinessProcess, IsmsBusinessProcess.name
+            ),
+            "pestle_processes": self.labelled_ids(
+                PestleBusinessProcess, PestleBusinessProcess.name
+            ),
+            "pestle_items": self.labelled_ids(PestleItem, PestleItem.item),
+            "party_names": self.labelled_ids(
+                InterestedPartyName, InterestedPartyName.name
+            ),
+            "categories": self.labelled_ids(RiskCategory, RiskCategory.name),
+            "people": self.labelled_ids(IsmsPerson, IsmsPerson.name),
+            "vendors": self.labelled_ids(IsmsVendor, IsmsVendor.name),
+            "swot": self.labelled_ids(IsmsSwot, IsmsSwot.title),
+            "stories": self.labelled_ids(Story, Story.title),
+        }
+        found["measures"] = self.ids(
+            db.query(IsmsEffectivenessMeasure.id).filter(
                 or_(
-                    IsmsEffectivenessMeasure.summary.like(self.like_prefix),
-                    IsmsEffectivenessMeasure.metric_key.like(
-                        f"{self.account_code('METRIC')}-%"
+                    self.labelled(IsmsEffectivenessMeasure.summary),
+                    *(
+                        self.starts_with(
+                            IsmsEffectivenessMeasure.metric_key,
+                            self.account_code(code) + "-",
+                        )
+                        for code in ("METRIC", "SLA")
                     ),
                 )
             )
         )
-        access_entry_ids = self.prefixed_ids(
-            IsmsAccessControlMatrixEntry, IsmsAccessControlMatrixEntry.task_action
-        )
-        account_ids = self.ids(
-            self.db.query(IsmsAwsAccount.id).filter(
+        found["accounts"] = self.ids(
+            db.query(IsmsAwsAccount.id).filter(
                 or_(
-                    IsmsAwsAccount.name.like(self.like_prefix),
-                    IsmsAwsAccount.account_id.like(
-                        f"{(re.sub(r'[^A-Z0-9]', '', self.prefix.upper()) or 'DEMO')[:12]}-%"
+                    self.labelled(IsmsAwsAccount.name),
+                    self.starts_with(
+                        IsmsAwsAccount.account_id,
+                        (re.sub(r"[^A-Z0-9]", "", self.prefix.upper()) or "DEMO")[:12]
+                        + "-",
                     ),
                 )
             )
         )
-        org_node_ids = self.prefixed_ids(IsmsOrgNode, IsmsOrgNode.name)
-        license_ids = self.prefixed_ids(IsmsLicense, IsmsLicense.name)
-        isms_process_ids = self.prefixed_ids(
-            IsmsBusinessProcess, IsmsBusinessProcess.name
-        )
-        pestle_process_ids = self.prefixed_ids(
-            PestleBusinessProcess, PestleBusinessProcess.name
-        )
-        pestle_item_ids = self.prefixed_ids(PestleItem, PestleItem.item)
-        interested_party_name_ids = self.prefixed_ids(
-            InterestedPartyName, InterestedPartyName.name
-        )
-        interested_party_ids = (
+        found["parties"] = (
             self.ids(
-                self.db.query(InterestedParty.id).filter(
-                    InterestedParty.name_id.in_(interested_party_name_ids)
+                db.query(InterestedParty.id).filter(
+                    InterestedParty.name_id.in_(found["party_names"])
                 )
             )
-            if interested_party_name_ids
+            if found["party_names"]
             else []
         )
-        category_ids = self.prefixed_ids(RiskCategory, RiskCategory.name)
-        subcategory_ids = self.ids(
-            self.db.query(RiskAssetSubcategory.id).filter(
+        found["subcategories"] = self.ids(
+            db.query(RiskAssetSubcategory.id).filter(
                 or_(
-                    RiskAssetSubcategory.name.like(self.like_prefix),
-                    RiskAssetSubcategory.category_id.in_(category_ids or [None]),
+                    self.labelled(RiskAssetSubcategory.name),
+                    RiskAssetSubcategory.category_id.in_(found["categories"] or [None]),
                 )
             )
         )
-        asset_ids = self.ids(
-            self.db.query(RiskAsset.id).filter(
+        found["assets"] = self.ids(
+            db.query(RiskAsset.id).filter(
                 or_(
-                    RiskAsset.name.like(self.like_prefix),
-                    RiskAsset.category_id.in_(category_ids or [None]),
-                    RiskAsset.subcategory_id.in_(subcategory_ids or [None]),
-                    RiskAsset.license_id.in_(license_ids or [None]),
+                    self.labelled(RiskAsset.name),
+                    RiskAsset.category_id.in_(found["categories"] or [None]),
+                    RiskAsset.subcategory_id.in_(found["subcategories"] or [None]),
+                    RiskAsset.license_id.in_(found["licences"] or [None]),
                 )
             )
         )
-        risk_ids = (
-            self.ids(self.db.query(Risk.id).filter(Risk.asset_id.in_(asset_ids)))
-            if asset_ids
+        found["risks"] = (
+            self.ids(db.query(Risk.id).filter(Risk.asset_id.in_(found["assets"])))
+            if found["assets"]
             else []
         )
-        diary_event_ids = self.ids(
-            self.db.query(Event.id).filter(
-                Event.source == "diary",
+        link_entries = [
+            link_entry_external_id(record_type, record_id)
+            for record_type, key in LINK_ENTRY_RECORDS.items()
+            for record_id in found[key]
+        ]
+        found["events"] = self.ids(
+            db.query(Event.id).filter(
                 or_(
-                    Event.external_id.like(f"{self.account_code('DIARY')}-%"),
-                    Event.summary.like(f"diary: {self.like_prefix}"),
-                ),
+                    # Every seeded collector event carries the prefix's code.
+                    self.starts_with(
+                        Event.external_id, self.account_code("EVENT") + "-"
+                    ),
+                    (Event.source == "demo-seed")
+                    & (Event.external_id == self.account_code("SEED-ANCHOR")),
+                    (Event.source == DIARY_SOURCE)
+                    & self.starts_with(
+                        Event.external_id, self.account_code("DIARY") + "-"
+                    ),
+                    (Event.source == DIARY_SOURCE)
+                    & Event.external_id.in_(link_entries or [""]),
+                    (Event.source == "demo")
+                    & or_(
+                        *(
+                            self.starts_with(
+                                Event.external_id, self.account_code(code) + "-"
+                            )
+                            for code in ("CATALOGUE", "SLA")
+                        )
+                    ),
+                )
             )
         )
-        source_event_ids = self.ids(
-            self.db.query(Event.id).filter(
-                Event.source.in_(
-                    [
-                        "loki",
-                        "jenkins",
-                        "github",
-                        "forgejo",
-                        "webhook:enroll",
-                    ]
-                ),
-                or_(
-                    Event.external_id.like(f"{self.account_code('EVENT')}-%"),
-                    Event.summary.like(self.like_prefix),
-                ),
-            )
-        )
-        event_ids = diary_event_ids + source_event_ids
+        return found
 
-        self._delete_audit_dependents(
-            audit_ids,
-            document_ids,
-            event_ids,
-            objective_ids,
-            measure_ids,
-            meeting_ids,
-            access_entry_ids,
-            asset_ids,
-            risk_ids,
-            pestle_item_ids,
-            interested_party_ids,
-        )
-        self._delete_event_dependents(event_ids)
-        self._delete_isms_dependents(
-            document_ids,
-            objective_ids,
-            measure_ids,
-            meeting_ids,
-            access_entry_ids,
-            account_ids,
-            org_node_ids,
-            asset_ids,
-        )
-        self._delete_risk_dependents(risk_ids)
-        self._delete_pestle_dependents(pestle_item_ids, pestle_process_ids)
-        self._delete_interested_party_dependents(interested_party_ids)
+    def delete_stories(self, found: dict[str, list[Any]]) -> None:
+        stories = found["stories"]
+        self.delete_ids(StoryComment, StoryComment.story_id, stories)
+        self.delete_ids(StoryLink, StoryLink.story_id, stories)
+        self.delete_ids(StoryItem, StoryItem.story_id, stories)
+        self.delete_ids(Story, Story.id, stories)
 
-        # Parent rows, after relationships have been removed.
-        self.delete_ids(Audit, Audit.id, audit_ids)
-        self.delete_ids(Event, Event.id, event_ids)
-        self.delete_ids(IsmsMeeting, IsmsMeeting.id, meeting_ids)
-        self.delete_ids(IsmsObjective, IsmsObjective.id, objective_ids)
+    def delete_audit_dependents(self, found: dict[str, list[Any]]) -> None:
+        audits = found["audits"]
+        for model in (
+            AuditAttendee,
+            AuditFinding,
+            AuditScopedControl,
+            AuditScopedClause,
+            AuditScopedIsmsDocument,
+            AuditSwotScope,
+            AuditEvidence,
+        ):
+            self.delete_ids(model, model.audit_id, audits)
         self.delete_ids(
-            IsmsEffectivenessMeasure, IsmsEffectivenessMeasure.id, measure_ids
+            AuditScopedIsmsDocument,
+            AuditScopedIsmsDocument.document_id,
+            found["documents"],
         )
-        self.delete_ids(
-            IsmsAccessControlMatrixEntry,
-            IsmsAccessControlMatrixEntry.id,
-            access_entry_ids,
-        )
-        self.delete_ids(IsmsAwsAccount, IsmsAwsAccount.id, account_ids)
-        self.delete_ids(IsmsDocument, IsmsDocument.id, document_ids)
-        self.delete_ids(Risk, Risk.id, risk_ids)
-        self.delete_ids(RiskAsset, RiskAsset.id, asset_ids)
-        self.delete_ids(RiskAssetSubcategory, RiskAssetSubcategory.id, subcategory_ids)
-        self.delete_ids(RiskCategory, RiskCategory.id, category_ids)
-        self.delete_ids(IsmsLicense, IsmsLicense.id, license_ids)
-        self.delete_ids(PestleItem, PestleItem.id, pestle_item_ids)
-        self.delete_ids(
-            PestleBusinessProcess, PestleBusinessProcess.id, pestle_process_ids
-        )
-        self.delete_ids(InterestedParty, InterestedParty.id, interested_party_ids)
-        self.delete_ids(
-            InterestedPartyName, InterestedPartyName.id, interested_party_name_ids
-        )
-        self._delete_seeded_interested_party_natures_if_orphaned()
-        self.delete_ids(IsmsBusinessProcess, IsmsBusinessProcess.id, isms_process_ids)
-        self.delete_ids(IsmsOrgNode, IsmsOrgNode.id, org_node_ids)
-
-    def _delete_audit_dependents(
-        self,
-        audit_ids: list[Any],
-        document_ids: list[Any],
-        event_ids: list[Any],
-        objective_ids: list[Any],
-        measure_ids: list[Any],
-        meeting_ids: list[Any],
-        access_entry_ids: list[Any],
-        asset_ids: list[Any],
-        risk_ids: list[Any],
-        pestle_item_ids: list[Any],
-        interested_party_ids: list[Any],
-    ) -> None:
-        self.delete_ids(AuditAttendee, AuditAttendee.audit_id, audit_ids)
-        self.delete_ids(AuditFinding, AuditFinding.audit_id, audit_ids)
-        self.delete_ids(AuditScopedControl, AuditScopedControl.audit_id, audit_ids)
-        self.delete_ids(AuditScopedClause, AuditScopedClause.audit_id, audit_ids)
-        self.delete_ids(
-            AuditScopedIsmsDocument, AuditScopedIsmsDocument.audit_id, audit_ids
-        )
-        self.delete_ids(
-            AuditScopedIsmsDocument, AuditScopedIsmsDocument.document_id, document_ids
-        )
-        self.delete_ids(AuditEvidence, AuditEvidence.audit_id, audit_ids)
-        self.delete_ids(AuditEvidence, AuditEvidence.event_id, event_ids)
+        self.delete_ids(AuditSwotScope, AuditSwotScope.swot_id, found["swot"])
+        self.delete_ids(AuditEvidence, AuditEvidence.event_id, found["events"])
         entity_targets = [
-            ("isms_document", document_ids),
-            ("isms_objective", objective_ids),
-            ("isms_effectiveness_measure", measure_ids),
-            ("isms_meeting", meeting_ids),
-            ("isms_access_control_matrix", access_entry_ids),
-            ("isms_asset", asset_ids),
-            ("risk", risk_ids),
-            ("pestle_item", pestle_item_ids),
-            ("interested_party", interested_party_ids),
+            ("isms_document", found["documents"]),
+            ("isms_objective", found["objectives"]),
+            ("isms_effectiveness_measure", found["measures"]),
+            ("isms_meeting", found["meetings"]),
+            ("isms_access_control_matrix", found["access"]),
+            ("isms_asset", found["assets"]),
+            ("isms_swot", found["swot"]),
+            ("risk", found["risks"]),
+            ("pestle_item", found["pestle_items"]),
+            ("interested_party", found["parties"]),
+            ("story", found["stories"]),
         ]
         for entity_type, ids in entity_targets:
             if ids:
@@ -342,113 +365,144 @@ class DemoTeardown:
                     AuditEvidence.entity_type == entity_type,
                     AuditEvidence.entity_id.in_(ids),
                 )
+        # Retention holds keep sampled events; they leave with their audits
+        # and with the demo events themselves.
+        self.delete_ids(RETENTION_HOLDS, RETENTION_HOLDS.c.audit_id, audits)
+        self.delete_ids(RETENTION_HOLDS, RETENTION_HOLDS.c.event_id, found["events"])
 
-    def _delete_event_dependents(self, event_ids: list[Any]) -> None:
+    def delete_event_dependents(self, event_ids: list[Any]) -> None:
         self.delete_ids(Mapping, Mapping.event_id, event_ids)
         self.delete_ids(EventIncident, EventIncident.event_id, event_ids)
-        self.delete_ids(Artifact, Artifact.event_id, event_ids)
         self.delete_ids(EventQuestionThread, EventQuestionThread.event_id, event_ids)
+        if event_ids:
+            for (uri,) in self.db.query(Artifact.storage_uri).filter(
+                Artifact.event_id.in_(event_ids)
+            ):
+                queue_object(self.db, uri)
+        self.delete_ids(Artifact, Artifact.event_id, event_ids)
 
-    def _delete_isms_dependents(
-        self,
-        document_ids: list[Any],
-        objective_ids: list[Any],
-        measure_ids: list[Any],
-        meeting_ids: list[Any],
-        access_entry_ids: list[Any],
-        account_ids: list[Any],
-        org_node_ids: list[Any],
-        asset_ids: list[Any],
-    ) -> None:
+    def delete_isms_dependents(self, found: dict[str, list[Any]]) -> None:
         self.delete_ids(
             IsmsEffectivenessMetricEntry,
             IsmsEffectivenessMetricEntry.measure_id,
-            measure_ids,
+            found["measures"],
         )
         self.delete_ids(
             IsmsObjectiveResourceUser,
             IsmsObjectiveResourceUser.objective_id,
-            objective_ids,
+            found["objectives"],
         )
-        self.delete_ids(IsmsMeetingLink, IsmsMeetingLink.meeting_id, meeting_ids)
-        self.delete_ids(IsmsMeetingLink, IsmsMeetingLink.document_id, document_ids)
+        self.delete_ids(IsmsMeetingLink, IsmsMeetingLink.meeting_id, found["meetings"])
         self.delete_ids(
-            IsmsMeetingAttendee, IsmsMeetingAttendee.meeting_id, meeting_ids
+            IsmsMeetingLink, IsmsMeetingLink.document_id, found["documents"]
+        )
+        self.delete_ids(
+            IsmsMeetingAttendee, IsmsMeetingAttendee.meeting_id, found["meetings"]
         )
         self.delete_ids(
             IsmsAccessControlMatrixAwsAccount,
             IsmsAccessControlMatrixAwsAccount.entry_id,
-            access_entry_ids,
+            found["access"],
         )
         self.delete_ids(
             IsmsAccessControlMatrixAwsAccount,
             IsmsAccessControlMatrixAwsAccount.aws_account_id,
-            account_ids,
+            found["accounts"],
         )
         self.delete_ids(
             IsmsAccessControlMatrixRole,
             IsmsAccessControlMatrixRole.entry_id,
-            access_entry_ids,
+            found["access"],
         )
         self.delete_ids(
             IsmsAccessControlMatrixRole,
             IsmsAccessControlMatrixRole.org_node_id,
-            org_node_ids,
+            found["org_nodes"],
         )
-        entity_targets = [
-            ("document", document_ids),
-            ("objective", objective_ids),
-            ("effectiveness_measure", measure_ids),
-            ("meeting", meeting_ids),
-            ("access_control_matrix", access_entry_ids),
-            ("asset", asset_ids),
-        ]
-        for entity_type, ids in entity_targets:
-            if ids:
-                self.delete_where(
-                    IsmsEntityControlLink,
-                    IsmsEntityControlLink.entity_type == entity_type,
-                    IsmsEntityControlLink.entity_id.in_(ids),
-                )
-                self.delete_where(
-                    IsmsEntityClauseLink,
-                    IsmsEntityClauseLink.entity_type == entity_type,
-                    IsmsEntityClauseLink.entity_id.in_(ids),
-                )
-
-    def _delete_risk_dependents(self, risk_ids: list[Any]) -> None:
-        self.delete_ids(RiskControlLink, RiskControlLink.risk_id, risk_ids)
-
-    def _delete_pestle_dependents(
-        self, pestle_item_ids: list[Any], pestle_process_ids: list[Any]
-    ) -> None:
         self.delete_ids(
-            PestleClauseRelevance, PestleClauseRelevance.pestle_item_id, pestle_item_ids
+            BookStackSectionEvidence,
+            BookStackSectionEvidence.document_id,
+            found["documents"],
+        )
+        for entity_type, key in ISMS_LINKED_RECORDS.items():
+            ids = found[key]
+            if not ids:
+                continue
+            for model in (IsmsEntityControlLink, IsmsEntityClauseLink):
+                self.delete_where(
+                    model, model.entity_type == entity_type, model.entity_id.in_(ids)
+                )
+        self.delete_ids(IsmsSwotLink, IsmsSwotLink.swot_id, found["swot"])
+        if found["swot"]:
+            # Child items refer to their parents; detach them before deleting.
+            self.db.query(IsmsSwot).filter(IsmsSwot.id.in_(found["swot"])).update(
+                {IsmsSwot.parent_id: None}, synchronize_session=False
+            )
+
+    def delete_pestle_dependents(self, found: dict[str, list[Any]]) -> None:
+        self.delete_ids(
+            PestleClauseRelevance,
+            PestleClauseRelevance.pestle_item_id,
+            found["pestle_items"],
         )
         self.delete_ids(
             PestleBusinessProcessRelevance,
             PestleBusinessProcessRelevance.pestle_item_id,
-            pestle_item_ids,
+            found["pestle_items"],
         )
         self.delete_ids(
             PestleBusinessProcessRelevance,
             PestleBusinessProcessRelevance.business_process_id,
-            pestle_process_ids,
+            found["pestle_processes"],
         )
 
-    def _delete_interested_party_dependents(
-        self, interested_party_ids: list[Any]
-    ) -> None:
-        self.delete_ids(
+    def delete_interested_party_dependents(self, party_ids: list[Any]) -> None:
+        for model in (
             InterestedPartyControlLink,
-            InterestedPartyControlLink.interested_party_id,
-            interested_party_ids,
+            InterestedPartyCommunication,
+            RiskInterestedParty,
+        ):
+            self.delete_ids(model, model.interested_party_id, party_ids)
+
+    def delete_parents(self, found: dict[str, list[Any]]) -> None:
+        self.delete_ids(Audit, Audit.id, found["audits"])
+        self.delete_ids(Event, Event.id, found["events"])
+        self.delete_ids(IsmsMeeting, IsmsMeeting.id, found["meetings"])
+        self.delete_ids(IsmsObjective, IsmsObjective.id, found["objectives"])
+        self.delete_ids(
+            IsmsEffectivenessMeasure, IsmsEffectivenessMeasure.id, found["measures"]
         )
         self.delete_ids(
-            InterestedPartyCommunication,
-            InterestedPartyCommunication.interested_party_id,
-            interested_party_ids,
+            IsmsAccessControlMatrixEntry,
+            IsmsAccessControlMatrixEntry.id,
+            found["access"],
         )
+        self.delete_ids(IsmsAwsAccount, IsmsAwsAccount.id, found["accounts"])
+        self.delete_ids(IsmsDocument, IsmsDocument.id, found["documents"])
+        self.delete_ids(IsmsDocumentFolder, IsmsDocumentFolder.id, found["folders"])
+        self.delete_ids(Risk, Risk.id, found["risks"])
+        self.delete_ids(RiskAsset, RiskAsset.id, found["assets"])
+        self.delete_ids(
+            RiskAssetSubcategory, RiskAssetSubcategory.id, found["subcategories"]
+        )
+        self.delete_ids(RiskCategory, RiskCategory.id, found["categories"])
+        self.delete_ids(IsmsLicense, IsmsLicense.id, found["licences"])
+        self.delete_ids(PestleItem, PestleItem.id, found["pestle_items"])
+        self.delete_ids(
+            PestleBusinessProcess, PestleBusinessProcess.id, found["pestle_processes"]
+        )
+        self.delete_ids(InterestedParty, InterestedParty.id, found["parties"])
+        self.delete_ids(
+            InterestedPartyName, InterestedPartyName.id, found["party_names"]
+        )
+        self._delete_seeded_interested_party_natures_if_orphaned()
+        self.delete_ids(
+            IsmsBusinessProcess, IsmsBusinessProcess.id, found["isms_processes"]
+        )
+        self.delete_ids(IsmsSwot, IsmsSwot.id, found["swot"])
+        self.delete_ids(IsmsPerson, IsmsPerson.id, found["people"])
+        self.delete_ids(IsmsVendor, IsmsVendor.id, found["vendors"])
+        self.delete_ids(IsmsOrgNode, IsmsOrgNode.id, found["org_nodes"])
 
     def _delete_seeded_interested_party_natures_if_orphaned(self) -> None:
         seeded_names = [
@@ -471,6 +525,7 @@ class DemoTeardown:
             if not still_used:
                 self.db.delete(nature)
                 self.stats[InterestedPartyNature.__tablename__] += 1
+        self.db.flush()
 
     def print_summary(self) -> None:
         print("\nDeletion summary:")
@@ -487,8 +542,8 @@ def parse_args() -> TeardownConfig:
     )
     parser.add_argument(
         "--framework",
-        default=settings.default_framework_slug,
-        help="Framework slug used by the seed data. Defaults to KEEN settings.default_framework_slug.",
+        default="iso_27001_2022",
+        help="Framework slug the seed data was written for; shown in the output.",
     )
     parser.add_argument(
         "--prefix",
@@ -505,7 +560,16 @@ def parse_args() -> TeardownConfig:
         action="store_true",
         help="Required for a real teardown. Omit with --dry-run.",
     )
+    parser.add_argument(
+        "--allow-non-demo",
+        action="store_true",
+        help="Explicitly permit removing prefixed records from a non-demo installation.",
+    )
     args = parser.parse_args()
+    if not settings.demo_mode and not args.allow_non_demo:
+        parser.error(
+            "Use demo mode, or explicitly pass --allow-non-demo to remove demo records from this installation"
+        )
     return TeardownConfig(
         framework=args.framework,
         prefix=args.prefix,

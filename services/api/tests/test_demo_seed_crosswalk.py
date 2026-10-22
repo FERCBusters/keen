@@ -27,10 +27,18 @@ from app.db.models import (
 )
 from app.services.control_inheritance import evidence_pairs
 from seed_demo_data import DemoConfig, DemoSeeder
-from sqlalchemy import create_engine, event, select
+from sqlalchemy import create_engine, event, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
+
+SHOWCASE = (
+    "iso_27001_2022",
+    "KEEN-AF:1.0",
+    "CYBER-ESSENTIALS:2026",
+    "soc2_tsc",
+    "pci_dss_v4",
+)
 
 
 @compiles(JSONB, "sqlite")
@@ -38,8 +46,18 @@ def sqlite_json(*a, **k):
     return "JSON"
 
 
-@pytest.fixture
-def db():
+@pytest.fixture(autouse=True)
+def artifact_storage(tmp_path, monkeypatch):
+    """Automatic link diary entries store artefacts; keep them in the test."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "artifact_storage_backend", "local")
+    monkeypatch.setattr(settings, "artifact_local_dir", str(tmp_path / "artifacts"))
+    return tmp_path / "artifacts"
+
+
+def catalogue_session(foreign_keys=False):
+    """An in-memory database holding the frameworks and one administrator."""
     engine = create_engine("sqlite://")
 
     @event.listens_for(engine, "connect")
@@ -72,6 +90,14 @@ def db():
 
     migration().seed_catalogue(session.connection())
     session.commit()
+    if foreign_keys:
+        session.execute(text("PRAGMA foreign_keys=ON"))
+    return session, engine
+
+
+@pytest.fixture
+def db():
+    session, engine = catalogue_session()
     yield session
     session.close()
     engine.dispose()
@@ -104,7 +130,7 @@ def test_all_framework_seed_is_idempotent_and_has_no_extra_login_users(db):
     assert counts["users"] == 1 and counts["isms_people"] == 6 and counts["risks"] >= 10
     assert {
         f for (f,) in db.query(ControlItem.framework_slug).join(Mapping).distinct()
-    } == {"iso_27001_2022", "KEEN-AF:1.0", "CYBER-ESSENTIALS:2026"}
+    } == set(SHOWCASE)
     assert not seeder.warnings
 
 
@@ -187,7 +213,7 @@ def test_evidence_inherits_one_hop_without_false_reverse_ce_mapping(db, monkeypa
     assert db.query(Mapping).count() == 2
 
 
-@pytest.mark.parametrize("framework", ["KEEN-AF:1.0", "CYBER-ESSENTIALS:2026"])
+@pytest.mark.parametrize("framework", SHOWCASE[1:])
 def test_single_non_iso_framework_seeds_without_iso_refs(db, framework):
     seeder = DemoSeeder(db, DemoConfig(framework, "Demo", None, False, False))
     seeder.run()
@@ -218,7 +244,7 @@ def test_measured_assurance_has_thresholds_sources_and_chronological_results(db)
         )
         .all()
     )
-    assert len(measures) == sum(map(len, LINKS.values())) == 14
+    assert len(measures) == sum(map(len, LINKS.values())) == 24
     for measure in measures:
         rows = (
             db.query(IsmsEffectivenessMetricEntry)
@@ -302,7 +328,7 @@ def test_swot_demo_relationships_frameworks_and_soa_visibility(db, monkeypatch):
     assert rows[0].title == "Locally edited SWOT"
     assert rows[0].status == "deferred"
     user = db.query(User).filter_by(username="demo").one()
-    for framework in ("iso_27001_2022", "KEEN-AF:1.0", "CYBER-ESSENTIALS:2026"):
+    for framework in SHOWCASE:
         result = soa.statement_of_applicability(framework=framework, user=user, db=db)
         expected = {
             r.entity_id
@@ -324,3 +350,412 @@ def test_swot_demo_relationships_frameworks_and_soa_visibility(db, monkeypatch):
     update(db, user, state(db).version, {"swot": False})
     result = soa.statement_of_applicability(user=user, db=db)
     assert result["swot_items"] == [] and not result["can_view_swot"]
+
+
+@pytest.fixture(scope="module")
+def seeded(tmp_path_factory):
+    """One full demo dataset, shared by the read-only checks below."""
+    from app.core.config import settings
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(settings, "artifact_storage_backend", "local")
+        patch.setattr(
+            settings, "artifact_local_dir", str(tmp_path_factory.mktemp("artifacts"))
+        )
+        session, engine = catalogue_session()
+        seeder = DemoSeeder(
+            session, DemoConfig("iso_27001_2022", "Demo", None, False, True)
+        )
+        seeder.run()
+        session.flush()
+        yield session, seeder
+        session.close()
+        engine.dispose()
+
+
+def test_annex_references_never_resolve_to_their_clause_twins(seeded):
+    db, seeder = seeded
+    lookup = DemoSeeder(db, seeder.config)
+    clauses = {
+        ref
+        for (ref,) in db.query(ControlItem.ref).filter_by(
+            framework_slug="iso_27001_2022", type="clause"
+        )
+    }
+    twins = [
+        ref
+        for (ref,) in db.query(ControlItem.ref).filter_by(
+            framework_slug="iso_27001_2022", type="annex_control"
+        )
+        if ref[2:] in clauses
+    ]
+    # A.5.1 to A.5.3, A.6.1 to A.6.3, A.7.1 to A.7.5 and A.8.1 to A.8.3.
+    assert len(twins) == 14
+    for ref in twins:
+        control = lookup._control(ref)
+        assert (control.ref, control.type) == (ref, "annex_control")
+    assert lookup._control("9.3").type == "clause"
+    assert lookup._control("5.15").ref == "A.5.15"
+    assert lookup._control("A.99.1") is None
+    assert lookup.warnings["missing controls"] == {"A.99.1"}
+
+
+def test_risk_register_holds_cia_risks_scored_like_the_register(seeded):
+    from app.db.models import Risk, RiskControlLink, RiskInterestedParty
+    from app.services.risks import (
+        TREATMENT_STATUSES,
+        TREATMENT_STRATEGIES,
+        _clean_risk_types,
+    )
+
+    db, _ = seeded
+    risks = db.query(Risk).all()
+    cia = [r for r in risks if r.risk_types]
+    assert len(risks) >= 25 and len(cia) >= 20 and len(risks) > len(cia)
+    # The CIA Triad tab filters on the canonical names KEEN stores.
+    assert {t for r in cia for t in r.risk_types} == {
+        "Confidentiality",
+        "Integrity",
+        "Availability",
+    }
+    for risk in risks:
+        assert _clean_risk_types(risk.risk_types) == risk.risk_types
+        assert risk.title and risk.treatment_plan
+        assert risk.risk_score == risk.register_likelihood * risk.register_impact
+        assert risk.residual_risk_score == (
+            risk.register_residual_likelihood * risk.register_residual_impact
+        )
+        assert (risk.vulnerability_score, risk.impact_score) == (
+            risk.register_likelihood,
+            risk.register_impact,
+        )
+        assert (risk.risk_owner_user_id is None) != (risk.risk_owner_role_id is None)
+        assert risk.treatment_strategy in TREATMENT_STRATEGIES
+        assert risk.treatment_status in TREATMENT_STATUSES
+    assert {f for (f,) in db.query(RiskControlLink.framework_slug).distinct()} == set(
+        SHOWCASE
+    )
+    affected = db.query(RiskInterestedParty).all()
+    assert any(p.interested_party_id for p in affected)
+    assert any(p.vendor_id for p in affected)
+
+
+def test_pestle_analysis_covers_every_factor_in_both_lenses(seeded):
+    from collections import Counter
+
+    from app.db.models import PestleItem
+    from app.services.pestle import PESTLE_TYPES, pestle_visualisations
+
+    db, _ = seeded
+    user = db.query(User).filter_by(username="demo").one()
+    items = db.query(PestleItem).all()
+    assert Counter(i.type for i in items) == {t: 3 for t in PESTLE_TYPES}
+    assert {i.overall_relevance.code for i in items} == {"high", "medium", "low"}
+    assert all(i.business_process_links and i.clause_links for i in items)
+    counts = pestle_visualisations(framework="iso_27001_2022", user=user, db=db)[
+        "lens_type_counts"
+    ]
+    assert all(counts[lens][typ] for lens in counts for typ in PESTLE_TYPES)
+
+
+def test_documents_link_controls_and_record_their_automatic_diary_entries(seeded):
+    from datetime import timedelta
+    from hashlib import sha256
+
+    from app.db.models import (
+        Artifact,
+        IsmsDocument,
+        IsmsDocumentRevision,
+        IsmsEntityClauseLink,
+        IsmsEntityControlLink,
+    )
+    from app.security.diary_visibility import link_entry_external_id
+    from app.services.isms.link_diary import MANUAL_RATIONALE
+
+    db, seeder = seeded
+    documents = db.query(IsmsDocument).filter(IsmsDocument.title.like("Demo %")).all()
+    assert len(documents) >= 40
+    frameworks = set()
+    for document in documents:
+        revision = (
+            db.query(IsmsDocumentRevision)
+            .filter_by(document_id=document.id, version=1)
+            .one()
+        )
+        assert document.content_version == 1 and document.content_html
+        assert revision.sha256 == sha256(document.content_html.encode()).hexdigest()
+        controls = {
+            (link.framework_slug, link.control_item_id)
+            for link in db.query(IsmsEntityControlLink).filter_by(
+                entity_type="document", entity_id=document.id
+            )
+        }
+        clauses = [
+            link.clause.ref
+            for link in db.query(IsmsEntityClauseLink).filter_by(
+                entity_type="document", entity_id=document.id
+            )
+        ]
+        assert controls or clauses
+        frameworks |= {framework for framework, _ in controls}
+        entry = (
+            db.query(Event)
+            .filter_by(
+                source="diary",
+                external_id=link_entry_external_id("document", document.id),
+            )
+            .one()
+        )
+        assert (entry.system, entry.action) == ("isms", "isms_link")
+        assert entry.normalized_payload["links"] == [
+            {"url": f"/isms-document.html?id={document.id}", "text": "Document"}
+        ]
+        assert entry.timestamp == document.created_at + timedelta(minutes=12)
+        mapped = {
+            m.control_item_id
+            for m in db.query(Mapping).filter_by(
+                event_id=entry.id, rationale=MANUAL_RATIONALE
+            )
+        }
+        clause_items = {
+            c.id
+            for c in db.query(ControlItem).filter(
+                ControlItem.framework_slug == "iso_27001_2022",
+                ControlItem.type == "clause",
+                ControlItem.ref.in_(clauses or [""]),
+            )
+        }
+        assert mapped == {item for _, item in controls} | clause_items
+        assert db.query(Artifact).filter_by(event_id=entry.id).count() == 1
+    assert frameworks == set(SHOWCASE)
+    assert seeder.stats["document link diary entries.created"] == len(documents)
+
+
+def test_a_dry_run_leaves_document_link_entries_out(db, artifact_storage):
+    seeder = DemoSeeder(db, DemoConfig("iso_27001_2022", "Demo", None, True, True))
+    seeder.run()
+    db.flush()
+    assert db.query(Event).filter_by(source="diary", system="isms").count() == 0
+    assert seeder.stats["document link diary entries.skipped in dry run"] == 1
+    assert not artifact_storage.exists()
+
+
+def test_evidence_spans_sources_and_covers_annex_a(seeded):
+    db, seeder = seeded
+    seeded_events = (
+        db.query(Event)
+        .filter(Event.external_id.like(seeder.account_code("EVENT") + "-%"))
+        .all()
+    )
+    assert {
+        "bookstack",
+        "cloudwatch_logs",
+        "forgejo",
+        "github",
+        "google_workspace",
+        "jenkins",
+        "loki",
+        "redmine",
+        "riskledger",
+    } <= {e.source for e in seeded_events}
+    # Evidence accumulates over months, so trends and freshness have history.
+    assert len({e.timestamp.date() for e in seeded_events}) >= 60
+    annex = {
+        c.id
+        for c in db.query(ControlItem).filter_by(
+            framework_slug="iso_27001_2022", type="annex_control"
+        )
+    }
+    direct = {
+        control
+        for (control,) in db.query(Mapping.control_item_id)
+        .filter(Mapping.control_item_id.in_(annex))
+        .distinct()
+    }
+    pairs = evidence_pairs("iso_27001_2022", db)
+    supported = {row[0] for row in db.execute(select(pairs.c.control_id).distinct())}
+    assert len(direct) >= 85
+    # Every Annex A control has evidence, a few only through crosswalks.
+    assert annex <= supported and annex - direct
+    # One record can evidence controls in several frameworks directly.
+    scans = [e for e in seeded_events if e.action == "vulnerability-scan"]
+    assert len(scans) == 12
+    for scan in scans:
+        assert {
+            framework
+            for (framework,) in db.query(ControlItem.framework_slug)
+            .join(Mapping, Mapping.control_item_id == ControlItem.id)
+            .filter(Mapping.event_id == scan.id)
+        } == {"iso_27001_2022", "soc2_tsc", "pci_dss_v4"}
+    cyber_essentials = (
+        db.query(Mapping.control_item_id)
+        .join(ControlItem, ControlItem.id == Mapping.control_item_id)
+        .filter(ControlItem.framework_slug == "CYBER-ESSENTIALS:2026")
+        .distinct()
+        .count()
+    )
+    assert cyber_essentials >= 20
+
+
+def test_stories_show_linked_records_on_a_timeline_and_flow(seeded):
+    from app.services import stories
+    from app.services.entity_changelog import list_entity_changelogs
+
+    db, _ = seeded
+    user = db.query(User).filter_by(username="demo").one()
+    listing = stories.list_stories(user=user, db=db)
+    assert listing["total"] == 4
+    assert {s["status"] for s in listing["items"]} == {"open", "closed"}
+    comments = 0
+    for row in listing["items"]:
+        story = stories.get_story(
+            story_id=row["id"], framework="iso_27001_2022", user=user, db=db
+        )
+        items = story["items"]
+        kinds = {item["kind"] for item in items}
+        assert {"event", "note", "document", "risk", "asset"} <= kinds
+        assert not any(item["withheld"] for item in items)
+        assert all(item["occurred_at"] for item in items if item["kind"] == "event")
+        assert len({(item["x"], item["y"]) for item in items}) == len(items)
+        ids = {item["id"] for item in items}
+        assert story["links"] and all(
+            link["label"] and {link["from_item_id"], link["to_item_id"]} <= ids
+            for link in story["links"]
+        )
+        assert story["controls"]
+        comments += story["comment_count"]
+        history = list_entity_changelogs(
+            db, entity_type="story", entity_id=row["id"], limit=10, offset=0
+        )
+        assert [entry["action"] for entry in history["items"]] == ["created"]
+    assert comments >= 1
+
+
+def test_seeded_frameworks_join_the_selection_with_iso_as_default(db, monkeypatch):
+    from app.core.config import settings
+    from app.db.models import ManagedConfiguration
+    from app.services.frameworks import framework_selection
+
+    db.add(
+        ManagedConfiguration(
+            name="organisation-frameworks",
+            document={
+                "enabled": ["KEEN-AF:1.0", "nist_csf_2"],
+                "default": "KEEN-AF:1.0",
+            },
+            version=1,
+        )
+    )
+    db.flush()
+    config = DemoConfig("iso_27001_2022", "Demo", None, False, True)
+    DemoSeeder(db, config).run()
+    selection = framework_selection(db=db)
+    enabled = {item["slug"] for item in selection["items"] if item["enabled"]}
+    assert enabled == set(SHOWCASE) | {"nist_csf_2"}
+    assert selection["default"] == "iso_27001_2022"
+    DemoSeeder(db, config).run()
+    assert framework_selection(db=db)["version"] == selection["version"]
+
+    # An environment restriction still applies, and a single framework run
+    # adds its framework without changing the default.
+    monkeypatch.setattr(settings, "enabled_frameworks", "iso_27001_2022,soc2_tsc")
+    row = db.get(ManagedConfiguration, "organisation-frameworks")
+    row.document = {"enabled": ["iso_27001_2022"], "default": "iso_27001_2022"}
+    db.flush()
+    DemoSeeder(db, DemoConfig("soc2_tsc", "Demo", None, False, False)).run()
+    selection = framework_selection(db=db)
+    assert {item["slug"] for item in selection["items"] if item["enabled"]} == {
+        "iso_27001_2022",
+        "soc2_tsc",
+    }
+    assert selection["default"] == "iso_27001_2022"
+
+
+def test_teardown_removes_the_seeded_dataset(artifact_storage):
+    from app.db.models import IsmsDocument
+    from teardown_demo_data import DemoTeardown, TeardownConfig
+
+    db, engine = catalogue_session(foreign_keys=True)
+    try:
+        assert db.execute(text("PRAGMA foreign_keys")).scalar() == 1
+        # Records that merely resemble the prefix stay.
+        db.add(IsmsDocument(title="Demonstration notes"))
+        db.add(
+            Event(
+                source="github",
+                external_id="real-event",
+                timestamp=utc_now_naive(),
+                summary="Demo day for the new release",
+            )
+        )
+        db.flush()
+
+        def counts():
+            return {t.name: db.query(t).count() for t in Base.metadata.sorted_tables}
+
+        before = counts()
+        DemoSeeder(db, DemoConfig("iso_27001_2022", "Demo", None, False, True)).run()
+        db.flush()
+        entries = db.query(Event).filter_by(source="diary", system="isms").count()
+        # Saving seeded records in the app gives them automatic entries too.
+        from app.db.models import IsmsEntityControlLink, RiskControlLink
+        from app.services.isms.link_diary import sync_entity_link_diary
+
+        user = db.query(User).one()
+        sync_entity_link_diary(
+            db, "risk", db.query(RiskControlLink.risk_id).first()[0], user
+        )
+        for record_type in ("objective", "effectiveness_measure", "meeting", "swot"):
+            record = (
+                db.query(IsmsEntityControlLink.entity_id)
+                .filter_by(entity_type=record_type)
+                .first()
+            )
+            sync_entity_link_diary(db, record_type, record[0], user)
+        db.flush()
+        artefacts = db.query(Event).filter_by(source="diary", system="isms").count()
+        assert artefacts == entries + 5
+        teardown = DemoTeardown(
+            db, TeardownConfig("iso_27001_2022", "Demo", False, True)
+        )
+        teardown.run()
+        db.flush()
+        after = counts()
+        # Configuration, reference levels and change history stay; stored
+        # files of the automatic diary entries wait for deletion.
+        kept = {
+            "entity_changelogs",
+            "evidence_object_cleanup",
+            "managed_configuration_revisions",
+            "managed_configurations",
+            "pestle_relevance_levels",
+        }
+        assert {t: n for t, n in after.items() if t not in kept} == {
+            t: n for t, n in before.items() if t not in kept
+        }
+        assert after["evidence_object_cleanup"] == artefacts > 0
+        assert db.query(IsmsDocument).one().title == "Demonstration notes"
+        assert db.query(Event).one().external_id == "real-event"
+    finally:
+        db.close()
+        engine.dispose()
+
+
+@pytest.mark.parametrize("script", ["seed_demo_data", "teardown_demo_data"])
+def test_scripts_need_explicit_permission_outside_demo_mode(
+    script, monkeypatch, capsys
+):
+    from app.core.config import settings
+
+    module = importlib.import_module(script)
+    monkeypatch.setattr(settings, "demo_mode", False)
+    monkeypatch.setattr(sys, "argv", [script, "--dry-run"])
+    with pytest.raises(SystemExit) as refused:
+        module.parse_args()
+    assert refused.value.code == 2
+    assert "--allow-non-demo" in capsys.readouterr().err
+    monkeypatch.setattr(sys, "argv", [script, "--dry-run", "--allow-non-demo"])
+    assert module.parse_args().dry_run
+    monkeypatch.setattr(settings, "demo_mode", True)
+    monkeypatch.setattr(sys, "argv", [script, "--dry-run"])
+    assert module.parse_args().dry_run

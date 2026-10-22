@@ -92,6 +92,20 @@ LINKS = {
         "evidence_coverage": "GOV-11",
     },
     "CYBER-ESSENTIALS:2026": {"patch_sla": "A6.4", "access_review": "A7.3"},
+    "soc2_tsc": {
+        "availability": "A1.1",
+        "patch_sla": "CC7.1",
+        "recovery": "A1.3",
+        "access_review": "CC6.3",
+        "supplier_review": "CC9.2",
+        "evidence_coverage": "CC4.1",
+    },
+    "pci_dss_v4": {
+        "patch_sla": "6.3.3",
+        "access_review": "7.2",
+        "supplier_review": "12.8",
+        "evidence_coverage": "12.4",
+    },
 }
 
 
@@ -208,9 +222,13 @@ def seed_metrics(seeder, frameworks):
                     if passed
                     else spec["action"]
                 )
+                # One monthly report evidences the measure in every framework.
                 event = seeder.upsert(
                     Event,
-                    dict(source="demo", external_id=f"{identity}-{start}"),
+                    dict(
+                        source="demo",
+                        external_id=f"{seeder.account_code('SLA')}-{key}-{start}",
+                    ),
                     dict(
                         timestamp=stamp,
                         system="fictional.example.invalid",
