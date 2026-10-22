@@ -18,11 +18,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Images are pinned by digest; tools/docker_image_pins.py keeps them current.
     container:
-      image: docker.io/library/debian:13
+      image: docker.io/library/debian:13@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308
     services:
       postgres:
-        image: docker.io/library/postgres:16
+        image: docker.io/library/postgres:16@sha256:a902560563d3a5661228585f53474c5065e7f273b21ffd77e555a8b5682c5690
         env:
           POSTGRES_USER: keen_test
           POSTGRES_PASSWORD: keen_test
@@ -33,7 +34,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
       valkey:
-        image: docker.io/valkey/valkey:8
+        image: docker.io/valkey/valkey:8@sha256:640c5e62cea04b6d6f2084232651d0cc70362d31f4f805e7be94dbed6855e8f2
         options: >-
           --health-cmd "valkey-cli ping"
           --health-interval 5s

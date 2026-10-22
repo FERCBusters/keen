@@ -114,6 +114,10 @@ Use KEEN's retention controls to manage evidence lifetimes. Configure source sch
 
 The CI workflow in `.github/workflows/tests.yml` installs locked dependencies and runs `bash tests.sh` against disposable PostgreSQL and Valkey services. Set `KEEN_TEST_DATABASE_URL` to a dedicated test database and `KEEN_REDIS_URL` to the test broker before running it. The suite changes database contents. See [TESTING.md](TESTING.md) for the development test environment.
 
+Third-party images in the Dockerfiles, the Compose file and the CI and release workflows are pinned by digest (`name:tag@sha256:…`), and the test suite rejects an unpinned reference. `python3 tools/docker_image_pins.py check` lists pins whose tag has moved; `update` rewrites them after checking each new image index. The Docker image pins workflow (`.github/workflows/docker-image-pins.yml`) runs the update daily and proposes the new digests, with their upstream versions, in a pull request.
+
+The workflow acts through a GitHub App, so its pull requests start CI and can update pins in workflow files. Install an App on this repository with read and write access to contents, pull requests and workflows, then set the repository variable `IMAGE_PINS_APP_CLIENT_ID` to its client ID and the secret `IMAGE_PINS_APP_PRIVATE_KEY` to its private key. The workflow never approves or merges: a maintainer reviews each pull request and merges it. A branch ruleset on `main` that requires an approving review enforces this, since the App cannot approve its own pull requests; keep the App off the ruleset's bypass list and leave **Allow GitHub Actions to create and approve pull requests** disabled.
+
 ## Security
 
 See [SECURITY.md](SECURITY.md) for the threat model, deployment responsibilities and vulnerability reporting policy. Contributor and coding-agent guidance is in [AGENTS.md](AGENTS.md).

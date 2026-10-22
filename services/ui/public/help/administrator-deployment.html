@@ -18,7 +18,7 @@
 <p>During an upgrade, stop scheduling and manual submissions and let collection jobs on the old default queue finish. Routing changes apply to new jobs only; do not purge existing jobs. Deploy matching API, worker and scheduler images and start <code>keen-http-worker</code> with them. Hosted demo provisioning also includes this worker. The standard Compose configuration includes pgdata, beatdata and artifacts volumes.</p>
 </details>
 <h2 id="2-deploy-a-self-managed-installation">Deploy a self-managed installation</h2>
-<p>You need a supported Docker Engine and Compose plugin, DNS for the application, a trusted TLS certificate, and storage for the database and artefacts. The supplied Compose file uses the published KEEN images.</p>
+<p>You need a supported Docker Engine and Compose plugin, DNS for the application, a trusted TLS certificate, and storage for the database and artefacts. The supplied Compose file uses the published KEEN images and pins the PostgreSQL and Valkey images by digest, so <code>docker compose pull</code> fetches the builds reviewed for that release.</p>
 <ol class="steps">
 <li>Place the release files in the deployment directory and record the release or commit you used.</li>
 <li>Create a protected <code>.env</code> from the release’s settings: database, Valkey, public URL, authentication and artefact backend, with unique secrets.</li>
@@ -37,7 +37,7 @@ docker compose logs --tail=100 keen-api keen-worker keen-beat</pre>
 <h4 id="first-administrator">Create the first administrator</h4>
 <p>Set <code>KEEN_BOOTSTRAP_ADMIN_USERNAME</code> and <code>KEEN_BOOTSTRAP_ADMIN_PASSWORD</code> before the first start. Once that administrator can sign in, remove both variables and recreate the containers; the database keeps the account and its current password. Migrations, workers and later API starts do not need them.</p>
 <details class="more"><summary>Going deeper: building locally and hosted mode</summary>
-<p>To build from source, run <code>docker compose -f docker-compose.yml -f docker-compose.build.yml build</code> before starting the backing services and applying migrations, and start the application with the same two files: <code>docker compose -f docker-compose.yml -f docker-compose.build.yml up -d</code>. The UI installs its pinned design-system dependency during the image build.</p>
+<p>To build from source, run <code>docker compose -f docker-compose.yml -f docker-compose.build.yml build</code> before starting the backing services and applying migrations, and start the application with the same two files: <code>docker compose -f docker-compose.yml -f docker-compose.build.yml up -d</code>. The UI installs its pinned design-system dependency during the image build, and both Dockerfiles pin their base images by digest.</p>
 <p>In hosted mode, owner provisioning uses the separate hosted bootstrap and never creates a generic shared administrator.</p>
 </details>
 <h2 id="3-configure-the-runtime">Configure the runtime</h2>

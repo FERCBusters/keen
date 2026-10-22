@@ -33,7 +33,7 @@
 - For security changes, add a reproducible negative test demonstrating the attack prerequisite and rejection. Test both permitted behavior and the boundary being protected, using synthetic credentials and local fixtures.
 - Run the assembled-application contracts in `tests/test_security_design_contracts.py` after route, middleware, session or policy changes. Preserve the local TLS hostname verification regression.
 - Test UI rendering and navigation with hostile strings as well as ordinary values. For CSP or vendor changes, verify actual vendor behavior and report any missing browser coverage.
-- Update `pyproject.toml` and `poetry.lock` together for Python dependencies. Keep unrelated locked versions unchanged. Preserve pinned third-party Actions and design-system revisions.
+- Update `pyproject.toml` and `poetry.lock` together for Python dependencies. Keep unrelated locked versions unchanged. Preserve pinned third-party Actions, image digests and design-system revisions. Pin a new third-party image with `python3 tools/docker_image_pins.py update`.
 - Validate the exact final working tree after formatter or lint fixes. Include a fresh-process application import and the lifespan tests; earlier results from a different tree do not validate the delivered code. Imported fixtures and public re-exports may be used indirectly: mark them explicitly and preserve their contracts.
 - Report what passed, what failed and what could not run. Do not equate a green SQLite or mocked UI suite with full PostgreSQL CI, production-browser validation or a penetration test.
 

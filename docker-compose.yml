@@ -1,6 +1,8 @@
+# Third-party images are pinned by digest. tools/docker_image_pins.py and the
+# Docker image pins workflow keep the digests current.
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16@sha256:a902560563d3a5661228585f53474c5065e7f273b21ffd77e555a8b5682c5690
     environment:
       POSTGRES_USER: keen
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMe123!}
@@ -18,7 +20,7 @@ services:
     restart: unless-stopped
 
   valkey:
-    image: valkey/valkey:7
+    image: valkey/valkey:8@sha256:640c5e62cea04b6d6f2084232651d0cc70362d31f4f805e7be94dbed6855e8f2
     command: ["valkey-server", "--requirepass", "${KEEN_REDIS_PASSWORD:-ChangeMe123!}"]
     environment:
       - KEEN_REDIS_PASSWORD=${KEEN_REDIS_PASSWORD:-ChangeMe123!}

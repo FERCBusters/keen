@@ -1,8 +1,9 @@
 # Build from the KEEN repository root:
 # docker build -f services/ui/Dockerfile -t keen-ui .
 # MOSP is a public Git-backed npm dependency pinned by commit in package.json/lock.
+# Base images are pinned by digest; tools/docker_image_pins.py keeps them current.
 
-FROM node:20-alpine AS vendor
+FROM node:24-alpine@sha256:feb76650b7195319268c59cb2d419c732d6c499b13bf5296f16ab59eb1f0a4f3 AS vendor
 ENV NODE_OPTIONS="--no-network-family-autoselection --dns-result-order=ipv4first"
 
 WORKDIR /build
@@ -27,7 +28,7 @@ COPY services/ui/scripts ./scripts
 COPY services/ui/public ./public
 RUN npm run build
 
-FROM nginx:1.30.6-alpine
+FROM nginx:1.30-alpine@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5
 
 COPY services/ui/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=vendor /build/dist/ /usr/share/nginx/html/

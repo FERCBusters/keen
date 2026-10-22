@@ -1,0 +1,133 @@
+name: Docker image pins
+
+# Checks every pinned third-party image daily. When a tracked tag resolves to a
+# new image index, the new digests are committed to an
+# autobot/docker-image-pins-* branch and proposed in a pull request, so a moved
+# or replaced upstream tag changes nothing until a maintainer reviews and
+# merges that pull request. This workflow never approves or merges.
+#
+# A GitHub App opens the pull requests, so they start CI and can update pins in
+# workflow files. Install an App on this repository with Contents, Pull
+# requests and Workflows read and write access, then set the repository
+# variable IMAGE_PINS_APP_CLIENT_ID and the secret IMAGE_PINS_APP_PRIVATE_KEY.
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-image-pins
+  cancel-in-progress: false
+
+env:
+  BASE_BRANCH: main
+  BRANCH_PREFIX: autobot/docker-image-pins-
+
+jobs:
+  update:
+    name: Update pinned digests
+    if: github.repository_owner == 'FERCBusters'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.BASE_BRANCH }}
+          persist-credentials: false
+
+      # Registry responses are untrusted, so this step runs before any App
+      # token exists.
+      - name: Resolve tags and update digests
+        id: pins
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/image-pins"
+          python3 -I tools/docker_image_pins.py update --report-dir "$report"
+          cat "$report/outputs.txt" >> "$GITHUB_OUTPUT"
+          cat "$report/pr-body.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the GitHub App settings
+        if: steps.pins.outputs.changed == 'true'
+        env:
+          CLIENT_ID: ${{ vars.IMAGE_PINS_APP_CLIENT_ID }}
+          HAS_KEY: ${{ secrets.IMAGE_PINS_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ "$HAS_KEY" != true ]; then
+            echo "::error::New digests are ready, but IMAGE_PINS_APP_CLIENT_ID or IMAGE_PINS_APP_PRIVATE_KEY is missing. See the top of this workflow."
+            exit 1
+          fi
+
+      - name: Create GitHub App token
+        id: app
+        if: steps.pins.outputs.changed == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.IMAGE_PINS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.IMAGE_PINS_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+
+      - name: Propose the new digests
+        if: steps.pins.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          KEY: ${{ steps.pins.outputs.key }}
+          TITLE: ${{ steps.pins.outputs.title }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/image-pins"
+          branch="${BRANCH_PREFIX}${KEY}"
+
+          # A pull request for exactly these digests already settles them,
+          # including one a maintainer closed.
+          existing=$(gh pr list --state all --head "$branch" --json number,state \
+            --jq 'first // empty | "\(.number) \(.state)"')
+          if [ -n "$existing" ]; then
+            read -r number state <<< "$existing"
+            echo "Pull request #$number ($state) already proposes these digests."
+            if [ "$state" != OPEN ]; then
+              exit 0
+            fi
+          else
+            # The commit is created through the API, so the job needs no git
+            # credentials and GitHub signs the commit.
+            entries="$RUNNER_TEMP/tree-entries.json"
+            git diff --name-only -z | while IFS= read -r -d '' path; do
+              mode=$(git ls-files --stage -- "$path" | cut -d' ' -f1)
+              jq -n --arg path "$path" --arg mode "$mode" --rawfile content "$path" \
+                '{path: $path, mode: $mode, type: "blob", content: $content}'
+            done | jq -s . > "$entries"
+            tree=$(jq -n --arg base "$(git rev-parse 'HEAD^{tree}')" \
+                --slurpfile entries "$entries" '{base_tree: $base, tree: $entries[0]}' \
+              | gh api "repos/$GH_REPO/git/trees" --input - --jq .sha)
+            commit=$(jq -n --arg tree "$tree" --arg parent "$(git rev-parse HEAD)" \
+                --rawfile message "$report/commit-message.txt" \
+                '{message: $message, tree: $tree, parents: [$parent]}' \
+              | gh api "repos/$GH_REPO/git/commits" --input - --jq .sha)
+            # A branch left by an interrupted run has no pull request yet.
+            if gh api "repos/$GH_REPO/git/ref/heads/$branch" --silent 2>/dev/null; then
+              gh api -X PATCH "repos/$GH_REPO/git/refs/heads/$branch" \
+                -f sha="$commit" -F force=true --silent
+            else
+              gh api "repos/$GH_REPO/git/refs" \
+                -f ref="refs/heads/$branch" -f sha="$commit" --silent
+            fi
+            url=$(gh pr create --base "$BASE_BRANCH" --head "$branch" \
+              --title "$TITLE" --body-file "$report/pr-body.md")
+            number="${url##*/}"
+            echo "Opened $url for review."
+          fi
+
+          gh pr list --state open --limit 100 --json number,headRefName,author \
+            | jq -r --arg prefix "$BRANCH_PREFIX" --arg branch "$branch" \
+              '.[] | select(.author.is_bot and (.headRefName | startswith($prefix))
+                and .headRefName != $branch) | .number' \
+            | while read -r older; do
+                gh pr close "$older" --delete-branch --comment "Superseded by #$number."
+              done
