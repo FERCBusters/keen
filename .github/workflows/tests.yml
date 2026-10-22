@@ -23,7 +23,7 @@ jobs:
       image: docker.io/library/debian:13@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308
     services:
       postgres:
-        image: docker.io/library/postgres:16@sha256:a902560563d3a5661228585f53474c5065e7f273b21ffd77e555a8b5682c5690
+        image: docker.io/library/postgres:16@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
         env:
           POSTGRES_USER: keen_test
           POSTGRES_PASSWORD: keen_test
