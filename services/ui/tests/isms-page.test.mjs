@@ -121,6 +121,15 @@ for (const [tab, id, text] of [
     );
   });
 }
+test('inherited object names in the tab parameter open the overview', async (t) => {
+  for (const name of ['constructor', '__proto__', 'toString', 'valueOf']) {
+    const ui = await fixture(t, { query: '&tab=' + name });
+    const sections = ui.calls
+      .filter((c) => c.url.includes('/isms/summary?'))
+      .map((c) => new URL(c.url, 'https://keen.example').searchParams.get('section'));
+    assert.deepEqual(sections, ['overview'], name);
+  }
+});
 test('ISMS overview does not eagerly fetch all sections', async (t) => {
   const ui = await fixture(t);
   assert.equal(ui.calls.filter((c) => c.url.includes('/isms/summary?')).length, 1);

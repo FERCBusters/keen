@@ -68,10 +68,9 @@ function setTabQuery(tabName) {
   history.replaceState({}, '', `${location.pathname}${p.toString() ? `?${p.toString()}` : ''}`);
 }
 function activateTab(tabName) {
-  const tab =
-    { details: detailsTab, communications: communicationsTab, changelog: changelogTab }[
-      tabName || 'details'
-    ] || detailsTab;
+  const tabs = { details: detailsTab, communications: communicationsTab, changelog: changelogTab };
+  // Own tab names only; inherited names such as "constructor" select Details.
+  const tab = (Object.hasOwn(tabs, tabName) && tabs[tabName]) || detailsTab;
   if (tab && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
 function wireTabs() {

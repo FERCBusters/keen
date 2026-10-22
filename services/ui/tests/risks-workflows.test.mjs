@@ -476,6 +476,19 @@ test('CSV import reports its count and refreshes the list and heatmap', async (t
   assert.doesNotMatch(old.ui.window.location.search, /tab=/);
 });
 
+test('a tab the page does not define, including inherited object names, keeps the Risks tab', async (t) => {
+  const paths = (ui) => [...new Set(ui.calls.map((c) => c.url.split('?')[0]))].sort();
+  const plain = await dashboard(t);
+  await settle(() => cell(plain.ui, 3, 3));
+  // Inherited names reach no loader, so the page loads exactly what it loads
+  // without a tab and finishes without an error.
+  for (const tab of ['__proto__', '__defineSetter__', 'constructor', 'toString', 'unknown']) {
+    const { ui } = await dashboard(t, { query: `&tab=${tab}` });
+    await settle(() => cell(ui, 3, 3));
+    assert.deepEqual(paths(ui), paths(plain.ui), tab);
+  }
+});
+
 test('readers see the heatmap and ratings without rating, threshold or import controls', async (t) => {
   const { ui, state } = await dashboard(t, { me: { can_view_risks: true } });
   await settle(() => cell(ui, 3, 3));

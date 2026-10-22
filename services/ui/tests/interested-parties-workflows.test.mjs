@@ -267,6 +267,14 @@ test('tabs follow the tab query parameter and record the active tab', async (t) 
   assert.deepEqual(unknown.shown, ['interestedPartiesTab']);
 });
 
+test('inherited object names in the tab parameter select the Items tab', async (t) => {
+  for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    const tabs = fakeTabs();
+    await partiesPage(t, { query: `&tab=${name}`, tabs });
+    assert.deepEqual(tabs.shown, ['interestedPartiesTab'], name);
+  }
+});
+
 test('the party/control matrix links both sides and filters by party or control', async (t) => {
   const { ui } = await partiesPage(t, { query: '&tab=visualisations' });
   const matrix = ui.el('partyControlsMatrix');

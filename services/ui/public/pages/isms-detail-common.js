@@ -34,6 +34,7 @@ export function activateTabFromHashOrQuery(params, map, defaultKey = '') {
   const key = String(
     params.get('tab') || window.location.hash.replace(/^#/, '') || defaultKey || '',
   ).toLowerCase();
-  const target = map[key];
+  // Own keys only, so a link such as ?tab=constructor selects no tab.
+  const target = Object.hasOwn(map, key) ? map[key] : null;
   if (target && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(target).show();
 }

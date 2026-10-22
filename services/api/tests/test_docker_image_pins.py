@@ -322,6 +322,34 @@ def test_references_that_cannot_be_pinned_stop_an_update(tmp_path):
     assert run("check", tmp_path, hub)[0] == 1
 
 
+def test_required_variables_are_left_for_the_deployment_to_supply(tmp_path):
+    hub = FakeHub()
+    python = hub.publish("library/python", "3.12-slim")
+    compose = (
+        "services:\n"
+        "  db:\n    image: ${POSTGRES_IMAGE:?Set a digest-pinned PostgreSQL 16 image}\n"
+        "  app:\n    image: '${APP_IMAGE?set APP_IMAGE}'\n"
+    )
+    write_tree(
+        tmp_path, {"Dockerfile": "FROM python:3.12-slim\n", "compose.yml": compose}
+    )
+
+    supplied = [(r.where, r.text) for r in pins.find_references(tmp_path) if r.supplied]
+    assert supplied == [
+        ("compose.yml:3", "${POSTGRES_IMAGE:?Set a digest-pinned PostgreSQL 16 image}"),
+        ("compose.yml:5", "${APP_IMAGE?set APP_IMAGE}"),
+    ]
+    code, out, _ = run("check", tmp_path, hub)
+    # Only the unpinned Dockerfile is a finding; the variables are listed.
+    assert code == 1
+    assert out.count("external  ") == 2
+    assert out.count("unpinned  ") == 1
+    assert run("update", tmp_path, hub)[0] == 0
+    assert (tmp_path / "compose.yml").read_text() == compose
+    assert (tmp_path / "Dockerfile").read_text() == f"FROM python:3.12-slim@{python}\n"
+    assert run("check", tmp_path, hub)[0] == 0
+
+
 def test_check_reports_current_stale_and_unpinned_images(tmp_path):
     hub = FakeHub()
     python = hub.publish("library/python", "3.12-slim")
@@ -877,7 +905,7 @@ def test_every_third_party_image_in_the_repository_is_pinned():
     references = pins.find_references(ROOT)
 
     assert [f"{r.where} {r.text}: {r.problem}" for r in references if r.problem] == []
-    third_party = [r for r in references if not r.keen]
+    third_party = [r for r in references if r.image and not r.keen]
     assert [r.where for r in third_party if not r.image.digest] == []
     assert {r.image.repository for r in third_party} >= {
         "library/python",

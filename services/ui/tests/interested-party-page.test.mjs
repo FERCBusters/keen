@@ -32,6 +32,7 @@ async function partyPage(t, options = {}) {
     query: options.query ?? '&id=ip1',
     me: options.me || { is_admin: true },
     globals: options.globals,
+    setup: options.setup,
     get: async (u) => {
       const p = u.pathname;
       if (p === '/api/v1/interested-parties/meta') {
@@ -231,6 +232,25 @@ test('changelog tab and deep link load entries', async (t) => {
   assert.match(ui.window.location.search, /tab=communications/);
   ui.el('partyDetailsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   assert.doesNotMatch(ui.window.location.search, /tab=/);
+});
+
+test("the tab parameter selects only the page's own tabs", async (t) => {
+  const open = async (tab) => {
+    const shown = [];
+    const bootstrap = {
+      Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+    };
+    await partyPage(t, {
+      query: `&id=ip1&tab=${tab}`,
+      setup: (window) => {
+        window.bootstrap = bootstrap;
+      },
+    });
+    return shown;
+  };
+  assert.deepEqual(await open('communications'), ['partyCommunicationsTab']);
+  for (const name of ['constructor', '__proto__', 'toString', 'unknown'])
+    assert.deepEqual(await open(name), ['partyDetailsTab'], name);
 });
 
 test('deletion confirms first and save failures are reported', async (t) => {

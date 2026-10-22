@@ -588,32 +588,36 @@ function setTabQuery(tabName) {
   history.replaceState({}, '', `${location.pathname}${qs ? `?${qs}` : ''}${location.hash || ''}`);
 }
 
-const TAB_LOADERS = {
-  risks: null,
-  cia: () => (loaded.cia ? null : loadCiaRisks()),
-  pestle: () => (loaded.pestle ? null : loadPestle()),
-  library: () => (loaded.library ? null : loadLibrary()),
-  visualisations: () =>
-    riskVisualisationsAreLoaded()
-      ? null
-      : loadRiskVisualisations().catch((e) =>
-          notify(`Failed to load risk visualisations: ${String(e)}`),
-        ),
-  'controls-without-risks': () => (loaded.controlsWithout ? null : loadControlsWithoutRisks()),
-};
-const TAB_BUTTONS = {
-  risks: 'risksListTab',
-  cia: 'ciaTab',
-  pestle: 'pestleTab',
-  library: 'libraryTab',
-  visualisations: 'riskVisualisationsTab',
-  'controls-without-risks': 'controlsWithoutRisksTab',
-};
+// Maps, so a tab name from the URL only ever matches a tab defined here.
+const TAB_LOADERS = new Map([
+  ['risks', null],
+  ['cia', () => (loaded.cia ? null : loadCiaRisks())],
+  ['pestle', () => (loaded.pestle ? null : loadPestle())],
+  ['library', () => (loaded.library ? null : loadLibrary())],
+  [
+    'visualisations',
+    () =>
+      riskVisualisationsAreLoaded()
+        ? null
+        : loadRiskVisualisations().catch((e) =>
+            notify(`Failed to load risk visualisations: ${String(e)}`),
+          ),
+  ],
+  ['controls-without-risks', () => (loaded.controlsWithout ? null : loadControlsWithoutRisks())],
+]);
+const TAB_BUTTONS = new Map([
+  ['risks', 'risksListTab'],
+  ['cia', 'ciaTab'],
+  ['pestle', 'pestleTab'],
+  ['library', 'libraryTab'],
+  ['visualisations', 'riskVisualisationsTab'],
+  ['controls-without-risks', 'controlsWithoutRisksTab'],
+]);
 
-for (const [name, id] of Object.entries(TAB_BUTTONS)) {
+for (const [name, id] of TAB_BUTTONS) {
   $(id)?.addEventListener('shown.bs.tab', () => {
     setTabQuery(name);
-    TAB_LOADERS[name]?.();
+    TAB_LOADERS.get(name)?.();
   });
 }
 
@@ -810,8 +814,8 @@ if (!canViewRisks) {
   }
   await Promise.all([loadRisks(), loadHeatmap()]);
   if (requestedTab === 'register') setTabQuery('risks');
-  if (requestedTab && TAB_BUTTONS[requestedTab] && requestedTab !== 'risks') {
-    showTab($(TAB_BUTTONS[requestedTab]));
-    await TAB_LOADERS[requestedTab]?.();
+  if (TAB_BUTTONS.has(requestedTab) && requestedTab !== 'risks') {
+    showTab($(TAB_BUTTONS.get(requestedTab)));
+    await TAB_LOADERS.get(requestedTab)?.();
   }
 }

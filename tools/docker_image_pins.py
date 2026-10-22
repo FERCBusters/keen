@@ -17,6 +17,9 @@ update  rewrites stale and missing digests in place once each new index
         receives pr-body.md, commit-message.txt and outputs.txt (key=value
         lines for GitHub Actions).
 
+A Compose value written as ${VAR:?message} names an image that the deployment
+supplies. check lists it as external, and neither command pins it.
+
 Both commands exit 2 when a registry request fails, and update also exits 2
 for a reference it cannot pin; every file then stays unchanged. Tags are
 resolved with HEAD requests, which Docker Hub leaves out of its pull limits,
@@ -111,6 +114,7 @@ _DOCKER_USES = re.compile(
 )
 _IMAGE_OPTION = re.compile(r"(?:^|[\s,])image=(?P<ref>[^\s,\"'#]+)")
 _DEFAULTED = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*:?-(?P<ref>[^${}]*)\}")
+_REQUIRED = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*:?\?[^${}]*\}")
 _COMPOSE_FILE = re.compile(r"(?:docker-)?compose(?:[.-][\w.-]+)?\.ya?ml")
 
 
@@ -151,6 +155,7 @@ class Reference:
     text: str
     image: Image | None = None
     keen: bool = False
+    supplied: bool = False  # a required variable set by the deployment
     problem: str | None = None
 
     @property
@@ -273,6 +278,8 @@ def _value_reference(path: str, number: int, match: re.Match) -> Reference | Non
     value, start = match["value"], match.start("value")
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
         value, start = value[1:-1], start + 1
+    if _REQUIRED.fullmatch(value):
+        return Reference(path, number, start, start + len(value), value, supplied=True)
     if defaulted := _DEFAULTED.fullmatch(value):
         value, start = defaulted["ref"], start + defaulted.start("ref")
     return _reference(path, number, start, value) if value else None
@@ -681,6 +688,9 @@ def check(root: Path, registry: Registry, out: TextIO) -> int:
     problems = [r for r in references if r.problem]
     for ref in problems:
         print(f"problem   {ref.where}: {ref.text} {ref.problem}", file=out)
+    for ref in references:
+        if ref.supplied:
+            print(f"external  {ref.where}  {ref.text} (set when deploying)", file=out)
     pinnable = _pinnable(references)
     current = _resolve(pinnable, registry)
     outdated = bool(problems)

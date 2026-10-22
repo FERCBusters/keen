@@ -113,7 +113,8 @@ function setTabQuery(tabName) {
   history.replaceState({}, '', `${location.pathname}${p.toString() ? `?${p.toString()}` : ''}`);
 }
 function activateTab(tabName) {
-  const tab = tabs[tabName || 'items'] || tabs.items;
+  // Own tab names only; inherited names such as "constructor" select Items.
+  const tab = (Object.hasOwn(tabs, tabName) && tabs[tabName]) || tabs.items;
   if (tab && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
 function wireTabs() {

@@ -18,12 +18,14 @@ async function detail(
     query = '&id=x1',
     fail = false,
     sources = false,
+    setup,
   } = {},
 ) {
   const posted = [];
   const ui = await page(t, name, {
     query,
     me,
+    setup,
     get: async (u) => {
       if (u.pathname === path) {
         if (fail) throw new Error('Record offline');
@@ -308,6 +310,28 @@ test('objectives show status, owners and linked requirements', async (t) => {
   assert.equal(empty.ui.el('objectiveTitle').textContent, 'ISMS objective');
   assert.equal(empty.ui.el('objectiveStatusValue').textContent, 'Not Started');
   assert.equal(empty.ui.el('objectiveResources').textContent, '—');
+});
+
+test("a detail page link opens only the page's own tabs", async (t) => {
+  const open = async (tab) => {
+    const shown = [];
+    await detail(t, 'isms-objective', {
+      path: '/api/v1/isms/objectives/x1',
+      row: { id: 'x1' },
+      swot: true,
+      query: `&id=x1&tab=${tab}`,
+      setup: (window) => {
+        window.bootstrap = {
+          Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+        };
+      },
+    });
+    return shown;
+  };
+  assert.deepEqual(await open('changelog'), ['objectiveChangelogTab']);
+  // Inherited object names select nothing, leaving the details tab in front.
+  for (const name of ['constructor', '__proto__', 'toString'])
+    assert.deepEqual(await open(name), [], name);
 });
 
 test('assets show classification, owners and risk counts', async (t) => {
