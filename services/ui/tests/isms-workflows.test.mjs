@@ -234,6 +234,11 @@ test('a written document is saved with its tags, a new folder and its links', as
     },
   });
   await settle(() => ui.el('documentsRows').textContent.includes('Security policy'));
+  // A document's control opens on the control's Requirements tab.
+  assert.equal(
+    ui.el('documentsRows').querySelector('a.badge').getAttribute('href'),
+    '/control.html?id=c1&framework=A',
+  );
   await ui.add('document', 'documentFormCard');
   assert.equal(ui.el('docWritePane').hidden, false);
 

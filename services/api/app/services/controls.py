@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import case, desc, func
+from sqlalchemy import and_, case, desc, func
 from sqlalchemy.orm import Session, load_only
 
+from app.core.cache import cached_json, user_cache_scope
 from app.core.config import settings
 from app.core.references import control_justification as _control_justification
 from app.core.references import control_upstream_url as _control_upstream_url
@@ -19,12 +20,18 @@ from app.db.models import (
     FrameworkClause,
     Mapping,
 )
-from app.security.diary_visibility import diary_filter_condition
+from app.security.diary_visibility import (
+    DIARY_SOURCE,
+    LINK_ENTRY_PREFIX,
+    LINK_ENTRY_SYSTEM,
+    diary_filter_condition,
+)
 from app.security.redaction import redact_obj as _redact_obj
 from app.security.redaction import redact_str as _redact_str
 from app.services.control_inheritance import inherited_control_ids
 from app.services.entity_changelog import list_entity_changelogs
 from app.services.errors import DomainError
+from app.services.event_filters import event_predicates, parse_event_filters
 from app.services.presentation import extract_source_url as _extract_source_url
 
 EVENTS_READ_PERMISSION = "events.read"
@@ -225,3 +232,75 @@ def control_evidence(*, control_id: str, limit: int, offset: int, db: Session, u
             }
         )
     return {"total": total, "limit": limit, "offset": offset, "items": items}
+
+
+def _iso(value) -> str | None:
+    return value.isoformat() if value else None
+
+
+def control_evidence_summary(*, control_id: str, db: Session, user) -> dict:
+    """A control's evidence counted by source, with the newest event from each.
+
+    The counts follow the control's evidence list: its own and inherited
+    evidence, with diary entries the caller can see. Automatic diary entries
+    recorded when a record is linked to the control are also counted as link
+    entries.
+    """
+    cid = _try_uuid(control_id)
+    if not cid:
+        raise DomainError(status_code=400, detail="control_id must be a UUID")
+    control = db.get(ControlItem, cid)
+    if not control:
+        raise DomainError(status_code=404, detail="Control not found")
+    framework = control.framework_slug
+
+    def _load() -> dict:
+        filters = parse_event_filters(framework=framework, control=str(cid))
+        event_ids = (
+            db.query(Event.id)
+            .filter(diary_filter_condition(db, user))
+            .filter(*event_predicates(filters, db))
+            .distinct()
+            .subquery()
+        )
+        link_entry = and_(
+            Event.source == DIARY_SOURCE,
+            Event.system == LINK_ENTRY_SYSTEM,
+            Event.external_id.startswith(LINK_ENTRY_PREFIX, autoescape=True),
+        )
+        source_rows = (
+            db.query(
+                Event.source,
+                func.count(Event.id),
+                func.max(Event.timestamp),
+                func.sum(case((link_entry, 1), else_=0)),
+            )
+            .join(event_ids, event_ids.c.id == Event.id)
+            .group_by(Event.source)
+            .all()
+        )
+        sources = [
+            {
+                "source": source or "",
+                "count": int(count),
+                "latest": _iso(latest),
+                "link_entries": int(links or 0),
+            }
+            for source, count, latest, links in source_rows
+        ]
+        sources.sort(key=lambda row: (-row["count"], row["source"]))
+        return {
+            "control_id": str(cid),
+            "framework": framework,
+            "total": sum(row["count"] for row in sources),
+            "latest": max(
+                (row["latest"] for row in sources if row["latest"]), default=None
+            ),
+            "sources": sources,
+        }
+
+    return cached_json(
+        "controls:evidence-summary",
+        {"control": str(cid), "user": user_cache_scope(user), "version": 1},
+        _load,
+    )

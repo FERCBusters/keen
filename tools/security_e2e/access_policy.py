@@ -141,6 +141,9 @@ OBJECT_RULES = {
         "The comment's author can delete it; stories.admin can delete any comment."
     ),
     "GET /v1/stats/controls": "Evidence counts need events.read.",
+    "GET /v1/controls/{control_id}/evidence/summary": (
+        "Diary entries count only when the account can see them, as in the evidence list."
+    ),
 }
 
 OUTSIDE_SCHEMA = {
@@ -364,6 +367,7 @@ POLICY = {
     "GET /v1/controls/{control_id}/changelog": SIGNED_IN,
     "GET /v1/controls/{control_id}/effectiveness-measures": ISMS_READ,
     "GET /v1/controls/{control_id}/evidence": EVENTS_READ,
+    "GET /v1/controls/{control_id}/evidence/summary": EVENTS_READ,
     "GET /v1/controls/{control_id}/interested-parties": PARTIES_READ,
     "GET /v1/controls/{control_id}/isms": ISMS_READ,
     "GET /v1/controls/{control_id}/risks": RISK_READ,

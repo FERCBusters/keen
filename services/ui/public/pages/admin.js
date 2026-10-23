@@ -1063,6 +1063,15 @@ async function loadControls() {
   }
 }
 
+// A link from a control's Requirements tab names the control to record
+// evidence for; it starts out chosen.
+function chooseLinkedDiaryControl() {
+  const wanted = new URLSearchParams(location.search).get('control');
+  const chosen = wanted ? allControls.find((item) => item.id === wanted) : null;
+  if (chosen && !selectedControls.some((item) => item.id === chosen.id))
+    selectedControls.push(chosen);
+}
+
 document.getElementById('controlSearch')?.addEventListener('input', (ev) => {
   const q = (ev.target.value || '').trim().toLowerCase();
   if (!q || allControls.length === 0) {
@@ -1384,6 +1393,7 @@ if (!isAdmin && !canAudit) {
 } else {
   // Full admin
   await loadControls();
+  chooseLinkedDiaryControl();
   renderSelected();
   await refreshUsers(true);
   await refreshGroups(true);

@@ -785,6 +785,19 @@ test('diary evidence collects controls, links, timestamp and attachments', async
   assert.ok(el('controlSelected').querySelector('[data-remove="k-a51"]'));
 });
 
+test("a control's Requirements link starts the diary form with that control chosen", async (t) => {
+  const { el } = await admin(t, { hash: '?control=c-a52&framework=A#diary' });
+  assert.deepEqual(
+    [...el('controlSelected').querySelectorAll('[data-remove]')].map((b) => b.dataset.remove),
+    ['c-a52'],
+  );
+  // The chosen title stays text.
+  assert.equal(el('controlSelected').querySelector('img'), null);
+  // An unknown control leaves the form empty.
+  const unknown = await admin(t, { hash: '?control=nothing#diary' });
+  assert.equal(unknown.el('controlSelected').querySelectorAll('[data-remove]').length, 0);
+});
+
 test('a rejected diary entry is reported', async (t) => {
   const { el, ui } = await admin(t, { fail: { post: true } });
   el('diarySummary').value = 'Entry';

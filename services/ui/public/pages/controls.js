@@ -82,7 +82,7 @@ function render() {
     const evHtml = withheld
       ? '<span class="small-muted">-</span>'
       : ev > 0
-        ? `<a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" class="badge badge-soft">${ev}</a>`
+        ? `<a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=evidence`, framework)}" class="badge badge-soft">${ev}</a>`
         : `<span class="badge text-bg-light">0</span>`;
 
     const lastIso = c.last_evidence || '';

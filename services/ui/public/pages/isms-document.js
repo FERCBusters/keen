@@ -58,7 +58,7 @@ function renderDocument(row) {
   $('documentUpdated').textContent = fmtTs(documentRow.updated_at) || '-';
   $('documentUploadedAt').textContent = fmtTs(documentRow.uploaded_at) || '-';
   $('documentUploadedBy').innerHTML = userPillHtml(documentRow.uploaded_by);
-  $('documentControls').innerHTML = controlBadges(documentRow.controls, framework);
+  $('documentControls').innerHTML = controlBadges(documentRow.controls, framework, { tab: '' });
   $('documentClauses').innerHTML = clauseBadges(documentRow.clauses, framework);
 
   const external = documentRow.external_url || '';

@@ -1,4 +1,5 @@
 import { safeExternalHref } from '/app.js';
+import { clauseBadges, controlBadges } from '/pages/isms-detail-common.js';
 import {
   initNavbar,
   apiGet,
@@ -122,33 +123,6 @@ function interestedPartyLink(item) {
   return `<a href="${esc(href)}">${esc(item.name?.name || 'Interested party')}</a>`;
 }
 
-function badgeList(items, labelKey = 'ref', urlFn = null) {
-  const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">-</span>';
-  return arr
-    .map((it) => {
-      const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
-      const title = String(it?.title || it?.name || label);
-      const href = urlFn ? urlFn(it) : '';
-      if (href)
-        return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(title)}">${esc(label)}</a>`;
-      return `<span class="badge badge-soft me-1 mb-1" title="${esc(title)}">${esc(label)}</span>`;
-    })
-    .join('');
-}
-function ismsControlBadges(items) {
-  return badgeList(items, 'ref', (c) =>
-    withFramework(
-      `/control.html?id=${encodeURIComponent(c.id)}&tab=isms`,
-      c.framework || framework,
-    ),
-  );
-}
-function ismsClauseBadges(items) {
-  return badgeList(items, 'ref', (c) =>
-    withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework),
-  );
-}
 function personBadges(items) {
   return userPillsHtml(items);
 }
@@ -472,7 +446,7 @@ function renderIsmsObjectives() {
     rows
       .map(
         (o) =>
-          `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement || '', 180))}</div></td><td>${esc(o.metric || '-')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(o.completion_target_date || '-')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${ismsControlBadges(o.controls)}</td><td>${ismsClauseBadges(o.clauses)}</td></tr>`,
+          `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement || '', 180))}</div></td><td>${esc(o.metric || '-')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(o.completion_target_date || '-')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${controlBadges(o.controls, framework)}</td><td>${clauseBadges(o.clauses, framework)}</td></tr>`,
       )
       .join('') ||
     '<tr><td colspan="7" class="p-4 small-muted">No ISMS objectives match.</td></tr>';
@@ -497,7 +471,7 @@ function renderIsmsDocuments() {
     rows
       .map(
         (d) =>
-          `<tr><td class="fw-semibold wrap">${esc(d.title || 'Document')}</td><td>${esc(d.document_type || '-')}</td><td>${documentLink(d)}</td><td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '-')}</td><td>${ismsControlBadges(d.controls)}</td><td>${ismsClauseBadges(d.clauses)}</td></tr>`,
+          `<tr><td class="fw-semibold wrap">${esc(d.title || 'Document')}</td><td>${esc(d.document_type || '-')}</td><td>${documentLink(d)}</td><td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '-')}</td><td>${controlBadges(d.controls, framework, { tab: '' })}</td><td>${clauseBadges(d.clauses, framework)}</td></tr>`,
       )
       .join('') || '<tr><td colspan="6" class="p-4 small-muted">No ISMS documents match.</td></tr>';
 }
@@ -528,7 +502,7 @@ function renderIsmsEffectiveness() {
     <td>${esc(item.target_display || '-')}</td>
     <td>${esc(item.frequency || '-')}</td>
     <td>${userPillHtml(item.owner)}</td>
-    <td>${ismsControlBadges(item.controls)}</td>
+    <td>${controlBadges(item.controls, framework, { tab: '' })}</td>
   </tr>`,
       )
       .join('') ||
@@ -542,7 +516,7 @@ function renderIsmsOrgAssets() {
       orgs
         .map(
           (n) =>
-            `<tr><td class="fw-semibold">${esc(n.name || 'Org node')}</td><td>${esc(n.parent?.name || 'Root')}</td><td>${personBadges(n.people)}</td><td>${ismsControlBadges(n.controls)}</td><td>${ismsClauseBadges(n.clauses)}</td></tr>`,
+            `<tr><td class="fw-semibold">${esc(n.name || 'Org node')}</td><td>${esc(n.parent?.name || 'Root')}</td><td>${personBadges(n.people)}</td><td>${controlBadges(n.controls, framework)}</td><td>${clauseBadges(n.clauses, framework)}</td></tr>`,
         )
         .join('') ||
       `<tr><td colspan="5" class="p-4 small-muted">${soa.can_view_isms ? 'No organisation chart nodes yet.' : 'You do not have permission to view ISMS.'}</td></tr>`;
@@ -553,7 +527,7 @@ function renderIsmsOrgAssets() {
       assets
         .map(
           (a) =>
-            `<tr><td class="fw-semibold">${esc(a.asset || a.name || 'Asset')}</td><td>${esc(a.category?.name || a.category_name || '-')}</td><td>${esc(a.subcategory?.name || a.subcategory_name || '-')}</td><td>${esc(a.license || '-')}</td><td>${esc(a.owner_org_node?.name || '-')}</td><td>${esc(a.register_held_by_org_node?.name || '-')}</td><td>${ismsControlBadges(a.controls)}</td><td>${ismsClauseBadges(a.clauses)}</td></tr>`,
+            `<tr><td class="fw-semibold">${esc(a.asset || a.name || 'Asset')}</td><td>${esc(a.category?.name || a.category_name || '-')}</td><td>${esc(a.subcategory?.name || a.subcategory_name || '-')}</td><td>${esc(a.license || '-')}</td><td>${esc(a.owner_org_node?.name || '-')}</td><td>${esc(a.register_held_by_org_node?.name || '-')}</td><td>${controlBadges(a.controls, framework)}</td><td>${clauseBadges(a.clauses, framework)}</td></tr>`,
         )
         .join('') ||
       `<tr><td colspan="8" class="p-4 small-muted">${soa.can_view_isms ? 'No ISMS assets yet.' : 'You do not have permission to view ISMS.'}</td></tr>`;

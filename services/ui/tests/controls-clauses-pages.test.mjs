@@ -102,9 +102,10 @@ test('controls register shows in-scope controls with evidence counts and KPIs', 
   assert.deepEqual(refs(ui), ['A.1', 'A.2', 'A.3']);
   assert.equal(ui.el('rows').querySelector('b'), null);
   const rows = [...ui.el('rows').querySelectorAll('tr')];
+  // The evidence count opens the control's evidence list.
   assert.match(
     rows[0].querySelector('a.badge').getAttribute('href'),
-    /control\.html\?id=c1&framework=A/,
+    /control\.html\?id=c1&tab=evidence&framework=A/,
   );
   assert.match(rows[1].textContent, /0/);
   // Counts withheld from accounts without event access render as a dash.

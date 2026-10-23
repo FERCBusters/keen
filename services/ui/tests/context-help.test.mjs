@@ -204,6 +204,8 @@ test('page help follows the page and the active tab', async (t) => {
     ['questions', 'none', '/help/using-events.html#questions-and-incidents'],
     ['isms-document', 'documentDetailsTab', '/help/using-documents.html'],
     ['soa', 'soaControlsTab', '/help/using-frameworks.html#4-controls-clauses-and-applicability'],
+    ['controls', 'controlRequirementsTab', '/help/using-frameworks.html#control-requirements'],
+    ['controls', 'controlEvidenceTab', '/help/using-events.html'],
   ];
   for (const [page, tab, url] of cases) {
     ui.document.body.dataset.page = page;
@@ -266,6 +268,7 @@ test('every help topic points at a published chapter and anchor', async (t) => {
     'adminOverview',
     'features',
     'sourceInsights',
+    'controlRequirements',
   ];
   for (const key of keys) {
     trigger.dataset.helpTopic = key;

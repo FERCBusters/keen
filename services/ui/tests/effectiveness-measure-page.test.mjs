@@ -132,7 +132,8 @@ test('effectiveness measure details render with threshold state and linked contr
   assert.match(ui.el('latestValue').textContent, /9 days\s*Outside target\s*March/);
   assert.match(
     ui.el('linkedControls').querySelector('a').getAttribute('href'),
-    /control\.html\?id=c1&tab=isms&framework=A/,
+    // Measures are listed on the control's default Requirements tab.
+    /control\.html\?id=c1&framework=A/,
   );
   assert.match(
     ui.el('editMeasureLink').getAttribute('href'),

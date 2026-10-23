@@ -2,6 +2,7 @@ import { featureEnabled, sectionFeatures } from '/pages/feature-availability.js'
 import { renderBoard, renderTimeline, normalise, statuses, label } from '/pages/planning-views.js';
 import { safeExternalHref } from '/app.js';
 import { mountMeasurementExamples } from '/pages/measurement-examples.js';
+import { clauseBadges, controlBadges } from '/pages/isms-detail-common.js';
 import {
   initNavbar,
   apiGet,
@@ -296,33 +297,6 @@ function objectiveUserPill(user) {
 }
 function objectiveUserBadges(list) {
   return userPillsHtml(list, { className: 'isms-objective-user-pill' });
-}
-function badgeList(items, labelKey = 'ref', urlFn = null) {
-  const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">-</span>';
-  return arr
-    .map((it) => {
-      const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
-      const title = String(it?.title || it?.name || label);
-      const href = urlFn ? urlFn(it) : '';
-      if (href)
-        return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(title)}">${esc(label)}</a>`;
-      return `<span class="badge badge-soft me-1 mb-1" title="${esc(title)}">${esc(label)}</span>`;
-    })
-    .join('');
-}
-function controlBadges(items) {
-  return badgeList(items, 'ref', (c) =>
-    withFramework(
-      `/control.html?id=${encodeURIComponent(c.id)}&tab=isms`,
-      c.framework || framework,
-    ),
-  );
-}
-function clauseBadges(items) {
-  return badgeList(items, 'ref', (c) =>
-    withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework),
-  );
 }
 function docLink(d) {
   if (d.external_url)
@@ -1308,7 +1282,7 @@ function renderObjectives() {
     <td class="isms-objectives-owner-cell">${objectiveUserPill(o.owner)}</td>
     <td class="wrap">${esc(o.completion_target_date || '-')}</td>
     <td class="isms-objectives-resources-cell">${objectiveUserBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 100))}</div></td>
-    <td class="wrap">${controlBadges(o.controls)}</td><td class="wrap">${clauseBadges(o.clauses)}</td>${actionsHtml('objective', o.id, 'isms-objectives-actions')}
+    <td class="wrap">${controlBadges(o.controls, framework)}</td><td class="wrap">${clauseBadges(o.clauses, framework)}</td>${actionsHtml('objective', o.id, 'isms-objectives-actions')}
   </tr>`,
       )
       .join('') || emptyRow(8, 'No ISMS objectives yet.');
@@ -1328,7 +1302,7 @@ function renderDocuments() {
       .map(
         (d) => `<tr data-isms-row="document">
     <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title || 'Document')}</a><div class="small">${(d.tags || []).map((tag) => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '-')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in Keen</span> ' : ''}${docLink(d)}</td>
-    <td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '-')}</td><td>${controlBadges(d.controls)}</td><td>${clauseBadges(d.clauses)}</td><td class="small-muted">${esc(fmtTs(d.updated_at))}</td>${actionsHtml('document', d.id)}
+    <td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '-')}</td><td>${controlBadges(d.controls, framework, { tab: '' })}</td><td>${clauseBadges(d.clauses, framework)}</td><td class="small-muted">${esc(fmtTs(d.updated_at))}</td>${actionsHtml('document', d.id)}
   </tr>`,
       )
       .join('') || emptyRow(8, 'No ISMS documents yet.');
@@ -1341,7 +1315,7 @@ function renderOrg() {
     items
       .map(
         (n) => `<tr data-isms-row="org">
-    <td class="fw-semibold">${esc(n.name || 'Org node')}</td><td>${esc(n.parent?.name || 'Root')}</td><td>${esc(n.node_type || '-')}</td><td>${userBadges(n.people)}</td><td class="wrap small-muted">${esc(shorten(n.description || '', 160) || '-')}</td><td>${controlBadges(n.controls)}</td><td>${clauseBadges(n.clauses)}</td>${actionsHtml('org', n.id)}
+    <td class="fw-semibold">${esc(n.name || 'Org node')}</td><td>${esc(n.parent?.name || 'Root')}</td><td>${esc(n.node_type || '-')}</td><td>${userBadges(n.people)}</td><td class="wrap small-muted">${esc(shorten(n.description || '', 160) || '-')}</td><td>${controlBadges(n.controls, framework)}</td><td>${clauseBadges(n.clauses, framework)}</td>${actionsHtml('org', n.id)}
   </tr>`,
       )
       .join('') || emptyRow(8, 'No organisation chart nodes yet.');
@@ -1533,7 +1507,7 @@ function renderAssets() {
     <td>${esc(a.register_held_by_org_node?.name || '-')}</td>
     <td class="wrap small-muted">${esc(shorten(a.description || '', 160) || '-')}</td>
     <td>${Number(a.risk_count || 0)}</td>
-    <td>${controlBadges(a.controls)}</td><td>${clauseBadges(a.clauses)}</td>${actionsHtml('asset', a.id)}
+    <td>${controlBadges(a.controls, framework)}</td><td>${clauseBadges(a.clauses, framework)}</td>${actionsHtml('asset', a.id)}
   </tr>`,
       )
       .join('') || emptyRow(11, 'No assets yet.');
@@ -1793,7 +1767,7 @@ function renderEffectivenessMeasures() {
     <td class="wrap">${metricValueHtml(item.latest_entry, item)}${metricHistoryLinkHtml(item)}</td>
     <td>${esc(item.target_display || '-')}</td>
     <td>${userPillHtml(item.owner)}</td>
-    <td class="wrap">${controlBadges(item.controls)}</td>
+    <td class="wrap">${controlBadges(item.controls, framework, { tab: '' })}</td>
     ${effectivenessActionsHtml(item)}
   </tr>`,
       )
@@ -1928,7 +1902,7 @@ function renderMeetings() {
             .filter(Boolean)
             .join('<br>') || '<span class="small-muted">-</span>';
         const href = meetingHref(m);
-        return `<tr data-isms-row="meeting"><td>${esc(m.date || '-')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('-') || '-')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls)}</td><td>${clauseBadges(m.clauses)}</td>${actionsHtml('meeting', m.id)}</tr>`;
+        return `<tr data-isms-row="meeting"><td>${esc(m.date || '-')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('-') || '-')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls, framework)}</td><td>${clauseBadges(m.clauses, framework)}</td>${actionsHtml('meeting', m.id)}</tr>`;
       })
       .join('') || emptyRow(9, 'No meeting minutes yet.');
 }

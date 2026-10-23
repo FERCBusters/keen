@@ -25,7 +25,10 @@
 
     <ul class="nav nav-tabs mb-3 no-print" id="controlPageTabs" role="tablist">
       <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="controlEvidenceTab" data-bs-toggle="tab" data-bs-target="#controlEvidencePane" type="button" role="tab" aria-controls="controlEvidencePane" aria-selected="true">Evidence</button>
+        <button class="nav-link active" id="controlRequirementsTab" data-bs-toggle="tab" data-bs-target="#controlRequirementsPane" type="button" role="tab" aria-controls="controlRequirementsPane" aria-selected="true">Requirements</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="controlEvidenceTab" data-bs-toggle="tab" data-bs-target="#controlEvidencePane" type="button" role="tab" aria-controls="controlEvidencePane" aria-selected="false">Evidence</button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="controlRelatedTab" data-bs-toggle="tab" data-bs-target="#controlRelatedPane" type="button" role="tab" aria-controls="controlRelatedPane" aria-selected="false">Related controls</button>
@@ -51,7 +54,11 @@
     </ul>
 
     <div class="tab-content" id="controlPageTabContent">
-      <section class="tab-pane fade show active" id="controlEvidencePane" role="tabpanel" aria-labelledby="controlEvidenceTab" tabindex="0">
+      <section class="tab-pane fade show active" id="controlRequirementsPane" role="tabpanel" aria-labelledby="controlRequirementsTab" tabindex="0">
+        <div id="controlRequirements"><div class="small-muted">Loading requirements</div></div>
+      </section>
+
+      <section class="tab-pane fade" id="controlEvidencePane" role="tabpanel" aria-labelledby="controlEvidenceTab" tabindex="0">
         <div class="card mb-3 no-print" data-mosp-filter-section="control-filters" data-mosp-filter-title="Filters">
           <div class="card-body">
             <div class="row g-2 align-items-end">
@@ -250,7 +257,7 @@
       <section class="tab-pane fade" id="controlIsmsPane" role="tabpanel" aria-labelledby="controlIsmsTab" tabindex="0">
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div><div class="fw-bold">ISMS references</div><div class="small-muted">ISMS objectives, documents, org roles, assets and meetings linked to this control.</div></div>
+            <div><div class="fw-bold">ISMS references</div><div class="small-muted">SWOT items, objectives, organisation roles, assets and meetings linked to this control. Policies, processes and effectiveness measures are under Requirements.</div></div>
             <a class="btn btn-sm btn-outline-primary" data-nav-fw="1" href="/isms.html">Open ISMS</a>
           </div>
           <div id="controlIsmsView" class="card-body small-muted">Loading ISMS references</div>

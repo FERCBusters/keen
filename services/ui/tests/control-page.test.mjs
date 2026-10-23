@@ -61,8 +61,9 @@ async function controlPage(t, options = {}) {
   const state = { control: options.control || baseControl(), patched: [], posted: [], removed: [] };
   const fail = options.fail || {};
   const empty = options.empty || {};
+  const query = options.query ?? '&id=c1&tab=evidence';
   const ui = await page(t, 'control', {
-    query: options.query ?? '&id=c1',
+    query,
     me: options.me || { is_admin: true },
     globals: options.globals,
     frameworks: [
@@ -77,6 +78,7 @@ async function controlPage(t, options = {}) {
       const p = u.pathname;
       if (p === '/api/v1/controls/c1') {
         if (fail.control) throw new Error('Control offline');
+        await options.gate;
         return structuredClone(state.control);
       }
       if (p === '/api/v1/controls/c1/cross-framework') {
@@ -143,14 +145,94 @@ async function controlPage(t, options = {}) {
       }
       if (p === '/api/v1/controls/c1/isms') {
         if (fail.isms) throw new Error('ISMS offline');
+        // Policies and measures appear under Requirements, not the ISMS tab.
+        if (empty.ismsRecords)
+          return {
+            documents: [{ id: 'd1', title: 'Access policy' }],
+            effectiveness_measures: [{ id: 'm1', summary: 'MTTR' }],
+          };
         return {
           swot: [{ id: 's1', title: 'Strength <b>x</b>', updated_at: '2026-01-01' }],
           objectives: [{ requirement: 'Reduce incidents' }],
-          documents: [{ title: 'Policy' }],
+          documents: empty.documents
+            ? []
+            : [
+                {
+                  id: 'd1',
+                  title: '<img src=x>Access policy',
+                  document_type: 'policy',
+                  content_html: '<p>Text</p>',
+                  content_version: 3,
+                  updated_at: '2026-02-01T00:00:00Z',
+                },
+                {
+                  id: 'd2',
+                  title: 'Leavers process',
+                  document_type: 'process',
+                  has_file: true,
+                  filename: 'leavers.pdf',
+                },
+                { id: 'd3', document_type: 'record', external_url: 'https://docs.example/r' },
+                { id: 'd4', title: 'Draft' },
+              ],
           org_nodes: [{}],
           assets: [{ asset: 'Laptop' }],
           effectiveness_measures: [{ id: 'm1', summary: 'MTTR' }],
           meetings: [{ id: 'mt1', title: 'Review' }, { title: 'No id' }],
+        };
+      }
+      if (p === '/api/v1/controls/c1/evidence/summary') {
+        if (fail.summary) throw new Error('Summary offline');
+        if (empty.summary) return { total: 0, latest: null, sources: [] };
+        return {
+          control_id: 'c1',
+          framework: 'A',
+          total: 41,
+          latest: '2026-03-05T09:00:00',
+          sources: [
+            { source: 'jenkins', count: 38, latest: '2026-03-05T09:00:00', link_entries: 0 },
+            { source: 'diary', count: 3, latest: '2026-02-14T09:00:00', link_entries: 1 },
+            { source: '', count: 1, latest: null, link_entries: 0 },
+          ],
+        };
+      }
+      if (p === '/api/v1/controls/c1/effectiveness-measures') {
+        if (fail.measures) throw new Error('Measures offline');
+        if (empty.measures) return { items: [] };
+        if (options.measures) return { items: options.measures };
+        return {
+          items: [
+            {
+              id: 'm1',
+              summary: '<b>Disposal certificates</b>',
+              frequency: 'monthly',
+              target_value: 100,
+              target_unit: '%',
+              threshold_operator: 'gte',
+              target_display: '≥ 100 %',
+              latest_entry: {
+                metric_value: 100,
+                metric_unit: '%',
+                value_display: '100 %',
+                recorded_at: '2026-03-01T00:00:00Z',
+              },
+            },
+            {
+              id: 'm2',
+              summary: 'Laptop audit',
+              target_value: 95,
+              target_unit: '%',
+              threshold_operator: 'gte',
+              target_display: '≥ 95 %',
+              latest_entry: { metric_value: 82, metric_unit: '%', value_display: '82 %' },
+            },
+            { id: 'm3', summary: 'Tabletop exercise', latest_entry: null },
+            {
+              id: 'm4',
+              summary: 'Supplier review',
+              latest_entry: { qualitative_value: 'Completed', recorded_at: '2026-01-10T00:00:00Z' },
+            },
+          ],
         };
       }
       if (p === '/api/v1/controls/c1/changelog') {
@@ -217,11 +299,19 @@ async function controlPage(t, options = {}) {
       return { ok: true };
     },
   });
-  await settle(
-    () =>
-      (ui.calls.some((c) => c.url.startsWith('/api/v1/events?')) && ui.idle()) ||
-      ui.el('status').textContent,
-  );
+  // A gated control load is awaited by the test itself.
+  if (options.gate) return { ui, state };
+  // Wait for the tab the page opens on: the evidence list, Requirements, or
+  // the control itself for the other tabs.
+  const tab = new URLSearchParams(query).get('tab') || 'requirements';
+  await settle(() => {
+    if (ui.el('status').textContent) return true;
+    if (!ui.idle()) return false;
+    if (tab === 'evidence') return ui.calls.some((c) => c.url.startsWith('/api/v1/events?'));
+    if (tab === 'requirements')
+      return !/Loading requirements/.test(ui.el('controlRequirements').textContent);
+    return ui.calls.some((c) => c.url.startsWith('/api/v1/controls/c1?'));
+  });
   await new Promise((r) => setTimeout(r, 10));
   return { ui, state };
 }
@@ -373,23 +463,13 @@ test('ISMS and changelog tabs load on demand and update the URL', async (t) => {
   const rows = [...ui.el('controlIsmsView').querySelectorAll('tbody tr')];
   assert.deepEqual(
     rows.map((r) => r.cells[0].textContent),
-    [
-      'SWOT',
-      'Objectives',
-      'Documents',
-      'Organisation chart',
-      'Assets',
-      'Effectiveness measures',
-      'Meetings',
-      'Meetings',
-    ],
+    ['SWOT', 'Objectives', 'Organisation chart', 'Assets', 'Meetings', 'Meetings'],
   );
   assert.equal(ui.el('controlIsmsView').querySelector('b'), null);
   const hrefs = rows.map((r) => r.querySelector('a').getAttribute('href'));
   assert.match(hrefs[0], /^\/swot\.html\?id=s1&framework=A$/);
-  assert.match(hrefs[5], /isms-effectiveness-measure\.html\?id=m1/);
-  assert.match(hrefs[6], /isms-meeting\.html\?id=mt1/);
-  assert.match(hrefs[7], /isms\.html\?tab=meetings/);
+  assert.match(hrefs[4], /isms-meeting\.html\?id=mt1/);
+  assert.match(hrefs[5], /isms\.html\?tab=meetings/);
   // A second activation reuses the loaded references.
   const before = ui.calls.length;
   ui.el('controlIsmsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
@@ -400,6 +480,9 @@ test('ISMS and changelog tabs load on demand and update the URL', async (t) => {
   assert.match(ui.window.location.search, /tab=changelog/);
   assert.equal(ui.el('controlChangelog').querySelector('b'), null);
   ui.el('controlEvidenceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  assert.match(ui.window.location.search, /tab=evidence/);
+  // Requirements is the default tab, so the address drops the tab name.
+  ui.el('controlRequirementsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   assert.doesNotMatch(ui.window.location.search, /tab=/);
   ui.el('controlInterestedPartiesTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   assert.match(ui.window.location.search, /tab=interested-parties/);
@@ -422,7 +505,7 @@ test('deep links to the ISMS and changelog tabs load their data with the page', 
   assert.match(related.ui.window.location.search, /tab=justification/);
 });
 
-test('a reader deep-linked to the justification tab sees the evidence tab', async (t) => {
+test('a reader deep-linked to the justification tab sees Requirements', async (t) => {
   const shown = [];
   await controlPage(t, {
     me: { can_view_controls: true },
@@ -433,11 +516,11 @@ test('a reader deep-linked to the justification tab sees the evidence tab', asyn
       };
     },
   });
-  assert.deepEqual(shown, ['controlEvidenceTab']);
+  assert.deepEqual(shown, ['controlRequirementsTab']);
 });
 
-test('an unknown or inherited tab name in the address opens the evidence tab', async (t) => {
-  for (const name of ['constructor', '__proto__', 'nothing']) {
+test('an unknown or inherited tab name in the address opens Requirements', async (t) => {
+  for (const name of ['constructor', '__proto__', 'nothing', 'effectiveness']) {
     const shown = [];
     await controlPage(t, {
       query: `&id=c1&tab=${name}`,
@@ -447,7 +530,7 @@ test('an unknown or inherited tab name in the address opens the evidence tab', a
         };
       },
     });
-    assert.deepEqual(shown, ['controlEvidenceTab'], name);
+    assert.deepEqual(shown, ['controlRequirementsTab'], name);
   }
 });
 
@@ -457,7 +540,7 @@ test('evidence appears while slower sections are still loading', async (t) => {
     releaseRisks = resolve;
   });
   const ui = await page(t, 'control', {
-    query: '&id=c1',
+    query: '&id=c1&tab=evidence',
     get: async (u) => {
       const p = u.pathname;
       if (p === '/api/v1/controls/c1') return baseControl();
@@ -511,7 +594,7 @@ test('evidence filters, paging and saved searches use the canonical control URL'
     path: '/api/v1/me/saved-searches',
     body: {
       name: 'My search',
-      url: '/control.html?id=c1&framework=A&q=deploy&source=github&limit=100',
+      url: '/control.html?id=c1&framework=A&tab=evidence&q=deploy&source=github&limit=100',
     },
   });
 
@@ -529,7 +612,9 @@ test('cancelling the saved-search prompt sends nothing', async (t) => {
 });
 
 test('a selected source with no remaining results stays selectable', async (t) => {
-  const { ui } = await controlPage(t, { query: '&id=c1&source=jira&limit=13&offset=-5' });
+  const { ui } = await controlPage(t, {
+    query: '&id=c1&tab=evidence&source=jira&limit=13&offset=-5',
+  });
   assert.equal(ui.el('sourceFilter').value, 'jira');
   assert.match(ui.el('sourceFilter').selectedOptions[0].textContent, /jira \(0\)/);
   // Invalid limits and offsets are clamped before the first request.
@@ -804,4 +889,298 @@ test('a deep-linked tab is shown through Bootstrap when it is available', async 
   });
   assert.deepEqual(shown, ['controlIsmsTab']);
   assert.ok(ui.el('controlIsmsView').querySelector('table'));
+});
+
+const requirementsText = (ui) => ui.el('controlRequirements').textContent.replace(/\s+/g, ' ');
+const tileTexts = (ui) =>
+  [...ui.el('controlRequirements').querySelectorAll('.kpi')].map((tile) =>
+    tile.textContent.replace(/\s+/g, ' ').trim(),
+  );
+
+test('Requirements opens first and assembles policies, evidence and measures', async (t) => {
+  const { ui } = await controlPage(t, { query: '&id=c1' });
+  const root = ui.el('controlRequirements');
+  assert.doesNotMatch(ui.window.location.search, /tab=/);
+  // Untrusted titles, descriptions and summaries stay text.
+  assert.equal(root.querySelector('img, b'), null);
+  assert.deepEqual(tileTexts(ui), [
+    'Policies and processes: In place 4 linked to this control',
+    'Evidence: In place 41 events 3 sources, latest 2026-03-05T09:00:00',
+    'Measures and tests: Needs attention 4 1 of 2 meeting target; 1 without a result',
+  ]);
+  assert.deepEqual(
+    [...root.querySelectorAll('.kpi')].map((tile) => tile.getAttribute('href')),
+    ['#requirementsPolicies', '#requirementsEvidence', '#requirementsMeasures'],
+  );
+
+  const policies = [...root.querySelectorAll('#requirementsPolicies tbody tr')];
+  assert.deepEqual(
+    policies.map((row) => [...row.cells].map((cell) => cell.textContent.trim())),
+    [
+      ['<img src=x>Access policy', 'Policy', 'Written in Keen', 'v3', '2026-02-01T00:00:00Z'],
+      ['Leavers process', 'Process', 'leavers.pdf', '-', '-'],
+      ['Document', 'Record', 'Link', '-', '-'],
+      ['Draft', 'Document', '-', '-', '-'],
+    ],
+  );
+  assert.equal(
+    policies[0].querySelector('a').getAttribute('href'),
+    '/isms-document.html?id=d1&framework=A',
+  );
+
+  const sources = [...root.querySelectorAll('#requirementsEvidence tbody tr')];
+  assert.deepEqual(
+    sources.map((row) => row.cells[0].querySelector('.fw-semibold').textContent),
+    ['jenkins', 'diary', 'Unknown source'],
+  );
+  assert.equal(
+    sources[1].cells[0].querySelector('.small-muted').textContent,
+    '1 entry recorded when a record was linked',
+  );
+  assert.equal(
+    sources[0].querySelector('a').getAttribute('href'),
+    '/control.html?id=c1&tab=evidence&source=jenkins&framework=A',
+  );
+  const actions = Object.fromEntries(
+    [...root.querySelectorAll('#requirementsEvidence .card-header a')].map((a) => [
+      a.textContent,
+      a.getAttribute('href'),
+    ]),
+  );
+  assert.deepEqual(actions, {
+    'Add diary evidence': '/admin.html?control=c1&framework=A#diary',
+    'Open evidence': '/control.html?id=c1&tab=evidence&framework=A',
+  });
+
+  const measures = [...root.querySelectorAll('#requirementsMeasures tbody tr')];
+  assert.deepEqual(
+    measures.map((row) => [
+      row.cells[1].firstElementChild.textContent,
+      row.cells[1].querySelector('.eff-metric-threshold-label')?.textContent || '',
+    ]),
+    [
+      ['100 %', 'Meets target'],
+      ['82 %', 'Outside target'],
+      ['No result yet', ''],
+      ['Completed', ''],
+    ],
+  );
+  assert.match(measures[0].cells[0].textContent, /<b>Disposal certificates<\/b>\s*Monthly/);
+  assert.equal(
+    measures[0].querySelector('a').getAttribute('href'),
+    '/isms-effectiveness-measure.html?id=m1&framework=A',
+  );
+  assert.equal(
+    measures[2].querySelector('td:last-child a').getAttribute('href'),
+    '/isms.html?tab=effectiveness&record=m3&framework=A',
+  );
+
+  // The evidence list waits for its tab, and the ISMS tab reuses the
+  // references Requirements read.
+  assert.equal(
+    ui.calls.some((c) => c.url.startsWith('/api/v1/events?')),
+    false,
+  );
+  ui.el('controlIsmsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('controlIsmsView').querySelector('table'));
+  assert.equal(ui.calls.filter((c) => c.url.startsWith('/api/v1/controls/c1/isms?')).length, 1);
+  ui.el('controlEvidenceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /pushed/.test(ui.el('rows').textContent));
+  assert.match(ui.window.location.search, /tab=evidence/);
+  // Opening Requirements again reuses what it loaded.
+  const before = ui.calls.length;
+  ui.el('controlRequirementsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  assert.equal(ui.calls.length, before);
+});
+
+test('a source count opens the evidence list filtered to that source', async (t) => {
+  // An earlier search in the address leaves the list once a count is chosen.
+  const { ui } = await controlPage(t, { query: '&id=c1&q=deploy' });
+  assert.equal(ui.el('localQ').value, 'deploy');
+  const link = () => ui.el('controlRequirements').querySelector('a[data-open-evidence="jenkins"]');
+  // A click with a modifier opens the link in the usual way.
+  const opened = new ui.window.MouseEvent('click', {
+    bubbles: true,
+    cancelable: true,
+    ctrlKey: true,
+  });
+  link().dispatchEvent(opened);
+  assert.equal(opened.defaultPrevented, false);
+  assert.equal(
+    ui.calls.some((c) => c.url.startsWith('/api/v1/events?')),
+    false,
+  );
+
+  const plainClick = new ui.window.MouseEvent('click', { bubbles: true, cancelable: true });
+  link().dispatchEvent(plainClick);
+  assert.equal(plainClick.defaultPrevented, true);
+  await settle(() => /pushed/.test(ui.el('rows').textContent));
+  assert.equal(lastEventsUrl(ui).searchParams.get('source'), 'jenkins');
+  assert.equal(lastEventsUrl(ui).searchParams.has('q'), false);
+  assert.match(ui.window.location.search, /source=jenkins/);
+  assert.doesNotMatch(ui.window.location.search, /q=/);
+  assert.equal(ui.el('localQ').value, '');
+  assert.equal(ui.el('sourceFilter').value, 'jenkins');
+
+  // With the list loaded, Open evidence clears the source filter and reloads.
+  const all = ui.el('controlRequirements').querySelector('a[data-open-evidence=""]');
+  all.dispatchEvent(new ui.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  await settle(() => !lastEventsUrl(ui).searchParams.has('source'));
+  assert.doesNotMatch(ui.window.location.search, /source=/);
+});
+
+test('each reader sees the requirement parts they can read', async (t) => {
+  const evidenceOnly = await controlPage(t, { query: '&id=c1', me: { can_view_events: true } });
+  const text = requirementsText(evidenceOnly.ui);
+  assert.match(text, /You do not have permission to view policies and processes/);
+  assert.match(text, /You do not have permission to view effectiveness measures/);
+  assert.ok(!evidenceOnly.ui.calls.some((c) => /\/(isms|effectiveness-measures)\?/.test(c.url)));
+  assert.deepEqual(
+    tileTexts(evidenceOnly.ui).map((tile) => tile.split(':')[0]),
+    ['Policies and processes', 'Evidence', 'Measures and tests'],
+  );
+  assert.match(tileTexts(evidenceOnly.ui)[0], /Not available - Not available/);
+  // Only administrators add diary evidence, and ISMS managers record results.
+  const root = evidenceOnly.ui.el('controlRequirements');
+  assert.deepEqual(
+    [...root.querySelectorAll('.card-header a')].map((a) => a.textContent),
+    ['Open evidence'],
+  );
+
+  const ismsReader = await controlPage(t, { query: '&id=c1', me: { can_view_isms: true } });
+  assert.match(requirementsText(ismsReader.ui), /You do not have permission to view evidence/);
+  assert.ok(!ismsReader.ui.calls.some((c) => c.url.includes('/evidence/summary')));
+  assert.equal(ismsReader.ui.el('controlRequirements').querySelector('a[href*="record="]'), null);
+});
+
+test('switched-off features leave their requirement parts out', async (t) => {
+  const features = (enabled) => ({ is_admin: true, features: { enabled } });
+  const evidence = await controlPage(t, {
+    query: '&id=c1',
+    me: features({ documents: false, effectiveness: false }),
+  });
+  assert.equal(evidence.ui.el('requirementsPolicies'), null);
+  assert.equal(evidence.ui.el('requirementsMeasures'), null);
+  assert.ok(evidence.ui.el('requirementsEvidence'));
+  assert.deepEqual(tileTexts(evidence.ui).length, 1);
+  assert.ok(!evidence.ui.calls.some((c) => /\/(isms|effectiveness-measures)\?/.test(c.url)));
+
+  const none = await controlPage(t, {
+    query: '&id=c1',
+    me: features({ isms: false, evidence: false }),
+  });
+  assert.equal(
+    requirementsText(none.ui),
+    'Policies, evidence and measures are switched off for this installation.',
+  );
+});
+
+test('requirement load failures stay in their own sections', async (t) => {
+  const { ui } = await controlPage(t, {
+    query: '&id=c1',
+    fail: { isms: true, summary: true, measures: true },
+  });
+  const text = requirementsText(ui);
+  assert.match(text, /Failed to load linked policies and processes/);
+  assert.match(text, /Failed to load the evidence summary/);
+  assert.match(text, /Failed to load linked effectiveness measures/);
+  assert.equal(tileTexts(ui).filter((tile) => /Not available/.test(tile)).length, 3);
+  // A failed reference load is tried again when the ISMS tab opens.
+  ui.el('controlIsmsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /Failed to load ISMS references/.test(ui.el('controlIsmsView').textContent));
+  assert.equal(ui.calls.filter((c) => c.url.startsWith('/api/v1/controls/c1/isms?')).length, 2);
+});
+
+test('a control with nothing linked asks for each requirement', async (t) => {
+  const { ui } = await controlPage(t, {
+    query: '&id=c1',
+    empty: { documents: true, summary: true, measures: true },
+  });
+  const text = requirementsText(ui);
+  assert.match(text, /No policies or processes are linked yet/);
+  assert.match(text, /No evidence is mapped to this control yet/);
+  assert.match(text, /No effectiveness measures are linked yet/);
+  assert.deepEqual(tileTexts(ui), [
+    'Policies and processes: Needs attention 0 None linked yet',
+    'Evidence: Needs attention 0 events None mapped yet',
+    'Measures and tests: Needs attention 0 None linked yet',
+  ]);
+});
+
+test('measures with every result on target show as in place', async (t) => {
+  const onTarget = {
+    id: 'm1',
+    summary: 'Restore test',
+    target_value: 1,
+    threshold_operator: 'gte',
+    latest_entry: { metric_value: 1, recorded_at: '2026-03-01T00:00:00Z' },
+  };
+  const met = await controlPage(t, { query: '&id=c1', measures: [onTarget] });
+  assert.equal(tileTexts(met.ui)[2], 'Measures and tests: In place 1 1 of 1 meeting target');
+  // Results without a numeric target are listed without a comparison.
+  const described = await controlPage(t, {
+    query: '&id=c1',
+    measures: [{ id: 'm5', summary: 'Review', latest_entry: { qualitative_value: 'Done' } }],
+  });
+  assert.equal(
+    tileTexts(described.ui)[2],
+    'Measures and tests: In place 1 No results compared with a target',
+  );
+});
+
+test('a tab chosen while the control loads fills once the control arrives', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const { ui } = await controlPage(t, { query: '&id=c1', gate });
+  ui.el('controlEvidenceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  assert.match(ui.window.location.search, /tab=evidence/);
+  release();
+  await settle(() => /pushed/.test(ui.el('rows').textContent));
+  // Requirements waits for its own tab.
+  assert.equal(
+    ui.calls.some((c) => c.url.includes('/evidence/summary')),
+    false,
+  );
+});
+
+test('linking or unlinking a control reloads Requirements and evidence when next shown', async (t) => {
+  const { ui } = await controlPage(t, {
+    query: '&id=c1',
+    globals: { confirm: () => true },
+  });
+  const count = (part) => ui.calls.filter((c) => c.url.includes(part)).length;
+  ui.el('controlEvidenceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /pushed/.test(ui.el('rows').textContent));
+  assert.deepEqual([count('/evidence/summary'), count('/api/v1/events?')], [1, 1]);
+
+  await openRelated(ui);
+  ui.el('crossFrameworkSource').value = 'B';
+  ui.el('crossFrameworkSource').dispatchEvent(new ui.window.Event('change'));
+  await settle(() => ui.el('crossFrameworkControl').options.length === 3);
+  ui.el('crossFrameworkControl').value = 'b7';
+  ui.el('crossFrameworkForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => /Control link saved/.test(ui.el('status').textContent));
+  await settle(() => ui.idle());
+  // Nothing reloads behind the Related controls tab.
+  assert.deepEqual([count('/evidence/summary'), count('/api/v1/events?')], [1, 1]);
+  ui.el('controlRequirementsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => count('/evidence/summary') === 2);
+  ui.el('controlEvidenceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => count('/api/v1/events?') === 2);
+
+  ui.el('crossFrameworkView').value = 'B';
+  ui.el('crossFrameworkView').dispatchEvent(new ui.window.Event('change'));
+  ui.el('crossFrameworkLinks').querySelector('[data-remove-cross-link]').click();
+  await settle(() => /Control link removed/.test(ui.el('status').textContent));
+  ui.el('controlRequirementsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => count('/evidence/summary') === 3);
+});
+
+test('the ISMS tab names what it lists when only policies or measures are linked', async (t) => {
+  const { ui } = await controlPage(t, { query: '&id=c1&tab=isms', empty: { ismsRecords: true } });
+  await settle(() => !/Loading/.test(ui.el('controlIsmsView').textContent));
+  assert.equal(
+    ui.el('controlIsmsView').textContent,
+    'No SWOT items, objectives, organisation roles, assets or meetings are linked to this control.',
+  );
 });

@@ -103,7 +103,7 @@ test('effectiveness metric entry shows its value against the parent measure targ
   assert.match(ui.el('parentMetricKey').innerHTML, /<code>mttr<\/code>/);
   assert.match(
     ui.el('metricControls').querySelector('a').getAttribute('href'),
-    /control\.html\?id=c1&tab=isms/,
+    /control\.html\?id=c1&framework=/,
   );
   const body = await sample(ui, posted, 'sampleMetricAudit');
   assert.equal(body.entity_type, 'isms_effectiveness_metric');
@@ -213,6 +213,11 @@ test('ISMS documents link uploaded files and only safe external URLs', async (t)
   assert.equal(ui.el('openDocumentLink').getAttribute('href'), '/api/v1/isms/documents/x1/file');
   assert.equal(ui.el('openDocumentLink').style.display, '');
   assert.match(ui.el('swotRelatedPane').textContent, /No SWOT items linked/);
+  // A document's controls open on Requirements, which lists their policies.
+  assert.equal(
+    ui.el('documentControls').querySelector('a').getAttribute('href'),
+    '/control.html?id=c1&framework=A',
+  );
   const body = await sample(ui, posted, 'sampleDocumentAudit');
   assert.equal(body.entity_type, 'isms_document');
 });
@@ -300,6 +305,11 @@ test('objectives show status, owners and linked requirements', async (t) => {
   assert.match(ui.el('objectiveMeta').textContent, /^2026-12-31 · In Progress · updated/);
   assert.equal(ui.el('objectiveStatusValue').textContent, 'In Progress');
   assert.equal(ui.el('objectiveMetric').textContent, 'No metric recorded.');
+  // Other ISMS records link to the control's ISMS tab.
+  assert.equal(
+    ui.el('objectiveControls').querySelector('a').getAttribute('href'),
+    '/control.html?id=c1&tab=isms&framework=A',
+  );
   const body = await sample(ui, posted, 'sampleObjectiveAudit');
   assert.equal(body.entity_type, 'isms_objective');
   const empty = await detail(t, 'isms-objective', {

@@ -92,6 +92,11 @@ def test_admin_only_csrf_versions_and_preserved_settings(keen):
         ({"swot": False}, "/v1/isms/swot", "GET"),
         ({"people": False}, "/v1/isms/people", "GET"),
         ({"effectiveness": False}, "/v1/isms/effectiveness-measures", "GET"),
+        (
+            {"evidence": False},
+            "/v1/controls/00000000-0000-0000-0000-000000000001/evidence/summary",
+            "GET",
+        ),
     ],
 )
 def test_disabled_routes_refuse_even_admins(keen, changes, path, method):

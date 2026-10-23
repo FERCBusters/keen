@@ -15,10 +15,13 @@ export function badgeList(items, labelKey = 'ref', urlFn = null) {
     .join('');
 }
 
-export function controlBadges(items, framework) {
+// Control links open the tab that lists the record: Requirements (the
+// control's default tab, `tab: ''`) for policies, processes and measures, and
+// the ISMS tab for other records.
+export function controlBadges(items, framework, { tab = 'isms' } = {}) {
   return badgeList(items, 'ref', (c) =>
     withFramework(
-      `/control.html?id=${encodeURIComponent(c.id)}&tab=isms`,
+      `/control.html?id=${encodeURIComponent(c.id)}${tab ? `&tab=${tab}` : ''}`,
       c.framework || framework,
     ),
   );

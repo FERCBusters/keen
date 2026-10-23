@@ -42,6 +42,12 @@ const topics = {
     "Insights compare recent activity with this source's own history: how often it usually sends events, whether it has gone quiet, which days spiked and which summaries keep repeating.",
     'A quiet source can mean a stalled collector, expired credentials or a genuinely idle system; check collection before drawing a control conclusion. Open a repeated unmapped summary to see suggested controls for a rule.',
   ],
+  controlRequirements: [
+    'Control requirements',
+    'using-frameworks.html#control-requirements',
+    'Requirements brings together the policies and processes linked to a control, the evidence its mapping rules and the Diary supply, and its effectiveness measures with their latest results.',
+    'Start with any part marked as needing attention: link a policy, add a mapping rule or Diary entry, or record a measure result. The guide explains each part.',
+  ],
   frameworks: [
     'Frameworks and scope',
     'using-frameworks.html',
@@ -301,6 +307,7 @@ const tabs = {
   soaIsmsDocumentsTab: 'documents',
   soaIsmsEffectivenessTab: 'measures',
   soaIsmsOrgAssetsTab: 'peopleAssets',
+  controlRequirementsTab: 'controlRequirements',
   controlRisksTab: 'risks',
   soaRisksTab: 'risks',
   controlEvidenceTab: 'events',

@@ -1,5 +1,6 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { createRelatedControlsBrowser } from './related-controls.js';
+import { createControlRequirements } from './control-requirements.js';
 import {
   initNavbar,
   apiGet,
@@ -65,6 +66,7 @@ const saveControlJustificationBtn = document.getElementById('saveControlJustific
 const saveClauseLinksBtn = document.getElementById('saveClauseLinks');
 const editClauseApplicabilityBtn = document.getElementById('editClauseApplicability');
 const controlsBreadcrumb = document.getElementById('controlsBreadcrumb');
+const controlRequirementsTab = document.getElementById('controlRequirementsTab');
 const controlEvidenceTab = document.getElementById('controlEvidenceTab');
 const controlRelatedTab = document.getElementById('controlRelatedTab');
 const controlJustificationTab = document.getElementById('controlJustificationTab');
@@ -106,6 +108,64 @@ const pagerButtons = collectOffsetPagerButtons();
 
 let sourceMeta = {};
 let ctrl = null;
+// The tab showing. One chosen before the control has loaded fills once it has.
+let activeTab = 'requirements';
+let evidenceLoaded = null;
+// The ISMS tab and Requirements read the same references, so one request
+// serves both for the control's framework.
+let ismsReferences = null;
+
+function loadIsmsReferences() {
+  const fw = ctrl?.framework || framework;
+  if (ismsReferences?.framework !== fw) {
+    const promise = apiGet(
+      `/api/v1/controls/${encodeURIComponent(id)}/isms?framework=${encodeURIComponent(fw)}`,
+    );
+    ismsReferences = { framework: fw, promise };
+    promise.catch(() => {
+      if (ismsReferences?.promise === promise) ismsReferences = null;
+    });
+  }
+  return ismsReferences.promise;
+}
+
+const requirements = createControlRequirements({
+  root: document.getElementById('controlRequirements'),
+  me,
+  isms: loadIsmsReferences,
+  sourceName: (source) => String(sourceLabel(source, sourceMeta) || source),
+  onOpenEvidence: openEvidence,
+});
+
+function loadRequirements() {
+  if (!ctrl) return null;
+  return requirements.load({ id: ctrl.id || id, framework: ctrl.framework || framework });
+}
+
+// Evidence loads when its tab first opens.
+function ensureEvidence() {
+  if (!ctrl) return null;
+  evidenceLoaded ||= Promise.all([loadEvents(), loadFacets()]);
+  return evidenceLoaded;
+}
+
+// Opens the evidence list as Requirements counts it: every event, or one
+// source's, without an earlier search.
+function openEvidence(source) {
+  state = { ...state, q: '', source: source || '', offset: 0 };
+  setQuery({ q: null, source: state.source || null, offset: 0 });
+  syncInputs();
+  if (evidenceLoaded) evidenceLoaded = Promise.all([loadEvents(), loadFacets()]);
+  activateControlTab('evidence');
+  return ensureEvidence();
+}
+
+// Evidence and Requirements include what linked controls supply, so both
+// load afresh when next shown.
+function controlLinksChanged() {
+  requirements.reset();
+  evidenceLoaded = null;
+}
 let crossFrameworks = [];
 let relatedLoaded = false;
 const relatedControls = createRelatedControlsBrowser(document, { isAdmin: !!me?.is_admin });
@@ -172,8 +232,8 @@ crossForm?.addEventListener('submit', async (event) => {
     });
     document.getElementById('crossFrameworkRationale').value = '';
     toast(status, 'Control link saved. Existing evidence is now visible here.', 'success');
+    controlLinksChanged();
     await loadCrossFrameworkLinks();
-    reload();
   } catch (e) {
     toast(status, `Could not link controls: ${String(e)}`, 'danger');
   }
@@ -186,8 +246,8 @@ crossList?.addEventListener('click', async (event) => {
       `/api/v1/controls/${encodeURIComponent(id)}/cross-framework/${encodeURIComponent(button.dataset.removeCrossLink)}`,
     );
     toast(status, 'Control link removed.', 'success');
+    controlLinksChanged();
     await loadCrossFrameworkLinks();
-    reload();
   } catch (e) {
     toast(status, `Could not remove control link: ${String(e)}`, 'danger');
   }
@@ -260,23 +320,25 @@ function renderControlJustificationCard() {
   if (controlJustification) controlJustification.value = ctrl?.justification || '';
 }
 
+// Records the tab showing and keeps it in the address.
 function setControlTabQuery(tabName) {
+  activeTab = tabName || 'requirements';
   const p = new URLSearchParams(location.search);
-  if (!tabName || tabName === 'evidence') p.delete('tab');
+  if (!tabName || tabName === 'requirements') p.delete('tab');
   else p.set('tab', tabName);
   history.replaceState({}, '', `${location.pathname}?${p.toString()}`);
 }
 
+// Shows a tab and returns its name. Tabs the reader cannot use, unknown names
+// and inherited names such as `constructor` open Requirements.
 function activateControlTab(tabName) {
-  let name = tabName || 'evidence';
-  if (name === 'interestedparties') name = 'interested-parties';
-  if (name === 'risks' && !canViewRisks) name = 'evidence';
-  if (name === 'interested-parties' && !canViewInterestedParties) name = 'evidence';
-  if (name === 'isms' && !canViewIsms) name = 'evidence';
-  if (name === 'justification' && !me?.is_admin) name = 'evidence';
-  if ((name === 'effectiveness' || name === 'effectiveness-measures') && !canViewIsms)
-    name = 'evidence';
+  let name = tabName || 'requirements';
+  if (name === 'risks' && !canViewRisks) name = 'requirements';
+  if (name === 'interested-parties' && !canViewInterestedParties) name = 'requirements';
+  if (name === 'isms' && !canViewIsms) name = 'requirements';
+  if (name === 'justification' && !me?.is_admin) name = 'requirements';
   const tabs = {
+    requirements: controlRequirementsTab,
     evidence: controlEvidenceTab,
     related: controlRelatedTab,
     justification: controlJustificationTab,
@@ -286,10 +348,10 @@ function activateControlTab(tabName) {
     isms: controlIsmsTab,
     changelog: controlChangelogTab,
   };
-  // Only the page's own tab names count; `?tab=constructor` opens the evidence.
-  const tab = (Object.hasOwn(tabs, name) && tabs[name]) || controlEvidenceTab;
-  if (!tab || !window.bootstrap?.Tab) return;
-  window.bootstrap.Tab.getOrCreateInstance(tab).show();
+  if (!Object.hasOwn(tabs, name)) name = 'requirements';
+  if (tabs[name] && window.bootstrap?.Tab)
+    window.bootstrap.Tab.getOrCreateInstance(tabs[name]).show();
+  return name;
 }
 
 function wireControlTabs() {
@@ -306,7 +368,14 @@ function wireControlTabs() {
   } else {
     controlJustificationPane?.classList.add('d-none');
   }
-  controlEvidenceTab?.addEventListener('shown.bs.tab', () => setControlTabQuery('evidence'));
+  controlRequirementsTab?.addEventListener('shown.bs.tab', () => {
+    setControlTabQuery('requirements');
+    loadRequirements();
+  });
+  controlEvidenceTab?.addEventListener('shown.bs.tab', () => {
+    setControlTabQuery('evidence');
+    ensureEvidence();
+  });
   controlRelatedTab?.addEventListener('shown.bs.tab', async () => {
     setControlTabQuery('related');
     await loadRelatedControls();
@@ -328,7 +397,7 @@ function wireControlTabs() {
     setControlTabQuery('changelog');
     loadControlChangelog();
   });
-  activateControlTab(qs('tab', 'evidence'));
+  activeTab = activateControlTab(qs('tab', 'requirements'));
 }
 
 wireControlTabs();
@@ -351,15 +420,8 @@ function _ismsEntityRows(data) {
       (x) => x.goal || x.requirement || 'Objective',
       () => '/isms.html?tab=objectives',
     ],
-    ['Documents', data.documents, (x) => x.title || 'Document', () => '/isms.html?tab=documents'],
     ['Organisation chart', data.org_nodes, (x) => x.name || 'Org node', () => '/isms.html?tab=org'],
     ['Assets', data.assets, (x) => x.asset || 'Asset', () => '/isms.html?tab=assets'],
-    [
-      'Effectiveness measures',
-      data.effectiveness_measures,
-      (x) => x.summary || 'Effectiveness measure',
-      (x) => `/isms-effectiveness-measure.html?id=${encodeURIComponent(x.id)}`,
-    ],
     [
       'Meetings',
       data.meetings,
@@ -378,7 +440,7 @@ function _ismsEntityRows(data) {
     }
   }
   if (!rows.length)
-    return '<div class="small-muted">No ISMS entities are currently linked to this control.</div>';
+    return '<div class="small-muted">No SWOT items, objectives, organisation roles, assets or meetings are linked to this control.</div>';
   return `<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th style="width:190px;">Type</th><th>Entity</th><th style="width:170px;">Updated</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 
@@ -393,9 +455,7 @@ async function loadControlIsms({ force = false } = {}) {
   if (ismsLoaded && !force) return;
   controlIsmsView.innerHTML = '<span class="small-muted">Loading ISMS references</span>';
   try {
-    const data = await apiGet(
-      `/api/v1/controls/${encodeURIComponent(id)}/isms?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
-    );
+    const data = await loadIsmsReferences();
     ismsLoaded = true;
     controlIsmsView.innerHTML = _ismsEntityRows(data || {});
   } catch (e) {
@@ -929,15 +989,17 @@ async function load() {
     renderLinkedClauses();
     renderAdminClauses();
 
-    // Evidence loads first; the other sections load alongside it.
-    const evidence = (async () => {
+    // The tab showing loads first, whether the page opened on it or it was
+    // chosen while the control loaded; the linked records load alongside it.
+    const tab = activeTab;
+    const opening = (async () => {
       sourceMeta = await getSourceMeta();
       syncInputs();
-      await Promise.all([loadEvents(), loadFacets()]);
+      if (tab === 'evidence') await ensureEvidence();
+      if (tab === 'requirements') await loadRequirements();
     })();
-    const tab = qs('tab');
     await Promise.all([
-      evidence,
+      opening,
       loadLinkedRisks(),
       loadLinkedInterestedParties({ force: true }),
       tab === 'related' ? loadRelatedControls() : null,
@@ -1012,6 +1074,7 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
   const p = new URLSearchParams();
   p.set('id', id);
   if (ctrl?.framework || framework) p.set('framework', ctrl?.framework || framework);
+  p.set('tab', 'evidence');
   if (state.q) p.set('q', state.q);
   if (state.source) p.set('source', state.source);
   if (state.limit) p.set('limit', String(state.limit));
