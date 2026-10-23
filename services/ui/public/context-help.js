@@ -245,7 +245,6 @@ const pages = {
   home: 'start',
   events: 'events',
   questions: 'questions',
-  'my-questions': 'questions',
   stories: 'stories',
   sources: 'sources',
   source: 'sources',
@@ -346,7 +345,7 @@ export function resolveHelp(trigger) {
     const pane = document.querySelector('#adminTabContent > .tab-pane.active');
     if (page === 'admin') key = own(panes, pane?.id) || 'sources';
     else {
-      const swot = ['/swot.html', '/isms-swot.html'].includes(location.pathname);
+      const swot = location.pathname === '/swot.html';
       key =
         activeTabTopic() ||
         (swot ? 'swot' : own(pages, page)) ||

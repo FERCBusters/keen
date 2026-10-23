@@ -49,7 +49,7 @@ PUBLIC_API = {
 
 # Pages served before sign-in. Everything else must show the login page.
 PUBLIC_PAGES = {"login.html", "mfa.html", "sso-email.html"}
-ADMIN_PAGES = {"admin.html", "agents.html"}
+ADMIN_PAGES = {"admin.html"}
 
 # Used when the suite runs outside a Keen checkout.
 FALLBACK_PAGES = [
@@ -80,15 +80,12 @@ FALLBACK_PAGES = [
     "audits.html",
     "audit.html",
     "questions.html",
-    "my-questions.html",
     "account.html",
     "documents.html",
     "assurance.html",
     "statement-of-applicability.html",
     "mitigator.html",
-    "bookstack-sections.html",
     "admin.html",
-    "agents.html",
 ]
 
 

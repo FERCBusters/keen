@@ -160,7 +160,7 @@ for (const color of ['#fff', '#ffffff'])
 for (const color of ['#000', '#000000'])
   test('dark badge ' + color, () => assert.equal(a.idealTextColor(color), '#f8fafc'));
 
-test('changelog loader propagates API failure without rendering error markup', async () => {
+test('changelog loader reports an API failure in its tab without the error text', async () => {
   const u = await loadUi('app.js', {
     vendor: {
       apiGet: async () => {
@@ -170,9 +170,9 @@ test('changelog loader propagates API failure without rendering error markup', a
   });
   try {
     const target = u.document.createElement('div');
-    await assert.rejects(u.api.loadEntityChangelog(target, '/api/fail'), /onerror/);
+    assert.equal(await u.api.loadEntityChangelog(target, '/api/fail'), null);
     assert.equal(target.querySelector('img'), null);
-    assert.match(target.textContent, /Loading/);
+    assert.equal(target.textContent, 'Failed to load changelog.');
   } finally {
     u.close();
   }

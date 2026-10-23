@@ -121,14 +121,22 @@ async function open(
         if (url.pathname === '/api/v1/questions/entities/story/s1') return { threads };
         throw new Error('Unexpected GET ' + url);
       }),
-    post,
+    post: async (url, body) => {
+      // Reading the questions marks their replies seen; tests follow the other posts.
+      if (url.pathname === '/api/v1/questions/entities/story/s1/mark-seen') return {};
+      if (!post) throw new Error('Unexpected POST ' + url);
+      return post(url, body);
+    },
     patch,
     put,
     remove,
   });
   await settle(() => ui.el('storyTitle').textContent !== 'Loading');
+  await settle(() => !/Loading questions/.test(ui.el('questionPanel').textContent));
   return ui;
 }
+
+const askForm = (ui) => ui.el('questionPanel').querySelector('[data-question-ask]');
 
 const timeline = (ui) =>
   [...ui.document.querySelectorAll('#timeline [data-item-id]')].map((li) => [
@@ -188,7 +196,7 @@ test('a reader sees the timeline in time order with withheld items marked', asyn
   for (const id of ['edit', 'deleteStory', 'sample', 'addItems', 'flowToolbar'])
     assert.equal(ui.el(id).hidden, true, id);
   assert.equal(ui.el('commentForm').hidden, false);
-  assert.equal(ui.el('questionForm').hidden, false);
+  assert.equal(askForm(ui).hidden, false);
   assert.equal(ui.document.querySelector('#timeline [data-edit-item]'), null);
   assert.equal(ui.el('commentCount').textContent, '1');
   assert.equal(ui.el('comments').querySelector('.story-note').textContent, 'Looks <complete>');
@@ -428,7 +436,7 @@ test('item edits, removals, comments and questions carry the current version', a
   assert.equal(calls.remove[1], '/api/v1/stories/s1/comments/k1');
 
   ui.el('questionBody').value = 'Why?';
-  ui.el('questionForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  askForm(ui).dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => calls.post.length === 2);
   assert.deepEqual(plain(calls.post[1]), ['/api/v1/questions/entities/story/s1', { body: 'Why?' }]);
 });
@@ -489,15 +497,16 @@ test('question threads show replies the author may send, and failures are report
       throw new Error('409 This story changed. Reload before saving.');
     },
   });
-  const forms = [...ui.el('questionList').querySelectorAll('[data-reply-thread]')];
+  // The author may reply to their own thread only.
+  const replies = [...ui.el('questionPanel').querySelectorAll('[data-question-action="reply"]')];
   assert.deepEqual(
-    forms.map((f) => f.dataset.replyThread),
+    replies.map((button) => button.closest('[data-thread]').dataset.thread),
     ['t1'],
   );
-  assert.equal(ui.el('questionList').textContent.includes('Why <was> it allowed?'), true);
-  forms[0].elements.body.value = 'Because of the change window';
-  forms[0].dispatchEvent(new ui.window.Event('submit', { bubbles: true, cancelable: true }));
-  await settle(() => posted.length === 1);
+  assert.equal(ui.el('questionPanel').textContent.includes('Why <was> it allowed?'), true);
+  ui.el('questionReply-t1').value = 'Because of the change window';
+  replies[0].click();
+  await settle(() => ui.el('status').textContent === 'Reply sent');
   assert.deepEqual(plain(posted[0]), [
     '/api/v1/questions/t1/posts',
     { body: 'Because of the change window' },
@@ -615,8 +624,10 @@ test('every refused change is reported and leaves the page as it was', async (t)
   reset();
 
   ui.el('questionBody').value = 'Why?';
-  ui.el('questionForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(reported);
+  askForm(ui).dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(
+    () => ui.el('status').textContent === 'Error: 409 This story changed. Reload before saving.',
+  );
   assert.equal(ui.el('questionBody').value, 'Why?');
   reset();
 

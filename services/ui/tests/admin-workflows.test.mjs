@@ -474,6 +474,16 @@ test('new users need a username and password, and the form resets after creation
   await settle(() => el('usersStatus').textContent === 'Failed: Error: Password is required');
   el('newEmail').value = 'riley@example.test';
   el('newPassword').value = 'synthetic-password-2';
+  // The role menu shares its choices with the users table and the group form.
+  assert.deepEqual(
+    [...el('newRole').options].map((o) => [o.value, o.textContent]),
+    [
+      ['inherit', 'Inherit (from groups)'],
+      ['normal', 'Normal'],
+      ['admin', 'Admin'],
+    ],
+  );
+  assert.equal(el('newRole').value, 'inherit');
   el('newRole').value = 'admin';
   submit();
   await settle(() => el('usersStatus').textContent === 'Created riley (Admin)');
@@ -601,14 +611,36 @@ test('groups open into an editable detail with members and permissions', async (
   assert.equal(state.calls.length, before);
 });
 
-test('groups are created from the form and opened for editing', async (t) => {
+test('New group opens the group form empty, creates the group and then edits it', async (t) => {
   const { el, ui, calls } = await admin(t);
-  const submit = (id) => el(id).dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  submit('groupCreateForm');
+  const submit = () =>
+    el('groupForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  // With no group open the form sends nothing.
+  submit();
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(calls('POST', '/api/v1/admin/groups').length, 0);
+
+  el('groupNew').click();
+  assert.equal(el('groupDetail').style.display, 'block');
+  assert.equal(el('groupDetailEmpty').style.display, 'none');
+  assert.equal(el('groupDetailTitle').textContent, 'New group');
+  assert.equal(el('groupSave').textContent, 'Create group');
+  // Deletion, members and permissions wait until the group exists.
+  assert.equal(el('groupDelete').hidden, true);
+  assert.equal(el('groupAccess').hidden, true);
+  assert.deepEqual(
+    [...el('groupRole').options].map((o) => [o.value, o.textContent]),
+    [
+      ['', 'No role'],
+      ['normal', 'Normal'],
+      ['admin', 'Admin'],
+    ],
+  );
+  submit();
   await settle(() => el('groupsStatus').textContent === 'Failed: Error: Group name is required');
-  el('newGroupName').value = ' Reviewers ';
-  el('newGroupRole').value = 'normal';
-  submit('groupCreateForm');
+  el('groupName').value = ' Reviewers ';
+  el('groupRole').value = 'normal';
+  submit();
   await settle(() => el('groupName').value === 'Auditors');
   assert.deepEqual(calls('POST', '/api/v1/admin/groups')[0].body, {
     name: 'Reviewers',
@@ -617,6 +649,17 @@ test('groups are created from the form and opened for editing', async (t) => {
   });
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(el('groupsStatus').textContent, 'Created group Reviewers');
+  assert.equal(el('groupDetailTitle').textContent, 'Edit group');
+  assert.equal(el('groupSave').textContent, 'Save details');
+  assert.equal(el('groupDelete').hidden, false);
+  assert.equal(el('groupAccess').hidden, false);
+
+  // Another new group starts from an empty form and clears the row selection.
+  el('groupNew').click();
+  assert.equal(el('groupName').value, '');
+  assert.equal(el('groupDesc').value, '');
+  assert.equal(el('groupRole').value, '');
+  assert.equal(el('groupsRows').querySelector('tr.table-active'), null);
 
   el('groupsRefresh').click();
   await settle(() => calls('GET', '/api/v1/admin/groups').length >= 4);

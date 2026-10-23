@@ -150,16 +150,11 @@
       <div id="templateScheduleBody" class="collapse show">
         <div class="card-body">
           <form id="templateScheduleForm" data-feature="audit_scheduling" class="row g-2">
+            <!-- pages/audit-schedule.js adds the fuzzy date rules, months and recurrences. -->
             <div class="col-12 col-lg-4">
               <label class="form-label small-muted mb-1" for="tmplDateRule">Date selector</label>
               <select id="tmplDateRule" class="form-select">
                 <option value="exact">Exact next run date</option>
-                <option value="first_weekday_of_month">First weekday of month</option>
-                <option value="first_monday_of_month">First Monday of month</option>
-                <option value="first_tuesday_of_month">First Tuesday of month</option>
-                <option value="first_wednesday_of_month">First Wednesday of month</option>
-                <option value="first_thursday_of_month">First Thursday of month</option>
-                <option value="first_friday_of_month">First Friday of month</option>
               </select>
               <div class="form-text">Use the fuzzy option for recurring schedules such as “first Monday of January”.</div>
             </div>
@@ -178,20 +173,7 @@
               <div class="row g-2">
                 <div class="col-7">
                   <label class="form-label small-muted mb-1" for="tmplFuzzyMonth" id="tmplFuzzyMonthLabel">First weekday of</label>
-                  <select id="tmplFuzzyMonth" class="form-select">
-                    <option value="1">January</option>
-                    <option value="2">February</option>
-                    <option value="3">March</option>
-                    <option value="4">April</option>
-                    <option value="5">May</option>
-                    <option value="6">June</option>
-                    <option value="7">July</option>
-                    <option value="8">August</option>
-                    <option value="9">September</option>
-                    <option value="10">October</option>
-                    <option value="11">November</option>
-                    <option value="12">December</option>
-                  </select>
+                  <select id="tmplFuzzyMonth" class="form-select"></select>
                 </div>
                 <div class="col-5">
                   <label class="form-label small-muted mb-1" for="tmplFuzzyYear">Start year</label>
@@ -205,13 +187,7 @@
 
             <div class="col-12 col-md-4 col-lg-3">
               <label class="form-label small-muted mb-1" for="tmplRecurrence">Recurrence</label>
-              <select id="tmplRecurrence" class="form-select">
-                <option value="once">Once</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="quarterly">Quarterly</option>
-                <option value="yearly">Yearly</option>
-              </select>
+              <select id="tmplRecurrence" class="form-select"></select>
             </div>
             <div class="col-6 col-md-2 col-lg-2">
               <label class="form-label small-muted mb-1" for="tmplInterval">Every</label>

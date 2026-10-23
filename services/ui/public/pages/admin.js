@@ -309,12 +309,35 @@ const newEmail = document.getElementById('newEmail');
 const newPassword = document.getElementById('newPassword');
 const newRole = document.getElementById('newRole');
 
+// Every role menu on this page is built from this list. A user's menu starts
+// with inheriting the role of their groups; a group's menu starts with no role.
+const ROLE_CHOICES = [
+  ['normal', 'Normal'],
+  ['admin', 'Admin'],
+];
+const ROLE_MENU_FIRST_CHOICE = {
+  inherit: ['inherit', 'Inherit (from groups)'],
+  none: ['', 'No role'],
+};
+
+function roleMenuOptionsHtml(menu, selected) {
+  return [ROLE_MENU_FIRST_CHOICE[menu], ...ROLE_CHOICES]
+    .map(
+      ([value, label]) =>
+        `<option value="${esc(value)}"${value === selected ? ' selected' : ''}>${esc(label)}</option>`,
+    )
+    .join('');
+}
+
+document.querySelectorAll('select[data-role-menu]').forEach((select) => {
+  const menu = select.dataset.roleMenu;
+  select.innerHTML = roleMenuOptionsHtml(menu, ROLE_MENU_FIRST_CHOICE[menu][0]);
+});
+
 function roleLabel(role) {
   const r = String(role || '').toLowerCase();
-  if (r === 'admin') return 'Admin';
-  if (r === 'normal') return 'Normal';
   if (r === 'inherit') return 'Inherit';
-  return r || 'Normal';
+  return ROLE_CHOICES.find(([value]) => value === r)?.[1] || r || 'Normal';
 }
 
 function groupRoleSuffix(g) {
@@ -336,16 +359,16 @@ function renderUsers(users) {
 
       return `
       <tr data-user-id="${esc(u.id)}">
-        <td data-username="${esc(u.username || '')}">${userPillHtml(u)}</td>
+        <td data-username="${esc(u.username || '')}">
+          ${userPillHtml(u)}
+          <div class="small-muted mt-1">Created ${esc(created)}</div>
+          <div class="small-muted">Updated ${esc(updated)}</div>
+        </td>
         <td>
           <input class="form-control form-control-sm" type="email" data-email value="${esc(u.email || '')}" placeholder="user@example.com" />
         </td>
         <td>
-          <select class="form-select form-select-sm" data-role>
-            <option value="inherit" ${role === 'inherit' ? 'selected' : ''}>Inherit (from groups)</option>
-            <option value="normal" ${role === 'normal' ? 'selected' : ''}>Normal</option>
-            <option value="admin" ${role === 'admin' ? 'selected' : ''}>Admin</option>
-          </select>
+          <select class="form-select form-select-sm" data-role>${roleMenuOptionsHtml('inherit', role)}</select>
           ${showEff ? `<div class="small-muted mt-1">Effective: ${esc(roleLabel(effRole))}</div>` : ''}
         </td>
         <td>
@@ -353,20 +376,20 @@ function renderUsers(users) {
             <input class="form-check-input" type="checkbox" data-active ${activeChecked} />
           </div>
         </td>
-        <td class="small-muted">${esc(created)}</td>
-        <td class="small-muted">${esc(updated)}</td>
-        <td class="d-flex flex-wrap gap-2">
-          <button class="btn btn-outline-primary btn-sm" type="button" data-save>Save</button>
-          <button class="btn btn-outline-primary btn-sm" type="button" data-access>Access</button>
-          <button class="btn btn-outline-primary btn-sm" type="button" data-reset ${u.auth_backend === 'ldap' ? 'disabled title="Change this password in your LDAP directory"' : ''}>${u.auth_backend === 'ldap' ? 'LDAP password' : 'Password'}</button>
-          <button class="btn btn-outline-danger btn-sm" type="button" data-delete>Delete</button>
+        <td>
+          <div class="d-flex flex-wrap gap-1">
+            <button class="btn btn-outline-primary btn-sm" type="button" data-save>Save</button>
+            <button class="btn btn-outline-primary btn-sm" type="button" data-access>Access</button>
+            <button class="btn btn-outline-primary btn-sm" type="button" data-reset ${u.auth_backend === 'ldap' ? 'disabled title="Change this password in your LDAP directory"' : ''}>${u.auth_backend === 'ldap' ? 'LDAP password' : 'Password'}</button>
+            <button class="btn btn-outline-danger btn-sm" type="button" data-delete>Delete</button>
+          </div>
         </td>
       </tr>
     `;
     })
     .join('');
 
-  usersRows.innerHTML = rows || `<tr><td colspan="7" class="small-muted">No users found.</td></tr>`;
+  usersRows.innerHTML = rows || `<tr><td colspan="5" class="small-muted">No users found.</td></tr>`;
 
   usersRows.querySelectorAll('[data-save]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -400,7 +423,7 @@ function renderUsers(users) {
       const tr = btn.closest('tr');
       if (!tr) return;
       const userId = tr.getAttribute('data-user-id');
-      const username = (tr.querySelector('td')?.textContent || '').trim() || 'user';
+      const username = tr.querySelector('[data-username]')?.dataset.username || 'user';
       await openUserAccessModal(userId, username);
     });
   });
@@ -410,7 +433,7 @@ function renderUsers(users) {
       const tr = btn.closest('tr');
       if (!tr) return;
       const userId = tr.getAttribute('data-user-id');
-      const username = (tr.querySelector('td')?.textContent || '').trim() || 'user';
+      const username = tr.querySelector('[data-username]')?.dataset.username || 'user';
 
       const pw = prompt(`Set a new password for ${username}:`);
       if (!pw) return;
@@ -430,7 +453,7 @@ function renderUsers(users) {
       const tr = btn.closest('tr');
       if (!tr) return;
       const userId = tr.getAttribute('data-user-id');
-      const username = (tr.querySelector('td')?.textContent || '').trim() || 'user';
+      const username = tr.querySelector('[data-username]')?.dataset.username || 'user';
       if (
         !confirm(
           `Delete ${username} permanently? This removes the account row but keeps historical audit/question records with a blank/deleted author.`,
@@ -452,7 +475,7 @@ function renderUsers(users) {
 async function refreshUsers(showLoading = true) {
   if (!usersRows) return;
   if (showLoading) {
-    usersRows.innerHTML = `<tr><td colspan="7" class="small-muted">Loading</td></tr>`;
+    usersRows.innerHTML = `<tr><td colspan="5" class="small-muted">Loading</td></tr>`;
   }
 
   try {
@@ -624,18 +647,17 @@ const groupsRows = document.getElementById('groupsRows');
 const groupsRefresh = document.getElementById('groupsRefresh');
 const groupsStatus = document.getElementById('groupsStatus');
 
-const groupCreateForm = document.getElementById('groupCreateForm');
-const newGroupName = document.getElementById('newGroupName');
-const newGroupDesc = document.getElementById('newGroupDesc');
-const newGroupRole = document.getElementById('newGroupRole');
-
+const groupNew = document.getElementById('groupNew');
 const groupDetailEmpty = document.getElementById('groupDetailEmpty');
 const groupDetail = document.getElementById('groupDetail');
+const groupDetailTitle = document.getElementById('groupDetailTitle');
 const groupDetailMeta = document.getElementById('groupDetailMeta');
+const groupForm = document.getElementById('groupForm');
 const groupName = document.getElementById('groupName');
 const groupDesc = document.getElementById('groupDesc');
 const groupRole = document.getElementById('groupRole');
 const groupSave = document.getElementById('groupSave');
+const groupAccess = document.getElementById('groupAccess');
 const groupDelete = document.getElementById('groupDelete');
 const groupMembers = document.getElementById('groupMembers');
 const groupPermissions = document.getElementById('groupPermissions');
@@ -643,6 +665,31 @@ const groupApplyMembers = document.getElementById('groupApplyMembers');
 const groupApplyPermissions = document.getElementById('groupApplyPermissions');
 
 let selectedGroupId = null;
+// The group form creates a group ('create') or edits the selected one ('edit');
+// null while no group is open.
+let groupFormMode = null;
+
+function showGroupForm(mode) {
+  groupFormMode = mode;
+  const editing = mode === 'edit';
+  if (groupDetailEmpty) groupDetailEmpty.style.display = mode ? 'none' : 'block';
+  if (groupDetail) groupDetail.style.display = mode ? 'block' : 'none';
+  if (groupDetailTitle) groupDetailTitle.textContent = editing ? 'Edit group' : 'New group';
+  if (groupSave) groupSave.textContent = editing ? 'Save details' : 'Create group';
+  // Deletion, members and permissions apply once the group exists.
+  if (groupDelete) groupDelete.hidden = !editing;
+  if (groupAccess) groupAccess.hidden = !editing;
+}
+
+function openNewGroup() {
+  selectedGroupId = null;
+  showGroupsStatus('', 'info');
+  groupForm?.reset();
+  if (groupDetailMeta) groupDetailMeta.textContent = '';
+  showGroupForm('create');
+  renderGroups(cachedGroups);
+  groupName?.focus();
+}
 
 function showGroupsStatus(msg, kind = 'info') {
   if (!groupsStatus) return;
@@ -708,9 +755,7 @@ async function openGroupDetail(gid, { keepStatus = false } = {}) {
   selectedGroupId = String(gid);
   // A reload after a successful action keeps its confirmation visible.
   if (!keepStatus) showGroupsStatus('', 'info');
-
-  if (groupDetailEmpty) groupDetailEmpty.style.display = 'none';
-  if (groupDetail) groupDetail.style.display = 'block';
+  showGroupForm('edit');
 
   try {
     await refreshPermissions();
@@ -754,52 +799,39 @@ async function openGroupDetail(gid, { keepStatus = false } = {}) {
 }
 
 if (groupsRefresh) groupsRefresh.addEventListener('click', () => refreshGroups(true));
+groupNew?.addEventListener('click', openNewGroup);
 
-if (groupCreateForm) {
-  groupCreateForm.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    showGroupsStatus('', 'info');
-    try {
-      const name = (newGroupName?.value || '').trim();
-      const description = (newGroupDesc?.value || '').trim() || null;
-      const roleRaw = (newGroupRole?.value || '').trim();
-      const role = roleRaw ? roleRaw : null;
-      if (!name) throw new Error('Group name is required');
-      const g = await apiPost('/api/v1/admin/groups', { name, description, role });
-      toast(groupsStatus, `Created group ${name}`, 'success');
-      if (newGroupName) newGroupName.value = '';
-      if (newGroupDesc) newGroupDesc.value = '';
-      if (newGroupRole) newGroupRole.value = '';
-      await refreshGroups(false);
-      if (g?.id) await openGroupDetail(g.id, { keepStatus: true });
-    } catch (e) {
-      toast(groupsStatus, `Failed: ${String(e)}`, 'danger');
-    }
-  });
-}
-
-if (groupSave) {
-  groupSave.addEventListener('click', async () => {
-    if (!selectedGroupId) return;
-    showGroupsStatus('', 'info');
-    try {
-      const payload = {
-        name: (groupName?.value || '').trim(),
-        description: (groupDesc?.value || '').trim(),
-        role: (groupRole?.value || '').trim(),
-      };
+groupForm?.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!groupFormMode) return;
+  showGroupsStatus('', 'info');
+  try {
+    const name = (groupName?.value || '').trim();
+    const description = (groupDesc?.value || '').trim();
+    const role = (groupRole?.value || '').trim();
+    if (!name) throw new Error('Group name is required');
+    if (groupFormMode === 'edit') {
       const res = await apiPatch(
         `/api/v1/admin/groups/${encodeURIComponent(String(selectedGroupId))}`,
-        payload,
+        { name, description, role },
       );
       toast(groupsStatus, 'Group updated', 'success');
       await refreshGroups(false);
       await openGroupDetail(res.id || selectedGroupId, { keepStatus: true });
-    } catch (e) {
-      toast(groupsStatus, `Failed: ${String(e)}`, 'danger');
+      return;
     }
-  });
-}
+    const g = await apiPost('/api/v1/admin/groups', {
+      name,
+      description: description || null,
+      role: role || null,
+    });
+    toast(groupsStatus, `Created group ${name}`, 'success');
+    await refreshGroups(false);
+    if (g?.id) await openGroupDetail(g.id, { keepStatus: true });
+  } catch (e) {
+    toast(groupsStatus, `Failed: ${String(e)}`, 'danger');
+  }
+});
 
 if (groupDelete) {
   groupDelete.addEventListener('click', async () => {
@@ -810,8 +842,7 @@ if (groupDelete) {
       await apiDelete(`/api/v1/admin/groups/${encodeURIComponent(String(selectedGroupId))}`);
       toast(groupsStatus, 'Group deleted', 'success');
       selectedGroupId = null;
-      if (groupDetail) groupDetail.style.display = 'none';
-      if (groupDetailEmpty) groupDetailEmpty.style.display = 'block';
+      showGroupForm(null);
       await refreshGroups(false);
     } catch (e) {
       toast(groupsStatus, `Failed: ${String(e)}`, 'danger');

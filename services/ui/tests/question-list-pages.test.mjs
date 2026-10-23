@@ -139,39 +139,3 @@ test('users with delete permission can remove their threads; empty and failed li
   assert.match(failed.ui.el('status').textContent, /Queue offline/);
   assert.match(failed.ui.el('status').className, /alert/);
 });
-
-test('my questions lists threads, deletes after confirmation and explains failures', async (t) => {
-  const { ui, state } = await questionsPage(t, 'my-questions', {
-    me: { can_delete_questions: true },
-    globals: { confirm: () => true },
-  });
-  const rows = [...ui.el('questionsTbody').querySelectorAll('tr')];
-  assert.equal(rows.length, 3);
-  // Each load brings the navbar's question count up to date.
-  assert.equal(state.bell, 1);
-  assert.equal(ui.el('questionsTbody').querySelector('img'), null);
-  assert.match(rows[0].textContent, /new reply/);
-  assert.match(rows[1].textContent, /pestle item · P-1/);
-  assert.equal(
-    rows[1].querySelector('a').getAttribute('href'),
-    '/pestle_item.html?id=p1&thread=t2&framework=A#questions',
-  );
-  ui.document.querySelector('[data-delete-question="t3"]').click();
-  await settle(() => ui.el('questionsTbody').querySelectorAll('tr').length === 2);
-  assert.deepEqual(state.removed, ['/api/v1/questions/t3']);
-  ui.el('btnRefresh').click();
-  await settle(() => ui.calls.filter((c) => c.url === '/api/v1/me/questions').length === 3);
-  await settle(() => state.bell === 3);
-
-  const readOnly = await questionsPage(t, 'my-questions', { me: {}, items: [] });
-  assert.equal(readOnly.ui.el('questionsEmpty').style.display, '');
-  const failed = await questionsPage(t, 'my-questions', { fail: true });
-  assert.equal(failed.ui.el('status').textContent, 'Failed to load questions: Error: Mine offline');
-  const deleteFailed = await questionsPage(t, 'my-questions', {
-    me: { is_admin: true },
-    deleteFail: true,
-    globals: { confirm: () => true },
-  });
-  deleteFailed.ui.document.querySelector('[data-delete-question="t1"]').click();
-  await settle(() => deleteFailed.ui.el('status').textContent === 'Delete refused');
-});

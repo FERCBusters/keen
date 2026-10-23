@@ -196,7 +196,6 @@ def _validate_landing_page(raw: str | None, *, is_admin: bool) -> str:
         "/events.html",
         "/sources.html",
         "/account.html",
-        "/my-questions.html",
         "/risks.html",
         "/pestle.html",
         "/pestle_item.html",

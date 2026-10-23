@@ -335,15 +335,11 @@ wireControlTabs();
 
 async function loadControlChangelog() {
   if (!controlChangelogEl || !id) return;
-  try {
-    await loadEntityChangelog(
-      controlChangelogEl,
-      `/api/v1/controls/${encodeURIComponent(id)}/changelog?limit=100`,
-      { empty: 'No control changes have been recorded yet.' },
-    );
-  } catch (e) {
-    controlChangelogEl.innerHTML = '<div class="text-danger p-3">Failed to load changelog.</div>';
-  }
+  await loadEntityChangelog(
+    controlChangelogEl,
+    `/api/v1/controls/${encodeURIComponent(id)}/changelog?limit=100`,
+    { empty: 'No control changes have been recorded yet.' },
+  );
 }
 
 function _ismsEntityRows(data) {

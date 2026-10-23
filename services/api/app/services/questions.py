@@ -154,7 +154,7 @@ def _ensure_question_target_visible(
         row = db.get(IsmsSwot, entity_id)
         if not row:
             raise DomainError(404, "SWOT item not found")
-        return (row.kind, row.title, f"/isms-swot.html?id={row.id}&tab=questions", None)
+        return (row.kind, row.title, f"/swot.html?id={row.id}&tab=questions", None)
     if target_type == "story":
         from app.services.stories import readable_story, require_read
 
@@ -206,7 +206,7 @@ def _question_target_url(thread: EventQuestionThread) -> str:
     typ = (thread.target_type or "event").strip().lower()
     target_id = str(thread.target_id or thread.event_id or "")
     if typ == "isms_swot" and target_id:
-        return f"/isms-swot.html?id={target_id}&tab=questions&thread={tid}"
+        return f"/swot.html?id={target_id}&tab=questions&thread={tid}"
     if typ == "story" and target_id:
         return f"/story.html?id={target_id}&tab=questions&thread={tid}"
     if typ == "risk" and target_id:

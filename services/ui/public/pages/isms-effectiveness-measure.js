@@ -427,16 +427,11 @@ async function loadSourceMeta() {
 }
 
 async function loadChangelog() {
-  try {
-    await loadEntityChangelog(
-      $('measureChangelog'),
-      `/api/v1/isms/effectiveness_measure/${encodeURIComponent(measureId)}/changelog?limit=100`,
-      { empty: 'No effectiveness measure changes have been recorded yet.' },
-    );
-  } catch {
-    $('measureChangelog').innerHTML =
-      '<div class="text-danger p-3">Failed to load changelog.</div>';
-  }
+  await loadEntityChangelog(
+    $('measureChangelog'),
+    `/api/v1/isms/effectiveness_measure/${encodeURIComponent(measureId)}/changelog?limit=100`,
+    { empty: 'No effectiveness measure changes have been recorded yet.' },
+  );
 }
 
 function activateTabFromHashOrQuery() {

@@ -20,6 +20,13 @@ import {
   selectedFilterPillValues,
   setFilterPillOptions,
 } from '/pages/filter-pill-multiselect.js';
+import {
+  addHeadings,
+  addNodeLabel,
+  addZoom,
+  curvedLink,
+  splitLabel,
+} from '/pages/bipartite-graph.js';
 
 const me = await initNavbar();
 initCollapsibleFilterSections();
@@ -248,38 +255,6 @@ function relationshipSummary(graph) {
   const rightLabel = (graph?.right_label || 'right items').toLowerCase();
   return `${stats.left_count || 0} ${leftLabel}, ${stats.right_count || 0} ${rightLabel}, ${stats.link_count || 0} relationship(s)`;
 }
-function makeZoomButton(label, action, title) {
-  return `<button class="viz-zoom-btn" type="button" data-zoom="${action}" title="${esc(title)}" aria-label="${esc(title)}">${label}</button>`;
-}
-function splitLabelLines(value, maxChars = 34, maxLines = 2) {
-  const text =
-    String(value || '-')
-      .replace(/\s+/g, ' ')
-      .trim() || '-';
-  if (text.length <= maxChars) return [text];
-  const words = text.split(' ');
-  const lines = [];
-  let current = '';
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars && current) {
-      lines.push(current);
-      current = word;
-      if (lines.length >= maxLines) break;
-    } else {
-      current = next;
-    }
-  }
-  if (lines.length < maxLines && current) lines.push(current);
-  if (!lines.length) lines.push(text.slice(0, maxChars));
-  const joinedLength = lines.join(' ').length;
-  if (joinedLength < text.length) {
-    // Words were dropped: always mark the cut, even when the last line is short.
-    const last = lines.length - 1;
-    lines[last] = `${lines[last].slice(0, Math.max(8, maxChars - 1)).trimEnd()}…`;
-  }
-  return lines.slice(0, maxLines);
-}
 function estimatedLabelChars(nodes, fallback = 30) {
   const lengths = (nodes || []).map(
     (node) =>
@@ -304,40 +279,6 @@ function secondaryNodeLabel(node) {
   }
   return node.subtitle || node.ref || '';
 }
-function renderWrappedSvgText(
-  selection,
-  lines,
-  {
-    x = 0,
-    y = 0,
-    anchor = 'start',
-    fontSize = 12,
-    weight = 600,
-    lineHeight = 13,
-    opacity = 1,
-    underline = false,
-  } = {},
-) {
-  const text = selection
-    .append('text')
-    .attr('x', x)
-    .attr('y', y)
-    .attr('font-size', fontSize)
-    .attr('font-weight', weight)
-    .attr('text-anchor', anchor)
-    .attr('fill', 'currentColor')
-    .attr('opacity', opacity);
-  if (underline) text.style('text-decoration', 'underline');
-  (lines || ['-']).forEach((line, idx) => {
-    text
-      .append('tspan')
-      .attr('x', x)
-      .attr('dy', idx === 0 ? 0 : lineHeight)
-      .text(line);
-  });
-  return text;
-}
-
 function renderControlsMatrix(el, graph) {
   if (!el) return;
   const rows = graph?.nodes?.left || [];
@@ -486,15 +427,6 @@ function renderBipartiteGraph(el, graph) {
   const maxCount = d3.max(links, (link) => link.count || 1) || 1;
   const strokeWidth = d3.scaleLinear().domain([1, maxCount]).range([1.3, 5.5]);
 
-  const controls = document.createElement('div');
-  controls.className = 'viz-zoom-controls no-print';
-  controls.innerHTML = [
-    makeZoomButton('+', 'in', 'Zoom in'),
-    makeZoomButton('−', 'out', 'Zoom out'),
-    makeZoomButton('Reset', 'reset', 'Reset zoom to fit'),
-  ].join('');
-  el.appendChild(controls);
-
   const svg = d3
     .select(el)
     .append('svg')
@@ -505,71 +437,22 @@ function renderBipartiteGraph(el, graph) {
     .attr('role', 'img')
     .attr('aria-label', graph?.title || 'Interested party bipartite graph');
   const scene = svg.append('g').attr('class', 'interested-party-bipartite-scene');
-
-  const fitScale = Math.min(
-    1,
-    (viewportWidth - 20) / contentWidth,
-    (viewportHeight - 20) / contentHeight,
-  );
-  const fitX = Math.max(10, (viewportWidth - contentWidth * fitScale) / 2);
-  const fitY = Math.max(10, (viewportHeight - contentHeight * fitScale) / 2);
-  const fitTransform = d3.zoomIdentity.translate(fitX, fitY).scale(fitScale);
-  const zoom = d3
-    .zoom()
-    .scaleExtent([Math.min(0.15, fitScale), 4])
-    .translateExtent([
-      [-contentWidth, -contentHeight],
-      [contentWidth * 2, contentHeight * 2],
-    ])
-    .on('zoom', (ev) => scene.attr('transform', ev.transform));
-  svg.call(zoom).on('wheel.zoom', null);
-  svg.call(zoom.transform, fitTransform);
-
-  controls.addEventListener('click', (ev) => {
-    const btn = ev.target?.closest?.('[data-zoom]');
-    if (!btn) return;
-    const action = btn.getAttribute('data-zoom');
-    if (action === 'in') svg.transition().duration(160).call(zoom.scaleBy, 1.25);
-    else if (action === 'out') svg.transition().duration(160).call(zoom.scaleBy, 0.8);
-    else svg.transition().duration(160).call(zoom.transform, fitTransform);
-  });
-
-  renderWrappedSvgText(scene, [graph?.left_label || 'Interested parties'], {
-    x: leftX - 16,
+  addZoom(el, svg, scene, { contentWidth, contentHeight, viewportWidth, viewportHeight });
+  addHeadings(scene, {
+    leftX,
+    rightX,
+    titles: [graph?.left_label || 'Interested parties', graph?.right_label || 'Related items'],
+    summary: relationshipSummary(graph),
     y: 22,
-    anchor: 'end',
-    fontSize: 13,
-    weight: 700,
-  });
-  renderWrappedSvgText(scene, [graph?.right_label || 'Related items'], {
-    x: rightX + 16,
-    y: 22,
-    anchor: 'start',
-    fontSize: 13,
-    weight: 700,
+    summaryY: 43,
   });
   scene
-    .append('text')
-    .attr('x', leftX - 16)
-    .attr('y', 43)
-    .attr('font-size', 12)
-    .attr('fill', 'currentColor')
-    .attr('opacity', 0.72)
-    .attr('text-anchor', 'end')
-    .text(relationshipSummary(graph));
-
-  const path = (link) => {
-    const y1 = leftY(link.source) || topPad;
-    const y2 = rightY(link.target) || topPad;
-    const mid = (leftX + rightX) / 2;
-    return `M${leftX},${y1} C${mid},${y1} ${mid},${y2} ${rightX},${y2}`;
-  };
-  const linkGroup = scene.append('g').attr('fill', 'none');
-  linkGroup
+    .append('g')
+    .attr('fill', 'none')
     .selectAll('path')
     .data(links)
     .join('path')
-    .attr('d', path)
+    .attr('d', curvedLink(leftX, rightX, leftY, rightY, topPad))
     .attr('stroke', 'currentColor')
     .attr('stroke-opacity', 0.23)
     .attr('stroke-width', (link) => strokeWidth(link.count || 1))
@@ -584,9 +467,6 @@ function renderBipartiteGraph(el, graph) {
     const isLeft = side === 'left';
     const x = isLeft ? leftX : rightX;
     const yScale = isLeft ? leftY : rightY;
-    const labelAnchor = isLeft ? 'end' : 'start';
-    const labelX = isLeft ? -14 : 14;
-    const subtitleX = labelX;
     const maxPrimaryChars = isLeft ? (compact ? 24 : 36) : compact ? 28 : 42;
     const maxSecondaryChars = isLeft ? (compact ? 22 : 34) : compact ? 30 : 48;
     selection
@@ -598,37 +478,15 @@ function renderBipartiteGraph(el, graph) {
       .attr('fill', 'currentColor')
       .attr('opacity', (node) => (node.kind === 'party' ? 0.82 : 0.58));
     selection.each(function (node) {
-      const group = d3.select(this);
-      const href = nodeHref(node);
-      const countSuffix = node.count > 1 ? ` (${node.count})` : '';
-      const primary = `${primaryNodeLabel(node)}${countSuffix}`;
-      const primaryLines = splitLabelLines(primary, maxPrimaryChars, 2);
+      const primary = `${primaryNodeLabel(node)}${node.count > 1 ? ` (${node.count})` : ''}`;
       const secondary = secondaryNodeLabel(node);
-      const underline = Boolean(href);
-      renderWrappedSvgText(group, primaryLines, {
-        x: labelX,
-        y: primaryLines.length > 1 ? -10 : -3,
-        anchor: labelAnchor,
-        fontSize: 12,
-        weight: 650,
-        lineHeight: 12.5,
-        underline,
+      addNodeLabel(d3.select(this), {
+        left: isLeft,
+        primaryLines: splitLabel(primary, maxPrimaryChars, 2),
+        secondaryLines: secondary ? splitLabel(secondary, maxSecondaryChars, 1) : [],
+        secondaryY: 18,
+        href: nodeHref(node),
       });
-      if (secondary) {
-        renderWrappedSvgText(group, splitLabelLines(secondary, maxSecondaryChars, 1), {
-          x: subtitleX,
-          y: primaryLines.length > 1 ? 18 : 13,
-          anchor: labelAnchor,
-          fontSize: 10.5,
-          weight: 400,
-          opacity: 0.68,
-        });
-      }
-      if (href) {
-        group.style('cursor', 'pointer').on('click', () => {
-          window.location.href = href;
-        });
-      }
     });
     selection
       .append('title')

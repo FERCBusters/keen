@@ -2,6 +2,7 @@ import { featureEnabled } from '/pages/feature-availability.js';
 import { canManageStories, mountStoryRelated } from '/pages/story-related.js';
 import { createEvidenceExporter } from './evidence-export/index.js';
 import { renderJson } from '/json-highlight.js';
+import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
   initNavbar,
   canSampleIntoAudit,
@@ -10,7 +11,6 @@ import {
   apiPatch,
   apiPost,
   apiDelete,
-  apiPostForm,
   esc,
   fmtTs,
   toast,
@@ -44,8 +44,6 @@ if (PRINT_MODE) {
 } else {
   me = await initNavbar();
 }
-
-const canDeleteQuestions = !!(me?.is_admin || me?.can_delete_questions);
 
 const id = qs('id');
 const status = document.getElementById('status');
@@ -100,6 +98,38 @@ function setEventTab(name, visible, count = 0) {
     badge.textContent = count ? String(count) : '';
     badge.hidden = !count;
   }
+}
+
+function ruleSettingsHref(ruleId) {
+  return `/admin.html?rule=${encodeURIComponent(ruleId)}#evidence-config`;
+}
+
+// A control listed through a crosswalk: the event was mapped to a control in
+// another framework that cross-references this one. That control, and the rule
+// that mapped the event to it, explain why the event counts here.
+function inheritedRationaleHtml(c) {
+  const from = c.inherited_from || {};
+  const label = [from.framework, from.ref].filter(Boolean).join(' ');
+  const links = !PRINT_MODE;
+  let source = "Another framework's control";
+  if (links && from.control_id) {
+    const href = withFramework(
+      `/control.html?id=${encodeURIComponent(from.control_id)}`,
+      from.framework || pageFramework,
+    );
+    source = `<a href="${esc(href)}" title="${esc(label)}">${source}</a>`;
+  } else if (label) {
+    // Paper has no links, so name the control.
+    source += ` (${esc(label)})`;
+  }
+  const mapped =
+    links && me?.is_admin && from.rule_id
+      ? `<a href="${ruleSettingsHref(from.rule_id)}">mapped</a>`
+      : 'mapped';
+  const note = String(c.rationale || '').trim();
+  return `${source} cross-referenced this control when the event was ${mapped}.${
+    note ? `<div class="small-muted">${esc(note)}</div>` : ''
+  }`;
 }
 
 function showEventTab(name) {
@@ -761,15 +791,20 @@ async function load() {
         const seen = new Set();
 
         for (const c of controls) {
-          const r = (c.rationale || '').trim();
-          if (!r) continue;
-          if (seen.has(r)) continue;
-          seen.add(r);
-          uniq.push(
-            me?.is_admin && !PRINT_MODE && c.rule_id
-              ? `<a href="/admin.html?rule=${encodeURIComponent(c.rule_id)}#evidence-config">${esc(r)}</a>`
-              : esc(r),
-          );
+          let html = '';
+          if (c.inherited_from) {
+            html = inheritedRationaleHtml(c);
+          } else {
+            const r = (c.rationale || '').trim();
+            if (!r) continue;
+            html =
+              me?.is_admin && !PRINT_MODE && c.rule_id
+                ? `<a href="${ruleSettingsHref(c.rule_id)}">${esc(r)}</a>`
+                : esc(r);
+          }
+          if (seen.has(html)) continue;
+          seen.add(html);
+          uniq.push(html);
         }
 
         if (uniq.length === 0) {
@@ -920,7 +955,7 @@ async function load() {
     }
 
     // Questions (auditor Q&A)
-    await refreshQuestions(e.id);
+    await questionThreads.refresh();
 
     // JSON panes
     renderJson(document.getElementById('normalized'), pretty(e.normalized_payload ?? {}));
@@ -928,7 +963,7 @@ async function load() {
 
     // A deep link opens its tab once the tabs know what they hold; a linked
     // question thread has already opened the Questions tab.
-    if (!didFocusThread && qs('tab')) showEventTab(qs('tab'));
+    if (!questionThreadFocused && qs('tab')) showEventTab(qs('tab'));
 
     // If this is the dedicated print window, trigger the native print dialog
     // after the event + thumbnails are rendered. The printout shows the raw
@@ -1266,291 +1301,23 @@ incidentSubmitBtn?.addEventListener('click', submitIncident);
 // Questions (auditor Q&A)
 // ------------------------------------------------------------------
 
-const questionsEl = document.getElementById('questions');
-const btnAskQuestion = document.getElementById('btnAskQuestion');
-
-const questionModalEl = document.getElementById('questionModal');
-const questionBodyEl = document.getElementById('questionBody');
-const questionAttachmentsEl = document.getElementById('questionAttachments');
-const questionSubmitBtn = document.getElementById('questionSubmit');
-const questionStatusEl = document.getElementById('questionStatus');
-
-let questionModal = null;
-try {
-  if (questionModalEl && window.bootstrap?.Modal) {
-    questionModal = new bootstrap.Modal(questionModalEl);
-  }
-} catch {}
-
-const focusThreadId = String(qs('thread') || '').trim();
-let didFocusThread = false;
-
-function _qStatusBadge(status) {
-  const s = String(status || '').toLowerCase();
-  if (s === 'answered') return `<span class="badge text-bg-success">answered</span>`;
-  if (s === 'reviewing') return `<span class="badge text-bg-info">reviewing</span>`;
-  return `<span class="badge text-bg-warning">unanswered</span>`;
-}
-
-function _renderAttLinks(atts) {
-  const arr = Array.isArray(atts) ? atts : [];
-  if (arr.length === 0) return '';
-  const html = arr
-    .map((a) => {
-      const href = a?.download_url ? String(a.download_url) : '';
-      if (!href) return '';
-      const name = a?.filename
-        ? esc(a.filename)
-        : `attachment-${String(a?.artifact_id || '').slice(0, 8)}`;
-      return `<a class="mono" href="${esc(href)}" target="_blank" rel="noopener noreferrer"><i class="bi bi-paperclip"></i> ${name}</a>`;
-    })
-    .filter(Boolean)
-    .join(' ');
-  return html ? `<div class="question-attachments small-muted mt-1">${html}</div>` : '';
-}
-
-function _renderThread(t) {
-  const tid = t?.id || '';
-  const createdBy = t?.created_by_username || '';
-  const createdAt = t?.created_at ? fmtTs(t.created_at) : '-';
-  const updatedAt = t?.updated_at ? fmtTs(t.updated_at) : '-';
-  const statusVal = String(t?.status || 'unanswered').toLowerCase();
-  const posts = Array.isArray(t?.posts) ? t.posts : [];
-
-  const isAdmin = !!me?.is_admin;
-  const isAuthor = me?.user && createdBy && String(me.user) === String(createdBy);
-  const canReply = isAdmin || isAuthor;
-
-  const statusCtl = isAdmin
-    ? `
-        <select class="form-select form-select-sm" style="width:auto;" data-action="set-status" data-thread="${esc(tid)}">
-          <option value="unanswered" ${statusVal === 'unanswered' ? 'selected' : ''}>unanswered</option>
-          <option value="reviewing" ${statusVal === 'reviewing' ? 'selected' : ''}>reviewing</option>
-          <option value="answered" ${statusVal === 'answered' ? 'selected' : ''}>answered</option>
-        </select>
-      `
-    : '';
-  const deleteCtl = canDeleteQuestions
-    ? `<button class="btn btn-sm btn-outline-danger" type="button" data-action="delete-question" data-thread="${esc(tid)}">Delete</button>`
-    : '';
-
-  const postsHtml = posts
-    .map((p) => {
-      const who = p?.author_username || '-';
-      const when = p?.created_at ? fmtTs(p.created_at) : '-';
-      const body = esc(p?.body || '').replace(/\n/g, '<br>');
-      const atts = _renderAttLinks(p?.attachments);
-      return `
-          <div class="question-post">
-            <div class="question-post-meta">
-              <div class="small-muted"><span class="fw-bold">${esc(who)}</span> · ${esc(when)}</div>
-            </div>
-            <div class="mt-2">${body}</div>
-            ${atts}
-          </div>
-        `;
-    })
-    .join('');
-
-  const replyHtml = canReply
-    ? `
-        <div class="mt-3 no-print">
-          <div class="small-muted mb-1">Reply</div>
-          <textarea class="form-control" rows="3" id="replyBody-${esc(tid)}" placeholder="Write a response"></textarea>
-          <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
-            <input class="form-control form-control-sm" style="max-width: 360px;" type="file" multiple id="replyFiles-${esc(tid)}">
-            <button class="btn btn-sm btn-primary" data-action="reply" data-thread="${esc(tid)}">Send reply</button>
-          </div>
-          <div class="form-text">Only admins or the original author can reply.</div>
-        </div>
-      `
-    : `<div class="small-muted mt-3">Only admins or the original author can reply.</div>`;
-
-  return `
-        <div class="question-thread" id="thread-${esc(tid)}">
-          <div class="question-header">
-            <div>
-              <div class="question-title">Thread by <span class="mono">${esc(createdBy || '-')}</span></div>
-              <div class="small-muted">Created ${esc(createdAt)} · Updated ${esc(updatedAt)}</div>
-            </div>
-            <div class="d-flex flex-wrap gap-2 align-items-center">
-              ${_qStatusBadge(statusVal)}
-              ${statusCtl}
-              ${deleteCtl}
-            </div>
-          </div>
-          ${postsHtml || `<div class="small-muted mt-2">No posts yet.</div>`}
-          ${replyHtml}
-        </div>
-      `;
-}
-
-function _renderThreads(threads) {
-  const arr = Array.isArray(threads) ? threads : [];
-  if (!questionsEl) return;
-  setEventTab('questions', featureEnabled(me, 'questions'), arr.length);
-  if (arr.length === 0) {
-    questionsEl.innerHTML = `<span class="badge text-bg-light">none</span>`;
-    return;
-  }
-  questionsEl.innerHTML = arr.map(_renderThread).join('');
-}
-
-async function refreshQuestions(eventId) {
-  if (!featureEnabled(me, 'questions')) return;
-  if (!questionsEl) return;
-  try {
-    const res = await apiGet(`/api/v1/events/${encodeURIComponent(eventId)}/questions`);
-    _renderThreads(res?.threads || []);
-    // Mark questions seen for the thread author so their bell clears immediately.
-    if (!PRINT_MODE && !me?.is_admin) {
-      try {
-        await apiPost(`/api/v1/events/${encodeURIComponent(eventId)}/questions/mark-seen`, {});
-      } catch {
-        /* ignore */
-      }
-    }
-    if (focusThreadId && !didFocusThread) {
-      const el = document.getElementById(`thread-${focusThreadId}`);
-      if (el) {
-        didFocusThread = true;
-        showEventTab('questions');
-        el.classList.add('question-thread-focus');
-        try {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } catch {
-          el.scrollIntoView();
-        }
-      }
-    }
-  } catch (e) {
-    questionsEl.innerHTML = `<div class="text-danger small">Failed to load questions: ${esc(String(e))}</div>`;
-  }
-}
-
-if (btnAskQuestion) {
-  const canQuestion = !!(me?.is_admin || me?.can_question_events);
-  btnAskQuestion.style.display = canQuestion ? '' : 'none';
-  btnAskQuestion.addEventListener('click', () => {
-    if (!questionModal) return;
-    if (questionStatusEl) {
-      questionStatusEl.style.display = 'none';
-      questionStatusEl.textContent = '';
-    }
-    if (questionBodyEl) questionBodyEl.value = '';
-    if (questionAttachmentsEl) questionAttachmentsEl.value = '';
-    questionModal.show();
-  });
-}
-
-questionSubmitBtn?.addEventListener('click', async () => {
-  const e = currentEvent;
-  if (!e?.id) {
-    toast(status, 'Event not loaded yet', 'warning');
-    return;
-  }
-  const body = String(questionBodyEl?.value || '').trim();
-  if (!body) {
-    toast(status, 'Please enter a question', 'warning');
-    return;
-  }
-
-  if (questionStatusEl) {
-    questionStatusEl.style.display = '';
-    questionStatusEl.textContent = 'Submitting';
-  }
-
-  const fd = new FormData();
-  fd.append('body', body);
-  const files = questionAttachmentsEl?.files ? Array.from(questionAttachmentsEl.files) : [];
-  for (const f of files.slice(0, 10)) {
-    fd.append('attachments', f, f.name);
-  }
-
-  try {
-    await apiPostForm(`/api/v1/events/${encodeURIComponent(e.id)}/questions`, fd);
-    questionModal?.hide();
-    toast(status, 'Question submitted', 'success', 2500);
-    await refreshQuestions(e.id);
-  } catch (err) {
-    const msg = String(err);
-    if (questionStatusEl) {
-      questionStatusEl.style.display = '';
-      questionStatusEl.textContent = msg;
-    } else {
-      toast(status, msg, 'danger');
-    }
-  }
-});
-
-questionsEl?.addEventListener('click', async (ev) => {
-  const delBtn = ev.target?.closest?.('[data-action="delete-question"]');
-  if (delBtn) {
-    const tid = delBtn.getAttribute('data-thread');
-    if (!tid || !canDeleteQuestions) return;
-    if (!confirm('Delete this question thread and all replies?')) return;
-    delBtn.disabled = true;
-    try {
-      await apiDelete(`/api/v1/questions/${encodeURIComponent(tid)}`);
-      toast(status, 'Question deleted', 'success', 2000);
-      if (currentEvent?.id) await refreshQuestions(currentEvent.id);
-    } catch (err) {
-      toast(status, String(err), 'danger');
-      delBtn.disabled = false;
-    }
-    return;
-  }
-
-  const btn = ev.target?.closest?.('[data-action="reply"]');
-  if (!btn) return;
-  const tid = btn.getAttribute('data-thread');
-  if (!tid) return;
-
-  const bodyEl = document.getElementById(`replyBody-${tid}`);
-  const fileEl = document.getElementById(`replyFiles-${tid}`);
-  const body = String(bodyEl?.value || '').trim();
-  if (!body) {
-    toast(status, 'Please enter a reply', 'warning');
-    return;
-  }
-
-  btn.disabled = true;
-  const prev = btn.textContent;
-  btn.textContent = 'Sending';
-
-  const fd = new FormData();
-  fd.append('body', body);
-  const files = fileEl?.files ? Array.from(fileEl.files) : [];
-  for (const f of files.slice(0, 10)) {
-    fd.append('attachments', f, f.name);
-  }
-
-  try {
-    await apiPostForm(`/api/v1/questions/${encodeURIComponent(tid)}/posts`, fd);
-    toast(status, 'Reply sent', 'success', 2000);
-    if (currentEvent?.id) await refreshQuestions(currentEvent.id);
-    if (bodyEl) bodyEl.value = '';
-    if (fileEl) fileEl.value = '';
-  } catch (err) {
-    toast(status, String(err), 'danger');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = prev || 'Send reply';
-  }
-});
-
-questionsEl?.addEventListener('change', async (ev) => {
-  const sel = ev.target?.closest?.('[data-action="set-status"]');
-  if (!sel) return;
-  const tid = sel.getAttribute('data-thread');
-  const newStatus = String(sel.value || '').trim();
-  if (!tid || !newStatus) return;
-  try {
-    await apiPatch(`/api/v1/admin/questions/${encodeURIComponent(tid)}`, { status: newStatus });
-    if (currentEvent?.id) await refreshQuestions(currentEvent.id);
-  } catch (err) {
-    toast(status, String(err), 'danger');
-  }
+// A link to a question thread opens the Questions tab instead of ?tab=.
+let questionThreadFocused = false;
+const questionThreads = mountQuestionThreads({
+  panel: document.getElementById('questions'),
+  me,
+  status,
+  attachments: true,
+  placeholder: 'e.g. What was this about?',
+  base: () =>
+    currentEvent?.id ? `/api/v1/events/${encodeURIComponent(currentEvent.id)}/questions` : null,
+  // The print window leaves unread replies for the author to read on screen.
+  markSeen: !PRINT_MODE,
+  onCount: (count) => setEventTab('questions', featureEnabled(me, 'questions'), count),
+  onFocus: () => {
+    questionThreadFocused = true;
+    showEventTab('questions');
+  },
 });
 
 load();

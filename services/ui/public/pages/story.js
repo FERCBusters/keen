@@ -1,5 +1,5 @@
 // One story: its timeline, flow chart, comments, questions and changelog.
-import { featureEnabled } from '/pages/feature-availability.js';
+import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
   initNavbar,
   apiGet,
@@ -114,7 +114,6 @@ function render() {
   $('flowToolbar').hidden = !story.can_edit;
   $('flowHint').hidden = !story.can_edit;
   $('commentForm').hidden = false;
-  $('questionForm').hidden = !(me?.is_admin || me?.can_create_questions);
   $('commentCount').textContent = story.comment_count ? String(story.comment_count) : '';
   const controls = story.controls || [];
   $('controlsLine').hidden = !controls.length;
@@ -409,43 +408,12 @@ $('comments').addEventListener('click', async (ev) => {
 
 // --- Questions ---------------------------------------------------------------
 
-async function loadQuestions() {
-  if (!featureEnabled(me, 'questions')) return;
-  const data = await apiGet(`/api/v1/questions/entities/story/${encodeURIComponent(storyId)}`);
-  const threads = data.threads || [];
-  $('questionList').innerHTML = threads.length
-    ? threads
-        .map(
-          (t) =>
-            `<article class="card card-body mb-3"><div class="small-muted">${esc(t.status)}</div>${(t.posts || []).map((p) => `<p class="mb-1"><strong>${esc(p.author_username)}</strong></p><p class="text-break">${esc(p.body)}</p>`).join('')}${me?.is_admin || (t.created_by_user_id && String(t.created_by_user_id) === String(me?.user_id || '')) ? `<form class="planning-question-form" data-reply-thread="${esc(t.id)}"><label class="form-label d-block">Reply<textarea class="form-control" name="body" rows="3" maxlength="5000" required></textarea></label><button class="btn btn-primary mt-2" type="submit">Send reply</button></form>` : ''}</article>`,
-        )
-        .join('')
-    : '<p class="small-muted">No questions yet.</p>';
-}
-$('questionForm').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  try {
-    await apiPost(`/api/v1/questions/entities/story/${encodeURIComponent(storyId)}`, {
-      body: $('questionBody').value,
-    });
-    $('questionBody').value = '';
-    await loadQuestions();
-  } catch (error) {
-    fail(error);
-  }
-});
-$('questionList').addEventListener('submit', async (ev) => {
-  const form = ev.target.closest('[data-reply-thread]');
-  if (!form) return;
-  ev.preventDefault();
-  try {
-    await apiPost(`/api/v1/questions/${encodeURIComponent(form.dataset.replyThread)}/posts`, {
-      body: form.elements.body.value,
-    });
-    await loadQuestions();
-  } catch (error) {
-    fail(error);
-  }
+const storyQuestions = mountQuestionThreads({
+  panel: $('questionPanel'),
+  me,
+  status: $('status'),
+  placeholder: 'Write a question about this story',
+  base: () => (storyId ? `/api/v1/questions/entities/story/${encodeURIComponent(storyId)}` : null),
 });
 
 // --- Start -------------------------------------------------------------------
@@ -460,7 +428,7 @@ try {
   }
   await Promise.all([
     loadComments(),
-    loadQuestions(),
+    storyQuestions.refresh(),
     loadEntityChangelog($('changelog'), `${base}/changelog?limit=100`, {
       empty: 'No changes recorded.',
     }),

@@ -76,7 +76,7 @@ def entity_href(entity_type: str, entity_id: uuid.UUID, framework: str) -> str:
     if entity_type == "interested_party":
         return f"/interested_party.html?id={eid}{fwq}"
     if entity_type == "isms_swot":
-        return f"/isms-swot.html?id={eid}{fwq}"
+        return f"/swot.html?id={eid}{fwq}"
     if entity_type == "story":
         return f"/story.html?id={eid}{fwq}"
     if entity_type == "isms_objective":

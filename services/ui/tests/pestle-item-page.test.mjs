@@ -42,6 +42,7 @@ async function pestleItem(t, options = {}) {
       {
         id: 't1',
         status: 'reviewing',
+        created_by_user_id: 'u-erin',
         created_by_username: 'erin',
         created_at: '2026-03-02T00:00:00Z',
         posts: [
@@ -184,7 +185,7 @@ test('read-only PESTLE viewers see disabled fields and no mutation controls', as
     'saveClauseRelevance',
   ])
     assert.equal(ui.el(id).style.display, 'none', id);
-  assert.equal(ui.el('pestleQuestionForm').style.display, 'none');
+  assert.equal(ui.el('pestleQuestions').querySelector('[data-question-ask]').hidden, true);
   assert.match(ui.el('relatedControls').textContent, /No controls are related/);
   tab(ui, 'pestleRelevanceTab');
   await settle(() => ui.el('businessProcessRelevanceList').querySelector('select'));
@@ -219,8 +220,13 @@ test('new PESTLE items require text and are created before relevance can be edit
   assert.match(ui.el('businessProcessRelevanceList').textContent, /Save the item first/);
   assert.match(ui.el('pestleChangelog').textContent, /Save the item first/);
   assert.equal(ui.el('deletePestleItem').style.display, 'none');
-  ui.el('pestleAskQuestion').click();
-  assert.match(ui.el('status').textContent, /Save the PESTLE\(E\) item first/);
+  // Questions wait until the item exists.
+  const ask = ui.el('pestleQuestions').querySelector('[data-question-ask]');
+  assert.equal(ask.hidden, true);
+  assert.equal(
+    ui.el('pestleQuestions').querySelector('[data-question-list]').textContent,
+    'Save the item first.',
+  );
 
   ui.el('pestleItemText').value = '   ';
   ui.el('pestleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
@@ -248,6 +254,8 @@ test('new PESTLE items require text and are created before relevance can be edit
   assert.match(ui.window.location.search, /id=p1/);
   assert.ok(ui.el('businessProcessRelevanceList').querySelector('select'));
   assert.equal(ui.el('deletePestleItem').style.display, '');
+  await settle(() => ui.el('thread-t1'));
+  assert.equal(ask.hidden, false);
 });
 
 test('existing PESTLE items are updated with PATCH', async (t) => {
@@ -324,75 +332,36 @@ test('business process and clause relevance are edited and saved, including filt
   assert.match(ui.el('clauseRelevanceList').textContent, /No clauses match/);
 });
 
-test('questions render safely and support asking, replying, status changes and deletion', async (t) => {
-  const prompts = [];
-  const { ui, state } = await pestleItem(t, {
-    globals: { confirm: (m) => (prompts.push(m), true) },
-  });
+// The shared question panel is tested through the event page; these tests
+// cover what the PESTLE(E) item page supplies.
+test('PESTLE(E) item questions are asked at the item and read in its Questions tab', async (t) => {
+  const { ui, state } = await pestleItem(t);
   tab(ui, 'pestleQuestionsTab');
   await settle(() => ui.el('pestleQuestions').querySelector('.question-thread'));
   assert.match(ui.window.location.search, /tab=questions/);
-  const thread = ui.el('thread-t1');
-  assert.equal(thread.querySelector('script'), null);
-  assert.match(thread.innerHTML, /Line 1<br>&lt;script&gt;/);
-  assert.match(thread.textContent, /reviewing/);
-  assert.match(ui.el('thread-t2').textContent, /No posts yet/);
-  // Administrators do not mark questions as seen.
-  assert.ok(!state.posted.some((p) => p.path.endsWith('/mark-seen')));
-
-  ui.el('pestleAskQuestion').click();
-  assert.equal(ui.el('status').textContent, 'Please enter a question');
-  ui.el('pestleQuestionBody').value = '  Who owns this?  ';
-  ui.el('pestleAskQuestion').click();
+  assert.equal(ui.el('thread-t1').querySelector('script'), null);
+  assert.equal(ui.el('questionBody').placeholder, 'Write a question about this PESTLE(E) item');
+  ui.el('questionBody').value = '  Who owns this?  ';
+  ui.el('pestleQuestions')
+    .querySelector('[data-question-ask]')
+    .dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => ui.el('status').textContent === 'Question submitted');
   assert.deepEqual(state.posted.at(-1), {
     path: '/api/v1/questions/entities/pestle_item/p1',
     body: { body: 'Who owns this?' },
   });
-  assert.equal(ui.el('pestleAskQuestion').textContent, 'Ask question');
-
-  ui.document.querySelector('[data-action="reply-pestle-question"][data-thread="t1"]').click();
-  assert.equal(ui.el('status').textContent, 'Please enter a reply');
-  ui.el('pestleReplyBody-t1').value = 'Legal team';
-  ui.document.querySelector('[data-action="reply-pestle-question"][data-thread="t1"]').click();
-  await settle(() => ui.el('status').textContent === 'Reply sent');
-  assert.deepEqual(state.posted.at(-1), {
-    path: '/api/v1/questions/t1/posts',
-    body: { body: 'Legal team' },
-  });
-
-  const select = ui.document.querySelector(
-    '[data-action="set-pestle-question-status"][data-thread="t1"]',
-  );
-  select.value = 'answered';
-  select.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
-  await settle(() => state.patched.length === 1);
-  assert.deepEqual(state.patched[0], {
-    path: '/api/v1/admin/questions/t1',
-    body: { status: 'answered' },
-  });
-
-  ui.document.querySelector('[data-action="delete-pestle-question"][data-thread="t2"]').click();
-  await settle(() => ui.el('status').textContent === 'Question deleted');
-  assert.deepEqual(state.removed, ['/api/v1/questions/t2']);
-  assert.match(prompts[0], /Delete this question thread/);
 });
 
-test('question authors can reply and are marked as having seen replies', async (t) => {
+test('a link to a PESTLE(E) question thread opens it and marks the replies seen', async (t) => {
   const { ui, state } = await pestleItem(t, {
-    me: { can_view_pestle: true, can_question_events: true, user: 'erin' },
+    me: { can_view_pestle: true, can_create_questions: true, user: 'erin', user_id: 'u-erin' },
     query: '&id=p1&tab=questions&thread=t1',
   });
-  await settle(() => ui.el('thread-t1'));
   await settle(() =>
     state.posted.some((p) => p.path === '/api/v1/questions/entities/pestle_item/p1/mark-seen'),
   );
   assert.ok(ui.el('thread-t1').classList.contains('question-thread-focus'));
-  assert.ok(ui.el('pestleReplyBody-t1'));
-  assert.equal(ui.document.getElementById('pestleReplyBody-t2'), null);
-  assert.equal(ui.document.querySelector('[data-action="set-pestle-question-status"]'), null);
-  assert.equal(ui.document.querySelector('[data-action="delete-pestle-question"]'), null);
-  assert.equal(ui.el('pestleQuestionForm').style.display, '');
+  assert.ok(ui.el('questionReply-t1'));
 });
 
 test('question and changelog failures are reported inside their panes', async (t) => {
@@ -408,7 +377,7 @@ test('question and changelog failures are reported inside their panes', async (t
 });
 
 test('deep links load relevance and changelog panes with the item', async (t) => {
-  const rel = await pestleItem(t, { query: '&id=p1&tab=editor' });
+  const rel = await pestleItem(t, { query: '&id=p1&tab=relevance' });
   await settle(() => rel.ui.el('clauseRelevanceList').querySelector('select'));
   const log = await pestleItem(t, { query: '&id=p1&tab=changelog' });
   await settle(() => /Item created/.test(log.ui.el('pestleChangelog').textContent));
@@ -482,7 +451,10 @@ test('a new item opens its deep-linked tab and every pane asks for a save first'
     },
   });
   assert.deepEqual(shown, ['pestleQuestionsTab']);
-  assert.equal(ui.el('pestleQuestions').textContent.trim(), 'Save the item first.');
+  assert.equal(
+    ui.el('pestleQuestions').querySelector('[data-question-list]').textContent,
+    'Save the item first.',
+  );
   tab(ui, 'pestleChangelogTab');
   assert.equal(ui.el('pestleChangelog').textContent.trim(), 'Save the item first.');
   tab(ui, 'pestleRelevanceTab');
@@ -506,46 +478,4 @@ test('a refused deletion is reported and the button is usable again', async (t) 
   assert.equal(ui.el('deletePestleItem').disabled, false);
   assert.deepEqual(state.removed, ['/api/v1/pestle/items/p1']);
   assert.equal(ui.el('pestleItemTitle').textContent, item().item);
-});
-
-test('refused question actions are reported and leave the thread list in place', async (t) => {
-  const { ui } = await pestleItem(t, {
-    globals: { confirm: () => true },
-    postFail: true,
-    patchFail: true,
-    removeFail: true,
-    threads: [{ id: 't1', status: 'unanswered', created_by_username: 'erin', posts: [] }],
-  });
-  tab(ui, 'pestleQuestionsTab');
-  await settle(() => ui.el('thread-t1'));
-  // A thread with no answer yet carries the unanswered badge.
-  assert.match(ui.el('thread-t1').querySelector('.badge').textContent, /unanswered/);
-  const failed = () => ui.el('status').textContent === 'Error: Rejected';
-  const reset = () => (ui.el('status').textContent = '');
-
-  ui.el('pestleQuestionBody').value = 'Who owns this?';
-  ui.el('pestleAskQuestion').click();
-  await settle(failed);
-  assert.equal(ui.el('pestleAskQuestion').disabled, false);
-  assert.equal(ui.el('pestleAskQuestion').textContent, 'Ask question');
-  reset();
-
-  ui.el('pestleReplyBody-t1').value = 'Legal team';
-  ui.document.querySelector('[data-action="reply-pestle-question"][data-thread="t1"]').click();
-  await settle(failed);
-  reset();
-
-  const select = ui.document.querySelector(
-    '[data-action="set-pestle-question-status"][data-thread="t1"]',
-  );
-  select.value = 'answered';
-  select.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
-  await settle(failed);
-  reset();
-
-  const del = ui.document.querySelector('[data-action="delete-pestle-question"][data-thread="t1"]');
-  del.click();
-  await settle(failed);
-  assert.equal(del.disabled, false);
-  assert.ok(ui.el('thread-t1'));
 });

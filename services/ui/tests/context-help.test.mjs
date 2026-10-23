@@ -201,7 +201,7 @@ test('page help follows the page and the active tab', async (t) => {
     ['account', 'security-tab', '/help/using-account.html#local-account-security'],
     ['account', 'preferences-tab', '/help/using-account.html'],
     ['pestle', 'pestleItemsTab', '/help/using-isms.html#context'],
-    ['my-questions', 'none', '/help/using-events.html#questions-and-incidents'],
+    ['questions', 'none', '/help/using-events.html#questions-and-incidents'],
     ['isms-document', 'documentDetailsTab', '/help/using-documents.html'],
     ['soa', 'soaControlsTab', '/help/using-frameworks.html#4-controls-clauses-and-applicability'],
   ];

@@ -70,6 +70,7 @@ async function riskPage(t, options = {}) {
       {
         id: 't1',
         status: 'unanswered',
+        created_by_user_id: 'u-erin',
         created_by_username: 'erin',
         posts: [{ author_username: 'erin', body: 'Why <b>16</b>?' }],
       },
@@ -217,7 +218,7 @@ test('risks without optional data show fallbacks and readers lose edit and sampl
   assert.match(ui.el('linkedControls').textContent, /No controls are mapped/);
   assert.equal(ui.el('editRisk').style.display, 'none');
   assert.equal(ui.el('sampleRiskAudit').style.display, 'none');
-  assert.equal(ui.el('riskAskQuestion').style.display, 'none');
+  assert.equal(ui.el('riskQuestions').querySelector('[data-question-ask]').hidden, true);
   assert.match(ui.el('swotRelatedPane').textContent, /No SWOT items linked/);
 });
 
@@ -229,87 +230,43 @@ test('related SWOT items explain when access is unavailable', async (t) => {
   );
 });
 
-test('risk questions support asking, replying, status changes and deletion', async (t) => {
-  const { ui, state } = await riskPage(t, { globals: { confirm: () => true } });
+// The shared question panel is tested through the event page; these tests
+// cover what the risk page supplies: its question address and plain-text posts.
+test('risk questions are asked and answered at the risk', async (t) => {
+  const { ui, state } = await riskPage(t);
   tab(ui, 'riskQuestionsTab');
   await settle(() => ui.el('thread-t1'));
   assert.match(ui.window.location.search, /tab=questions/);
   assert.equal(ui.el('riskQuestions').querySelector('b'), null);
-  ui.el('riskAskQuestion').click();
-  assert.equal(ui.el('status').textContent, 'Please enter a question');
-  ui.el('riskQuestionBody').value = 'Owner?';
-  ui.el('riskAskQuestion').click();
+  assert.equal(ui.el('questionBody').placeholder, 'Write a question about this risk');
+  ui.el('questionBody').value = 'Owner?';
+  ui.el('riskQuestions')
+    .querySelector('[data-question-ask]')
+    .dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => ui.el('status').textContent === 'Question submitted');
   assert.deepEqual(state.posted[0], {
     path: '/api/v1/questions/entities/risk/r1',
     body: { body: 'Owner?' },
   });
-  ui.document.querySelector('[data-action="reply-risk-question"]').click();
-  assert.equal(ui.el('status').textContent, 'Please enter a reply');
-  ui.el('riskReplyBody-t1').value = 'Because';
-  ui.document.querySelector('[data-action="reply-risk-question"]').click();
+  ui.el('questionReply-t1').value = 'Because';
+  ui.el('thread-t1').querySelector('[data-question-action="reply"]').click();
   await settle(() => ui.el('status').textContent === 'Reply sent');
   assert.deepEqual(state.posted[1], {
     path: '/api/v1/questions/t1/posts',
     body: { body: 'Because' },
   });
-  const sel = ui.document.querySelector('[data-action="set-risk-question-status"]');
-  sel.value = 'reviewing';
-  sel.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
-  await settle(() => state.patched.length === 1);
-  assert.deepEqual(state.patched[0], {
-    path: '/api/v1/admin/questions/t1',
-    body: { status: 'reviewing' },
-  });
-  ui.document.querySelector('[data-action="delete-risk-question"]').click();
-  await settle(() => ui.el('status').textContent === 'Question deleted');
-  assert.deepEqual(state.removed, ['/api/v1/questions/t1']);
 });
 
-test('question mutation failures are reported and controls re-enabled', async (t) => {
-  const { ui } = await riskPage(t, {
-    postFail: true,
-    patchFail: true,
-    deleteFail: true,
-    globals: { confirm: () => true },
-  });
-  tab(ui, 'riskQuestionsTab');
-  await settle(() => ui.el('thread-t1'));
-  ui.el('riskQuestionBody').value = 'Q';
-  ui.el('riskAskQuestion').click();
-  await settle(() => ui.el('status').textContent === 'Error: Post refused');
-  assert.equal(ui.el('riskAskQuestion').disabled, false);
-  ui.el('riskReplyBody-t1').value = 'R';
-  ui.document.querySelector('[data-action="reply-risk-question"]').click();
-  await settle(
-    () =>
-      ui.document.querySelector('[data-action="reply-risk-question"]').textContent === 'Send reply',
-  );
-  const sel = ui.document.querySelector('[data-action="set-risk-question-status"]');
-  sel.value = 'answered';
-  sel.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
-  await settle(() => ui.el('status').textContent === 'Error: Patch refused');
-  const del = ui.document.querySelector('[data-action="delete-risk-question"]');
-  del.click();
-  await settle(() => ui.el('status').textContent === 'Error: Delete refused');
-  assert.equal(del.disabled, false);
-});
-
-test('non-admin question authors reply, mark threads seen and focus linked threads', async (t) => {
+test('a link to a risk question thread opens it and marks the replies seen', async (t) => {
   const { ui, state } = await riskPage(t, {
-    me: { can_view_risks: true, can_question_events: true, user: 'erin' },
+    me: { can_view_risks: true, can_create_questions: true, user: 'erin', user_id: 'u-erin' },
     query: '&id=r1&tab=questions&thread=t1',
-    threads: [
-      { id: 't1', status: 'answered', created_by_username: 'erin', posts: [] },
-      { id: 't2', created_by_username: 'zed', posts: [] },
-    ],
   });
-  await settle(() => state.posted.some((p) => p.path.endsWith('/mark-seen')));
+  await settle(() =>
+    state.posted.some((p) => p.path === '/api/v1/questions/entities/risk/r1/mark-seen'),
+  );
   assert.ok(ui.el('thread-t1').classList.contains('question-thread-focus'));
-  assert.ok(ui.el('riskReplyBody-t1'));
-  assert.equal(ui.document.getElementById('riskReplyBody-t2'), null);
-  assert.match(ui.el('thread-t2').textContent, /Only admins or the original author can reply/);
-  assert.equal(ui.document.querySelector('[data-action="delete-risk-question"]'), null);
+  assert.ok(ui.el('questionReply-t1'));
 });
 
 test('changelog and question load failures stay inside their tabs', async (t) => {
@@ -346,8 +303,6 @@ test('load failures and a missing id are reported', async (t) => {
     },
   });
   assert.equal(missing.el('status').textContent, 'Missing risk id.');
-  missing.el('riskAskQuestion').click();
-  assert.equal(missing.el('status').textContent, 'Risk not loaded yet.');
 });
 
 test('audit managers without event access can sample a risk', async (t) => {

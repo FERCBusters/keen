@@ -120,6 +120,7 @@ async function eventPage(t, options = {}) {
             {
               id: 't1',
               status: 'answered',
+              created_by_user_id: 'u-erin',
               created_by_username: 'erin',
               posts: [
                 {
@@ -133,7 +134,13 @@ async function eventPage(t, options = {}) {
                 },
               ],
             },
-            { id: 't2', status: 'reviewing', created_by_username: 'zed', posts: [] },
+            {
+              id: 't2',
+              status: 'reviewing',
+              created_by_user_id: 'u-zed',
+              created_by_username: 'zed',
+              posts: [],
+            },
           ],
         };
       }
@@ -462,11 +469,28 @@ test('sampling explains missing or unavailable audits', async (t) => {
   assert.equal(noSamples.ui.el('auditSamplesCard').style.display, 'none');
 });
 
+// The question panel is shared by every record that takes questions; the
+// event page adds attachments, the tab count and opening a linked thread.
+const submitAsk = (ui) =>
+  ui
+    .el('questions')
+    .querySelector('[data-question-ask]')
+    .dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+
 test('event questions render attachments safely and support ask, reply, status and delete', async (t) => {
-  const { ui, state } = await eventPage(t);
+  const prompts = [];
+  const { ui, state } = await eventPage(t, {
+    globals: { confirm: (message) => (prompts.push(message), true) },
+  });
   const q = ui.el('questions');
   assert.equal(q.querySelector('img'), null);
   assert.equal(q.querySelector('b'), null);
+  // Line breaks survive; markup is shown as text.
+  assert.match(ui.el('thread-t1').innerHTML, /Why\?<br>&lt;img src=x&gt;/);
+  assert.match(ui.el('thread-t2').textContent, /No posts yet\./);
+  assert.equal(ui.el('eventQuestionsCount').textContent, '2');
+  // Administrators leave unread replies for the author.
+  assert.ok(!state.posted.some((p) => p.path.endsWith('/mark-seen')));
   const attachments = [...q.querySelectorAll('.question-attachments a')];
   assert.deepEqual(
     attachments.map((a) => a.getAttribute('href')),
@@ -475,31 +499,33 @@ test('event questions render attachments safely and support ask, reply, status a
   assert.match(attachments[0].textContent, /<b>log<\/b>\.txt/);
   assert.match(attachments[1].textContent, /attachment-abcdef12/);
   // Ask a new question with an attachment.
-  ui.el('btnAskQuestion').click();
-  assert.equal(ui.el('questionModal').dataset.shown, '1');
-  ui.el('questionSubmit').click();
+  const ask = q.querySelector('[data-question-ask]');
+  assert.equal(ask.hidden, false);
+  assert.equal(ui.el('questionBody').placeholder, 'e.g. What was this about?');
+  submitAsk(ui);
   assert.equal(ui.el('status').textContent, 'Please enter a question');
   ui.el('questionBody').value = ' Is this complete? ';
-  Object.defineProperty(ui.el('questionAttachments'), 'files', {
+  Object.defineProperty(ask.elements.attachments, 'files', {
     value: [new File(['a'], 'a.txt')],
     configurable: true,
   });
-  ui.el('questionSubmit').click();
+  submitAsk(ui);
   await settle(() => ui.el('status').textContent === 'Question submitted');
   const asked = state.posted.find((p) => p.path === '/api/v1/events/e1/questions').body;
   assert.equal(asked.get('body'), 'Is this complete?');
   assert.equal(asked.getAll('attachments')[0].name, 'a.txt');
   // Reply, change status, delete.
-  q.querySelector('[data-action="reply"][data-thread="t1"]').click();
+  const replyButton = () => ui.el('thread-t1').querySelector('[data-question-action="reply"]');
+  replyButton().click();
   assert.equal(ui.el('status').textContent, 'Please enter a reply');
-  ui.el('replyBody-t1').value = 'Yes';
-  q.querySelector('[data-action="reply"][data-thread="t1"]').click();
+  ui.el('questionReply-t1').value = 'Yes';
+  replyButton().click();
   await settle(() => ui.el('status').textContent === 'Reply sent');
   assert.equal(
     state.posted.find((p) => p.path === '/api/v1/questions/t1/posts').body.get('body'),
     'Yes',
   );
-  const select = q.querySelector('[data-action="set-status"][data-thread="t2"]');
+  const select = ui.el('thread-t2').querySelector('[data-question-action="status"]');
   select.value = 'answered';
   select.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
   await settle(() => state.patched.length === 1);
@@ -507,22 +533,34 @@ test('event questions render attachments safely and support ask, reply, status a
     path: '/api/v1/admin/questions/t2',
     body: { status: 'answered' },
   });
-  ui.el('questions').querySelector('[data-action="delete-question"][data-thread="t2"]').click();
+  ui.el('thread-t2').querySelector('[data-question-action="delete"]').click();
   await settle(() => ui.el('status').textContent === 'Question deleted');
   assert.deepEqual(state.removed, ['/api/v1/questions/t2']);
+  assert.deepEqual(prompts, ['Delete this question thread and all replies?']);
 });
 
 test('question authors reply, mark threads seen and focus a linked thread', async (t) => {
+  const shown = [];
   const { ui, state } = await eventPage(t, {
-    me: { can_view_events: true, can_question_events: true, user: 'erin' },
+    me: { can_view_events: true, can_create_questions: true, user: 'erin', user_id: 'u-erin' },
     query: '&id=e1&thread=t1',
+    setup(window) {
+      window.bootstrap = {
+        ...bootstrap,
+        Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+      };
+    },
   });
   await settle(() => state.posted.some((p) => p.path === '/api/v1/events/e1/questions/mark-seen'));
   assert.ok(ui.el('thread-t1').classList.contains('question-thread-focus'));
-  assert.ok(ui.document.getElementById('replyBody-t1'));
-  assert.equal(ui.document.getElementById('replyBody-t2'), null);
-  assert.equal(ui.document.querySelector('[data-action="set-status"]'), null);
-  assert.equal(ui.el('btnAskQuestion').style.display, '');
+  // A linked thread opens the Questions tab.
+  assert.deepEqual(shown, ['eventQuestionsTab']);
+  assert.ok(ui.document.getElementById('questionReply-t1'));
+  assert.equal(ui.document.getElementById('questionReply-t2'), null);
+  assert.match(ui.el('thread-t2').textContent, /Only admins or the original author can reply\./);
+  assert.equal(ui.document.querySelector('[data-question-action="status"]'), null);
+  assert.equal(ui.document.querySelector('[data-question-action="delete"]'), null);
+  assert.equal(ui.el('questions').querySelector('[data-question-ask]').hidden, false);
 });
 
 test('a tab named in the address opens; unknown or inherited names keep the snapshot', async (t) => {
@@ -557,20 +595,30 @@ test('question failures are contained in the questions panel', async (t) => {
     patchFail: true,
     deleteFail: true,
   });
-  assert.match(empty.ui.el('questions').textContent, /none/);
+  assert.match(empty.ui.el('questions').textContent, /No questions yet\./);
   empty.ui.el('questionBody').value = 'Q';
-  empty.ui.el('questionSubmit').click();
-  await settle(() => empty.ui.el('questionStatus').textContent === 'Error: Post refused');
+  submitAsk(empty.ui);
+  await settle(() => empty.ui.el('status').textContent === 'Error: Post refused');
+  // The form keeps the question for another try.
+  assert.equal(empty.ui.el('questionBody').value, 'Q');
+  const askButton = empty.ui.el('questions').querySelector('[data-question-ask] [type="submit"]');
+  assert.equal(askButton.disabled, false);
+  assert.equal(askButton.textContent, 'Ask question');
   const actions = await eventPage(t, { postFail: true, patchFail: true, deleteFail: true });
-  actions.ui.el('replyBody-t1').value = 'R';
-  actions.ui.el('questions').querySelector('[data-action="reply"][data-thread="t1"]').click();
+  actions.ui.el('questionReply-t1').value = 'R';
+  const reply = actions.ui.el('thread-t1').querySelector('[data-question-action="reply"]');
+  reply.click();
   await settle(() => actions.ui.el('status').textContent === 'Error: Post refused');
-  const sel = actions.ui.el('questions').querySelector('[data-action="set-status"]');
+  assert.equal(reply.disabled, false);
+  assert.equal(reply.textContent, 'Send reply');
+  const sel = actions.ui.el('questions').querySelector('[data-question-action="status"]');
   sel.value = 'reviewing';
   sel.dispatchEvent(new actions.ui.window.Event('change', { bubbles: true }));
   await settle(() => actions.ui.el('status').textContent === 'Error: Patch refused');
-  actions.ui.el('questions').querySelector('[data-action="delete-question"]').click();
+  const remove = actions.ui.el('questions').querySelector('[data-question-action="delete"]');
+  remove.click();
   await settle(() => actions.ui.el('status').textContent === 'Error: Delete refused');
+  assert.equal(remove.disabled, false);
 });
 
 test('an incident is created from the event with sanitised plain text', async (t) => {
@@ -621,7 +669,6 @@ test('actions on an event that failed to load are refused with a warning', async
   for (const [button, message] of [
     ['btnSampleAudit', 'Event not loaded yet'],
     ['btnCreateIncident', 'Event not loaded yet.'],
-    ['questionSubmit', 'Event not loaded yet'],
   ]) {
     ui.el('status').textContent = '';
     ui.el(button).click();
@@ -709,7 +756,7 @@ test('a thread that is neither answered nor reviewing is shown as unanswered', a
   const { ui } = await eventPage(t, {
     threads: [{ id: 't9', status: 'open', created_by_username: 'erin', posts: [] }],
   });
-  const badge = ui.el('thread-t9').querySelector('.badge.text-bg-warning');
+  const badge = ui.el('thread-t9').querySelector('.badge.text-bg-secondary');
   assert.equal(badge.textContent, 'unanswered');
 });
 

@@ -12,7 +12,6 @@ import {
   getCurrentFramework,
   withFramework,
   wireIsoDateTextField,
-  isoDateToDisplay,
   dateFormatPlaceholder,
   initRichTextEditors,
   setRichTextEditorValue,
@@ -20,6 +19,13 @@ import {
   syncRichTextEditors,
   userPillHtml,
 } from '/app.js';
+import {
+  fuzzyRuleLabel,
+  isFuzzyDateRule,
+  monthName,
+  recurrenceName,
+  scheduleDateFields,
+} from '/pages/audit-schedule.js';
 
 const me = await initNavbar();
 const status = document.getElementById('status');
@@ -89,6 +95,22 @@ const schedUntilWire = wireIsoDateTextField(
 for (const el of [schedStartText, schedEndText, schedUntilText]) {
   if (el) el.setAttribute('placeholder', dateFormatPlaceholder());
 }
+// A new schedule on a fuzzy rule recurs: a one-off becomes yearly.
+const scheduleDates = scheduleDateFields(
+  {
+    rule: schedDateRule,
+    recurrence: document.getElementById('schedRecurrence'),
+    exactFields: schedExactDateFields,
+    fuzzyFields: schedFuzzyDateFields,
+    month: schedFuzzyMonth,
+    monthLabel: document.getElementById('schedFuzzyMonthLabel'),
+    year: schedFuzzyYear,
+    start: schedStart,
+    startText: schedStartText,
+    preview: schedDatePreview,
+  },
+  { lead: 'First run', yearlyWhenFuzzy: true },
+);
 
 initRichTextEditors(document);
 
@@ -597,81 +619,6 @@ function _todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function _isFuzzyScheduleDateRule(rule) {
-  return String(rule || 'exact') !== 'exact';
-}
-
-function _fuzzyScheduleRuleLabel(rule) {
-  return (
-    {
-      first_weekday_of_month: 'first weekday',
-      first_monday_of_month: 'first Monday',
-      first_tuesday_of_month: 'first Tuesday',
-      first_wednesday_of_month: 'first Wednesday',
-      first_thursday_of_month: 'first Thursday',
-      first_friday_of_month: 'first Friday',
-    }[String(rule || '')] || 'first weekday'
-  );
-}
-
-function _firstScheduleRuleDateIso(year, month, rule) {
-  const y = Number(year) || new Date().getFullYear();
-  const m = Math.max(1, Math.min(12, Number(month) || 1));
-  const d = new Date(Date.UTC(y, m - 1, 1));
-  const targetWeekdays = {
-    first_monday_of_month: 1,
-    first_tuesday_of_month: 2,
-    first_wednesday_of_month: 3,
-    first_thursday_of_month: 4,
-    first_friday_of_month: 5,
-  };
-  const target = targetWeekdays[String(rule || '')];
-  if (target) {
-    while (d.getUTCDay() !== target) d.setUTCDate(d.getUTCDate() + 1);
-  } else {
-    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
-  }
-  return d.toISOString().slice(0, 10);
-}
-
-function updateScheduleDateMode() {
-  const mode = schedDateRule?.value || 'exact';
-  const fuzzy = _isFuzzyScheduleDateRule(mode);
-  if (schedExactDateFields) schedExactDateFields.style.display = fuzzy ? 'none' : '';
-  if (schedFuzzyDateFields) schedFuzzyDateFields.style.display = fuzzy ? '' : 'none';
-  const recurrence = document.getElementById('schedRecurrence');
-  const weekly = recurrence?.querySelector('option[value="weekly"]');
-  if (weekly) weekly.disabled = fuzzy;
-  if (fuzzy && recurrence?.value === 'weekly') recurrence.value = 'yearly';
-  if (fuzzy && recurrence?.value === 'once') recurrence.value = 'yearly';
-
-  if (fuzzy) {
-    const year = Number(schedFuzzyYear?.value || new Date().getFullYear());
-    const month = Number(schedFuzzyMonth?.value || new Date().getMonth() + 1);
-    const iso = _firstScheduleRuleDateIso(year, month, mode);
-    const label = _fuzzyScheduleRuleLabel(mode);
-    const monthLabel = document.getElementById('schedFuzzyMonthLabel');
-    if (monthLabel) monthLabel.textContent = `${label.charAt(0).toUpperCase()}${label.slice(1)} of`;
-    if (schedStart) schedStart.value = iso;
-    if (schedStartText) schedStartText.value = isoDateToDisplay(iso);
-    if (schedDatePreview) {
-      schedDatePreview.textContent = `First run will be ${isoDateToDisplay(iso)}; future runs keep the ${label} rule.`;
-    }
-  } else if (schedDatePreview) {
-    schedDatePreview.textContent = '';
-  }
-}
-
-function _scheduleStartForSubmit() {
-  updateScheduleDateMode();
-  if (_isFuzzyScheduleDateRule(schedDateRule?.value || 'exact')) {
-    return schedStart?.value || '';
-  }
-  const ok = schedStartWire?.syncHiddenFromText?.();
-  if (ok === false) return '';
-  return schedStart?.value || '';
-}
-
 function _monthValue(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
@@ -699,34 +646,12 @@ function _shiftMonth(value, delta) {
 function recurrenceLabel(a) {
   const recur = String(a?.schedule_recurrence || 'once');
   const interval = Number(a?.schedule_interval || 1);
-  const labels = {
-    once: 'Once',
-    weekly: 'Weekly',
-    monthly: 'Monthly',
-    quarterly: 'Quarterly',
-    yearly: 'Yearly',
-  };
-  const base = labels[recur] || recur;
+  const base = recurrenceName(recur);
   const recurText = interval > 1 && recur !== 'once' ? `${base} × ${interval}` : base;
   const dateRule = String(a?.schedule_date_rule || 'exact');
-  if (_isFuzzyScheduleDateRule(dateRule)) {
-    const months = [
-      '',
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const month = months[Number(a?.schedule_anchor_month || 0)] || 'month';
-    return `${recurText} · ${_fuzzyScheduleRuleLabel(dateRule)} of ${month}`;
+  if (isFuzzyDateRule(dateRule)) {
+    const month = monthName(a?.schedule_anchor_month).slice(0, 3) || 'month';
+    return `${recurText} · ${fuzzyRuleLabel(dateRule)} of ${month}`;
   }
   return recurText;
 }
@@ -958,7 +883,7 @@ function resetScheduleForm() {
   schedStartWire?.syncTextFromHidden?.();
   schedEndWire?.syncTextFromHidden?.();
   schedUntilWire?.syncTextFromHidden?.();
-  updateScheduleDateMode();
+  scheduleDates.update();
   if (schedInterval) schedInterval.value = '1';
   setRichTextEditorValue('schedNotes', '');
   scheduledAttendees = [];
@@ -998,10 +923,6 @@ document.getElementById('coverage-tab')?.addEventListener('shown.bs.tab', () => 
   if (!coverageData) loadScopeCoverage();
 });
 document.getElementById('scheduleReset')?.addEventListener('click', resetScheduleForm);
-schedDateRule?.addEventListener('change', updateScheduleDateMode);
-schedFuzzyMonth?.addEventListener('change', updateScheduleDateMode);
-schedFuzzyYear?.addEventListener('input', debounce(updateScheduleDateMode, 150));
-document.getElementById('schedRecurrence')?.addEventListener('change', updateScheduleDateMode);
 schedAttendeeUserId?.addEventListener('change', syncScheduledAttendeeUserSelection);
 document.getElementById('schedAddAttendee')?.addEventListener('click', () => {
   const user = selectedScheduledAttendeeUser();
@@ -1045,14 +966,12 @@ scheduleForm?.addEventListener('submit', async (ev) => {
       title: (document.getElementById('schedTitle')?.value || '').trim(),
       framework_slug: (getCurrentFramework() || '').trim(),
       audit_type: document.getElementById('schedType')?.value || 'internal',
-      start_date: _scheduleStartForSubmit() || null,
+      start_date: scheduleDates.startForSubmit(schedStartWire) || null,
       end_date: schedEnd?.value || null,
       schedule_recurrence: document.getElementById('schedRecurrence')?.value || 'once',
       schedule_interval: Number(document.getElementById('schedInterval')?.value || 1),
       schedule_date_rule: schedDateRule?.value || 'exact',
-      schedule_anchor_month: _isFuzzyScheduleDateRule(schedDateRule?.value || 'exact')
-        ? Number(schedFuzzyMonth?.value || 1)
-        : null,
+      schedule_anchor_month: scheduleDates.anchorMonth(),
       schedule_until_date: schedUntil?.value || null,
       report_notes: syncRichTextEditor(document.getElementById('schedNotes')) || '',
       documents: schedDocuments
@@ -1085,9 +1004,6 @@ scheduleForm?.addEventListener('submit', async (ev) => {
 });
 
 setDefaultCoverageDates();
-// Older links ask this page to start an audit; the wizard does that now.
-if ((qs('new') === '1' || qs('new') === 'true') && canManageAudits())
-  location.replace(withFramework('/audit-wizard.html', getCurrentFramework()));
 if (location.hash === '#coverage' || qs('tab') === 'coverage') {
   try {
     new bootstrap.Tab(document.getElementById('coverage-tab')).show();

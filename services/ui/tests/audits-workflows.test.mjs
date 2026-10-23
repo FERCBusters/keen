@@ -469,21 +469,8 @@ test('a schedule with a malformed end or until date is not sent, and a refused o
   assert.equal(ui.el('schedTitle').value, 'Supplier review');
 });
 
-test('starting an audit opens the wizard, and older links to the register go there too', async (t) => {
+test('starting an audit opens the wizard', async (t) => {
   const { ui } = await auditsPage(t);
   assert.equal(ui.el('showCreate').getAttribute('href'), '/audit-wizard.html');
   assert.equal(ui.el('createCard'), null);
-
-  const replaced = [];
-  const location = { hash: '', replace: (url) => replaced.push(url) };
-  await auditsPage(t, { query: '&new=1', globals: { location } });
-  assert.deepEqual(replaced, ['/audit-wizard.html?framework=A']);
-
-  const reader = { hash: '', replace: (url) => replaced.push(url) };
-  await auditsPage(t, {
-    query: '&new=1',
-    me: { can_view_audits: true },
-    globals: { location: reader },
-  });
-  assert.equal(replaced.length, 1, 'readers stay on the register');
 });

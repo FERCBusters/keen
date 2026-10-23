@@ -479,7 +479,9 @@ function agentsFixture(overrides = {}) {
 
 async function agentsPage(t, options = {}) {
   const state = { posted: [], data: options.data || agentsFixture() };
+  // Keen Agents is a tab of the administration page.
   const ui = await page(t, 'agents', {
+    htmlName: 'admin',
     globals: {
       setInterval: () => 0,
       confirm: () => options.confirm ?? true,

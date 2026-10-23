@@ -262,10 +262,6 @@ figcaption,
 .chapter-pagination a:last-child {
   text-align: right;
 }
-.legacy-bookmarks a {
-  display: block;
-  padding: 0.3rem;
-}
 details summary {
   cursor: pointer;
 }

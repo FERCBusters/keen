@@ -1,4 +1,4 @@
-import { featureEnabled } from '/pages/feature-availability.js';
+import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
   initNavbar,
   apiGet,
@@ -21,10 +21,7 @@ const me = await initNavbar();
 const framework = getCurrentFramework();
 const params = new URLSearchParams(location.search);
 let itemId = params.get('id') || '';
-const canDeleteQuestions = !!(me?.is_admin || me?.can_delete_questions);
 const requestedTab = params.get('tab') || 'details';
-const focusThreadId = String(params.get('thread') || '').trim();
-let didFocusThread = false;
 
 const canViewPestle = !!(
   me?.is_admin ||
@@ -34,7 +31,6 @@ const canViewPestle = !!(
   me?.can_manage_risks
 );
 const canManagePestle = !!(me?.is_admin || me?.can_manage_pestle || me?.can_manage_risks);
-const canAskQuestions = !!(me?.is_admin || me?.can_question_events);
 
 const status = document.getElementById('status');
 const pestleBreadcrumb = document.getElementById('pestleBreadcrumb');
@@ -70,10 +66,15 @@ const saveBusinessProcessRelevance = document.getElementById('saveBusinessProces
 const saveClauseRelevance = document.getElementById('saveClauseRelevance');
 
 const pestleChangelogEl = document.getElementById('pestleChangelog');
-const pestleQuestionForm = document.getElementById('pestleQuestionForm');
-const pestleQuestionsEl = document.getElementById('pestleQuestions');
-const pestleQuestionBody = document.getElementById('pestleQuestionBody');
-const pestleAskQuestion = document.getElementById('pestleAskQuestion');
+const pestleQuestions = mountQuestionThreads({
+  panel: document.getElementById('pestleQuestions'),
+  me,
+  status,
+  placeholder: 'Write a question about this PESTLE(E) item',
+  base: () =>
+    itemId ? `/api/v1/questions/entities/pestle_item/${encodeURIComponent(itemId)}` : null,
+  unsaved: 'Save the item first.',
+});
 
 let meta = { types: [], lenses: [], relevance_levels: [] };
 let currentItem = null;
@@ -109,13 +110,13 @@ function wireTabs() {
   });
   pestleQuestionsTab?.addEventListener('shown.bs.tab', async () => {
     setTabQuery('questions');
-    await refreshPestleQuestions();
+    await pestleQuestions.refresh();
   });
   pestleChangelogTab?.addEventListener('shown.bs.tab', async () => {
     setTabQuery('changelog');
     await loadPestleChangelog();
   });
-  activateTab(requestedTab === 'editor' ? 'details' : requestedTab);
+  activateTab(requestedTab);
 }
 
 function relevanceLabel(rowOrCode) {
@@ -265,8 +266,7 @@ function renderItem(item = null) {
   if (!isExisting) {
     if (pestleChangelogEl)
       pestleChangelogEl.innerHTML = '<div class="p-3 small-muted">Save the item first.</div>';
-    if (pestleQuestionsEl)
-      pestleQuestionsEl.innerHTML = '<div class="small-muted">Save the item first.</div>';
+    pestleQuestions.refresh();
     processRelevanceRows = [];
     clauseRelevanceRows = [];
     renderProcessRelevance();
@@ -373,126 +373,15 @@ async function loadPestleChangelog() {
     pestleChangelogEl.innerHTML = '<div class="p-3 small-muted">Save the item first.</div>';
     return;
   }
-  try {
-    const u = new URL(
-      `/api/v1/pestle/items/${encodeURIComponent(itemId)}/changelog`,
-      location.origin,
-    );
-    if (framework) u.searchParams.set('framework', framework);
-    u.searchParams.set('limit', '100');
-    await loadEntityChangelog(pestleChangelogEl, u.pathname + u.search, {
-      empty: 'No PESTLE(E) item changes have been recorded yet.',
-    });
-  } catch (e) {
-    pestleChangelogEl.innerHTML = '<div class="text-danger p-3">Failed to load changelog.</div>';
-  }
-}
-
-function _qStatusBadge(status) {
-  const s = String(status || '').toLowerCase();
-  if (s === 'answered') return '<span class="badge text-bg-success">answered</span>';
-  if (s === 'reviewing') return '<span class="badge text-bg-info">reviewing</span>';
-  return '<span class="badge text-bg-warning">unanswered</span>';
-}
-
-function _renderPestleQuestionThread(t) {
-  const tid = t?.id || '';
-  const createdBy = t?.created_by_username || '';
-  const createdAt = t?.created_at ? fmtTs(t.created_at) : '-';
-  const updatedAt = t?.updated_at ? fmtTs(t.updated_at) : '-';
-  const statusVal = String(t?.status || 'unanswered').toLowerCase();
-  const posts = Array.isArray(t?.posts) ? t.posts : [];
-  const isAdmin = !!me?.is_admin;
-  const isAuthor = me?.user && createdBy && String(me.user) === String(createdBy);
-  const canReply = isAdmin || isAuthor;
-  const statusCtl = isAdmin
-    ? `
-    <select class="form-select form-select-sm" style="width:auto;" data-action="set-pestle-question-status" data-thread="${esc(tid)}">
-      <option value="unanswered" ${statusVal === 'unanswered' ? 'selected' : ''}>unanswered</option>
-      <option value="reviewing" ${statusVal === 'reviewing' ? 'selected' : ''}>reviewing</option>
-      <option value="answered" ${statusVal === 'answered' ? 'selected' : ''}>answered</option>
-    </select>`
-    : '';
-  const deleteCtl = canDeleteQuestions
-    ? `<button class="btn btn-sm btn-outline-danger" type="button" data-action="delete-pestle-question" data-thread="${esc(tid)}">Delete</button>`
-    : '';
-  const postsHtml = posts
-    .map(
-      (p) => `
-    <div class="question-post">
-      <div class="question-post-meta"><div class="small-muted"><span class="fw-bold">${esc(p?.author_username || '-')}</span> · ${esc(p?.created_at ? fmtTs(p.created_at) : '-')}</div></div>
-      <div class="mt-2">${esc(p?.body || '').replace(/\n/g, '<br>')}</div>
-    </div>`,
-    )
-    .join('');
-  const replyHtml = canReply
-    ? `
-    <div class="mt-3 no-print">
-      <div class="small-muted mb-1">Reply</div>
-      <textarea class="form-control" rows="3" id="pestleReplyBody-${esc(tid)}" placeholder="Write a response"></textarea>
-      <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
-        <button class="btn btn-sm btn-primary" data-action="reply-pestle-question" data-thread="${esc(tid)}">Send reply</button>
-      </div>
-      <div class="form-text">Only admins or the original author can reply.</div>
-    </div>`
-    : '<div class="small-muted mt-3">Only admins or the original author can reply.</div>';
-  return `
-    <div class="question-thread" id="thread-${esc(tid)}">
-      <div class="question-header">
-        <div>
-          <div class="question-title">Thread by <span class="mono">${esc(createdBy || '-')}</span></div>
-          <div class="small-muted">Created ${esc(createdAt)} · Updated ${esc(updatedAt)}</div>
-        </div>
-        <div class="d-flex flex-wrap gap-2 align-items-center">${_qStatusBadge(statusVal)}${statusCtl}${deleteCtl}</div>
-      </div>
-      ${postsHtml || '<div class="small-muted mt-2">No posts yet.</div>'}
-      ${replyHtml}
-    </div>`;
-}
-
-function _renderPestleQuestions(threads) {
-  const arr = Array.isArray(threads) ? threads : [];
-  if (!pestleQuestionsEl) return;
-  pestleQuestionsEl.innerHTML = arr.length
-    ? arr.map(_renderPestleQuestionThread).join('')
-    : '<span class="badge text-bg-light">none</span>';
-}
-
-async function refreshPestleQuestions() {
-  if (!featureEnabled(me, 'questions')) return;
-  if (!pestleQuestionsEl) return;
-  if (!itemId) {
-    pestleQuestionsEl.innerHTML = '<div class="small-muted">Save the item first.</div>';
-    return;
-  }
-  try {
-    const res = await apiGet(
-      `/api/v1/questions/entities/pestle_item/${encodeURIComponent(itemId)}`,
-    );
-    _renderPestleQuestions(res?.threads || []);
-    if (!me?.is_admin) {
-      try {
-        await apiPost(
-          `/api/v1/questions/entities/pestle_item/${encodeURIComponent(itemId)}/mark-seen`,
-          {},
-        );
-      } catch {}
-    }
-    if (focusThreadId && !didFocusThread) {
-      const el = document.getElementById(`thread-${focusThreadId}`);
-      if (el) {
-        didFocusThread = true;
-        el.classList.add('question-thread-focus');
-        try {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } catch {
-          el.scrollIntoView();
-        }
-      }
-    }
-  } catch (e) {
-    pestleQuestionsEl.innerHTML = `<div class="text-danger small">Failed to load questions: ${esc(String(e))}</div>`;
-  }
+  const u = new URL(
+    `/api/v1/pestle/items/${encodeURIComponent(itemId)}/changelog`,
+    location.origin,
+  );
+  if (framework) u.searchParams.set('framework', framework);
+  u.searchParams.set('limit', '100');
+  await loadEntityChangelog(pestleChangelogEl, u.pathname + u.search, {
+    empty: 'No PESTLE(E) item changes have been recorded yet.',
+  });
 }
 
 async function saveCurrentItem(ev) {
@@ -507,7 +396,11 @@ async function saveCurrentItem(ev) {
     itemId = saved.id;
     currentItem = saved;
     renderItem(saved);
-    await Promise.all([loadItemRelations(itemId), loadPestleChangelog(), refreshPestleQuestions()]);
+    await Promise.all([
+      loadItemRelations(itemId),
+      loadPestleChangelog(),
+      pestleQuestions.refresh(),
+    ]);
     history.replaceState(
       {},
       '',
@@ -616,82 +509,6 @@ deletePestleItem?.addEventListener('click', async () => {
   }
 });
 
-if (pestleQuestionForm) pestleQuestionForm.style.display = canAskQuestions ? '' : 'none';
-
-pestleAskQuestion?.addEventListener('click', async () => {
-  if (!itemId) return toast(status, 'Save the PESTLE(E) item first.', 'warning');
-  const body = String(pestleQuestionBody?.value || '').trim();
-  if (!body) return toast(status, 'Please enter a question', 'warning');
-  pestleAskQuestion.disabled = true;
-  const prev = pestleAskQuestion.textContent;
-  pestleAskQuestion.textContent = 'Submitting';
-  try {
-    await apiPost(`/api/v1/questions/entities/pestle_item/${encodeURIComponent(itemId)}`, { body });
-    if (pestleQuestionBody) pestleQuestionBody.value = '';
-    await refreshPestleQuestions();
-    toast(status, 'Question submitted', 'success');
-  } catch (e) {
-    toast(status, String(e), 'danger');
-  } finally {
-    pestleAskQuestion.disabled = false;
-    pestleAskQuestion.textContent = prev || 'Ask question';
-  }
-});
-
-pestleQuestionsEl?.addEventListener('click', async (ev) => {
-  const delBtn = ev.target?.closest?.('[data-action="delete-pestle-question"]');
-  if (delBtn && itemId) {
-    const tid = delBtn.getAttribute('data-thread') || '';
-    if (!tid || !canDeleteQuestions) return;
-    if (!confirm('Delete this question thread and all replies?')) return;
-    delBtn.disabled = true;
-    try {
-      await apiDelete(`/api/v1/questions/${encodeURIComponent(tid)}`);
-      await refreshPestleQuestions();
-      toast(status, 'Question deleted', 'success');
-    } catch (e) {
-      toast(status, String(e), 'danger');
-      delBtn.disabled = false;
-    }
-    return;
-  }
-
-  const btn = ev.target?.closest?.('[data-action="reply-pestle-question"]');
-  if (!btn || !itemId) return;
-  const tid = btn.getAttribute('data-thread') || '';
-  const bodyEl = document.getElementById(`pestleReplyBody-${tid}`);
-  const body = String(bodyEl?.value || '').trim();
-  if (!body) return toast(status, 'Please enter a reply', 'warning');
-  btn.disabled = true;
-  const prev = btn.textContent;
-  btn.textContent = 'Sending';
-  try {
-    await apiPost(`/api/v1/questions/${encodeURIComponent(tid)}/posts`, { body });
-    if (bodyEl) bodyEl.value = '';
-    await refreshPestleQuestions();
-    toast(status, 'Reply sent', 'success');
-  } catch (e) {
-    toast(status, String(e), 'danger');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = prev || 'Send reply';
-  }
-});
-
-pestleQuestionsEl?.addEventListener('change', async (ev) => {
-  const sel = ev.target?.closest?.('[data-action="set-pestle-question-status"]');
-  if (!sel || !itemId) return;
-  const tid = sel.getAttribute('data-thread') || '';
-  const newStatus = String(sel.value || '').trim();
-  if (!tid || !newStatus) return;
-  try {
-    await apiPatch(`/api/v1/admin/questions/${encodeURIComponent(tid)}`, { status: newStatus });
-    await refreshPestleQuestions();
-  } catch (e) {
-    toast(status, String(e), 'danger');
-  }
-});
-
 if (pestleBreadcrumb) pestleBreadcrumb.href = withFramework('/pestle.html', framework);
 if (pestleList) pestleList.href = withFramework('/pestle.html', framework);
 if (pestleVisualisations)
@@ -705,8 +522,8 @@ try {
     toast(status, 'You do not have permission to view PESTLE(E) assessments.', 'danger');
   } else {
     await loadItem();
-    if (itemId && ['relevance', 'editor'].includes(requestedTab)) await loadItemRelations(itemId);
-    if (itemId && requestedTab === 'questions') await refreshPestleQuestions();
+    if (itemId && requestedTab === 'relevance') await loadItemRelations(itemId);
+    if (itemId && requestedTab === 'questions') await pestleQuestions.refresh();
     if (itemId && requestedTab === 'changelog') await loadPestleChangelog();
   }
 } catch (e) {

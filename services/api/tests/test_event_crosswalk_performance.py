@@ -279,3 +279,65 @@ def test_clause_filters_share_one_bounded_predicate(catalogue, monkeypatch):
     unknown = parse_event_filters(framework="F0", clause="9.9")
     (predicate,) = event_predicates(unknown, db)
     assert db.query(Event).filter(predicate).count() == 0
+
+
+def test_inherited_controls_name_the_rule_and_leave_out_shipped_boilerplate(
+    catalogue, monkeypatch
+):
+    """An inherited control says which control the event was mapped to, and by which rule."""
+    from app.api.routes import events as routes
+    from app.core.config import settings
+    from app.db.models import User
+    from app.services.control_inheritance import STARTER_SAME_TOPIC_RATIONALE
+    from starlette.requests import Request
+
+    db, controls, events, _ = catalogue
+    event = events[-1]
+    source, same_topic, reviewed = controls[2][3], controls[0][3], controls[0][4]
+    db.add(
+        Mapping(
+            event_id=event.id,
+            control_item_id=source.id,
+            method="rule",
+            mapped_by="system",
+            rationale="auto by rule backups (F2)",
+        )
+    )
+    db.add_all(
+        [
+            CrossFrameworkControlLink(
+                source_control_id=source.id,
+                target_control_id=same_topic.id,
+                rationale=STARTER_SAME_TOPIC_RATIONALE,
+            ),
+            CrossFrameworkControlLink(
+                source_control_id=source.id,
+                target_control_id=reviewed.id,
+                rationale="Partial: restore tests only",
+            ),
+        ]
+    )
+    db.commit()
+    user = User(id=uuid.uuid4(), username="test", is_active=True)
+    monkeypatch.setattr(routes, "_require_events_read", lambda db, request: user)
+    monkeypatch.setattr(settings, "aggregate_cache_ttl_seconds", 0)
+    request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+    detail = routes.get_event(request, str(event.id), framework="F0", db=db)
+    rows = {row["id"]: row for row in detail["controls"]}
+    shipped, partial = rows[str(same_topic.id)], rows[str(reviewed.id)]
+    assert shipped["inherited_from"] == {
+        "framework": "F2",
+        "ref": "C3",
+        "title": source.title,
+        "control_id": str(source.id),
+        "rule_id": "backups",
+    }
+    # The shipped same-topic text adds nothing to the page's own explanation.
+    assert shipped["rationale"] == ""
+    assert partial["rationale"] == "Partial: restore tests only"
+    # The first event's mappings were made without a rule, so none is named.
+    other = routes.get_event(request, str(events[0].id), framework="F0", db=db)
+    inherited = [row for row in other["controls"] if row.get("inherited_from")]
+    assert inherited and all(
+        row["inherited_from"]["rule_id"] is None for row in inherited
+    )

@@ -1,4 +1,5 @@
 import { featureEnabled } from '/pages/feature-availability.js';
+import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
   initNavbar,
   initCollapsibleFilterSections,
@@ -31,11 +32,18 @@ const $ = (id) => document.getElementById(id),
 const me = await initNavbar(),
   framework = getCurrentFramework();
 const manage = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);
-const objectiveMode = params.get('mode') === 'objectives';
 const itemId = params.get('id'),
   isNew = params.has('new'),
   base = '/api/v1/isms/swot';
 const fw = `framework=${encodeURIComponent(framework)}`;
+const swotQuestions = mountQuestionThreads({
+  panel: $('questionPanel'),
+  me,
+  status: $('status'),
+  placeholder: 'Write a question about this SWOT item',
+  base: () =>
+    itemId ? `/api/v1/questions/entities/isms_swot/${encodeURIComponent(itemId)}` : null,
+});
 let row = null,
   rows = [],
   offset = 0,
@@ -215,17 +223,6 @@ function renderRelations() {
     .join('');
   renderGraph($('graph'), current, framework);
 }
-async function questions() {
-  if (!featureEnabled(me, 'questions')) return;
-  const data = await apiGet(`/api/v1/questions/entities/isms_swot/${encodeURIComponent(itemId)}`);
-  $('questionList').innerHTML =
-    data.threads
-      .map(
-        (t) =>
-          `<article class="card card-body mb-3"><div class="small-muted">${esc(t.status)}</div>${(t.posts || []).map((p) => `<p class="mb-1"><strong>${esc(p.author_username)}</strong></p><p class="text-break">${esc(p.body)}</p>`).join('')}${me?.is_admin || (t.created_by_user_id && String(t.created_by_user_id) === String(me?.user_id || '')) ? `<form class="planning-question-form" data-reply-thread="${esc(t.id)}"><label class="form-label d-block">Reply<textarea class="form-control" name="body" rows="3" maxlength="5000" required></textarea></label><button class="btn btn-primary mt-2" type="submit">Send reply</button></form>` : ''}</article>`,
-      )
-      .join('') || '<p class="small-muted">No questions yet.</p>';
-}
 function mappingOptions(id, records = [], selected = [], filter = false) {
   const chosen = new Set((selected || []).map((record) => String(record.id)));
   $(id).replaceChildren();
@@ -280,10 +277,9 @@ async function loadDetail() {
   $('changelogTab').disabled = isNew;
   renderRelations();
   await choices('linkType', 'linkItem');
-  $('questionForm').hidden = isNew || !(me?.is_admin || me?.can_question_events);
   if (row) {
     renderRelations();
-    await questions();
+    await swotQuestions.refresh();
     await loadEntityChangelog(
       $('changelog'),
       `/api/v1/isms/swot/${encodeURIComponent(itemId)}/changelog?limit=100`,
@@ -422,18 +418,6 @@ $('relatedList').addEventListener('click', async (e) => {
     fail(e);
   }
 });
-$('questionForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  try {
-    await apiPost(`/api/v1/questions/entities/isms_swot/${encodeURIComponent(itemId)}`, {
-      body: $('questionBody').value,
-    });
-    $('questionBody').value = '';
-    await questions();
-  } catch (e) {
-    fail(e);
-  }
-});
 $('deleteItem').addEventListener('click', async () => {
   if (!confirm('Delete this SWOT item? Its changelog remains.')) return;
   try {
@@ -458,10 +442,7 @@ try {
   $('workspace').hidden = !!itemId || isNew;
   $('detail').hidden = !itemId && !isNew;
   $('newItem').hidden = !manage;
-  if (objectiveMode) {
-    const view = params.get('view') === 'timeline' ? 'timeline' : 'kanban';
-    location.replace(withFramework(`/isms.html?tab=objectives&view=${view}`, framework));
-  } else if (itemId || isNew) {
+  if (itemId || isNew) {
     if (isNew && kinds.includes(params.get('kind'))) $('kind').value = params.get('kind');
     await loadDetail();
     const tab = ['details', 'related', 'visualisation', 'questions', 'changelog'].includes(
@@ -491,20 +472,6 @@ try {
 } catch (e) {
   fail(e);
 }
-
-$('questionList').addEventListener('submit', async (event) => {
-  const form = event.target.closest('[data-reply-thread]');
-  if (!form) return;
-  event.preventDefault();
-  try {
-    await apiPost(`/api/v1/questions/${encodeURIComponent(form.dataset.replyThread)}/posts`, {
-      body: form.elements.body.value,
-    });
-    await questions();
-  } catch (error) {
-    fail(error);
-  }
-});
 
 $('itemForm').addEventListener(
   'invalid',

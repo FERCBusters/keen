@@ -18,7 +18,7 @@
     <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between mb-3">
       <div>
         <h1 class="h3 mb-1">Administration</h1>
-	<div class="small-muted">Connect your systems, shape your evidence and manage access.</div>
+	<div class="small-muted">Connect your systems, configure your frameworks, map your evidence and manage access.</div>
       </div>
       <div class="d-flex gap-2">
         <a class="btn btn-outline-primary btn-sm" href="/">Back to controls</a>
@@ -32,20 +32,20 @@
       <ul class="nav nav-pills flex-column admin-tab-nav" id="adminTabs" role="tablist" aria-orientation="vertical">
 <li class="admin-nav-label" role="presentation">Workspace</li>
 <li class="nav-item" role="presentation"><button class="nav-link active" id="tab-overview" data-bs-toggle="tab" data-bs-target="#pane-overview" type="button" role="tab" aria-controls="pane-overview" aria-selected="true"><i class="bi bi-grid" aria-hidden="true"></i> Overview</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" id="tab-agents" data-bs-toggle="tab" data-bs-target="#pane-agents" type="button" role="tab" aria-controls="pane-agents" aria-selected="false"><i class="bi bi-pc-display" aria-hidden="true"></i> Keen Agents</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" id="tab-integrations" data-bs-toggle="tab" data-bs-target="#pane-integrations" type="button" role="tab" aria-controls="pane-integrations" aria-selected="false"><i class="bi bi-plug" aria-hidden="true"></i> API ingester builder</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" id="tab-evidence-config" data-bs-toggle="tab" data-bs-target="#pane-evidence-config" type="button" role="tab" aria-controls="pane-evidence-config" aria-selected="false"><i class="bi bi-diagram-3" aria-hidden="true"></i> Sources &amp; evidence mapping</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-framework-editor" data-bs-toggle="tab" data-bs-target="#pane-framework-editor" type="button" role="tab" aria-controls="pane-framework-editor" aria-selected="false"><i class="bi bi-layers" aria-hidden="true"></i> Frameworks</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-agents" data-bs-toggle="tab" data-bs-target="#pane-agents" type="button" role="tab" aria-controls="pane-agents" aria-selected="false"><i class="bi bi-pc-display" aria-hidden="true"></i> Keen Agents</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-evidence-config" data-bs-toggle="tab" data-bs-target="#pane-evidence-config" type="button" role="tab" aria-controls="pane-evidence-config" aria-selected="false"><i class="bi bi-diagram-3" aria-hidden="true"></i> Sources &amp; evidence mapping</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-integrations" data-bs-toggle="tab" data-bs-target="#pane-integrations" type="button" role="tab" aria-controls="pane-integrations" aria-selected="false"><i class="bi bi-plug" aria-hidden="true"></i> API ingester builder</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-ingest" data-bs-toggle="tab" data-bs-target="#pane-ingest" type="button" role="tab" aria-controls="pane-ingest" aria-selected="false"><i class="bi bi-cloud-arrow-down" aria-hidden="true"></i> Ingest runners</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" id="tab-diary" data-bs-toggle="tab" data-bs-target="#pane-diary" type="button" role="tab" aria-controls="pane-diary" aria-selected="false"><i class="bi bi-journal-plus" aria-hidden="true"></i> Diary evidence</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-retention" data-bs-toggle="tab" data-bs-target="#pane-retention" type="button" role="tab" aria-controls="pane-retention" aria-selected="false"><i class="bi bi-database" aria-hidden="true"></i> Evidence retention</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" id="tab-diary" data-bs-toggle="tab" data-bs-target="#pane-diary" type="button" role="tab" aria-controls="pane-diary" aria-selected="false"><i class="bi bi-journal-plus" aria-hidden="true"></i> Add diary evidence</button></li>
 <li class="admin-nav-label" role="presentation">Access</li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-users" data-bs-toggle="tab" data-bs-target="#pane-users" type="button" role="tab" aria-controls="pane-users" aria-selected="false"><i class="bi bi-people" aria-hidden="true"></i> Users</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-groups" data-bs-toggle="tab" data-bs-target="#pane-groups" type="button" role="tab" aria-controls="pane-groups" aria-selected="false"><i class="bi bi-shield-lock" aria-hidden="true"></i> Groups & permissions</button></li>
 <li class="admin-nav-label" role="presentation">System</li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-features" data-bs-toggle="tab" data-bs-target="#pane-features" type="button" role="tab" aria-controls="pane-features" aria-selected="false"><i class="bi bi-sliders" aria-hidden="true"></i> Features</button></li>
 <li class="nav-item" role="presentation"><button class="nav-link" id="tab-audit" data-bs-toggle="tab" data-bs-target="#pane-audit" type="button" role="tab" aria-controls="pane-audit" aria-selected="false"><i class="bi bi-clock-history" aria-hidden="true"></i> Audit trail</button></li>
-<li hidden><button id="tab-remap" class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-remap" role="tab">Historical remapping</button></li>
+<li hidden><button id="tab-remap" class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-remap" role="tab">Remap old events</button></li>
       </ul>
 
       <div class="tab-content flex-grow-1" id="adminTabContent">
@@ -65,14 +65,13 @@
   <div id="retention-status" role="status" aria-live="polite"></div>
   <div class="card mb-3"><div class="card-body">
     <h3 class="h5">Automatic retention</h3>
-    <p class="small-muted">Disabled by default. Cleanup runs in the background using the Keen worker and scheduler.</p>
     <form id="retention-form">
       <div class="row g-3 align-items-end"><div class="col-md-7"><label for="retention-mode" class="form-label">Keep evidence by</label>
       <select id="retention-mode" class="form-select"><option value="disabled">Keep everything</option><option value="age">Maximum event age</option><option value="count">Maximum number of events</option></select></div>
       <div class="col-md-5" id="retention-value-wrap" hidden><label for="retention-value" id="retention-value-label" class="form-label">Days</label><input id="retention-value" class="form-control" type="number" min="1" step="1"></div></div>
       <p id="retention-explanation" class="form-text mt-2"></p>
       <fieldset class="my-3"><legend class="h6">Source type and rule overrides</legend>
-      <p class="form-text">Rule overrides take priority over source types, then the global policy above. Every applicable rule override must allow deletion. Counts apply separately to each policy group; audit-held events are additional. Remove a row to inherit again. Changes apply to existing evidence.</p>
+      <p class="form-text">Rule overrides take priority over source types, then the global policy above.</p>
       <div id="retention-overrides"></div>
       <button id="retention-add" type="button" class="btn btn-outline-secondary btn-sm">Add override</button>
       </fieldset>
@@ -83,7 +82,7 @@
   <div class="card border-danger mb-3"><div class="card-body">
     <h3 class="h5">Purge all collected evidence</h3>
     <p>Delete all eligible events up to the time you start the purge, including event mappings, attached files, event questions and incident links. Audit-protected evidence is kept. Frameworks, mapping rules, source configuration, ISMS records and the administrative audit trail remain.</p>
-    <p class="small-muted">All ingesters, agents and webhook intake pause automatically while a manual purge is queued or running and for five minutes after completion or cancellation. In-flight database work drains before deletion. Your existing source pause settings are preserved. Upstream systems may send previously deleted events again after ingestion resumes.</p>
+    <p class="small-muted">All ingesters, agents and webhook intake pause automatically while a manual purge is queued or running and for five minutes after completion or cancellation. Upstream systems may send previously deleted events again after ingestion resumes.</p>
     <label class="form-label" for="retention-confirm">Type <strong>PURGE EVIDENCE</strong> to enable the purge</label>
     <input id="retention-confirm" class="form-control mb-3" autocomplete="off" spellcheck="false">
     <button type="button" id="retention-purge" class="btn btn-danger" disabled>Preview and purge all evidence</button>
@@ -91,8 +90,7 @@
   <div class="card"><div class="card-body">
     <div class="d-flex flex-wrap justify-content-between gap-2"><h3 class="h5">Cleanup status</h3><button type="button" id="retention-refresh" class="btn btn-outline-secondary btn-sm">Refresh</button></div>
     <div id="retention-progress" aria-live="polite"></div>
-    <div class="d-flex flex-wrap gap-2 mt-3"><button id="retention-cancel" type="button" class="btn btn-outline-danger" hidden>Cancel active purge</button><button id="retention-retry" type="button" class="btn btn-outline-primary" hidden>Retry stored-file cleanup</button><a class="btn btn-outline-secondary" href="/audits.html">Manage audits</a></div>
-    <p class="small-muted mt-3 mb-0">S3 retention locks and legal holds are respected. Stored files awaiting deletion stay in the cleanup queue and retry automatically. Removing a sample from an audit does not release its retention protection; delete the audit to release it.</p>
+    <div class="d-flex flex-wrap gap-2 mt-3"><button id="retention-cancel" type="button" class="btn btn-outline-danger" hidden>Cancel active purge</button><button id="retention-retry" type="button" class="btn btn-outline-primary" hidden>Retry stored-file cleanup</button></div>
   </div></div>
 </section>
 
@@ -172,11 +170,11 @@
             <div id="usersStatus" class="alert alert-info" style="display:none;"></div>
 
             <form id="userCreateForm" class="row g-2 align-items-end mb-3">
-              <div class="col-12 col-lg-3">
+              <div class="col-12 col-lg">
                 <label class="form-label small-muted mb-1">Username</label>
                 <input id="newUsername" class="form-control" placeholder="e.g. alice" required />
               </div>
-              <div class="col-12 col-lg-3">
+              <div class="col-12 col-lg">
                 <label class="form-label small-muted mb-1">Email</label>
                 <input id="newEmail" class="form-control" type="email" placeholder="alice@example.com" />
               </div>
@@ -184,15 +182,11 @@
                 <label class="form-label small-muted mb-1">Password</label>
                 <input id="newPassword" class="form-control" type="password" placeholder="Initial password" required />
               </div>
-              <div class="col-12 col-lg-2">
-                <label class="form-label small-muted mb-1">Role</label>
-                <select id="newRole" class="form-select">
-                  <option value="inherit" selected>Inherit (from groups)</option>
-                  <option value="normal">Normal</option>
-                  <option value="admin">Admin</option>
-                </select>
+              <div class="col-12 col-lg-3">
+                <label for="newRole" class="form-label small-muted mb-1">Role</label>
+                <select id="newRole" class="form-select" data-role-menu="inherit"></select>
               </div>
-              <div class="col-12 col-lg-2 d-flex gap-2">
+              <div class="col-12 col-lg-auto d-flex gap-2">
                 <button class="btn btn-primary" type="submit">Create</button>
               </div>
             </form>
@@ -201,13 +195,11 @@
               <table class="table table-sm table-hover align-middle mb-0">
                 <thead>
                   <tr>
-                    <th style="min-width: 180px;">Username</th>
-                    <th style="min-width: 220px;">Email</th>
-                    <th style="min-width: 140px;">Role</th>
-                    <th style="min-width: 90px;">Active</th>
-                    <th style="min-width: 180px;">Created</th>
-                    <th style="min-width: 180px;">Updated</th>
-                    <th style="min-width: 300px;" data-nosort>Actions</th>
+                    <th style="min-width: 190px;">User</th>
+                    <th style="min-width: 190px;">Email</th>
+                    <th style="min-width: 150px;">Role</th>
+                    <th>Active</th>
+                    <th style="min-width: 160px;" data-nosort>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="usersRows"></tbody>
@@ -236,27 +228,9 @@
 
             <div class="row g-3 admin-groups-layout">
               <div class="col-12 col-lg-5 admin-groups-list-col">
-                <form id="groupCreateForm" class="row g-2 align-items-end mb-3">
-                  <div class="col-12">
-                    <label class="form-label small-muted mb-1">Group name</label>
-                    <input id="newGroupName" class="form-control" placeholder="e.g. staff" required />
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label small-muted mb-1">Description (optional)</label>
-                    <textarea id="newGroupDesc" class="form-control" rows="2" placeholder="Who is in this group? What is it for?"></textarea>
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label small-muted mb-1">Role (optional). Admin users can make changes, Normal users can only view data.</label>
-                    <select id="newGroupRole" class="form-select">
-                      <option value="">No role</option>
-                      <option value="normal">Normal</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                  <div class="col-12 d-flex gap-2">
-                    <button class="btn btn-primary" type="submit">Create group</button>
-                  </div>
-                </form>
+                <div class="d-flex mb-3">
+                  <button id="groupNew" class="btn btn-primary" type="button"><i class="bi bi-plus-lg" aria-hidden="true"></i> New group</button>
+                </div>
 
                 <div class="table-responsive admin-groups-table-wrap">
                   <table class="table table-sm table-hover align-middle mb-0">
@@ -275,12 +249,12 @@
               </div>
 
               <div class="col-12 col-lg-7 admin-groups-detail-col">
-                <div id="groupDetailEmpty" class="alert alert-light">Click on a group name to edit it.</div>
+                <div id="groupDetailEmpty" class="alert alert-light">Choose a group to edit it, or choose New group to create one.</div>
 
                 <div id="groupDetail" style="display:none;">
                   <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
                     <div>
-                      <div class="fw-bold">Edit group</div>
+                      <div class="fw-bold" id="groupDetailTitle">Edit group</div>
                       <div class="small-muted" id="groupDetailMeta"></div>
                     </div>
                     <div class="d-flex gap-2">
@@ -288,28 +262,26 @@
                     </div>
                   </div>
 
-                  <div class="row g-2 mb-2">
+                  <!-- One form creates a group and edits the selected one. -->
+                  <form id="groupForm" class="row g-2 mb-2">
                     <div class="col-12">
-                      <label class="form-label small-muted mb-1">Name</label>
-                      <input id="groupName" class="form-control" />
+                      <label for="groupName" class="form-label small-muted mb-1">Group name</label>
+                      <input id="groupName" class="form-control" placeholder="e.g. staff" required />
                     </div>
                     <div class="col-12">
-                      <label class="form-label small-muted mb-1">Description</label>
-                      <textarea id="groupDesc" class="form-control" rows="2"></textarea>
+                      <label for="groupDesc" class="form-label small-muted mb-1">Description (optional)</label>
+                      <textarea id="groupDesc" class="form-control" rows="2" placeholder="Who is in this group? What is it for?"></textarea>
                     </div>
                     <div class="col-12">
-                      <label class="form-label small-muted mb-1">Role (optional). Admin users can make changes, Normal users can only view data.</label>
-                      <select id="groupRole" class="form-select">
-                        <option value="">No role</option>
-                        <option value="normal">Normal</option>
-                        <option value="admin">Admin</option>
-                      </select>
+                      <label for="groupRole" class="form-label small-muted mb-1">Role (optional). Admin users can make changes, Normal users can only view data unless they have special permissions.</label>
+                      <select id="groupRole" class="form-select" data-role-menu="none"></select>
                     </div>
                     <div class="col-12 d-flex gap-2">
-                      <button id="groupSave" class="btn btn-outline-primary btn-sm" type="button">Save details</button>
+                      <button id="groupSave" class="btn btn-primary btn-sm" type="submit">Save details</button>
                     </div>
-                  </div>
+                  </form>
 
+                  <div id="groupAccess">
                   <hr />
 
                   <div class="row g-3">
@@ -330,6 +302,7 @@
                       </div>
 
                     </div>
+                  </div>
                   </div>
 
                 </div>
@@ -390,11 +363,11 @@
 <button id="hub-mapping" class="nav-link" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="evidence-mapping-view">Evidence mapping</button>
 </div>
 <section id="evidence-mapping-view" hidden role="tabpanel" aria-labelledby="hub-mapping">        
-        <h2 data-ec-overview class="h5">Evidence mapping</h2><p data-ec-overview><a href="#remap" class="btn btn-outline-secondary btn-sm">Review historical remapping</a></p>
+        <h2 data-ec-overview class="h5">Evidence mapping</h2>
         <p data-ec-overview class="small-muted">Collections choose remote inputs to fetch. Evidence definitions match the resulting events and link them to framework controls or clauses. A collection can support several definitions.</p>
         <div id="ec-status" role="status" hidden></div>
         <div class="card mb-3"><div data-ec-overview class="card-header fw-bold">Create and manage evidence mappings</div><div class="card-body">
-          <div id="ec-library"><div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h3 class="h6 mb-1">Create a new mapping</h3><p class="small-muted mb-0">Choose matching events and the controls they support.</p></div><button id="ec-new-rule" class="btn btn-primary">Create mapping</button></div>
+          <div id="ec-library"><div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h3 class="h6 mb-1">Create a new mapping</h3><p class="small-muted mb-0">Choose matching events and the controls they support.</p></div><div class="d-flex flex-wrap gap-2"><a id="ec-remap-link" href="#remap" class="btn btn-outline-primary">Remap old events</a><button id="ec-new-rule" class="btn btn-primary">Create mapping</button></div></div>
             <details id="ec-browse"><summary class="fw-semibold mb-3">Browse existing mappings</summary><label for="ec-source-filter" class="form-label">Source</label><select id="ec-source-filter" class="form-select mb-2"><option value="">All sources</option></select><button type="button" id="ec-export-rules" class="btn btn-outline-primary mb-2">Export YAML for selected source</button><p class="small-muted">With All sources selected, exports every mapping rule. Search text does not limit the export.</p><label for="ec-rule-filter" class="form-label">Search by name, collection item or framework</label><input id="ec-rule-filter" class="form-control mb-2" placeholder="Search evidence definitions"><div id="ec-rule-count" class="small-muted mb-2" role="status"></div><div id="ec-rules" class="list-group"></div><button id="ec-more-rules" class="btn btn-outline-secondary mt-2" hidden>Next page</button><button id="ec-previous-rules" class="btn btn-outline-secondary mt-2 me-2" hidden>Previous page</button></details></div>
           <div id="ec-editor" hidden>
             <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between mb-3">
@@ -437,7 +410,7 @@
                 <p class="small-muted">Exact values. Leave a box blank to allow any value.</p>
                 <div id="ec-conditions" class="row g-2"></div>
                 <div id="ec-rule-sentence" class="small bg-body-tertiary rounded p-2 mt-3" role="status" aria-live="polite"></div>
-                <p class="small mt-2 mb-0"><a href="/help/using.html#mapping-made-simple">Action, result and mapping: a worked example</a></p>
+                <p class="small mt-2 mb-0"><a href="/help/using-mapping.html#mapping-made-simple">Action, result and mapping: a worked example</a></p>
               </div>
               <section class="border rounded-3 p-3 mb-3">
                 <h5 class="h6">Structured event fields <span class="small-muted fw-normal">(optional)</span></h5>
@@ -576,7 +549,7 @@
               <button type="button" class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/imap/run" title="Queue polling for all enabled IMAP connections">Run IMAP</button>
               <button class="btn btn-outline-primary" data-run="/api/v1/admin/ingest/rss/run">Run RSS</button>
             </div>
-            <p class="small-muted mt-3 mb-0">Fetch new activity from your configured collections. To apply a definition to existing events, open it in Sources &amp; evidence mapping and choose <strong>Apply saved rule to past evidence</strong>.</p>
+	    <p class="small-muted mt-3 mb-0">Fetch new activity from your configured collections without waiting for them to collect automatically.</p>
           </div>
         </div>
       </div>
@@ -623,7 +596,6 @@
                   <div id="controlResults" class="list-group mt-2" style="max-height: 220px; overflow:auto;"></div>
                   <div class="small-muted mt-2">Selected:</div>
                   <div id="controlSelected" class="d-flex flex-wrap gap-2"></div>
-                  <div class="form-text">Tip: you can still rely on rules.yml for automatic mapping, but this creates explicit <span class="mono">manual</span> mappings.</div>
                 </div>
                 <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
                   <button class="btn btn-primary" type="submit">Create diary evidence</button>
@@ -639,7 +611,7 @@
         <div class="card mb-3">
           <div class="card-header">
             <div class="fw-bold">Remap events</div>
-            <div class="small-muted">Calls <span class="mono">POST /api/v1/admin/remap/run</span>. By default it applies rules to events with no mappings; you can optionally include already-mapped events.</div>
+            <div class="small-muted">Calls <span class="mono">POST /api/v1/admin/remap/run</span>. By default it only applies rules to events with no mappings; you can optionally include already-mapped events.</div>
           </div>
           <div class="card-body">
             <div class="row g-2 align-items-end">
@@ -683,7 +655,7 @@
                 </div>
               </div>
               <div class="col-12 small-muted">
-                Browse: <a href="/events.html?unmapped=true">unmapped events</a>. To remap only Jenkins, set Source filter to <span class="mono">jenkins</span>.
+                Browse: <a href="/events.html?unmapped=true">unmapped events</a>.
               </div>
             </div>
           </div>

@@ -21,7 +21,7 @@ def scope_items(db, audit_id):
             "id": str(row.id),
             "title": row.title,
             "kind": row.kind,
-            "url": f"/isms-swot.html?id={row.id}",
+            "url": f"/swot.html?id={row.id}",
         }
         for row in rows
     ]

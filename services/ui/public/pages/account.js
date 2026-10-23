@@ -1,4 +1,5 @@
 import { featureEnabled } from '/pages/feature-availability.js';
+import { deleteQuestionThread, myQuestionRowHtml } from '/pages/question-threads.js';
 import {
   initNavbar,
   apiGet,
@@ -33,48 +34,6 @@ const logoutBtn = document.getElementById('logoutBtn');
 
 const savedSearchesList = document.getElementById('savedSearchesList');
 const savedSearchesEmpty = document.getElementById('savedSearchesEmpty');
-
-const myQuestionsStatus = document.getElementById('myQuestionsStatus');
-const myQuestionsTbody = document.getElementById('myQuestionsTbody');
-const myQuestionsEmpty = document.getElementById('myQuestionsEmpty');
-const myQuestionsTableWrap = document.getElementById('myQuestionsTableWrap');
-const myQuestionsRefresh = document.getElementById('myQuestionsRefresh');
-
-const myAuditsStatus = document.getElementById('myAuditsStatus');
-const myAuditsTbody = document.getElementById('myAuditsTbody');
-const myAuditsEmpty = document.getElementById('myAuditsEmpty');
-const myAuditsTableWrap = document.getElementById('myAuditsTableWrap');
-const myAuditsRefresh = document.getElementById('myAuditsRefresh');
-
-const myMeetingsStatus = document.getElementById('myMeetingsStatus');
-const myMeetingsTbody = document.getElementById('myMeetingsTbody');
-const myMeetingsEmpty = document.getElementById('myMeetingsEmpty');
-const myMeetingsTableWrap = document.getElementById('myMeetingsTableWrap');
-const myMeetingsRefresh = document.getElementById('myMeetingsRefresh');
-
-const myRisksStatus = document.getElementById('myRisksStatus');
-const myRisksTbody = document.getElementById('myRisksTbody');
-const myRisksEmpty = document.getElementById('myRisksEmpty');
-const myRisksTableWrap = document.getElementById('myRisksTableWrap');
-const myRisksRefresh = document.getElementById('myRisksRefresh');
-
-const myIsmsObjectivesStatus = document.getElementById('myIsmsObjectivesStatus');
-const myIsmsObjectivesTbody = document.getElementById('myIsmsObjectivesTbody');
-const myIsmsObjectivesEmpty = document.getElementById('myIsmsObjectivesEmpty');
-const myIsmsObjectivesTableWrap = document.getElementById('myIsmsObjectivesTableWrap');
-const myIsmsObjectivesRefresh = document.getElementById('myIsmsObjectivesRefresh');
-
-const myIsmsRoleStatus = document.getElementById('myIsmsRoleStatus');
-const myIsmsRoleTbody = document.getElementById('myIsmsRoleTbody');
-const myIsmsRoleEmpty = document.getElementById('myIsmsRoleEmpty');
-const myIsmsRoleTableWrap = document.getElementById('myIsmsRoleTableWrap');
-const myIsmsRoleRefresh = document.getElementById('myIsmsRoleRefresh');
-
-const myIsmsAssetsStatus = document.getElementById('myIsmsAssetsStatus');
-const myIsmsAssetsTbody = document.getElementById('myIsmsAssetsTbody');
-const myIsmsAssetsEmpty = document.getElementById('myIsmsAssetsEmpty');
-const myIsmsAssetsTableWrap = document.getElementById('myIsmsAssetsTableWrap');
-const myIsmsAssetsRefresh = document.getElementById('myIsmsAssetsRefresh');
 
 const prefsForm = document.getElementById('prefsForm');
 const prefUseLocalTz = document.getElementById('prefUseLocalTz');
@@ -585,32 +544,20 @@ loadSavedSearches();
 // Account tabs
 // ---------------------------------------------------------------------------
 
-function accountTabTargetFromHash(hash) {
-  const h = String(hash || '')
+// A hash names the tab whose data-tab-hash matches it, such as #my-questions.
+function accountTabForHash(hash) {
+  const wanted = String(hash || '')
     .trim()
     .toLowerCase();
-  if (h === '#profile' || h === '#preferences') return '#preferences-pane';
-  if (h === '#saved-searches' || h === '#savedsearches') return '#saved-searches-pane';
-  if (h === '#my-questions' || h === '#questions') return '#my-questions-pane';
-  if (h === '#my-audits' || h === '#audits') return '#my-audits-pane';
-  if (h === '#my-meetings' || h === '#meetings' || h === '#minutes') return '#my-meetings-pane';
-  if (h === '#my-risks' || h === '#risks-i-own' || h === '#risks') return '#my-risks-pane';
-  if (h === '#my-isms-objectives' || h === '#isms-objectives') return '#my-isms-objectives-pane';
-  if (h === '#my-isms-role' || h === '#isms-role' || h === '#my-role') return '#my-isms-role-pane';
-  if (h === '#my-isms-assets' || h === '#isms-assets' || h === '#assets-i-manage')
-    return '#my-isms-assets-pane';
-  if (h === '#security' || h === '#password') return '#security-pane';
-  return '';
+  return wanted
+    ? [...document.querySelectorAll('#accountTabs [data-tab-hash]')].find(
+        (button) => button.dataset.tabHash === wanted,
+      )
+    : null;
 }
 
 function maybeLoadActiveAccountTab(target) {
-  if (target === '#my-questions-pane') loadMyQuestionsOnce();
-  if (target === '#my-audits-pane') loadMyAuditsOnce();
-  if (target === '#my-meetings-pane') loadMyMeetingsOnce();
-  if (target === '#my-risks-pane') loadMyRisksOnce();
-  if (target === '#my-isms-objectives-pane') loadMyIsmsObjectivesOnce();
-  if (target === '#my-isms-role-pane') loadMyIsmsRoleOnce();
-  if (target === '#my-isms-assets-pane') loadMyIsmsAssetsOnce();
+  if (Object.hasOwn(accountLists, target)) accountLists[target].loadOnce();
 }
 
 function bindAccountTabs() {
@@ -634,13 +581,10 @@ function bindAccountTabs() {
     });
   }
 
-  const target = accountTabTargetFromHash(window.location.hash);
-  if (target) {
-    const trigger = document.querySelector(`#accountTabs [data-bs-target="${target}"]`);
-    if (trigger && window.bootstrap?.Tab) {
-      window.bootstrap.Tab.getOrCreateInstance(trigger).show();
-      return;
-    }
+  const trigger = accountTabForHash(window.location.hash);
+  if (trigger && window.bootstrap?.Tab) {
+    window.bootstrap.Tab.getOrCreateInstance(trigger).show();
+    return;
   }
   maybeLoadActiveAccountTab('#preferences-pane');
 }
@@ -649,117 +593,69 @@ function bindAccountTabs() {
 // My questions
 // ---------------------------------------------------------------------------
 
-let myQuestionsLoaded = false;
-
-function myQuestionStatusBadge(st, unread) {
-  const s = String(st || 'unanswered').toLowerCase();
-  if (unread) return `<span class="badge text-bg-warning">new reply</span>`;
-  if (s === 'answered') return `<span class="badge text-bg-success">answered</span>`;
-  if (s === 'reviewing') return `<span class="badge text-bg-info">reviewing</span>`;
-  return `<span class="badge text-bg-secondary">unanswered</span>`;
-}
-
-function myQuestionRow(it) {
-  const framework = getCurrentFramework();
-  const rawHref = withFramework(
-    it?.target_url ||
-      `/event.html?id=${encodeURIComponent(it?.event_id || '')}&thread=${encodeURIComponent(it?.thread_id || '')}#questions`,
-    framework,
-  );
-  const href = safeExternalHref(rawHref) || '#';
-  const title = it.target_label || it.event_summary || '(no summary)';
-  const src =
-    it.target_type && it.target_type !== 'event'
-      ? String(it.target_type).replaceAll('_', ' ')
-      : it.event_source || '';
-  const ts = it.event_timestamp ? fmtTs(it.event_timestamp) : it.target_ref || '-';
-  const updated = it.updated_at ? fmtTs(it.updated_at) : '-';
-  const badge = myQuestionStatusBadge(it.status, !!it.unread);
-
-  return `
-    <tr class="${it.unread ? 'table-warning' : ''}">
-      <td class="wrap">
-        <div class="fw-semibold">${esc(title)}</div>
-        <div class="small-muted">${esc(src)} · ${esc(ts)}</div>
-      </td>
-      <td>${badge}</td>
-      <td class="small-muted">${esc(updated)}</td>
-      <td class="text-end">
-        <div class="btn-group btn-group-sm" role="group" aria-label="Question actions">
-          <a class="btn btn-outline-primary" href="${esc(href)}">Open</a>
-          ${canDeleteQuestions ? `<button class="btn btn-outline-danger" type="button" data-delete-question="${esc(it.thread_id || '')}">Delete</button>` : ''}
-        </div>
-      </td>
-    </tr>
-  `;
-}
-
-async function loadMyQuestions() {
-  if (!featureEnabled(me, 'questions')) return;
-  if (!myQuestionsTbody) return;
-  try {
-    if (myQuestionsStatus) myQuestionsStatus.style.display = 'none';
-    myQuestionsTbody.innerHTML = '<tr><td colspan="4" class="p-4 small-muted">Loading</td></tr>';
-    if (myQuestionsTableWrap) myQuestionsTableWrap.style.display = '';
-    if (myQuestionsEmpty) myQuestionsEmpty.style.display = 'none';
-
-    const res = await apiGet('/api/v1/me/questions');
-    const items = Array.isArray(res?.items) ? res.items : [];
-
-    if (items.length === 0) {
-      if (myQuestionsEmpty) myQuestionsEmpty.style.display = '';
-      if (myQuestionsTableWrap) myQuestionsTableWrap.style.display = 'none';
-      myQuestionsTbody.innerHTML = '';
-    } else {
-      if (myQuestionsEmpty) myQuestionsEmpty.style.display = 'none';
-      if (myQuestionsTableWrap) myQuestionsTableWrap.style.display = '';
-      myQuestionsTbody.innerHTML = items.map(myQuestionRow).join('');
-    }
-
-    myQuestionsLoaded = true;
+// Each "My ..." tab lists records from one /api/v1/me endpoint. Its elements
+// share the tab's id prefix: <prefix>Status, <prefix>Tbody, <prefix>Empty,
+// <prefix>TableWrap and <prefix>Refresh. A list loads the first time its tab
+// opens; Refresh loads it again.
+function accountList({
+  prefix,
+  feature,
+  endpoint,
+  framework = false,
+  noun,
+  columns,
+  row,
+  onLoaded,
+}) {
+  const el = (part) => document.getElementById(prefix + part);
+  const [listStatus, tbody, empty, wrap] = ['Status', 'Tbody', 'Empty', 'TableWrap'].map(el);
+  let loaded = false;
+  async function load() {
+    if (!featureEnabled(me, feature)) return;
+    listStatus.style.display = 'none';
+    tbody.innerHTML = `<tr><td colspan="${columns}" class="p-4 small-muted">Loading</td></tr>`;
+    wrap.style.display = '';
+    empty.style.display = 'none';
     try {
-      window.keenRefreshBell?.();
-    } catch {
-      // ignore
+      const url = new URL(endpoint, location.origin);
+      const fw = framework ? getCurrentFramework() : '';
+      if (fw) url.searchParams.set('framework', fw);
+      const res = await apiGet(url.pathname + url.search);
+      const items = Array.isArray(res?.items) ? res.items : [];
+      empty.style.display = items.length ? 'none' : '';
+      wrap.style.display = items.length ? '' : 'none';
+      tbody.innerHTML = items.map(row).join('');
+      loaded = true;
+      onLoaded?.();
+    } catch (err) {
+      wrap.style.display = 'none';
+      listStatus.className = 'alert alert-danger';
+      listStatus.style.display = '';
+      listStatus.textContent = `Failed to load ${noun}: ${String(err)}`;
     }
-  } catch (err) {
-    if (myQuestionsTableWrap) myQuestionsTableWrap.style.display = 'none';
-    myQuestionsStatus.className = 'alert alert-danger';
-    myQuestionsStatus.style.display = '';
-    myQuestionsStatus.textContent = `Failed to load questions: ${String(err)}`;
   }
+  el('Refresh')?.addEventListener('click', load);
+  return { load, loadOnce: () => (loaded ? undefined : load()) };
 }
 
-function loadMyQuestionsOnce() {
-  if (!myQuestionsLoaded) loadMyQuestions();
-}
-
-myQuestionsRefresh?.addEventListener('click', () => {
-  myQuestionsLoaded = false;
-  loadMyQuestions();
-});
-myQuestionsTbody?.addEventListener('click', async (ev) => {
-  const btn = ev.target?.closest?.('[data-delete-question]');
-  if (!btn || !canDeleteQuestions) return;
-  const tid = btn.getAttribute('data-delete-question') || '';
-  if (!tid) return;
-  if (!confirm('Delete this question thread and all replies?')) return;
-  btn.disabled = true;
+document.getElementById('myQuestionsTbody')?.addEventListener('click', async (ev) => {
+  const button = ev.target.closest?.('[data-delete-question]');
+  if (!button || !canDeleteQuestions) return;
+  button.disabled = true;
   try {
-    await apiDelete(`/api/v1/questions/${encodeURIComponent(tid)}`);
-    toast(status, 'Question deleted', 'success');
-    await loadMyQuestions();
+    if (await deleteQuestionThread(button.dataset.deleteQuestion)) {
+      toast(status, 'Question deleted', 'success');
+      await accountLists['#my-questions-pane'].load();
+    }
   } catch (e) {
     toast(status, String(e), 'danger');
-    btn.disabled = false;
   }
+  button.disabled = false;
 });
 
 // ---------------------------------------------------------------------------
 // My audits
 // ---------------------------------------------------------------------------
-
-let myAuditsLoaded = false;
 
 function auditStatusLabel(s) {
   const v = String(s || 'open');
@@ -788,51 +684,9 @@ function myAuditRow(a) {
   </tr>`;
 }
 
-async function loadMyAudits() {
-  if (!featureEnabled(me, 'audits')) return;
-  if (!myAuditsTbody) return;
-  try {
-    if (myAuditsStatus) myAuditsStatus.style.display = 'none';
-    myAuditsTbody.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">Loading</td></tr>';
-    if (myAuditsTableWrap) myAuditsTableWrap.style.display = '';
-    if (myAuditsEmpty) myAuditsEmpty.style.display = 'none';
-
-    const res = await apiGet('/api/v1/me/audits');
-    const items = Array.isArray(res?.items) ? res.items : [];
-
-    if (items.length === 0) {
-      if (myAuditsEmpty) myAuditsEmpty.style.display = '';
-      if (myAuditsTableWrap) myAuditsTableWrap.style.display = 'none';
-      myAuditsTbody.innerHTML = '';
-    } else {
-      if (myAuditsEmpty) myAuditsEmpty.style.display = 'none';
-      if (myAuditsTableWrap) myAuditsTableWrap.style.display = '';
-      myAuditsTbody.innerHTML = items.map(myAuditRow).join('');
-    }
-
-    myAuditsLoaded = true;
-  } catch (err) {
-    if (myAuditsTableWrap) myAuditsTableWrap.style.display = 'none';
-    myAuditsStatus.className = 'alert alert-danger';
-    myAuditsStatus.style.display = '';
-    myAuditsStatus.textContent = `Failed to load audits: ${String(err)}`;
-  }
-}
-
-function loadMyAuditsOnce() {
-  if (!myAuditsLoaded) loadMyAudits();
-}
-
-myAuditsRefresh?.addEventListener('click', () => {
-  myAuditsLoaded = false;
-  loadMyAudits();
-});
-
 // ---------------------------------------------------------------------------
 // Risks I own
 // ---------------------------------------------------------------------------
-
-let myRisksLoaded = false;
 
 function riskScoreClass(score) {
   const n = Number(score || 0);
@@ -878,57 +732,9 @@ function myRiskRow(r) {
   </tr>`;
 }
 
-async function loadMyRisks() {
-  if (!featureEnabled(me, 'risk_cia')) return;
-  if (!myRisksTbody) return;
-  try {
-    if (myRisksStatus) myRisksStatus.style.display = 'none';
-    myRisksTbody.innerHTML = '<tr><td colspan="8" class="p-4 small-muted">Loading</td></tr>';
-    if (myRisksTableWrap) myRisksTableWrap.style.display = '';
-    if (myRisksEmpty) myRisksEmpty.style.display = 'none';
-
-    const u = new URL('/api/v1/me/risks', location.origin);
-    const fw = getCurrentFramework();
-    if (fw) u.searchParams.set('framework', fw);
-    const res = await apiGet(u.pathname + u.search);
-    const items = Array.isArray(res?.items) ? res.items : [];
-
-    if (items.length === 0) {
-      if (myRisksEmpty) myRisksEmpty.style.display = '';
-      if (myRisksTableWrap) myRisksTableWrap.style.display = 'none';
-      myRisksTbody.innerHTML = '';
-    } else {
-      if (myRisksEmpty) myRisksEmpty.style.display = 'none';
-      if (myRisksTableWrap) myRisksTableWrap.style.display = '';
-      myRisksTbody.innerHTML = items.map(myRiskRow).join('');
-    }
-
-    myRisksLoaded = true;
-  } catch (err) {
-    if (myRisksTableWrap) myRisksTableWrap.style.display = 'none';
-    myRisksStatus.className = 'alert alert-danger';
-    myRisksStatus.style.display = '';
-    myRisksStatus.textContent = `Failed to load risks: ${String(err)}`;
-  }
-}
-
-function loadMyRisksOnce() {
-  if (!myRisksLoaded) loadMyRisks();
-}
-
-myRisksRefresh?.addEventListener('click', () => {
-  myRisksLoaded = false;
-  loadMyRisks();
-});
-
 // ---------------------------------------------------------------------------
 // My ISMS account cross-references
 // ---------------------------------------------------------------------------
-
-let myIsmsObjectivesLoaded = false;
-let myIsmsMeetingsLoaded = false;
-let myIsmsRoleLoaded = false;
-let myIsmsAssetsLoaded = false;
 
 function ismsUrl(tab = 'overview') {
   return withFramework(`/isms.html?tab=${encodeURIComponent(tab)}`, getCurrentFramework());
@@ -979,47 +785,6 @@ function myMeetingRow(item) {
   </tr>`;
 }
 
-async function loadMyMeetings() {
-  if (!featureEnabled(me, 'meetings')) return;
-  if (!myMeetingsTbody) return;
-  try {
-    if (myMeetingsStatus) myMeetingsStatus.style.display = 'none';
-    myMeetingsTbody.innerHTML = '<tr><td colspan="7" class="p-4 small-muted">Loading</td></tr>';
-    if (myMeetingsTableWrap) myMeetingsTableWrap.style.display = '';
-    if (myMeetingsEmpty) myMeetingsEmpty.style.display = 'none';
-
-    const u = new URL('/api/v1/me/isms-meetings', location.origin);
-    const fw = getCurrentFramework();
-    if (fw) u.searchParams.set('framework', fw);
-    const res = await apiGet(u.pathname + u.search);
-    const items = Array.isArray(res?.items) ? res.items : [];
-    if (!items.length) {
-      if (myMeetingsEmpty) myMeetingsEmpty.style.display = '';
-      if (myMeetingsTableWrap) myMeetingsTableWrap.style.display = 'none';
-      myMeetingsTbody.innerHTML = '';
-    } else {
-      if (myMeetingsEmpty) myMeetingsEmpty.style.display = 'none';
-      if (myMeetingsTableWrap) myMeetingsTableWrap.style.display = '';
-      myMeetingsTbody.innerHTML = items.map(myMeetingRow).join('');
-    }
-    myIsmsMeetingsLoaded = true;
-  } catch (err) {
-    if (myMeetingsTableWrap) myMeetingsTableWrap.style.display = 'none';
-    myMeetingsStatus.className = 'alert alert-danger';
-    myMeetingsStatus.style.display = '';
-    myMeetingsStatus.textContent = `Failed to load ISMS meetings: ${String(err)}`;
-  }
-}
-
-function loadMyMeetingsOnce() {
-  if (!myIsmsMeetingsLoaded) loadMyMeetings();
-}
-
-myMeetingsRefresh?.addEventListener('click', () => {
-  myIsmsMeetingsLoaded = false;
-  loadMyMeetings();
-});
-
 function myIsmsObjectiveRow(item) {
   const owner = userPillHtml(item?.owner_user);
   const target = item?.completion_target_date || '-';
@@ -1033,48 +798,6 @@ function myIsmsObjectiveRow(item) {
   </tr>`;
 }
 
-async function loadMyIsmsObjectives() {
-  if (!featureEnabled(me, 'objectives')) return;
-  if (!myIsmsObjectivesTbody) return;
-  try {
-    if (myIsmsObjectivesStatus) myIsmsObjectivesStatus.style.display = 'none';
-    myIsmsObjectivesTbody.innerHTML =
-      '<tr><td colspan="6" class="p-4 small-muted">Loading</td></tr>';
-    if (myIsmsObjectivesTableWrap) myIsmsObjectivesTableWrap.style.display = '';
-    if (myIsmsObjectivesEmpty) myIsmsObjectivesEmpty.style.display = 'none';
-
-    const u = new URL('/api/v1/me/isms-objectives', location.origin);
-    const fw = getCurrentFramework();
-    if (fw) u.searchParams.set('framework', fw);
-    const res = await apiGet(u.pathname + u.search);
-    const items = Array.isArray(res?.items) ? res.items : [];
-    if (!items.length) {
-      if (myIsmsObjectivesEmpty) myIsmsObjectivesEmpty.style.display = '';
-      if (myIsmsObjectivesTableWrap) myIsmsObjectivesTableWrap.style.display = 'none';
-      myIsmsObjectivesTbody.innerHTML = '';
-    } else {
-      if (myIsmsObjectivesEmpty) myIsmsObjectivesEmpty.style.display = 'none';
-      if (myIsmsObjectivesTableWrap) myIsmsObjectivesTableWrap.style.display = '';
-      myIsmsObjectivesTbody.innerHTML = items.map(myIsmsObjectiveRow).join('');
-    }
-    myIsmsObjectivesLoaded = true;
-  } catch (err) {
-    if (myIsmsObjectivesTableWrap) myIsmsObjectivesTableWrap.style.display = 'none';
-    myIsmsObjectivesStatus.className = 'alert alert-danger';
-    myIsmsObjectivesStatus.style.display = '';
-    myIsmsObjectivesStatus.textContent = `Failed to load ISMS objectives: ${String(err)}`;
-  }
-}
-
-function loadMyIsmsObjectivesOnce() {
-  if (!myIsmsObjectivesLoaded) loadMyIsmsObjectives();
-}
-
-myIsmsObjectivesRefresh?.addEventListener('click', () => {
-  myIsmsObjectivesLoaded = false;
-  loadMyIsmsObjectives();
-});
-
 function myIsmsRoleRow(item) {
   const node = item?.org_node || item?.node || item || {};
   const path = orgPathLabel(item?.path) || orgPathLabel(node?.path) || orgNodeLabel(node) || '-';
@@ -1086,44 +809,6 @@ function myIsmsRoleRow(item) {
     <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="${esc(ismsUrl('org'))}">Open</a></td>
   </tr>`;
 }
-
-async function loadMyIsmsRole() {
-  if (!featureEnabled(me, 'organisation')) return;
-  if (!myIsmsRoleTbody) return;
-  try {
-    if (myIsmsRoleStatus) myIsmsRoleStatus.style.display = 'none';
-    myIsmsRoleTbody.innerHTML = '<tr><td colspan="5" class="p-4 small-muted">Loading</td></tr>';
-    if (myIsmsRoleTableWrap) myIsmsRoleTableWrap.style.display = '';
-    if (myIsmsRoleEmpty) myIsmsRoleEmpty.style.display = 'none';
-
-    const res = await apiGet('/api/v1/me/isms-role');
-    const items = Array.isArray(res?.items) ? res.items : [];
-    if (!items.length) {
-      if (myIsmsRoleEmpty) myIsmsRoleEmpty.style.display = '';
-      if (myIsmsRoleTableWrap) myIsmsRoleTableWrap.style.display = 'none';
-      myIsmsRoleTbody.innerHTML = '';
-    } else {
-      if (myIsmsRoleEmpty) myIsmsRoleEmpty.style.display = 'none';
-      if (myIsmsRoleTableWrap) myIsmsRoleTableWrap.style.display = '';
-      myIsmsRoleTbody.innerHTML = items.map(myIsmsRoleRow).join('');
-    }
-    myIsmsRoleLoaded = true;
-  } catch (err) {
-    if (myIsmsRoleTableWrap) myIsmsRoleTableWrap.style.display = 'none';
-    myIsmsRoleStatus.className = 'alert alert-danger';
-    myIsmsRoleStatus.style.display = '';
-    myIsmsRoleStatus.textContent = `Failed to load ISMS roles: ${String(err)}`;
-  }
-}
-
-function loadMyIsmsRoleOnce() {
-  if (!myIsmsRoleLoaded) loadMyIsmsRole();
-}
-
-myIsmsRoleRefresh?.addEventListener('click', () => {
-  myIsmsRoleLoaded = false;
-  loadMyIsmsRole();
-});
 
 function assetRoleLabel(item) {
   const roles = [];
@@ -1150,46 +835,71 @@ function myIsmsAssetRow(item) {
   </tr>`;
 }
 
-async function loadMyIsmsAssets() {
-  if (!featureEnabled(me, 'assets')) return;
-  if (!myIsmsAssetsTbody) return;
-  try {
-    if (myIsmsAssetsStatus) myIsmsAssetsStatus.style.display = 'none';
-    myIsmsAssetsTbody.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">Loading</td></tr>';
-    if (myIsmsAssetsTableWrap) myIsmsAssetsTableWrap.style.display = '';
-    if (myIsmsAssetsEmpty) myIsmsAssetsEmpty.style.display = 'none';
-
-    const u = new URL('/api/v1/me/isms-assets', location.origin);
-    const fw = getCurrentFramework();
-    if (fw) u.searchParams.set('framework', fw);
-    const res = await apiGet(u.pathname + u.search);
-    const items = Array.isArray(res?.items) ? res.items : [];
-    if (!items.length) {
-      if (myIsmsAssetsEmpty) myIsmsAssetsEmpty.style.display = '';
-      if (myIsmsAssetsTableWrap) myIsmsAssetsTableWrap.style.display = 'none';
-      myIsmsAssetsTbody.innerHTML = '';
-    } else {
-      if (myIsmsAssetsEmpty) myIsmsAssetsEmpty.style.display = 'none';
-      if (myIsmsAssetsTableWrap) myIsmsAssetsTableWrap.style.display = '';
-      myIsmsAssetsTbody.innerHTML = items.map(myIsmsAssetRow).join('');
-    }
-    myIsmsAssetsLoaded = true;
-  } catch (err) {
-    if (myIsmsAssetsTableWrap) myIsmsAssetsTableWrap.style.display = 'none';
-    myIsmsAssetsStatus.className = 'alert alert-danger';
-    myIsmsAssetsStatus.style.display = '';
-    myIsmsAssetsStatus.textContent = `Failed to load ISMS assets: ${String(err)}`;
-  }
-}
-
-function loadMyIsmsAssetsOnce() {
-  if (!myIsmsAssetsLoaded) loadMyIsmsAssets();
-}
-
-myIsmsAssetsRefresh?.addEventListener('click', () => {
-  myIsmsAssetsLoaded = false;
-  loadMyIsmsAssets();
-});
+const accountLists = {
+  '#my-questions-pane': accountList({
+    prefix: 'myQuestions',
+    feature: 'questions',
+    endpoint: '/api/v1/me/questions',
+    noun: 'questions',
+    columns: 4,
+    row: (item) =>
+      myQuestionRowHtml(item, { framework: getCurrentFramework(), canDelete: canDeleteQuestions }),
+    // Keep the navbar's question count in step with the list.
+    onLoaded: () => window.keenRefreshBell?.(),
+  }),
+  '#my-audits-pane': accountList({
+    prefix: 'myAudits',
+    feature: 'audits',
+    endpoint: '/api/v1/me/audits',
+    noun: 'audits',
+    columns: 6,
+    row: myAuditRow,
+  }),
+  '#my-meetings-pane': accountList({
+    prefix: 'myMeetings',
+    feature: 'meetings',
+    endpoint: '/api/v1/me/isms-meetings',
+    framework: true,
+    noun: 'ISMS meetings',
+    columns: 7,
+    row: myMeetingRow,
+  }),
+  '#my-risks-pane': accountList({
+    prefix: 'myRisks',
+    feature: 'risk_cia',
+    endpoint: '/api/v1/me/risks',
+    framework: true,
+    noun: 'risks',
+    columns: 8,
+    row: myRiskRow,
+  }),
+  '#my-isms-objectives-pane': accountList({
+    prefix: 'myIsmsObjectives',
+    feature: 'objectives',
+    endpoint: '/api/v1/me/isms-objectives',
+    framework: true,
+    noun: 'ISMS objectives',
+    columns: 6,
+    row: myIsmsObjectiveRow,
+  }),
+  '#my-isms-role-pane': accountList({
+    prefix: 'myIsmsRole',
+    feature: 'organisation',
+    endpoint: '/api/v1/me/isms-role',
+    noun: 'ISMS roles',
+    columns: 5,
+    row: myIsmsRoleRow,
+  }),
+  '#my-isms-assets-pane': accountList({
+    prefix: 'myIsmsAssets',
+    feature: 'assets',
+    endpoint: '/api/v1/me/isms-assets',
+    framework: true,
+    noun: 'ISMS assets',
+    columns: 6,
+    row: myIsmsAssetRow,
+  }),
+};
 
 bindAccountTabs();
 

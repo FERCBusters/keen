@@ -1271,6 +1271,7 @@ export function entityChangelogHtml(items = [], { empty = 'No changelog entries 
   </div>`;
 }
 
+// Shows a record's changelog in its tab; a failure is reported in the tab.
 export async function loadEntityChangelog(
   container,
   url,
@@ -1278,7 +1279,12 @@ export async function loadEntityChangelog(
 ) {
   if (!container) return null;
   container.innerHTML = loadingSpinnerHtml(loading, { small: true });
-  const res = await apiGet(url);
-  container.innerHTML = entityChangelogHtml(res?.items || [], { empty });
-  return res;
+  try {
+    const res = await apiGet(url);
+    container.innerHTML = entityChangelogHtml(res?.items || [], { empty });
+    return res;
+  } catch {
+    container.innerHTML = '<div class="text-danger p-3">Failed to load changelog.</div>';
+    return null;
+  }
 }

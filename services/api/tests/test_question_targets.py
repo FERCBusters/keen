@@ -853,7 +853,7 @@ def test_the_admin_queue_shows_open_questions_unless_asked_for_more(qa):
         ),
         swot_thread: (
             "SWOT item: weakness - Ageing hardware",
-            f"/isms-swot.html?id={qa.swot.id}&tab=questions&thread={swot_thread}",
+            f"/swot.html?id={qa.swot.id}&tab=questions&thread={swot_thread}",
         ),
     }
 

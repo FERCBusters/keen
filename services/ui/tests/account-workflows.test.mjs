@@ -212,7 +212,7 @@ const showTab = (ui, id) => ui.el(id).dispatchEvent(new ui.window.Event('shown.b
 
 test('my questions show status badges, safe links and deletion for administrators', async (t) => {
   const tabs = fakeTabs();
-  const { ui, state } = await account(t, { query: '#questions', tabs });
+  const { ui, state } = await account(t, { query: '#my-questions', tabs });
   assert.deepEqual(tabs.shown, ['my-questions-tab']);
   await settle(() => ui.el('myQuestionsTbody').querySelectorAll('tr').length === 3);
   const rows = [...ui.el('myQuestionsTbody').querySelectorAll('tr')];
@@ -498,22 +498,26 @@ test('disabled features skip their account lists', async (t) => {
   );
 });
 
-test('hash aliases open the matching account tab', async (t) => {
+test("each tab's own hash opens it, and an unknown hash opens the default tab", async (t) => {
   for (const [hash, id] of [
-    ['#profile', 'preferences-tab'],
-    ['#savedsearches', 'saved-searches-tab'],
-    ['#audits', 'my-audits-tab'],
-    ['#minutes', 'my-meetings-tab'],
-    ['#risks-i-own', 'my-risks-tab'],
-    ['#isms-objectives', 'my-isms-objectives-tab'],
-    ['#my-role', 'my-isms-role-tab'],
-    ['#assets-i-manage', 'my-isms-assets-tab'],
-    ['#password', 'security-tab'],
+    ['#preferences', 'preferences-tab'],
+    ['#security', 'security-tab'],
+    ['#saved-searches', 'saved-searches-tab'],
+    ['#my-questions', 'my-questions-tab'],
+    ['#my-audits', 'my-audits-tab'],
+    ['#my-meetings', 'my-meetings-tab'],
+    ['#my-risks', 'my-risks-tab'],
+    ['#my-isms-objectives', 'my-isms-objectives-tab'],
+    ['#my-isms-role', 'my-isms-role-tab'],
+    ['#MY-ISMS-ASSETS', 'my-isms-assets-tab'],
   ]) {
     const tabs = fakeTabs();
     await account(t, { query: hash, tabs, lists: emptyLists });
     assert.deepEqual(tabs.shown, [id], hash);
   }
+  const unknown = fakeTabs();
+  await account(t, { query: '#password', tabs: unknown, lists: emptyLists });
+  assert.deepEqual(unknown.shown, []);
 });
 
 test('preferences load defaults, toggle the timezone and save the chosen settings', async (t) => {
@@ -802,7 +806,7 @@ test('a framework catalogue that cannot load still offers the saved default fram
 
 test('Refresh fetches my questions again and shows a later failure in the card', async (t) => {
   const fail = {};
-  const { ui, state } = await account(t, { query: '#questions', tabs: fakeTabs(), fail });
+  const { ui, state } = await account(t, { query: '#my-questions', tabs: fakeTabs(), fail });
   await settle(() => ui.el('myQuestionsTbody').querySelectorAll('tr').length === 3);
   const requests = () => state.gets.filter((g) => g.startsWith('/api/v1/me/questions')).length;
   assert.equal(requests(), 1);

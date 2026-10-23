@@ -109,16 +109,11 @@
                       <option value="external">External</option>
                     </select>
                   </div>
+                  <!-- pages/audit-schedule.js adds the fuzzy date rules, months and recurrences. -->
                   <div class="col-12">
                     <label class="form-label small-muted mb-1" for="schedDateRule">Date selector</label>
                     <select id="schedDateRule" class="form-select">
                       <option value="exact">Exact first run date</option>
-                      <option value="first_weekday_of_month">First weekday of month</option>
-                      <option value="first_monday_of_month">First Monday of month</option>
-                      <option value="first_tuesday_of_month">First Tuesday of month</option>
-                      <option value="first_wednesday_of_month">First Wednesday of month</option>
-                      <option value="first_thursday_of_month">First Thursday of month</option>
-                      <option value="first_friday_of_month">First Friday of month</option>
                     </select>
                     <div class="form-text">Use a fuzzy selector for schedules such as “first Monday of January” that should survive year-to-year calendar shifts.</div>
                   </div>
@@ -134,20 +129,7 @@
                     <div class="row g-2">
                       <div class="col-12 col-md-7">
                         <label class="form-label small-muted mb-1" for="schedFuzzyMonth" id="schedFuzzyMonthLabel">First weekday of</label>
-                        <select id="schedFuzzyMonth" class="form-select">
-                          <option value="1">January</option>
-                          <option value="2">February</option>
-                          <option value="3">March</option>
-                          <option value="4">April</option>
-                          <option value="5">May</option>
-                          <option value="6">June</option>
-                          <option value="7">July</option>
-                          <option value="8">August</option>
-                          <option value="9">September</option>
-                          <option value="10">October</option>
-                          <option value="11">November</option>
-                          <option value="12">December</option>
-                        </select>
+                        <select id="schedFuzzyMonth" class="form-select"></select>
                       </div>
                       <div class="col-12 col-md-5">
                         <label class="form-label small-muted mb-1" for="schedFuzzyYear">Start year</label>
@@ -167,14 +149,8 @@
                     </div>
                   </div>
                   <div class="col-12 col-md-6">
-                    <label class="form-label small-muted mb-1">Recurrence</label>
-                    <select id="schedRecurrence" class="form-select">
-                      <option value="once">Once</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                      <option value="quarterly">Quarterly</option>
-                      <option value="yearly">Yearly</option>
-                    </select>
+                    <label class="form-label small-muted mb-1" for="schedRecurrence">Recurrence</label>
+                    <select id="schedRecurrence" class="form-select"></select>
                   </div>
                   <div class="col-6 col-md-3">
                     <label class="form-label small-muted mb-1">Every</label>

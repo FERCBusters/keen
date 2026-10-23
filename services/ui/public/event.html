@@ -172,17 +172,12 @@
 
       <section class="tab-pane fade" id="eventQuestionsPane" role="tabpanel" aria-labelledby="eventQuestionsTab" tabindex="0">
         <div id="questionsCard" class="card mb-3" data-feature="questions">
-          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div>
-              <div class="fw-bold">Questions</div>
-              <div class="small-muted">Auditor questions and responses associated with this evidence.</div>
-            </div>
-            <div class="no-print">
-              <button id="btnAskQuestion" class="btn btn-sm btn-outline-primary" type="button" style="display:none;"><i class="bi bi-chat-left-text me-1" aria-hidden="true"></i>Ask a question about this event</button>
-            </div>
+          <div class="card-header">
+            <div class="fw-bold">Questions</div>
+            <div class="small-muted">Auditor questions and responses associated with this evidence.</div>
           </div>
           <div class="card-body">
-            <div id="questions" class="small-muted">-</div>
+            <div id="questions"></div>
           </div>
         </div>
       </section>
@@ -360,36 +355,6 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
           <button id="incidentSubmit" type="button" class="btn btn-warning">Create incident</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Question event (auditor question) -->
-  <div class="modal fade" id="questionModal" data-feature="questions" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Ask a question about this event</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div id="questionStatus" class="alert alert-info" style="display:none;"></div>
-          <form id="questionForm" data-feature="questions">
-            <div class="mb-3">
-              <label class="form-label small-muted mb-1">Question</label>
-              <textarea id="questionBody" class="form-control" rows="4" placeholder="e.g. What was this about?" required></textarea>
-            </div>
-            <div class="mb-2">
-              <label class="form-label small-muted mb-1">Attachments (optional)</label>
-              <input id="questionAttachments" class="form-control" type="file" multiple />
-              <div class="form-text">Up to 10 attachments.</div>
-            </div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button id="questionSubmit" type="button" class="btn btn-primary">Submit question</button>
         </div>
       </div>
     </div>

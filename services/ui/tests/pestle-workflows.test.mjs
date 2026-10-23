@@ -328,24 +328,6 @@ test('an item can be sampled into an audit from the register', async (t) => {
   assert.equal(state.posted[0].body.entity_id, 'p1');
 });
 
-test('a legacy item link redirects to the item page and maps the editor tab', async (t) => {
-  for (const [query, target] of [
-    ['&id=p%2F1&tab=editor', '/pestle_item.html?id=p%2F1&tab=details&framework=A'],
-    ['&id=p1&tab=questions', '/pestle_item.html?id=p1&tab=questions&framework=A'],
-    ['&id=p1', '/pestle_item.html?id=p1&framework=A'],
-  ]) {
-    const replaced = [];
-    const location = {
-      search: '?framework=A' + query,
-      origin: 'https://keen.example',
-      pathname: '/pestle.html',
-      replace: (u) => replaced.push(u),
-    };
-    await pestlePage(t, { globals: { location } });
-    assert.deepEqual(replaced, [target]);
-  }
-});
-
 function fakeTabs() {
   const shown = [];
   return {
@@ -370,9 +352,10 @@ test('tabs follow the tab query parameter and record the active tab', async (t) 
   assert.doesNotMatch(ui.window.location.search, /tab=/);
   assert.match(ui.window.location.search, /framework=A/);
 
-  const editor = fakeTabs();
-  await pestlePage(t, { query: '&tab=editor', tabs: editor });
-  assert.deepEqual(editor.shown, ['pestleItemsTab']);
+  // An unknown tab opens the item list.
+  const unknown = fakeTabs();
+  await pestlePage(t, { query: '&tab=unknown', tabs: unknown });
+  assert.deepEqual(unknown.shown, ['pestleItemsTab']);
 });
 
 test('visualisations draw the lens/type heatmap, relevance circles and clause network', async (t) => {

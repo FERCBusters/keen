@@ -25,6 +25,8 @@ async function fixture(t, options = {}) {
         return { ...event, ...options.event };
       }
       if (u.pathname === '/api/v1/events/e1/questions') return { threads: [] };
+      // The print view reads the account itself instead of drawing the navigation.
+      if (u.pathname === '/api/v1/me') return { is_admin: true, ...options.me };
       if (u.pathname === '/api/v1/events/e1/control-suggestions') {
         if (options.suggestionsFail) throw new Error('down');
         return {
@@ -141,6 +143,57 @@ test('rule rationale links use escaped text and encoded IDs for administrators o
   const reader = await fixture(t, { event: data, me: { is_admin: false } });
   assert.equal(reader.el('rationale').querySelector('a'), null);
   assert.match(reader.el('rationale').textContent, /auto by rule/);
+});
+
+test('a control inherited through a crosswalk links the other control and the rule that mapped the event', async (t) => {
+  const rule = 'rule"><img src=x>';
+  const inherited = (id, from, rationale = '') => ({
+    id,
+    ref: id.toUpperCase(),
+    method: 'cross_framework',
+    rationale,
+    inherited_from: { framework: 'ISO', ref: from, control_id: 'src-' + from, rule_id: rule },
+  });
+  const data = {
+    controls: [
+      inherited('c1', 'A.8.13'),
+      // A second control inherited through the same mapping is explained once.
+      inherited('c2', 'A.8.13'),
+      inherited('c3', 'A.5.30', 'Partial: <b>restore tests</b> only'),
+    ],
+  };
+  const ui = await fixture(t, { event: data });
+  const items = [...ui.el('rationale').querySelectorAll('li')];
+  assert.equal(items.length, 2);
+  assert.match(
+    items[0].textContent,
+    /^Another framework's control cross-referenced this control when the event was mapped\.$/,
+  );
+  const [control, mapped] = items[0].querySelectorAll('a');
+  assert.equal(control.getAttribute('title'), 'ISO A.8.13');
+  assert.match(control.getAttribute('href'), /^\/control\.html\?id=src-A\.8\.13&framework=ISO$/);
+  assert.equal(mapped.textContent, 'mapped');
+  assert.equal(new URL(mapped.href).searchParams.get('rule'), rule);
+  assert.equal(new URL(mapped.href).hash, '#evidence-config');
+  // A crosswalk's own rationale follows as plain text.
+  assert.equal(
+    items[1].querySelector('.small-muted').textContent,
+    'Partial: <b>restore tests</b> only',
+  );
+  assert.equal(ui.el('rationale').querySelector('img, b'), null);
+
+  // Readers can open the other control; the rule settings stay with administrators.
+  const reader = await fixture(t, { event: data, me: { is_admin: false } });
+  const readerLinks = [...reader.el('rationale').querySelectorAll('a')];
+  assert.ok(readerLinks.every((a) => a.textContent === "Another framework's control"));
+
+  // Printed evidence names the other control instead of linking it.
+  const printed = await fixture(t, { event: data, query: '&id=e1&print=1' });
+  assert.equal(printed.el('rationale').querySelector('a'), null);
+  assert.match(
+    printed.el('rationale').textContent,
+    /Another framework's control \(ISO A\.8\.13\) cross-referenced this control when the event was mapped\./,
+  );
 });
 
 test('an unmapped event shows suggested controls and a rule proposal with the ticked refs', async (t) => {

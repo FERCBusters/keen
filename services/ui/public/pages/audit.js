@@ -1,5 +1,6 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { maskDomText, maskEventDataString } from '/pages/evidence-export/masking.js';
+import { isoYearMonth, scheduleDateFields } from '/pages/audit-schedule.js';
 let selectedSwotIds = new Set(),
   swotScopeLoaded = false;
 import {
@@ -91,6 +92,21 @@ for (const el of ['auditStartText', 'auditEndText', 'tmplScheduleStartText', 'tm
 )) {
   if (el) el.setAttribute('placeholder', dateFormatPlaceholder());
 }
+const templateDates = scheduleDateFields(
+  {
+    rule: document.getElementById('tmplDateRule'),
+    recurrence: document.getElementById('tmplRecurrence'),
+    exactFields: document.getElementById('tmplExactDateFields'),
+    fuzzyFields: document.getElementById('tmplFuzzyDateFields'),
+    month: document.getElementById('tmplFuzzyMonth'),
+    monthLabel: document.getElementById('tmplFuzzyMonthLabel'),
+    year: document.getElementById('tmplFuzzyYear'),
+    start: tmplScheduleStart,
+    startText: document.getElementById('tmplScheduleStartText'),
+    preview: document.getElementById('tmplSchedulePreview'),
+  },
+  { lead: 'Next run' },
+);
 
 initRichTextEditors(document);
 
@@ -105,102 +121,6 @@ let clauseControlMap = new Map();
 let clauseChildrenByParentId = new Map();
 let attendeeUsers = [];
 let attendeePeople = [];
-
-function _todayYear() {
-  return new Date().getFullYear();
-}
-
-function _isFuzzyScheduleDateRule(rule) {
-  return String(rule || 'exact') !== 'exact';
-}
-
-function _fuzzyScheduleRuleLabel(rule) {
-  return (
-    {
-      first_weekday_of_month: 'first weekday',
-      first_monday_of_month: 'first Monday',
-      first_tuesday_of_month: 'first Tuesday',
-      first_wednesday_of_month: 'first Wednesday',
-      first_thursday_of_month: 'first Thursday',
-      first_friday_of_month: 'first Friday',
-    }[String(rule || '')] || 'first weekday'
-  );
-}
-
-function _firstScheduleRuleDateIso(year, month, rule) {
-  const y = Number(year) || _todayYear();
-  const m = Math.max(1, Math.min(12, Number(month) || 1));
-  const d = new Date(Date.UTC(y, m - 1, 1));
-  const targetWeekdays = {
-    first_monday_of_month: 1,
-    first_tuesday_of_month: 2,
-    first_wednesday_of_month: 3,
-    first_thursday_of_month: 4,
-    first_friday_of_month: 5,
-  };
-  const target = targetWeekdays[String(rule || '')];
-  if (target) {
-    while (d.getUTCDay() !== target) d.setUTCDate(d.getUTCDate() + 1);
-  } else {
-    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
-  }
-  return d.toISOString().slice(0, 10);
-}
-
-function _isoYear(iso, fallback = _todayYear()) {
-  const m = String(iso || '').match(/^(\d{4})-/);
-  return m ? Number(m[1]) : fallback;
-}
-
-function _isoMonth(iso, fallback = new Date().getMonth() + 1) {
-  const m = String(iso || '').match(/^\d{4}-(\d{2})-/);
-  return m ? Number(m[1]) : fallback;
-}
-
-function updateTemplateScheduleDateMode() {
-  const mode = document.getElementById('tmplDateRule')?.value || 'exact';
-  const fuzzy = _isFuzzyScheduleDateRule(mode);
-  const exactFields = document.getElementById('tmplExactDateFields');
-  const fuzzyFields = document.getElementById('tmplFuzzyDateFields');
-  if (exactFields) exactFields.style.display = fuzzy ? 'none' : '';
-  if (fuzzyFields) fuzzyFields.style.display = fuzzy ? '' : 'none';
-
-  const recurrence = document.getElementById('tmplRecurrence');
-  const weekly = recurrence?.querySelector('option[value="weekly"]');
-  if (weekly) weekly.disabled = fuzzy;
-  if (fuzzy && recurrence?.value === 'weekly') recurrence.value = 'yearly';
-
-  if (fuzzy) {
-    const year = Number(
-      document.getElementById('tmplFuzzyYear')?.value || _isoYear(tmplScheduleStart?.value),
-    );
-    const month = Number(
-      document.getElementById('tmplFuzzyMonth')?.value || _isoMonth(tmplScheduleStart?.value),
-    );
-    const iso = _firstScheduleRuleDateIso(year, month, mode);
-    const label = _fuzzyScheduleRuleLabel(mode);
-    const monthLabel = document.getElementById('tmplFuzzyMonthLabel');
-    if (monthLabel) monthLabel.textContent = `${label.charAt(0).toUpperCase()}${label.slice(1)} of`;
-    if (tmplScheduleStart) tmplScheduleStart.value = iso;
-    if (document.getElementById('tmplScheduleStartText'))
-      document.getElementById('tmplScheduleStartText').value = isoDateToDisplay(iso);
-    const preview = document.getElementById('tmplSchedulePreview');
-    if (preview)
-      preview.textContent = `Next run will be ${isoDateToDisplay(iso)}; future runs keep the ${label} rule.`;
-  } else {
-    const preview = document.getElementById('tmplSchedulePreview');
-    if (preview) preview.textContent = '';
-  }
-}
-
-function _templateScheduleStartForSubmit() {
-  updateTemplateScheduleDateMode();
-  if (_isFuzzyScheduleDateRule(document.getElementById('tmplDateRule')?.value || 'exact')) {
-    return tmplScheduleStart?.value || '';
-  }
-  const ok = tmplScheduleStartWire?.syncHiddenFromText?.();
-  return ok === false ? '' : tmplScheduleStart?.value || '';
-}
 
 function canViewAudits() {
   return Boolean(me?.can_view_audits || me?.can_manage_audits || me?.is_admin);
@@ -377,11 +297,12 @@ function setTemplateScheduleForm(a) {
   setFieldValue('tmplRecurrence', a?.schedule_recurrence || 'once');
   setFieldValue('tmplInterval', String(a?.schedule_interval || 1));
   setFieldValue('tmplUntil', a?.schedule_until_date || '');
-  setFieldValue('tmplFuzzyMonth', String(a?.schedule_anchor_month || _isoMonth(start)));
-  setFieldValue('tmplFuzzyYear', String(_isoYear(start)));
+  const startMonth = isoYearMonth(start);
+  setFieldValue('tmplFuzzyMonth', String(a?.schedule_anchor_month || startMonth.month));
+  setFieldValue('tmplFuzzyYear', String(startMonth.year));
   tmplScheduleStartWire?.syncTextFromHidden?.();
   tmplUntilWire?.syncTextFromHidden?.();
-  updateTemplateScheduleDateMode();
+  templateDates.update();
 
   const info = document.getElementById('tmplScheduleInfo');
   if (info) {
@@ -486,7 +407,7 @@ function restoreUnsavedPageState(state) {
   auditEndWire?.syncTextFromHidden?.();
   tmplScheduleStartWire?.syncTextFromHidden?.();
   tmplUntilWire?.syncTextFromHidden?.();
-  updateTemplateScheduleDateMode();
+  templateDates.update();
 
   selectedSwotIds = new Set(state.selectedSwotIds || []);
   document.querySelectorAll('[data-swot-scope]').forEach((box) => {
@@ -2471,20 +2392,11 @@ document.getElementById('detailsForm')?.addEventListener('submit', async (ev) =>
   }
 });
 
-document.getElementById('tmplDateRule')?.addEventListener('change', updateTemplateScheduleDateMode);
-document
-  .getElementById('tmplFuzzyMonth')
-  ?.addEventListener('change', updateTemplateScheduleDateMode);
-document.getElementById('tmplFuzzyYear')?.addEventListener('input', updateTemplateScheduleDateMode);
-document
-  .getElementById('tmplRecurrence')
-  ?.addEventListener('change', updateTemplateScheduleDateMode);
-
 document.getElementById('templateScheduleForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   try {
     if (!ensureAuditEditable() || !auditTemplate()) return;
-    const startDate = _templateScheduleStartForSubmit();
+    const startDate = templateDates.startForSubmit(tmplScheduleStartWire);
     const untilOk = tmplUntilWire?.syncHiddenFromText?.() !== false;
     if (!startDate || !untilOk) {
       toast(status, 'Enter schedule dates using the configured date format.', 'warning');
@@ -2493,11 +2405,7 @@ document.getElementById('templateScheduleForm')?.addEventListener('submit', asyn
     await apiPatch(`/api/v1/audits/scheduled/${encodeURIComponent(auditId)}`, {
       start_date: startDate,
       schedule_date_rule: document.getElementById('tmplDateRule')?.value || 'exact',
-      schedule_anchor_month: _isFuzzyScheduleDateRule(
-        document.getElementById('tmplDateRule')?.value || 'exact',
-      )
-        ? Number(document.getElementById('tmplFuzzyMonth')?.value || 1)
-        : null,
+      schedule_anchor_month: templateDates.anchorMonth(),
       schedule_recurrence: document.getElementById('tmplRecurrence')?.value || 'once',
       schedule_interval: Number(document.getElementById('tmplInterval')?.value || 1),
       schedule_until_date: tmplUntil?.value || null,

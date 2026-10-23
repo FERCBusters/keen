@@ -283,6 +283,19 @@ test('a deleted rule deep link reports that the rule is unavailable', async (t) 
   assert.equal(ui.document.getElementById('ec-new-rule').disabled, false);
 });
 
+test('Remap old events sits beside Create mapping and leaves with the library', async (t) => {
+  const ui = await fixture(t, { defaultView: true });
+  const create = ui.document.getElementById('ec-new-rule');
+  const remap = ui.document.getElementById('ec-remap-link');
+  assert.equal(remap.textContent, 'Remap old events');
+  assert.equal(remap.getAttribute('href'), '#remap');
+  assert.equal(remap.parentElement, create.parentElement);
+  await until(() => !create.disabled);
+  create.click();
+  await until(() => !ui.document.getElementById('ec-editor').hidden);
+  assert.equal(remap.closest('#ec-library').hidden, true);
+});
+
 test('Create mapping is unavailable until the first load finishes', async (t) => {
   let release;
   const held = new Promise((resolve) => {

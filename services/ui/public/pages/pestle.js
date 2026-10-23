@@ -21,6 +21,13 @@ import {
   selectedFilterPillValues,
   setFilterPillOptions,
 } from '/pages/filter-pill-multiselect.js';
+import {
+  addHeadings,
+  addNodeLabel,
+  addZoom,
+  curvedLink,
+  splitLabel,
+} from '/pages/bipartite-graph.js';
 
 const me = await initNavbar();
 initCollapsibleFilterSections();
@@ -37,14 +44,7 @@ const canViewPestle = !!(
 const canManagePestle = !!(me?.is_admin || me?.can_manage_pestle || me?.can_manage_risks);
 const canSampleAudits = canSampleIntoAudit(me, 'pestle_item');
 
-const params = new URLSearchParams(location.search);
-const requestedItemId = params.get('id') || '';
-const requestedTab = params.get('tab') || '';
-if (requestedItemId) {
-  const targetTab = requestedTab === 'editor' ? 'details' : requestedTab;
-  const target = `/pestle_item.html?id=${encodeURIComponent(requestedItemId)}${targetTab ? `&tab=${encodeURIComponent(targetTab)}` : ''}`;
-  location.replace(withFramework(target, framework));
-}
+const requestedTab = new URLSearchParams(location.search).get('tab') || '';
 let visualisationsLoaded = false;
 
 const status = document.getElementById('status');
@@ -149,7 +149,7 @@ function wireTabs() {
       toast(status, `Failed to load visualisations: ${String(e)}`, 'danger'),
     );
   });
-  activateTab(requestedTab === 'editor' ? 'items' : requestedTab || 'items');
+  activateTab(requestedTab);
 }
 
 function relevanceLabel(rowOrCode) {
@@ -544,69 +544,6 @@ function pestleClauseHref(id) {
   return withFramework(`/clause.html?id=${encodeURIComponent(id || '')}&tab=pestle`, framework);
 }
 
-function splitPestleVizLabel(value, maxChars = 34, maxLines = 2) {
-  const text = String(value || '').trim() || '-';
-  if (text.length <= maxChars) return [text];
-  const words = text.split(/\s+/);
-  const lines = [];
-  let current = '';
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars && current) {
-      lines.push(current);
-      current = word;
-      if (lines.length >= maxLines) break;
-    } else {
-      current = next;
-    }
-  }
-  if (lines.length < maxLines && current) lines.push(current);
-  if (!lines.length) lines.push(text.slice(0, maxChars));
-  if (lines.join(' ').length < text.length) {
-    const last = lines.length - 1;
-    lines[last] = `${lines[last].slice(0, Math.max(8, maxChars - 1)).replace(/\s+$/, '')}…`;
-  }
-  return lines.slice(0, maxLines);
-}
-
-function addPestleBipartiteText(
-  selection,
-  lines,
-  {
-    x = 0,
-    y = 0,
-    anchor = 'start',
-    fontSize = 12,
-    weight = 600,
-    lineHeight = 13,
-    opacity = 1,
-    underline = false,
-  } = {},
-) {
-  const text = selection
-    .append('text')
-    .attr('x', x)
-    .attr('y', y)
-    .attr('font-size', fontSize)
-    .attr('font-weight', weight)
-    .attr('text-anchor', anchor)
-    .attr('fill', 'currentColor')
-    .attr('opacity', opacity);
-  if (underline) text.style('text-decoration', 'underline');
-  (lines || ['-']).forEach((line, idx) => {
-    text
-      .append('tspan')
-      .attr('x', x)
-      .attr('dy', idx === 0 ? 0 : lineHeight)
-      .text(line);
-  });
-  return text;
-}
-
-function pestleVizButton(label, action, title) {
-  return `<button class="viz-zoom-btn" type="button" data-zoom="${esc(action)}" title="${esc(title)}" aria-label="${esc(title)}">${esc(label)}</button>`;
-}
-
 function estimatedPestleLabelChars(nodes, fallback = 36) {
   const max = Math.max(
     ...(nodes || []).map((node) => String(node.label || node.ref || '').length),
@@ -743,15 +680,6 @@ function drawClauseNetwork(data) {
     ...new Set(graphItems.map((node) => node.type || 'PESTLE(E)')),
   ]);
 
-  const controls = document.createElement('div');
-  controls.className = 'viz-zoom-controls no-print';
-  controls.innerHTML = [
-    pestleVizButton('+', 'in', 'Zoom in'),
-    pestleVizButton('−', 'out', 'Zoom out'),
-    pestleVizButton('Reset', 'reset', 'Reset zoom to fit'),
-  ].join('');
-  el.appendChild(controls);
-
   const svg = d3
     .select(el)
     .append('svg')
@@ -762,69 +690,20 @@ function drawClauseNetwork(data) {
     .attr('role', 'img')
     .attr('aria-label', 'Clauses to PESTLE(E) items bipartite graph');
   const scene = svg.append('g').attr('class', 'pestle-clause-bipartite-scene');
-  const fitScale = Math.min(
-    1,
-    (viewportWidth - 20) / contentWidth,
-    (viewportHeight - 20) / contentHeight,
-  );
-  const fitX = Math.max(10, (viewportWidth - contentWidth * fitScale) / 2);
-  const fitY = Math.max(10, (viewportHeight - contentHeight * fitScale) / 2);
-  const fitTransform = d3.zoomIdentity.translate(fitX, fitY).scale(fitScale);
-  const zoom = d3
-    .zoom()
-    .scaleExtent([Math.min(0.15, fitScale), 4])
-    .translateExtent([
-      [-contentWidth, -contentHeight],
-      [contentWidth * 2, contentHeight * 2],
-    ])
-    .on('zoom', (ev) => scene.attr('transform', ev.transform));
-  svg.call(zoom).on('wheel.zoom', null);
-  svg.call(zoom.transform, fitTransform);
-  controls.addEventListener('click', (ev) => {
-    const btn = ev.target?.closest?.('[data-zoom]');
-    if (!btn) return;
-    const action = btn.getAttribute('data-zoom');
-    if (action === 'in') svg.transition().duration(160).call(zoom.scaleBy, 1.25);
-    else if (action === 'out') svg.transition().duration(160).call(zoom.scaleBy, 0.8);
-    else svg.transition().duration(160).call(zoom.transform, fitTransform);
-  });
-
-  addPestleBipartiteText(scene, ['Clauses'], {
-    x: leftX - 16,
-    y: 24,
-    anchor: 'end',
-    fontSize: 13,
-    weight: 700,
-  });
-  addPestleBipartiteText(scene, ['PESTLE(E) items'], {
-    x: rightX + 16,
-    y: 24,
-    anchor: 'start',
-    fontSize: 13,
-    weight: 700,
+  addZoom(el, svg, scene, { contentWidth, contentHeight, viewportWidth, viewportHeight });
+  addHeadings(scene, {
+    leftX,
+    rightX,
+    titles: ['Clauses', 'PESTLE(E) items'],
+    summary: clauseRelationshipSummary({ clauses, items: graphItems, links }),
   });
   scene
-    .append('text')
-    .attr('x', leftX - 16)
-    .attr('y', 46)
-    .attr('font-size', 12)
-    .attr('fill', 'currentColor')
-    .attr('opacity', 0.72)
-    .attr('text-anchor', 'end')
-    .text(clauseRelationshipSummary({ clauses, items: graphItems, links }));
-
-  const path = (link) => {
-    const y1 = clauseY(link.source) || topPad;
-    const y2 = itemY(link.target) || topPad;
-    const mid = (leftX + rightX) / 2;
-    return `M${leftX},${y1} C${mid},${y1} ${mid},${y2} ${rightX},${y2}`;
-  };
-  const linkGroup = scene.append('g').attr('fill', 'none');
-  linkGroup
+    .append('g')
+    .attr('fill', 'none')
     .selectAll('path')
     .data(links)
     .join('path')
-    .attr('d', path)
+    .attr('d', curvedLink(leftX, rightX, clauseY, itemY, topPad))
     .attr('stroke', (link) => pestleRelevanceColour(link.relevance))
     .attr('stroke-opacity', 0.34)
     .attr('stroke-width', (link) => strokeWidth(link.count || 1))
@@ -839,8 +718,6 @@ function drawClauseNetwork(data) {
     const isClause = side === 'clause';
     const x = isClause ? leftX : rightX;
     const yScale = isClause ? clauseY : itemY;
-    const anchor = isClause ? 'end' : 'start';
-    const labelX = isClause ? -14 : 14;
     const maxPrimaryChars = isClause ? (compact ? 26 : 38) : compact ? 28 : 44;
     const maxSecondaryChars = isClause ? (compact ? 28 : 42) : compact ? 26 : 38;
     selection
@@ -852,34 +729,14 @@ function drawClauseNetwork(data) {
       .attr('fill', (node) => (isClause ? '#475569' : itemColour(node.type || 'PESTLE(E)')))
       .attr('opacity', isClause ? 0.62 : 0.86);
     selection.each(function (node) {
-      const group = d3.select(this);
-      const href = isClause ? pestleClauseHref(node.id) : pestleItemHref(node.id);
       const primary = `${isClause ? node.ref || node.label : node.label}${node.count ? ` (${node.count})` : ''}`;
-      const primaryLines = splitPestleVizLabel(primary, maxPrimaryChars, isClause ? 2 : 3);
-      addPestleBipartiteText(group, primaryLines, {
-        x: labelX,
-        y: primaryLines.length > 1 ? -10 : -3,
-        anchor,
-        fontSize: 12,
-        weight: 650,
-        lineHeight: 12.5,
-        underline: Boolean(href),
+      addNodeLabel(d3.select(this), {
+        left: isClause,
+        primaryLines: splitLabel(primary, maxPrimaryChars, isClause ? 2 : 3),
+        secondaryLines: node.subtitle ? splitLabel(node.subtitle, maxSecondaryChars, 1) : [],
+        secondaryY: 20,
+        href: isClause ? pestleClauseHref(node.id) : pestleItemHref(node.id),
       });
-      const secondary = isClause ? node.subtitle : node.subtitle;
-      if (secondary) {
-        addPestleBipartiteText(group, splitPestleVizLabel(secondary, maxSecondaryChars, 1), {
-          x: labelX,
-          y: primaryLines.length > 1 ? 20 : 13,
-          anchor,
-          fontSize: 10.5,
-          weight: 400,
-          opacity: 0.68,
-        });
-      }
-      if (href)
-        group.style('cursor', 'pointer').on('click', () => {
-          window.location.href = href;
-        });
     });
     selection
       .append('title')

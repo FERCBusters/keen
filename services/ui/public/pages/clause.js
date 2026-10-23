@@ -132,15 +132,11 @@ async function loadClausePestle() {
 
 async function loadClauseChangelog() {
   if (!clauseChangelogEl || !id) return;
-  try {
-    await loadEntityChangelog(
-      clauseChangelogEl,
-      `/api/v1/clauses/${encodeURIComponent(id)}/changelog?limit=100`,
-      { empty: 'No clause changes have been recorded yet.' },
-    );
-  } catch (e) {
-    clauseChangelogEl.innerHTML = '<div class="text-danger p-3">Failed to load changelog.</div>';
-  }
+  await loadEntityChangelog(
+    clauseChangelogEl,
+    `/api/v1/clauses/${encodeURIComponent(id)}/changelog?limit=100`,
+    { empty: 'No clause changes have been recorded yet.' },
+  );
 }
 
 function _ismsEntityRows(data) {

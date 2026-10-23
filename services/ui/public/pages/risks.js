@@ -70,9 +70,6 @@ const registerEnabled = featureEnabled(me, 'risk_register');
 
 const params = new URLSearchParams(location.search);
 const requestedTab = params.get('tab') || '';
-const requestedTemplateId = params.get('template') || '';
-const legacyEditId = params.get('edit') || '';
-const legacyViewId = params.get('id') || '';
 
 const $ = (id) => document.getElementById(id);
 const status = $('status');
@@ -93,12 +90,6 @@ let loaded = { heatmap: false, cia: false, pestle: false, library: false, contro
 function notify(message, kind = 'danger') {
   toast(status, message, kind);
 }
-
-// Older links addressed the editor and viewer through this page.
-if (legacyEditId) location.replace(riskWizardHref(framework, { id: legacyEditId }));
-else if (legacyViewId) location.replace(riskHref(legacyViewId, framework));
-else if (requestedTemplateId)
-  location.replace(riskWizardHref(framework, { template: requestedTemplateId }));
 
 // --- All risks ----------------------------------------------------------------------------
 

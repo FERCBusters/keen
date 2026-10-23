@@ -2,6 +2,13 @@
 // a heatmap built from the framework's risk/control mappings, weighted by the
 // inherent or residual score. The page wires its own controls through init().
 import { apiGet, debounce, esc } from '/app.js';
+import {
+  addHeadings,
+  addNodeLabel,
+  addZoom,
+  curvedLink,
+  splitLabel,
+} from '/pages/bipartite-graph.js';
 import { riskHref as riskPageHref, controlHref as controlPageHref } from '/pages/risk-common.js';
 
 let framework = '';
@@ -97,73 +104,6 @@ function truncateRiskVizText(value, max = 72) {
     .trim();
   if (text.length <= max) return text;
   return `${text.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
-}
-
-function splitRiskVizLabel(value, maxChars = 34, maxLines = 2) {
-  const text =
-    String(value || '-')
-      .replace(/\s+/g, ' ')
-      .trim() || '-';
-  if (text.length <= maxChars) return [text];
-  const words = text.split(' ');
-  const lines = [];
-  let current = '';
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars && current) {
-      lines.push(current);
-      current = word;
-      if (lines.length >= maxLines) break;
-    } else {
-      current = next;
-    }
-  }
-  if (lines.length < maxLines && current) lines.push(current);
-  if (!lines.length) lines.push(text.slice(0, maxChars));
-  if (lines.join(' ').length < text.length) {
-    // Words were dropped: always mark the cut, even when the last line is short.
-    const last = lines.length - 1;
-    lines[last] = `${lines[last].slice(0, Math.max(8, maxChars - 1)).trimEnd()}…`;
-  }
-  return lines.slice(0, maxLines);
-}
-
-function addRiskVizText(
-  selection,
-  lines,
-  {
-    x = 0,
-    y = 0,
-    anchor = 'start',
-    fontSize = 12,
-    weight = 600,
-    lineHeight = 13,
-    opacity = 1,
-    underline = false,
-  } = {},
-) {
-  const text = selection
-    .append('text')
-    .attr('x', x)
-    .attr('y', y)
-    .attr('font-size', fontSize)
-    .attr('font-weight', weight)
-    .attr('text-anchor', anchor)
-    .attr('fill', 'currentColor')
-    .attr('opacity', opacity);
-  if (underline) text.style('text-decoration', 'underline');
-  (lines || ['-']).forEach((line, idx) => {
-    text
-      .append('tspan')
-      .attr('x', x)
-      .attr('dy', idx === 0 ? 0 : lineHeight)
-      .text(line);
-  });
-  return text;
-}
-
-function riskVizButton(label, action, title) {
-  return `<button class="viz-zoom-btn" type="button" data-zoom="${esc(action)}" title="${esc(title)}" aria-label="${esc(title)}">${esc(label)}</button>`;
 }
 
 function riskControlDataset() {
@@ -264,15 +204,6 @@ function renderRiskControlsGraph() {
     .domain([0, Math.max(1, maxScore)])
     .range([1.5, 6.5]);
 
-  const zoomControls = document.createElement('div');
-  zoomControls.className = 'viz-zoom-controls no-print';
-  zoomControls.innerHTML = [
-    riskVizButton('+', 'in', 'Zoom in'),
-    riskVizButton('−', 'out', 'Zoom out'),
-    riskVizButton('Reset', 'reset', 'Reset zoom to fit'),
-  ].join('');
-  el.appendChild(zoomControls);
-
   const svg = d3
     .select(el)
     .append('svg')
@@ -283,70 +214,20 @@ function renderRiskControlsGraph() {
     .attr('role', 'img')
     .attr('aria-label', 'Risks to controls graph');
   const scene = svg.append('g').attr('class', 'risk-controls-graph-scene');
-  const fitScale = Math.min(
-    1,
-    (viewportWidth - 20) / contentWidth,
-    (viewportHeight - 20) / contentHeight,
-  );
-  const fitX = Math.max(10, (viewportWidth - contentWidth * fitScale) / 2);
-  const fitY = Math.max(10, (viewportHeight - contentHeight * fitScale) / 2);
-  const fitTransform = d3.zoomIdentity.translate(fitX, fitY).scale(fitScale);
-  const zoom = d3
-    .zoom()
-    .scaleExtent([Math.min(0.15, fitScale), 4])
-    .translateExtent([
-      [-contentWidth, -contentHeight],
-      [contentWidth * 2, contentHeight * 2],
-    ])
-    .on('zoom', (ev) => scene.attr('transform', ev.transform));
-  svg.call(zoom).on('wheel.zoom', null);
-  svg.call(zoom.transform, fitTransform);
-  zoomControls.addEventListener('click', (ev) => {
-    const btn = ev.target?.closest?.('[data-zoom]');
-    if (!btn) return;
-    const action = btn.getAttribute('data-zoom');
-    if (action === 'in') svg.transition().duration(160).call(zoom.scaleBy, 1.25);
-    else if (action === 'out') svg.transition().duration(160).call(zoom.scaleBy, 0.8);
-    else svg.transition().duration(160).call(zoom.transform, fitTransform);
+  addZoom(el, svg, scene, { contentWidth, contentHeight, viewportWidth, viewportHeight });
+  addHeadings(scene, {
+    leftX,
+    rightX,
+    titles: ['Risks', 'Controls'],
+    summary: `${risks.length} risk(s), ${controlNodes.length} control(s), ${links.length} mapping(s)`,
   });
-
-  addRiskVizText(scene, ['Risks'], {
-    x: leftX - 16,
-    y: 24,
-    anchor: 'end',
-    fontSize: 13,
-    weight: 700,
-  });
-  addRiskVizText(scene, ['Controls'], {
-    x: rightX + 16,
-    y: 24,
-    anchor: 'start',
-    fontSize: 13,
-    weight: 700,
-  });
-  scene
-    .append('text')
-    .attr('x', leftX - 16)
-    .attr('y', 46)
-    .attr('font-size', 12)
-    .attr('fill', 'currentColor')
-    .attr('opacity', 0.72)
-    .attr('text-anchor', 'end')
-    .text(`${risks.length} risk(s), ${controlNodes.length} control(s), ${links.length} mapping(s)`);
-
-  const path = (link) => {
-    const y1 = riskY(link.source) || topPad;
-    const y2 = controlY(link.target) || topPad;
-    const mid = (leftX + rightX) / 2;
-    return `M${leftX},${y1} C${mid},${y1} ${mid},${y2} ${rightX},${y2}`;
-  };
   scene
     .append('g')
     .attr('fill', 'none')
     .selectAll('path')
     .data(links)
     .join('path')
-    .attr('d', path)
+    .attr('d', curvedLink(leftX, rightX, riskY, controlY, topPad))
     .attr('stroke', (link) => riskMap.get(link.source)?.color || 'currentColor')
     .attr('stroke-opacity', 0.28)
     .attr('stroke-width', (link) => strokeWidth(riskVizScoreValue(link, scoreMode)))
@@ -362,8 +243,6 @@ function renderRiskControlsGraph() {
     const isRisk = side === 'risk';
     const x = isRisk ? leftX : rightX;
     const yScale = isRisk ? riskY : controlY;
-    const anchor = isRisk ? 'end' : 'start';
-    const labelX = isRisk ? -14 : 14;
     const maxPrimary = isRisk ? (compact ? 28 : 44) : compact ? 28 : 36;
     const maxSecondary = isRisk ? (compact ? 26 : 42) : compact ? 28 : 48;
     selection
@@ -375,33 +254,15 @@ function renderRiskControlsGraph() {
       .attr('fill', (node) => node.color || 'currentColor')
       .attr('opacity', isRisk ? 0.85 : 0.62);
     selection.each(function (node) {
-      const group = d3.select(this);
-      const href = riskVizNodeHref(node);
       const primary = `${riskVizPrimaryLabel(node)}${node.link_count ? ` (${node.link_count})` : ''}`;
-      const primaryLines = splitRiskVizLabel(primary, maxPrimary, isRisk ? 3 : 2);
-      addRiskVizText(group, primaryLines, {
-        x: labelX,
-        y: primaryLines.length > 1 ? -10 : -3,
-        anchor,
-        fontSize: 12,
-        weight: 650,
-        lineHeight: 12.5,
-        underline: Boolean(href),
-      });
       const secondary = riskVizSecondaryLabel(node);
-      if (secondary)
-        addRiskVizText(group, splitRiskVizLabel(secondary, maxSecondary, 1), {
-          x: labelX,
-          y: primaryLines.length > 1 ? 22 : 13,
-          anchor,
-          fontSize: 10.5,
-          weight: 400,
-          opacity: 0.68,
-        });
-      if (href)
-        group.style('cursor', 'pointer').on('click', () => {
-          window.location.href = href;
-        });
+      addNodeLabel(d3.select(this), {
+        left: isRisk,
+        primaryLines: splitLabel(primary, maxPrimary, isRisk ? 3 : 2),
+        secondaryLines: secondary ? splitLabel(secondary, maxSecondary, 1) : [],
+        secondaryY: 22,
+        href: riskVizNodeHref(node),
+      });
     });
     selection
       .append('title')

@@ -32,8 +32,7 @@ const CHOICE = {
 
 async function detail(t, { item = swot(), get, ...options } = {}) {
   const state = { item: copy(item), detailLoads: 0, questionLoads: 0 };
-  const ui = await page(t, 'isms-swot', {
-    htmlName: 'swot',
+  const ui = await page(t, 'swot', {
     query: '&id=' + item.id,
     ...options,
     get: async (u) => {
@@ -116,7 +115,9 @@ test('a question about the item is posted and the thread list refreshed', async 
   ui.el('questionBody').value = 'Who owns the relocation?';
   const loads = ui.state.questionLoads;
 
-  submit(ui, 'questionForm');
+  ui.el('questionPanel')
+    .querySelector('[data-question-ask]')
+    .dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
 
   await settle(() => ui.state.questionLoads === loads + 1);
   const post = ui.calls.find((c) => c.method === 'POST');
@@ -195,8 +196,7 @@ test('a parent beyond the first page of candidates is still shown', async (t) =>
 
 async function workspace(t, { query = '', items = [], total = items.length, ...options } = {}) {
   const lists = [];
-  const ui = await page(t, 'isms-swot', {
-    htmlName: 'swot',
+  const ui = await page(t, 'swot', {
     query,
     ...options,
     get: async (u) => {
@@ -380,8 +380,7 @@ for (const [how, stage] of [
   });
 
 test('leaving a new item with unsaved edits asks for confirmation', async (t) => {
-  const ui = await page(t, 'isms-swot', {
-    htmlName: 'swot',
+  const ui = await page(t, 'swot', {
     query: '&new=1',
     get: async (u) => {
       if (u.pathname === '/api/v1/isms/meta') return { users: [], controls: [], clauses: [] };
@@ -442,14 +441,15 @@ test('refused unlinking, questions, replies and deletion are reported and leave 
   reset();
 
   ui.el('questionBody').value = 'Who owns this?';
-  submit(ui, 'questionForm');
+  ui.el('questionPanel')
+    .querySelector('[data-question-ask]')
+    .dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(reported);
   assert.equal(ui.el('questionBody').value, 'Who owns this?');
   reset();
 
-  const reply = ui.el('questionList').querySelector('[data-reply-thread="q1"]');
-  reply.elements.body.value = 'Facilities';
-  reply.dispatchEvent(new ui.window.Event('submit', { bubbles: true, cancelable: true }));
+  ui.el('questionReply-q1').value = 'Facilities';
+  ui.el('thread-q1').querySelector('[data-question-action="reply"]').click();
   await settle(reported);
   reset();
 
@@ -493,8 +493,7 @@ test('a SWOT item is sampled into an audit with a link back to it', async (t) =>
 
 test('an item that cannot be loaded is reported, and an invalid field returns to Details', async (t) => {
   const shown = [];
-  const ui = await page(t, 'isms-swot', {
-    htmlName: 'swot',
+  const ui = await page(t, 'swot', {
     query: '&id=s1&tab=related',
     setup(window) {
       window.bootstrap = {
@@ -515,8 +514,7 @@ test('an item that cannot be loaded is reported, and an invalid field returns to
 });
 
 test('a new item draws its draft relationships when the visualisation tab opens', async (t) => {
-  const ui = await page(t, 'isms-swot', {
-    htmlName: 'swot',
+  const ui = await page(t, 'swot', {
     query: '&new=1',
     setup(window) {
       window.d3 = d3;

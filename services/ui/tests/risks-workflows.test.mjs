@@ -347,25 +347,6 @@ test('risks are sampled into audits by their display name', async (t) => {
   assert.equal(state.posted[0].body.entity_type, 'risk');
 });
 
-test('old editor and template links are forwarded to the wizard, and view links to the risk page', async (t) => {
-  for (const [query, expected] of [
-    ['&edit=r1', '/risk-wizard.html?id=r1&framework=A'],
-    ['&template=tpl1', '/risk-wizard.html?template=tpl1&framework=A'],
-    ['&id=r2', '/risk.html?id=r2&framework=A'],
-  ]) {
-    const location = {
-      origin: 'https://keen.example',
-      pathname: '/risks.html',
-      hash: '',
-      href: 'https://keen.example/risks.html?framework=A' + query,
-      search: '?framework=A' + query,
-      replace: (href) => (location.href = href),
-    };
-    await dashboard(t, { query, globals: { location } });
-    assert.equal(location.href, expected, query);
-  }
-});
-
 test('an empty register explains itself and a failed load is reported', async (t) => {
   const { ui } = await dashboard(t, { risks: [] });
   assert.match(ui.el('rows').textContent, /No risks match\. Use “Add a risk”/);

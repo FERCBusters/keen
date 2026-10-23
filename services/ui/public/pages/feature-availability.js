@@ -10,51 +10,32 @@ const pages = {
   '/event.html': 'evidence',
   '/sources.html': 'sources',
   '/source.html': 'sources',
-  '/visualisation.html': 'visualisations',
-  '/visualisations.html': 'visualisations',
-  '/home.html': 'explorer',
   '/questions.html': 'questions',
-  '/my-questions.html': 'questions',
   '/isms-access.html': 'access_control',
   '/isms-effectiveness-metric.html': 'effectiveness',
   '/documents.html': 'documents',
-  '/bookstack-sections.html': 'documents',
   '/statement-of-applicability.html': 'soa',
   '/pestle_item.html': 'pestle',
   '/interested_parties.html': 'interested_parties',
   '/interested_party.html': 'interested_parties',
   '/assurance.html': 'isms',
-
   '/risks.html': 'risk_cia',
   '/risk.html': 'risk_cia',
   '/risk-wizard.html': 'risk_cia',
   '/mitigator.html': 'mitigator',
   '/pestle.html': 'pestle',
-  '/pestle-item.html': 'pestle',
-  '/interested-parties.html': 'interested_parties',
-  '/interested-party.html': 'interested_parties',
   '/isms.html': 'isms',
   '/swot.html': 'swot',
-  '/isms-swot.html': 'swot',
-  '/people.html': 'people',
-  '/person.html': 'people',
-  '/vendors.html': 'vendors',
-  '/vendor.html': 'vendors',
   '/audits.html': 'audits',
   '/audit-wizard.html': 'audits',
   '/stories.html': 'stories',
   '/story.html': 'stories',
   '/audit.html': 'audits',
-  '/scheduled-audits.html': 'audit_scheduling',
-  '/soa.html': 'soa',
-  '/bookstack-section.html': 'documents',
   '/isms-objective.html': 'objectives',
   '/isms-document.html': 'documents',
   '/isms-asset.html': 'assets',
-  '/isms-org-node.html': 'organisation',
   '/isms-effectiveness-measure.html': 'effectiveness',
   '/isms-meeting.html': 'meetings',
-  '/isms-access-control-matrix.html': 'access_control',
 };
 export const sectionFeatures = {
   objectives: 'objectives',
@@ -79,8 +60,6 @@ export function hrefFeature(href) {
   }
   if (url.origin !== window.location.origin) return null;
   if (url.pathname === '/isms.html') return sectionFeatures[url.searchParams.get('tab')] || 'isms';
-  if (url.pathname === '/isms-swot.html' && url.searchParams.get('mode') === 'objectives')
-    return 'objectives';
   return pages[url.pathname];
 }
 let observer;

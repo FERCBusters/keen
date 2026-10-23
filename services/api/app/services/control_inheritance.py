@@ -100,6 +100,22 @@ def effective_framework_ids(framework, db=None):
     return direct.union(explicit, osa)
 
 
+# The starter crosswalk stores this text on each of its same-topic links. It
+# only says that the two controls share a topic, which the event page already
+# explains for every control an event inherits, so events leave it out.
+STARTER_SAME_TOPIC_RATIONALE = (
+    "Keen starter crosswalk [same-topic]: Same control topic in the shipped "
+    "catalogues. Review the evidence scope and implementation for the target; "
+    "this link does not confer compliance."
+)
+
+
+def inherited_event_rationale(link_rationale):
+    """A crosswalk link's rationale, as an event shows it beside an inherited control."""
+    text = link_rationale or ""
+    return "" if text == STARTER_SAME_TOPIC_RATIONALE else text
+
+
 # Up to this many matching mappings are read first and the events are named by
 # id, so the database fetches exactly those events. Beyond it the evidence is
 # common enough for an ordered scan of events to fill a page quickly.

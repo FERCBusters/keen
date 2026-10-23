@@ -67,7 +67,7 @@ test('timeline shows dated items and hierarchy handles missing parents without H
 
 test('SWOT workspace filters on the server and preserves version on status change', async (t) => {
   let state = 'defined';
-  const ui = await page(t, 'isms-swot', {
+  const ui = await page(t, 'swot', {
     get(url) {
       if (url.pathname === '/api/v1/isms/meta') return { controls: [], clauses: [] };
       if (url.pathname === '/api/v1/isms/swot')
@@ -124,7 +124,7 @@ test('SWOT detail renders escaped relationships and submits bounded fields with 
     controls: [],
     clauses: [],
   };
-  const ui = await page(t, 'isms-swot', {
+  const ui = await page(t, 'swot', {
     query: '&id=s1',
     get(url) {
       if (url.pathname === '/api/v1/isms/swot/s1') return item;
@@ -177,8 +177,7 @@ test('quadrant creation links preserve framework and type; overview is read only
 for (const kind of ['strength', 'weakness', 'opportunity', 'threat', '<img src=x>']) {
   test(`new SWOT preselects only valid quadrant: ${kind}`, async (t) => {
     let saved;
-    const ui = await page(t, 'isms-swot', {
-      htmlName: 'swot',
+    const ui = await page(t, 'swot', {
       query: '&new=1&kind=' + encodeURIComponent(kind),
       get(url) {
         if (url.pathname === '/api/v1/isms/meta') {
@@ -252,8 +251,7 @@ test('graph wraps complete labels as text and allocates space for every line', a
 });
 
 test('SWOT filters default to collapsed and question composers share consistent sizing', async (t) => {
-  const ui = await page(t, 'isms-swot', {
-    htmlName: 'swot',
+  const ui = await page(t, 'swot', {
     query: '&id=s1',
     get(url) {
       if (url.pathname === '/api/v1/isms/swot/s1')
@@ -275,12 +273,10 @@ test('SWOT filters default to collapsed and question composers share consistent 
       throw Error('Unexpected GET ' + url);
     },
   });
-  await settle(() => ui.el('questionList').querySelector('textarea'));
-  const reply = ui.el('questionList').querySelector('textarea');
+  await settle(() => ui.el('questionPanel').querySelector('[data-thread] textarea'));
+  const reply = ui.el('questionPanel').querySelector('[data-thread] textarea');
   assert.equal(reply.rows, ui.el('questionBody').rows);
-  assert.ok(reply.closest('.planning-question-form'));
-  assert.ok(ui.el('questionBody').closest('.planning-question-form'));
-  assert.ok(reply.closest('label').classList.contains('d-block'));
+  assert.equal(ui.el('questionBody').placeholder, 'Write a question about this SWOT item');
   assert.equal(ui.el('filters').dataset.mospFilterDefault, 'collapsed');
   assert.ok(ui.el('filters').querySelector('[data-mosp-filter-body]').hidden);
   assert.equal(ui.el('view').closest('#filters'), null);
@@ -346,8 +342,7 @@ for (const [start, end] of [
 for (const rejected of [false, true]) {
   test(`kanban drop ${rejected ? 'recovers saved state after rejection' : 'saves immediately and highlights the card'}`, async (t) => {
     let state = 'defined';
-    const ui = await page(t, 'isms-swot', {
-      htmlName: 'swot',
+    const ui = await page(t, 'swot', {
       get(url) {
         if (url.pathname === '/api/v1/isms/meta') return {};
         if (url.pathname === '/api/v1/isms/swot')
@@ -405,8 +400,7 @@ for (const rejected of [false, true]) {
 
 test('related filter appears only with usable choices and clears immediately; stale choices are ignored', async (t) => {
   let resolveChoices;
-  const ui = await page(t, 'isms-swot', {
-    htmlName: 'swot',
+  const ui = await page(t, 'swot', {
     get(url) {
       if (url.pathname === '/api/v1/isms/meta') return {};
       if (url.pathname === '/api/v1/isms/swot') return { items: [], total: 0 };
@@ -437,29 +431,6 @@ test('related filter appears only with usable choices and clears immediately; st
   assert.equal(ui.el('relatedItemField').hidden, true);
   assert.equal(ui.el('relatedItem').value, '');
   assert.equal(ui.el('relatedItem').disabled, true);
-});
-
-test('legacy objective planning URL forwards to the unified Objectives board in the same framework', async (t) => {
-  let destination;
-  await page(t, 'isms-swot', {
-    query: '&mode=objectives',
-    globals: {
-      location: {
-        search: '?framework=A&mode=objectives',
-        replace(url) {
-          destination = url;
-        },
-      },
-    },
-    get(url) {
-      throw Error('Unexpected GET ' + url);
-    },
-  });
-  const url = new URL(destination, 'https://keen.example');
-  assert.equal(url.pathname, '/isms.html');
-  assert.equal(url.searchParams.get('tab'), 'objectives');
-  assert.equal(url.searchParams.get('view'), 'kanban');
-  assert.equal(url.searchParams.get('framework'), 'A');
 });
 
 test('compact quadrant cards expose a five-bar rating and optional date beside an accessible status', async (t) => {
@@ -513,8 +484,7 @@ test('new SWOT relationships remain local, deduplicate and travel in the final c
     title: '<img src=x onerror=alert(1)>',
     url: '/isms-objective.html?id=o1',
   };
-  const ui = await page(t, 'isms-swot', {
-    htmlName: 'swot',
+  const ui = await page(t, 'swot', {
     query: '&new=1',
     get(url) {
       if (url.pathname === '/api/v1/isms/meta') return { users: [], controls: [], clauses: [] };
@@ -556,8 +526,8 @@ test('new SWOT relationships remain local, deduplicate and travel in the final c
 
 test('SWOT question authors can reply to their own threads only', async (t) => {
   const posted = [];
-  const ui = await page(t, 'isms-swot', {
-    htmlName: 'swot',
+  const seen = [];
+  const ui = await page(t, 'swot', {
     query: '&id=s1',
     // /me identifies the user by user_id; `user` is the username string.
     me: { user: 'erin', user_id: 'u7', can_view_isms: true, can_create_questions: true },
@@ -597,20 +567,24 @@ test('SWOT question authors can reply to their own threads only', async (t) => {
       throw Error('Unexpected GET ' + url);
     },
     post(url, body) {
-      posted.push({ path: url.pathname, body: JSON.parse(JSON.stringify(body)) });
+      // Reading the threads marks their replies seen for the author.
+      if (url.pathname.endsWith('/mark-seen')) seen.push(url.pathname);
+      else posted.push({ path: url.pathname, body: JSON.parse(JSON.stringify(body)) });
       return {};
     },
   });
-  await settle(() => ui.el('questionList').querySelector('article'));
-  const forms = [...ui.el('questionList').querySelectorAll('[data-reply-thread]')];
+  await settle(() => seen.length === 1);
+  assert.deepEqual(seen, ['/api/v1/questions/entities/isms_swot/s1/mark-seen']);
+  const panel = ui.el('questionPanel');
+  const replies = [...panel.querySelectorAll('[data-question-action="reply"]')];
   assert.deepEqual(
-    forms.map((f) => f.dataset.replyThread),
+    replies.map((button) => button.closest('[data-thread]').dataset.thread),
     ['q1'],
   );
-  assert.equal(ui.el('questionList').querySelector('b'), null);
-  assert.match(ui.el('questionList').textContent, /<b>Why\?<\/b>/);
-  forms[0].elements.body.value = 'Thanks, resolved';
-  forms[0].dispatchEvent(new ui.window.Event('submit', { cancelable: true, bubbles: true }));
+  assert.equal(panel.querySelector('b'), null);
+  assert.match(panel.textContent, /<b>Why\?<\/b>/);
+  ui.el('questionReply-q1').value = 'Thanks, resolved';
+  replies[0].click();
   await settle(() => posted.length === 1);
   assert.deepEqual(posted[0], {
     path: '/api/v1/questions/q1/posts',
@@ -749,7 +723,7 @@ test('the graph lists controls and clauses as records and breaks unbroken words'
 test('a second status change while one is saving is ignored, and a failed refresh is reported', async (t) => {
   let release;
   let listFails = false;
-  const ui = await page(t, 'isms-swot', {
+  const ui = await page(t, 'swot', {
     get(url) {
       if (url.pathname === '/api/v1/isms/meta') return { controls: [], clauses: [] };
       if (url.pathname === '/api/v1/isms/swot') {

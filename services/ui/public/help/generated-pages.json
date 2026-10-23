@@ -30,10 +30,7 @@
   "administrator-taiga.html",
   "administrator-webhooks.html",
   "administrator.html",
-  "adopter.html",
-  "agents.html",
   "developer-architecture.html",
-  "developer-development.html",
   "developer-frameworks-rules.html",
   "developer-ingestion.html",
   "developer-isms.html",
@@ -41,8 +38,6 @@
   "developer-security.html",
   "developer.html",
   "index.html",
-  "operations.html",
-  "redmine.html",
   "using-account.html",
   "using-audits.html",
   "using-collection.html",
@@ -59,6 +54,5 @@
   "using-start.html",
   "using-structured-fields.html",
   "using-swot.html",
-  "using.html",
-  "walkthroughs.html"
+  "using.html"
 ]

@@ -47,6 +47,7 @@ from app.services.activity_log import record_action as _audit_action
 from app.services.context import ChangeContext
 from app.services.control_inheritance import (
     evidence_pairs,
+    inherited_event_rationale,
     page_controls,
 )
 from app.services.errors import DomainError
@@ -589,14 +590,18 @@ def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session
                 "upstream_url": _control_upstream_url(target),
                 "confidence": mapping.confidence,
                 "method": "cross_framework",
-                "rationale": link.rationale,
+                "rationale": inherited_event_rationale(link.rationale),
                 "mapped_at": mapping.mapped_at.isoformat()
                 if mapping.mapped_at
                 else None,
+                # The control the event was mapped to, and the rule that mapped
+                # it, explain why this control lists the event.
                 "inherited_from": {
                     "framework": source.framework_slug,
                     "ref": source.ref,
+                    "title": source.title,
                     "control_id": str(source.id),
+                    "rule_id": rule_id_of(mapping, source.framework_slug),
                 },
             }
         )
