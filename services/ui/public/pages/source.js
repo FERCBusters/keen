@@ -144,9 +144,9 @@ function renderSourceChrome(row = null) {
   }
   const label = sourceLabel(sourceName, sourceMeta) || sourceName;
   sourceTitle.innerHTML = `${sourceBadgeHtml(sourceName, sourceMeta, sourcePageHref(sourceName, { tab: 'events', q: '', start_date: '', end_date: '', unmapped: false, offset: 0 }))} <span class="ms-2 align-middle">${esc(label)}</span>`;
-  document.title = `Keen – ${label}`;
+  document.title = `Keen - ${label}`;
   if (row) {
-    sourceMetaEl.textContent = `${Number(row.total_events || 0).toLocaleString()} events • ${Number(row.mapped_events || 0).toLocaleString()} mapped • ${Number(row.unmapped_events || 0).toLocaleString()} unmapped • last seen ${fmtTs(row.last_seen) || '—'}`;
+    sourceMetaEl.textContent = `${Number(row.total_events || 0).toLocaleString()} events · ${Number(row.mapped_events || 0).toLocaleString()} mapped · ${Number(row.unmapped_events || 0).toLocaleString()} unmapped · last seen ${fmtTs(row.last_seen) || '-'}`;
   } else {
     sourceMetaEl.textContent = 'Source summary unavailable.';
   }
@@ -178,7 +178,7 @@ async function loadSourceMeta() {
 
 function controlBadges(controls) {
   const arr = Array.isArray(controls) ? controls : [];
-  if (!arr.length) return '<span class="small-muted">—</span>';
+  if (!arr.length) return '<span class="small-muted">-</span>';
   const shown = arr.slice(0, 5);
   const more =
     arr.length > shown.length
@@ -196,7 +196,7 @@ function controlBadges(controls) {
 
 function eventUuidLink(e) {
   const id = String(e?.id || e?.event_id || '').trim();
-  if (!id) return '<span class="small-muted">—</span>';
+  if (!id) return '<span class="small-muted">-</span>';
   const href = withFramework(`/event.html?id=${encodeURIComponent(id)}`, framework);
   return `<a class="font-monospace small" href="${esc(href)}" title="${esc(id)}">${esc(id)}</a>`;
 }
@@ -212,9 +212,9 @@ function renderEvents(items) {
           : '<span class="badge text-bg-light">0</span>';
         const context = e.identifier ?? e.system ?? '';
         return `<tr>
-      <td class="small-muted" data-sort="${esc(tsSortKey(e.timestamp))}">${esc(fmtTs(e.timestamp) || '—')}</td>
+      <td class="small-muted" data-sort="${esc(tsSortKey(e.timestamp))}">${esc(fmtTs(e.timestamp) || '-')}</td>
       <td data-sort="${esc(e.id || '')}">${eventUuidLink(e)}</td>
-      <td class="small-muted" data-sort="${esc(context)}">${context ? esc(shorten(context, 90)) : '—'}</td>
+      <td class="small-muted" data-sort="${esc(context)}">${context ? esc(shorten(context, 90)) : '-'}</td>
       <td class="wrap"><a class="fw-semibold" href="${esc(eventHref)}">${esc(shorten(e.summary || '(no summary)', 180))}</a></td>
       <td class="wrap">${controlBadges(e.controls)}</td>
       <td class="text-center">${linksHtml}</td>
@@ -227,8 +227,8 @@ function renderEvents(items) {
 
 async function loadEvents() {
   if (!sourceName) return;
-  showTableLoading(eventRows, 7, 'Loading source events…');
-  eventResultMeta.textContent = 'Loading…';
+  showTableLoading(eventRows, 7, 'Loading source events');
+  eventResultMeta.textContent = 'Loading';
   try {
     const p = new URLSearchParams();
     if (framework) p.set('framework', framework);
@@ -242,12 +242,12 @@ async function loadEvents() {
     const data = await apiGet(`/api/v1/events?${p.toString()}`);
     state.total = Number(data.total || 0);
     const page = offsetPagerState(state);
-    eventResultMeta.textContent = `${page.start}–${page.end} of ${page.total}`;
+    eventResultMeta.textContent = `${page.start}-${page.end} of ${page.total}`;
     renderEvents(data.items || []);
     setOffsetPagerDisabled(pagerButtons, state);
   } catch (e) {
     toast(status, `Failed to load source events: ${String(e)}`, 'danger');
-    eventResultMeta.textContent = '—';
+    eventResultMeta.textContent = '-';
     eventRows.innerHTML =
       '<tr><td colspan="7" class="p-4 text-danger">Failed to load source events.</td></tr>';
   }
@@ -280,7 +280,7 @@ function measureHref(item) {
 
 function controlsHtml(items) {
   const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">—</span>';
+  if (!arr.length) return '<span class="small-muted">-</span>';
   return arr
     .map(
       (c) =>
@@ -300,12 +300,12 @@ function latestEntryForSource(item) {
 }
 
 function entryValueHtml(entry, measure) {
-  if (!entry) return '<span class="small-muted">—</span>';
+  if (!entry) return '<span class="small-muted">-</span>';
   const source = entry.source_url
     ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type || 'source')}</a>`
     : esc(entry.source_title || entry.source_type || 'source');
   const eventLink = entry.source_event_id
-    ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>`
+    ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open Keen event">${esc(entry.source_event_id)}</a>`
     : '';
   const valueHtml = effectivenessMetricValueHtml(entry, measure, { fallback: 'Metric entry' });
   const thresholdHtml = effectivenessMetricThresholdBadgeHtml(measure, entry);
@@ -319,7 +319,7 @@ function renderEffectiveness(items) {
     const entry = latestEntryForSource(item);
     rows.push(`<tr>
       <td class="wrap"><a class="fw-semibold" href="${esc(measureHref(item))}">${esc(shorten(item.summary || 'Effectiveness measure', 180))}</a>${item.metric_key ? `<div class="small-muted"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
-      <td>${esc(item.target_display || '—')}</td>
+      <td>${esc(item.target_display || '-')}</td>
       <td class="wrap">${entryValueHtml(entry, item)}</td>
       <td class="wrap">${controlsHtml(item.controls)}</td>
     </tr>`);
@@ -327,14 +327,14 @@ function renderEffectiveness(items) {
   effectivenessMeta.textContent = `Measures with metric entries recorded against ${sourceName}.`;
   effectivenessRows.innerHTML =
     rows.join('') ||
-    `<tr><td colspan="4" class="p-4 small-muted">No Effectiveness Measures have metric entries for ${esc(sourceName)}.</td></tr>`;
+    `<tr><td colspan="4" class="p-4 small-muted">No effectiveness measures have metric entries for ${esc(sourceName)}.</td></tr>`;
 }
 
 async function loadEffectiveness({ force = false } = {}) {
   if (!effectivenessRows || !canViewIsms || !sourceName) return;
   if (effectivenessLoaded && !force) return;
   effectivenessRows.innerHTML =
-    '<tr><td colspan="4" class="p-4 small-muted">Loading Effectiveness Measures…</td></tr>';
+    '<tr><td colspan="4" class="p-4 small-muted">Loading effectiveness measures</td></tr>';
   try {
     const data = await apiGet(
       `/api/v1/sources/${encodeURIComponent(sourceName)}/effectiveness-measures?framework=${encodeURIComponent(framework)}`,
@@ -344,7 +344,7 @@ async function loadEffectiveness({ force = false } = {}) {
   } catch (e) {
     effectivenessLoaded = false;
     effectivenessRows.innerHTML =
-      '<tr><td colspan="4" class="p-4 text-danger">Failed to load Effectiveness Measures.</td></tr>';
+      '<tr><td colspan="4" class="p-4 text-danger">Failed to load effectiveness measures.</td></tr>';
   }
 }
 
@@ -408,7 +408,7 @@ function renderInsights(data) {
       'Last event',
       data?.last_seen
         ? `${fmtTs(data.last_seen)} (${fmtDuration(data.since_last_seconds)} ago)`
-        : '—',
+        : '-',
     ],
     [
       'Usual rhythm',
@@ -432,7 +432,7 @@ function renderInsights(data) {
       ${facts.map(([k, v]) => `<dt class="col-sm-3 col-lg-2 small-muted fw-normal">${esc(k)}</dt><dd class="col-sm-9 col-lg-10">${esc(v)}</dd>`).join('')}
     </dl>
     ${dailyBarsHtml(data?.daily)}
-    <div class="small-muted">Events per day; select a bar to open that day’s events.</div>
+    <div class="small-muted">Events per day; select a bar to open that day's events.</div>
     ${section(
       'Quiet periods',
       quiet.length
@@ -453,7 +453,7 @@ function renderInsights(data) {
                 `<tr><td><a href="${esc(eventFilterHref({ start_date: sp.date, end_date: sp.date, q: '', unmapped: false }))}">${esc(sp.date)}</a></td><td>${esc(sp.count)}${sp.ratio ? ` <span class="small-muted">(×${esc(sp.ratio)})</span>` : ''}</td><td>${esc(sp.baseline)}</td></tr>`,
             )
             .join('')}</tbody></table>`
-        : '<div class="small-muted">No day stands out against this source’s typical active day.</div>',
+        : `<div class="small-muted">No day stands out against this source's typical active day.</div>`,
     )}
     ${section(
       'Repeated summaries',
@@ -461,7 +461,7 @@ function renderInsights(data) {
         ? `<table class="table table-sm mb-0"><thead><tr><th>Summary</th><th>Count</th><th>Unmapped</th><th>Last seen</th></tr></thead><tbody>${repeats
             .map(
               (r) =>
-                `<tr><td class="wrap"><a href="${esc(withFramework(`/event.html?id=${encodeURIComponent(r.example_event_id || '')}`, framework))}" title="Open an example event">${esc(shorten(r.example || r.pattern || '', 160))}</a></td><td>${esc(r.count)} <span class="small-muted">(${esc(r.share_pct)}%)</span></td><td>${Number(r.unmapped_count) ? `<a href="${esc(eventFilterHref({ unmapped: true, q: '', start_date: '', end_date: '' }))}">${esc(r.unmapped_count)}</a>` : '0'}</td><td class="small-muted">${esc(fmtTs(r.last_seen) || '—')}</td></tr>`,
+                `<tr><td class="wrap"><a href="${esc(withFramework(`/event.html?id=${encodeURIComponent(r.example_event_id || '')}`, framework))}" title="Open an example event">${esc(shorten(r.example || r.pattern || '', 160))}</a></td><td>${esc(r.count)} <span class="small-muted">(${esc(r.share_pct)}%)</span></td><td>${Number(r.unmapped_count) ? `<a href="${esc(eventFilterHref({ unmapped: true, q: '', start_date: '', end_date: '' }))}">${esc(r.unmapped_count)}</a>` : '0'}</td><td class="small-muted">${esc(fmtTs(r.last_seen) || '-')}</td></tr>`,
             )
             .join(
               '',
@@ -476,7 +476,7 @@ async function loadInsights() {
   if (!insightsEl || !sourceName) return;
   const days = Number(insightsDays?.value || 90) || 90;
   const request = ++insightsRequest;
-  insightsEl.innerHTML = '<div class="small-muted">Loading insights…</div>';
+  insightsEl.innerHTML = '<div class="small-muted">Loading insights</div>';
   try {
     const data = await apiGet(
       `/api/v1/sources/${encodeURIComponent(sourceName)}/insights?framework=${encodeURIComponent(framework)}&days=${encodeURIComponent(days)}`,

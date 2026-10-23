@@ -1,6 +1,6 @@
 """Who a request is: the trusted-proxy header, session cookies and hosted owners.
 
-KEEN accepts a proxy's identity header only from a configured proxy address,
+Keen accepts a proxy's identity header only from a configured proxy address,
 only when native single sign-on is off, and only in one well-formed copy. A
 session cookie identifies its user while that user is active and, in a hosted
 installation, only while the session belongs to the workspace owner's OIDC
@@ -81,7 +81,7 @@ def test_the_proxy_names_only_active_accounts(production_client, proxy, contract
             client.get("/v1/auth/check", headers={"REMOTE_USER": "nobody"}).status_code
             == 401
         )
-        # A proxy identity KEEN cannot use is not replaced by a session cookie.
+        # A proxy identity Keen cannot use is not replaced by a session cookie.
         _, redis, admin, _ = production_client
         sid = sessions.create_session(redis, user_id=str(admin.id), ttl_seconds=300)
         client.cookies.set(settings.session_cookie_name, sid)

@@ -1,4 +1,4 @@
-"""A conventional risk register layered on KEEN's existing scenario records."""
+"""A conventional risk register layered on Keen's existing scenario records."""
 
 from __future__ import annotations
 

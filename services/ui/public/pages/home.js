@@ -39,7 +39,7 @@ function ensureHomeLayout() {
     message.className = 'alert alert-warning m-4';
     message.setAttribute('role', 'alert');
     message.textContent =
-      'The home page and its scripts are from different UI versions. Please reload without cache. If this persists, rebuild and redeploy the KEEN UI and clear any reverse-proxy HTML cache.';
+      'The home page and its scripts are from different UI versions. Please reload without cache. If this persists, rebuild and redeploy the Keen UI and clear any reverse-proxy HTML cache.';
     (document.querySelector('main') || document.body).prepend(message);
   }
   return false;
@@ -85,7 +85,7 @@ if (ensureHomeLayout()) {
     label: 'Home',
     title: 'Explore connections',
     subtitle:
-      'Choose a starting point above, then use “Zoom in” where available to replace the current layer with the next connected layer.',
+      'Choose a starting point above, then use Zoom in where available to open the next connected layer.',
   };
 
   const KINDS = {
@@ -119,7 +119,7 @@ if (ensureHomeLayout()) {
     },
     interested_parties: {
       singular: 'interested_party',
-      label: 'Interested Parties',
+      label: 'Interested parties',
       icon: 'bi-people',
       href: '/interested_parties.html',
       tone: 'primary',
@@ -133,7 +133,7 @@ if (ensureHomeLayout()) {
     },
     effectiveness_measures: {
       singular: 'effectiveness_measure',
-      label: 'Effectiveness Measures',
+      label: 'Effectiveness measures',
       icon: 'bi-speedometer2',
       href: '/isms.html?tab=effectiveness',
       tone: 'primary',
@@ -502,7 +502,7 @@ if (ensureHomeLayout()) {
     }
   }
 
-  function setLoading(message = 'Loading…') {
+  function setLoading(message = 'Loading') {
     explorerCanvas.innerHTML = `<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted p-4"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>${esc(message)}</span></div>`;
   }
 
@@ -575,7 +575,7 @@ if (ensureHomeLayout()) {
     if (kind === 'risk')
       return (
         item.title ||
-        [item.asset_name || item.asset, item.threat_summary].filter(Boolean).join(' – ') ||
+        [item.asset_name || item.asset, item.threat_summary].filter(Boolean).join(' - ') ||
         'Risk'
       );
     if (kind === 'pestle_item')
@@ -586,8 +586,8 @@ if (ensureHomeLayout()) {
         item.title ||
         [item.name?.name || item.name, item.nature?.name || item.nature]
           .filter(Boolean)
-          .join(' – ') ||
-        'Interested Party'
+          .join(' - ') ||
+        'Interested party'
       );
     if (kind === 'communication')
       return (
@@ -688,7 +688,7 @@ if (ensureHomeLayout()) {
     const start = page * pageSize + 1;
     const end = Math.min(total, (page + 1) * pageSize);
     return `<div class="home-pagination d-flex flex-wrap gap-2 align-items-center justify-content-between mt-3">
-    <div class="small-muted">Showing ${start.toLocaleString()}–${end.toLocaleString()} of ${Number(total).toLocaleString()}</div>
+    <div class="small-muted">Showing ${start.toLocaleString()}-${end.toLocaleString()} of ${Number(total).toLocaleString()}</div>
     <div class="btn-group btn-group-sm" role="group" aria-label="Section pagination">
       <button class="btn btn-outline-secondary js-section-page" type="button" data-section-key="${esc(sectionKey)}" data-page="${esc(String(page - 1))}" ${page <= 0 ? 'disabled' : ''}><i class="bi bi-chevron-left" aria-hidden="true"></i> Previous</button>
       <button class="btn btn-outline-secondary js-section-page" type="button" data-section-key="${esc(sectionKey)}" data-page="${esc(String(page + 1))}" ${page >= maxPage ? 'disabled' : ''}>Next <i class="bi bi-chevron-right" aria-hidden="true"></i></button>
@@ -889,7 +889,7 @@ if (ensureHomeLayout()) {
     explorerTitle.textContent = ROOT_NODE.title;
     explorerSubtitle.textContent = ROOT_NODE.subtitle;
     renderCrumbs();
-    setEmpty('Pick one of the widgets above to start exploring KEEN as a connected graph.');
+    setEmpty('Pick one of the widgets above to start exploring Keen as a connected graph.');
     markCardsEntering(entryCards);
   }
 
@@ -960,8 +960,7 @@ if (ensureHomeLayout()) {
     setEntryCardsVisible(false);
     explorerTitle.textContent = node.title || node.label || 'Explore connections';
     explorerSubtitle.textContent =
-      node.subtitle ||
-      'Use “Zoom in” where available to replace the current layer with the next connected layer.';
+      node.subtitle || 'Use Zoom in where available to open the next connected layer.';
     renderCrumbs();
   }
 
@@ -975,7 +974,7 @@ if (ensureHomeLayout()) {
       {
         kind: 'clauses',
         title: 'Clauses',
-        description: 'Follow this framework’s clause hierarchy and its linked evidence.',
+        description: "Follow this framework's clause hierarchy and its linked evidence.",
       },
       {
         kind: 'risks',
@@ -991,7 +990,7 @@ if (ensureHomeLayout()) {
       },
       {
         kind: 'interested_parties',
-        title: 'Interested Parties',
+        title: 'Interested parties',
         description:
           'Start from interested parties and move to linked controls or communication audiences.',
       },
@@ -1002,7 +1001,7 @@ if (ensureHomeLayout()) {
       },
       {
         kind: 'effectiveness_measures',
-        title: 'Effectiveness Measures',
+        title: 'Effectiveness measures',
         description:
           'Start from ISMS effectiveness measures and move to linked controls, sources and metric entries.',
       },
@@ -1085,7 +1084,7 @@ if (ensureHomeLayout()) {
       },
       push,
     );
-    setLoading(`Loading ${cfg.label.toLowerCase()}…`);
+    setLoading(`Loading ${cfg.label.toLowerCase()}`);
 
     let data = { items: [], total: 0, limit: PAGE_SIZE, offset: safeOffset };
     let renderKind = cfg.singular;
@@ -1172,7 +1171,7 @@ if (ensureHomeLayout()) {
         out.title ||
         [out.asset_name || out.asset, shortText(out.threat_summary, 70)]
           .filter(Boolean)
-          .join(' – ');
+          .join(' - ');
     }
     if (kind === 'pestle_item') {
       out.title =
@@ -1190,10 +1189,10 @@ if (ensureHomeLayout()) {
     if (kind === 'interested_party') {
       out.title =
         out.title ||
-        [out.name?.name || out.name, out.nature?.name || out.nature].filter(Boolean).join(' – ');
+        [out.name?.name || out.name, out.nature?.name || out.nature].filter(Boolean).join(' - ');
       out.description =
         out.description ||
-        `${Number(out.control_count || (out.controls || []).length || 0)} linked controls • ${Number(out.communication_count || (out.communications || []).length || 0)} communications`;
+        `${Number(out.control_count || (out.controls || []).length || 0)} linked controls · ${Number(out.communication_count || (out.communications || []).length || 0)} communications`;
     }
     return out;
   }
@@ -1213,11 +1212,11 @@ if (ensureHomeLayout()) {
         id,
         label: 'Control',
         title: 'Control connections',
-        subtitle: 'Controls connect clauses, risks, Interested Parties and evidence.',
+        subtitle: 'Controls connect clauses, risks, interested parties and evidence.',
       },
       push,
     );
-    setLoading('Loading control connections…');
+    setLoading('Loading control connections');
     const [control, evidence, risks, interestedParties, effectiveness] = await Promise.all([
       safeGet(`/api/v1/controls/${encodeURIComponent(id)}`, null),
       safeGet(`/api/v1/controls/${encodeURIComponent(id)}/evidence?limit=${PAGE_SIZE}`, {
@@ -1256,8 +1255,8 @@ if (ensureHomeLayout()) {
     ${clauses.length ? paginatedSectionHtml('Linked clauses', 'Explore linked clauses in this framework.', clauses, (c) => gridItem(cardHtml('clause', { id: c.clause_id, ref: c.ref, title: c.title })), { sectionKey: 'control-clauses' }) : ''}
     ${paginatedSectionHtml('Recent evidence', 'Events mapped to this control.', evItems, (e) => gridItem(cardHtml('evidence', e)), { sectionKey: 'control-evidence' })}
     ${paginatedSectionHtml('Related risks', 'Risk scenarios mapped to this control.', riskItems, (r) => gridItem(cardHtml('risk', r)), { sectionKey: 'control-risks' })}
-    ${paginatedSectionHtml('Effectiveness Measures', 'Measures that use this control as part of the ISMS effectiveness ledger.', effectivenessItems, (m) => gridItem(cardHtml('effectiveness_measure', m)), { sectionKey: 'control-effectiveness-measures' })}
-    ${paginatedSectionHtml('Interested Parties', 'Interested Parties mapped to this control.', interestedPartyItems, (p) => gridItem(cardHtml('interested_party', p)), { sectionKey: 'control-interested-parties' })}
+    ${paginatedSectionHtml('Effectiveness measures', 'Measures that use this control as part of the ISMS effectiveness ledger.', effectivenessItems, (m) => gridItem(cardHtml('effectiveness_measure', m)), { sectionKey: 'control-effectiveness-measures' })}
+    ${paginatedSectionHtml('Interested parties', 'Interested parties mapped to this control.', interestedPartyItems, (p) => gridItem(cardHtml('interested_party', p)), { sectionKey: 'control-interested-parties' })}
   `;
     wireHomeControls();
   }
@@ -1273,7 +1272,7 @@ if (ensureHomeLayout()) {
       },
       push,
     );
-    setLoading('Loading clause connections…');
+    setLoading('Loading clause connections');
     const [clause, controls, events, allClauses] = await Promise.all([
       safeGet(`/api/v1/clauses/${encodeURIComponent(id)}`, null),
       safeGet(`/api/v1/clauses/${encodeURIComponent(id)}/controls?limit=${PAGE_SIZE}`, {
@@ -1316,7 +1315,7 @@ if (ensureHomeLayout()) {
       },
       push,
     );
-    setLoading('Loading risk connections…');
+    setLoading('Loading risk connections');
     const [risk, controls] = await Promise.all([
       safeGet(apiUrl(`/api/v1/risks/${encodeURIComponent(id)}`), null),
       safeGet(apiUrl(`/api/v1/risks/${encodeURIComponent(id)}/controls`), { items: [] }),
@@ -1344,7 +1343,7 @@ if (ensureHomeLayout()) {
       },
       push,
     );
-    setLoading('Loading PESTLE(E) connections…');
+    setLoading('Loading PESTLE(E) connections');
     const item = await safeGet(apiUrl(`/api/v1/pestle/items/${encodeURIComponent(id)}`), null);
     if (!item)
       return setEmpty('PESTLE(E) item not found, or you do not have permission to view it.');
@@ -1355,14 +1354,14 @@ if (ensureHomeLayout()) {
     const processes = (item.business_processes || []).map((link) => ({
       ...(link.business_process || {}),
       relevance: link.relevance || null,
-      relevance_label: link.relevance?.label || '—',
-      description: `Relevance: ${link.relevance?.label || '—'}`,
+      relevance_label: link.relevance?.label || '-',
+      description: `Relevance: ${link.relevance?.label || '-'}`,
     }));
     const clauses = (item.clauses || []).map((link) => ({
       ...(link.clause || {}),
       relevance: link.relevance || null,
-      relevance_label: link.relevance?.label || '—',
-      description: `PESTLE(E) relevance: ${link.relevance?.label || '—'}`,
+      relevance_label: link.relevance?.label || '-',
+      description: `PESTLE(E) relevance: ${link.relevance?.label || '-'}`,
     }));
     const controls = item.related_controls || [];
 
@@ -1380,19 +1379,19 @@ if (ensureHomeLayout()) {
       {
         kind: 'interested_party',
         id,
-        label: 'Interested Party',
-        title: 'Interested Party connections',
-        subtitle: 'Interested Parties connect Nature of Interest, communications and controls.',
+        label: 'Interested party',
+        title: 'Interested party connections',
+        subtitle: 'Interested parties connect nature of interest, communications and controls.',
       },
       push,
     );
-    setLoading('Loading Interested Party connections…');
+    setLoading('Loading interested party connections');
     const item = await safeGet(
       apiUrl(`/api/v1/interested-parties/${encodeURIComponent(id)}`),
       null,
     );
     if (!item)
-      return setEmpty('Interested Party not found, or you do not have permission to view it.');
+      return setEmpty('Interested party not found, or you do not have permission to view it.');
     const party = normaliseItem('interested_party', item);
     current.label = primaryText('interested_party', party);
     renderCrumbs();
@@ -1419,7 +1418,7 @@ if (ensureHomeLayout()) {
       },
       push,
     );
-    setLoading('Loading audit connections…');
+    setLoading('Loading audit connections');
     const audit = await safeGet(`/api/v1/audits/${encodeURIComponent(id)}`, null);
     if (!audit) return setEmpty('Audit not found, or you do not have permission to view it.');
     current.label = audit.title || 'Audit';
@@ -1448,20 +1447,20 @@ if (ensureHomeLayout()) {
       {
         kind: 'effectiveness_measure',
         id,
-        label: 'Effectiveness Measure',
-        title: 'Effectiveness Measure connections',
+        label: 'Effectiveness measure',
+        title: 'Effectiveness measure connections',
         subtitle:
-          'Effectiveness Measures connect ISMS controls to recorded metrics and their sources.',
+          'Effectiveness measures connect ISMS controls to recorded metrics and their sources.',
       },
       push,
     );
-    setLoading('Loading Effectiveness Measure connections…');
+    setLoading('Loading effectiveness measure connections');
     const item = await safeGet(
       apiUrl(`/api/v1/isms/effectiveness-measures/${encodeURIComponent(id)}`),
       null,
     );
     if (!item)
-      return setEmpty('Effectiveness Measure not found, or you do not have permission to view it.');
+      return setEmpty('Effectiveness measure not found, or you do not have permission to view it.');
     const measure = normaliseItem('effectiveness_measure', item);
     current.label = primaryText('effectiveness_measure', measure);
     renderCrumbs();
@@ -1481,7 +1480,7 @@ if (ensureHomeLayout()) {
     explorerCanvas.innerHTML = `
     ${nodeHeader('effectiveness_measure', measure, measure.target_display ? `Target ${measure.target_display}` : 'ISMS effectiveness metric')}
     ${paginatedSectionHtml('Linked controls', 'Controls this effectiveness measure is used to assess.', controls, (c) => gridItem(cardHtml('control', c)), { sectionKey: 'effectiveness-controls' })}
-    ${paginatedSectionHtml('Metric sources', 'KEEN sources that have reported metric entries against this measure.', sources, (src) => gridItem(cardHtml('source', src)), { sectionKey: 'effectiveness-sources' })}
+    ${paginatedSectionHtml('Metric sources', 'Keen sources that have reported metric entries against this measure.', sources, (src) => gridItem(cardHtml('source', src)), { sectionKey: 'effectiveness-sources' })}
     ${paginatedSectionHtml('Recent metric entries', 'Recorded numeric or qualitative results for this measure.', entries, (entry) => gridItem(cardHtml('metric_entry', entry, { zoom: false, open: Boolean(entry.source_event_id) })), { sectionKey: 'effectiveness-metric-entries' })}
   `;
     wireHomeControls();
@@ -1498,7 +1497,7 @@ if (ensureHomeLayout()) {
       },
       push,
     );
-    setLoading('Loading source connections…');
+    setLoading('Loading source connections');
     const [sources, events, effectiveness] = await Promise.all([
       safeGet(apiUrl('/api/v1/sources', {}, { includeFramework: false }), { items: [] }),
       safeGet(apiUrl('/api/v1/events', { source: sourceName, limit: PAGE_SIZE }), { items: [] }),
@@ -1518,7 +1517,7 @@ if (ensureHomeLayout()) {
     );
     explorerCanvas.innerHTML = `
     ${nodeHeader('source', src, 'Explore evidence ingested from this source.')}
-    ${paginatedSectionHtml('Related Effectiveness Measures', 'Measures with metric entries recorded against this source.', effectivenessItems, (m) => gridItem(cardHtml('effectiveness_measure', m)), { sectionKey: 'source-effectiveness-measures' })}
+    ${paginatedSectionHtml('Related effectiveness measures', 'Measures with metric entries recorded against this source.', effectivenessItems, (m) => gridItem(cardHtml('effectiveness_measure', m)), { sectionKey: 'source-effectiveness-measures' })}
     ${paginatedSectionHtml('Recent evidence', 'Events ingested from this source.', events.items || [], (e) => gridItem(cardHtml('evidence', e)), { sectionKey: 'source-evidence' })}
   `;
     wireHomeControls();
@@ -1620,7 +1619,7 @@ if (ensureHomeLayout()) {
       },
       push,
     );
-    setLoading('Loading framework structure…');
+    setLoading('Loading framework structure');
     const data = await apiGet(apiUrl('/api/v1/home/controls', { prefix }));
     const groups = data.groups || [],
       items = data.items || [];
@@ -1651,7 +1650,7 @@ if (ensureHomeLayout()) {
     return esc(withFramework(href, framework));
   }
   function homeNumber(value) {
-    return Number.isFinite(value) ? value.toLocaleString() : '—';
+    return Number.isFinite(value) ? value.toLocaleString() : '-';
   }
   function renderHomeTasks() {
     const admin = me?.is_admin;
@@ -1733,7 +1732,7 @@ if (ensureHomeLayout()) {
           percent === null ? homeNumber(overview.control_count) + ' controls' : `${percent}%`,
           coverage
             ? `${coverage.with_evidence} of ${coverage.in_scope} in-scope controls have evidence`
-            : 'Explore this framework’s controls',
+            : "Explore this framework's controls",
           '/controls.html',
           percent,
         ),
@@ -1771,7 +1770,7 @@ if (ensureHomeLayout()) {
         kpi(
           'Framework structure',
           'No entries yet',
-          'Add this framework’s requirements to begin',
+          "Add this framework's requirements to begin",
           me?.is_admin ? '/admin.html#framework-editor' : '/help/using.html',
         ),
       );

@@ -362,12 +362,14 @@ function paintConnectionChoices() {
   let select = $('definition-connection');
   if (!select) {
     const label = document.createElement('label');
-    label.className = 'form-label d-block';
-    label.textContent = 'Connection';
+    label.className = 'col-md-4';
+    const text = document.createElement('span');
+    text.className = 'form-label d-block';
+    text.textContent = 'Connection';
     select = document.createElement('select');
     select.id = 'ec-definition-connection';
     select.className = 'form-select';
-    label.append(select);
+    label.append(text, select);
     $('definition-adapter').parentElement.after(label);
     select.onchange = () => selectDefinitionAdapter(true).catch((error) => status(error.message));
   }
@@ -466,15 +468,14 @@ const fieldHelp = {
     'For example, web-prod-01. Leave empty to include every system within the selected source.',
   actor: 'Copy the account from an event only when the rule should apply to that account.',
   action:
-    'The event’s activity name. Copy an observed value such as build or package.upgrade. Typing here filters events; it does not run or rename an activity.',
+    "The event's activity name. Copy an observed value such as build or package.upgrade. Typing here filters events; it does not run or rename an activity.",
   outcome:
     'The recorded result. Copy its exact value, such as success, failed or info. “info” means the event reports information; it makes no success/failure claim.',
   severity: 'An exact number assigned by the source. A value of 4 matches severity 4 only.',
   label:
     'A tag supplied by some collectors. Leave empty unless the source supplies the label you need.',
 };
-function ruleSentence() {
-  if (!$('rule-sentence')) return;
+function eventSentence() {
   const parts = [
     'From ' + ($('definition-adapter').selectedOptions[0]?.textContent || 'the selected source'),
   ];
@@ -493,9 +494,13 @@ function ruleSentence() {
   ].filter((x) => $('when-' + x)?.value.trim());
   if (extra.length)
     parts.push('with ' + extra.length + ' additional filter' + (extra.length === 1 ? '' : 's'));
+  return parts.join(', ') + '.';
+}
+function ruleSentence() {
+  if (!$('rule-sentence')) return;
   $('rule-sentence').textContent =
-    parts.join(', ') +
-    '. ' +
+    eventSentence() +
+    ' ' +
     (targets.length
       ? 'Matching events link to ' + targets.length + ' selected control(s) or clause(s).'
       : 'Next: choose the controls this evidence supports.');
@@ -503,22 +508,67 @@ function ruleSentence() {
   if (more && ['actor', 'severity', 'label'].some((x) => $('when-' + x)?.value.trim()))
     more.open = true;
 }
-const stepTitles = ['Choose matching events', 'Name and choose controls', 'Check and publish'];
+const stepTitles = ['Matching events', 'Name and controls', 'Check and publish'];
+const stepHints = [
+  'Fill in only the conditions that matter. Blank boxes match anything.',
+  'Add at least one control or clause.',
+  'Preview the matches, then save to publish.',
+];
+function reviewRow(term, value, goto) {
+  const dt = document.createElement('dt');
+  dt.className = 'col-sm-3';
+  dt.textContent = term;
+  const dd = document.createElement('dd');
+  dd.className = 'col-sm-9 d-flex gap-3 justify-content-between align-items-start';
+  const text = document.createElement('span');
+  text.className = 'text-break';
+  text.textContent = value;
+  const change = document.createElement('button');
+  change.type = 'button';
+  change.className = 'btn btn-link btn-sm p-0';
+  change.dataset.ecGoto = String(goto);
+  change.textContent = 'Change';
+  change.setAttribute('aria-label', `Change ${term.toLowerCase()}`);
+  dd.append(text, change);
+  return [dt, dd];
+}
+function renderReview() {
+  $('review').replaceChildren(
+    ...reviewRow('Events', eventSentence(), 1),
+    ...reviewRow('Mapping name', $('description').value.trim(), 2),
+    ...reviewRow('Maps to', targets.map(targetText).join(', '), 2),
+  );
+}
 function showStep(number) {
   step = Math.max(1, Math.min(3, number));
-  $('regex-help').hidden = step !== 1;
   for (const section of document.querySelectorAll('[data-ec-step]'))
     section.hidden = Number(section.dataset.ecStep) !== step;
+  for (const pill of document.querySelectorAll('#ec-steps [data-ec-goto]')) {
+    const target = Number(pill.dataset.ecGoto);
+    pill.className = `btn btn-sm ${target === step ? 'btn-primary' : target < step ? 'btn-outline-success' : 'btn-outline-secondary'}`;
+    pill.disabled = target > step;
+    if (target === step) pill.setAttribute('aria-current', 'step');
+    else pill.removeAttribute('aria-current');
+  }
   $('step-number').textContent = step;
   $('step-title').textContent = stepTitles[step - 1];
-  $('step-progress').style.width = `${(step * 100) / 3}%`;
-  $('step-progress').parentElement.setAttribute('aria-valuenow', String(step));
+  $('step-hint').textContent = stepHints[step - 1];
   $('prev-step').hidden = step === 1;
   $('next-step').hidden = step === 3;
+  $('save-rule').hidden = step !== 3;
+  $('saved-rule').hidden = !selectedRule;
   ruleSentence();
+  if (step === 3) renderReview();
   $('editor-heading').textContent = selectedRule
     ? `Edit ${$('description').value || selectedRule}`
-    : 'Create an evidence definition';
+    : 'Create a mapping';
+}
+// Moving between steps brings the new step's question into view.
+function goToStep(number) {
+  showStep(number);
+  const heading = $(`step-${step}-heading`);
+  heading.setAttribute('tabindex', '-1');
+  heading.focus();
 }
 function showEditor(number = 1) {
   window.dispatchEvent(new Event('keen-show-evidence-mapping'));
@@ -562,7 +612,7 @@ function nextStep() {
     return;
   }
   status('');
-  showStep(step + 1);
+  goToStep(step + 1);
 }
 
 const label = (field) => field.replaceAll('.', ' / ').replaceAll('_', ' ');
@@ -644,7 +694,7 @@ async function loadRuleRevisions() {
   if (!ruleId) return;
   const data = await apiGet(`${apiRoot}/mapping-rules/${encodeURIComponent(ruleId)}/revisions`);
   if (selectedRule !== ruleId) return;
-  element.replaceChildren(new Option('Select this rule’s revision', ''));
+  element.replaceChildren(new Option("Select this rule's revision", ''));
   for (const row of data.items)
     element.add(new Option(`#${row.revision} · ${row.at}`, String(row.version)));
   $('rule-restore').disabled = !data.items.length;
@@ -1034,6 +1084,13 @@ function targetKind(item) {
 function targetLabel(kind, ref) {
   return `${kind === 'clause' ? 'Clause ' : ''}${ref}`;
 }
+// Framework names read better than slugs; a framework the picker does not list keeps its slug.
+function frameworkLabel(slug) {
+  return [...$('framework').options].find((option) => option.value === slug)?.textContent || slug;
+}
+function targetText(target) {
+  return `${frameworkLabel(target.framework)} / ${targetLabel(target.kind, target.ref)}`;
+}
 function addTarget(target) {
   const same = (t) =>
     t.framework === target.framework && t.ref === target.ref && t.kind === target.kind;
@@ -1048,7 +1105,7 @@ function renderTargets() {
     const row = document.createElement('div');
     row.className = 'list-group-item d-flex justify-content-between align-items-center';
     const text = document.createElement('span');
-    text.textContent = `${target.framework} / ${targetLabel(target.kind, target.ref)}`;
+    text.textContent = targetText(target);
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'btn btn-sm btn-outline-danger';
@@ -1100,7 +1157,7 @@ async function loadFrameworkControls() {
   for (const control of data.items) {
     const kind = targetKind(control);
     const option = new Option(
-      `${targetLabel(kind, control.ref)} — ${control.title || control.type}`,
+      `${targetLabel(kind, control.ref)} - ${control.title || control.type}`,
       control.ref,
     );
     option.dataset.kind = kind;
@@ -1246,7 +1303,12 @@ $('previous-rules').onclick = () => {
   renderRules();
 };
 $('close-editor').addEventListener('click', showLibrary);
-$('prev-step').addEventListener('click', () => showStep(step - 1));
+$('prev-step').addEventListener('click', () => goToStep(step - 1));
+// Step pills and the review's Change buttons go back to an earlier step.
+$('editor').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-ec-goto]');
+  if (button && !button.disabled) goToStep(Number(button.dataset.ecGoto));
+});
 $('next-step').addEventListener('click', nextStep);
 $('new-rule').addEventListener('click', () => newRule().catch((error) => status(error.message)));
 function addSelectedTarget() {
@@ -1316,15 +1378,18 @@ $('preview').addEventListener('click', async () => {
     for (const item of data.examples) {
       const p = document.createElement('p');
       p.className = 'alert alert-success py-2 mb-2';
-      p.textContent = `✓ Matches: ${item.summary} → ${Object.entries(item.targets)
-        .map(([fw, refs]) => `${fw}: ${refs.join(', ')}`)
+      const maps = document.createElement('span');
+      maps.className = 'd-block small';
+      maps.textContent = `Maps to ${Object.entries(item.targets)
+        .map(([fw, refs]) => `${frameworkLabel(fw)} (${refs.join(', ')})`)
         .join('; ')}`;
+      p.append(`Matches: ${item.summary}`, maps);
       container.append(p);
     }
     for (const item of data.nonmatches || []) {
       const p = document.createElement('p');
       p.className = 'alert alert-warning py-2 mb-2';
-      p.textContent = `— Does not match: ${item.summary}. ${(item.reasons || []).join(' ') || 'Review the additional filters.'}`;
+      p.textContent = `Does not match: ${item.summary}. ${(item.reasons || []).join(' ') || 'Review the additional filters.'}`;
       container.append(p);
     }
   } catch (error) {
@@ -1389,7 +1454,7 @@ $('save-rule').addEventListener('click', async () => {
     const rule = readRule();
     if (!$('predefine').checked && JSON.stringify(rule) !== previewedRule)
       throw new Error(
-        'Preview this version of the rule before saving, or choose Advanced → Predefine before evidence is available.',
+        'Preview this version of the rule before saving, or tick “Predefine this rule before evidence is available” under Advanced rule settings.',
       );
     if (
       previewedRule &&
@@ -1465,7 +1530,17 @@ $('delete-rule').addEventListener('click', async () => {
     status(error.message);
   }
 });
+// Create mapping waits for the first load: opening the editor sooner would
+// let that load reset it to the library.
 async function init() {
+  $('new-rule').disabled = true;
+  try {
+    await load();
+  } finally {
+    $('new-rule').disabled = false;
+  }
+}
+async function load() {
   conditionForm();
   const observed = await apiGet(`${apiRoot}/evidence-event-samples`);
   for (const source of observed.sources || [])
@@ -1477,7 +1552,7 @@ async function init() {
       value: item.adapter,
       label:
         item.adapter === 'keen-agent'
-          ? 'KEEN Agent / OTLP logs'
+          ? 'Keen Agent / OTLP logs'
           : item.adapter.replaceAll('_', ' '),
     }));
   for (const adapter of definitionAdapters)
@@ -1572,7 +1647,7 @@ function availableEventFields() {
   return [...draftEventFields, ...samples.flatMap((sample) => sample.fields || [])];
 }
 function populateFieldChoices(select, selectedPath = null) {
-  select.replaceChildren(new Option('Choose an event field…', ''));
+  select.replaceChildren(new Option('Choose an event field', ''));
   for (const group of fieldChoiceGroups(
     currentEventFields(),
     availableEventFields(),
@@ -1623,7 +1698,7 @@ function addFieldCondition(item = {}) {
   path.style.flex = '2 1 260px';
   path.style.width = 'auto';
   path.setAttribute('aria-label', 'Event field');
-  path.add(new Option('Choose an event field…', ''));
+  path.add(new Option('Choose an event field', ''));
   populateFieldChoices(path, item.scope === 'event' ? 'event:summary' : item.path || null);
   row.optional = !!item.optional;
   row.legacySummary = !!item.legacySummary;
@@ -1739,16 +1814,16 @@ async function draftFromEvent() {
   for (const ref of added)
     addTarget({ framework: $('framework').value, ref, kind: catalogue.get(ref) });
   document.getElementById('hub-panel')?.removeAttribute('open');
-  $('sample-details').textContent =
+  // The notice above the step carries the draft's advice; the sample box keeps describing samples.
+  const notice = $('draft-notice');
+  notice.hidden = false;
+  notice.textContent =
     'Draft from event ' +
     id +
     '. Review every condition: clear System and remove Host for multiple servers; remove Client IP for multiple addresses. Transient identifiers and timestamps are omitted. ' +
     (added.length
       ? `${added.length} suggested target${added.length === 1 ? '' : 's'} added from the event page (${added.join(', ')}); confirm each one is appropriate before saving.`
       : 'Select framework targets before saving.');
-  const notice = $('draft-notice');
-  notice.hidden = false;
-  notice.textContent = $('sample-details').textContent;
   showEditor(1);
   ruleSentence();
   // Reloading the editor must not unexpectedly recreate the draft.

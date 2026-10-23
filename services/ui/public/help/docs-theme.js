@@ -1,4 +1,4 @@
-// Apply the same palette preference as KEEN before the handbook is painted.
+// Apply the same palette preference as Keen before the handbook is painted.
 (() => {
   const palettes = ['purple', 'ocean', 'forest', 'sunset', 'rose', 'slate', 'teal'];
   let saved = 'purple';

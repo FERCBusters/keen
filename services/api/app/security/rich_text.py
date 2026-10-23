@@ -2,11 +2,11 @@ from __future__ import annotations
 
 """Server-side rich-text HTML sanitisation.
 
-KEEN stores a small amount of user-authored rich text (audit report notes,
+Keen stores a small amount of user-authored rich text (audit report notes,
 executive summaries, audit finding descriptions, ISMS meeting minutes). These
 values are rendered as HTML in the browser. The UI applies a client-side
 allowlist sanitiser (``sanitizeRichTextHtml`` in the MOSP design system), but
-per KEEN's security model the *backend* must be the authoritative sanitiser and
+per Keen's security model the *backend* must be the authoritative sanitiser and
 the frontend is only defence-in-depth.
 
 This module provides a single allowlist-based sanitiser that mirrors the

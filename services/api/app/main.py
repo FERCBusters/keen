@@ -179,7 +179,7 @@ async def csrf_middleware(request: Request, call_next):
 
     response = await call_next(request)
 
-    # Browsers signed in by a trusted proxy have no KEEN sign-in response to
+    # Browsers signed in by a trusted proxy have no Keen sign-in response to
     # carry the CSRF cookie, and a browser may lose the cookie before its
     # session ends; either receives a token with this response.
     if user and not get_csrf_token_from_request(request):

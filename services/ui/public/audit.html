@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – Audit</title>
+  <title>Keen - Audit</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/vendor/wysi/wysi.min.css">
@@ -19,7 +19,7 @@
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
         <h1 class="h3 mb-1" id="title">Audit</h1>
-        <div class="small-muted" id="meta">—</div>
+        <div class="small-muted" id="meta">-</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
         <button id="btnAuditZip" class="btn btn-outline-success" type="button">Export audit ZIP</button>
@@ -88,7 +88,7 @@
                   </div>
                 </div>
                 <div class="col-12">
-                  <label class="form-label small-muted mb-1">Executive Summary</label>
+                  <label class="form-label small-muted mb-1">Executive summary</label>
                   <div class="rich-text-editor"><textarea id="auditExecutiveSummary" class="form-control" rows="4" data-rich-text="1" placeholder="High-level summary of audit objectives, coverage, headline outcomes, and overall conclusion."></textarea></div>
                 </div>
                 <div class="col-12">
@@ -120,14 +120,14 @@
               </form>
               <hr />
               <div class="row g-3 text-center">
-                <div class="col-3"><div class="kpi"><div class="label">Evidence</div><div class="value" id="kpiEvidence">–</div></div></div>
-                <div class="col-3"><div class="kpi"><div class="label">Scope</div><div class="value" id="kpiScope">–</div></div></div>
-                <div class="col-3"><div class="kpi"><div class="label">People</div><div class="value" id="kpiPeople">–</div></div></div>
-                <div class="col-3"><div class="kpi"><div class="label">Findings</div><div class="value" id="kpiFindings">–</div></div></div>
+                <div class="col-3"><div class="kpi"><div class="label">Evidence</div><div class="value" id="kpiEvidence">-</div></div></div>
+                <div class="col-3"><div class="kpi"><div class="label">Scope</div><div class="value" id="kpiScope">-</div></div></div>
+                <div class="col-3"><div class="kpi"><div class="label">People</div><div class="value" id="kpiPeople">-</div></div></div>
+                <div class="col-3"><div class="kpi"><div class="label">Findings</div><div class="value" id="kpiFindings">-</div></div></div>
               </div>
               <hr />
               <form id="reportNotesForm">
-                <label class="form-label small-muted mb-1">Report Notes</label>
+                <label class="form-label small-muted mb-1">Report notes</label>
                 <div class="rich-text-editor"><textarea id="auditNotes" class="form-control" rows="4" data-rich-text="1" placeholder="Detailed report notes, context, caveats, follow-ups, or drafting notes."></textarea></div>
                 <div class="mt-2"><button class="btn btn-outline-primary" type="submit">Save report notes</button></div>
               </form>
@@ -260,7 +260,7 @@
                 <div class="fw-semibold">ISMS documents</div>
                 <div class="small-muted" id="documentScopeCount">0 selected</div>
               </div>
-              <input id="documentFilter" class="form-control mb-2" placeholder="Filter policies/processes…" />
+              <input id="documentFilter" class="form-control mb-2" placeholder="Filter policies/processes" />
               <div id="documentsList" class="row g-2" style="max-height:340px; overflow:auto;"></div>
             </div>
             <div class="col-12 col-xl-4">
@@ -268,7 +268,7 @@
                 <div class="fw-semibold">Clauses</div>
                 <div class="small-muted" id="clauseScopeCount">0 selected</div>
               </div>
-              <input id="clauseFilter" class="form-control mb-2" placeholder="Filter clauses by ref or title…" />
+              <input id="clauseFilter" class="form-control mb-2" placeholder="Filter clauses by ref or title" />
               <div id="clausesList" class="row g-2" style="max-height:340px; overflow:auto;"></div>
             </div>
             <div class="col-12 col-xl-4">
@@ -276,7 +276,7 @@
                 <div class="fw-semibold">Controls</div>
                 <div class="small-muted" id="controlScopeCount">0 selected</div>
               </div>
-              <input id="controlFilter" class="form-control mb-2" placeholder="Filter controls by ref or title…" />
+              <input id="controlFilter" class="form-control mb-2" placeholder="Filter controls by ref or title" />
               <div id="controlsList" class="row g-2" style="max-height:340px; overflow:auto;"></div>
             </div>
           </div>
@@ -296,7 +296,7 @@
       </div>
       <div id="scopeVisualBody" class="collapse show">
         <div class="card-body">
-          <div id="scopeHeatmapSummary" class="small-muted mb-2">Loading scope visualisation…</div>
+          <div id="scopeHeatmapSummary" class="small-muted mb-2">Loading scope visualisation</div>
           <div id="scopeHeatmap" class="audit-scope-graph border rounded bg-white p-2" style="min-height:260px; overflow:auto;"></div>
         </div>
       </div>
@@ -317,9 +317,9 @@
           <div id="peopleBody" class="collapse show">
             <div class="card-body">
               <form id="attendeeForm" class="row g-2 mb-3">
-                <div class="col-12"><label class="form-label small-muted mb-1" for="attendeePersonId">Person directory</label><select id="attendeePersonId" class="form-select"><option value="">Choose a Person or enter a new name below</option></select></div>
+                <div class="col-12"><label class="form-label small-muted mb-1" for="attendeePersonId">Person directory</label><select id="attendeePersonId" class="form-select"><option value="">Choose a person or enter a new name below</option></select></div>
                 <div class="col-12">
-                  <label class="form-label small-muted mb-1" for="attendeeUserId">KEEN user (existing accounts)</label>
+                  <label class="form-label small-muted mb-1" for="attendeeUserId">Keen user (existing accounts)</label>
                   <select id="attendeeUserId" class="form-select">
                     <option value="">Custom / external attendee</option>
                   </select>
@@ -327,11 +327,11 @@
                 </div>
                 <div class="col-12"><input id="attendeeName" class="form-control" placeholder="Name (or override selected user's display name)" /></div>
                 <div class="col-12 col-md-6"><input id="attendeeEmail" class="form-control" placeholder="Email (optional)" /></div>
-                <div class="col-12"><button id="attendeeCreatePerson" data-feature="people" class="btn btn-sm btn-outline-secondary rounded-pill" type="button" hidden>Add this as a Person in KEEN for the future?</button></div>
+                <div class="col-12"><button id="attendeeCreatePerson" data-feature="people" class="btn btn-sm btn-outline-secondary rounded-pill" type="button" hidden>Add this as a Person in Keen for the future?</button></div>
                 <div class="col-12 col-md-6"><input id="attendeeRole" class="form-control" placeholder="Role / organisation" /></div>
                 <div class="col-12"><button class="btn btn-outline-primary" type="submit">Add person</button></div>
               </form>
-              <div id="attendees">—</div>
+              <div id="attendees">-</div>
             </div>
           </div>
         </div>
@@ -353,10 +353,10 @@
               <form id="findingForm" class="row g-2 mb-3">
                 <div class="col-12 col-md-4">
                   <select id="findingKind" class="form-select">
-                    <option value="major_nc">Major Non-Conformity</option>
-                    <option value="minor_nc">Minor Non-Conformity</option>
-                    <option value="ofi">Opportunity for Improvement</option>
-                    <option value="best_practice">Best Practice</option>
+                    <option value="major_nc">Major non-conformity</option>
+                    <option value="minor_nc">Minor non-conformity</option>
+                    <option value="ofi">Opportunity for improvement</option>
+                    <option value="best_practice">Best practice</option>
                   </select>
                 </div>
                 <div class="col-12 col-md-4"><input id="findingTitle" class="form-control" placeholder="Finding title" required /></div>
@@ -371,7 +371,7 @@
                 <div class="col-12"><div class="rich-text-editor"><textarea id="findingDesc" class="form-control" rows="3" data-rich-text="1" placeholder="Description / evidence / recommendation"></textarea></div></div>
                 <div class="col-12"><button class="btn btn-outline-primary" type="submit">Add finding</button></div>
               </form>
-              <div id="findings">—</div>
+              <div id="findings">-</div>
             </div>
           </div>
         </div>
@@ -391,10 +391,10 @@
       <div id="evidenceBody" class="collapse show">
         <div class="card-body">
           <form id="urlEvidenceForm" data-feature="sampling" class="d-flex flex-wrap gap-2 mb-3">
-            <input id="urlEvidence" class="form-control form-control-sm flex-grow-1" style="min-width:280px" placeholder="Paste an event URL or external evidence URL…" />
+            <input id="urlEvidence" class="form-control form-control-sm flex-grow-1" style="min-width:280px" placeholder="Paste an event URL or external evidence URL" />
             <button class="btn btn-sm btn-outline-primary" type="submit">Add URL</button>
           </form>
-          <div id="evidence">—</div>
+          <div id="evidence">-</div>
         </div>
       </div>
     </div>

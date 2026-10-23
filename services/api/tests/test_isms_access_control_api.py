@@ -182,7 +182,7 @@ def test_a_matrix_row_records_its_service_accounts_roles_and_approval(acm):
         str(acm.approver.id),
         "Reviewed quarterly",
     )
-    assert row["display"] == "Deploy releases → Payroll"
+    assert row["display"] == "Deploy releases × Payroll"
     assert acm.call(acm.reader, "GET", f"access-control-matrix/{row['id']}") == row
 
 

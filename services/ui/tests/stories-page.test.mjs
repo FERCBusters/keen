@@ -48,7 +48,7 @@ async function register(t, { me = { can_view_stories: true }, query = '', post, 
     },
     post,
   });
-  await settle(() => ui.el('meta').textContent !== 'Loading…');
+  await settle(() => ui.el('meta').textContent !== 'Loading');
   const rows = () =>
     [...ui.document.querySelectorAll('#rows [data-story-id]')].map((tr) => [
       tr.dataset.storyId,
@@ -66,7 +66,7 @@ test('stories list with their status and open with the framework', async (t) => 
     ['s1', 'Payroll <export>', '/story.html?id=s1&framework=A', 'open'],
     ['s2', 'Phishing wave', '/story.html?id=s2&framework=A', 'closed'],
   ]);
-  assert.equal(ui.el('meta').textContent, '1–2 of 2');
+  assert.equal(ui.el('meta').textContent, '1-2 of 2');
   assert.equal(ui.el('showCreate').hidden, true);
   assert.equal(
     ui.document.querySelector('#rows tr:first-child .small-muted').textContent,
@@ -150,19 +150,19 @@ test('paging moves through the register and is written to the address', async (t
       };
     },
   });
-  await settle(() => ui.el('meta').textContent === '1–50 of 120');
+  await settle(() => ui.el('meta').textContent === '1-50 of 120');
   assert.equal(ui.el('prev').disabled, true);
   assert.equal(ui.el('next').disabled, false);
 
   ui.el('next').click();
-  await settle(() => ui.el('meta').textContent === '51–100 of 120');
+  await settle(() => ui.el('meta').textContent === '51-100 of 120');
   assert.equal(new URL(ui.window.location.href).searchParams.get('offset'), '50');
   assert.equal(ui.el('prev').disabled, false);
   ui.el('next').click();
-  await settle(() => ui.el('meta').textContent === '101–120 of 120');
+  await settle(() => ui.el('meta').textContent === '101-120 of 120');
   assert.equal(ui.el('next').disabled, true);
   ui.el('prev').click();
-  await settle(() => ui.el('meta').textContent === '51–100 of 120');
+  await settle(() => ui.el('meta').textContent === '51-100 of 120');
   assert.deepEqual(requests, [
     '?limit=50&offset=0',
     '?limit=50&offset=50',
@@ -182,7 +182,7 @@ test('a register that cannot load says so, and a refused story is reported', asy
       throw new Error('Title in use');
     },
   });
-  await settle(() => ui.el('meta').textContent === '—');
+  await settle(() => ui.el('meta').textContent === '-');
   assert.equal(ui.el('status').textContent, 'Failed to load stories: Error: Stories offline');
   assert.equal(ui.el('status').dataset.alert, 'danger');
 

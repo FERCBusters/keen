@@ -1,6 +1,6 @@
 """Single sign-on through the assembled application against a fake provider.
 
-The provider is replaced only at the HTTP transport, so KEEN's real code builds
+The provider is replaced only at the HTTP transport, so Keen's real code builds
 the authorization request (state, nonce and PKCE), exchanges the code with
 authlib, fetches and caches the JWKS, verifies the signed ID token, consumes
 the browser-bound login state, links the identity to an existing account and
@@ -418,7 +418,7 @@ def test_a_first_sign_in_links_only_a_mailbox_both_sides_verified(sso):
     refused = sso.sign_in(browser)
     assert refused.status_code == 403
     assert (
-        refused.json()["detail"] == "No active KEEN account matches this SSO identity"
+        refused.json()["detail"] == "No active Keen account matches this SSO identity"
     )
     assert sso.db.query(UserIdentity).count() == 0
 
@@ -442,7 +442,7 @@ def test_a_deactivated_account_is_never_linked_by_email(sso):
 
     assert refused.status_code == 403
     assert (
-        refused.json()["detail"] == "No active KEEN account matches this SSO identity"
+        refused.json()["detail"] == "No active Keen account matches this SSO identity"
     )
     assert sso.db.query(UserIdentity).count() == 0
 
@@ -596,7 +596,7 @@ def test_the_key_set_is_fetched_once_an_hour(sso, monkeypatch):
         (
             {"oidc_auto_provision": True},
             500,
-            "SSO auto-provisioning is not supported; KEEN only allows existing "
+            "SSO auto-provisioning is not supported; Keen only allows existing "
             "active users",
         ),
         (
@@ -617,7 +617,7 @@ def test_the_key_set_is_fetched_once_an_hour(sso, monkeypatch):
             "KEEN_OIDC_TOKEN_ENDPOINT",
         ),
         (
-            # KEEN never derives a callback address from the request.
+            # Keen never derives a callback address from the request.
             {"oidc_redirect_uri": ""},
             500,
             f"{LABEL} SSO is enabled but required settings are missing: "
@@ -808,7 +808,7 @@ def test_a_public_github_profile_address_cannot_claim_an_account(github, emails)
 
     assert refused.status_code == 403
     assert (
-        refused.json()["detail"] == "No active KEEN account matches this SSO identity"
+        refused.json()["detail"] == "No active Keen account matches this SSO identity"
     )
     assert github.db.query(UserIdentity).count() == 0
     assert _signed_in_as(browser) is None
@@ -825,7 +825,7 @@ def test_a_github_token_response_without_an_access_token_cannot_sign_in(github):
         "GitHub token response missing access_token",
     )
     assert not _sets_session(refused) and _signed_in_as(browser) is None
-    # KEEN asks GitHub for no profile without a token to present.
+    # Keen asks GitHub for no profile without a token to present.
     assert [url for _, url in github.provider.requests if "api.github.com" in url] == []
 
 

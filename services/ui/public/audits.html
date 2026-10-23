@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – Audits</title>
+  <title>Keen - Audits</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/vendor/wysi/wysi.min.css">
@@ -21,96 +21,21 @@
         <div class="small-muted">Start an audit, collect sampled evidence, track scope, attendees, findings and the final report.</div>
       </div>
       <div class="d-flex gap-2">
-        <button id="showCreate" class="btn btn-primary"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Start audit</button>
+        <a id="showCreate" class="btn btn-primary" data-nav-fw="1" href="/audit-wizard.html"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Start an audit</a>
       </div>
     </div>
 
     <div id="status" class="alert alert-info" style="display:none;"></div>
-
-    <div id="createCard" class="card mb-3" style="display:none;">
-      <div class="card-header">
-        <div class="fw-bold">Start a new audit</div>
-        <div class="small-muted">The audit belongs to the framework selected in the top navigation.</div>
-      </div>
-      <div class="card-body">
-        <form id="createForm" class="row g-3 align-items-end">
-          <div class="col-12 col-lg-5">
-            <label class="form-label small-muted mb-1">Title</label>
-            <input id="newTitle" class="form-control" placeholder="e.g. Surveillance audit May 2026" required />
-          </div>
-          <div class="col-12 col-md-6 col-lg-3">
-            <label class="form-label small-muted mb-1" for="newFramework">Framework</label>
-            <input id="newFramework" class="form-control" readonly aria-describedby="newFrameworkHint" />
-            <div id="newFrameworkHint" class="form-text">Audits use the framework selected in the top navigation. Switch it there to audit a different framework.</div>
-          </div>
-          <div class="col-12 col-md-6 col-lg-2">
-            <label class="form-label small-muted mb-1">Audit type</label>
-            <select id="newType" class="form-select">
-              <option value="internal">Internal</option>
-              <option value="external">External</option>
-            </select>
-          </div>
-          <div class="col-6 col-lg-1">
-            <label class="form-label small-muted mb-1">Begin date</label>
-            <input id="newStart" class="form-control" type="date" />
-          </div>
-          <div class="col-6 col-lg-1">
-            <label class="form-label small-muted mb-1">End date</label>
-            <input id="newEnd" class="form-control" type="date" />
-          </div>
-          <div class="col-12 col-lg-6">
-            <label class="form-label small-muted mb-1">Executive Summary</label>
-            <div class="rich-text-editor"><textarea id="newExecutiveSummary" class="form-control" rows="2" data-rich-text="1" data-rich-text-height="180" placeholder="Optional high-level summary; can be filled in later."></textarea></div>
-          </div>
-          <div class="col-12 col-lg-6">
-            <label class="form-label small-muted mb-1">Report Notes</label>
-            <div class="rich-text-editor"><textarea id="newNotes" class="form-control" rows="2" data-rich-text="1" data-rich-text-height="180" placeholder="Scope, audit plan reference, external auditor, etc."></textarea></div>
-          </div>
-          <div class="col-12">
-            <div class="border rounded p-3">
-              <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
-                <div>
-                  <div class="fw-semibold">Optional audit scope</div>
-                  <div class="small-muted">Select ISMS policies/processes, clauses or controls now, or leave scope empty and set it later. Document and clause selections automatically include their linked clauses/controls.</div>
-                </div>
-                <div class="small-muted"><span id="newDocumentCount">0 documents</span> · <span id="newClauseCount">0 clauses</span> · <span id="newControlCount">0 controls</span></div>
-              </div>
-              <div class="row g-3">
-                <div class="col-12 col-xl-4">
-                  <label class="form-label small-muted mb-1">ISMS documents</label>
-                  <input id="newDocumentFilter" class="form-control form-control-sm mb-2" placeholder="Filter policies/processes…" />
-                  <div id="newDocumentsList" class="row g-2" style="max-height:240px; overflow:auto;"></div>
-                </div>
-                <div class="col-12 col-xl-4">
-                  <label class="form-label small-muted mb-1">Clauses</label>
-                  <input id="newClauseFilter" class="form-control form-control-sm mb-2" placeholder="Filter clauses…" />
-                  <div id="newClausesList" class="row g-2" style="max-height:240px; overflow:auto;"></div>
-                </div>
-                <div class="col-12 col-xl-4">
-                  <label class="form-label small-muted mb-1">Controls</label>
-                  <input id="newControlFilter" class="form-control form-control-sm mb-2" placeholder="Filter controls…" />
-                  <div id="newControlsList" class="row g-2" style="max-height:240px; overflow:auto;"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-12 d-flex gap-2">
-            <button class="btn btn-primary" type="submit">Create audit</button>
-            <button id="cancelCreate" class="btn btn-outline-secondary" type="button">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
 
     <ul class="nav nav-tabs mb-3" id="auditTabs" role="tablist">
       <li class="nav-item" role="presentation">
         <button class="nav-link active" id="register-tab" data-bs-toggle="tab" data-bs-target="#registerPane" type="button" role="tab" aria-controls="registerPane" aria-selected="true">Audit register</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="scheduled-tab" data-feature="audit_scheduling" data-bs-toggle="tab" data-bs-target="#scheduledPane" type="button" role="tab" aria-controls="scheduledPane" aria-selected="false">Scheduled Audits</button>
+        <button class="nav-link" id="scheduled-tab" data-feature="audit_scheduling" data-bs-toggle="tab" data-bs-target="#scheduledPane" type="button" role="tab" aria-controls="scheduledPane" aria-selected="false">Scheduled audits</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="coverage-tab" data-bs-toggle="tab" data-bs-target="#coveragePane" type="button" role="tab" aria-controls="coveragePane" aria-selected="false">Scope Coverage</button>
+        <button class="nav-link" id="coverage-tab" data-bs-toggle="tab" data-bs-target="#coveragePane" type="button" role="tab" aria-controls="coveragePane" aria-selected="false">Scope coverage</button>
       </li>
     </ul>
 
@@ -123,7 +48,7 @@
               <div class="small-muted">Audits are shared between all auditors; the original author is retained.</div>
             </div>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-              <input id="q" class="form-control form-control-sm" style="min-width:240px" placeholder="Filter by title…" />
+              <input id="q" class="form-control form-control-sm" style="min-width:240px" placeholder="Filter by title" />
               <select id="statusFilter" class="form-select form-select-sm" style="width:150px">
                 <option value="">All statuses</option>
                 <option value="open">Open</option>
@@ -151,7 +76,7 @@
                     <th class="text-end">Actions</th>
                   </tr>
                 </thead>
-                <tbody id="rows"><tr><td colspan="10" class="p-4 small-muted">Loading…</td></tr></tbody>
+                <tbody id="rows"><tr><td colspan="10" class="p-4 small-muted">Loading</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -265,7 +190,7 @@
                   </div>
                   <div class="col-12">
                     <label class="form-label small-muted mb-1">Report notes / plan</label>
-                    <div class="rich-text-editor"><textarea id="schedNotes" class="form-control" rows="3" data-rich-text="1" placeholder="Purpose, planned scope, external auditor, prep notes…"></textarea></div>
+                    <div class="rich-text-editor"><textarea id="schedNotes" class="form-control" rows="3" data-rich-text="1" placeholder="Purpose, planned scope, external auditor, prep notes"></textarea></div>
                   </div>
                   <div class="col-12">
                     <label class="form-label small-muted mb-1" for="schedDocuments">ISMS policies/processes in scope</label>
@@ -294,7 +219,7 @@
                         </div>
                         <div class="col-12 col-md-3">
                           <label class="form-label small-muted mb-1" for="schedAttendeeRole">Role</label>
-                          <input id="schedAttendeeRole" class="form-control form-control-sm" placeholder="Auditor, auditee…" />
+                          <input id="schedAttendeeRole" class="form-control form-control-sm" placeholder="Auditor, auditee" />
                         </div>
                         <div class="col-12 col-md-1 d-grid">
                           <button id="schedAddAttendee" class="btn btn-sm btn-outline-primary" type="button">Add</button>
@@ -350,7 +275,7 @@
                         <th></th>
                       </tr>
                     </thead>
-                    <tbody id="scheduledRows"><tr><td colspan="5" class="p-4 small-muted">Loading…</td></tr></tbody>
+                    <tbody id="scheduledRows"><tr><td colspan="5" class="p-4 small-muted">Loading</td></tr></tbody>
                   </table>
                 </div>
               </div>
@@ -381,7 +306,7 @@
               </div>
               <div class="col-12 col-lg-3">
                 <label class="form-label small-muted mb-1" for="coverageQ">Filter results</label>
-                <input id="coverageQ" class="form-control" type="search" placeholder="Control, clause, document, audit…">
+                <input id="coverageQ" class="form-control" type="search" placeholder="Control, clause, document, audit">
               </div>
               <div class="col-12 col-lg-2">
                 <button id="coverageReload" class="btn btn-outline-primary w-100" type="button">Refresh</button>

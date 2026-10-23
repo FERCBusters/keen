@@ -180,7 +180,24 @@ def test_a_run_imports_suppliers_risks_and_the_controls_they_name(ledger):
     (link,) = ledger.db.query(RiskControlLink).filter_by(risk_id=risk.id).all()
     control = ledger.db.get(ControlItem, link.control_item_id)
     assert (control.framework_slug, control.ref) == (rl.FRAMEWORK, CTL)
-    assert control.title == "B 4 — Is there a continuity plan?"
+    assert control.title == "B 4 - Is there a continuity plan?"
+    # The imported link counts towards the control's coverage, like a link
+    # saved in Keen, through the risk's automatic diary entry.
+    entry = (
+        ledger.db.query(Event)
+        .filter_by(source="diary", external_id=f"isms-link:risk:{risk.id}")
+        .one()
+    )
+    assert (entry.system, entry.action, entry.actor) == (
+        "isms",
+        "isms_link",
+        "riskledger",
+    )
+    # The entry belongs to Keen, not to the connection that imported the risk.
+    assert (entry.connection_id, entry.connection_name) == (None, None)
+    assert [(m.control_item_id, m.method, m.mapped_by) for m in entry.mappings] == [
+        (control.id, "manual", "riskledger")
+    ]
     events = ledger.db.query(Event).filter_by(source="riskledger").all()
     assert sorted(e.action for e in events) == [
         "control.snapshot",
@@ -199,7 +216,7 @@ def test_a_run_imports_suppliers_risks_and_the_controls_they_name(ledger):
 
     # An unchanged account yields no new snapshots.
     (again,) = ledger.run()
-    assert (again["created_events"], ledger.db.query(Event).count()) == (0, 4)
+    assert (again["created_events"], ledger.db.query(Event).count()) == (0, 5)
 
 
 def test_a_failure_part_way_keeps_completed_snapshots_and_reports_safely(ledger):

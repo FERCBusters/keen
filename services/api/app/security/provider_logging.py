@@ -1,7 +1,7 @@
 """Suppress provider diagnostics that contain URLs, bodies or reflected secrets.
 
 Apply to the emitting logger: filters on a parent do not cover child loggers.
-KEEN exposes its own fixed collection diagnostics instead. Recheck SDK logging
+Keen exposes its own fixed collection diagnostics instead. Recheck SDK logging
 sites when upgrading dependencies; arbitrary wire-debug modes are unsupported.
 """
 

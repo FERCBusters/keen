@@ -1,4 +1,4 @@
-KEEN Assurance Framework incorporates the Vanta Control Set under Apache-2.0.
+Keen Assurance Framework incorporates the Vanta Control Set under Apache-2.0.
 Upstream: https://github.com/VantaInc/vanta-control-set
 
 Upstream NOTICE:
@@ -8,7 +8,7 @@ Copyright 2021 Vanta Inc
 This product license includes software developed at
 Vanta, Inc (http://www.vanta.com/)
 
-KEEN adaptations include control organisation, KEEN identifiers, and
+Keen adaptations include control organisation, Keen identifiers, and
 consolidation of duplicate controls while retaining source references.
 The applicable Apache License, Version 2.0 is included in LICENSE and
 services/ui/public/licenses/VANTA-LICENSE.txt.
@@ -22,16 +22,16 @@ Licence: Creative Commons Attribution-ShareAlike 4.0 International
 https://creativecommons.org/licenses/by-sa/4.0/
 Legal code: https://creativecommons.org/licenses/by-sa/4.0/legalcode
 
-KEEN includes an offline OSA catalogue snapshot dated 8 October 2026.
+Keen includes an offline OSA catalogue snapshot dated 8 October 2026.
 Individual records retain their upstream framework URL, licence and source
-commit. KEEN adaptations include database identifiers, hierarchy, shortened
+commit. Keen adaptations include database identifiers, hierarchy, shortened
 display titles, combined descriptions and relationships derived from shared
 NIST control references. Original source fields remain in record metadata.
 
-The OSA-derived catalogue data and KEEN's adaptations are distributed under
+The OSA-derived catalogue data and Keen's adaptations are distributed under
 CC BY-SA 4.0. When sharing them, retain attribution, identify modifications,
 link to the licence and apply its ShareAlike terms to adaptations.
-KEEN's software is licensed separately under Apache License 2.0.
+Keen's software is licensed separately under Apache License 2.0.
 
 OSA coverage estimates and mappings are interpretive guidance. Refer to the
 underlying standards for their requirements. Attribution does not imply

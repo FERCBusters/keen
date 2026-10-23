@@ -36,23 +36,6 @@ body[data-page='admin'] .container-tight {
 #adminTabContent {
   min-width: 0;
 }
-.admin-hero {
-  border: 1px solid #e1d6f5;
-  background: linear-gradient(125deg, #f7f1ff, #fff 80%);
-  border-radius: 20px;
-  padding: 30px;
-}
-.admin-hero h2 {
-  font-size: clamp(1.7rem, 3vw, 2.5rem);
-  letter-spacing: -0.04em;
-  margin: 12px 0;
-}
-.admin-eyebrow {
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  color: #7244b8;
-}
 .admin-quicklinks {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -163,9 +146,6 @@ body[data-page='admin'] .container-tight {
   .admin-quicklinks {
     grid-template-columns: 1fr;
   }
-  .admin-hero {
-    padding: 22px;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   .spinner-border {
@@ -266,13 +246,8 @@ body[data-page='admin'] .btn-outline-primary {
   border-color: var(--bs-border-color);
   color: var(--bs-body-color);
 }
-:root[data-bs-theme='dark'] .admin-hero {
-  background: linear-gradient(125deg, var(--keen-accent-100), var(--bs-secondary-bg));
-  border-color: var(--bs-border-color);
-}
 :root[data-bs-theme='dark'] .admin-tab-nav .nav-link:not(.active),
-:root[data-bs-theme='dark'] .admin-nav-label,
-:root[data-bs-theme='dark'] .admin-eyebrow {
+:root[data-bs-theme='dark'] .admin-nav-label {
   color: var(--bs-body-color);
 }
 :root[data-bs-theme='dark'] .ig-steps button {

@@ -18,13 +18,14 @@ const AUDITS = [
 ];
 const AUDITOR = { can_manage_audits: true, can_view_events: true, user_id: 'u1' };
 
-async function sampling(t, { audits = AUDITS, auditsError, post, url } = {}) {
+async function sampling(t, { audits = AUDITS, auditsError, post, url, globals } = {}) {
   const calls = [];
   const toasts = [];
   const modal = { shown: 0, hidden: 0 };
   const ui = await loadUi('app.js', {
     html: '<div id="pageStatus"></div>',
     url: url ?? 'https://keen.example/event.html?id=e1&framework=A',
+    globals,
     setup(window) {
       window.bootstrap = {
         Modal: {
@@ -83,7 +84,7 @@ test('the dialog offers only active audits the user may add to', async (t) => {
   assert.equal(ui.el('entityAuditSampleTitle').textContent, 'Sample “Deploy” into audit');
   assert.equal(
     ui.el('entityAuditSampleCreate').getAttribute('href'),
-    '/audits.html?new=1&framework=A',
+    '/audit-wizard.html?framework=A',
   );
   assert.equal(ui.el('entityAuditSampleSubmit').disabled, false);
   assert.equal(ui.el('entityAuditSampleUseCurrentUrl').checked, true);
@@ -145,7 +146,7 @@ test('without an active audit the dialog explains how to start one', async (t) =
   await ui.open();
   assert.deepEqual(
     [...ui.el('entityAuditSampleSelect').options].map((o) => o.textContent),
-    ['No open or in-progress audits — start one first'],
+    ['No open or in-progress audits - start one first'],
   );
   for (const id of [
     'entityAuditSampleSubmit',
@@ -227,4 +228,41 @@ test('the dialog opens only for saved items and users who may sample them', asyn
   });
   assert.deepEqual(ui.calls, []);
   assert.equal(ui.modal.shown, 0);
+});
+
+test('the dialog starts with the audit being worked on and remembers the last one used', async (t) => {
+  const stored = { 'keen.samplingAudit': 'a4' };
+  const sessionStorage = {
+    getItem: (key) => stored[key] ?? null,
+    setItem: (key, value) => {
+      stored[key] = value;
+    },
+  };
+  const ui = await sampling(t, { globals: { sessionStorage } });
+  await ui.open();
+  assert.equal(ui.el('entityAuditSampleSelect').value, 'a4');
+  ui.el('entityAuditSampleSelect').value = 'a1';
+  await ui.submit();
+  assert.equal(stored['keen.samplingAudit'], 'a1');
+
+  // An audit that is no longer offered is ignored.
+  stored['keen.samplingAudit'] = 'a2';
+  await ui.open();
+  assert.equal(ui.el('entityAuditSampleSelect').value, 'a1');
+
+  // Without storage the dialog works as before.
+  const broken = {
+    getItem: () => {
+      throw new Error('blocked');
+    },
+    setItem: () => {
+      throw new Error('blocked');
+    },
+  };
+  const plain = await sampling(t, { globals: { sessionStorage: broken } });
+  await plain.open();
+  assert.equal(plain.el('entityAuditSampleSelect').value, 'a1');
+  await plain.submit();
+  assert.ok(plain.calls.some((c) => c.method === 'POST'));
+  plain.api.rememberSamplingAudit('a4');
 });

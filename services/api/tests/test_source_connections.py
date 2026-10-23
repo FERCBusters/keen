@@ -639,3 +639,24 @@ def test_a_file_credential_reference_reads_the_secret_file(tmp_path, monkeypatch
     # The file is read when the connection is used, not when it is listed.
     assert item.credentials == {}
     assert sc.resolve(item).credentials == {"password": "file-secret"}
+
+
+def connection_for(key):
+    return connection(key, "riskledger", credentials={"api_key": "synthetic"})
+
+
+def test_keen_records_written_during_a_run_leave_the_connection_behind():
+    connection = connection_for("db:riskledger")
+    with sc.connection_scope(connection):
+        sc.connection_cache()["token"] = "connection-secret"
+        assert sc.namespace("isms-link:risk:1") != "isms-link:risk:1"
+        with sc.outside_connection():
+            # Identifiers, storage keys and identity are Keen's own, and the
+            # run's cache, with whatever the connection keeps there, is hidden.
+            assert sc.current_connection() is None
+            assert sc.namespace("isms-link:risk:1") == "isms-link:risk:1"
+            assert sc.artifact_key("diary/entry.json") == "diary/entry.json"
+            assert sc.identity() == {}
+            assert sc.connection_cache() == {}
+        assert sc.current_connection() is connection
+        assert sc.connection_cache() == {"token": "connection-secret"}

@@ -211,7 +211,7 @@ function renderLandingPageOptions(meObj, savedSearches = []) {
   const savedLabels = saved.map((s) => {
     const dup = (nameCounts.get(s.name.toLowerCase()) || 0) > 1;
     // Plain text; escaped once when the <option> is rendered.
-    const label = dup ? `${s.name} — ${shorten(s.url, 60)}` : s.name;
+    const label = dup ? `${s.name} - ${shorten(s.url, 60)}` : s.name;
     return { v: s.url, label };
   });
 
@@ -361,7 +361,7 @@ function normalizeHex(hex) {
 
 function colorChipHtml(hex) {
   const c = normalizeHex(hex);
-  if (!c) return '<span class="small-muted">–</span>';
+  if (!c) return '<span class="small-muted">-</span>';
   const fg = idealTextColor(c);
   const border = fg === '#FFFFFF' ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.14)';
   return `<span class="badge" style="background:${c}; border:1px solid ${border}; color:${fg}; font-weight:650;">${c}</span>`;
@@ -646,7 +646,7 @@ function bindAccountTabs() {
 }
 
 // ---------------------------------------------------------------------------
-// My Questions
+// My questions
 // ---------------------------------------------------------------------------
 
 let myQuestionsLoaded = false;
@@ -672,15 +672,15 @@ function myQuestionRow(it) {
     it.target_type && it.target_type !== 'event'
       ? String(it.target_type).replaceAll('_', ' ')
       : it.event_source || '';
-  const ts = it.event_timestamp ? fmtTs(it.event_timestamp) : it.target_ref || '—';
-  const updated = it.updated_at ? fmtTs(it.updated_at) : '—';
+  const ts = it.event_timestamp ? fmtTs(it.event_timestamp) : it.target_ref || '-';
+  const updated = it.updated_at ? fmtTs(it.updated_at) : '-';
   const badge = myQuestionStatusBadge(it.status, !!it.unread);
 
   return `
     <tr class="${it.unread ? 'table-warning' : ''}">
       <td class="wrap">
         <div class="fw-semibold">${esc(title)}</div>
-        <div class="small-muted">${esc(src)} • ${esc(ts)}</div>
+        <div class="small-muted">${esc(src)} · ${esc(ts)}</div>
       </td>
       <td>${badge}</td>
       <td class="small-muted">${esc(updated)}</td>
@@ -699,7 +699,7 @@ async function loadMyQuestions() {
   if (!myQuestionsTbody) return;
   try {
     if (myQuestionsStatus) myQuestionsStatus.style.display = 'none';
-    myQuestionsTbody.innerHTML = '<tr><td colspan="4" class="p-4 small-muted">Loading…</td></tr>';
+    myQuestionsTbody.innerHTML = '<tr><td colspan="4" class="p-4 small-muted">Loading</td></tr>';
     if (myQuestionsTableWrap) myQuestionsTableWrap.style.display = '';
     if (myQuestionsEmpty) myQuestionsEmpty.style.display = 'none';
 
@@ -756,7 +756,7 @@ myQuestionsTbody?.addEventListener('click', async (ev) => {
 });
 
 // ---------------------------------------------------------------------------
-// My Audits
+// My audits
 // ---------------------------------------------------------------------------
 
 let myAuditsLoaded = false;
@@ -772,9 +772,9 @@ function myAuditRow(a) {
     `/audit.html?id=${encodeURIComponent(a.id)}`,
     a.framework_slug || getCurrentFramework(),
   );
-  const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ') || '—';
+  const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ') || '-';
   const attendeeRole = String(a?.my_attendee?.role || '').trim() || 'Attendee';
-  const updated = a.updated_at ? fmtTs(a.updated_at) : '—';
+  const updated = a.updated_at ? fmtTs(a.updated_at) : '-';
   return `<tr>
     <td>
       <a class="fw-semibold" href="${esc(url)}">${esc(a.title || 'Audit')}</a>
@@ -793,7 +793,7 @@ async function loadMyAudits() {
   if (!myAuditsTbody) return;
   try {
     if (myAuditsStatus) myAuditsStatus.style.display = 'none';
-    myAuditsTbody.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">Loading…</td></tr>';
+    myAuditsTbody.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">Loading</td></tr>';
     if (myAuditsTableWrap) myAuditsTableWrap.style.display = '';
     if (myAuditsEmpty) myAuditsEmpty.style.display = 'none';
 
@@ -854,14 +854,14 @@ function myRiskRow(r) {
   const asset = String(r.asset || r.asset_entity?.name || 'Risk').trim() || 'Risk';
   const threat = String(r.threat_summary || '').trim();
   const categoryBits = [r.category?.name, r.subcategory?.name].filter(Boolean);
-  const category = categoryBits.join(' / ') || '—';
+  const category = categoryBits.join(' / ') || '-';
   const types = Array.isArray(r.risk_types) ? r.risk_types : [];
   const typeHtml = types.length
     ? types.map((t) => `<span class="badge badge-soft me-1">${esc(t)}</span>`).join('')
-    : '<span class="small-muted">—</span>';
+    : '<span class="small-muted">-</span>';
   const controlsText =
     Number(r.control_count || 0) === 1 ? '1 control' : `${Number(r.control_count || 0)} controls`;
-  const updated = r.updated_at ? fmtTs(r.updated_at) : '—';
+  const updated = r.updated_at ? fmtTs(r.updated_at) : '-';
 
   return `<tr>
     <td class="wrap">
@@ -883,7 +883,7 @@ async function loadMyRisks() {
   if (!myRisksTbody) return;
   try {
     if (myRisksStatus) myRisksStatus.style.display = 'none';
-    myRisksTbody.innerHTML = '<tr><td colspan="8" class="p-4 small-muted">Loading…</td></tr>';
+    myRisksTbody.innerHTML = '<tr><td colspan="8" class="p-4 small-muted">Loading</td></tr>';
     if (myRisksTableWrap) myRisksTableWrap.style.display = '';
     if (myRisksEmpty) myRisksEmpty.style.display = 'none';
 
@@ -959,8 +959,8 @@ function orgPathLabel(path) {
 function meetingTimeLabel(item) {
   const start = item?.start_time || '';
   const end = item?.end_time || '';
-  if (start && end) return `${start}–${end}`;
-  return start || end || '—';
+  if (start && end) return `${start}-${end}`;
+  return start || end || '-';
 }
 
 function myMeetingRow(item) {
@@ -970,9 +970,9 @@ function myMeetingRow(item) {
   );
   return `<tr>
     <td class="wrap"><span class="fw-semibold">${esc(item?.title || 'Meeting')}</span><div class="small-muted">${esc(item?.agenda_minutes_notes || '')}</div></td>
-    <td class="small-muted">${esc(item?.date || '—')}</td>
+    <td class="small-muted">${esc(item?.date || '-')}</td>
     <td class="small-muted">${esc(meetingTimeLabel(item))}</td>
-    <td><span class="badge text-bg-light">${esc(item?.my_attendance_label || '—')}</span></td>
+    <td><span class="badge text-bg-light">${esc(item?.my_attendance_label || '-')}</span></td>
     <td>${userPillsHtml(item?.attendees || [])}</td>
     <td>${userPillsHtml(item?.apologies || [])}</td>
     <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="${esc(href)}">Open</a></td>
@@ -984,7 +984,7 @@ async function loadMyMeetings() {
   if (!myMeetingsTbody) return;
   try {
     if (myMeetingsStatus) myMeetingsStatus.style.display = 'none';
-    myMeetingsTbody.innerHTML = '<tr><td colspan="7" class="p-4 small-muted">Loading…</td></tr>';
+    myMeetingsTbody.innerHTML = '<tr><td colspan="7" class="p-4 small-muted">Loading</td></tr>';
     if (myMeetingsTableWrap) myMeetingsTableWrap.style.display = '';
     if (myMeetingsEmpty) myMeetingsEmpty.style.display = 'none';
 
@@ -1022,10 +1022,10 @@ myMeetingsRefresh?.addEventListener('click', () => {
 
 function myIsmsObjectiveRow(item) {
   const owner = userPillHtml(item?.owner_user);
-  const target = item?.completion_target_date || '—';
+  const target = item?.completion_target_date || '-';
   return `<tr>
     <td class="wrap"><span class="fw-semibold">${esc(item?.requirement || 'Objective')}</span><div class="small-muted">${esc(item?.metric || '')}</div></td>
-    <td class="wrap">${esc(item?.goal || '—')}</td>
+    <td class="wrap">${esc(item?.goal || '-')}</td>
     <td>${owner}</td>
     <td>${peopleBadges(item?.resource_users)}</td>
     <td class="small-muted">${esc(target)}</td>
@@ -1039,7 +1039,7 @@ async function loadMyIsmsObjectives() {
   try {
     if (myIsmsObjectivesStatus) myIsmsObjectivesStatus.style.display = 'none';
     myIsmsObjectivesTbody.innerHTML =
-      '<tr><td colspan="6" class="p-4 small-muted">Loading…</td></tr>';
+      '<tr><td colspan="6" class="p-4 small-muted">Loading</td></tr>';
     if (myIsmsObjectivesTableWrap) myIsmsObjectivesTableWrap.style.display = '';
     if (myIsmsObjectivesEmpty) myIsmsObjectivesEmpty.style.display = 'none';
 
@@ -1077,7 +1077,7 @@ myIsmsObjectivesRefresh?.addEventListener('click', () => {
 
 function myIsmsRoleRow(item) {
   const node = item?.org_node || item?.node || item || {};
-  const path = orgPathLabel(item?.path) || orgPathLabel(node?.path) || orgNodeLabel(node) || '—';
+  const path = orgPathLabel(item?.path) || orgPathLabel(node?.path) || orgNodeLabel(node) || '-';
   return `<tr>
     <td class="wrap"><span class="fw-semibold">${esc(orgNodeLabel(node) || 'Role')}</span><div class="small-muted">${esc(node.description || '')}</div></td>
     <td><span class="badge text-bg-light">${esc(node.node_type || 'role')}</span></td>
@@ -1092,7 +1092,7 @@ async function loadMyIsmsRole() {
   if (!myIsmsRoleTbody) return;
   try {
     if (myIsmsRoleStatus) myIsmsRoleStatus.style.display = 'none';
-    myIsmsRoleTbody.innerHTML = '<tr><td colspan="5" class="p-4 small-muted">Loading…</td></tr>';
+    myIsmsRoleTbody.innerHTML = '<tr><td colspan="5" class="p-4 small-muted">Loading</td></tr>';
     if (myIsmsRoleTableWrap) myIsmsRoleTableWrap.style.display = '';
     if (myIsmsRoleEmpty) myIsmsRoleEmpty.style.display = 'none';
 
@@ -1129,7 +1129,7 @@ function assetRoleLabel(item) {
   const roles = [];
   if (item?.is_owner) roles.push('Owner');
   if (item?.is_register_holder) roles.push('Register holder');
-  return roles.join(', ') || item?.relationship || '—';
+  return roles.join(', ') || item?.relationship || '-';
 }
 
 function myIsmsAssetRow(item) {
@@ -1142,10 +1142,10 @@ function myIsmsAssetRow(item) {
     .join(' / ');
   return `<tr>
     <td class="wrap"><span class="fw-semibold">${esc(asset.asset || asset.name || 'Asset')}</span><div class="small-muted">${esc(taxonomy || asset.description || '')}</div></td>
-    <td>${esc(asset.license || '—')}</td>
+    <td>${esc(asset.license || '-')}</td>
     <td><span class="badge text-bg-light">${esc(assetRoleLabel(item))}</span></td>
-    <td class="small-muted">${esc(orgNodeLabel(asset.owner_org_node) || '—')}</td>
-    <td class="small-muted">${esc(orgNodeLabel(asset.register_held_by_org_node) || '—')}</td>
+    <td class="small-muted">${esc(orgNodeLabel(asset.owner_org_node) || '-')}</td>
+    <td class="small-muted">${esc(orgNodeLabel(asset.register_held_by_org_node) || '-')}</td>
     <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="${esc(ismsUrl('assets'))}">Open</a></td>
   </tr>`;
 }
@@ -1155,7 +1155,7 @@ async function loadMyIsmsAssets() {
   if (!myIsmsAssetsTbody) return;
   try {
     if (myIsmsAssetsStatus) myIsmsAssetsStatus.style.display = 'none';
-    myIsmsAssetsTbody.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">Loading…</td></tr>';
+    myIsmsAssetsTbody.innerHTML = '<tr><td colspan="6" class="p-4 small-muted">Loading</td></tr>';
     if (myIsmsAssetsTableWrap) myIsmsAssetsTableWrap.style.display = '';
     if (myIsmsAssetsEmpty) myIsmsAssetsEmpty.style.display = 'none';
 

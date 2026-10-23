@@ -168,7 +168,7 @@ def test_compact_text_created_and_replied():
     created = qw._compact_text(PAYLOAD)
     assert created.startswith("New question on event")
     assert "Event: Suspicious login" in created
-    assert "Source: taiga • 2026-10-09T12:00:00" in created
+    assert "Source: taiga · 2026-10-09T12:00:00" in created
     assert "Asked by: alice" in created
     assert "Why did this event fire twice?" in created
     assert "Controls: A.9.1, A.5.3" in created

@@ -85,7 +85,9 @@ class Definition(Strict):
                 "Request path must be relative to the connection, beginning with /"
             )
         if urlsplit(self.path).query or urlsplit(self.path).fragment:
-            raise ValueError("Put query parameters in Query, not in the path")
+            raise ValueError(
+                "Move query parameters to Query; the path holds no query or fragment"
+            )
         if any(
             k.lower()
             in {

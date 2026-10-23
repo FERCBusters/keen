@@ -116,8 +116,8 @@ async function measurePage(t, options = {}) {
 test('effectiveness measure details render with threshold state and linked controls', async (t) => {
   const { ui } = await measurePage(t);
   assert.equal(ui.el('measureTitle').textContent, '<b>Patch latency</b>');
-  assert.equal(ui.document.title, 'Keen – <b>Patch latency</b>');
-  assert.equal(ui.el('measureMeta').textContent, 'A • key: patch-latency • 3 metric entries');
+  assert.equal(ui.document.title, 'Keen - <b>Patch latency</b>');
+  assert.equal(ui.el('measureMeta').textContent, 'A · key: patch-latency · 3 metric entries');
   assert.equal(ui.el('measureNotes').textContent, 'No notes recorded.');
   assert.equal(ui.el('metricKey').innerHTML, '<code>patch-latency</code>');
   assert.equal(ui.el('metricCount').textContent, '3 metric entries');
@@ -239,9 +239,9 @@ test('measures without a key disable the integration examples', async (t) => {
     measure: measure({ metric_key: '', metric_entry_count: 0, latest_entry: null }),
     entries: [],
   });
-  assert.equal(ui.el('metricKey').textContent, '—');
+  assert.equal(ui.el('metricKey').textContent, '-');
   assert.equal(ui.el('metricCount').textContent, '0');
-  assert.equal(ui.el('measureMeta').textContent, 'A • No metric entries');
+  assert.equal(ui.el('measureMeta').textContent, 'A · No metric entries');
   assert.match(ui.el('latestValue').textContent, /No metric entries yet/);
   const details = ui.el('measurement-examples').querySelector('details');
   details.open = true;

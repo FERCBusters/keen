@@ -107,7 +107,7 @@ def test_a_metric_entry_is_read_with_its_measure_in_its_framework(isms):  # noqa
 
 
 def test_measures_recorded_against_a_source_are_listed_for_it(isms):  # noqa: F811
-    # A metric source must be a source KEEN has collected, or "other".
+    # A metric source must be a source Keen has collected, or "other".
     isms.db.add(
         Event(
             source="loki",

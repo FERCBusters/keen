@@ -216,7 +216,7 @@ test('an analysis is laid out as existing matches, templates, then a new risk wi
   // 3. Controls are called safeguards and badged so nobody reads them as risks.
   assert.match(
     sections[2].textContent,
-    /Safeguards the new risk could link to\s*controls, not risks/,
+    /Safeguards the new risk could link to\s*framework controls/,
   );
   const boxes = sections[2].querySelectorAll('.mitigator-suggestion-select');
   assert.deepEqual(
@@ -226,7 +226,7 @@ test('an analysis is laid out as existing matches, templates, then a new risk wi
       ['c2', true],
     ],
   );
-  assert.match(sections[2].textContent, /Out of scope — review applicability/);
+  assert.match(sections[2].textContent, /Out of scope - review applicability/);
   assert.equal(sections[2].querySelector('b'), null);
   assert.match(sections[2].textContent, /Matches "<b>phishing<\/b>"/);
   const parties = sections[2].querySelectorAll('.mitigator-interested-select');
@@ -237,7 +237,7 @@ test('an analysis is laid out as existing matches, templates, then a new risk wi
       [false, true],
     ],
   );
-  assert.match(sections[2].textContent, /Customers — Customer \(already recorded\)/);
+  assert.match(sections[2].textContent, /Customers - Customer \(already recorded\)/);
   assert.match(sections[2].textContent, /This also reads like a PESTLE\(E\) influence: Legal/);
   assert.ok(ui.el('mitigatorToWizard'));
   assert.ok(ui.el('mitigatorToPestleWizard'));

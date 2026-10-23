@@ -304,7 +304,7 @@ async function editCollection(adapter, existing = null, connection = null) {
       label.className = 'form-label d-block';
       label.textContent =
         adapter === 'riskledger' && name === 'org'
-          ? 'Organisation UUID (or * for the API key’s organisation)'
+          ? "Organisation UUID (or * for the API key's organisation)"
           : adapter === 'redmine' && name === 'project'
             ? 'Project ID / identifier (or * for all accessible projects)'
             : {

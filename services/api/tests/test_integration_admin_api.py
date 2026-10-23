@@ -154,7 +154,7 @@ def test_a_collector_is_saved_published_and_run(api):
 def test_definitions_never_hold_credentials(api, definition):
     refused = collector(api, definition, status=422)
 
-    assert refused["detail"] == "Store credentials in a Connection, not a definition"
+    assert refused["detail"] == "Move credentials from the definition to a Connection"
     assert api.keen.db.query(IntegrationCollector).count() == 0
 
 

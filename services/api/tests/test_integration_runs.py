@@ -140,7 +140,7 @@ def test_a_pause_cancels_runs_before_collection(
         "cancelled",
         "Source ingestion paused before collection began",
     )
-    with pytest.raises(ValueError, match="paused in Sources & Evidence Mapping"):
+    with pytest.raises(ValueError, match="paused in Sources & evidence mapping"):
         runtime.queue_run(db, db.get(Collector, "collector"))
 
 

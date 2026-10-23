@@ -126,7 +126,7 @@ async function open(
     put,
     remove,
   });
-  await settle(() => ui.el('storyTitle').textContent !== 'Loading…');
+  await settle(() => ui.el('storyTitle').textContent !== 'Loading');
   return ui;
 }
 
@@ -149,7 +149,7 @@ test('a reader sees the timeline in time order with withheld items marked', asyn
     ],
   });
   assert.equal(ui.el('storyTitle').textContent, 'Payroll <export>');
-  assert.equal(ui.document.title, 'Keen – Payroll <export>');
+  assert.equal(ui.document.title, 'Keen - Payroll <export>');
   assert.equal(ui.el('storySummary').textContent, 'Root sign-in\nthen export');
   assert.equal(
     ui.el('storyMeta').textContent,
@@ -690,7 +690,7 @@ test('a selected link can be removed, unsaved layout changes hold the page, and 
       throw new Error('Unexpected GET ' + url);
     },
   });
-  await settle(() => ui.el('storyTitle').textContent !== 'Loading…');
+  await settle(() => ui.el('storyTitle').textContent !== 'Loading');
   assert.deepEqual(shown, ['commentsTab']);
 
   // Leaving with a clean layout is allowed.
@@ -717,4 +717,66 @@ test('a selected link can be removed, unsaved layout changes hold the page, and 
   ui.window.dispatchEvent(dirty);
   assert.equal(dirty.defaultPrevented, true);
   assert.equal(ui.el('saveLayout').disabled, false);
+});
+
+test('flow chart titles open records in a new tab and authors add any kind of record', async (t) => {
+  const posted = [];
+  const detail = story({ can_edit: true });
+  const ui = await open(t, {
+    me: { can_manage_stories: true },
+    detail,
+    get: async (url) => {
+      if (url.pathname === '/api/v1/stories/s1') return detail;
+      if (url.pathname === '/api/v1/stories/s1/comments') return { items: [] };
+      if (url.pathname === '/api/v1/stories/s1/changelog') return { items: [] };
+      if (url.pathname === '/api/v1/questions/entities/story/s1') return { threads: [] };
+      if (url.pathname === '/api/v1/stories/choices/meeting')
+        return {
+          items: [{ target_id: 'm1', title: 'Monthly <review>', url: '/isms-meeting.html?id=m1' }],
+        };
+      throw new Error('Unexpected GET ' + url);
+    },
+    post: async (url, body) => {
+      posted.push([url.pathname, plain(body)]);
+      return detail;
+    },
+  });
+  const title = (id) =>
+    ui.document.querySelector(`#flow [data-item-id="${id}"] .story-node-title a`);
+  assert.equal(title('i-login').getAttribute('href'), '/event.html?id=e1&framework=A');
+  assert.equal(title('i-login').target, '_blank');
+  assert.equal(title('i-login').textContent, 'Attacker signs in');
+  assert.equal(title('i-note'), null);
+  assert.equal(title('i-risk'), null, 'a withheld item has no link');
+
+  assert.deepEqual(
+    [...ui.el('addKind').options].map((o) => [o.value, o.textContent, o.dataset.feature || '']),
+    [
+      ['event', 'Event', ''],
+      ['risk', 'Risk', 'risk_cia'],
+      ['document', 'Document', 'documents'],
+      ['asset', 'Asset', 'assets'],
+      ['objective', 'Objective', 'objectives'],
+      ['swot', 'SWOT item', 'swot'],
+      ['person', 'Person', 'people'],
+      ['vendor', 'Vendor', 'vendors'],
+      ['effectiveness_measure', 'Effectiveness measure', 'effectiveness'],
+      ['meeting', 'Meeting minutes', 'meetings'],
+      ['note', 'Note', ''],
+    ],
+  );
+  ui.el('addKind').value = 'meeting';
+  ui.el('addKind').dispatchEvent(new ui.window.Event('change'));
+  ui.el('addSearch').value = 'monthly';
+  ui.el('findItems').click();
+  await settle(() => ui.el('candidates').querySelector('[data-add-id="m1"]'));
+  const candidate = ui.el('candidates').querySelector('li');
+  assert.equal(candidate.querySelector('.badge').textContent, 'Meeting minutes');
+  assert.match(candidate.textContent, /Monthly <review>/);
+  candidate.querySelector('[data-add-id="m1"]').click();
+  await settle(() => posted.length === 1);
+  assert.deepEqual(posted[0], [
+    '/api/v1/stories/s1/items',
+    { items: [{ kind: 'meeting', entity_id: 'm1' }], expected_version: 3 },
+  ]);
 });

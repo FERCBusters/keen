@@ -252,7 +252,7 @@ function renderItem(item = null) {
           `updated ${fmtTs(item.updated_at) || 'unknown'}`,
         ]
       : [framework || 'selected framework', 'new item'];
-    pestleItemMeta.textContent = bits.filter(Boolean).join(' • ');
+    pestleItemMeta.textContent = bits.filter(Boolean).join(' · ');
   }
   if (pestleBadges) {
     pestleBadges.innerHTML = isExisting
@@ -282,7 +282,7 @@ function renderProcessRelevance() {
   }
   if (!processRelevanceRows.length) {
     businessProcessRelevanceList.innerHTML =
-      '<div class="small-muted">No business processes exist yet. Add them from the PESTLE(E) Impact Assessment page.</div>';
+      '<div class="small-muted">No business processes exist yet. Add them from the PESTLE(E) impact assessment page.</div>';
     return;
   }
   businessProcessRelevanceList.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle mb-0">
@@ -398,8 +398,8 @@ function _qStatusBadge(status) {
 function _renderPestleQuestionThread(t) {
   const tid = t?.id || '';
   const createdBy = t?.created_by_username || '';
-  const createdAt = t?.created_at ? fmtTs(t.created_at) : '—';
-  const updatedAt = t?.updated_at ? fmtTs(t.updated_at) : '—';
+  const createdAt = t?.created_at ? fmtTs(t.created_at) : '-';
+  const updatedAt = t?.updated_at ? fmtTs(t.updated_at) : '-';
   const statusVal = String(t?.status || 'unanswered').toLowerCase();
   const posts = Array.isArray(t?.posts) ? t.posts : [];
   const isAdmin = !!me?.is_admin;
@@ -420,7 +420,7 @@ function _renderPestleQuestionThread(t) {
     .map(
       (p) => `
     <div class="question-post">
-      <div class="question-post-meta"><div class="small-muted"><span class="fw-bold">${esc(p?.author_username || '—')}</span> • ${esc(p?.created_at ? fmtTs(p.created_at) : '—')}</div></div>
+      <div class="question-post-meta"><div class="small-muted"><span class="fw-bold">${esc(p?.author_username || '-')}</span> · ${esc(p?.created_at ? fmtTs(p.created_at) : '-')}</div></div>
       <div class="mt-2">${esc(p?.body || '').replace(/\n/g, '<br>')}</div>
     </div>`,
     )
@@ -429,7 +429,7 @@ function _renderPestleQuestionThread(t) {
     ? `
     <div class="mt-3 no-print">
       <div class="small-muted mb-1">Reply</div>
-      <textarea class="form-control" rows="3" id="pestleReplyBody-${esc(tid)}" placeholder="Write a response…"></textarea>
+      <textarea class="form-control" rows="3" id="pestleReplyBody-${esc(tid)}" placeholder="Write a response"></textarea>
       <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
         <button class="btn btn-sm btn-primary" data-action="reply-pestle-question" data-thread="${esc(tid)}">Send reply</button>
       </div>
@@ -440,8 +440,8 @@ function _renderPestleQuestionThread(t) {
     <div class="question-thread" id="thread-${esc(tid)}">
       <div class="question-header">
         <div>
-          <div class="question-title">Thread by <span class="mono">${esc(createdBy || '—')}</span></div>
-          <div class="small-muted">Created ${esc(createdAt)} • Updated ${esc(updatedAt)}</div>
+          <div class="question-title">Thread by <span class="mono">${esc(createdBy || '-')}</span></div>
+          <div class="small-muted">Created ${esc(createdAt)} · Updated ${esc(updatedAt)}</div>
         </div>
         <div class="d-flex flex-wrap gap-2 align-items-center">${_qStatusBadge(statusVal)}${statusCtl}${deleteCtl}</div>
       </div>
@@ -624,7 +624,7 @@ pestleAskQuestion?.addEventListener('click', async () => {
   if (!body) return toast(status, 'Please enter a question', 'warning');
   pestleAskQuestion.disabled = true;
   const prev = pestleAskQuestion.textContent;
-  pestleAskQuestion.textContent = 'Submitting…';
+  pestleAskQuestion.textContent = 'Submitting';
   try {
     await apiPost(`/api/v1/questions/entities/pestle_item/${encodeURIComponent(itemId)}`, { body });
     if (pestleQuestionBody) pestleQuestionBody.value = '';
@@ -664,7 +664,7 @@ pestleQuestionsEl?.addEventListener('click', async (ev) => {
   if (!body) return toast(status, 'Please enter a reply', 'warning');
   btn.disabled = true;
   const prev = btn.textContent;
-  btn.textContent = 'Sending…';
+  btn.textContent = 'Sending';
   try {
     await apiPost(`/api/v1/questions/${encodeURIComponent(tid)}/posts`, { body });
     if (bodyEl) bodyEl.value = '';

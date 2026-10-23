@@ -23,6 +23,7 @@ import {
   auditStatusLabel,
   wireIsoDateTextField,
   isoDateToDisplay,
+  rememberSamplingAudit,
   dateFormatPlaceholder,
   initRichTextEditors,
   refreshRichTextEditorStates,
@@ -325,10 +326,10 @@ function ensureAuditRead() {
 
 function kindLabel(k) {
   const v = String(k || '');
-  if (v === 'major_nc') return 'Major Non-Conformity';
-  if (v === 'minor_nc') return 'Minor Non-Conformity';
-  if (v === 'ofi') return 'Opportunity for Improvement';
-  if (v === 'best_practice') return 'Best Practice';
+  if (v === 'major_nc') return 'Major non-conformity';
+  if (v === 'minor_nc') return 'Minor non-conformity';
+  if (v === 'ofi') return 'Opportunity for improvement';
+  if (v === 'best_practice') return 'Best practice';
   return v || 'Finding';
 }
 
@@ -362,6 +363,11 @@ function showMeta(a) {
     a?.framework_slug || getCurrentFramework(),
   );
 }
+
+// Evidence found from here goes to this audit unless the auditor picks another.
+document
+  .getElementById('sampleEventLink')
+  ?.addEventListener('click', () => rememberSamplingAudit(auditId));
 
 function setTemplateScheduleForm(a) {
   const start = a?.schedule_next_run_date || a?.start_date || '';
@@ -673,9 +679,9 @@ function _formStaticBlock(text, extraClass = '', { richText = false } = {}) {
   div.style.minHeight = '2.4rem';
   if (richText) {
     div.classList.add('rich-text-content');
-    div.innerHTML = renderRichTextContent(text, '<span class="small-muted">—</span>');
+    div.innerHTML = renderRichTextContent(text, '<span class="small-muted">-</span>');
   } else {
-    div.textContent = String(text || '').trim() || '—';
+    div.textContent = String(text || '').trim() || '-';
   }
   return div;
 }
@@ -1171,7 +1177,7 @@ async function exportAuditZip() {
   const prevLabel = btn ? btn.textContent : '';
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Preparing ZIP…';
+    btn.textContent = 'Preparing ZIP';
   }
 
   try {
@@ -1179,7 +1185,7 @@ async function exportAuditZip() {
     const files = [];
     const seenNames = new Map();
 
-    toast(status, 'Rendering audit page PDF…', 'info');
+    toast(status, 'Rendering audit page PDF', 'info');
     const pdfBlob = await buildAuditPagePdfBlob(audit);
     files.push({
       name: _uniqueZipName(`${stem}-audit-page.pdf`, seenNames),
@@ -1188,7 +1194,7 @@ async function exportAuditZip() {
     });
 
     if (audit.final_report?.download_url) {
-      toast(status, 'Adding final report…', 'info');
+      toast(status, 'Adding final report', 'info');
       const finalReport = await _fetchBytes(audit.final_report.download_url);
       const reportName =
         finalReport.filename ||
@@ -1209,7 +1215,7 @@ async function exportAuditZip() {
       const item = evidenceItems[i];
       const eventId = item.event_id || item.event?.id;
       if (!eventId) continue;
-      toast(status, `Collecting sampled evidence ${i + 1}/${evidenceItems.length}…`, 'info');
+      toast(status, `Collecting sampled evidence ${i + 1}/${evidenceItems.length}`, 'info');
       const eventData = await apiGet(
         _sampleExportUrl(
           `/api/v1/events/${encodeURIComponent(eventId)}?framework=${encodeURIComponent(audit.framework_slug || getCurrentFramework())}`,
@@ -1228,7 +1234,7 @@ async function exportAuditZip() {
       for (let j = 0; j < artifacts.length; j++) {
         const art = artifacts[j];
         artifactCount += 1;
-        toast(status, `Downloading sampled evidence artifact ${artifactCount}…`, 'info');
+        toast(status, `Downloading sampled evidence artifact ${artifactCount}`, 'info');
         const downloaded = await _fetchBytes(
           _sampleExportUrl(`/api/v1/artifacts/${encodeURIComponent(art.id)}/download`),
         );
@@ -1246,7 +1252,7 @@ async function exportAuditZip() {
       }
     }
 
-    toast(status, 'Building ZIP…', 'info');
+    toast(status, 'Building ZIP', 'info');
     const zipBlob = buildZipStore(files);
     _downloadBlob(zipBlob, `${stem}.zip`);
     const extra = [];
@@ -1883,7 +1889,7 @@ function renderScopeBipartiteGraph(data) {
   linkSel.append('title').text((d) => {
     const clause = clauseById.get(d.clause_id) || {};
     const control = controlById.get(d.control_id) || {};
-    return `${clause.ref || 'Clause'} → ${control.ref || 'Control'}\n${_scopeApplicabilityLabel(d.applicability)}`;
+    return `${clause.ref || 'Clause'} × ${control.ref || 'Control'}\n${_scopeApplicabilityLabel(d.applicability)}`;
   });
 
   const gNodes = svg.append('g').attr('class', 'audit-scope-nodes');
@@ -1921,7 +1927,7 @@ function renderScopeBipartiteGraph(data) {
         )
         .style('stroke', 'rgba(255,255,255,0.20)')
         .style('stroke-width', 1);
-      const label = `${d.ref || 'Clause'}${d.title ? ` — ${d.title}` : ''}`;
+      const label = `${d.ref || 'Clause'}${d.title ? ` - ${d.title}` : ''}`;
       group
         .append('text')
         .attr('x', leftW / 2)
@@ -1980,7 +1986,7 @@ function renderScopeBipartiteGraph(data) {
         )
         .style('stroke', 'rgba(255,255,255,0.18)')
         .style('stroke-width', 1);
-      const label = `${d.ref || 'Control'}${d.title ? ` — ${d.title}` : ''}`;
+      const label = `${d.ref || 'Control'}${d.title ? ` - ${d.title}` : ''}`;
       group
         .append('text')
         .attr('x', 10)
@@ -2054,7 +2060,7 @@ function renderScopeBipartiteGraph(data) {
 
 async function loadScopeVisualisation() {
   const wrap = document.getElementById('scopeHeatmap');
-  if (wrap) wrap.innerHTML = '<div class="small-muted p-3">Loading scope visualisation…</div>';
+  if (wrap) wrap.innerHTML = '<div class="small-muted p-3">Loading scope visualisation</div>';
   try {
     const data = await apiGet(`/api/v1/audits/${encodeURIComponent(auditId)}/scope-map`);
     renderScopeBipartiteGraph(data);
@@ -2080,7 +2086,7 @@ function renderAttendeePersonOptions() {
   if (!sel) return;
   const current = sel.value;
   sel.innerHTML =
-    '<option value="">Choose a Person or enter a new name below</option>' +
+    '<option value="">Choose a person or enter a new name below</option>' +
     attendeePeople
       .map(
         (p) =>
@@ -2196,7 +2202,7 @@ function renderAttendees(items) {
       return `<div class="list-group-item d-flex justify-content-between gap-2 align-items-start">
       <div>
         <div class="fw-semibold">${who}</div>
-        <div class="small-muted">${esc(meta.join(' · ') || '—')}</div>
+        <div class="small-muted">${esc(meta.join(' · ') || '-')}</div>
       </div>
       ${canEditAudit() ? `<button class="btn btn-sm btn-outline-danger" data-del-attendee="${esc(x.id)}">Remove</button>` : ''}
     </div>`;
@@ -2214,10 +2220,10 @@ function renderAttendees(items) {
 }
 
 function findingKindOptions(current) {
-  return `<option value="major_nc" ${selectedAttr('major_nc', current)}>Major Non-Conformity</option>
-    <option value="minor_nc" ${selectedAttr('minor_nc', current)}>Minor Non-Conformity</option>
-    <option value="ofi" ${selectedAttr('ofi', current)}>Opportunity for Improvement</option>
-    <option value="best_practice" ${selectedAttr('best_practice', current)}>Best Practice</option>`;
+  return `<option value="major_nc" ${selectedAttr('major_nc', current)}>Major non-conformity</option>
+    <option value="minor_nc" ${selectedAttr('minor_nc', current)}>Minor non-conformity</option>
+    <option value="ofi" ${selectedAttr('ofi', current)}>Opportunity for improvement</option>
+    <option value="best_practice" ${selectedAttr('best_practice', current)}>Best practice</option>`;
 }
 
 function findingStatusOptions(current) {
@@ -2589,8 +2595,8 @@ document.getElementById('attendeeForm')?.addEventListener('submit', async (ev) =
     const user = selectedAttendeeUser();
     const name = (document.getElementById('attendeeName')?.value || '').trim();
     const email = (document.getElementById('attendeeEmail')?.value || '').trim();
-    if (!userId && !personId && !name && !email) throw new Error('Choose a Person or enter a name');
-    if (userId && personId) throw new Error('Select a Person or KEEN user');
+    if (!userId && !personId && !name && !email) throw new Error('Choose a person or enter a name');
+    if (userId && personId) throw new Error('Select either a person or a Keen user');
     await apiPost(`/api/v1/audits/${encodeURIComponent(auditId)}/attendees`, {
       user_id: userId || null,
       person_id: personId || null,
@@ -2700,6 +2706,16 @@ document.getElementById('deleteAudit')?.addEventListener('click', async () => {
 await loadAttendeeUsers();
 await loadAttendeePeople();
 await loadAudit();
+focusRequestedSection();
+
+// The new-audit wizard can open the audit at its report notes.
+function focusRequestedSection() {
+  if (qs('focus') !== 'notes') return;
+  const form = document.getElementById('reportNotesForm');
+  form?.scrollIntoView({ block: 'start' });
+  const editor = form?.querySelector('[contenteditable]') || document.getElementById('auditNotes');
+  editor?.focus?.();
+}
 
 async function loadSwotScope() {
   if (!featureEnabled(me, 'swot')) return;

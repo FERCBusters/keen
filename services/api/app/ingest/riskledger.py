@@ -34,6 +34,7 @@ from app.ingest.connections import connection_runs, load_document, namespace, se
 from app.ingest.http import client as ingestion_client
 from app.security.redaction import mask_event_data_obj, redact_obj
 from app.services.ingestion_pause import pausable
+from app.services.isms.link_diary import sync_entity_link_diary
 
 BASE = "https://api.riskledger.com/alpha"
 FRAMEWORK = "RISKLEDGER:ASSESSMENT"
@@ -256,7 +257,7 @@ def _domain(db, row):
             framework_slug=FRAMEWORK,
             type="clause",
             ref=ref,
-            title=(_text(row, "letter") + " — " + _text(row, "name", ident))[:256],
+            title=(_text(row, "letter") + " - " + _text(row, "name", ident))[:256],
             in_scope=False,
             meta=meta,
         )
@@ -289,7 +290,7 @@ def _control(db, row, domain):
             framework_slug=FRAMEWORK,
             type="control",
             ref=ident,
-            title=(display + " — " + question)[:256],
+            title=(display + " - " + question)[:256],
             in_scope=row.get("deprecated") is not True,
             meta={
                 "description": question + "\n\n" + _text(row, "description"),
@@ -378,7 +379,7 @@ def _risk(db, org, row, vendor, control):
     risk = db.get(Risk, local)
     if risk is None:
         asset = _asset(db, org, row.get("supplierID"), vendor)
-        # Upstream scales and status enum are not defined as KEEN's 5x5 ratings.
+        # Upstream scales and status enum are not defined as Keen's 5x5 ratings.
         # Preserve those values for a human review rather than inventing a conversion.
         context = {
             k: row.get(k)
@@ -399,7 +400,7 @@ def _risk(db, org, row, vendor, control):
             id=local,
             asset_id=asset.id,
             threat_summary=_text(row, "name") + "\n\n" + _text(row, "description"),
-            note="Imported from Risk Ledger; review ownership, score and treatment in KEEN. Original values: "
+            note="Imported from Risk Ledger; review ownership, score and treatment in Keen. Original values: "
             + json.dumps(context, ensure_ascii=False),
             mitigator_context={"riskledger": {"organisation_id": org, **context}},
             risk_types=[],
@@ -414,6 +415,11 @@ def _risk(db, org, row, vendor, control):
                     control_item_id=control.id,
                 )
             )
+            db.flush()
+    # Imported links count towards control coverage like links saved in Keen.
+    # Every run brings the risk's entry up to date, so it also follows local
+    # link changes and covers risks imported before entries were kept.
+    sync_entity_link_diary(db, "risk", risk.id, actor="riskledger")
     return risk
 
 

@@ -55,7 +55,7 @@ def graph_control_source(
     breakdown: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    "Graph for visualisation: Sources -> Controls.\n\n    Counts are **distinct events**, not number of mappings. One event can map to\n    multiple controls, so counting mappings would inflate totals.\n"
+    "Graph for visualisation: sources × controls.\n\n    Counts are **distinct events**. One event can map to multiple controls, so a\n    count of mappings would inflate totals.\n"
     return service.graph_control_source(
         context=change_context(request),
         framework=framework,

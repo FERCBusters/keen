@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – Events</title>
+  <title>Keen - Events</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css"/>
@@ -17,7 +17,7 @@
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
         <h1 id="pageTitle" class="h3 mb-1">Events</h1>
-        <div class="small-muted">Search and slice evidence by source, clause, actor/system — then jump to sampling.</div>
+        <div class="small-muted">Search and slice evidence by source, clause, actor/system - then jump to sampling.</div>
       </div>
       <div id="eventsActions" class="d-flex gap-2 no-print">
         <a class="btn btn-outline-primary" href="/sources.html">Sources</a>
@@ -110,13 +110,13 @@
       <input class="form-control form-control-sm" data-story-title aria-label="Story title" maxlength="256" placeholder="Story title" style="width:16rem;">
       <button class="btn btn-sm btn-primary" type="button" data-create-story><i class="bi bi-journal-plus me-1" aria-hidden="true"></i>Create story</button>
       <span class="small-muted">or</span>
-      <select class="form-select form-select-sm" data-story-target aria-label="Add to an existing story" style="width:16rem;"><option value="">Choose a story…</option></select>
+      <select class="form-select form-select-sm" data-story-target aria-label="Add to an existing story" style="width:16rem;"><option value="">Choose a story</option></select>
       <button class="btn btn-sm btn-outline-primary" type="button" data-add-to-story>Add to story</button>
       <button class="btn btn-sm btn-outline-secondary ms-auto" type="button" data-clear-selection>Clear selection</button>
     </div>
     <div id="rowMenu" class="dropdown-menu show position-absolute shadow" role="menu" hidden>
       <button class="dropdown-item" type="button" role="menuitem" data-menu-action="create">Create story from <span data-selection-count>1</span> selected</button>
-      <button class="dropdown-item" type="button" role="menuitem" data-menu-action="add">Add selected to a story…</button>
+      <button class="dropdown-item" type="button" role="menuitem" data-menu-action="add">Add selected to a story</button>
       <button class="dropdown-item" type="button" role="menuitem" data-menu-action="clear">Clear selection</button>
     </div>
 
@@ -124,7 +124,7 @@
       <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
         <div>
           <div class="fw-bold">Results</div>
-          <div class="small-muted" id="resultMeta">—</div>
+          <div class="small-muted" id="resultMeta">-</div>
         </div>
         <div class="d-flex gap-2 align-items-center no-print">
           <div class="dropdown">
@@ -162,7 +162,7 @@
                 <th style="width:120px;">Artifacts</th>
               </tr>
             </thead>
-            <tbody id="rows"><tr class="table-loading-row"><td colspan="7" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading events…</span></div></td></tr></tbody>
+            <tbody id="rows"><tr class="table-loading-row"><td colspan="7" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading events</span></div></td></tr></tbody>
           </table>
           <div class="card-footer d-flex justify-content-end gap-2 align-items-center no-print">
             <button id="prevBottom" data-pager="prev" class="btn btn-sm btn-outline-primary">Prev</button>

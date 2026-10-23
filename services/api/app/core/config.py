@@ -56,7 +56,7 @@ class Settings(BaseSettings):
                 "https://"
             ):
                 raise ValueError(
-                    "Hosted KEEN requires an exact OIDC issuer and owner subject"
+                    "Hosted Keen requires an exact OIDC issuer and owner subject"
                 )
             if (
                 not self.oidc_enabled
@@ -69,7 +69,7 @@ class Settings(BaseSettings):
                 or self.oidc_auto_provision
             ):
                 raise ValueError(
-                    "Hosted KEEN requires OIDC only, with automatic account linking disabled"
+                    "Hosted Keen requires OIDC only, with automatic account linking disabled"
                 )
             if (
                 not self.cookie_secure
@@ -78,11 +78,11 @@ class Settings(BaseSettings):
                 or not self.session_cookie_name.startswith("__Host-")
             ):
                 raise ValueError(
-                    "Hosted KEEN requires secure __Host- cookies and HTTPS OIDC"
+                    "Hosted Keen requires secure __Host- cookies and HTTPS OIDC"
                 )
             # The field validator has already reduced the URL to a bare origin.
             if not self.public_base_url.startswith("https://"):
-                raise ValueError("Hosted KEEN requires an exact public HTTPS origin")
+                raise ValueError("Hosted Keen requires an exact public HTTPS origin")
             if (
                 not self.s3_bucket
                 or self.s3_access_key
@@ -90,11 +90,11 @@ class Settings(BaseSettings):
                 or self.s3_endpoint_url
             ):
                 raise ValueError(
-                    "Hosted KEEN requires its own AWS bucket and no static S3 credentials"
+                    "Hosted Keen requires its own AWS bucket and no static S3 credentials"
                 )
             if self.artifact_storage_backend != "s3" or not self.s3_use_instance_role:
                 raise ValueError(
-                    "Hosted KEEN requires S3 with instance-role credentials"
+                    "Hosted Keen requires S3 with instance-role credentials"
                 )
         return self
 
@@ -147,7 +147,7 @@ class Settings(BaseSettings):
 
     # Optional sign-out address of the trusted proxy that authenticates users.
     # Native OIDC uses KEEN_OIDC_END_SESSION_ENDPOINT and the ID token stored in
-    # KEEN's own session instead.
+    # Keen's own session instead.
     upstream_logout_url: str = Field(default="")
 
     # -----------------------------------------------------------------------------
@@ -172,7 +172,7 @@ class Settings(BaseSettings):
     oidc_allowed_email_domains: str = Field(default="")
     oidc_auto_link_existing: bool = Field(default=True)
     # Present for deployment parity with Statistics, but intentionally unsupported
-    # by KEEN's OIDC resolver because KEEN must not auto-register users.
+    # by Keen's OIDC resolver because Keen must not auto-register users.
     oidc_auto_provision: bool = Field(default=False)
     oidc_allowed_algs: str = Field(default="RS256")
     oidc_allow_insecure_http: bool = Field(default=False)
@@ -572,7 +572,7 @@ class Settings(BaseSettings):
     # -----------------------------------------------------------------------------
     # Outbound incident creation webhook
     # -----------------------------------------------------------------------------
-    # When set, event pages may show a "Create Incident" button to users with
+    # When set, event pages may show a "Create incident" button to users with
     # incident.create permission. Keen POSTs a canonical JSON payload to this URL
     # and records a local reference on the event after the webhook accepts it.
     incident_webhook_url: str = Field(default="")

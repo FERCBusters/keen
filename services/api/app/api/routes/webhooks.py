@@ -46,7 +46,7 @@ async def isms_effectiveness_metric_webhook(
     """Record an ISMS effectiveness metric entry from an external scheduler/tool.
 
     Configure provider ``isms_metrics`` in config/webhooks.yml. ``source_type``
-    must be an existing KEEN evidence source, or ``other``. A typical payload is:
+    must be an existing Keen evidence source, or ``other``. A typical payload is:
     {
       "value": 42,
       "unit": "requests",

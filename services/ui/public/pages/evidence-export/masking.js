@@ -1,4 +1,4 @@
-// Masks e-mail and IP addresses in text that leaves KEEN in a sample export.
+// Masks e-mail and IP addresses in text that leaves Keen in a sample export.
 // Evidence and audit exports share these rules. They follow mask_event_data_str
 // in services/api/app/security/redaction.py, so a capture made in the browser
 // hides what a server-side sample export hides.

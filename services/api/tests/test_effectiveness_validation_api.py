@@ -2,7 +2,7 @@
 
 A measure's summary names what is measured and its description explains how;
 it carries an owner, a pass threshold (operator, target value and unit), the
-KEEN source expected to supply its values and may carry a metric key that
+Keen source expected to supply its values and may carry a metric key that
 metric webhooks address it by. A metric entry records
 one observation: a value or a qualitative result, its period and where it
 came from. Requests pass through the production middleware, password sign-in,
@@ -251,7 +251,7 @@ def test_metric_sources_are_existing_evidence_sources_or_other(isms):
     assert stored("Google-Workspace") == "google_workspace"
     _refused(
         isms.send("POST", path, {"metric_value": 1, "source_type": "spreadsheet"}),
-        "Invalid metric source type; choose an existing KEEN source or other",
+        "Invalid metric source type; choose an existing Keen source or other",
     )
 
 
@@ -270,7 +270,7 @@ def test_a_measure_needs_a_summary_and_a_known_expected_source(isms):
 
     _refused(
         isms.send("POST", MEASURES, {"summary": "M", "source_type": "spreadsheet"}),
-        "Invalid metric source type; choose an existing KEEN source or other",
+        "Invalid metric source type; choose an existing Keen source or other",
     )
     isms.db.add(
         Event(
@@ -370,5 +370,5 @@ def test_a_retired_expected_source_falls_back_to_other_for_new_entries(isms):
             _entries(isms, measure),
             {"metric_value": 1, "source_type": "google_workspace"},
         ),
-        "Invalid metric source type; choose an existing KEEN source or other",
+        "Invalid metric source type; choose an existing Keen source or other",
     )

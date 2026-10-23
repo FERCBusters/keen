@@ -72,7 +72,7 @@ function _patchRiskNavDropdown() {
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risks.html'))}">Risks dashboard</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risk-wizard.html'))}">Add a risk</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risks.html?tab=pestle'))}">PESTLE(E) method</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/interested_parties.html'))}">Interested Parties</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/interested_parties.html'))}">Interested parties</a></li>
       <li><a class="dropdown-item d-inline-flex align-items-center gap-2" href="${esc(_withCurrentFramework('/mitigator.html'))}"><img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator</a></li>
     </ul>`;
   navRoot.dataset.pestleRiskDropdownPatched = '1';
@@ -113,16 +113,16 @@ function _patchIsmsNavDropdown() {
       ISMS
     </a>
     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="ismsDropdown">
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html'))}">ISMS Overview</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html'))}">ISMS overview</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=objectives'))}">Objectives</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/swot.html'))}">SWOT analysis</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=effectiveness'))}">Effectiveness Measures</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=documents'))}">Policies &amp; Processes</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=org'))}">Organisation Chart</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=assets'))}">Asset Matrix</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=effectiveness'))}">Effectiveness measures</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=documents'))}">Policies &amp; processes</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=org'))}">Organisation chart</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=assets'))}">Asset matrix</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/assurance.html'))}">People &amp; vendors</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=access'))}">Access Control Matrix</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=meetings'))}">Minutes of Meetings</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=access'))}">Access control matrix</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=meetings'))}">Minutes of meetings</a></li>
       <li><hr class="dropdown-divider"></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/statement-of-applicability.html'))}">Statement of Applicability</a></li>
     </ul>`;
@@ -274,7 +274,7 @@ async function initialiseNavbar(...args) {
     nav: { ...cfg.nav, expandClass: 'navbar-expand-lg' },
     framework: { ...cfg.framework, selectMaxChars: 19, selectMinChars: 14 },
   });
-  // KEEN logout mutates authentication state and therefore uses a CSRF POST.
+  // Keen logout mutates authentication state and therefore uses a CSRF POST.
   const logoutButton = document.getElementById('navLogout');
   const logoutUrl = String(me?.logout_url || '').trim();
   if (logoutButton && (!logoutUrl || logoutUrl === '/api/v1/auth/oidc/logout')) {
@@ -435,7 +435,7 @@ export function richTextEditorValue(raw) {
   return isRichTextHtmlLike(value) ? sanitizeRichTextHtml(value) : plainTextToRichTextHtml(value);
 }
 
-export function renderRichTextContent(raw, emptyHtml = '<span class="small-muted">—</span>') {
+export function renderRichTextContent(raw, emptyHtml = '<span class="small-muted">-</span>') {
   const value = String(raw || '').trim();
   if (!value) return emptyHtml;
   const html = isRichTextHtmlLike(value)
@@ -626,10 +626,10 @@ export function userDisplayName(userOrName, fallback = '') {
 
 export function userPillHtml(
   userOrName,
-  { empty = '—', className = '', title = '', prefix = '' } = {},
+  { empty = '-', className = '', title = '', prefix = '' } = {},
 ) {
   const label = userDisplayName(userOrName);
-  if (!label) return `<span class="small-muted">${esc(empty || '—')}</span>`;
+  if (!label) return `<span class="small-muted">${esc(empty || '-')}</span>`;
   const user = userOrName && typeof userOrName === 'object' ? userOrName.user || userOrName : null;
   const tip = String(title || user?.email || label || '').trim();
   const cls = ['badge', 'badge-soft', 'user-pill', className].filter(Boolean).join(' ');
@@ -642,7 +642,7 @@ export function userPillsHtml(items = [], opts = {}) {
     .map((item) => userPillHtml(item, { ...opts, empty: '' }))
     .filter((value) => value && !value.includes('small-muted'))
     .join('');
-  if (!html) return `<span class="small-muted">${esc(opts.empty || '—')}</span>`;
+  if (!html) return `<span class="small-muted">${esc(opts.empty || '-')}</span>`;
   return `<span class="user-pill-list">${html}</span>`;
 }
 
@@ -685,6 +685,31 @@ export function canSampleIntoAudit(me = null, entityType = '') {
   if (type === 'event') return Boolean(me?.can_view_events);
   if (type === 'bookstack_section' || type.startsWith('isms')) return Boolean(me?.can_sample_isms);
   return true;
+}
+
+// The audit an auditor is gathering evidence for, remembered in this browser
+// tab so each sampling dialog starts with it. A convenience only: the dialog
+// still lists every audit the account can sample into.
+const SAMPLING_AUDIT_KEY = 'keen.samplingAudit';
+
+export function rememberSamplingAudit(auditId) {
+  try {
+    sessionStorage.setItem(SAMPLING_AUDIT_KEY, String(auditId || ''));
+  } catch {
+    // Without storage each dialog starts with the first audit.
+  }
+}
+
+// Selects the remembered audit in a list of audit choices when it is there.
+export function preselectSamplingAudit(select) {
+  let remembered = '';
+  try {
+    remembered = sessionStorage.getItem(SAMPLING_AUDIT_KEY) || '';
+  } catch {
+    return;
+  }
+  if (remembered && [...select.options].some((option) => option.value === remembered))
+    select.value = remembered;
 }
 
 export function canEditAuditForUser(me = null, audit = null) {
@@ -730,7 +755,7 @@ function _ensureEntityAuditSampleModal() {
             </div>
           </div>
           <div class="modal-footer">
-            <a id="entityAuditSampleCreate" class="btn btn-outline-primary me-auto" href="/audits.html?new=1">Start an Audit</a>
+            <a id="entityAuditSampleCreate" class="btn btn-outline-primary me-auto" href="/audit-wizard.html">Start an audit</a>
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
             <button id="entityAuditSampleSubmit" type="button" class="btn btn-primary">Sample into audit</button>
           </div>
@@ -773,8 +798,7 @@ function _sampleAuditsUrl(framework = '') {
 
 function _sampleCreateAuditUrl(framework = '') {
   const fw = _sampleFramework(framework);
-  const url = new URL('/audits.html', window.location.origin);
-  url.searchParams.set('new', '1');
+  const url = new URL('/audit-wizard.html', window.location.origin);
   if (fw) url.searchParams.set('framework', fw);
   return url.pathname + url.search;
 }
@@ -818,7 +842,7 @@ export async function openAuditSampleModal({
   if (els.create) els.create.href = _sampleCreateAuditUrl(framework);
   if (els.submit) els.submit.disabled = false;
   if (els.select) {
-    els.select.innerHTML = '<option value="">Loading audits…</option>';
+    els.select.innerHTML = '<option value="">Loading audits</option>';
     try {
       const data = await apiGet(_sampleAuditsUrl(framework));
       const items = (data?.items || []).filter(
@@ -833,7 +857,8 @@ export async function openAuditSampleModal({
               auditStatusValue(a) === 'in_progress' ? ' · In progress' : ' · Open';
             return `<option value="${esc(a.id)}">${esc(a.title || 'Audit')}${esc(suffix)}${esc(statusSuffix)}</option>`;
           })
-          .join('') || '<option value="">No open or in-progress audits — start one first</option>';
+          .join('') || '<option value="">No open or in-progress audits - start one first</option>';
+      preselectSamplingAudit(els.select);
       const disabled = !items.length;
       if (els.submit) els.submit.disabled = disabled;
       if (els.notes) els.notes.disabled = disabled;
@@ -867,7 +892,7 @@ export async function openAuditSampleModal({
     const prev = btn?.textContent || '';
     if (btn) {
       btn.disabled = true;
-      btn.textContent = 'Sampling…';
+      btn.textContent = 'Sampling';
     }
     try {
       const body = {
@@ -878,6 +903,7 @@ export async function openAuditSampleModal({
         notes: els.notes?.value || '',
       };
       await apiPost(`/api/v1/audits/${encodeURIComponent(auditId)}/evidence`, body);
+      rememberSamplingAudit(auditId);
       toast(statusEl, 'Item sampled into audit', 'success');
       if (window.bootstrap?.Modal && els.modal) {
         window.bootstrap.Modal.getOrCreateInstance(els.modal).hide();
@@ -903,8 +929,8 @@ export async function openAuditSampleModal({
   }
 }
 
-export function loadingSpinnerHtml(message = 'Loading data…', { small = true } = {}) {
-  const msg = esc(message || 'Loading data…');
+export function loadingSpinnerHtml(message = 'Loading data', { small = true } = {}) {
+  const msg = esc(message || 'Loading data');
   const spinnerClass = small ? 'spinner-border spinner-border-sm' : 'spinner-border';
   return `<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted">
     <span class="${spinnerClass}" role="status" aria-hidden="true"></span>
@@ -912,17 +938,17 @@ export function loadingSpinnerHtml(message = 'Loading data…', { small = true }
   </div>`;
 }
 
-export function tableLoadingHtml(colspan = 1, message = 'Loading data…') {
+export function tableLoadingHtml(colspan = 1, message = 'Loading data') {
   const n = Math.max(1, parseInt(colspan, 10) || 1);
   return `<tr class="table-loading-row"><td colspan="${n}" class="p-4">${loadingSpinnerHtml(message, { small: true })}</td></tr>`;
 }
 
-export function showTableLoading(tbody, colspan = 1, message = 'Loading data…') {
+export function showTableLoading(tbody, colspan = 1, message = 'Loading data') {
   if (!tbody) return;
   tbody.innerHTML = tableLoadingHtml(colspan, message);
 }
 
-export function showInlineLoading(el, message = 'Loading data…') {
+export function showInlineLoading(el, message = 'Loading data') {
   if (!el) return;
   el.innerHTML = loadingSpinnerHtml(message, { small: true });
 }
@@ -941,7 +967,7 @@ export function arrowLinkHtml(
  * Validate a link before placing it into an href.
  *
  * Same-origin paths are allowed, but browsers read a backslash as "/" and drop
- * tabs and newlines while parsing, so "/" followed by either can leave KEEN.
+ * tabs and newlines while parsing, so "/" followed by either can leave Keen.
  * HTML escaping does not make a URL safe; use this before esc().
  */
 export function safeExternalHref(url) {
@@ -962,7 +988,7 @@ export function safeAbsoluteHttpHref(url) {
   const raw = String(url || '').trim();
   if (!raw || raw.length > 2048) return '';
   // Upstream evidence links must be actual absolute web URLs.  Do not turn
-  // payload values such as /home/miguel into same-origin KEEN links.
+  // payload values such as /home/miguel into same-origin Keen links.
   if (!/^https?:\/\//i.test(raw)) return '';
   try {
     const parsed = new URL(raw);
@@ -1109,7 +1135,7 @@ export function offsetPaginationHtml({
   const fmt = (n) => (formatNumber ? Number(n || 0).toLocaleString() : String(n));
   const kindAttr = kind ? ` data-kind="${esc(kind)}"` : '';
   return `<div class="${esc(wrapperClass)}">
-    <div class="small-muted">${esc(summaryPrefix)}${fmt(s.start)}–${fmt(s.end)} of ${fmt(s.total)}</div>
+    <div class="small-muted">${esc(summaryPrefix)}${fmt(s.start)}-${fmt(s.end)} of ${fmt(s.total)}</div>
     <div class="btn-group btn-group-sm" role="group" aria-label="Pagination">
       <button class="${esc(buttonClass)} ${esc(pageClass)}" type="button" data-pager="prev" data-direction="prev" data-offset-pager="prev" data-offset="${esc(String(s.prevOffset))}"${kindAttr} ${s.prevDisabled ? 'disabled' : ''}>${previousLabel}</button>
       <button class="${esc(buttonClass)} ${esc(pageClass)}" type="button" data-pager="next" data-direction="next" data-offset-pager="next" data-offset="${esc(String(s.nextOffset))}"${kindAttr} ${s.nextDisabled ? 'disabled' : ''}>${nextLabel}</button>
@@ -1201,7 +1227,7 @@ export function effectivenessMetricThresholdBadgeHtml(measure, entry) {
 
 function _changelogValueHtml(value) {
   if (value === null || value === undefined || value === '') {
-    return '<span class="small-muted">—</span>';
+    return '<span class="small-muted">-</span>';
   }
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'object') {
@@ -1234,7 +1260,7 @@ export function entityChangelogHtml(items = [], { empty = 'No changelog entries 
         <div class="d-flex flex-wrap gap-2 justify-content-between align-items-start">
           <div>
             <div class="fw-semibold">${esc(entry?.summary || 'Entity changed')}</div>
-            <div class="small-muted">${esc(fmtTs(entry?.changed_at) || entry?.changed_at || '')} • ${esc(actor)} • ${esc(action)}</div>
+            <div class="small-muted">${esc(fmtTs(entry?.changed_at) || entry?.changed_at || '')} · ${esc(actor)} · ${esc(action)}</div>
           </div>
           ${entry?.request_path ? `<span class="badge text-bg-light mono">${esc(entry.request_method || '')} ${esc(entry.request_path)}</span>` : ''}
         </div>
@@ -1248,7 +1274,7 @@ export function entityChangelogHtml(items = [], { empty = 'No changelog entries 
 export async function loadEntityChangelog(
   container,
   url,
-  { empty = 'No changelog entries yet.', loading = 'Loading changelog…' } = {},
+  { empty = 'No changelog entries yet.', loading = 'Loading changelog' } = {},
 ) {
   if (!container) return null;
   container.innerHTML = loadingSpinnerHtml(loading, { small: true });

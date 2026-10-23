@@ -30,6 +30,7 @@ let layoutDirty = false;
 const flow = createFlowCanvas({
   host: $('flow'),
   editable: false,
+  linkFor: (item) => (item.url ? withFramework(item.url, framework) : ''),
   onChange: (change) => {
     if (change.type === 'select') {
       $('linkEditor').hidden = !change.link;
@@ -97,7 +98,7 @@ function itemHtml(item) {
 }
 
 function render() {
-  document.title = `Keen – ${story.title}`;
+  document.title = `Keen - ${story.title}`;
   $('storyTitle').textContent = story.title;
   $('storyStatus').textContent = story.status;
   $('storyStatus').className =
@@ -229,7 +230,7 @@ async function findCandidates() {
   const q = $('addSearch').value.trim();
   const list = $('candidates');
   list.hidden = false;
-  list.innerHTML = '<li class="list-group-item small-muted">Searching…</li>';
+  list.innerHTML = '<li class="list-group-item small-muted">Searching</li>';
   try {
     let candidates;
     if (kind === 'event') {

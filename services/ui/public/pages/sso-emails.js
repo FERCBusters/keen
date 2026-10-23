@@ -13,7 +13,7 @@ async function load() {
     const item = document.createElement('li');
     item.className = 'd-flex align-items-center justify-content-between gap-3 py-2';
     const label = document.createElement('span');
-    label.textContent = address.email + ' — verified';
+    label.textContent = address.email + ' - verified';
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn btn-sm btn-outline-danger';

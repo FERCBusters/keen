@@ -1,7 +1,8 @@
 """Records other features refer to, resolved with the reader's own access.
 
-SWOT items and stories relate to objectives, documents, assets, people,
-vendors and risks. A reference is resolved only when the feature is enabled
+SWOT items relate to objectives, documents, assets, people, vendors and risks.
+Stories relate to those records and also to SWOT items, effectiveness measures
+and meeting minutes. A reference is resolved only when the feature is enabled
 and the reader can read the record itself, so a relationship never shows more
 than the record's own page would.
 """
@@ -10,8 +11,11 @@ from __future__ import annotations
 
 from app.db.models import (
     IsmsDocument,
+    IsmsEffectivenessMeasure,
+    IsmsMeeting,
     IsmsObjective,
     IsmsPerson,
+    IsmsSwot,
     IsmsVendor,
     Risk,
     RiskAsset,
@@ -27,8 +31,29 @@ TARGETS = {
     "person": IsmsPerson,
     "vendor": IsmsVendor,
     "risk": Risk,
+    "swot": IsmsSwot,
+    "effectiveness_measure": IsmsEffectivenessMeasure,
+    "meeting": IsmsMeeting,
 }
-SEARCH_FIELDS = {"objective": "goal", "document": "title", "risk": "threat_summary"}
+SEARCH_FIELDS = {
+    "objective": "goal",
+    "document": "title",
+    "risk": "threat_summary",
+    "swot": "title",
+    "effectiveness_measure": "summary",
+    "meeting": "title",
+}
+PAGES = {
+    "objective": "/isms-objective.html?id={id}",
+    "document": "/isms-document.html?id={id}",
+    "asset": "/isms-asset.html?id={id}",
+    "risk": "/risk.html?id={id}",
+    "person": "/assurance.html?tab=persons&edit={id}",
+    "vendor": "/assurance.html?tab=vendors&edit={id}",
+    "swot": "/swot.html?id={id}",
+    "effectiveness_measure": "/isms-effectiveness-measure.html?id={id}",
+    "meeting": "/isms-meeting.html?id={id}",
+}
 
 
 def resolve_target(db, user, kind, target_id, *, required=True):
@@ -54,32 +79,26 @@ def resolve_target(db, user, kind, target_id, *, required=True):
     return row
 
 
-def target_summary(kind, row):
-    title = (
+def _title(kind, row) -> str:
+    if kind == "effectiveness_measure":
+        return row.summary or row.metric_key or "Effectiveness measure"
+    if kind == "meeting":
+        return row.title or f"Meeting minutes {row.date}"
+    return (
         getattr(row, "title", None)
         or getattr(row, "name", None)
         or getattr(row, "goal", None)
         or getattr(row, "threat_summary", None)
         or kind
     )
-    page = {
-        "objective": "isms-objective",
-        "document": "isms-document",
-        "asset": "isms-asset",
-        "risk": "risk",
-        "person": "assurance",
-        "vendor": "assurance",
-    }[kind]
-    suffix = (
-        f"?tab={kind}s&edit={row.id}"
-        if kind in ("person", "vendor")
-        else f"?id={row.id}"
-    )
+
+
+def target_summary(kind, row):
     return {
         "target_type": kind,
         "target_id": str(row.id),
-        "title": title,
-        "url": f"/{page}.html{suffix}",
+        "title": _title(kind, row),
+        "url": PAGES[kind].format(id=row.id),
     }
 
 

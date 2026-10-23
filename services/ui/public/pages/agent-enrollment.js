@@ -12,11 +12,11 @@ export function enrollmentProfiles(host, onChanged) {
   <div class="col-md-6"><label class="form-label" for="ep-cidrs">Allowed CIDRs (optional, comma-separated)</label><input id="ep-cidrs" name="cidrs" class="form-control" placeholder="192.0.2.0/24, 2001:db8::/32"></div>
   <div class="col-12"><label class="form-label" for="ep-labels">Fleet labels (optional, one key=value per line)</label><textarea id="ep-labels" name="labels" class="form-control" rows="2" placeholder="environment=production"></textarea></div>
   <div class="col-12"><button class="btn btn-primary" data-create>Create enrollment profile</button></div></form>
-  <p class="small-muted mt-3">Store bootstrap keys in your cluster’s secret manager. Limit access to the enrollment endpoint at your reverse proxy. <a href="/help/administrator-agents.html#agent-enrollment-profiles">Enrollment help</a></p>
+  <p class="small-muted mt-3">Store bootstrap keys in your cluster's secret manager. Limit access to the enrollment endpoint at your reverse proxy. <a href="/help/administrator-agents.html#agent-enrollment-profiles">Enrollment help</a></p>
   <div data-status role="status" aria-live="polite"></div>
-  <section data-secret-box hidden class="alert alert-warning"><h3 class="h6">Save this bootstrap key now</h3><p>KEEN displays this key once. It permits enrollment into this profile. Store it in the fleet’s secret manager.</p>
+  <section data-secret-box hidden class="alert alert-warning"><h3 class="h6">Save this bootstrap key now</h3><p>Keen displays this key once. It permits enrollment into this profile. Store it in the fleet's secret manager.</p>
   <label for="ep-secret" class="form-label">Bootstrap key</label><input id="ep-secret" type="password" readonly autocomplete="off" class="form-control font-monospace">
-  <div class="d-flex gap-2 mt-2"><button type="button" data-reveal class="btn btn-outline-primary">Show key</button><button type="button" data-copy class="btn btn-primary">Copy key</button><button type="button" data-dismiss class="btn btn-outline-secondary">Saved — dismiss</button></div></section>
+  <div class="d-flex gap-2 mt-2"><button type="button" data-reveal class="btn btn-outline-primary">Show key</button><button type="button" data-copy class="btn btn-primary">Copy key</button><button type="button" data-dismiss class="btn btn-outline-secondary">Saved - dismiss</button></div></section>
   <div data-profiles class="d-grid gap-3 mt-3"></div></div></div>`;
   const q = (s) => host.querySelector(s),
     form = q('[data-form]');
@@ -88,7 +88,7 @@ export function enrollmentProfiles(host, onChanged) {
               p,
               'Rotate bootstrap key',
               'rotate',
-              'Replace this profile’s bootstrap key? Existing agents keep working.',
+              "Replace this profile's bootstrap key? Existing agents keep working.",
             ),
             action(
               p,

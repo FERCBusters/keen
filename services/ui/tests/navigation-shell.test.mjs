@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadUi } from './support/load-ui.mjs';
 
-// KEEN's additions to the design-system navbar: grouped risk and ISMS menus,
+// Keen's additions to the design-system navbar: grouped risk and ISMS menus,
 // Help, framework reconciliation and the account-aware notification bell.
 const LINKS = [
   ['Controls', '/controls.html?framework=A'],
@@ -21,7 +21,7 @@ function navbarHtml(links) {
     )
     .join('');
   return `<nav class="navbar"><ul class="navbar-nav me-auto">${items}</ul>
-    <select id="navFrameworkSelect" disabled><option>Loading…</option></select>
+    <select id="navFrameworkSelect" disabled><option>Loading</option></select>
     <button id="navLogout" type="button">Logout</button></nav>`;
 }
 
@@ -122,20 +122,20 @@ test('risk and ISMS pages are grouped into menus that keep the framework', async
     ['Risks dashboard', '/risks.html?framework=A'],
     ['Add a risk', '/risk-wizard.html?framework=A'],
     ['PESTLE(E) method', '/risks.html?tab=pestle&framework=A'],
-    ['Interested Parties', '/interested_parties.html?framework=A'],
+    ['Interested parties', '/interested_parties.html?framework=A'],
     ['Keen Mitigator', '/mitigator.html?framework=A'],
   ]);
   assert.deepEqual(ui.menu('ismsDropdown'), [
-    ['ISMS Overview', '/isms.html?framework=A'],
+    ['ISMS overview', '/isms.html?framework=A'],
     ['Objectives', '/isms.html?tab=objectives&framework=A'],
     ['SWOT analysis', '/swot.html?framework=A'],
-    ['Effectiveness Measures', '/isms.html?tab=effectiveness&framework=A'],
-    ['Policies & Processes', '/isms.html?tab=documents&framework=A'],
-    ['Organisation Chart', '/isms.html?tab=org&framework=A'],
-    ['Asset Matrix', '/isms.html?tab=assets&framework=A'],
+    ['Effectiveness measures', '/isms.html?tab=effectiveness&framework=A'],
+    ['Policies & processes', '/isms.html?tab=documents&framework=A'],
+    ['Organisation chart', '/isms.html?tab=org&framework=A'],
+    ['Asset matrix', '/isms.html?tab=assets&framework=A'],
     ['People & vendors', '/assurance.html?framework=A'],
-    ['Access Control Matrix', '/isms.html?tab=access&framework=A'],
-    ['Minutes of Meetings', '/isms.html?tab=meetings&framework=A'],
+    ['Access control matrix', '/isms.html?tab=access&framework=A'],
+    ['Minutes of meetings', '/isms.html?tab=meetings&framework=A'],
     ['Statement of Applicability', '/statement-of-applicability.html?framework=A'],
   ]);
   const help = ui.nav.querySelector('[data-keen-documentation]');

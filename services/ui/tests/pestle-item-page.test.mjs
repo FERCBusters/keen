@@ -141,7 +141,7 @@ test('PESTLE item details render safely with relevance badge and related control
   assert.equal(ui.el('pestleItemTitle').textContent, item().item);
   assert.equal(
     ui.el('pestleItemMeta').textContent,
-    'A • Legal / Internal • updated 2026-03-01T00:00:00Z',
+    'A · Legal / Internal · updated 2026-03-01T00:00:00Z',
   );
   assert.equal(ui.el('pestleEditorTitle').textContent, 'Edit PESTLE(E) item');
   assert.match(ui.el('pestleBadges').innerHTML, /text-bg-danger">1 High/);
@@ -213,7 +213,7 @@ test('a viewer opening the page without an id is told the id is missing', async 
 test('new PESTLE items require text and are created before relevance can be edited', async (t) => {
   const { ui, state } = await pestleItem(t, { query: '', item: null });
   assert.equal(ui.el('pestleItemTitle').textContent, 'New PESTLE(E) item');
-  assert.equal(ui.el('pestleItemMeta').textContent, 'A • new item');
+  assert.equal(ui.el('pestleItemMeta').textContent, 'A · new item');
   assert.match(ui.el('pestleBadges').textContent, /unsaved/);
   assert.match(ui.el('relatedControls').textContent, /Save the item and map clauses/);
   assert.match(ui.el('businessProcessRelevanceList').textContent, /Save the item first/);

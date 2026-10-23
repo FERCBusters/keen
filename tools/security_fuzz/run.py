@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded KEEN security probes; run --help for the local development workflow."""
+"""Bounded Keen security probes; run --help for the local development workflow."""
 
 from __future__ import annotations
 

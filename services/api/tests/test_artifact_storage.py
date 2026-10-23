@@ -1,7 +1,7 @@
 """Evidence artifact storage: immutability, containment, version pinning and isolation.
 
 Local storage runs against a real temporary directory. S3 runs against a fake
-boto3 client that records exactly what KEEN asks the bucket to do.
+boto3 client that records exactly what Keen asks the bucket to do.
 """
 
 import hashlib

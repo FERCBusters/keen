@@ -76,6 +76,25 @@ def connection_scope(connection):
         _current.reset(token)
 
 
+@contextmanager
+def outside_connection():
+    """Store a record that belongs to Keen rather than to the running connection.
+
+    A collection run can change records Keen keeps for itself, such as the
+    automatic diary entry of a risk it imports. That record keeps its own
+    external ID and storage key and carries no connection identity, exactly as
+    when it is saved in Keen. The run's cache, which may hold the connection's
+    tokens, is out of reach until the block ends.
+    """
+    token = _current.set(None)
+    cache_token = _run_cache.set(None)
+    try:
+        yield
+    finally:
+        _run_cache.reset(cache_token)
+        _current.reset(token)
+
+
 def connection_cache():
     """Transient cache owned by this run; never share credentials across origins.
 

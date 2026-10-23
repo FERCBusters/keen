@@ -574,7 +574,7 @@ def test_an_uploaded_file_downloads_unchanged(docs):
     assert record["uploaded_by"]["id"] == str(docs.manager_user.id)
     stored = docs.row(document["id"])
     assert stored.sha256 == hashlib.sha256(pdf).hexdigest()
-    # The stored name is KEEN's own, under the document, keeping a safe extension.
+    # The stored name is Keen's own, under the document, keeping a safe extension.
     prefix = f"local://local/isms-documents/{document['id']}/"
     assert stored.storage_uri.startswith(prefix)
     assert stored.storage_uri.endswith(".pdf")

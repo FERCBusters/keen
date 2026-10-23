@@ -1,1 +1,1 @@
-"""KEEN regression tests."""
+"""Keen regression tests."""

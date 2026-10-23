@@ -89,6 +89,9 @@ async function assurancePage(t, options = {}) {
       }
       if (u.pathname === '/api/v1/isms/people') return { items: structuredClone(state.people) };
       if (u.pathname === '/api/v1/isms/vendors') return { items: structuredClone(state.vendors) };
+      if (u.pathname.startsWith('/api/v1/stories/related/'))
+        return { items: options.stories?.[u.pathname.split('/').pop()] || [] };
+      if (u.pathname === '/api/v1/stories') return { items: [] };
       if (u.pathname === '/api/v1/isms/swot') {
         if (fail.swot) throw new Error('Forbidden');
         return {
@@ -163,7 +166,7 @@ test('people and vendors are listed as text with linked assets and search', asyn
   assert.equal(ui.el('assuranceCard').style.display, 'none');
   // Select lists hold names as text.
   assert.equal(ui.el('personAssets').options[1].textContent, HOSTILE + 'Laptop fleet');
-  assert.equal(ui.el('personUser').options[0].textContent, '— None —');
+  assert.equal(ui.el('personUser').options[0].textContent, 'None');
   assert.equal(ui.el('personAssets').options.length, 2);
 
   ui.el('personSearch').value = 'FINANCE';
@@ -191,7 +194,10 @@ test('viewing a person shows assurance records with safe evidence links and rela
   assert.equal(rows[0].querySelector('a').getAttribute('href'), '#');
   assert.equal(rows[1].querySelector('a').getAttribute('href'), 'https://lms.example.test/cert/1');
   assert.equal(rows[1].querySelector('a').getAttribute('rel'), 'noopener noreferrer');
-  assert.match(rows[1].textContent, /—\s*—\s*—/);
+  assert.deepEqual(
+    [...rows[1].cells].slice(3, 6).map((c) => c.textContent.replace(/\s+/g, ' ').trim()),
+    ['-', '-', '-'],
+  );
   const swot = ui.el('assuranceSwot');
   await settle(() => /Related SWOT items/.test(swot.textContent));
   assert.equal(swot.querySelector('img'), null);
@@ -440,4 +446,57 @@ test('a SWOT edit link opens the linked vendor or person', async (t) => {
   assert.equal(person.ui.el('assuranceCard').style.display, '');
   const unknown = await assurancePage(t, { query: '&edit=missing' });
   assert.equal(unknown.ui.el('personFormTitle').textContent, 'Add a person');
+});
+
+test('a chosen person or vendor shows its SWOT items and stories as tabs', async (t) => {
+  const { ui } = await assurancePage(t, {
+    stories: {
+      ve1: [
+        {
+          id: 's1',
+          title: 'SSH <b>brute force</b>',
+          status: 'closed',
+          item_count: 12,
+          updated_at: '2026-05-02',
+          can_edit: true,
+          version: 2,
+        },
+      ],
+    },
+  });
+  ui.el('peopleList').querySelector('[data-view-person="pe1"]').click();
+  const card = ui.el('assuranceRelated');
+  assert.equal(card.querySelector('.fw-semibold').textContent, `Related to ${HOSTILE}Alex Example`);
+  assert.equal(card.querySelector('img'), null);
+  assert.deepEqual(
+    [...card.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent),
+    ['SWOT items', 'Stories'],
+  );
+  await settle(() => /Related SWOT items/.test(ui.el('assuranceSwot').textContent));
+  // Stories load when their tab is shown.
+  assert.ok(!ui.calls.some((c) => c.url.includes('/stories/related/')));
+  ui.el('assuranceStoriesTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /not in a story yet/.test(ui.el('assuranceStories').textContent));
+  assert.match(ui.el('assuranceStories').textContent, /This person is not in a story yet/);
+  assert.ok(ui.calls.some((c) => c.url === '/api/v1/stories/related/person/pe1'));
+
+  ui.el('vendorsList').querySelector('[data-edit-vendor="ve1"]').click();
+  assert.equal(
+    ui.el('assuranceRelated').querySelector('.fw-semibold').textContent,
+    'Related to Hosting Co',
+  );
+  ui.el('assuranceStoriesTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /brute force/.test(ui.el('assuranceStories').textContent));
+  assert.equal(ui.el('assuranceStoriesTab').textContent, 'Stories (1)');
+  assert.equal(ui.el('assuranceStories').querySelector('b'), null);
+});
+
+test('without story access a chosen person shows SWOT items alone', async (t) => {
+  const { ui } = await assurancePage(t, { me: { can_view_isms: true } });
+  ui.el('peopleList').querySelector('[data-view-person="pe2"]').click();
+  assert.deepEqual(
+    [...ui.el('assuranceRelated').querySelectorAll('[role="tab"]')].map((tab) => tab.textContent),
+    ['SWOT items'],
+  );
+  assert.equal(ui.el('assuranceStories'), null);
 });

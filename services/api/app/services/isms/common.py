@@ -53,7 +53,7 @@ def _clean_text(
 
 def _clean_minutes_html(raw: str | None) -> str:
     # Trim/length-check the raw input, then apply the shared server-side
-    # rich-text allowlist sanitiser (single source of truth for all KEEN
+    # rich-text allowlist sanitiser (single source of truth for all Keen
     # rich-text fields; see app.security.rich_text).
     value = _clean_text(raw, max_len=50000)
     cleaned = sanitize_rich_text_html(value)

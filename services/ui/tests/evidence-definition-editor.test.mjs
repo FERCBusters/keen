@@ -298,7 +298,7 @@ async function editor(t, server = {}) {
   };
 }
 
-test('the BookStack picker pages through books and groups each book’s pages by chapter', async (t) => {
+test("the BookStack picker pages through books and groups each book's pages by chapter", async (t) => {
   const chosen = { id: 12, name: 'Access policy' };
   const ui = await editor(t, {
     sources: ['bookstack'],
@@ -470,7 +470,7 @@ test('choosing a BookStack page records its book and slug with the saved input',
   assert.equal(ui.$('status').textContent, 'Mapping saved. Future evidence uses it immediately.');
 });
 
-test('a book’s chapter listing stops after five catalogue pages', async (t) => {
+test("a book's chapter listing stops after five catalogue pages", async (t) => {
   const chapters = Array.from({ length: 30 }, (_, i) => ({ id: 100 + i, name: 'Chapter ' + i }));
   const ui = await editor(t, {
     sources: ['bookstack'],
@@ -626,7 +626,7 @@ test('dotted collection fields are saved as nested settings', async (t) => {
 });
 
 test('repository inputs are identified by owner and name', async (t) => {
-  const entry = { owner: 'octo', repo: 'keen', label: 'KEEN' };
+  const entry = { owner: 'octo', repo: 'keen', label: 'Keen' };
   const ui = await editor(t, {
     sources: ['github'],
     connections: [
@@ -834,7 +834,7 @@ test('the editor deletes only saved definitions', async (t) => {
 });
 
 test('opening a definition restores its source, connection and input', async (t) => {
-  const entry = { owner: 'octo', repo: 'keen', label: 'KEEN' };
+  const entry = { owner: 'octo', repo: 'keen', label: 'Keen' };
   const ui = await editor(t, {
     sources: ['github', 'keen-agent'],
     rules: [
@@ -942,7 +942,7 @@ test('restoring a revision reloads the rule and reopens it', async (t) => {
   assert.deepEqual(
     [...ui.$('rule-revision').options].map((option) => [option.value, option.textContent]),
     [
-      ['', 'Select this rule’s revision'],
+      ['', "Select this rule's revision"],
       ['9', '#2 · 2026-10-01T10:00:00'],
       ['5', '#1 · 2026-09-01T10:00:00'],
     ],
@@ -1092,7 +1092,7 @@ test('applying a saved rule to past evidence starts a run for that rule', async 
 
 test('shared adapter settings load per adapter and save with their revision', async (t) => {
   const ui = await editor(t, {
-    settings: { rss: { settings: { user_agent: 'KEEN' }, version: 3 } },
+    settings: { rss: { settings: { user_agent: 'Keen' }, version: 3 } },
   });
   assert.equal(ui.$('settings-adapter').value, 'jenkins');
   assert.deepEqual(
@@ -1104,14 +1104,14 @@ test('shared adapter settings load per adapter and save with their revision', as
     ],
   );
   await ui.choose('settings-adapter', 'rss');
-  assert.deepEqual(JSON.parse(ui.$('settings-json').value), { user_agent: 'KEEN' });
+  assert.deepEqual(JSON.parse(ui.$('settings-json').value), { user_agent: 'Keen' });
 
-  ui.$('settings-json').value = '{"user_agent": "KEEN audit"}';
+  ui.$('settings-json').value = '{"user_agent": "Keen audit"}';
   await ui.click('save-settings');
   assert.deepEqual(ui.writes.at(-1), {
     method: 'PUT',
     path: '/api/v1/admin/adapter-settings/rss',
-    body: { version: 3, settings: { user_agent: 'KEEN audit' } },
+    body: { version: 3, settings: { user_agent: 'Keen audit' } },
   });
   assert.equal(ui.$('status').textContent, 'Saved shared rss settings as revision 4.');
   // The saved revision becomes the next concurrency token.
@@ -1152,7 +1152,7 @@ test('choosing a source from Sources shows its definitions', async (t) => {
   assert.deepEqual(ui.library(), [['No evidence definitions yet. Create one to get started.']]);
 });
 
-test('an integration rule starts from the integration’s source and name', async (t) => {
+test("an integration rule starts from the integration's source and name", async (t) => {
   const ui = await editor(t);
   ui.window.dispatchEvent(
     new ui.window.CustomEvent('keen-integration-rule', {
@@ -1166,7 +1166,7 @@ test('an integration rule starts from the integration’s source and name', asyn
   assert.equal(ui.$('when-source').value, 'integration:okta');
 });
 
-test('exporting rules downloads the selected source’s YAML', async (t) => {
+test("exporting rules downloads the selected source's YAML", async (t) => {
   const downloads = [];
   let ok = true;
   const ui = await editor(t, {
@@ -1311,16 +1311,21 @@ test('the preview lists matching and non-matching samples as text', async (t) =>
   const results = [...ui.$('preview-results').children].map((p) => [p.className, p.textContent]);
   assert.deepEqual(results, [
     ['', '1 of 3 recent keen-agent events matched. Newest first.'],
-    ['alert alert-success py-2 mb-2', `✓ Matches: ${hostile} → A: A1, A2; B: B9`],
+    ['alert alert-success py-2 mb-2', `Matches: ${hostile}Maps to Framework A (A1, A2); B (B9)`],
     [
       'alert alert-warning py-2 mb-2',
-      '— Does not match: Quiet night. Outcome differs. Actor differs.',
+      'Does not match: Quiet night. Outcome differs. Actor differs.',
     ],
     [
       'alert alert-warning py-2 mb-2',
-      '— Does not match: Blank entry. Review the additional filters.',
+      'Does not match: Blank entry. Review the additional filters.',
     ],
   ]);
+  // The targets sit on their own line; a framework the picker does not list keeps its slug.
+  assert.equal(
+    ui.$('preview-results').querySelector('.alert-success .small').textContent,
+    'Maps to Framework A (A1, A2); B (B9)',
+  );
   assert.equal(ui.$('preview-results').querySelector('img'), null);
 });
 
@@ -1349,7 +1354,7 @@ test('saving needs a preview of this version, and no evidence asks for confirmat
   await ui.click('save-rule');
   assert.equal(
     ui.$('status').textContent,
-    'Preview this version of the rule before saving, or choose Advanced → Predefine before evidence is available.',
+    'Preview this version of the rule before saving, or tick “Predefine this rule before evidence is available” under Advanced rule settings.',
   );
   assert.deepEqual(ui.writes, []);
 

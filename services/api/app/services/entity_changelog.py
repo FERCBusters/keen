@@ -28,7 +28,7 @@ from app.db.models import (
 _CHANGE_FIELD_LABELS = {
     "agenda_minutes_notes": "Agenda/minutes/notes",
     "application_configurations": "Application configuration",
-    "access_control_matrix": "Access Control Matrix",
+    "access_control_matrix": "Access control matrix",
     "account_id": "hosting account ID",
     "aws_accounts": "managed hosting accounts",
     "aws_account_ids": "managed hosting accounts",
@@ -75,7 +75,7 @@ _CHANGE_FIELD_LABELS = {
     "treatment_due_at": "Treatment due",
     "service": "Service",
     "service_asset_id": "Service",
-    "task_action": "Task/Action",
+    "task_action": "Task/action",
     "role": "Role",
     "roles": "Roles",
     "role_org_node_ids": "Roles",
@@ -104,7 +104,7 @@ _CHANGE_FIELD_LABELS = {
     "evidence_mappings": "Evidence mappings",
     "framework": "Framework",
     "impact_score": "Impact score",
-    "nature": "Nature of Interest",
+    "nature": "Nature of interest",
     "lens": "Lens",
     "item": "Item",
     "overall_relevance": "Overall relevance",
@@ -135,24 +135,24 @@ _CHANGE_FIELD_LABELS = {
 
 _ENTITY_LABELS = {
     "isms_swot": "SWOT item",
-    "isms_objective": "ISMS Objective",
+    "isms_objective": "ISMS objective",
     "isms_document": "ISMS Document",
-    "isms_org_node": "ISMS Organisation Chart node",
+    "isms_org_node": "ISMS organisation chart node",
     "isms_asset": "ISMS Asset",
     "isms_license": "ISMS License",
     "isms_business_process": "ISMS Business Process",
     "isms_application_configuration": "ISMS Application Configuration",
-    "isms_access_control_matrix": "ISMS Access Control Matrix",
+    "isms_access_control_matrix": "ISMS access control matrix",
     "isms_aws_account": "ISMS Managed Hosting Account",
-    "isms_meeting": "ISMS Meeting",
-    "isms_effectiveness_measure": "ISMS Effectiveness Measure",
+    "isms_meeting": "ISMS meeting",
+    "isms_effectiveness_measure": "ISMS effectiveness measure",
     "isms_effectiveness_metric": "ISMS Effectiveness Metric",
     "control": "Control",
     "clause": "Clause",
-    "risk": "CIA Triad Risk",
+    "risk": "CIA triad risk",
     "pestle_item": "PESTLE(E) item",
     "pestle_business_process": "PESTLE(E) business process",
-    "interested_party": "Interested Party",
+    "interested_party": "Interested party",
     "story": "Story",
 }
 
@@ -286,7 +286,7 @@ def record_entity_changelog(
     request_path: str | None = None,
     changed_at: datetime | None = None,
 ) -> EntityChangelog | None:
-    """Record an immutable semantic change for KEEN relationship entities.
+    """Record an immutable semantic change for Keen relationship entities.
 
     The regular AuditLog captures request metadata; this captures the before/after
     values users need for ISO-style evidence of what actually changed. Pass
@@ -514,7 +514,7 @@ def risk_changelog_state(
         "id": str(risk.id),
         "framework": framework,
         "display": title
-        or (f"{asset_name or 'Risk'} — {threat}" if threat else (asset_name or "Risk")),
+        or (f"{asset_name or 'Risk'} - {threat}" if threat else (asset_name or "Risk")),
         "title": title,
         "asset": asset_name,
         "category": category.name if category else None,

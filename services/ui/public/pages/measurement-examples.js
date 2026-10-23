@@ -1,6 +1,6 @@
 // Examples use the existing secret-authenticated effectiveness webhook.
 // The payload names the measure's expected source so entries are attributed to
-// the same KEEN source the measure was configured with.
+// the same Keen source the measure was configured with.
 export function measurementExamples({
   origin,
   key,
@@ -21,7 +21,7 @@ export function measurementExamples({
   const json = JSON.stringify(payload, null, 2);
   const quote = (value) => "'" + String(value).replaceAll("'", "'\\''") + "'";
   const curl =
-    '# Set KEEN_METRICS_SECRET securely in the reporting environment.\n# Replace value with the observed result, not the target threshold.\n' +
+    '# Set KEEN_METRICS_SECRET securely in the reporting environment.\n# Replace value with the observed result for the period.\n' +
     'curl --fail-with-body --show-error ' +
     quote(endpoint) +
     ' ' +
@@ -59,12 +59,12 @@ export function mountMeasurementExamples(container, read) {
   const help = document.createElement('p');
   help.className = 'small-muted mt-2';
   help.textContent =
-    'Save the measure with a metric key first. Replace the example value with your observed measurement. Each successful POST creates a metric entry; repeat submissions create additional entries. Optional period_start and period_end accept YYYY-MM-DD. Configure the isms_metrics webhook provider and its secret on the KEEN server. Set the same secret as KEEN_METRICS_SECRET on the reporting host; set KEEN_METRICS_HEADER if your provider uses a different header.';
+    'Save the measure with a metric key first. Replace the example value with your observed measurement. Each successful POST creates a metric entry; repeat submissions create additional entries. Optional period_start and period_end accept YYYY-MM-DD. Configure the isms_metrics webhook provider and its secret on the Keen server. Set the same secret as KEEN_METRICS_SECRET on the reporting host; set KEEN_METRICS_HEADER if your provider uses a different header.';
   details.append(help);
   const setup = document.createElement('pre');
   setup.className = 'small';
   setup.textContent =
-    'Webhooks configuration (UI or config-managed YAML):\nproviders:\n  isms_metrics:\n    secret_header: X-KEEN-Metrics-Secret\n    secret_env: KEEN_METRICS_SECRET\n\nSet KEEN_METRICS_SECRET in the KEEN API container environment.';
+    'Webhooks configuration (UI or config-managed YAML):\nproviders:\n  isms_metrics:\n    secret_header: X-KEEN-Metrics-Secret\n    secret_env: KEEN_METRICS_SECRET\n\nSet KEEN_METRICS_SECRET in the Keen API container environment.';
   details.append(setup);
   const warning = document.createElement('p');
   warning.setAttribute('role', 'status');

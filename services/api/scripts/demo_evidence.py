@@ -1,10 +1,10 @@
 """Fictional operational evidence mapped to the ISO 27001:2022 controls it shows.
 
-Each event imitates the shape its KEEN collector stores for that source, so
+Each event imitates the shape its Keen collector stores for that source, so
 the event page, structured mapping and source views behave as they would with
 real collection. Hosts, accounts and addresses use reserved example ranges and
 domains. Mappings name the control an auditor would expect the record to
-evidence; other frameworks receive the evidence through KEEN's crosswalks.
+evidence; other frameworks receive the evidence through Keen's crosswalks.
 """
 
 from __future__ import annotations
@@ -1333,7 +1333,7 @@ def forgejo_events(seeder):
             action="pull_request",
             outcome="success",
             severity=3,
-            summary="Forgejo KEEN demo pull request adds a threat model for payment page scripts",
+            summary="Forgejo Keen demo pull request adds a threat model for payment page scripts",
             raw_pointer={
                 "forgejo": {
                     "host": host,
@@ -1625,7 +1625,7 @@ REDMINE = (
         "Approval",
         "Closed",
         "Penetration test rules of engagement approved",
-        "Production testing limited to Tuesday 22:00–02:00; backups verified beforehand.",
+        "Production testing limited to Tuesday 22:00-02:00; backups verified beforehand.",
         "Alex Example",
         ["A.8.29", "A.8.34"],
     ),

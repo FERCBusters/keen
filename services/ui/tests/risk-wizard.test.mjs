@@ -345,7 +345,7 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
   assert.equal(ui.el('doneTitle').textContent, 'Risk recorded');
   assert.match(
     ui.el('doneDetail').textContent,
-    /KEEN also added the asset “HR portal” and 1 new interested party for you/,
+    /Keen also added the asset “HR portal” and 1 new interested party for you/,
   );
   assert.equal(
     ui.el('doneActions').querySelector('a').getAttribute('href'),
@@ -587,7 +587,7 @@ test('a Mitigator draft pre-fills the wizard and pre-ticks its suggested control
   const { ui, state } = await wizard(t, { storage });
   assert.match(
     ui.el('status').textContent,
-    /Mitigator’s analysis has been carried into the wizard/,
+    /Mitigator's analysis has been carried into the wizard/,
   );
   assert.equal(storage.getItem('keen.riskWizardDraft'), null);
   // A CIA type in the draft turns a general draft into a CIA risk.

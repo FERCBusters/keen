@@ -259,7 +259,7 @@ def effective_cross_framework_links(
         pairs.c.target_control_id,
         literal(
             "Related evidence via shared NIST controls in Open Security Architecture (CC BY-SA 4.0). "
-            "KEEN-derived crosswalk; review relevance and coverage gaps. This is not full equivalence."
+            "Keen-derived crosswalk; review relevance and coverage gaps, as related controls can differ in scope."
         ),
         literal(None, type_=DateTime),
         literal(True),
@@ -1452,7 +1452,7 @@ class PestleClauseRelevance(Base):
 
 
 # -----------------------------------------------------------------------------
-# Interested Parties risk/context assessment
+# Interested parties risk/context assessment
 # -----------------------------------------------------------------------------
 
 
@@ -2029,7 +2029,7 @@ class IsmsOrgNodeUser(Base):
 
 
 class IsmsPerson(Base):
-    """A person in the assurance register, regardless of KEEN login access."""
+    """A person in the assurance register, regardless of Keen login access."""
 
     __tablename__ = "isms_people"
     id: Mapped[uuid.UUID] = mapped_column(
@@ -2360,7 +2360,7 @@ class IsmsEffectivenessMeasure(Base):
     metric_key: Mapped[str | None] = mapped_column(
         String(128), nullable=True, unique=True, index=True
     )
-    # The KEEN evidence source expected to supply this measure's values, or
+    # The Keen evidence source expected to supply this measure's values, or
     # "other"; new metric entries default to it.
     source_type: Mapped[str] = mapped_column(
         String(64), nullable=False, default="other", server_default="other"
@@ -2470,7 +2470,7 @@ class IsmsMeeting(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     title: Mapped[str] = mapped_column(
-        String(256), nullable=False, default="ISMS Meeting", index=True
+        String(256), nullable=False, default="ISMS meeting", index=True
     )
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     start_time: Mapped[dtime | None] = mapped_column(Time, nullable=True)
@@ -3374,7 +3374,7 @@ class SourceIngestionState(Base):
 
 
 class UserSsoEmail(Base):
-    """Addresses whose ownership KEEN has verified for future SSO linking."""
+    """Addresses whose ownership Keen has verified for future SSO linking."""
 
     __tablename__ = "user_sso_emails"
     email: Mapped[str] = mapped_column(String(256), primary_key=True)
@@ -3484,7 +3484,8 @@ class StoryItem(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     __table_args__ = (
         CheckConstraint(
-            "kind in ('event','risk','document','asset','objective','note')",
+            "kind in ('event','risk','document','asset','objective','swot','person',"
+            "'vendor','effectiveness_measure','meeting','note')",
             name="ck_story_item_kind",
         ),
         CheckConstraint(

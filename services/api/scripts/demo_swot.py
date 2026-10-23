@@ -19,7 +19,7 @@ from app.db.models import (
 from app.services.isms.common import _record, _utcnow
 from app.services.isms.swot import summary
 
-# Each tuple explicitly reviews applicability in ISO, KEEN Assurance, CE, SOC 2
+# Each tuple explicitly reviews applicability in ISO, Keen Assurance, CE, SOC 2
 # and PCI DSS; None records that no control in that framework applies.
 FRAMEWORKS = (
     "iso_27001_2022",

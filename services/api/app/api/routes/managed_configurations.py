@@ -208,7 +208,7 @@ def restore_revision(
 def preview_stale_rule_mappings(
     source: str, offset: int = 0, db: Session = Depends(get_db)
 ):
-    "Review one bounded page of mappings; never include manual mappings."
+    "Review one bounded page of a source's rule mappings; manual mappings stay out."
     return service.preview_stale_rule_mappings(source=source, offset=offset, db=db)
 
 

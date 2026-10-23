@@ -57,7 +57,7 @@ enhanceFilterPillMultiSelect(typePicker, {
   emptyText: 'All source types',
   emptySelectedText: 'No source type filters selected. All source types are shown.',
   noMatchText: 'No source types match your filter.',
-  searchPlaceholder: 'Filter source types…',
+  searchPlaceholder: 'Filter source types',
   options: [],
   selectedValues: filters.types,
 });
@@ -176,7 +176,7 @@ function applyFilters() {
 
 async function load() {
   status.style.display = 'none';
-  showTableLoading(tbody, 6, 'Loading sources…');
+  showTableLoading(tbody, 6, 'Loading sources');
   try {
     const data = await apiGet(`/api/v1/sources?framework=${encodeURIComponent(framework)}`);
     sourceMeta = {};

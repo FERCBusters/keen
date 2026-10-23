@@ -187,7 +187,7 @@ def latest_evidence_event(
     limit: int = 1,
     db: Session = Depends(get_db),
 ):
-    "Return the newest visible events by ingestion time, newest first.\n\n    The homepage ticker polls this endpoint. Visibility follows the normal event\n    listing rules. `after` is compared with Event.created_at because the ticker\n    shows what most recently arrived in KEEN, not the original event time.\n    `limit` accepts 1 to 25 events.\n"
+    "Return the newest visible events by ingestion time, newest first.\n\n    The homepage ticker polls this endpoint. Visibility follows the normal event\n    listing rules. `after` is compared with Event.created_at because the ticker\n    shows the most recent arrivals in Keen, whatever their original event time.\n    `limit` accepts 1 to 25 events.\n"
     user = _require_events_read(db, request)
     return service.latest_evidence_event(user=user, after=after, limit=limit, db=db)
 

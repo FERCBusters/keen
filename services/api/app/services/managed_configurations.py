@@ -809,7 +809,7 @@ def source_catalogue(*, db: Session):
             "observed_events": agent_events,
             "last_seen": agent_last,
             "managed_version": 0,
-            "description": "Register scoped identities under Integrations → Manage agents.",
+            "description": "Register scoped identities under Admin → Keen Agents.",
         }
     )
     from app.db.models import IntegrationCollector, SourceIngestionState
@@ -1188,7 +1188,7 @@ def _validate_rule(rule: dict, db: Session):
         r"[a-zA-Z0-9_-]{1,96}", rule["id"]
     ):
         raise DomainError(
-            400, "Rule ID must be 1–96 letters, numbers, underscores or hyphens"
+            400, "Rule ID must be 1-96 letters, numbers, underscores or hyphens"
         )
     when = rule.get("when")
     if (
@@ -1398,7 +1398,7 @@ def _plain_mismatch_reasons(event, when):
             actual = getattr(event, key, None)
             if str(expected) != str(actual if actual is not None else ""):
                 reasons.append(
-                    f"{label}: the rule asks for ‘{expected}’; this event has ‘{actual if actual is not None else 'not supplied'}’."
+                    f"{label}: the rule asks for '{expected}'; this event has '{actual if actual is not None else 'not supplied'}'."
                 )
     return reasons or [
         "A structured field, collection, label, pattern or BookStack selector condition did not match."
@@ -1698,7 +1698,7 @@ def _stale(db: Session, event, control, rules, cache: dict) -> bool:
 
 
 def preview_stale_rule_mappings(*, source: str, offset: int = 0, db: Session):
-    """Review one bounded page of mappings; never include manual mappings."""
+    """Review one bounded page of a source's rule mappings; manual mappings stay out."""
     source = source.strip()
     if not source or len(source) > 128 or not 0 <= offset <= 100_000:
         raise DomainError(400, "Choose a source and an offset between 0 and 100000")
@@ -1745,7 +1745,7 @@ def prune_stale_rule_mappings(*, payload: PruneInput, db: Session):
     if _version(db, "rules") != payload.version:
         raise DomainError(409, "Rules changed since the review. Preview again.")
     if not payload.source.strip() or not 1 <= len(payload.mapping_ids) <= 500:
-        raise DomainError(400, "Review 1–500 mapping IDs for a source first")
+        raise DomainError(400, "Review 1-500 mapping IDs for a source first")
     import uuid
 
     try:

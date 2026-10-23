@@ -193,7 +193,7 @@ def _question_target_label(thread: EventQuestionThread) -> str:
     else:
         prefix = "Evidence"
     if ref and title:
-        return f"{prefix}: {ref} — {title}"
+        return f"{prefix}: {ref} - {title}"
     if title:
         return f"{prefix}: {title}"
     if ref:

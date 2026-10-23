@@ -108,8 +108,8 @@ export function createEventPanel({ framework, getSourceMeta = () => ({}) }) {
     current = eventId;
     const href = withFramework(`/event.html?id=${encodeURIComponent(eventId)}`, framework);
     fullLink.setAttribute('href', href);
-    title.textContent = 'Loading…';
-    body.innerHTML = '<p class="small-muted">Loading event…</p>';
+    title.textContent = 'Loading';
+    body.innerHTML = '<p class="small-muted">Loading event</p>';
     show();
     try {
       const event = await apiGet(

@@ -7,7 +7,6 @@ from app.db.models import (
     AuditAttendee,
     AuditEvidence,
     AuditFinding,
-    IsmsPerson,
     User,
 )
 from app.security.permissions import has_permission
@@ -73,6 +72,7 @@ from app.services.audits.validation import (
     validate_dates,
 )
 from app.services.errors import DomainError
+from app.services.isms.related_records import resolve_target
 
 
 def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):
@@ -108,6 +108,9 @@ def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):
         clause_values=payload.clauses,
         document_values=payload.documents,
     )
+    # The audit and its attendees are saved together, or not at all.
+    for attendee in payload.attendees:
+        db.add(_attendee_row(db, user, a, attendee))
     db.commit()
     db.refresh(a)
     return audit_summary(db, a, {user.id: user.username})
@@ -397,20 +400,25 @@ def delete_audit_evidence(*, audit_id: str, evidence_id: str, db: Session, user:
     return {"ok": True}
 
 
-def add_attendee(
-    *, audit_id: str, payload: AuditAttendeePayload, db: Session, user: User
-):
-    a = editable_audit_or_404(db, user, audit_id)
-    require_mutable_audit(a)
+def _attendee_row(
+    db: Session, user: User, audit: Audit, payload: AuditAttendeePayload
+) -> AuditAttendee:
+    """A checked attendee of ``audit``; the caller adds and commits it.
+
+    People come from the ISMS register, so naming one needs the access its
+    page needs, and an unreadable person is reported like a missing one.
+    """
     linked_user = None
     linked_person = None
     if payload.person_id is not None:
-        linked_person = db.get(IsmsPerson, payload.person_id)
+        linked_person = resolve_target(
+            db, user, "person", payload.person_id, required=False
+        )
         if linked_person is None:
             raise DomainError(status_code=400, detail="Unknown Person")
     if payload.person_id is not None and payload.user_id is not None:
         raise DomainError(
-            status_code=400, detail="Select a Person or KEEN user, not both"
+            status_code=400, detail="Select either a person or a Keen user"
         )
     if payload.user_id is not None:
         linked_user = (
@@ -435,8 +443,8 @@ def add_attendee(
         display_name = linked_person.name
 
     explicit_email = clean_email(payload.email, label="email")
-    row = AuditAttendee(
-        audit_id=a.id,
+    return AuditAttendee(
+        audit_id=audit.id,
         user_id=linked_user.id if linked_user is not None else None,
         person_id=linked_person.id if linked_person is not None else None,
         name=display_name,
@@ -446,6 +454,14 @@ def add_attendee(
         role=clean_text(payload.role, max_len=128, label="role") or None,
         created_at=utcnow(),
     )
+
+
+def add_attendee(
+    *, audit_id: str, payload: AuditAttendeePayload, db: Session, user: User
+):
+    a = editable_audit_or_404(db, user, audit_id)
+    require_mutable_audit(a)
+    row = _attendee_row(db, user, a, payload)
     a.updated_at = utcnow()
     db.add(row)
     db.add(a)

@@ -384,7 +384,7 @@ def test_attendees_name_one_person_or_one_active_user(aud):
     for body, detail in (
         (
             {"person_id": str(person.id), "user_id": str(aud.owner.id)},
-            "Select a Person or KEEN user, not both",
+            "Select either a person or a Keen user",
         ),
         ({"person_id": str(uuid.uuid4())}, "Unknown Person"),
         ({"user_id": str(inactive.id)}, "Unknown or inactive attendee user"),
@@ -411,6 +411,93 @@ def test_attendees_name_one_person_or_one_active_user(aud):
         "visitor@example.org",
         None,
     )
+
+
+def test_people_in_the_register_need_isms_read_access_to_attend(aud):
+    person = IsmsPerson(name="Pat Auditor", email="pat@example.org")
+    aud.db.add(person)
+    aud.db.commit()
+    # This manager cannot read the people register, so cannot name its people.
+    blind_user = aud.keen.user("audits.manage")
+    blind = aud.keen.client(blind_user)
+    own = blind.post(
+        "/v1/audits",
+        json={"title": "Blind audit", "framework_slug": FW},
+        headers=unsafe(blind),
+    ).json()
+    refused = blind.post(
+        f"/v1/audits/{own['id']}/attendees",
+        json={"person_id": str(person.id)},
+        headers=unsafe(blind),
+    )
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == "Unknown Person"
+    assert "Pat" not in refused.text
+    named = blind.post(
+        f"/v1/audits/{own['id']}/attendees",
+        json={"name": "Pat Auditor"},
+        headers=unsafe(blind),
+    )
+    assert named.status_code == 200, named.text
+
+
+def test_a_new_audit_arrives_with_its_scope_and_attendees(aud):
+    person = IsmsPerson(name="Pat Auditor", email="pat@example.org")
+    aud.db.add(person)
+    aud.db.commit()
+    payload = {
+        "title": "Surveillance audit",
+        "framework_slug": FW,
+        "audit_type": "external",
+        "start_date": "2026-06-01",
+        "end_date": "2026-06-03",
+        "controls": ["A.1"],
+        "attendees": [
+            {"user_id": str(aud.owner.id), "role": "Lead auditor"},
+            {"person_id": str(person.id), "role": "Auditee"},
+            {
+                "name": "Jo External",
+                "email": "jo@example.org",
+                "role": "Certification body",
+            },
+        ],
+    }
+    created = aud.client.post("/v1/audits", json=payload, headers=unsafe(aud.client))
+    assert created.status_code == 200, created.text
+    detail = aud.client.get(f"/v1/audits/{created.json()['id']}").json()
+    assert sorted(
+        (a["name"], a["email"] or "", a["role"], a["person_id"] or "")
+        for a in detail["attendees"]
+    ) == sorted(
+        [
+            (aud.owner.username, "", "Lead auditor", ""),
+            ("Pat Auditor", "pat@example.org", "Auditee", str(person.id)),
+            ("Jo External", "jo@example.org", "Certification body", ""),
+        ]
+    )
+    assert [c["ref"] for c in detail["scoped_controls"]] == ["A.1"]
+    assert (detail["audit_type"], detail["start_date"]) == ("external", "2026-06-01")
+
+    # One bad attendee refuses the whole audit; nothing is left half made.
+    before = aud.db.query(Audit).count()
+    for attendee, message in (
+        ({"person_id": str(uuid.uuid4())}, "Unknown Person"),
+        ({"role": "Observer"}, "name is required"),
+    ):
+        refused = aud.client.post(
+            "/v1/audits",
+            json={**payload, "attendees": [payload["attendees"][0], attendee]},
+            headers=unsafe(aud.client),
+        )
+        assert refused.status_code == 400
+        assert refused.json()["detail"] == message
+    assert aud.db.query(Audit).count() == before
+    too_many = aud.client.post(
+        "/v1/audits",
+        json={**payload, "attendees": [{"name": "x"}] * 101},
+        headers=unsafe(aud.client),
+    )
+    assert too_many.status_code == 422
 
 
 def test_findings_keep_to_the_audit_framework(aud):

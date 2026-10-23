@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – Add a risk</title>
+  <title>Keen - Add a risk</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css"/>
@@ -18,7 +18,7 @@
       <div>
         <div class="small-muted mb-1"><a id="wizardBreadcrumb" class="link-subtle" data-nav-fw="1" href="/risks.html">← Risks</a></div>
         <h1 class="h3 mb-1" id="wizardTitle">Add a risk</h1>
-        <div class="small-muted" id="wizardIntro">Answer a few questions and KEEN will create the risk, and anything it needs along the way, for you.</div>
+        <div class="small-muted" id="wizardIntro">Answer a few questions and Keen will create the risk, and anything it needs along the way, for you.</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
         <a class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" id="wizardMitigatorLink" data-nav-fw="1" href="/mitigator.html"><img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon-sm"> Not sure? Ask the Mitigator</a>
@@ -42,7 +42,7 @@
                 <div class="fw-semibold">Start from a reusable template?</div>
                 <div class="small-muted">Templates from your risk library fill in the description, type and example ratings. You review everything before saving.</div>
               </div>
-              <input id="templateSearch" class="form-control form-control-sm" type="search" placeholder="Search templates…" style="max-width:260px;" aria-label="Search templates">
+              <input id="templateSearch" class="form-control form-control-sm" type="search" placeholder="Search templates" style="max-width:260px;" aria-label="Search templates">
             </div>
             <div id="templateList" class="list-group mt-2"></div>
           </div>
@@ -52,8 +52,8 @@
         <section class="risk-wizard-step" data-step="subject" hidden>
           <div data-subject="asset">
             <h2 class="h5">What is at risk?</h2>
-            <p class="small-muted">Every risk belongs to an asset: a system, a set of information, a place, a service, or people. Pick one you already have, or describe a new one and KEEN will add it to the asset register.</p>
-            <input id="assetSearch" class="form-control mb-2" type="search" placeholder="Search your assets, or type a new name…" aria-label="Search assets" autocomplete="off">
+            <p class="small-muted">Every risk belongs to an asset: a system, a set of information, a place, a service, or people. Pick one you already have, or describe a new one and Keen will add it to the asset register.</p>
+            <input id="assetSearch" class="form-control mb-2" type="search" placeholder="Search your assets, or type a new name" aria-label="Search assets" autocomplete="off">
             <div id="assetList" class="list-group mb-3"></div>
             <div id="newAssetPanel" class="border rounded-3 p-3" hidden>
               <div class="fw-semibold mb-2">Add “<span id="newAssetName"></span>” as a new asset</div>
@@ -76,8 +76,8 @@
           </div>
           <div data-subject="pestle" hidden>
             <h2 class="h5">Which business processes does it touch?</h2>
-            <p class="small-muted">Optional. Tick the processes this factor could affect. Type a name to add a process KEEN does not know yet.</p>
-            <input id="processSearch" class="form-control mb-2" type="search" placeholder="Search business processes, or type a new name…" aria-label="Search business processes" autocomplete="off">
+            <p class="small-muted">Optional. Tick the processes this factor could affect. Type a name to add a process Keen does not know yet.</p>
+            <input id="processSearch" class="form-control mb-2" type="search" placeholder="Search business processes, or type a new name" aria-label="Search business processes" autocomplete="off">
             <div id="processList" class="list-group"></div>
           </div>
         </section>
@@ -85,8 +85,8 @@
         <!-- Step 3: parties -->
         <section class="risk-wizard-step" data-step="parties" hidden>
           <h2 class="h5">Who is affected?</h2>
-          <p class="small-muted">Optional. Tick the people, suppliers or interested parties who would feel this risk — customers, regulators, staff, a vendor. If someone is missing, add them here and KEEN will record them as an interested party.</p>
-          <input id="partySearch" class="form-control mb-2" type="search" placeholder="Search interested parties, people and vendors, or type a new name…" aria-label="Search affected parties" autocomplete="off">
+          <p class="small-muted">Optional. Tick the people, suppliers or interested parties the risk affects, such as customers, regulators, staff or a vendor. If someone is missing, add them here and Keen records them as an interested party.</p>
+          <input id="partySearch" class="form-control mb-2" type="search" placeholder="Search interested parties, people and vendors, or type a new name" aria-label="Search affected parties" autocomplete="off">
           <div id="partyList" class="list-group mb-3"></div>
           <div id="newPartyPanel" class="border rounded-3 p-3" hidden>
             <div class="fw-semibold mb-2">Add “<span id="newPartyName"></span>” as a new interested party</div>
@@ -141,8 +141,8 @@
         <!-- Step 5: rate -->
         <section class="risk-wizard-step" data-step="rate" hidden>
           <div data-method-not="pestle">
-            <h2 class="h5">How big is it?</h2>
-            <p class="small-muted">Rate how likely it is and how much it would hurt, first as things stand today and then assuming your planned controls work. The scores feed the register and the 5×5 heatmap.</p>
+            <h2 class="h5">Likelihood and impact</h2>
+            <p class="small-muted">Rate the likelihood and impact as things stand today, then again assuming your planned controls work. The scores feed the register and the 5×5 heatmap.</p>
             <div class="row g-3">
               <div class="col-12 col-lg-6">
                 <div class="border rounded-3 p-3 h-100">
@@ -180,9 +180,9 @@
             </div>
           </div>
           <div data-method-only="pestle" hidden>
-            <h2 class="h5">Where does it bite?</h2>
+            <h2 class="h5">Relevant clauses</h2>
             <p class="small-muted">Optional. Tick the framework clauses this factor is relevant to and say how strongly. You can refine this later on the item's page.</p>
-            <input id="clauseSearch" class="form-control form-control-sm mb-2" type="search" placeholder="Filter clauses…" aria-label="Filter clauses">
+            <input id="clauseSearch" class="form-control form-control-sm mb-2" type="search" placeholder="Filter clauses" aria-label="Filter clauses">
             <div id="clauseList" class="border rounded p-2 risk-wizard-scroll"></div>
           </div>
         </section>
@@ -190,9 +190,9 @@
         <!-- Step 6: controls -->
         <section class="risk-wizard-step" data-step="controls" hidden>
           <h2 class="h5">Which controls help with it?</h2>
-          <p class="small-muted">Optional. Controls are the safeguards that reduce the risk — they are not risks themselves. Tick the ones that apply in <span id="controlsFramework">this framework</span>; suggested controls are pre-ticked for you to review.</p>
+          <p class="small-muted">Optional. Controls are the safeguards that reduce the risk. Tick the ones that apply in <span id="controlsFramework">this framework</span>; suggested controls are pre-ticked for you to review.</p>
           <div id="suggestedControlsNote" class="alert alert-light border py-2" hidden></div>
-          <input id="controlSearch" class="form-control form-control-sm mb-2" type="search" placeholder="Filter controls by reference or title…" aria-label="Filter controls">
+          <input id="controlSearch" class="form-control form-control-sm mb-2" type="search" placeholder="Filter controls by reference or title" aria-label="Filter controls">
           <div id="controlList" class="border rounded p-2 risk-wizard-scroll"></div>
           <div class="small-muted mt-2"><span id="controlCount">0</span> selected.</div>
         </section>
@@ -200,7 +200,7 @@
         <!-- Step 7: review -->
         <section class="risk-wizard-step" data-step="review" hidden>
           <h2 class="h5">Check and save</h2>
-          <p class="small-muted">Here is what KEEN will record. Use “Change” to go back to any step.</p>
+          <p class="small-muted">Keen records the details below. Use Change to go back to any step.</p>
           <dl class="row mb-0" id="reviewSummary"></dl>
         </section>
 

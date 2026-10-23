@@ -219,7 +219,7 @@ test('my questions show status badges, safe links and deletion for administrator
   assert.equal(ui.el('myQuestionsTbody').querySelector('img'), null);
   assert.equal(ui.window.pwned, undefined);
   assert.equal(rows[0].querySelector('.fw-semibold').textContent, HOSTILE + 'Policy review');
-  assert.match(rows[0].textContent, /pestle item • PESTLE-1/);
+  assert.match(rows[0].textContent, /pestle item · PESTLE-1/);
   assert.equal(
     rows[0].querySelector('a').getAttribute('href'),
     '/pestle_item.html?id=p1&framework=A#questions',
@@ -233,7 +233,7 @@ test('my questions show status badges, safe links and deletion for administrator
     rows[1].querySelector('a').getAttribute('href'),
     '/event.html?id=e%2F1&thread=t2&framework=A#questions',
   );
-  assert.match(rows[1].textContent, /okta • 2026-09-30T09:00:00Z/);
+  assert.match(rows[1].textContent, /okta · 2026-09-30T09:00:00Z/);
   // A script URL is never made clickable.
   assert.equal(rows[2].querySelector('a').getAttribute('href'), '#');
   assert.equal(state.bell, 1);
@@ -284,9 +284,10 @@ test('my audits and risks show status, roles and score bands', async (t) => {
     audits[0].textContent,
     /2026-01-01 → 2026-02-01[\s\S]*Lead auditor[\s\S]*In progress/,
   );
-  assert.match(
-    audits[1].textContent,
-    /Audit[\s\S]*Updated —[\s\S]*—[\s\S]*Attendee[\s\S]*Completed/,
+  // Missing dates show a dash.
+  assert.deepEqual(
+    [...audits[1].cells].slice(0, 5).map((c) => c.textContent.replace(/\s+/g, ' ').trim()),
+    ['Audit Updated -', '', '-', 'Attendee', 'Completed'],
   );
   assert.equal(audits[1].querySelector('a').getAttribute('href'), '/audit.html?id=a2&framework=A');
   // A second visit to the tab reuses the loaded list; Refresh reloads it.
@@ -316,7 +317,7 @@ test('my audits and risks show status, roles and score bands', async (t) => {
   await settle(() => state.gets.filter((g) => g.startsWith('/api/v1/me/risks')).length === 2);
 });
 
-test('ISMS meetings, objectives, roles and assets list the user’s responsibilities', async (t) => {
+test("ISMS meetings, objectives, roles and assets list the user's responsibilities", async (t) => {
   const { ui, state } = await account(t);
   showTab(ui, 'my-meetings-tab');
   await settle(() => ui.el('myMeetingsTbody').querySelectorAll('tr').length === 2);
@@ -324,13 +325,16 @@ test('ISMS meetings, objectives, roles and assets list the user’s responsibili
   assert.equal(ui.el('myMeetingsTbody').querySelector('img'), null);
   assert.match(
     meetings[0].textContent,
-    /Management review[\s\S]*2026-10-02[\s\S]*09:00–10:00[\s\S]*Attendee[\s\S]*dana/,
+    /Management review[\s\S]*2026-10-02[\s\S]*09:00-10:00[\s\S]*Attendee[\s\S]*dana/,
   );
   assert.equal(
     meetings[0].querySelector('a').getAttribute('href'),
     '/isms-meeting.html?id=m1&framework=A',
   );
-  assert.match(meetings[1].textContent, /Meeting[\s\S]*—[\s\S]*14:00/);
+  assert.deepEqual(
+    [...meetings[1].cells].slice(0, 6).map((c) => c.textContent.replace(/\s+/g, ' ').trim()),
+    ['Meeting', '-', '14:00', '-', '-', '-'],
+  );
   ui.el('myMeetingsRefresh').click();
   await settle(
     () => state.gets.filter((g) => g.startsWith('/api/v1/me/isms-meetings')).length === 2,
@@ -371,7 +375,7 @@ test('ISMS meetings, objectives, roles and assets list the user’s responsibili
     assets[0].textContent,
     /Laptop fleet[\s\S]*Hardware \/ Laptops[\s\S]*Owned[\s\S]*Owner, Register holder[\s\S]*IT[\s\S]*Org → Finance/,
   );
-  assert.match(assets[1].textContent, /Shared drive[\s\S]*Team files[\s\S]*—[\s\S]*Custodian/);
+  assert.match(assets[1].textContent, /Shared drive[\s\S]*Team files[\s\S]*-[\s\S]*Custodian/);
   assert.equal(
     assets[0].querySelector('a').getAttribute('href'),
     '/isms.html?tab=assets&framework=A',
@@ -607,7 +611,7 @@ test('source colour overrides validate hex values and can be reset', async (t) =
   assert.equal(rows.length, 2);
   // Three-digit defaults are expanded; invalid defaults show no chip.
   assert.equal(rows[0].querySelector('.badge').textContent, '#112233');
-  assert.equal(rows[1].querySelectorAll('td')[2].textContent.trim(), '–');
+  assert.equal(rows[1].querySelectorAll('td')[2].textContent.trim(), '-');
   const picker = (src) => body.querySelector(`[data-src-color="${src}"]`);
   const hex = (src) => body.querySelector(`[data-src-hex="${src}"]`);
   assert.equal(hex('okta').value, '#00FF00');
@@ -669,8 +673,8 @@ test('saved searches can be deleted and duplicate names are disambiguated for th
   assert.deepEqual(
     [...group.querySelectorAll('option')].map((o) => o.textContent),
     [
-      'Unmapped — /events.html?unmapped=true',
-      'unmapped — /events.html?source=okta&q=<b>x</b>',
+      'Unmapped - /events.html?unmapped=true',
+      'unmapped - /events.html?source=okta&q=<b>x</b>',
       'R&D <b>reviews</b>',
       'Danger',
     ],

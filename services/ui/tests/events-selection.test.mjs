@@ -129,7 +129,7 @@ test('the right-click menu selects the row and offers the story actions', async 
     me: { can_manage_stories: true },
     stories: [
       { id: 's1', title: 'Mine <open>', can_edit: true },
-      { id: 's2', title: 'Someone else’s', can_edit: false },
+      { id: 's2', title: "Someone else's", can_edit: false },
     ],
   });
   const row = ui.document.querySelector('#rows tr[data-event-id="e2"]');
@@ -147,7 +147,7 @@ test('the right-click menu selects the row and offers the story actions', async 
   assert.deepEqual(
     [...target.options].map((o) => [o.value, o.textContent]),
     [
-      ['', 'Choose a story…'],
+      ['', 'Choose a story'],
       ['s1', 'Mine <open>'],
     ],
   );

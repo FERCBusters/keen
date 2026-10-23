@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove KEEN demonstration data created by seed_demo_data.py.
+"""Remove Keen demonstration data created by seed_demo_data.py.
 
 Intended location:
     services/api/scripts/teardown_demo_data.py
@@ -120,7 +120,11 @@ ISMS_LINKED_RECORDS = {
 }
 # Saving a record's framework links in the app maintains an automatic diary
 # entry for it, so any seeded record of these types may have one.
-LINK_ENTRY_RECORDS = {**ISMS_LINKED_RECORDS, "risk": "risks"}
+LINK_ENTRY_RECORDS = {
+    **ISMS_LINKED_RECORDS,
+    "risk": "risks",
+    "interested_party": "parties",
+}
 
 
 @dataclass(frozen=True)
@@ -182,7 +186,7 @@ class DemoTeardown:
 
     def run(self) -> None:
         print(
-            f"Removing KEEN demo data for framework {self.framework!r} "
+            f"Removing Keen demo data for framework {self.framework!r} "
             f"with prefix {self.prefix!r}."
         )
         found = self.find()
@@ -538,7 +542,7 @@ class DemoTeardown:
 
 def parse_args() -> TeardownConfig:
     parser = argparse.ArgumentParser(
-        description="Remove KEEN demo data seeded by seed_demo_data.py."
+        description="Remove Keen demo data seeded by seed_demo_data.py."
     )
     parser.add_argument(
         "--framework",

@@ -23,26 +23,26 @@ def enqueue(db, user, event, *, ip=None):
         return
     address = ip or "Unavailable (operator action or unknown address)"
     titles = {
-        "sso-email-added": "An SSO email address was verified for your KEEN account",
-        "sso-email-removed": "An SSO email address was removed from your KEEN account",
+        "sso-email-added": "An SSO email address was verified for your Keen account",
+        "sso-email-removed": "An SSO email address was removed from your Keen account",
         "login-ip": "Sign-in from an unfamiliar IP address",
-        "password-changed": "Your KEEN password was changed",
-        "password-reset": "Your KEEN password was reset by an administrator",
-        "factor-enrolled": "An authenticator was added to your KEEN account",
-        "factor-removed": "An authenticator was removed from your KEEN account",
-        "recovery-codes-regenerated": "Your KEEN recovery codes were replaced",
-        "operator-reset": "Your KEEN two-factor authentication was reset by an operator",
+        "password-changed": "Your Keen password was changed",
+        "password-reset": "Your Keen password was reset by an administrator",
+        "factor-enrolled": "An authenticator was added to your Keen account",
+        "factor-removed": "An authenticator was removed from your Keen account",
+        "recovery-codes-regenerated": "Your Keen recovery codes were replaced",
+        "operator-reset": "Your Keen two-factor authentication was reset by an operator",
     }
     title = titles[event]
-    body = f"{title}.\n\nAccount: {user.username}\nKEEN installation: {settings.public_base_url}\nTime (UTC): {now().isoformat(timespec='seconds')}Z\nIP address: {address}\n\n"
+    body = f"{title}.\n\nAccount: {user.username}\nKeen installation: {settings.public_base_url}\nTime (UTC): {now().isoformat(timespec='seconds')}Z\nIP address: {address}\n\n"
     if event == "login-ip":
         body += "This address has not previously been recorded for a successful sign-in to this account. A VPN, mobile connection or changing ISP address can cause this alert.\n\n"
-    body += "If this was you, no action is needed. If you do not recognise this activity, open your known KEEN address directly and contact your KEEN administrator. Review your password and authenticators.\n"
+    body += "If this was you, no action is needed. If you do not recognise this activity, open your known Keen address directly and contact your Keen administrator. Review your password and authenticators.\n"
     db.add(
         SecurityNotification(
             user_id=user.id,
             recipient=recipient,
-            subject="KEEN security: " + title,
+            subject="Keen security: " + title,
             body=body,
         )
     )

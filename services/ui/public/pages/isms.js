@@ -285,7 +285,7 @@ function names(list) {
     (list || [])
       .map((x) => x?.username || x?.user?.username || x?.name || '')
       .filter(Boolean)
-      .join(', ') || '—'
+      .join(', ') || '-'
   );
 }
 function userBadges(list) {
@@ -299,7 +299,7 @@ function objectiveUserBadges(list) {
 }
 function badgeList(items, labelKey = 'ref', urlFn = null) {
   const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">—</span>';
+  if (!arr.length) return '<span class="small-muted">-</span>';
   return arr
     .map((it) => {
       const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
@@ -329,11 +329,11 @@ function docLink(d) {
     return `<a href="${esc(safeExternalHref(d.external_url) || '#')}" target="_blank" rel="noopener noreferrer">External URL</a>`;
   if (d.has_file)
     return `<a href="/api/v1/isms/documents/${encodeURIComponent(d.id)}/file" target="_blank" rel="noopener noreferrer">${esc(d.filename || 'Uploaded file')}</a>`;
-  return '<span class="small-muted">—</span>';
+  return '<span class="small-muted">-</span>';
 }
 function optionList(
   items,
-  { value = 'id', label = 'username', includeBlank = false, blankLabel = '—' } = {},
+  { value = 'id', label = 'username', includeBlank = false, blankLabel = '-' } = {},
 ) {
   const opts = [];
   if (includeBlank) opts.push(`<option value="">${esc(blankLabel)}</option>`);
@@ -383,7 +383,7 @@ const ismsTableSections = [
     countId: 'objectivesCount',
     formCardId: 'objectiveFormCard',
     title: 'Objective filters',
-    placeholder: 'Filter objectives by goal, metric, owner, controls or clauses…',
+    placeholder: 'Filter objectives by goal, metric, owner, controls or clauses',
     addLabel: 'Add new objective',
   },
   {
@@ -392,8 +392,8 @@ const ismsTableSections = [
     rowsId: 'documentsRows',
     countId: 'documentsCount',
     formCardId: 'documentFormCard',
-    title: 'Policies & Processes filters',
-    placeholder: 'Filter documents by title, type, description, controls or clauses…',
+    title: 'Policies & processes filters',
+    placeholder: 'Filter documents by title, type, description, controls or clauses',
     addLabel: 'Add new policy/process',
   },
   {
@@ -402,8 +402,8 @@ const ismsTableSections = [
     rowsId: 'orgRows',
     countId: 'orgCount',
     formCardId: 'orgFormCard',
-    title: 'Organisation Chart filters',
-    placeholder: 'Filter organisation chart rows by name, parent, people, controls or clauses…',
+    title: 'Organisation chart filters',
+    placeholder: 'Filter organisation chart rows by name, parent, people, controls or clauses',
     addLabel: 'Add new org node',
   },
   {
@@ -412,8 +412,8 @@ const ismsTableSections = [
     rowsId: 'assetsRows',
     countId: 'assetsCount',
     formCardId: 'assetFormCard',
-    title: 'Asset Matrix filters',
-    placeholder: 'Filter assets by name, category, owner, license, controls or clauses…',
+    title: 'Asset matrix filters',
+    placeholder: 'Filter assets by name, category, owner, license, controls or clauses',
     addLabel: 'Add new asset',
   },
   {
@@ -422,8 +422,8 @@ const ismsTableSections = [
     rowsId: 'accessMatrixRows',
     countId: 'accessControlCount',
     formCardId: 'accessControlFormCard',
-    title: 'Access Control Matrix filters',
-    placeholder: 'Filter access rows by task/action, service, account, role, approver or status…',
+    title: 'Access control matrix filters',
+    placeholder: 'Filter access rows by task/action, service, account, role, approver or status',
     addLabel: 'Add new access row',
   },
   {
@@ -432,9 +432,9 @@ const ismsTableSections = [
     rowsId: 'effectivenessRows',
     countId: 'effectivenessCount',
     formCardId: 'effectivenessFormCard',
-    title: 'Effectiveness Measures filters',
+    title: 'Effectiveness measures filters',
     placeholder:
-      'Filter effectiveness measures by summary, description, metric, linked controls, owner, source or latest value…',
+      'Filter effectiveness measures by summary, description, metric, linked controls, owner, source or latest value',
     addLabel: 'Add new effectiveness measure',
   },
   {
@@ -443,8 +443,8 @@ const ismsTableSections = [
     rowsId: 'meetingsRows',
     countId: 'meetingsCount',
     formCardId: 'meetingFormCard',
-    title: 'Minutes of Meetings filters',
-    placeholder: 'Filter meetings by date, title, attendees, links, controls or clauses…',
+    title: 'Minutes of meetings filters',
+    placeholder: 'Filter meetings by date, title, attendees, links, controls or clauses',
     addLabel: 'Add new meeting',
   },
 ];
@@ -686,12 +686,12 @@ function licenses() {
 }
 function licenseLabel(value) {
   const text = String(value || '').trim();
-  return text || '—';
+  return text || '-';
 }
 function renderLicenseOptions(targetValue = '') {
   const select = $('assetLicense');
   if (!select) return;
-  const opts = optionList(licenses(), { label: 'name', includeBlank: true, blankLabel: '—' });
+  const opts = optionList(licenses(), { label: 'name', includeBlank: true, blankLabel: '-' });
   const cur = targetValue || select.value || '';
   select.innerHTML = opts;
   select.value = licenses().some((l) => String(l.id) === String(cur)) ? cur : '';
@@ -704,7 +704,7 @@ function renderLicenses() {
       .map(
         (l) => `<tr>
     <td class="fw-semibold">${esc(l.name || 'License')}</td>
-    <td class="wrap small-muted">${esc(shorten(l.description || '', 180) || '—')}</td>
+    <td class="wrap small-muted">${esc(shorten(l.description || '', 180) || '-')}</td>
     <td>${Number(l.asset_count || 0)}</td>
     <td class="text-nowrap no-print"><div class="btn-group btn-group-sm" role="group"><button class="btn btn-outline-primary" type="button" data-license-edit="${esc(l.id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit license</span></button><button class="btn btn-outline-danger" type="button" data-license-delete="${esc(l.id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete license</span></button></div></td>
   </tr>`,
@@ -742,8 +742,8 @@ function renderAwsAccounts() {
       .map(
         (a) => `<tr>
     <td class="fw-semibold">${esc(a.name || 'hosting account')}</td>
-    <td>${esc(a.account_id || '—')}</td>
-    <td class="wrap small-muted">${esc(shorten(a.notes || '', 180) || '—')}</td>
+    <td>${esc(a.account_id || '-')}</td>
+    <td class="wrap small-muted">${esc(shorten(a.notes || '', 180) || '-')}</td>
     <td>${Number(a.entry_count || 0)}</td>
     <td class="text-nowrap no-print"><div class="btn-group btn-group-sm" role="group"><button class="btn btn-outline-primary" type="button" data-aws-account-edit="${esc(a.id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit hosting account</span></button><button class="btn btn-outline-danger" type="button" data-aws-account-delete="${esc(a.id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete hosting account</span></button></div></td>
   </tr>`,
@@ -943,7 +943,7 @@ function addMeetingExternalLinkRow(title = '', url = '') {
   row.className = 'meeting-external-link-row row g-2 align-items-start';
   row.innerHTML = `
     <div class="col-12 col-lg-5"><input class="form-control form-control-sm" data-meeting-link-title="1" placeholder="Link title" value="${esc(title || '')}"></div>
-    <div class="col-12 col-lg-6"><input class="form-control form-control-sm" data-meeting-link-url="1" type="url" placeholder="https://…" value="${esc(url || '')}"></div>
+    <div class="col-12 col-lg-6"><input class="form-control form-control-sm" data-meeting-link-url="1" type="url" placeholder="https://" value="${esc(url || '')}"></div>
     <div class="col-12 col-lg-1 text-lg-end"><button class="btn btn-sm btn-outline-danger" type="button" data-remove-meeting-link="1" title="Remove link"><i class="bi bi-x-lg" aria-hidden="true"></i><span class="visually-hidden">Remove link</span></button></div>`;
   holder.appendChild(row);
 }
@@ -1084,7 +1084,7 @@ function populateEditForm(kind, item) {
     $('effNotes').value = item.notes || '';
     setSelectValues($('effControls'), itemControls(item));
   } else if (kind === 'meeting') {
-    $('meetingTitle').value = item.title || 'ISMS Meeting';
+    $('meetingTitle').value = item.title || 'ISMS meeting';
     $('meetingDate').value = item.date || '';
     $('meetingStart').value = timeForInput(item.start_time);
     $('meetingEnd').value = timeForInput(item.end_time);
@@ -1170,7 +1170,7 @@ function renderOverview() {
       <div class="card-body">
         <div class="isms-flow-wrap">
           <svg class="isms-flow-svg" viewBox="0 0 1120 560" role="img" aria-labelledby="ismsFlowTitle ismsFlowDesc" preserveAspectRatio="xMidYMid meet">
-            <title id="ismsFlowTitle">KEEN ISMS circular navigation flow</title>
+            <title id="ismsFlowTitle">Keen ISMS circular navigation flow</title>
             <desc id="ismsFlowDesc">Clickable ISMS flow from the ISMS management section to the compliance framework, sources, evidence and diary entries, audits, and back to ISMS management.</desc>
             <defs>
               <marker id="ismsFlowArrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
@@ -1190,22 +1190,22 @@ function renderOverview() {
 
             <g class="isms-flow-section isms-flow-main">
               <rect class="isms-flow-section-bg" x="355" y="48" width="426" height="230" rx="18"></rect>
-              <text class="isms-flow-section-title" x="568" y="88" text-anchor="middle">Strategy and Planning</text>
+              <text class="isms-flow-section-title" x="568" y="88" text-anchor="middle">Strategy and planning</text>
               ${button({ label: 'Objectives', href: '/isms.html?tab=objectives', x: 384, y: 100, w: 110, h: 34 })}
               ${button({ label: 'Risks', href: '/risks.html', x: 506, y: 100, w: 138, h: 34 })}
               ${button({ label: 'PESTLE(E)', href: '/pestle.html', x: 656, y: 100, w: 96, h: 34 })}
-              ${button({ label: 'Org Chart', href: '/isms.html?tab=org', x: 384, y: 146, w: 110, h: 34 })}
-              ${button({ label: 'Interested Parties', href: '/interested_parties.html', x: 506, y: 146, w: 138, h: 34 })}
-              ${button({ label: 'Asset Matrix', href: '/isms.html?tab=assets', x: 656, y: 146, w: 96, h: 34 })}
-              ${button({ label: 'Policies & Processes', href: '/isms.html?tab=documents', x: 384, y: 196, w: 174, h: 34 })}
-              ${button({ label: 'Access Control Matrix', href: '/isms.html?tab=access', x: 570, y: 196, w: 182, h: 34, lines: ['Access Control', 'Matrix'] })}
-              ${button({ label: 'Effectiveness Measures', href: '/isms.html?tab=effectiveness', x: 384, y: 238, w: 224, h: 34, lines: ['Effectiveness', 'Measures'] })}
+              ${button({ label: 'Org chart', href: '/isms.html?tab=org', x: 384, y: 146, w: 110, h: 34 })}
+              ${button({ label: 'Interested parties', href: '/interested_parties.html', x: 506, y: 146, w: 138, h: 34 })}
+              ${button({ label: 'Asset matrix', href: '/isms.html?tab=assets', x: 656, y: 146, w: 96, h: 34 })}
+              ${button({ label: 'Policies & processes', href: '/isms.html?tab=documents', x: 384, y: 196, w: 174, h: 34 })}
+              ${button({ label: 'Access control matrix', href: '/isms.html?tab=access', x: 570, y: 196, w: 182, h: 34, lines: ['Access control', 'matrix'] })}
+              ${button({ label: 'Effectiveness measures', href: '/isms.html?tab=effectiveness', x: 384, y: 238, w: 224, h: 34, lines: ['Effectiveness', 'measures'] })}
               ${featureEnabled(me, 'swot') ? button({ label: 'SWOT', href: '/isms.html?tab=swot', x: 620, y: 238, w: 132, h: 34 }) : ''}
             </g>
 
             <g class="isms-flow-section isms-flow-compliance">
               <rect class="isms-flow-section-bg" x="96" y="155" width="218" height="178" rx="16"></rect>
-              <text class="isms-flow-section-title isms-flow-section-title-sm" x="205" y="184" text-anchor="middle">Compliance Framework</text>
+              <text class="isms-flow-section-title isms-flow-section-title-sm" x="205" y="184" text-anchor="middle">Compliance framework</text>
               <path class="isms-flow-inner-connector" marker-end="url(#ismsFlowArrow)" d="M 205 242 V 267"></path>
               ${button({ label: 'Clauses', href: '/clauses.html', x: 134, y: 206, w: 142, h: 34 })}
               ${button({ label: 'Controls', href: '/controls.html', x: 134, y: 268, w: 142, h: 34 })}
@@ -1304,9 +1304,9 @@ function renderObjectives() {
           o,
         ) => `<tr data-isms-row="objective" data-isms-id="${esc(o.id)}" data-objective-status="${esc(normalise(o, true).status)}">
     <td class="wrap"><div class="fw-semibold"><a href="${esc(objectiveHref(o))}">${esc(shorten(o.goal || o.requirement || 'Objective', 150))}</a></div><div class="small-muted">${esc(shorten(o.requirement || '', 160))}</div></td>
-    <td class="wrap">${esc(shorten(o.metric || '—', 180))}</td>
+    <td class="wrap">${esc(shorten(o.metric || '-', 180))}</td>
     <td class="isms-objectives-owner-cell">${objectiveUserPill(o.owner)}</td>
-    <td class="wrap">${esc(o.completion_target_date || '—')}</td>
+    <td class="wrap">${esc(o.completion_target_date || '-')}</td>
     <td class="isms-objectives-resources-cell">${objectiveUserBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 100))}</div></td>
     <td class="wrap">${controlBadges(o.controls)}</td><td class="wrap">${clauseBadges(o.clauses)}</td>${actionsHtml('objective', o.id, 'isms-objectives-actions')}
   </tr>`,
@@ -1327,8 +1327,8 @@ function renderDocuments() {
       .filter((item) => !documentTagFilter || (item.tags || []).includes(documentTagFilter))
       .map(
         (d) => `<tr data-isms-row="document">
-    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title || 'Document')}</a><div class="small">${(d.tags || []).map((tag) => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '—')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in KEEN</span> ' : ''}${docLink(d)}</td>
-    <td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '—')}</td><td>${controlBadges(d.controls)}</td><td>${clauseBadges(d.clauses)}</td><td class="small-muted">${esc(fmtTs(d.updated_at))}</td>${actionsHtml('document', d.id)}
+    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title || 'Document')}</a><div class="small">${(d.tags || []).map((tag) => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '-')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in Keen</span> ' : ''}${docLink(d)}</td>
+    <td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '-')}</td><td>${controlBadges(d.controls)}</td><td>${clauseBadges(d.clauses)}</td><td class="small-muted">${esc(fmtTs(d.updated_at))}</td>${actionsHtml('document', d.id)}
   </tr>`,
       )
       .join('') || emptyRow(8, 'No ISMS documents yet.');
@@ -1341,7 +1341,7 @@ function renderOrg() {
     items
       .map(
         (n) => `<tr data-isms-row="org">
-    <td class="fw-semibold">${esc(n.name || 'Org node')}</td><td>${esc(n.parent?.name || 'Root')}</td><td>${esc(n.node_type || '—')}</td><td>${userBadges(n.people)}</td><td class="wrap small-muted">${esc(shorten(n.description || '', 160) || '—')}</td><td>${controlBadges(n.controls)}</td><td>${clauseBadges(n.clauses)}</td>${actionsHtml('org', n.id)}
+    <td class="fw-semibold">${esc(n.name || 'Org node')}</td><td>${esc(n.parent?.name || 'Root')}</td><td>${esc(n.node_type || '-')}</td><td>${userBadges(n.people)}</td><td class="wrap small-muted">${esc(shorten(n.description || '', 160) || '-')}</td><td>${controlBadges(n.controls)}</td><td>${clauseBadges(n.clauses)}</td>${actionsHtml('org', n.id)}
   </tr>`,
       )
       .join('') || emptyRow(8, 'No organisation chart nodes yet.');
@@ -1349,12 +1349,12 @@ function renderOrg() {
 
 function orgDisplayName(node) {
   const people = names(node.people);
-  return `${node.name || 'Org node'}${people && people !== '—' ? ` (${people})` : ''}`;
+  return `${node.name || 'Org node'}${people && people !== '-' ? ` (${people})` : ''}`;
 }
 
 function buildOrgHierarchy(items) {
   const nodes = new Map();
-  const root = { id: 'root', name: 'ISMS Organisation', node_type: 'root', children: [] };
+  const root = { id: 'root', name: 'ISMS organisation', node_type: 'root', children: [] };
   for (const item of items || []) nodes.set(String(item.id), { ...item, children: [] });
   for (const node of nodes.values()) {
     const parentId = node.parent_id || node.parent?.id;
@@ -1401,7 +1401,7 @@ function wrapSvgLabel(text, maxChars = 26, maxLines = 2) {
 
 function orgNodeSubtitle(node) {
   const people = names(node.people);
-  return [node.node_type, people && people !== '—' ? people : ''].filter(Boolean).join(' • ');
+  return [node.node_type, people && people !== '-' ? people : ''].filter(Boolean).join(' · ');
 }
 
 function renderOrgChart() {
@@ -1526,12 +1526,12 @@ function renderAssets() {
       .map(
         (a) => `<tr data-isms-row="asset">
     <td class="fw-semibold"><a href="${esc(assetHref(a))}">${esc(a.asset || a.name || 'Asset')}</a></td>
-    <td>${esc(a.category?.name || a.category_name || '—')}</td>
-    <td>${esc(a.subcategory?.name || a.subcategory_name || '—')}</td>
+    <td>${esc(a.category?.name || a.category_name || '-')}</td>
+    <td>${esc(a.subcategory?.name || a.subcategory_name || '-')}</td>
     <td>${esc(licenseLabel(a.license_name || a.license))}</td>
-    <td>${esc(a.owner_org_node?.name || '—')}</td>
-    <td>${esc(a.register_held_by_org_node?.name || '—')}</td>
-    <td class="wrap small-muted">${esc(shorten(a.description || '', 160) || '—')}</td>
+    <td>${esc(a.owner_org_node?.name || '-')}</td>
+    <td>${esc(a.register_held_by_org_node?.name || '-')}</td>
+    <td class="wrap small-muted">${esc(shorten(a.description || '', 160) || '-')}</td>
     <td>${Number(a.risk_count || 0)}</td>
     <td>${controlBadges(a.controls)}</td><td>${clauseBadges(a.clauses)}</td>${actionsHtml('asset', a.id)}
   </tr>`,
@@ -1586,7 +1586,7 @@ function accessKeyLabel(item) {
     .join(', ');
   const approver = item?.approved_by?.username || '';
   return [
-    item?.task_action || 'Task/Action',
+    item?.task_action || 'Task/action',
     accessServiceLabel(item),
     item?.status || '',
     accounts,
@@ -1595,12 +1595,12 @@ function accessKeyLabel(item) {
     item?.notes || '',
   ]
     .filter(Boolean)
-    .join(' • ');
+    .join(' · ');
 }
 
 function accessAccountPillsHtml(entry) {
   const accounts = Array.isArray(entry?.aws_accounts) ? entry.aws_accounts : [];
-  if (!accounts.length) return '<span class="small-muted">—</span>';
+  if (!accounts.length) return '<span class="small-muted">-</span>';
   const labels = accounts.map((acct) => awsAccountLabel(acct)).filter(Boolean);
   const visible = accounts.slice(0, 2);
   const pills = visible.map((acct) => {
@@ -1619,7 +1619,7 @@ function accessAccountPillsHtml(entry) {
 
 function noteTooltipHtml(notes, label = 'Notes') {
   const text = String(notes || '').trim();
-  if (!text) return '<span class="small-muted">—</span>';
+  if (!text) return '<span class="small-muted">-</span>';
   return `<button class="btn btn-sm btn-outline-secondary isms-note-tooltip-trigger" type="button" data-bs-toggle="tooltip" data-bs-placement="left" title="${esc(text)}" aria-label="${esc(`${label}: ${text}`)}"><i class="bi bi-card-text" aria-hidden="true"></i><span class="visually-hidden">${esc(label)}</span></button>`;
 }
 
@@ -1649,7 +1649,7 @@ function renderAccessControlMatrix() {
   const head = $('accessMatrixHead');
   setCount('accessControlCount', items.length);
   if (head) {
-    head.innerHTML = `<tr><th class="text-center isms-app-head-group">Service</th><th class="text-center isms-app-head-linkage">Task/Action</th><th class="isms-access-accounts-head">Managed Hosting Accounts</th><th class="text-center isms-access-status-head">Status</th><th class="text-center isms-access-approver-head">Approved by</th>${roleColumns.map((role) => `<th class="text-center isms-access-role-heading" title="${esc(role.name || 'Role')}">${esc(role.name || 'Role')}</th>`).join('')}<th class="text-center isms-access-notes-head" title="Notes">Notes</th><th class="text-center no-print isms-access-actions-head">Actions</th></tr>`;
+    head.innerHTML = `<tr><th class="text-center isms-app-head-group">Service</th><th class="text-center isms-app-head-linkage">Task/action</th><th class="isms-access-accounts-head">Managed hosting accounts</th><th class="text-center isms-access-status-head">Status</th><th class="text-center isms-access-approver-head">Approved by</th>${roleColumns.map((role) => `<th class="text-center isms-access-role-heading" title="${esc(role.name || 'Role')}">${esc(role.name || 'Role')}</th>`).join('')}<th class="text-center isms-access-notes-head" title="Notes">Notes</th><th class="text-center no-print isms-access-actions-head">Actions</th></tr>`;
   }
   if (!items.length) {
     rows.access.innerHTML = emptyRow(roleColumns.length + 7, 'No access control matrix rows yet.');
@@ -1680,10 +1680,10 @@ function renderAccessControlMatrix() {
           const approverText = entry.approved_by?.username || '';
           return `<tr data-isms-row="access" data-isms-filter-text="${esc(accessKeyLabel(entry))}">
       ${serviceCell}
-      <td class="wrap isms-app-key-linkage" data-sort="${esc(entry.task_action || '')}"><div class="fw-semibold"><a href="${esc(accessControlHref(entry))}">${esc(entry.task_action || 'Task/Action')}</a></div></td>
+      <td class="wrap isms-app-key-linkage" data-sort="${esc(entry.task_action || '')}"><div class="fw-semibold"><a href="${esc(accessControlHref(entry))}">${esc(entry.task_action || 'Task/action')}</a></div></td>
       <td class="wrap isms-access-accounts" data-sort="${esc((entry.aws_accounts || []).map((acct) => awsAccountLabel(acct)).join(', '))}">${accessAccountPillsHtml(entry)}</td>
       <td class="isms-app-cell isms-access-status ${accessStatusClass(entry.status)} text-center" data-sort="${esc(entry.status || 'Pending Approval')}"><div class="fw-semibold">${esc(entry.status || 'Pending Approval')}</div></td>
-      <td class="wrap isms-access-approver" data-sort="${esc(approverText)}">${entry.approved_by ? userPillHtml(entry.approved_by, { className: 'isms-access-approver-pill' }) : '<span class="small-muted">—</span>'}</td>
+      <td class="wrap isms-access-approver" data-sort="${esc(approverText)}">${entry.approved_by ? userPillHtml(entry.approved_by, { className: 'isms-access-approver-pill' }) : '<span class="small-muted">-</span>'}</td>
       ${roleColumns.map((role) => accessRoleCellHtml(entry, role.id)).join('')}
       <td class="text-center small-muted isms-access-notes" data-sort="${esc(entry.notes || '')}">${noteTooltipHtml(entry.notes, 'Access row notes')}</td>
       ${actionsHtml('access', entry.id, 'isms-access-actions')}
@@ -1721,7 +1721,7 @@ function metricValueHtml(entry, measure) {
     ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type || 'source')}</a>`
     : esc(entry.source_title || entry.source_type || 'other');
   const eventLink = entry.source_event_id
-    ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>`
+    ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open Keen event">${esc(entry.source_event_id)}</a>`
     : '';
   const valueHtml = effectivenessMetricValueHtml(entry, measure, {
     href: entry.id ? effectivenessMetricHref(entry) : '',
@@ -1775,7 +1775,7 @@ function effectivenessFilterText(item) {
     ...(item.controls || []).map((c) => `${c.ref || ''} ${c.title || ''}`),
   ]
     .filter(Boolean)
-    .join(' • ');
+    .join(' · ');
 }
 
 function renderEffectivenessMeasures() {
@@ -1791,7 +1791,7 @@ function renderEffectivenessMeasures() {
     <td class="wrap"><div class="fw-semibold"><a href="${esc(effectivenessMeasureHref(item))}">${esc(shorten(item.summary || 'Effectiveness measure', 140))}</a></div>${item.description ? `<div class="small-muted whitespace-pre-wrap mt-1">${esc(shorten(item.description, 260))}</div>` : ''}${item.metric_key ? `<div class="small-muted mt-1"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
     <td class="wrap">${measureSourceHtml(item)}</td>
     <td class="wrap">${metricValueHtml(item.latest_entry, item)}${metricHistoryLinkHtml(item)}</td>
-    <td>${esc(item.target_display || '—')}</td>
+    <td>${esc(item.target_display || '-')}</td>
     <td>${userPillHtml(item.owner)}</td>
     <td class="wrap">${controlBadges(item.controls)}</td>
     ${effectivenessActionsHtml(item)}
@@ -1926,9 +1926,9 @@ function renderMeetings() {
                   : '',
             )
             .filter(Boolean)
-            .join('<br>') || '<span class="small-muted">—</span>';
+            .join('<br>') || '<span class="small-muted">-</span>';
         const href = meetingHref(m);
-        return `<tr data-isms-row="meeting"><td>${esc(m.date || '—')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('–') || '—')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls)}</td><td>${clauseBadges(m.clauses)}</td>${actionsHtml('meeting', m.id)}</tr>`;
+        return `<tr data-isms-row="meeting"><td>${esc(m.date || '-')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('-') || '-')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls)}</td><td>${clauseBadges(m.clauses)}</td>${actionsHtml('meeting', m.id)}</tr>`;
       })
       .join('') || emptyRow(9, 'No meeting minutes yet.');
 }
@@ -2167,11 +2167,11 @@ function renderMetaSummary() {
   ]
     .filter(([, , feature]) => featureEnabled(me, feature))
     .map(([key, label]) => `${c[key] || 0} ${label}`);
-  metaEl.textContent = [data.framework || meta.framework || framework, ...counts].join(' • ');
+  metaEl.textContent = [data.framework || meta.framework || framework, ...counts].join(' · ');
 }
 
 function setSectionLoading(section) {
-  const loading = 'Loading this ISMS section…';
+  const loading = 'Loading this ISMS section';
   if (section === 'objectives' && rows.objectives) rows.objectives.innerHTML = emptyRow(9, loading);
   if (section === 'documents' && rows.documents) rows.documents.innerHTML = emptyRow(8, loading);
   if (section === 'org' && rows.org) rows.org.innerHTML = emptyRow(8, loading);
@@ -2257,7 +2257,7 @@ async function loadSwotOverview() {
     );
     renderBoard($('swotQuadrants'), result.items, { view: 'quadrant', framework });
     $('swotSummary').textContent =
-      `${result.total ? swotOffset + 1 : 0}–${swotOffset + result.items.length} of ${result.total} items.`;
+      `${result.total ? swotOffset + 1 : 0}-${swotOffset + result.items.length} of ${result.total} items.`;
     $('swotPrevious').disabled = swotOffset === 0;
     $('swotNext').disabled = swotOffset + result.items.length >= result.total;
   } catch (error) {
@@ -2577,7 +2577,7 @@ onIsmsSubmit('meetingForm', async (ev) => {
   await saveIsms(
     'meeting',
     {
-      title: $('meetingTitle').value || 'ISMS Meeting',
+      title: $('meetingTitle').value || 'ISMS meeting',
       date: $('meetingDate').value,
       start_time: $('meetingStart').value || null,
       end_time: $('meetingEnd').value || null,

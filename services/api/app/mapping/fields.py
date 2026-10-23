@@ -33,7 +33,7 @@ def validate_fields(items):
             or not 1 <= len(path) <= 8
             or any(not isinstance(k, str) or not k or len(k) > 256 for k in path)
         ):
-            raise ValueError("Field path must contain 1–8 literal JSON keys")
+            raise ValueError("Field path must contain 1-8 literal JSON keys")
         if item.get("scope", "payload") not in ("payload", "event"):
             raise ValueError("Unsupported field scope")
         if item.get("scope") == "event" and path != ["summary"]:

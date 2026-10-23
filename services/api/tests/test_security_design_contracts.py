@@ -1129,11 +1129,11 @@ def test_assembled_remote_user_uses_direct_peer_and_rejects_duplicates(
         client.close()
 
 
-@pytest.mark.parametrize("signed_in_by", ["trusted proxy", "KEEN session"])
+@pytest.mark.parametrize("signed_in_by", ["trusted proxy", "Keen session"])
 def test_a_signed_in_browser_without_a_csrf_token_receives_one_for_its_writes(
     production_client, contract_db, monkeypatch, signed_in_by
 ):
-    """Trusted-proxy browsers never see a KEEN sign-in response, and a browser
+    """Trusted-proxy browsers never see a Keen sign-in response, and a browser
     may lose its token before its session ends; both still need to write."""
     from app import main
     from app.db.session import get_db

@@ -100,7 +100,7 @@ async function loadClausePestle() {
   if (!featureEnabled(me, 'pestle')) return;
   if (!clausePestleRows || !id) return;
   clausePestleRows.innerHTML =
-    '<tr><td colspan="6" class="p-4 small-muted">Loading PESTLE(E) relevance…</td></tr>';
+    '<tr><td colspan="6" class="p-4 small-muted">Loading PESTLE(E) relevance</td></tr>';
   try {
     const data = await apiGet(`/api/v1/clauses/${encodeURIComponent(id)}/pestle`);
     const items = data?.items || [];
@@ -120,7 +120,7 @@ async function loadClausePestle() {
         <td><a class="fw-semibold" href="${esc(pestleHref(it.id))}">${esc(it.item || '')}</a></td>
         <td>${pestleRelevanceBadge(row.relevance)}</td>
         <td>${pestleRelevanceBadge(it.overall_relevance)}</td>
-        <td class="wrap small-muted">${esc(it.rationale || '—')}</td>
+        <td class="wrap small-muted">${esc(it.rationale || '-')}</td>
       </tr>`;
       })
       .join('');
@@ -153,7 +153,7 @@ function _ismsEntityRows(data) {
       '/isms.html?tab=objectives',
     ],
     ['Documents', data.documents, (x) => x.title || 'Document', '/isms.html?tab=documents'],
-    ['Organisation Chart', data.org_nodes, (x) => x.name || 'Org node', '/isms.html?tab=org'],
+    ['Organisation chart', data.org_nodes, (x) => x.name || 'Org node', '/isms.html?tab=org'],
     ['Assets', data.assets, (x) => x.asset || 'Asset', '/isms.html?tab=assets'],
     ['Meetings', data.meetings, (x) => x.title || 'Meeting', '/isms.html?tab=meetings'],
   ];
@@ -178,7 +178,7 @@ async function loadClauseIsms({ force = false } = {}) {
     return;
   }
   if (ismsLoaded && !force) return;
-  clauseIsmsView.innerHTML = '<span class="small-muted">Loading ISMS references…</span>';
+  clauseIsmsView.innerHTML = '<span class="small-muted">Loading ISMS references</span>';
   try {
     const data = await apiGet(
       `/api/v1/clauses/${encodeURIComponent(id)}/isms?framework=${encodeURIComponent(clause?.framework || framework)}`,
@@ -261,7 +261,7 @@ function evidenceMappingRow(item = {}) {
       </div>
       <div class="col-12 col-lg-7">
         <label class="form-label small-muted mb-1">URL</label>
-        <input class="form-control form-control-sm clause-evidence-url" type="text" value="${esc(url)}" placeholder="https://… or /event.html?id=…">
+        <input class="form-control form-control-sm clause-evidence-url" type="text" value="${esc(url)}" placeholder="https:// or /event.html?id=">
       </div>
       <div class="col-12 col-lg-1 d-grid">
         <button class="btn btn-sm btn-outline-secondary remove-clause-evidence-url" type="button" title="Remove evidence mapping" aria-label="Remove evidence mapping"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
@@ -318,7 +318,7 @@ function renderClauseHeader() {
   clauseTitle.textContent = `${clause?.ref || ''}  ${clause?.title || ''}`.trim() || 'Clause';
   const parts = [clause?.framework || framework];
   if (clause?.parent_ref) parts.push(`parent ${clause.parent_ref}`);
-  clauseMeta.textContent = parts.filter(Boolean).join(' • ') || '—';
+  clauseMeta.textContent = parts.filter(Boolean).join(' · ') || '-';
   if (clausesBreadcrumb)
     clausesBreadcrumb.href = withFramework('/clauses.html', clause?.framework || framework);
 
@@ -454,7 +454,7 @@ async function load() {
     return;
   }
 
-  showTableLoading(rowsEl, 4, 'Loading linked controls…');
+  showTableLoading(rowsEl, 4, 'Loading linked controls');
   try {
     await reloadLinkedControls();
     await loadClauseChangelog();

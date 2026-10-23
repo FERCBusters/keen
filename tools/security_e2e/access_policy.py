@@ -1,4 +1,4 @@
-"""Who may call each KEEN API operation.
+"""Who may call each Keen API operation.
 
 Every HTTP operation the API serves appears here, keyed by method and route
 pattern. A new route fails both the backend inventory test
@@ -124,6 +124,9 @@ OBJECT_RULES = {
     "GET /v1/stories/{story_id}": (
         "Each item is shown only when the account can read the referenced record; "
         "other items appear as placeholders without the record's identifier."
+    ),
+    "GET /v1/stories/related/{kind}/{entity_id}": (
+        "The referenced record must be readable by the account, as on its own page."
     ),
     "PATCH /v1/stories/{story_id}": "stories.manage can edit stories its holder created.",
     "DELETE /v1/stories/{story_id}": "stories.manage can delete stories its holder created.",
@@ -385,6 +388,7 @@ POLICY = {
     "GET /v1/stories": STORIES_READ,
     "POST /v1/stories": STORIES_MANAGE,
     "GET /v1/stories/choices/{kind}": STORIES_MANAGE,
+    "GET /v1/stories/related/{kind}/{entity_id}": STORIES_READ,
     "GET /v1/stories/{story_id}": STORIES_READ,
     "PATCH /v1/stories/{story_id}": STORIES_MANAGE,
     "DELETE /v1/stories/{story_id}": STORIES_MANAGE,

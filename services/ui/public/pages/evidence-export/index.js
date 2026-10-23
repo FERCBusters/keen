@@ -204,6 +204,10 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       const clone = n.cloneNode(true);
       // Remove UI-only elements (buttons, nav links, etc.)
       clone.querySelectorAll('.no-print').forEach((el) => el.remove());
+      // Collapsed sections, such as the raw pointer, are exported in full.
+      for (const details of [clone, ...clone.querySelectorAll('details')]) {
+        if (details.tagName === 'DETAILS') details.open = true;
+      }
       wrap.appendChild(clone);
     }
 
@@ -227,9 +231,11 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     const evidenceCard = document.getElementById('evidenceCard');
     const normalizedCard = document.getElementById('normalized')?.closest('.card');
     const rawCard = document.getElementById('raw')?.closest('.card');
+    // Questions sit on their own tab and are exported with the snapshot.
+    const questionsCard = document.getElementById('questionsCard');
 
     // Capture everything as one continuous flow to avoid forcing a page break after Artifacts.
-    const nodes = [topRow, evidenceCard, normalizedCard, rawCard].filter(Boolean);
+    const nodes = [topRow, evidenceCard, questionsCard, normalizedCard, rawCard].filter(Boolean);
     const segments = nodes.length ? [nodes] : [];
 
     const allPages = [];
@@ -591,14 +597,14 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     const prevLabel = btn ? btn.textContent : '';
     if (btn) {
       btn.disabled = true;
-      btn.textContent = 'Preparing ZIP…';
+      btn.textContent = 'Preparing ZIP';
     }
 
     try {
       const files = [];
 
       // Include a PDF evidence report alongside the raw artifacts.
-      toast(status, 'Rendering evidence PDF…', 'info');
+      toast(status, 'Rendering evidence PDF', 'info');
       const pdfBlob = await buildEvidencePdfBlob(e, _lastPdfOrientation || 'portrait');
       if (pdfBlob.size > MAX_ZIP_EXPORT_BYTES)
         throw new Error('Evidence PDF exceeds the 100 MiB ZIP export limit.');
@@ -610,13 +616,13 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         mtime: new Date(),
       });
 
-      toast(status, `Collecting ${arts.length} artifact(s)…`, 'info');
+      toast(status, `Collecting ${arts.length} artifact(s)`, 'info');
       const seenNames = new Map();
 
       for (let i = 0; i < arts.length; i++) {
         const a = arts[i];
         const url = _sampleExportUrl(`/api/v1/artifacts/${encodeURIComponent(a.id)}/download`);
-        toast(status, `Downloading ${i + 1}/${arts.length}…`, 'info');
+        toast(status, `Downloading ${i + 1}/${arts.length}`, 'info');
 
         const res = await fetch(url, { credentials: 'include' });
         if (!res.ok) {
@@ -663,7 +669,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         files.push({ name, data: buf, mtime });
       }
 
-      toast(status, 'Building ZIP…', 'info');
+      toast(status, 'Building ZIP', 'info');
       const zipBlob = buildZipStore(files);
 
       const zipName = `${zipStem}.zip`;
@@ -751,7 +757,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     const prevLabel = btn ? btn.textContent : '';
     if (btn) {
       btn.disabled = true;
-      btn.textContent = 'Preparing PDF…';
+      btn.textContent = 'Preparing PDF';
     }
 
     try {
@@ -761,7 +767,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         return;
       }
 
-      toast(status, 'Rendering evidence PDF…', 'info');
+      toast(status, 'Rendering evidence PDF', 'info');
       const pdfBlob = await buildEvidencePdfBlob(e, orientation);
       _triggerDownload(pdfBlob, evidenceFileStem(e) + '.pdf');
 

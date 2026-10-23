@@ -165,11 +165,11 @@ def graph_control_source(
     breakdown: str | None = None,
     db: Session,
 ):
-    """Graph for visualisation: Sources -> Controls.
+    """Graph for visualisation: sources × controls.
 
-    Counts are **distinct events**, not number of mappings. One event can map to
-    multiple controls, so counting mappings would inflate totals. With a
-    breakdown, each source node is split by that event field.
+    Counts are **distinct events**. One event can map to multiple controls, so a
+    count of mappings would inflate totals. With a breakdown, each source node
+    is split by that event field.
     """
 
     user = context.actor
@@ -596,7 +596,7 @@ def graph_risk_control(
             if risk_id not in nodes:
                 threat_label = (risk.threat_summary or "").strip()
                 label = (
-                    asset.name if not threat_label else f"{asset.name} — {threat_label}"
+                    asset.name if not threat_label else f"{asset.name} - {threat_label}"
                 )
                 nodes[risk_id] = {
                     "id": risk_id,

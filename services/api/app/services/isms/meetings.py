@@ -40,7 +40,7 @@ def create_meeting(
         raise DomainError(status_code=400, detail="date is required")
     row = IsmsMeeting(
         title=_clean_text(
-            payload.title or "ISMS Meeting", max_len=256, required=True, label="title"
+            payload.title or "ISMS meeting", max_len=256, required=True, label="title"
         ),
         date=payload.date,
         start_time=payload.start_time,

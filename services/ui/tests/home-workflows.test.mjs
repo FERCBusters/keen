@@ -165,8 +165,8 @@ test('the control tree drills from sections into a control and its connected rec
   assert.equal(evidence.querySelector('a').getAttribute('rel'), 'noopener noreferrer');
   assert.match(evidence.textContent, /2026-01-02T03:04:05Z · okta/);
   const party = canvas.querySelector('[data-kind="interested_party"]');
-  assert.match(party.textContent, /Customers – External/);
-  assert.match(party.textContent, /2 linked controls • 0 communications/);
+  assert.match(party.textContent, /Customers - External/);
+  assert.match(party.textContent, /2 linked controls · 0 communications/);
   assert.match(
     canvas.querySelector('[data-kind="effectiveness_measure"]').textContent,
     /key: patch_days · target < 7 days/,
@@ -201,7 +201,7 @@ test('zoom out returns through the stack and Home restores the overview', async 
   await settle(() => ui.zoomCard('control', 'c1'));
   assert.match(ui.canvas().textContent, /Risk scenario/);
   assert.match(ui.canvas().textContent, /Out of scope/);
-  assert.match(ui.el('crumbs').textContent, /Risk register.*Database – Disclosure/);
+  assert.match(ui.el('crumbs').textContent, /Risk register.*Database - Disclosure/);
   ui.zoomCard('control', 'c1').click();
   await settle(() => ui.canvas().textContent.includes('Control not found.'));
 
@@ -321,7 +321,7 @@ test('PESTLE(E), Interested Party and audit layers render their relationships', 
   const processes = [...ui.canvas().querySelectorAll('[data-kind="business_process"]')];
   assert.deepEqual(
     processes.map((p) => p.querySelector('.home-node-meta').textContent),
-    ['Medium', '—'],
+    ['Medium', '-'],
   );
   // Business processes are context-only leaves: no zoom and no link.
   assert.equal(processes[0].querySelector('.js-zoom, a'), null);
@@ -334,7 +334,7 @@ test('PESTLE(E), Interested Party and audit layers render their relationships', 
   await goHome(ui);
   ui.document.querySelector('[data-kind="interested_parties"] .js-entry-zoom').click();
   await settle(() => ui.zoomCard('interested_party', 'i1'));
-  assert.match(ui.canvas().textContent, /Regulator – Statutory/);
+  assert.match(ui.canvas().textContent, /Regulator - Statutory/);
   ui.zoomCard('interested_party', 'i1').click();
   await settle(() => /Communications/.test(ui.canvas().textContent));
   const comms = ui.canvas().querySelector('[data-kind="communication"]');
@@ -388,7 +388,7 @@ test('effectiveness measures lead to metric sources and the source layer', async
           { id: 'me3', value_display: '6 days', source_type: 'keen-agent' },
         ],
       },
-      '/api/v1/sources': listOf([{ source: 'keen-agent', label: 'KEEN agents', event_count: 3 }]),
+      '/api/v1/sources': listOf([{ source: 'keen-agent', label: 'Keen agents', event_count: 3 }]),
       '/api/v1/events': (u) => {
         assert.equal(u.searchParams.get('source'), 'keen-agent');
         return listOf([{ id: 'e1', summary: 'Patch report', source: 'keen-agent' }]);
@@ -403,7 +403,7 @@ test('effectiveness measures lead to metric sources and the source layer', async
   ui.zoomCard('effectiveness_measure', 'm1').click();
   await settle(() => /Recent metric entries/.test(ui.canvas().textContent));
   assert.match(ui.canvas().querySelector('.home-node-header').textContent, /Target < 7 days/);
-  // Sources are de-duplicated and the generic "other" source type is not a KEEN source.
+  // Sources are de-duplicated and the generic "other" source type is not a Keen source.
   const sources = [
     ...ui
       .canvas()
@@ -432,7 +432,7 @@ test('effectiveness measures lead to metric sources and the source layer', async
 
   ui.zoomCard('source', 'keen-agent').click();
   await settle(() => /Events ingested from this source/.test(ui.canvas().textContent));
-  assert.match(ui.el('crumbs').textContent, /Patch latency.*KEEN agents/);
+  assert.match(ui.el('crumbs').textContent, /Patch latency.*Keen agents/);
   assert.match(ui.canvas().textContent, /Patch report/);
   assert.ok(ui.zoomCard('effectiveness_measure', 'm1'));
   // The source catalogue is global; the per-source queries carry the framework.
@@ -480,7 +480,7 @@ for (const [entry, kind, id, path, message] of [
     'interested_party',
     'i9',
     '/api/v1/interested-parties',
-    'Interested Party not found, or you do not have permission to view it.',
+    'Interested party not found, or you do not have permission to view it.',
   ],
   [
     'audits',
@@ -494,7 +494,7 @@ for (const [entry, kind, id, path, message] of [
     'effectiveness_measure',
     'm9',
     '/api/v1/isms/effectiveness-measures',
-    'Effectiveness Measure not found, or you do not have permission to view it.',
+    'Effectiveness measure not found, or you do not have permission to view it.',
   ],
   ['clauses', 'clause', 'cl9', '/api/v1/clauses', 'Clause not found.'],
 ])
@@ -554,13 +554,13 @@ test('large sections page locally and keep their page when revisited', async (t)
   ui.document.querySelector('[data-kind="controls"] .js-entry-zoom').click();
   await settle(() => ui.zoomCard('control', 'c0'));
   const summary = () => ui.canvas().querySelector('.home-pagination .small-muted').textContent;
-  assert.equal(summary(), 'Showing 1–100 of 150');
+  assert.equal(summary(), 'Showing 1-100 of 150');
   assert.equal(ui.canvas().querySelectorAll('.home-node-card').length, 100);
   const [prev, next] = ui.canvas().querySelectorAll('.js-section-page');
   assert.equal(prev.disabled, true);
   next.click();
   await settle(() => ui.zoomCard('control', 'c149'));
-  assert.equal(summary(), 'Showing 101–150 of 150');
+  assert.equal(summary(), 'Showing 101-150 of 150');
   assert.equal(ui.canvas().querySelectorAll('.home-node-card').length, 50);
   assert.equal(ui.canvas().querySelectorAll('.js-section-page')[1].disabled, true);
   ui.canvas().querySelectorAll('.js-section-page')[0].click();
@@ -583,7 +583,7 @@ test('collections page through the server with offsets and step back from an emp
   });
   ui.document.querySelector('[data-kind="risks"] .js-entry-zoom').click();
   await settle(() => ui.zoomCard('risk', 'r0'));
-  assert.match(ui.canvas().querySelector('.home-pagination').textContent, /Showing 1–100 of 150/);
+  assert.match(ui.canvas().querySelector('.home-pagination').textContent, /Showing 1-100 of 150/);
   const next = ui.canvas().querySelector('.js-collection-page[data-pager="next"]');
   assert.equal(next.dataset.offset, '100');
   next.click();
@@ -668,7 +668,7 @@ test('overview without coverage or structure points to the next step', async (t)
     routes: { '/api/v1/home': { control_count: 4, clause_count: 0, attention: [] } },
   });
   assert.match(noCoverage.el('homeKpis').textContent, /4 controls/);
-  assert.match(noCoverage.el('homeKpis').textContent, /Explore this framework’s controls/);
+  assert.match(noCoverage.el('homeKpis').textContent, /Explore this framework's controls/);
   assert.equal(noCoverage.el('homeKpis').querySelector('[role="progressbar"]'), null);
   assert.match(noCoverage.el('homeAttention').textContent, /No attention items found/);
 
@@ -1000,6 +1000,6 @@ test('risk and interested-party cards fall back to generic titles when fields ar
     [...ui.canvas().querySelectorAll('[data-kind="interested_party"] .home-node-title')].map(
       (n) => n.textContent,
     ),
-    ['Regulator – Statutory', 'Interested Party'],
+    ['Regulator - Statutory', 'Interested party'],
   );
 });

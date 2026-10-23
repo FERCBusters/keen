@@ -504,7 +504,7 @@ test('the access dialog loads groups and permissions and saves the selection', a
     [...el('userAccessPerms').options].map((o) => [o.textContent, o.selected]),
     [
       ['admin.audit_trail', true],
-      ['audits.view — View audits', false],
+      ['audits.view - View audits', false],
     ],
   );
   assert.equal(el('userAccessEffective').textContent, 'audits.view, admin.audit_trail');
@@ -538,7 +538,7 @@ test('groups open into an editable detail with members and permissions', async (
   const rows = [...el('groupsRows').querySelectorAll('tr')];
   assert.deepEqual(
     rows.map((r) => r.textContent.replace(/\s+/g, ' ').trim()),
-    ['Auditors Normal 2 3', 'Admins — 1 0'],
+    ['Auditors Normal 2 3', 'Admins - 1 0'],
   );
   rows[0].click();
   await settle(() => el('groupName').value === 'Auditors');
@@ -755,10 +755,10 @@ test('the entity changelog pages and filters', async (t) => {
   const { el, ui, calls } = await admin(t);
   const changelog = () => calls('GET', '/api/v1/admin/entity-changelog');
   assert.equal(changelog()[0].url, '/api/v1/admin/entity-changelog?limit=25&offset=0');
-  assert.equal(el('entityChangeMeta').textContent, 'Showing 1–25 of 30');
+  assert.equal(el('entityChangeMeta').textContent, 'Showing 1-25 of 30');
   assert.equal(el('entityChangePrev').disabled, true);
   el('entityChangeNext').click();
-  await settle(() => el('entityChangeMeta').textContent === 'Showing 26–30 of 30');
+  await settle(() => el('entityChangeMeta').textContent === 'Showing 26-30 of 30');
   assert.equal(el('entityChangeNext').disabled, true);
   el('entityChangePrev').click();
   await settle(() => changelog().at(-1).url.endsWith('offset=0'));
@@ -785,7 +785,7 @@ test('a changelog failure is reported', async (t) => {
   await settle(
     () => el('status').textContent === 'Failed to load entity changelog: Error: Changelog offline',
   );
-  assert.equal(el('entityChangeMeta').textContent, 'Showing 0–0 of 0');
+  assert.equal(el('entityChangeMeta').textContent, 'Showing 0-0 of 0');
   assert.equal(el('entityChangeNext').disabled, true);
 });
 
@@ -799,12 +799,12 @@ test('the audit trail renders requests as text and pages through results', async
     /POST[\s\S]*\/api\/v1\/users\?q=<b>x<\/b>[\s\S]*201[\s\S]*12[\s\S]*192\.0\.2\.1/,
   );
   assert.match(rows[1].textContent, /-[\s\S]*GET[\s\S]*\/api\/v1\/me\s[\s\S]*-[\s\S]*-/);
-  assert.equal(el('auditMeta').textContent, 'Showing 1–50 of 120');
+  assert.equal(el('auditMeta').textContent, 'Showing 1-50 of 120');
   const audit = () => calls('GET', '/api/v1/admin/audit');
   el('auditNext').click();
-  await settle(() => el('auditMeta').textContent === 'Showing 51–100 of 120');
+  await settle(() => el('auditMeta').textContent === 'Showing 51-100 of 120');
   el('auditNext').click();
-  await settle(() => el('auditMeta').textContent === 'Showing 101–120 of 120');
+  await settle(() => el('auditMeta').textContent === 'Showing 101-120 of 120');
   assert.equal(el('auditNext').disabled, true);
   el('auditPrev').click();
   await settle(() => audit().at(-1).url.endsWith('offset=50'));
@@ -862,7 +862,7 @@ test('an audit trail failure is reported', async (t) => {
   const { el } = await admin(t, { fail: { audit: true } });
   await settle(() => el('status').textContent === 'Failed to load audit: Error: Audit offline');
   assert.equal(el('out').textContent, 'Error: Audit offline');
-  assert.equal(el('auditMeta').textContent, 'Showing 0–0 of 0');
+  assert.equal(el('auditMeta').textContent, 'Showing 0-0 of 0');
 });
 
 test('audit-only users see just the audit tab and no admin data', async (t) => {

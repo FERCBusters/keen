@@ -1,6 +1,6 @@
 """Collection settings and evidence definitions through the assembled application.
 
-Administrators decide what KEEN collects, under which connection, and how the
+Administrators decide what Keen collects, under which connection, and how the
 matched events map to controls. The tests cover the administrator boundary,
 revision checks, the exclusion of credentials from editable documents, and the
 single transaction that publishes a collection input with its mapping rule.
@@ -262,7 +262,7 @@ def test_credentials_never_enter_collection_documents(defs, document, path):
     assert defs.versions()["jenkins"] == 0
 
 
-# Every credential a source connection can hold, under the name KEEN reads it
+# Every credential a source connection can hold, under the name Keen reads it
 # by, including the names each built-in source uses today.
 CONNECTION_CREDENTIALS = sorted(
     {name for _, secret in CONNECTION_FIELDS.values() for name in secret.split()}

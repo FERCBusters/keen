@@ -207,7 +207,7 @@ test('the summary and control/clause matrices show applicability with safe links
   const ui = await soaPage(t);
   assert.equal(
     ui.el('soaMeta').textContent,
-    'A • 2 controls • 2 clauses • 2 CIA risks • 1 PESTLE(E) items • 3 business processes • 1 Interested Parties • 1 ISMS objectives • 3 ISMS documents • 2 effectiveness measures • 1 assets',
+    'A · 2 controls · 2 clauses · 2 CIA risks · 1 PESTLE(E) items · 3 business processes · 1 interested parties · 1 ISMS objectives · 3 ISMS documents · 2 effectiveness measures · 1 assets',
   );
   assert.equal(ui.document.querySelector('main img'), null);
   assert.equal(ui.window.pwned, undefined);
@@ -228,7 +228,7 @@ test('the summary and control/clause matrices show applicability with safe links
   );
   assert.equal(c1.querySelector('.badge').textContent, 'in');
   assert.equal(c2.querySelectorAll('td')[2].textContent, 'out');
-  assert.equal(c2.querySelectorAll('td')[3].textContent, '—');
+  assert.equal(c2.querySelectorAll('td')[3].textContent, '-');
   assert.equal(
     c2.querySelectorAll('td')[4].firstElementChild.getAttribute('title'),
     'Not applicable',
@@ -239,7 +239,7 @@ test('the summary and control/clause matrices show applicability with safe links
   // Only HTTP(S) evidence links are rendered.
   assert.equal(evidence.length, 1);
   assert.equal(evidence[0].getAttribute('href'), 'https://docs.example.test/minutes');
-  assert.equal(k2.querySelectorAll('td')[2].textContent, '—');
+  assert.equal(k2.querySelectorAll('td')[2].textContent, '-');
   assert.equal(ui.el('clausesHead').querySelectorAll('th').length, 5);
 
   filter(ui, 'controlsFilter', 'LAW');
@@ -257,7 +257,7 @@ test('the summary and control/clause matrices show applicability with safe links
 test('risks, PESTLE(E) and Interested Parties render scores, relevance and filters', async (t) => {
   const ui = await soaPage(t);
   const [r1, r2] = ui.el('risksRows').querySelectorAll('tr');
-  assert.equal(r1.querySelector('a').textContent, 'Payroll DB – Ransomware');
+  assert.equal(r1.querySelector('a').textContent, 'Payroll DB - Ransomware');
   assert.equal(r2.querySelector('a').textContent, 'Risk');
   assert.deepEqual(
     [...r1.querySelectorAll('td.text-end .badge')].map((b) => [b.textContent, b.className]),
@@ -269,7 +269,10 @@ test('risks, PESTLE(E) and Interested Parties render scores, relevance and filte
   assert.equal(r2.querySelector('td.text-end .badge').className, 'badge text-bg-success');
   assert.match(r1.textContent, /dana/);
   assert.equal(r1.querySelector('a.badge').getAttribute('href'), '/control.html?id=c1&framework=A');
-  assert.match(r2.textContent, /—[\s\S]*—[\s\S]*—/);
+  assert.deepEqual(
+    [...r2.cells].slice(1, 4).map((c) => c.textContent.replace(/\s+/g, ' ').trim()),
+    ['-', '-', '-'],
+  );
   filter(ui, 'risksFilter', 'databases');
   assert.equal(rowTexts(ui, 'risksRows').length, 1);
   filter(ui, 'risksFilter', 'a.5.1');
@@ -293,7 +296,7 @@ test('risks, PESTLE(E) and Interested Parties render scores, relevance and filte
     [...processes].map((b) => [b.textContent, b.getAttribute('title')]),
     [
       ['Payroll', 'Medium'],
-      ['Business process', '—'],
+      ['Business process', '-'],
     ],
   );
   const clauseBadges = pestle[0].querySelectorAll('td')[6].querySelectorAll('a');
@@ -318,19 +321,19 @@ test('risks, PESTLE(E) and Interested Parties render scores, relevance and filte
   );
   assert.match(
     ip1.querySelectorAll('td')[4].textContent,
-    /Breach • 72h • CommissionerAudit • Annually • Board/,
+    /Breach · 72h · CommissionerAudit · Annually · Board/,
   );
   // Methods are de-duplicated across communications.
   assert.deepEqual(
     [...ip1.querySelectorAll('td')[5].querySelectorAll('.badge')].map((b) => b.textContent),
     ['Email', 'Portal'],
   );
-  assert.equal(ip2.querySelector('a').textContent, 'Interested Party');
-  assert.equal(rowTexts(ui, 'interestedPartiesRows')[1], 'Interested Party — — — — —');
+  assert.equal(ip2.querySelector('a').textContent, 'Interested party');
+  assert.equal(rowTexts(ui, 'interestedPartiesRows')[1], 'Interested party - - - - -');
   filter(ui, 'interestedPartiesFilter', 'portal');
   assert.equal(rowTexts(ui, 'interestedPartiesRows').length, 1);
   filter(ui, 'interestedPartiesFilter', 'zzz');
-  assert.match(ui.el('interestedPartiesRows').textContent, /No Interested Parties match/);
+  assert.match(ui.el('interestedPartiesRows').textContent, /No interested parties match/);
 });
 
 test('ISMS objectives, documents, measures, organisation and assets are listed', async (t) => {
@@ -368,7 +371,7 @@ test('ISMS objectives, documents, measures, organisation and assets are listed',
   );
   assert.equal(docLink(docs[1]).textContent, HOSTILE + 'plan.pdf');
   assert.equal(docLink(docs[2]).querySelector('a').getAttribute('href'), '#');
-  assert.equal(docLink(docs[3]).textContent, '—');
+  assert.equal(docLink(docs[3]).textContent, '-');
   assert.equal(docs[3].querySelector('td').textContent, 'Document');
   filter(ui, 'ismsDocumentsFilter', 'top level');
   assert.equal(rowTexts(ui, 'ismsDocumentsRows').length, 1);
@@ -407,7 +410,7 @@ test('ISMS objectives, documents, measures, organisation and assets are listed',
   assert.match(orgs[1], /^Org node Root/);
   const assets = rowTexts(ui, 'ismsAssetsRows');
   assert.match(assets[0], /^Laptop fleet Hardware Laptops Owned IT Finance/);
-  assert.match(assets[1], /^Named asset — — — — —/);
+  assert.match(assets[1], /^Named asset - - - - -/);
   assert.match(assets[2], /^Asset/);
 });
 
@@ -421,12 +424,12 @@ test('sections the user cannot view explain the restriction', async (t) => {
     counts: undefined,
   };
   const ui = await soaPage(t, { data });
-  assert.match(ui.el('soaMeta').textContent, /^A • 0 controls/);
+  assert.match(ui.el('soaMeta').textContent, /^A · 0 controls/);
   assert.match(ui.el('risksRows').textContent, /do not have permission to view risks/);
   assert.match(ui.el('pestleRows').textContent, /do not have permission to view PESTLE\(E\) items/);
   assert.match(
     ui.el('interestedPartiesRows').textContent,
-    /do not have permission to view Interested Parties/,
+    /do not have permission to view interested parties/,
   );
   assert.match(
     ui.el('ismsObjectivesRows').textContent,
@@ -465,7 +468,7 @@ test('a load failure is reported in every section', async (t) => {
     ['clausesRows', 'Failed to load clauses.'],
     ['risksRows', 'Failed to load risks.'],
     ['pestleRows', 'Failed to load PESTLE(E) items.'],
-    ['interestedPartiesRows', 'Failed to load Interested Parties.'],
+    ['interestedPartiesRows', 'Failed to load interested parties.'],
     ['ismsObjectivesRows', 'Failed to load ISMS objectives.'],
     ['ismsDocumentsRows', 'Failed to load ISMS documents.'],
     ['ismsEffectivenessRows', 'Failed to load effectiveness measures.'],

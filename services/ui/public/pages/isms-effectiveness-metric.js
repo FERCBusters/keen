@@ -51,7 +51,7 @@ function controlBadges(items) {
 }
 
 function linkOrDash(url, label) {
-  if (!url) return '—';
+  if (!url) return '-';
   return `<a href="${esc(safeExternalHref(url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(label || url)}</a>`;
 }
 
@@ -77,7 +77,7 @@ function renderMetric(row) {
   entry = row || {};
   const measure = entry.measure || {};
   const title = entry.value_display || 'Metric entry';
-  document.title = `Keen – ${title}`;
+  document.title = `Keen - ${title}`;
   $('metricTitle').textContent = title;
   $('metricMeta').textContent = [
     measure.summary || 'Effectiveness measure',
@@ -85,7 +85,7 @@ function renderMetric(row) {
     entry.source_type || 'other',
   ]
     .filter(Boolean)
-    .join(' • ');
+    .join(' · ');
   $('metricValue').innerHTML =
     `${effectivenessMetricValueHtml(entry, measure, { fallback: 'Metric entry' })}${effectivenessMetricThresholdBadgeHtml(measure, entry)}`;
   $('metricPeriod').textContent = entry.period || 'No period recorded';
@@ -98,17 +98,17 @@ function renderMetric(row) {
       ? withFramework(`/source.html?source=${encodeURIComponent(sourceType)}`, framework)
       : '',
   );
-  $('sourceTitle').textContent = entry.source_title || '—';
-  $('sourceReference').textContent = entry.source_reference || '—';
+  $('sourceTitle').textContent = entry.source_title || '-';
+  $('sourceReference').textContent = entry.source_reference || '-';
   $('sourceUrl').innerHTML = linkOrDash(entry.source_url, entry.source_url || 'Open source');
   $('sourceEvent').innerHTML = entry.source_event_id
-    ? `<a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>`
-    : '—';
+    ? `<a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open Keen event">${esc(entry.source_event_id)}</a>`
+    : '-';
   $('metricNotes').textContent = entry.notes || 'No notes recorded.';
   $('rawPayload').textContent = JSON.stringify(entry.raw_payload || {}, null, 2);
-  $('metricRecorded').textContent = fmtTs(entry.recorded_at) || '—';
-  $('metricCreated').textContent = fmtTs(entry.created_at) || '—';
-  $('metricUpdated').textContent = fmtTs(entry.updated_at) || '—';
+  $('metricRecorded').textContent = fmtTs(entry.recorded_at) || '-';
+  $('metricCreated').textContent = fmtTs(entry.created_at) || '-';
+  $('metricUpdated').textContent = fmtTs(entry.updated_at) || '-';
   $('metricControls').innerHTML = controlBadges(measure.controls);
 
   const parentTitle = measure.summary || 'Effectiveness measure';
@@ -119,8 +119,8 @@ function renderMetric(row) {
     ? `<code>${esc(measure.metric_key)}</code>${measure.owner ? ` · ${userPillHtml(measure.owner)}` : ''}`
     : measure.owner
       ? userPillHtml(measure.owner)
-      : '—';
-  $('parentMetricDefinition').textContent = measure.description || '—';
+      : '-';
+  $('parentMetricDefinition').textContent = measure.description || '-';
   $('openMeasureLink').href = parentHref;
   $('metricBreadcrumb').href = parentHref;
 

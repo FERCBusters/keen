@@ -1,4 +1,4 @@
-# Testing KEEN
+# Testing Keen
 
 Run the suite from a checkout, using a disposable PostgreSQL database and a
 Valkey service. Never use production services or production credentials for CI.
@@ -30,7 +30,7 @@ ORM metadata and translate the PostgreSQL UTC timestamp default only in that
 copy. PostgreSQL-specific retention SQL and triggers remain covered by the real
 PostgreSQL suites. Do not substitute SQLite for those suites.
 
-The KEEN Agent wire-format fixture is committed under services/api/tests/fixtures;
+The Keen Agent wire-format fixture is committed under services/api/tests/fixtures;
 there is no requirement to check out the separate agent repository. Adapter tests
 use fixtures/mocks and do not require real Forgejo, Redmine, Auth0, SMTP or AWS
 credentials. MFA tests use synthetic keys and mocked delivery.
@@ -47,7 +47,8 @@ admin HTML, current-event versus other-sample field groups, sample changes,
 structured field boundaries, filter pill interactions, pagination, status
 formatting, and rich-text sanitization. The DOM harness imports complete local
 modules and replaces the external design-system/API boundary with controlled
-responses. These are DOM integration tests, not real-browser end-to-end tests.
+responses. These DOM integration tests run in jsdom; real-browser end-to-end
+behaviour is outside their scope.
 
 `test-results/frontend.xml` contains JUnit results. Frontend HTML and LCOV
 reports live in `test-results/frontend-coverage/`. Coverage includes all
@@ -71,7 +72,7 @@ KEEN_DATABASE_URL=sqlite:// KEEN_BOOTSTRAP_ADMIN_USERNAME=test \
   poetry run pytest tests -q --cov=app --cov-branch
 ```
 
-KEEN requires `KEEN_PUBLIC_BASE_URL` at start-up; the suite sets it to the
+Keen requires `KEEN_PUBLIC_BASE_URL` at start-up; the suite sets it to the
 test client's origin, `http://testserver`, unless the environment provides one.
 
 This intentionally skips PostgreSQL-only tests and is not the release gate.
@@ -83,14 +84,14 @@ retention and concurrency tests continue using their native PostgreSQL fixtures.
 
 The full runner writes backend HTML, JSON and XML coverage under `test-results/`
 and frontend reports alongside them. Both suites run even if backend tests fail.
-Coverage measures the whole application rather than only selected new modules.
-Each suite has a coverage floor a little below its current level, so a change
-that leaves its behaviour untested fails the run: `tests.sh` gives pytest a
-minimum for combined statement and branch coverage, and `tests-ui.sh` gives c8
-minimums for lines, branches and functions. Raise a floor when coverage rises,
-and explain any reduction in the change that makes it. Use the HTML reports to
-find uncovered behaviour before adding assertions, rather than tests that only
-repeat implementation details.
+Coverage measures the whole application, including modules a change leaves
+untouched. Each suite has a coverage floor a little below its current level, so
+a change that leaves its behaviour untested fails the run: `tests.sh` gives
+pytest a minimum for combined statement and branch coverage, and `tests-ui.sh`
+gives c8 minimums for lines, branches and functions. Raise a floor when coverage
+rises, and explain any reduction in the change that makes it. Use the HTML
+reports to find uncovered behaviour, then add assertions that exercise it
+through the page or API.
 
 ## Readable frontend source
 
@@ -106,7 +107,7 @@ serves the generated `dist/` directory.
 
 ## Security tests against a running installation
 
-`tools/security_e2e` is a pytest and Playwright suite that tests a running KEEN
+`tools/security_e2e` is a pytest and Playwright suite that tests a running Keen
 installation through its nginx front end, API, PostgreSQL database and a real
 Chromium browser. It creates synthetic accounts with single permissions, seeds
 hostile text, and checks authentication coverage, CSRF and Origin enforcement,

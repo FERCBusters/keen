@@ -1,4 +1,5 @@
 import { safeExternalHref } from '/app.js';
+import { mountStoryRelated } from '/pages/story-related.js';
 import {
   initNavbar,
   apiGet,
@@ -27,7 +28,7 @@ function personBadges(list) {
 
 function badgeList(items, labelKey = 'ref', urlFn = null) {
   const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">—</span>';
+  if (!arr.length) return '<span class="small-muted">-</span>';
   return arr
     .map((it) => {
       const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
@@ -76,16 +77,16 @@ function renderMeetingNotes(text) {
 
 function renderMeeting(meeting) {
   const title = meeting.title || 'Meeting minutes';
-  document.title = `Keen – ${title}`;
+  document.title = `Keen - ${title}`;
   $('meetingTitle').textContent = title;
   $('meetingMeta').textContent =
-    `${meeting.date || 'No date'} • ${[meeting.start_time, meeting.end_time].filter(Boolean).join('–') || 'No time recorded'}`;
-  $('meetingDate').textContent = meeting.date || '—';
+    `${meeting.date || 'No date'} · ${[meeting.start_time, meeting.end_time].filter(Boolean).join('-') || 'No time recorded'}`;
+  $('meetingDate').textContent = meeting.date || '-';
   $('meetingTime').textContent =
-    [meeting.start_time, meeting.end_time].filter(Boolean).join('–') || '—';
+    [meeting.start_time, meeting.end_time].filter(Boolean).join('-') || '-';
   $('meetingAttendees').innerHTML = personBadges(meeting.attendees);
   $('meetingApologies').innerHTML = personBadges(meeting.apologies);
-  $('meetingUpdated').textContent = fmtTs(meeting.updated_at) || '—';
+  $('meetingUpdated').textContent = fmtTs(meeting.updated_at) || '-';
   $('meetingNotes').innerHTML = renderMeetingNotes(meeting.agenda_minutes_notes);
   $('meetingLinks').innerHTML = (meeting.links || []).length
     ? `<ul class="mb-0">${(meeting.links || []).map(linkHtml).filter(Boolean).join('')}</ul>`
@@ -134,4 +135,5 @@ async function load() {
 }
 
 window.addEventListener('hashchange', activateTabFromHashOrQuery);
+mountStoryRelated({ me, kind: 'meeting', id: meetingId, framework });
 load();

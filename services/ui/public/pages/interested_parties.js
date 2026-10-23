@@ -90,7 +90,7 @@ function setupPartyFilterPickers() {
     emptyText: 'All names',
     emptySelectedText: 'No name filters selected. All names are included.',
     noMatchText: 'No names match your filter.',
-    searchPlaceholder: 'Filter names…',
+    searchPlaceholder: 'Filter names',
   });
   enhanceFilterPillMultiSelect(partyNatureFilter, {
     title: 'Choose nature of interest values',
@@ -102,7 +102,7 @@ function setupPartyFilterPickers() {
     emptyText: 'All natures',
     emptySelectedText: 'No nature filters selected. All natures are included.',
     noMatchText: 'No natures match your filter.',
-    searchPlaceholder: 'Filter natures…',
+    searchPlaceholder: 'Filter natures',
   });
 }
 
@@ -154,7 +154,7 @@ function renderParties() {
   if (!partyRows) return;
   if (!canView) {
     partyRows.innerHTML =
-      '<tr><td colspan="6" class="p-4 small-muted">You do not have permission to view Interested Parties.</td></tr>';
+      '<tr><td colspan="6" class="p-4 small-muted">You do not have permission to view interested parties.</td></tr>';
     return;
   }
   if (!parties.length) {
@@ -170,15 +170,15 @@ function renderParties() {
             (c) =>
               `<a class="badge text-bg-light text-decoration-none me-1 mb-1" href="${esc(controlHref(c.id))}">${esc(c.ref || c.title || 'Control')}</a>`,
           )
-          .join('') || '<span class="small-muted">—</span>';
+          .join('') || '<span class="small-muted">-</span>';
       const comms =
         (it.communications || [])
           .map((c) => `${esc(c.event || '')} / ${esc(c.with_whom || '')}`)
           .slice(0, 3)
-          .join('<br>') || '<span class="small-muted">—</span>';
+          .join('<br>') || '<span class="small-muted">-</span>';
       const note = (it.note || '').trim()
         ? esc(shorten(it.note, 110))
-        : '<span class="small-muted">—</span>';
+        : '<span class="small-muted">-</span>';
       return `<tr><td><a class="fw-semibold" href="${esc(partyHref(it.id))}">${esc(it.name?.name || '')}</a></td><td>${esc(it.nature?.name || '')}</td><td class="small text-wrap" style="min-width:220px;">${note}</td><td>${controls}</td><td class="small">${comms}</td><td class="no-print"><div class="d-flex flex-wrap gap-1"><a class="btn btn-sm btn-outline-primary" href="${esc(partyHref(it.id))}">${canManage ? 'Edit' : 'View'}</a>${canSampleAudits ? `<button class="btn btn-sm btn-outline-success" type="button" data-sample-party="${esc(it.id)}"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>` : ''}</div></td></tr>`;
     })
     .join('');
@@ -193,7 +193,7 @@ function renderParties() {
         entityType: 'interested_party',
         entityId: id,
         title: party
-          ? `${party.name?.name || ''} — ${party.nature?.name || ''}`
+          ? `${party.name?.name || ''} - ${party.nature?.name || ''}`
           : 'Interested party',
         framework,
         statusEl: status,
@@ -225,7 +225,7 @@ async function loadLookups() {
   renderLookups();
 }
 async function loadParties() {
-  if (partyRows) showTableLoading(partyRows, 6, 'Loading interested parties…');
+  if (partyRows) showTableLoading(partyRows, 6, 'Loading interested parties');
   const qs = new URLSearchParams({ framework, limit: '5000' });
   if (partyQ?.value.trim()) qs.set('q', partyQ.value.trim());
   setCsvParam(qs, 'name_id', filterValues(partyNameFilter));
@@ -253,9 +253,9 @@ function makeZoomButton(label, action, title) {
 }
 function splitLabelLines(value, maxChars = 34, maxLines = 2) {
   const text =
-    String(value || '—')
+    String(value || '-')
       .replace(/\s+/g, ' ')
-      .trim() || '—';
+      .trim() || '-';
   if (text.length <= maxChars) return [text];
   const words = text.split(' ');
   const lines = [];
@@ -289,9 +289,9 @@ function estimatedLabelChars(nodes, fallback = 30) {
   return Math.max(fallback, Math.min(58, lengths.length ? Math.max(...lengths) : fallback));
 }
 function primaryNodeLabel(node) {
-  if (!node) return '—';
+  if (!node) return '-';
   if (node.kind === 'control' && node.ref) return node.ref;
-  return node.label || '—';
+  return node.label || '-';
 }
 function secondaryNodeLabel(node) {
   if (!node) return '';
@@ -328,7 +328,7 @@ function renderWrappedSvgText(
     .attr('fill', 'currentColor')
     .attr('opacity', opacity);
   if (underline) text.style('text-decoration', 'underline');
-  (lines || ['—']).forEach((line, idx) => {
+  (lines || ['-']).forEach((line, idx) => {
     text
       .append('tspan')
       .attr('x', x)
@@ -352,7 +352,7 @@ function renderControlsMatrix(el, graph) {
   el.innerHTML = `
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3 no-print">
       <div class="small-muted">${esc(relationshipSummary(graph))}. Scroll horizontally to review all linked controls.</div>
-      <input class="form-control form-control-sm" data-control-matrix-filter type="search" placeholder="Filter parties or controls…" style="max-width:320px;">
+      <input class="form-control form-control-sm" data-control-matrix-filter type="search" placeholder="Filter parties or controls" style="max-width:320px;">
     </div>
     <div data-control-matrix-host></div>
   `;
@@ -392,7 +392,7 @@ function renderControlsMatrix(el, graph) {
           <thead>
             <tr>
               <th class="matrix-sticky-col matrix-corner">Interested party</th>
-              ${visibleCols.map((col) => `<th class="matrix-control-header" title="${esc(col.label || col.ref || 'Control')}${col.subtitle ? ` — ${esc(col.subtitle)}` : ''}"><a href="${esc(controlHref(col.id))}" class="matrix-control-link">${esc(col.ref || col.label || 'Control')}</a></th>`).join('')}
+              ${visibleCols.map((col) => `<th class="matrix-control-header" title="${esc(col.label || col.ref || 'Control')}${col.subtitle ? ` - ${esc(col.subtitle)}` : ''}"><a href="${esc(controlHref(col.id))}" class="matrix-control-link">${esc(col.ref || col.label || 'Control')}</a></th>`).join('')}
             </tr>
           </thead>
           <tbody>
@@ -406,7 +406,7 @@ function renderControlsMatrix(el, graph) {
                 return `<tr>
                 <th class="matrix-sticky-col matrix-party-label">
                   <a class="fw-semibold" href="${esc(partyHref(row.id))}">${esc(row.label || 'Interested party')}</a>
-                  <div class="small-muted">${esc(row.subtitle || '')}${linkedCount ? ` • ${linkedCount} shown control(s)` : ''}</div>
+                  <div class="small-muted">${esc(row.subtitle || '')}${linkedCount ? ` · ${linkedCount} shown control(s)` : ''}</div>
                   ${note ? `<div class="small-muted matrix-party-note" title="${esc(note)}">${esc(shorten(note, 90))}</div>` : ''}
                 </th>
                 ${visibleCols
@@ -414,7 +414,7 @@ function renderControlsMatrix(el, graph) {
                     const link = linkMap.get(`${row.id}::${col.id}`);
                     if (!link)
                       return '<td class="matrix-cell matrix-cell-empty" aria-label="Not linked"></td>';
-                    const title = `${row.label || 'Interested party'} → ${col.label || col.ref || 'Control'}`;
+                    const title = `${row.label || 'Interested party'} × ${col.label || col.ref || 'Control'}`;
                     return `<td class="matrix-cell matrix-cell-linked" title="${esc(title)}"><a href="${esc(controlHref(col.id))}" aria-label="${esc(title)}"><i class="bi bi-check-lg" aria-hidden="true"></i><span class="visually-hidden">Linked</span></a></td>`;
                   })
                   .join('')}
@@ -534,7 +534,7 @@ function renderBipartiteGraph(el, graph) {
     else svg.transition().duration(160).call(zoom.transform, fitTransform);
   });
 
-  renderWrappedSvgText(scene, [graph?.left_label || 'Interested Parties'], {
+  renderWrappedSvgText(scene, [graph?.left_label || 'Interested parties'], {
     x: leftX - 16,
     y: 22,
     anchor: 'end',
@@ -577,7 +577,7 @@ function renderBipartiteGraph(el, graph) {
     .text((link) => {
       const left = leftMap.get(link.source)?.label || 'Interested party';
       const right = rightMap.get(link.target)?.label || 'Related item';
-      return `${left} → ${right}${link.count > 1 ? ` (${link.count})` : ''}`;
+      return `${left} × ${right}${link.count > 1 ? ` (${link.count})` : ''}`;
     });
 
   const renderNode = (selection, side) => {
@@ -712,5 +712,5 @@ try {
   await loadParties();
   if (requestedTab === 'visualisations') await renderVisualisations();
 } catch (e) {
-  toast(status, `Failed to load Interested Parties: ${String(e)}`, 'danger');
+  toast(status, `Failed to load interested parties: ${String(e)}`, 'danger');
 }

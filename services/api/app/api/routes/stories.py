@@ -67,6 +67,16 @@ def story_choices(
     return service.choices(kind=kind, q=q, user=user, db=db)
 
 
+@router.get("/v1/stories/related/{kind}/{entity_id}")
+def related_stories(
+    kind: str,
+    entity_id: str,
+    user=Depends(_reader),
+    db: Session = Depends(get_db),
+):
+    return service.related_stories(kind=kind, entity_id=entity_id, user=user, db=db)
+
+
 @router.get("/v1/stories/{story_id}")
 def get_story(
     story_id: str,

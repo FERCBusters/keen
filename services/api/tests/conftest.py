@@ -13,7 +13,7 @@ from tests.db_helpers import create_sqlite_schema, schema_engine
 
 
 def pytest_configure(config):
-    # KEEN requires its public origin at start-up. Tests use the test client's
+    # Keen requires its public origin at start-up. Tests use the test client's
     # origin unless the environment chooses another; this runs before any test
     # module imports the settings.
     os.environ.setdefault("KEEN_PUBLIC_BASE_URL", "http://testserver")

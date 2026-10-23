@@ -1,4 +1,5 @@
 import { featureEnabled } from '/pages/feature-availability.js';
+import { canManageStories, mountStoryRelated } from '/pages/story-related.js';
 import { createEvidenceExporter } from './evidence-export/index.js';
 import { renderJson } from '/json-highlight.js';
 import {
@@ -22,6 +23,8 @@ import {
   getCurrentFramework,
   withFramework,
   isAuditActive,
+  preselectSamplingAudit,
+  rememberSamplingAudit,
 } from '/app.js';
 
 const PRINT_MODE = (() => {
@@ -68,10 +71,52 @@ function pretty(obj) {
 
 function setText(id, val) {
   const el = document.getElementById(id);
-  el.textContent = val ?? '—';
+  el.textContent = val ?? '-';
 }
 
 let currentEvent = null;
+
+// ------------------------------------------------------------------
+// Tabs: the evidence snapshot, then stories, audits, incidents and questions.
+// A tab other than the snapshot appears when it has something to show.
+// ------------------------------------------------------------------
+
+const EVENT_TABS = {
+  snapshot: 'eventSnapshotTab',
+  stories: 'eventStoriesTab',
+  audits: 'eventAuditsTab',
+  incidents: 'eventIncidentsTab',
+  questions: 'eventQuestionsTab',
+};
+
+function setEventTab(name, visible, count = 0) {
+  const tab = document.getElementById(EVENT_TABS[name]);
+  const item = tab?.closest('li');
+  if (item) item.hidden = !visible;
+  const badge = document.getElementById(
+    `event${name.charAt(0).toUpperCase()}${name.slice(1)}Count`,
+  );
+  if (badge) {
+    badge.textContent = count ? String(count) : '';
+    badge.hidden = !count;
+  }
+}
+
+function showEventTab(name) {
+  const id = Object.hasOwn(EVENT_TABS, name) ? EVENT_TABS[name] : EVENT_TABS.snapshot;
+  const tab = document.getElementById(id);
+  if (!tab || tab.closest('li')?.hidden || !window.bootstrap?.Tab) return;
+  window.bootstrap.Tab.getOrCreateInstance(tab).show();
+}
+
+for (const [name, tabId] of Object.entries(EVENT_TABS)) {
+  document.getElementById(tabId)?.addEventListener('shown.bs.tab', () => {
+    const url = new URL(window.location.href);
+    if (name === 'snapshot') url.searchParams.delete('tab');
+    else url.searchParams.set('tab', name);
+    window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+  });
+}
 
 // ------------------------------------------------------------------
 // Evidence helpers
@@ -194,7 +239,7 @@ function editAddLinkRow(url = '', text = '') {
   row.innerHTML = `
         <div class="col-12 col-lg-6">
           <label class="form-label small-muted mb-1">URL</label>
-          <input class="form-control" data-link-url value="${esc(url)}" placeholder="https://…" />
+          <input class="form-control" data-link-url value="${esc(url)}" placeholder="https://" />
         </div>
         <div class="col-10 col-lg-5">
           <label class="form-label small-muted mb-1">Link text</label>
@@ -441,9 +486,10 @@ function renderIncidents(items) {
   const body = document.getElementById('incidents');
   if (!card || !body) return;
   const arr = Array.isArray(items) ? items : [];
+  setEventTab('incidents', arr.length > 0, arr.length);
   if (!arr.length) {
     card.style.display = 'none';
-    body.innerHTML = '—';
+    body.innerHTML = '-';
     return;
   }
   card.style.display = '';
@@ -451,7 +497,7 @@ function renderIncidents(items) {
   body.innerHTML = arr
     .map((i) => {
       const who = i.created_by ? ` by ${esc(i.created_by)}` : '';
-      const when = i.created_at ? fmtTs(i.created_at) : '—';
+      const when = i.created_at ? fmtTs(i.created_at) : '-';
       const text = String(i.text || '').trim();
       const shortText = text.length > 350 ? `${text.slice(0, 350)}…` : text;
       const deleteBtn = canDelete
@@ -482,7 +528,7 @@ async function deleteIncident(incidentId) {
     toast(status, 'incident.delete permission required.', 'danger');
     return;
   }
-  const ok = window.confirm('Delete this incident reference from KEEN?');
+  const ok = window.confirm('Delete this incident reference from Keen?');
   if (!ok) return;
   try {
     await apiDelete(
@@ -523,8 +569,8 @@ function renderSuggestedControls(e, data) {
   const canPropose = !!me?.is_admin && !PRINT_MODE;
   if (meta) {
     meta.textContent = items.length
-      ? `Catalogue matches in ${data?.framework || pageFramework} for this event’s wording. Review each one; nothing is mapped until a rule is saved.`
-      : `No clear catalogue matches in ${data?.framework || pageFramework} for this event’s wording. Search the controls list or describe the evidence in the mapping editor.`;
+      ? `Catalogue matches in ${data?.framework || pageFramework} for this event's wording. Review each one; nothing is mapped until a rule is saved.`
+      : `No clear catalogue matches in ${data?.framework || pageFramework} for this event's wording. Search the controls list or describe the evidence in the mapping editor.`;
   }
   if (!list) return;
   list.replaceChildren();
@@ -577,7 +623,7 @@ async function loadSuggestedControls(e) {
   const meta = document.getElementById('suggestedControlsMeta');
   const button = document.getElementById('suggestedControlsLoad');
   if (button) button.hidden = true;
-  if (meta) meta.textContent = 'Looking for matching controls…';
+  if (meta) meta.textContent = 'Looking for matching controls';
   try {
     const data = await apiGet(
       `/api/v1/events/${encodeURIComponent(e.id)}/control-suggestions?framework=${encodeURIComponent(pageFramework)}`,
@@ -634,14 +680,14 @@ async function load() {
 
     document.getElementById('summary').textContent = e.summary || '(no summary)';
     const srcLabel = e.source ? sourceLabel(e.source, sourceMeta) || e.source : 'unknown';
-    document.getElementById('meta').textContent = `${srcLabel} • ${fmtTs(e.timestamp)}`;
+    document.getElementById('meta').textContent = `${srcLabel} · ${fmtTs(e.timestamp)}`;
 
     setText('ts', fmtTs(e.timestamp));
-    setText('system', e.system || '—');
-    setText('actor', e.actor || '—');
-    setText('action', e.action || '—');
-    setText('outcome', e.outcome || '—');
-    setText('severity', e.severity ?? '—');
+    setText('system', e.system || '-');
+    setText('actor', e.actor || '-');
+    setText('action', e.action || '-');
+    setText('outcome', e.outcome || '-');
+    setText('severity', e.severity ?? '-');
 
     // Source badge + sideways navigation
     if (e.source) {
@@ -663,7 +709,7 @@ async function load() {
       }
       document.getElementById('bySource').href = sourceHref;
     } else {
-      document.getElementById('srcBadge').textContent = '—';
+      document.getElementById('srcBadge').textContent = '-';
       document.getElementById('bySource').href = withFramework('/events.html', pageFramework);
     }
 
@@ -769,6 +815,7 @@ async function load() {
     renderIncidents(e.incidents || []);
 
     await refreshAuditSamples(e.id);
+    showStories(e.id);
 
     // Artifacts list
     const arts = e.artifacts || [];
@@ -860,7 +907,7 @@ async function load() {
                       <td class="small-muted">${esc(fmtTs(a.captured_at))}</td>
                       <td><span class="badge badge-chip">${esc(a.kind || 'artifact')}</span></td>
                       <td class="small-muted">${esc(a.content_type || 'application/octet-stream')}</td>
-                      <td class="small-muted">${esc(a.size_bytes ?? '—')}</td>
+                      <td class="small-muted">${esc(a.size_bytes ?? '-')}</td>
                       <td class="no-print"><a class="btn btn-sm btn-outline-primary" href="/api/v1/artifacts/${encodeURIComponent(a.id)}/download">Download</a></td>
                     </tr>
                   `,
@@ -879,9 +926,16 @@ async function load() {
     renderJson(document.getElementById('normalized'), pretty(e.normalized_payload ?? {}));
     renderJson(document.getElementById('raw'), pretty(e.raw_pointer ?? {}));
 
+    // A deep link opens its tab once the tabs know what they hold; a linked
+    // question thread has already opened the Questions tab.
+    if (!didFocusThread && qs('tab')) showEventTab(qs('tab'));
+
     // If this is the dedicated print window, trigger the native print dialog
-    // after the event + thumbnails are rendered.
+    // after the event + thumbnails are rendered. The printout shows the raw
+    // pointer and the questions with the snapshot.
     if (PRINT_MODE) {
+      const rawPointer = document.getElementById('rawPointerCard');
+      if (rawPointer) rawPointer.open = true;
       await exporter.autoPrintEvidence(e);
     }
   } catch (err) {
@@ -925,9 +979,10 @@ function renderAuditSamples(items) {
   const body = document.getElementById('auditSamples');
   const arr = Array.isArray(items) ? items : [];
   if (!card || !body) return;
+  setEventTab('audits', arr.length > 0, arr.length);
   if (!arr.length) {
     card.style.display = 'none';
-    body.innerHTML = '—';
+    body.innerHTML = '-';
     return;
   }
 
@@ -964,11 +1019,33 @@ function renderAuditSamples(items) {
     .join('')}</div>`;
 }
 
+// The tab appears when the event is in a story, or for authors who can add it.
+function showStories(eventId) {
+  const card = document.getElementById('storiesCard');
+  const mounted = mountStoryRelated({
+    me,
+    kind: 'event',
+    id: eventId,
+    host: document.getElementById('eventStories'),
+    framework: pageFramework || getCurrentFramework(),
+    onLoad: (stories) => {
+      const visible = stories.length > 0 || canManageStories(me);
+      card.style.display = visible ? '' : 'none';
+      setEventTab('stories', visible, stories.length);
+    },
+  });
+  if (!mounted) {
+    card.style.display = 'none';
+    setEventTab('stories', false);
+  }
+}
+
 async function refreshAuditSamples(eventId) {
   if (!featureEnabled(me, 'audits')) return;
   const card = document.getElementById('auditSamplesCard');
   if (!canViewAuditEngagements()) {
     if (card) card.style.display = 'none';
+    setEventTab('audits', false);
     return;
   }
   try {
@@ -977,6 +1054,7 @@ async function refreshAuditSamples(eventId) {
   } catch (e) {
     // Do not block the evidence view if audit visibility is unavailable.
     if (card) card.style.display = 'none';
+    setEventTab('audits', false);
   }
 }
 
@@ -999,12 +1077,12 @@ async function openAuditSampleModal() {
   if (auditSampleSubmit) auditSampleSubmit.disabled = false;
   if (auditSampleCreate)
     auditSampleCreate.href = withFramework(
-      '/audits.html?new=1',
+      '/audit-wizard.html',
       pageFramework || getCurrentFramework(),
     );
 
   if (auditSampleSelect) {
-    auditSampleSelect.innerHTML = '<option value="">Loading audits…</option>';
+    auditSampleSelect.innerHTML = '<option value="">Loading audits</option>';
     try {
       const fw = pageFramework || getCurrentFramework();
       const data = await apiGet(`/api/v1/audits?framework=${encodeURIComponent(fw)}&limit=500`);
@@ -1020,7 +1098,8 @@ async function openAuditSampleModal() {
               (a.status || 'open') === 'in_progress' ? ' · In progress' : ' · Open';
             return `<option value="${esc(a.id)}">${esc(a.title || 'Audit')}${esc(suffix)}${esc(statusSuffix)}</option>`;
           })
-          .join('') || '<option value="">No open or in-progress audits — start one first</option>';
+          .join('') || '<option value="">No open or in-progress audits - start one first</option>';
+      preselectSamplingAudit(auditSampleSelect);
       if (auditSampleSubmit) auditSampleSubmit.disabled = !items.length;
       if (auditSampleNotes) auditSampleNotes.disabled = !items.length;
       if (auditSampleUseCurrentUrl) auditSampleUseCurrentUrl.disabled = !items.length;
@@ -1059,7 +1138,7 @@ async function submitAuditSample() {
   const prev = btn?.textContent || '';
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Sampling…';
+    btn.textContent = 'Sampling';
   }
   try {
     const evidence_url = auditSampleUseCurrentUrl?.checked ? _currentEventRelativeUrl() : null;
@@ -1070,6 +1149,7 @@ async function submitAuditSample() {
       title: currentEvent.summary || 'Keen event evidence',
     };
     await apiPost(`/api/v1/audits/${encodeURIComponent(auditId)}/evidence`, body);
+    rememberSamplingAudit(auditId);
     toast(status, 'Evidence sampled into audit', 'success');
     await refreshAuditSamples(currentEvent.id);
     if (window.bootstrap?.Modal && auditSampleModalEl) {
@@ -1152,7 +1232,7 @@ async function submitIncident() {
   const prev = btn?.textContent || '';
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Creating…';
+    btn.textContent = 'Creating';
   }
   try {
     const res = await apiPost(`/api/v1/events/${encodeURIComponent(currentEvent.id)}/incident`, {
@@ -1173,7 +1253,7 @@ async function submitIncident() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = prev || 'Create Incident';
+      btn.textContent = prev || 'Create incident';
     }
   }
 }
@@ -1232,8 +1312,8 @@ function _renderAttLinks(atts) {
 function _renderThread(t) {
   const tid = t?.id || '';
   const createdBy = t?.created_by_username || '';
-  const createdAt = t?.created_at ? fmtTs(t.created_at) : '—';
-  const updatedAt = t?.updated_at ? fmtTs(t.updated_at) : '—';
+  const createdAt = t?.created_at ? fmtTs(t.created_at) : '-';
+  const updatedAt = t?.updated_at ? fmtTs(t.updated_at) : '-';
   const statusVal = String(t?.status || 'unanswered').toLowerCase();
   const posts = Array.isArray(t?.posts) ? t.posts : [];
 
@@ -1256,14 +1336,14 @@ function _renderThread(t) {
 
   const postsHtml = posts
     .map((p) => {
-      const who = p?.author_username || '—';
-      const when = p?.created_at ? fmtTs(p.created_at) : '—';
+      const who = p?.author_username || '-';
+      const when = p?.created_at ? fmtTs(p.created_at) : '-';
       const body = esc(p?.body || '').replace(/\n/g, '<br>');
       const atts = _renderAttLinks(p?.attachments);
       return `
           <div class="question-post">
             <div class="question-post-meta">
-              <div class="small-muted"><span class="fw-bold">${esc(who)}</span> • ${esc(when)}</div>
+              <div class="small-muted"><span class="fw-bold">${esc(who)}</span> · ${esc(when)}</div>
             </div>
             <div class="mt-2">${body}</div>
             ${atts}
@@ -1276,7 +1356,7 @@ function _renderThread(t) {
     ? `
         <div class="mt-3 no-print">
           <div class="small-muted mb-1">Reply</div>
-          <textarea class="form-control" rows="3" id="replyBody-${esc(tid)}" placeholder="Write a response…"></textarea>
+          <textarea class="form-control" rows="3" id="replyBody-${esc(tid)}" placeholder="Write a response"></textarea>
           <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
             <input class="form-control form-control-sm" style="max-width: 360px;" type="file" multiple id="replyFiles-${esc(tid)}">
             <button class="btn btn-sm btn-primary" data-action="reply" data-thread="${esc(tid)}">Send reply</button>
@@ -1290,8 +1370,8 @@ function _renderThread(t) {
         <div class="question-thread" id="thread-${esc(tid)}">
           <div class="question-header">
             <div>
-              <div class="question-title">Thread by <span class="mono">${esc(createdBy || '—')}</span></div>
-              <div class="small-muted">Created ${esc(createdAt)} • Updated ${esc(updatedAt)}</div>
+              <div class="question-title">Thread by <span class="mono">${esc(createdBy || '-')}</span></div>
+              <div class="small-muted">Created ${esc(createdAt)} · Updated ${esc(updatedAt)}</div>
             </div>
             <div class="d-flex flex-wrap gap-2 align-items-center">
               ${_qStatusBadge(statusVal)}
@@ -1308,6 +1388,7 @@ function _renderThread(t) {
 function _renderThreads(threads) {
   const arr = Array.isArray(threads) ? threads : [];
   if (!questionsEl) return;
+  setEventTab('questions', featureEnabled(me, 'questions'), arr.length);
   if (arr.length === 0) {
     questionsEl.innerHTML = `<span class="badge text-bg-light">none</span>`;
     return;
@@ -1333,6 +1414,7 @@ async function refreshQuestions(eventId) {
       const el = document.getElementById(`thread-${focusThreadId}`);
       if (el) {
         didFocusThread = true;
+        showEventTab('questions');
         el.classList.add('question-thread-focus');
         try {
           el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1375,7 +1457,7 @@ questionSubmitBtn?.addEventListener('click', async () => {
 
   if (questionStatusEl) {
     questionStatusEl.style.display = '';
-    questionStatusEl.textContent = 'Submitting…';
+    questionStatusEl.textContent = 'Submitting';
   }
 
   const fd = new FormData();
@@ -1434,7 +1516,7 @@ questionsEl?.addEventListener('click', async (ev) => {
 
   btn.disabled = true;
   const prev = btn.textContent;
-  btn.textContent = 'Sending…';
+  btn.textContent = 'Sending';
 
   const fd = new FormData();
   fd.append('body', body);

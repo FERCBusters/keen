@@ -36,7 +36,7 @@ def _remote_user_from_headers(headers: Mapping[str, str], *, peer=None) -> str |
         return None
 
     # Native OIDC must not be bypassable by a request header. If OIDC is enabled,
-    # ignore REMOTE_USER-style headers entirely and require KEEN's own session
+    # ignore REMOTE_USER-style headers entirely and require Keen's own session
     # cookie that was minted after validating the configured SSO identity.
     if bool(getattr(settings, "oidc_enabled", False)):
         return None

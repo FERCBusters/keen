@@ -37,22 +37,22 @@ function statusLabel(value) {
 
 function userBadges(items) {
   const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">—</span>';
+  if (!arr.length) return '<span class="small-muted">-</span>';
   return arr.map((user) => userPillHtml(user)).join(' ');
 }
 
 function renderObjective(row) {
   objective = row || {};
   const title = objective.goal || objective.requirement || 'ISMS objective';
-  document.title = `Keen – ${title}`;
+  document.title = `Keen - ${title}`;
   $('objectiveTitle').textContent = title;
   $('objectiveMeta').textContent = [
     objective.completion_target_date || '',
     statusLabel(objective.status),
-    `updated ${fmtTs(objective.updated_at) || '—'}`,
+    `updated ${fmtTs(objective.updated_at) || '-'}`,
   ]
     .filter(Boolean)
-    .join(' • ');
+    .join(' · ');
   $('objectiveRequirement').textContent = objective.requirement || 'No requirement recorded.';
   $('objectiveGoal').textContent = objective.goal || 'No goal recorded.';
   $('objectiveMetric').textContent = objective.metric || 'No metric recorded.';
@@ -62,10 +62,10 @@ function renderObjective(row) {
     objective.evaluation_method || 'No evaluation method recorded.';
   $('objectiveOwner').innerHTML = userPillHtml(objective.owner);
   $('objectiveResources').innerHTML = userBadges(objective.resource_users);
-  $('objectiveResourceText').textContent = objective.resource_requirements_text || '—';
-  $('objectiveTarget').textContent = objective.completion_target_date || '—';
+  $('objectiveResourceText').textContent = objective.resource_requirements_text || '-';
+  $('objectiveTarget').textContent = objective.completion_target_date || '-';
   $('objectiveStatusValue').textContent = statusLabel(objective.status);
-  $('objectiveUpdated').textContent = fmtTs(objective.updated_at) || '—';
+  $('objectiveUpdated').textContent = fmtTs(objective.updated_at) || '-';
   $('objectiveControls').innerHTML = controlBadges(objective.controls, framework);
   $('objectiveClauses').innerHTML = clauseBadges(objective.clauses, framework);
 
@@ -125,4 +125,6 @@ window.addEventListener('hashchange', () =>
 load();
 
 import { mountSwotRelated } from '/pages/swot-related.js';
+import { mountStoryRelated } from '/pages/story-related.js';
 mountSwotRelated('objective', new URLSearchParams(location.search).get('id'));
+mountStoryRelated({ me, kind: 'objective', id: new URLSearchParams(location.search).get('id') });

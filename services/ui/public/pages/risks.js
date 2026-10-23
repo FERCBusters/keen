@@ -113,7 +113,7 @@ function setupFilterPickers() {
     emptyText: 'All categories',
     emptySelectedText: 'No category filters selected. All categories are included.',
     noMatchText: 'No categories match your filter.',
-    searchPlaceholder: 'Filter categories…',
+    searchPlaceholder: 'Filter categories',
   });
   enhanceFilterPillMultiSelect($('subcategoryFilter'), {
     title: 'Choose asset subcategories',
@@ -125,7 +125,7 @@ function setupFilterPickers() {
     emptyText: 'All subcategories',
     emptySelectedText: 'No subcategory filters selected. All subcategories are included.',
     noMatchText: 'No subcategories match your filter.',
-    searchPlaceholder: 'Filter subcategories…',
+    searchPlaceholder: 'Filter subcategories',
   });
   enhanceFilterPillMultiSelect($('typeFilter'), {
     title: 'Choose CIA risk types',
@@ -136,7 +136,7 @@ function setupFilterPickers() {
     emptyText: 'All CIA types',
     emptySelectedText: 'No CIA type filters selected. All types are included.',
     noMatchText: 'No types match your filter.',
-    searchPlaceholder: 'Filter types…',
+    searchPlaceholder: 'Filter types',
     options: RISK_TYPE_FILTER_OPTIONS,
   });
 }
@@ -264,7 +264,7 @@ function wireSampleButtons(root, lookup) {
 
 async function loadRisks() {
   if (!canViewRisks) return;
-  showTableLoading($('rows'), 10, 'Loading risks…');
+  showTableLoading($('rows'), 10, 'Loading risks');
   const u = new URL(base, location.origin);
   if (framework) u.searchParams.set('framework', framework);
   if ($('q').value) u.searchParams.set('q', $('q').value.trim());
@@ -298,7 +298,7 @@ async function loadRisks() {
 
 async function loadCiaRisks() {
   if (!canViewRisks) return;
-  showTableLoading($('ciaRows'), 8, 'Loading CIA risks…');
+  showTableLoading($('ciaRows'), 8, 'Loading CIA risks');
   const u = new URL(base, location.origin);
   if (framework) u.searchParams.set('framework', framework);
   const chosen = selectedFilterPillValues($('typeFilter'));
@@ -439,7 +439,7 @@ function pestleRelevanceBadge(level) {
 
 async function loadPestle() {
   if (!canViewPestle || !featureEnabled(me, 'pestle')) return;
-  showTableLoading($('pestleRows'), 7, 'Loading PESTLE(E) factors…');
+  showTableLoading($('pestleRows'), 7, 'Loading PESTLE(E) factors');
   try {
     if (!pestleMeta) {
       pestleMeta = await apiGet('/api/v1/pestle/meta');
@@ -539,7 +539,7 @@ async function loadLibrary() {
 
 async function loadControlsWithoutRisks() {
   if (!canViewRisks) return;
-  showTableLoading($('controlsWithoutRisksRows'), 4, 'Loading controls…');
+  showTableLoading($('controlsWithoutRisksRows'), 4, 'Loading controls');
   const u = new URL(`${base}/controls-without-risks`, location.origin);
   if (framework) u.searchParams.set('framework', framework);
   if ($('controlsWithoutRisksQ').value)
@@ -739,6 +739,42 @@ $('libraryList').addEventListener('click', async (e) => {
     notify(`Could not delete the template: ${String(err)}`);
   }
 });
+// --- Sidebar -----------------------------------------------------------------------------------
+
+// The heatmap, export and import fold away to the left so the register can widen.
+// The choice is a convenience for this browser only.
+const SIDEBAR_KEY = 'keen.risks.sidebar';
+
+function showSidebar(open, { remember = true } = {}) {
+  $('riskRegisterLayout').classList.toggle('sidebar-collapsed', !open);
+  $('riskSidebarBody').hidden = !open;
+  const toggle = $('toggleRiskSidebar');
+  toggle.setAttribute('aria-expanded', String(open));
+  toggle.title = open
+    ? 'Hide the heatmap, export and import'
+    : 'Show the heatmap, export and import';
+  toggle.innerHTML = open
+    ? '<i class="bi bi-chevron-double-left" aria-hidden="true"></i><span>Hide panel</span>'
+    : '<i class="bi bi-chevron-double-right" aria-hidden="true"></i><span>Heatmap and import</span>';
+  if (!remember) return;
+  try {
+    localStorage.setItem(SIDEBAR_KEY, open ? 'open' : 'collapsed');
+  } catch {
+    // Without storage the choice lasts until the page reloads.
+  }
+}
+
+function rememberedSidebar() {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) !== 'collapsed';
+  } catch {
+    return true;
+  }
+}
+
+showSidebar(rememberedSidebar(), { remember: false });
+$('toggleRiskSidebar').addEventListener('click', () => showSidebar($('riskSidebarBody').hidden));
+
 $('exportRegister').href = `${base}/register/export.csv?framework=${encodeURIComponent(framework)}`;
 $('importForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -805,7 +841,7 @@ if (!canViewRisks) {
       if ($(id)) $(id).style.display = 'none';
   }
   // Without the register feature the list takes the heatmap's room.
-  if (!registerEnabled) $('riskListColumn').classList.remove('col-xl-8');
+  if (!registerEnabled) $('riskRegisterLayout').classList.add('no-sidebar');
   try {
     categories = (await apiGet(`${base}/categories`))?.items || [];
     renderCategoryFilters();

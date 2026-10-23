@@ -146,7 +146,7 @@ async function sourcePage(t, options = {}) {
   await settle(
     () =>
       (ui.el('eventResultMeta').textContent &&
-        ui.el('eventResultMeta').textContent !== 'Loading…') ||
+        ui.el('eventResultMeta').textContent !== 'Loading') ||
       ui.el('status').textContent,
   );
   return ui;
@@ -161,10 +161,10 @@ const lastEvents = (ui) =>
 test('source page shows summary counts, filtered event links and safe event rows', async (t) => {
   const ui = await sourcePage(t);
   assert.match(ui.el('sourceTitle').textContent, /GitHub/);
-  assert.equal(ui.document.title, 'Keen – GitHub');
+  assert.equal(ui.document.title, 'Keen - GitHub');
   assert.equal(
     ui.el('sourceMeta').textContent,
-    '1,200 events • 1,000 mapped • 200 unmapped • last seen 2026-05-01T00:00:00Z',
+    '1,200 events · 1,000 mapped · 200 unmapped · last seen 2026-05-01T00:00:00Z',
   );
   assert.equal(
     ui.el('openEventsLink').getAttribute('href'),
@@ -179,7 +179,7 @@ test('source page shows summary counts, filtered event links and safe event rows
     (a) => a.textContent === 'Evidence retention',
   );
   assert.equal(retention.getAttribute('href'), '/admin.html?retention_source=github#retention');
-  assert.equal(ui.el('eventResultMeta').textContent, '1–50 of 130');
+  assert.equal(ui.el('eventResultMeta').textContent, '1-50 of 130');
   const rows = [...ui.el('eventRows').querySelectorAll('tr')];
   assert.equal(ui.el('eventRows').querySelector('img'), null);
   assert.equal(ui.el('eventRows').querySelector('b'), null);
@@ -191,7 +191,7 @@ test('source page shows summary counts, filtered event links and safe event rows
   // Only absolute HTTP(S) upstream links are rendered.
   assert.ok(rows[0].querySelector('a[href="https://github.example/commit/1"]'));
   assert.equal(rows[1].querySelector('a[href^="javascript"]'), null);
-  assert.match(rows[1].textContent, /—/);
+  assert.equal(rows[1].cells[4].textContent.trim(), '-');
   assert.equal(lastEvents(ui).searchParams.get('source'), 'github');
 });
 
@@ -256,7 +256,7 @@ test('effectiveness measures show the latest entry recorded against this source'
   assert.match(first.querySelector('code').textContent, /mttr/);
   assert.equal(first.querySelectorAll('td')[1].textContent, '< 4 h');
   assert.match(second.textContent, /Count/);
-  assert.equal(second.querySelectorAll('td')[1].textContent, '—');
+  assert.equal(second.querySelectorAll('td')[1].textContent, '-');
   assert.match(ui.el('sourceEffectivenessMeta').textContent, /recorded against github/);
   // Switching back clears the tab parameter; the tab loads once.
   ui.el('sourceEventsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
@@ -271,7 +271,7 @@ test('effectiveness measures show the latest entry recorded against this source'
 test('effectiveness deep links load immediately; empty and failed loads are explained', async (t) => {
   const empty = await sourcePage(t, { query: '&source=github&tab=effectiveness', measures: [] });
   await settle(() =>
-    /No Effectiveness Measures have metric entries for github/.test(
+    /No effectiveness measures have metric entries for github/.test(
       empty.el('sourceEffectivenessRows').textContent,
     ),
   );
@@ -280,7 +280,7 @@ test('effectiveness deep links load immediately; empty and failed loads are expl
     fail: { effectiveness: true },
   });
   await settle(() =>
-    /Failed to load Effectiveness Measures/.test(failed.el('sourceEffectivenessRows').textContent),
+    /Failed to load effectiveness measures/.test(failed.el('sourceEffectivenessRows').textContent),
   );
 });
 
@@ -442,7 +442,7 @@ test('source list failures are reported', async (t) => {
   assert.match(ui.el('status').textContent, /Failed to load sources: Error: Offline/);
 });
 
-test('metric source links on the source page only allow web or KEEN URLs', async (t) => {
+test('metric source links on the source page only allow web or Keen URLs', async (t) => {
   const entry = (source_url) => ({
     source_type: 'github',
     recorded_at: '2026-02-01',

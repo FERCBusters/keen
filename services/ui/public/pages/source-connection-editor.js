@@ -85,8 +85,8 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
         );
         if (source.value === 'imap') {
           if (key === 'fetch_body') {
-            input.add(new Option('No — headers only', 'false'));
-            input.add(new Option('Yes — prefer plaintext, otherwise raw HTML', 'true'));
+            input.add(new Option('No - headers only', 'false'));
+            input.add(new Option('Yes - prefer plaintext, otherwise raw HTML', 'true'));
             input.value = connection?.configuration[key] || 'false';
           }
           if (key === 'poll_interval_minutes') {

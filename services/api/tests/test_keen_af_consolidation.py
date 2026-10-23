@@ -1,4 +1,4 @@
-"""The release snapshot contains attributed, consolidated KEEN controls."""
+"""The release snapshot contains attributed, consolidated Keen controls."""
 
 import gzip
 import json

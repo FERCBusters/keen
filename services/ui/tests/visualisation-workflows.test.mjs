@@ -532,7 +532,7 @@ test('the histogram exports what it shows, and saves a relative default range', 
   assert.equal((drawing.match(/<rect/g) || []).length >= 4, true);
   // The file carries what the stylesheet and theme gave the chart on screen:
   // text colours are written onto each element and the page background becomes
-  // a backdrop, so the drawing reads the same way outside KEEN.
+  // a backdrop, so the drawing reads the same way outside Keen.
   assert.match(
     drawing,
     /<rect width="100%" height="100%" fill="rgb\(24, 24, 32\)" data-export-backdrop=""/,
@@ -608,7 +608,7 @@ test('small sources merge into one Other wedge whose breakdown links to their ev
   const panel = ui.el('sunburstOtherPanel');
   assert.equal(panel.style.display, '');
   assert.match(panel.textContent, /Sources merged into "Other"/);
-  assert.match(panel.textContent, new RegExp(`7 segments • 7 events • ${weekAgo} → ${today}`));
+  assert.match(panel.textContent, new RegExp(`7 segments · 7 events · ${weekAgo} → ${today}`));
   const links = [...panel.querySelectorAll('tbody a')];
   assert.deepEqual(
     links.map((a) => a.textContent),
@@ -621,7 +621,7 @@ test('clicking Other drills into the merged sources and the centre goes back', a
   const ui = await viz(t, { mode: 'sunburst_source', graph: manySources });
   ui.click(arc(ui, 'Other\nMerged: 7 segments\nMapped events: 7'));
 
-  assert.equal(ui.el('vizTitle').textContent, 'Sunburst: by source — Other');
+  assert.equal(ui.el('vizTitle').textContent, 'Sunburst: by source - Other');
   const inner = [...ui.document.querySelectorAll('#viz path.sunburst-arc title')]
     .map((n) => n.textContent.split('\n')[0])
     .filter((name) => !name.includes('→'));
@@ -744,7 +744,7 @@ test('graph marks open their source, filtered events and clause pages', async (t
     graph: (u) => (u.pathname.endsWith('/clause_source') ? clauseSources : twoSources),
   });
   ui.click(ui.titled('#viz g.node-source', 'GitHub\nMapped events: 8'), { ctrlKey: true });
-  ui.click(ui.titled('#viz .links path', 'GitHub → A2\nMapped events: 2'), { ctrlKey: true });
+  ui.click(ui.titled('#viz .links path', 'GitHub × A2\nMapped events: 2'), { ctrlKey: true });
   assert.deepEqual(
     ui.opened.map((o) => o.href),
     [
@@ -767,9 +767,9 @@ test('graph marks open their source, filtered events and clause pages', async (t
   assert.ok(!ui.calls.some((c) => c.url.includes('/clause_source')));
   ui.el('vizSelect').value = 'graph_clause_events';
   ui.el('vizSelect').dispatchEvent(new ui.window.Event('change'));
-  await settle(() => ui.titled('#viz .links path', 'GitHub → 5.1\nMapped events: 4'));
+  await settle(() => ui.titled('#viz .links path', 'GitHub × 5.1\nMapped events: 4'));
   assert.ok(ui.calls.some((c) => c.url === `/api/v1/graph/clause_source?framework=A&${range}`));
-  ui.click(ui.titled('#viz .links path', 'GitHub → 5.1\nMapped events: 4'), { ctrlKey: true });
+  ui.click(ui.titled('#viz .links path', 'GitHub × 5.1\nMapped events: 4'), { ctrlKey: true });
   ui.click(ui.document.querySelector('#viz g.node-control'), { ctrlKey: true });
   assert.deepEqual(
     ui.opened.slice(2).map((o) => o.href),
@@ -850,8 +850,8 @@ test('a source breaks down into sub-elements that open their own events', async 
   // so does the link to a control; the empty sub-element selects events whose
   // field is not recorded.
   ui.click(ui.titled('#viz g.node-source', 'RSS · NVD\nMapped events: 2'), { ctrlKey: true });
-  ui.click(ui.titled('#viz .links path', 'RSS · NVD → A1\nMapped events: 2'), { ctrlKey: true });
-  ui.click(ui.titled('#viz .links path', 'RSS · Not recorded → A1\nMapped events: 1'), {
+  ui.click(ui.titled('#viz .links path', 'RSS · NVD × A1\nMapped events: 2'), { ctrlKey: true });
+  ui.click(ui.titled('#viz .links path', 'RSS · Not recorded × A1\nMapped events: 1'), {
     ctrlKey: true,
   });
   assert.deepEqual(
@@ -880,9 +880,9 @@ test('a source breaks down into sub-elements that open their own events', async 
   // The heatmap reuses the dataset; its cells open the same events.
   ui.el('vizSelect').value = 'heatmap';
   ui.el('vizSelect').dispatchEvent(new ui.window.Event('change'));
-  await settle(() => ui.titled('#viz rect.heat-cell', 'RSS · NVD → A1\nMapped events: 2'));
+  await settle(() => ui.titled('#viz rect.heat-cell', 'RSS · NVD × A1\nMapped events: 2'));
   assert.deepEqual(requested, [null, 'system']);
-  ui.click(ui.titled('#viz rect.heat-cell', 'RSS · NVD → A1\nMapped events: 2'), { ctrlKey: true });
+  ui.click(ui.titled('#viz rect.heat-cell', 'RSS · NVD × A1\nMapped events: 2'), { ctrlKey: true });
   assert.equal(
     ui.opened.at(-1).href,
     `/events.html?framework=A&source=rss&f=system%3Aequals%3ANVD&control=A1&${range}`,
@@ -920,7 +920,7 @@ test('a shared breakdown is restored, and Reset returns to whole sources', async
   assert.ok(odd.calls.every((c) => !c.url.includes('breakdown=')));
 });
 
-test('the clause ↔ control graph ignores the date window and opens clauses', async (t) => {
+test('the clause × control graph ignores the date window and opens clauses', async (t) => {
   const relationships = {
     graph_kind: 'clause_control_relationship',
     nodes: [
@@ -945,7 +945,7 @@ test('the clause ↔ control graph ignores the date window and opens clauses', a
   };
   const ui = await viz(t, { mode: 'graph_clause_control', graph: relationships });
   assert.ok(ui.calls.some((c) => c.url === '/api/v1/graph/clause_control?framework=A'));
-  assert.ok(ui.titled('#viz .links path', '5.1 → A1\nLink count: 1'));
+  assert.ok(ui.titled('#viz .links path', '5.1 × A1\nLink count: 1'));
   ui.click(ui.document.querySelector('#viz g.node-source'), { ctrlKey: true });
   assert.equal(ui.opened[0].href, '/clause.html?id=k1&framework=A');
   assert.match(ui.el('vizCaption').textContent, /Showing 1 clauses × 1 controls/);
@@ -953,9 +953,9 @@ test('the clause ↔ control graph ignores the date window and opens clauses', a
 
 test('a heatmap cell opens the events behind it; an empty cell does nothing', async (t) => {
   const ui = await viz(t, { mode: 'heatmap', graph: twoSources });
-  const cell = ui.titled('#viz rect.heat-cell', 'Okta → A1\nMapped events: 1');
+  const cell = ui.titled('#viz rect.heat-cell', 'Okta × A1\nMapped events: 1');
   ui.click(cell, { ctrlKey: true });
-  ui.click(ui.titled('#viz rect.heat-cell', 'Okta → A2\nMapped events: 0'), { ctrlKey: true });
+  ui.click(ui.titled('#viz rect.heat-cell', 'Okta × A2\nMapped events: 0'), { ctrlKey: true });
   assert.deepEqual(
     ui.opened.map((o) => o.href),
     [`/events.html?framework=A&source=okta&control=A1&${range}`],
@@ -973,7 +973,7 @@ test('the heatmap redraws for a new top N without fetching again', async (t) => 
   const rows = () => [
     ...new Set(
       [...ui.document.querySelectorAll('#viz rect.heat-cell')].map(
-        (cell) => cell.querySelector(':scope > title').textContent.split(' → ')[0],
+        (cell) => cell.querySelector(':scope > title').textContent.split(' × ')[0],
       ),
     ),
   ];
@@ -1180,7 +1180,7 @@ test('a zoomed window becomes a story with the annotation as its first note', as
   ui.el('histStory').click();
   assert.equal(ui.el('histStoryPanel').hidden, false);
   const panel = ui.el('histStoryPanel');
-  assert.equal(panel.querySelector('[data-window]').textContent, `${start} – ${end} · 6 events`);
+  assert.equal(panel.querySelector('[data-window]').textContent, `${start} - ${end} · 6 events`);
   assert.equal(panel.querySelector('[data-window-title]').value, `Events from ${start} to ${end}`);
   panel.querySelector('[data-window-note]').value = '  Deploy storm after the release  ';
   panel.querySelector('[data-window-create]').click();
@@ -1241,7 +1241,7 @@ test('right-clicking a bar picks that bar alone, and a full window is reported',
   assert.equal(ui.el('histStoryPanel').hidden, false);
   assert.equal(
     ui.el('histStoryPanel').querySelector('[data-window]').textContent,
-    '2026-10-02T00:00:00.000Z – 2026-10-03T00:00:00.000Z · 4 events · source github',
+    '2026-10-02T00:00:00.000Z - 2026-10-03T00:00:00.000Z · 4 events · source github',
   );
   ui.el('histStoryPanel').querySelector('[data-window-title]').value = 'The spike';
   ui.el('histStoryPanel').querySelector('[data-window-create]').click();
@@ -1366,7 +1366,7 @@ test('graph marks clicked without a modifier open their pages in this tab', asyn
   });
   ui.click(ui.titled('#viz g.node-source', 'GitHub\nMapped events: 8'));
   ui.click(ui.document.querySelector('#viz g.node-control'));
-  ui.click(ui.titled('#viz .links path', 'Okta → A1\nMapped events: 1'));
+  ui.click(ui.titled('#viz .links path', 'Okta × A1\nMapped events: 1'));
   assert.deepEqual(assigned, [
     '/source.html?source=github&framework=A',
     '/control.html?id=A1-id&framework=A',
@@ -1377,8 +1377,8 @@ test('graph marks clicked without a modifier open their pages in this tab', asyn
   // Relationship edges lead to the control; clause nodes lead to the clause.
   ui.el('vizSelect').value = 'graph_clause_control';
   ui.el('vizSelect').dispatchEvent(new ui.window.Event('change'));
-  await settle(() => ui.titled('#viz .links path', '5.1 → A1\nLink count: 1'));
-  ui.click(ui.titled('#viz .links path', '5.1 → A1\nLink count: 1'));
+  await settle(() => ui.titled('#viz .links path', '5.1 × A1\nLink count: 1'));
+  ui.click(ui.titled('#viz .links path', '5.1 × A1\nLink count: 1'));
   ui.click(ui.document.querySelector('#viz g.node-source'));
   assert.deepEqual(assigned.slice(3), [
     '/control.html?id=c1&framework=A',
@@ -1400,7 +1400,7 @@ test('heatmap labels open sources and controls, and clause cells filter by claus
   ui.click(axisText('A2'));
   ui.click(axisText('Okta'));
   ui.click(ui.titled('#viz .viz-axis rect', 'GitHub'));
-  ui.click(ui.titled('#viz rect.heat-cell', 'GitHub → A2\nMapped events: 2'));
+  ui.click(ui.titled('#viz rect.heat-cell', 'GitHub × A2\nMapped events: 2'));
   assert.deepEqual(assigned, [
     '/control.html?id=A2-id&framework=A',
     '/source.html?source=okta&framework=A',
@@ -1410,8 +1410,8 @@ test('heatmap labels open sources and controls, and clause cells filter by claus
 
   ui.el('vizSelect').value = 'heatmap_clause_events';
   ui.el('vizSelect').dispatchEvent(new ui.window.Event('change'));
-  await settle(() => ui.titled('#viz rect.heat-cell', 'GitHub → 5.1\nMapped events: 4'));
-  ui.click(ui.titled('#viz rect.heat-cell', 'GitHub → 5.1\nMapped events: 4'), { ctrlKey: true });
+  await settle(() => ui.titled('#viz rect.heat-cell', 'GitHub × 5.1\nMapped events: 4'));
+  ui.click(ui.titled('#viz rect.heat-cell', 'GitHub × 5.1\nMapped events: 4'), { ctrlKey: true });
   ui.click(axisText('5.1'));
   assert.equal(ui.opened[0].href, `/events.html?framework=A&source=github&clause=5.1&${range}`);
   assert.equal(assigned.at(-1), '/clause.html?id=k1&framework=A');
@@ -1554,7 +1554,7 @@ test('tiny controls merge into Other on the control sunburst and list their even
   ui.click(other, { shiftKey: true });
   const panel = ui.el('sunburstOtherPanel');
   assert.match(panel.textContent, /Controls merged into "Other"/);
-  assert.match(panel.textContent, /3 segments • 3 events/);
+  assert.match(panel.textContent, /3 segments · 3 events/);
   assert.equal(panel.querySelector('thead th').textContent, 'Control');
   const links = [...panel.querySelectorAll('tbody a')];
   assert.deepEqual(links.map((a) => a.textContent).sort(), ['C1', 'C2', 'C3']);
@@ -1686,7 +1686,7 @@ test('dragging over bars zooms into those buckets at the next finer interval', a
   await settle(() => bars(ui).length === 4);
   ui.el('histZoomMode').click();
   // The chart is 900px wide with a 54px left margin; the first band spans
-  // roughly 54–468 and the second 468–882.
+  // roughly 54-468 and the second 468-882.
   dragBrush(ui, 80, 180);
   await settle(() => ui.series.length === 2);
   assert.deepEqual(ui.series[1], {
@@ -1751,7 +1751,7 @@ test('with auto-apply, edited heatmap and graph limits redraw without fetching',
   const rows = () =>
     new Set(
       [...ui.document.querySelectorAll('#viz rect.heat-cell')].map(
-        (cell) => cell.querySelector(':scope > title').textContent.split(' → ')[0],
+        (cell) => cell.querySelector(':scope > title').textContent.split(' × ')[0],
       ),
     ).size;
   assert.equal(rows(), 13);

@@ -101,7 +101,7 @@ def test_configured_source_meta_reads_catalogue(monkeypatch):
         "label": "CSV importer",
         "color": "#6935BE",
     }
-    assert meta["keen-agent"] == {"label": "KEEN Agent", "color": "#6935BE"}
+    assert meta["keen-agent"] == {"label": "Keen Agent", "color": "#6935BE"}
 
 
 def test_configured_source_meta_survives_database_outage(monkeypatch):

@@ -609,7 +609,7 @@ def test_sampled_records_are_described_with_their_controls(audits):
     expectations = {
         "pestle_item": (f"PESTLE(E): {HOSTILE}", "Legal · External", ["A.5.1"]),
         "interested_party": (
-            "Interested party: Customers — Data subjects",
+            "Interested party: Customers - Data subjects",
             "Retail",
             ["A.5.1"],
         ),

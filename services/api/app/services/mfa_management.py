@@ -100,7 +100,7 @@ def start_totp(*, context: ChangeContext, db: Session, row, user):
             409, "Remove the existing authenticator before adding another"
         )
     secret = pyotp.random_base32()
-    uri = pyotp.TOTP(secret).provisioning_uri(name=user.username, issuer_name="KEEN")
+    uri = pyotp.TOTP(secret).provisioning_uri(name=user.username, issuer_name="Keen")
     row.data = {
         **row.data,
         "totp_secret": mfa.cipher().encrypt(secret.encode()).decode(),
@@ -204,7 +204,7 @@ def registration_options(*, context: ChangeContext, db: Session, row, user):
     _, rp = mfa.origin_config()
     options = generate_registration_options(
         rp_id=rp,
-        rp_name="KEEN",
+        rp_name="Keen",
         user_id=user.id.bytes,
         user_name=user.username,
         exclude_credentials=[

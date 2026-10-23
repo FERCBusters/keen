@@ -22,7 +22,7 @@ from app.db.models import (
 from app.security.diary_visibility import diary_filter_condition
 from app.security.redaction import redact_obj as _redact_obj
 from app.security.redaction import redact_str as _redact_str
-from app.services.control_inheritance import effective_control_ids
+from app.services.control_inheritance import inherited_control_ids
 from app.services.entity_changelog import list_entity_changelogs
 from app.services.errors import DomainError
 from app.services.presentation import extract_source_url as _extract_source_url
@@ -156,7 +156,7 @@ def control_evidence(*, control_id: str, limit: int, offset: int, db: Session, u
             )
             .label("rank"),
         )
-        .filter(Mapping.control_item_id.in_(effective_control_ids(cid, db)))
+        .filter(Mapping.control_item_id.in_(inherited_control_ids(db, [cid])))
         .subquery()
     )
     base_q = (

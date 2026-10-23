@@ -164,7 +164,7 @@ def _effectiveness_metric_sources_out(
 
 
 def resolve_metric_source_type(db: Session, raw: str | None) -> str | None:
-    """Return the collected KEEN source named by ``raw``, "other", or None.
+    """Return the collected Keen source named by ``raw``, "other", or None.
 
     Blank input means "other". Spelling variants (case, hyphen/underscore) name
     the same collected source. None means no collected source has that name.
@@ -191,7 +191,7 @@ def _coerce_metric_source_type(db: Session, raw: str | None) -> str:
     if resolved is None:
         raise DomainError(
             status_code=400,
-            detail="Invalid metric source type; choose an existing KEEN source or other",
+            detail="Invalid metric source type; choose an existing Keen source or other",
         )
     return resolved
 

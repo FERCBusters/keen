@@ -178,7 +178,7 @@ def test_sign_out_follows_the_sign_in_method(  # noqa: F811
     me = _json(client.get("/v1/me"))
 
     assert me["logout_url"] == expected
-    # Behind a proxy without an upstream address, KEEN cannot end the session.
+    # Behind a proxy without an upstream address, Keen cannot end the session.
     assert me["logout_enabled"] is (not (proxy and not oidc) or expected is not None)
 
 

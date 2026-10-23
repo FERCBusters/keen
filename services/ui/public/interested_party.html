@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – Interested Party</title>
+  <title>Keen - Interested party</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css"/>
@@ -15,8 +15,8 @@
   <main class="container container-tight py-4">
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
-        <div class="small-muted mb-1"><a id="interestedPartiesBreadcrumb" class="link-subtle" data-nav-fw="1" href="/interested_parties.html">← Interested Parties</a></div>
-        <h1 id="partyTitle" class="h3 mb-1">Interested Party</h1>
+        <div class="small-muted mb-1"><a id="interestedPartiesBreadcrumb" class="link-subtle" data-nav-fw="1" href="/interested_parties.html">← Interested parties</a></div>
+        <h1 id="partyTitle" class="h3 mb-1">Interested party</h1>
         <div id="partyMeta" class="small-muted">Create or edit an interested party.</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
@@ -35,14 +35,14 @@
     <div class="tab-content">
       <section class="tab-pane fade show active" id="partyDetailsPane" role="tabpanel" tabindex="0">
         <form id="partyForm" class="card">
-          <div class="card-header"><div class="fw-bold" id="partyEditorTitle">Interested party details</div><div class="small-muted">Name and Nature of Interest are managed as reusable dropdown values.</div></div>
+          <div class="card-header"><div class="fw-bold" id="partyEditorTitle">Interested party details</div><div class="small-muted">Name and nature of interest are managed as reusable dropdown values.</div></div>
           <div class="card-body">
             <input id="partyId" type="hidden">
             <div class="row g-3">
-              <div class="col-12 col-lg-6"><label for="partyName" class="form-label">Name</label><select id="partyName" class="form-select"></select><div class="form-text">Add more names on the Interested Parties page.</div></div>
-              <div class="col-12 col-lg-6"><label for="partyNature" class="form-label">Nature of Interest</label><select id="partyNature" class="form-select"></select><div class="form-text">Add more natures on the Interested Parties page.</div></div>
+              <div class="col-12 col-lg-6"><label for="partyName" class="form-label">Name</label><select id="partyName" class="form-select"></select><div class="form-text">Add more names on the interested parties page.</div></div>
+              <div class="col-12 col-lg-6"><label for="partyNature" class="form-label">Nature of interest</label><select id="partyNature" class="form-select"></select><div class="form-text">Add more natures on the interested parties page.</div></div>
               <div class="col-12"><label for="partyNote" class="form-label">Note</label><textarea id="partyNote" class="form-control" rows="4" maxlength="4000" placeholder="Why is this nature of interest, communication pattern, or control mapping relevant for this interested party?"></textarea><div class="form-text">Use this to explain the rationale for this name + nature of interest combination and its linked controls/communications.</div></div>
-              <div class="col-12"><div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-2"><label class="form-label mb-0" for="controlSearch">Linked Controls</label><input id="controlSearch" class="form-control form-control-sm" type="search" placeholder="Filter controls…" style="max-width:320px;"></div><div id="controlsChecklist" class="border rounded p-2 small" style="max-height:360px; overflow:auto;">Loading controls…</div></div>
+              <div class="col-12"><div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-2"><label class="form-label mb-0" for="controlSearch">Linked controls</label><input id="controlSearch" class="form-control form-control-sm" type="search" placeholder="Filter controls" style="max-width:320px;"></div><div id="controlsChecklist" class="border rounded p-2 small" style="max-height:360px; overflow:auto;">Loading controls</div></div>
             </div>
           </div>
           <div class="card-footer d-flex flex-wrap gap-2 justify-content-between no-print"><button id="deleteParty" type="button" class="btn btn-outline-danger">Delete</button><button id="saveParty" type="submit" class="btn btn-primary">Save interested party</button></div>

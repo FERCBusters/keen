@@ -67,12 +67,12 @@ function render() {
       const evidenceMappings = Array.isArray(c.evidence_mappings) ? c.evidence_mappings : [];
       const evidenceHtml = titledLinksHtml(evidenceMappings, {
         title: 'Open evidence mapping',
-        empty: '<span class="small-muted">—</span>',
+        empty: '<span class="small-muted">-</span>',
         itemClass: 'd-inline-flex align-items-center gap-1 mb-1',
       });
       const parentClause = hasChildClauses(c);
       const linkedControlsHtml = parentClause
-        ? '<span class="small-muted" title="Parent clause; controls are linked to child clauses">—</span>'
+        ? '<span class="small-muted" title="Parent clause; controls are linked to child clauses">-</span>'
         : esc(String(c.control_link_count || 0));
       const linkedControlsSort = parentClause ? -1 : Number(c.control_link_count || 0);
       return `<tr>
@@ -87,7 +87,7 @@ function render() {
 }
 
 async function load() {
-  showTableLoading(rowsEl, 5, 'Loading clauses…');
+  showTableLoading(rowsEl, 5, 'Loading clauses');
   try {
     const data = await apiGet(`/api/v1/clauses?framework=${encodeURIComponent(framework)}`);
     clauses = flatten(data?.tree || []);

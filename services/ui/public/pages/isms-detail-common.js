@@ -2,7 +2,7 @@ import { esc, withFramework } from '/app.js';
 
 export function badgeList(items, labelKey = 'ref', urlFn = null) {
   const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">—</span>';
+  if (!arr.length) return '<span class="small-muted">-</span>';
   return arr
     .map((it) => {
       const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');

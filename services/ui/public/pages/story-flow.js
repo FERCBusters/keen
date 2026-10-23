@@ -1,7 +1,8 @@
 // The story flow chart: boxes for the story's items, arranged by dragging, and
 // labelled links drawn between them. The canvas keeps the layout in memory and
-// reports every change so the page can offer to save it.
-import { esc } from '/app.js';
+// reports every change so the page can offer to save it. A box's title opens
+// its record in a new tab.
+import { esc, safeExternalHref } from '/app.js';
 
 export const NODE_WIDTH = 200;
 export const NODE_HEIGHT = 90;
@@ -36,6 +37,12 @@ export function linkPath(from, to) {
   return { x1, y1, x2, y2, mx: (x1 + x2) / 2, my: (y1 + y2) / 2 };
 }
 
+// Record pages are same-origin paths; anything else stays plain text.
+export function recordHref(url) {
+  const safe = safeExternalHref(url);
+  return safe.startsWith('/') ? safe : '';
+}
+
 // Places items on a grid in their given order, as the server does for new items.
 export function gridPositions(
   items,
@@ -48,7 +55,12 @@ export function gridPositions(
   }));
 }
 
-export function createFlowCanvas({ host, editable = false, onChange = () => {} }) {
+export function createFlowCanvas({
+  host,
+  editable = false,
+  onChange = () => {},
+  linkFor = (item) => item.url,
+}) {
   let items = [];
   let canEdit = Boolean(editable);
   let links = [];
@@ -136,6 +148,13 @@ export function createFlowCanvas({ host, editable = false, onChange = () => {} }
     }
   }
 
+  function titleHtml(item, title) {
+    const href = item.withheld ? '' : recordHref(linkFor(item));
+    if (!href) return esc(title);
+    const name = `Open ${item.kind_label || item.kind}: ${item.title || title} (opens in a new tab)`;
+    return `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer" draggable="false" title="${esc(name)}" aria-label="${esc(name)}">${esc(title)}</a>`;
+  }
+
   function nodeHtml(item) {
     // A withheld item arrives with no label or note, so its title stands alone.
     const title = item.label || item.title || item.kind_label;
@@ -144,7 +163,7 @@ export function createFlowCanvas({ host, editable = false, onChange = () => {} }
       ? `<div class="small-muted story-node-time">${esc(item.occurred_at)}</div>`
       : '';
     return `<span class="badge badge-soft story-node-kind">${esc(item.kind_label || item.kind)}</span>
-      <div class="story-node-title">${esc(title)}</div>
+      <div class="story-node-title">${titleHtml(item, title)}</div>
       ${subtitle ? `<div class="small-muted story-node-subtitle">${esc(subtitle)}</div>` : ''}${when}`;
   }
 
@@ -212,6 +231,8 @@ export function createFlowCanvas({ host, editable = false, onChange = () => {} }
   host.addEventListener('pointerdown', (ev) => {
     const node = ev.target.closest('[data-item-id]');
     if (!node || !canEdit || ev.button !== 0) return;
+    // A title link opens its record; boxes are dragged by the rest of the box.
+    if (!linkMode && ev.target.closest('a')) return;
     const item = byId(node.dataset.itemId);
     if (!item) return;
     if (linkMode) {
@@ -261,6 +282,8 @@ export function createFlowCanvas({ host, editable = false, onChange = () => {} }
   host.addEventListener('pointercancel', finish);
   host.addEventListener('pointerleave', finish);
   host.addEventListener('click', (ev) => {
+    // While linking, a click on a title chooses the box instead of opening it.
+    if (linkMode && ev.target.closest('[data-item-id] a')) ev.preventDefault();
     const linkEl = ev.target.closest('[data-link-from]');
     if (linkEl) {
       selectLink(

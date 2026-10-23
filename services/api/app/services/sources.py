@@ -34,7 +34,7 @@ def source_effectiveness_measures(
     user,
     db: Session,
 ):
-    """Return effectiveness measures with metric entries recorded against a KEEN source."""
+    """Return effectiveness measures with metric entries recorded against a Keen source."""
     fw = _clean_framework(framework)
     src = str(source_name or "").strip()
     if not src:

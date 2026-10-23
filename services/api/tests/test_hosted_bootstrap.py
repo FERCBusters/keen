@@ -68,7 +68,7 @@ def test_an_existing_installation_is_never_claimed(db, subject):
     )
     db.flush()
 
-    with pytest.raises(RuntimeError, match="Refusing to claim an existing KEEN"):
+    with pytest.raises(RuntimeError, match="Refusing to claim an existing Keen"):
         _bootstrap(db, subject=subject)
 
     assert db.query(UserIdentity).count() == 0
@@ -83,7 +83,7 @@ def test_an_existing_installation_is_never_claimed(db, subject):
 def test_a_reconfigured_owner_identity_cannot_take_over(db, issuer, subject):
     _bootstrap(db)
 
-    with pytest.raises(RuntimeError, match="Refusing to claim an existing KEEN"):
+    with pytest.raises(RuntimeError, match="Refusing to claim an existing Keen"):
         _bootstrap(db, issuer=issuer, subject=subject)
 
     assert [(i.issuer, i.subject) for i in db.query(UserIdentity)] == [

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed a KEEN instance with deterministic demonstration ISMS data.
+"""Seed a Keen instance with deterministic demonstration ISMS data.
 
 Intended location:
     services/api/scripts/seed_demo_data.py
@@ -11,12 +11,12 @@ Or, from inside the API container's services/api working directory:
     python scripts/seed_demo_data.py --framework iso_27001_2022 --prefix Demo
 
 The ISMS dataset is written against ISO 27001:2022. --all-frameworks adds
-reviewed examples for SOC 2, PCI DSS, the KEEN Assurance Framework and Cyber
+reviewed examples for SOC 2, PCI DSS, the Keen Assurance Framework and Cyber
 Essentials. The frameworks a run seeds join the organisation's framework
 selection, and a run that seeds the ISMS dataset makes ISO 27001:2022 the
 organisation default.
 
-The script writes directly through KEEN's SQLAlchemy models. It is deliberately
+The script writes directly through Keen's SQLAlchemy models. It is deliberately
 idempotent for the demo records it creates: re-running it updates matching rows
 instead of creating a fresh copy, provided the same --prefix is used. Linking a
 control to a document creates an automatic diary entry with a stored artefact,
@@ -95,6 +95,18 @@ from app.services.control_refs import CLAUSE_ROW_TYPE  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 
+def linked_record(model: type, filters: dict[str, Any]) -> tuple[str, Any] | None:
+    """The record a framework link row belongs to, as (record type, record ID)."""
+
+    if model in (IsmsEntityControlLink, IsmsEntityClauseLink):
+        return filters["entity_type"], filters["entity_id"]
+    if model is RiskControlLink:
+        return "risk", filters["risk_id"]
+    if model is InterestedPartyControlLink:
+        return "interested_party", filters["interested_party_id"]
+    return None
+
+
 @dataclass(frozen=True)
 class DemoConfig:
     framework: str
@@ -129,6 +141,8 @@ class DemoSeeder:
             self.db.flush()
         self.seed_date = anchor.timestamp.date()
         self.relevance_levels: dict[str, PestleRelevanceLevel] = {}
+        # Records given framework links, for their automatic diary entries.
+        self.linked_records: set[tuple[str, Any]] = set()
 
     @property
     def prefix(self) -> str:
@@ -152,7 +166,7 @@ class DemoSeeder:
             user = query.filter(User.username == username).first()
             if not user:
                 raise SystemExit(
-                    f"No active KEEN user found with username {username!r}"
+                    f"No active Keen user found with username {username!r}"
                 )
             return user
         user = (
@@ -162,7 +176,7 @@ class DemoSeeder:
             user = query.order_by(User.created_at.asc()).first()
         if not user:
             raise SystemExit(
-                "No active KEEN user exists yet. Create/login an admin user first, "
+                "No active Keen user exists yet. Create/login an admin user first, "
                 "or pass --username for the user that should own the demo records."
             )
         return user
@@ -205,6 +219,9 @@ class DemoSeeder:
     ) -> Any:
         row = self.db.query(model).filter_by(**filters).first()
         stat_name = getattr(model, "__tablename__", model.__name__)
+        record = linked_record(model, filters)
+        if record is not None:
+            self.linked_records.add(record)
         if row is not None:
             self.stats[f"{stat_name}.unchanged"] += 1
             return row
@@ -218,7 +235,7 @@ class DemoSeeder:
     def risk_ratings(
         likelihood: int, impact: int, residual_likelihood: int, residual_impact: int
     ) -> dict[str, int]:
-        """Register ratings with the score columns KEEN derives from them."""
+        """Register ratings with the score columns Keen derives from them."""
         return {
             "register_likelihood": likelihood,
             "register_impact": impact,
@@ -486,12 +503,12 @@ class DemoSeeder:
                 "description": "Representative customer and audit evidence data store.",
             },
             "web_app": {
-                "name": "KEEN Demo Web App",
+                "name": "Keen Demo Web App",
                 "category": "application",
                 "subcategory": "web_app",
                 "license": "mit",
                 "owner": "security_lead",
-                "description": "Demo-facing KEEN application and static frontend.",
+                "description": "Demo-facing Keen application and static frontend.",
             },
             "service_desk": {
                 "name": "Service Desk Team",
@@ -822,7 +839,7 @@ class DemoSeeder:
                     status="Approved",
                     accounts=["backup"],
                     roles=["security_lead", "platform_engineer"],
-                    notes="Fictional break-glass exercise with dual approval and subsequent credential rotation. This matrix is documentation only; it grants no KEEN permissions.",
+                    notes="Fictional break-glass exercise with dual approval and subsequent credential rotation. This matrix is documentation only; it grants no Keen permissions.",
                     controls=["A.5.30", "A.8.13"],
                 ),
                 dict(
@@ -1443,12 +1460,12 @@ class DemoSeeder:
                 "type": "ReleaseEvent",
                 "actor": "release-bot",
                 "repo": "demo-org/keen-demo",
-                "summary": "GitHub release published for KEEN demo version 1.2.0",
+                "summary": "GitHub release published for Keen demo version 1.2.0",
                 "payload": {
                     "action": "published",
                     "release": {
                         "tag_name": "v1.2.0-demo",
-                        "name": "KEEN Demo v1.2.0",
+                        "name": "Keen Demo v1.2.0",
                         "draft": False,
                         "prerelease": False,
                     },
@@ -1518,7 +1535,7 @@ class DemoSeeder:
                 "repo": "mig5/keen-demo",
                 "actor": "platform-reviewer",
                 "op": "pull_request_review",
-                "summary": "Forgejo KEEN demo pull request review approved audit sampling fix",
+                "summary": "Forgejo Keen demo pull request review approved audit sampling fix",
                 "activity": {
                     "content": "Approved scoped evidence sampling fix for non-event entities",
                     "pull_request": {
@@ -1535,12 +1552,12 @@ class DemoSeeder:
                 "repo": "mig5/keen-demo",
                 "actor": "release-bot",
                 "op": "release",
-                "summary": "Forgejo KEEN demo release published with ISMS seed data",
+                "summary": "Forgejo Keen demo release published with ISMS seed data",
                 "activity": {
                     "content": "Release v1.2.0-demo published",
                     "release": {
                         "tag_name": "v1.2.0-demo",
-                        "title": "KEEN demo seed data",
+                        "title": "Keen demo seed data",
                     },
                 },
                 "controls": ["A.8.25", "A.8.31", "A.8.32"],
@@ -2024,7 +2041,7 @@ class DemoSeeder:
 
     def run(self) -> None:
         print(
-            f"Seeding KEEN demo data as user {self.user.username!r} "
+            f"Seeding Keen demo data as user {self.user.username!r} "
             f"for framework {self.framework!r} with prefix {self.prefix!r}."
         )
         from demo_catalogue import seed_catalogue, select_frameworks
@@ -2035,8 +2052,9 @@ class DemoSeeder:
             select_frameworks(self, frameworks)
             return
         from app.ingest.demo_rss import seed_preset
-        from demo_documents import seed_documents, seed_link_diary
+        from demo_documents import seed_documents
         from demo_evidence import seed_evidence, seed_further_mappings
+        from demo_link_diary import seed_link_diary
         from demo_pestle import seed_pestle
         from demo_risks import seed_risks
         from demo_stories import seed_stories
@@ -2079,7 +2097,7 @@ class DemoSeeder:
 
 def parse_args() -> DemoConfig:
     parser = argparse.ArgumentParser(
-        description="Seed KEEN with deterministic demo ISMS/risk data."
+        description="Seed Keen with deterministic demo ISMS/risk data."
     )
     parser.add_argument(
         "--framework",
@@ -2094,7 +2112,7 @@ def parse_args() -> DemoConfig:
     parser.add_argument(
         "--username",
         default=None,
-        help="Active KEEN username to own created records. Defaults to first active admin, then first active user.",
+        help="Active Keen username to own created records. Defaults to first active admin, then first active user.",
     )
     parser.add_argument(
         "--dry-run",
@@ -2104,7 +2122,7 @@ def parse_args() -> DemoConfig:
     parser.add_argument(
         "--all-frameworks",
         action="store_true",
-        help="Seed reviewed examples across ISO 27001, SOC 2, PCI DSS, KEEN Assurance and Cyber Essentials (the ISMS dataset uses ISO 27001).",
+        help="Seed reviewed examples across ISO 27001, SOC 2, PCI DSS, Keen Assurance and Cyber Essentials (the ISMS dataset uses ISO 27001).",
     )
     parser.add_argument(
         "--allow-non-demo",

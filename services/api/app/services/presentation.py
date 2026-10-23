@@ -256,7 +256,7 @@ def _validate_event_source_url(url: str) -> Optional[str]:
     Evidence payloads often contain fields named ``url`` that are not web links
     to an upstream system.  OSSEC/Wazuh alerts, for example, may put Unix paths
     such as ``/home/miguel`` in ``json.url``.  Rendering those values as links
-    makes the browser resolve them against the KEEN origin, producing misleading
+    makes the browser resolve them against the Keen origin, producing misleading
     buttons like ``https://keen.example/home/miguel``.
 
     Source links shown in evidence tables therefore need to be full web URLs.

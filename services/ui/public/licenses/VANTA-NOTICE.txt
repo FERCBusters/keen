@@ -1,4 +1,4 @@
-KEEN Assurance Framework incorporates the Vanta Control Set under Apache-2.0.
+Keen Assurance Framework incorporates the Vanta Control Set under Apache-2.0.
 Upstream: https://github.com/VantaInc/vanta-control-set
 
 Upstream NOTICE:
@@ -8,7 +8,7 @@ Copyright 2021 Vanta Inc
 This product license includes software developed at
 Vanta, Inc (http://www.vanta.com/)
 
-KEEN adaptations include control organisation, KEEN identifiers, and
+Keen adaptations include control organisation, Keen identifiers, and
 consolidation of duplicate controls while retaining source references.
 The applicable Apache License, Version 2.0 is included in LICENSE and
 services/ui/public/licenses/VANTA-LICENSE.txt.

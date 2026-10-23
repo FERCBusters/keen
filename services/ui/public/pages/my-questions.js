@@ -46,15 +46,15 @@ function _row(it) {
     it.target_type && it.target_type !== 'event'
       ? String(it.target_type).replaceAll('_', ' ')
       : it.event_source || '';
-  const ts = it.event_timestamp ? fmtTs(it.event_timestamp) : it.target_ref || '—';
-  const updated = it.updated_at ? fmtTs(it.updated_at) : '—';
+  const ts = it.event_timestamp ? fmtTs(it.event_timestamp) : it.target_ref || '-';
+  const updated = it.updated_at ? fmtTs(it.updated_at) : '-';
   const badge = _statusBadge(it.status, !!it.unread);
 
   return `
     <tr class="${it.unread ? 'table-warning' : ''}">
       <td class="wrap">
         <div class="fw-semibold">${esc(title)}</div>
-        <div class="small-muted">${esc(src)} • ${esc(ts)}</div>
+        <div class="small-muted">${esc(src)} · ${esc(ts)}</div>
       </td>
       <td>${badge}</td>
       <td class="small-muted">${esc(updated)}</td>

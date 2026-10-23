@@ -78,7 +78,7 @@ function riskVizNodeHref(node) {
 }
 
 function riskVizPrimaryLabel(node) {
-  if (!node) return '—';
+  if (!node) return '-';
   if (node.node_kind === 'control') return node.ref || node.label || 'Control';
   return node.label || node.asset || 'Risk';
 }
@@ -88,7 +88,7 @@ function riskVizSecondaryLabel(node) {
   if (node.node_kind === 'control') return node.title || '';
   const parts = [node.category, node.subcategory].filter(Boolean).join(' / ');
   const types = (node.risk_types || []).join(', ');
-  return [parts, types].filter(Boolean).join(' • ');
+  return [parts, types].filter(Boolean).join(' · ');
 }
 
 function truncateRiskVizText(value, max = 72) {
@@ -101,9 +101,9 @@ function truncateRiskVizText(value, max = 72) {
 
 function splitRiskVizLabel(value, maxChars = 34, maxLines = 2) {
   const text =
-    String(value || '—')
+    String(value || '-')
       .replace(/\s+/g, ' ')
-      .trim() || '—';
+      .trim() || '-';
   if (text.length <= maxChars) return [text];
   const words = text.split(' ');
   const lines = [];
@@ -152,7 +152,7 @@ function addRiskVizText(
     .attr('fill', 'currentColor')
     .attr('opacity', opacity);
   if (underline) text.style('text-decoration', 'underline');
-  (lines || ['—']).forEach((line, idx) => {
+  (lines || ['-']).forEach((line, idx) => {
     text
       .append('tspan')
       .attr('x', x)
@@ -355,7 +355,7 @@ function renderRiskControlsGraph() {
       const risk = riskMap.get(link.source);
       const control = controlMap.get(link.target);
       const selectedScore = riskVizScoreValue(link, scoreMode);
-      return `${riskVizPrimaryLabel(risk)} → ${riskVizPrimaryLabel(control)}\n${riskVizScoreShortLabel(scoreMode)}: ${selectedScore}\nInherent risk score: ${link.risk_score ?? link.value ?? '—'}\nResidual risk score: ${link.residual_risk_score ?? '—'}`;
+      return `${riskVizPrimaryLabel(risk)} × ${riskVizPrimaryLabel(control)}\n${riskVizScoreShortLabel(scoreMode)}: ${selectedScore}\nInherent risk score: ${link.risk_score ?? link.value ?? '-'}\nResidual risk score: ${link.residual_risk_score ?? '-'}`;
     });
 
   const renderNode = (selection, side) => {
@@ -430,7 +430,7 @@ function renderRiskControlsHeatmap() {
   el.innerHTML = `
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3 no-print">
       <div class="small-muted">${esc(risks.length)} risk(s), ${esc(controlNodes.length)} control(s), ${esc(links.length)} mapping(s). Darker cells have higher ${esc(scoreLabel)}.</div>
-      <input class="form-control form-control-sm" data-risk-control-matrix-filter type="search" placeholder="Filter risks or controls…" style="max-width:320px;">
+      <input class="form-control form-control-sm" data-risk-control-matrix-filter type="search" placeholder="Filter risks or controls" style="max-width:320px;">
     </div>
     <div data-risk-control-matrix-host></div>
   `;
@@ -475,7 +475,7 @@ function renderRiskControlsHeatmap() {
           <thead>
             <tr>
               <th class="matrix-sticky-col matrix-corner">Risk scenario</th>
-              ${visibleCols.map((control) => `<th class="matrix-control-header" title="${esc(control.ref || control.label || 'Control')} — ${esc(control.title || '')}"><a href="${esc(controlHref(control.control_id || ''))}" class="matrix-control-link">${esc(control.ref || control.label || 'Control')}</a></th>`).join('')}
+              ${visibleCols.map((control) => `<th class="matrix-control-header" title="${esc(control.ref || control.label || 'Control')} - ${esc(control.title || '')}"><a href="${esc(controlHref(control.control_id || ''))}" class="matrix-control-link">${esc(control.ref || control.label || 'Control')}</a></th>`).join('')}
             </tr>
           </thead>
           <tbody>
@@ -489,8 +489,8 @@ function renderRiskControlsHeatmap() {
                 return `<tr>
                 <th class="matrix-sticky-col matrix-party-label">
                   <a class="fw-semibold" href="${esc(riskHref(risk.risk_id || ''))}">${esc(truncateRiskVizText(riskVizPrimaryLabel(risk), 92))}</a>
-                  <div class="small-muted">${esc(subtitle)}${linkedCount ? ` • ${linkedCount} shown control(s)` : ''}</div>
-                  <div class="small-muted">Risk score: ${esc(String(risk.risk_score ?? '—'))} • Residual: ${esc(String(risk.residual_risk_score ?? '—'))}</div>
+                  <div class="small-muted">${esc(subtitle)}${linkedCount ? ` · ${linkedCount} shown control(s)` : ''}</div>
+                  <div class="small-muted">Risk score: ${esc(String(risk.risk_score ?? '-'))} · Residual: ${esc(String(risk.residual_risk_score ?? '-'))}</div>
                 </th>
                 ${visibleCols
                   .map((control) => {
@@ -499,7 +499,7 @@ function renderRiskControlsHeatmap() {
                       return '<td class="matrix-cell matrix-cell-empty" aria-label="Not linked"></td>';
                     const score = riskVizScoreValue(link, scoreMode);
                     const alpha = Math.max(0.18, Math.min(0.92, 0.16 + (score / maxScore) * 0.74));
-                    const title = `${riskVizPrimaryLabel(risk)} → ${riskVizPrimaryLabel(control)} — ${riskVizScoreShortLabel(scoreMode).toLowerCase()} ${score}, inherent ${link.risk_score ?? link.value ?? '—'}, residual ${link.residual_risk_score ?? '—'}`;
+                    const title = `${riskVizPrimaryLabel(risk)} × ${riskVizPrimaryLabel(control)} - ${riskVizScoreShortLabel(scoreMode).toLowerCase()} ${score}, inherent ${link.risk_score ?? link.value ?? '-'}, residual ${link.residual_risk_score ?? '-'}`;
                     return `<td class="matrix-cell risk-control-heatmap-cell" title="${esc(title)}" style="background:rgba(var(--bs-primary-rgb), ${alpha.toFixed(3)});"><a href="${esc(controlHref(control.control_id || ''))}" aria-label="${esc(title)}">${esc(String(score))}</a></td>`;
                   })
                   .join('')}
@@ -538,10 +538,10 @@ export async function loadRiskVisualisations(opts = {}) {
   if (!riskControlGraphData || opts.force) {
     if (riskControlsGraph)
       riskControlsGraph.innerHTML =
-        '<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risk/control graph…</span></div>';
+        '<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risk/control graph</span></div>';
     if (riskControlsHeatmap)
       riskControlsHeatmap.innerHTML =
-        '<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risk/control heatmap…</span></div>';
+        '<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risk/control heatmap</span></div>';
     riskControlGraphData = await apiGet(
       `/api/v1/graph/risk_control?framework=${encodeURIComponent(framework)}`,
     );

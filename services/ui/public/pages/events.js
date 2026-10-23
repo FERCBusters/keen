@@ -47,7 +47,7 @@ try {
     const a = document.createElement('a');
     a.className = 'btn btn-outline-primary';
     a.href = withFramework('/admin.html#diary', framework);
-    a.textContent = 'Add Diary Entry';
+    a.textContent = 'Add diary entry';
     actions.prepend(a);
   }
 } catch {
@@ -67,7 +67,7 @@ function controlHeading(ref) {
   if (!r) return '';
   const title = String(controlsIndex?.[r]?.title || '').trim();
   // Include BOTH reference + title when we have it.
-  return title ? `${r} — ${title}` : r;
+  return title ? `${r} - ${title}` : r;
 }
 
 function splitList(value) {
@@ -103,7 +103,7 @@ function updatePageTitle({ source, control, clause } = {}) {
   }
 
   if (pageTitleEl) pageTitleEl.textContent = heading;
-  document.title = `Keen – ${heading}`;
+  document.title = `Keen - ${heading}`;
 }
 
 function updatePageTitleFromInputs() {
@@ -223,7 +223,7 @@ function picker(el, singular, plural, description) {
     emptyText: `All ${plural}`,
     emptySelectedText: `No ${singular} filters selected. All ${plural} are included.`,
     noMatchText: `No ${plural} match your filter.`,
-    searchPlaceholder: `Filter ${plural}…`,
+    searchPlaceholder: `Filter ${plural}`,
     options: [],
     selectedValues: splitList(state[el.id]),
   });
@@ -365,8 +365,8 @@ async function loadControls() {
       selControl,
       items.map((c) => ({
         value: c.ref,
-        label: c.title ? `${c.ref} — ${c.title}` : c.ref,
-        title: `${c.type || 'control'}: ${c.title ? `${c.ref} — ${c.title}` : c.ref}`,
+        label: c.title ? `${c.ref} - ${c.title}` : c.ref,
+        title: `${c.type || 'control'}: ${c.title ? `${c.ref} - ${c.title}` : c.ref}`,
       })),
       splitList(state.control),
       (value) => ({ value, label: `Current filter: ${value}` }),
@@ -410,7 +410,7 @@ function renderControlOptions(facets) {
       const type = String(r.type || controlsIndex[ref]?.type || 'control');
       // Without the catalogue, the results still name the control.
       if (title && !controlsIndex[ref]) controlsIndex[ref] = { ref, title, type };
-      const label = title ? `${ref} — ${title}` : ref;
+      const label = title ? `${ref} - ${title}` : ref;
       return {
         value: ref,
         label: `${label} (${Number(r.count || 0)})`,
@@ -434,7 +434,7 @@ function renderRuleOptions(facets) {
       const targets = (r.targets || []).join(', ');
       return {
         value: id,
-        label: `${description ? `${id} — ${description}` : id} (${Number(r.count || 0)})`,
+        label: `${description ? `${id} - ${description}` : id} (${Number(r.count || 0)})`,
         title: targets ? `${id} maps to ${targets}` : id,
       };
     }),
@@ -551,8 +551,8 @@ tbody.addEventListener('click', (ev) => {
 
 async function loadEvents() {
   status.style.display = 'none';
-  meta.textContent = 'Loading…';
-  showTableLoading(tbody, columnCount, 'Loading events…');
+  meta.textContent = 'Loading';
+  showTableLoading(tbody, columnCount, 'Loading events');
   try {
     const p = filterParams();
     p.set('limit', String(state.limit));
@@ -564,16 +564,16 @@ async function loadEvents() {
     const page = offsetPagerState(state);
     const timeNote =
       state.start_ts && state.end_ts
-        ? ` • window ${fmtTs(state.start_ts)}–${fmtTs(state.end_ts)}`
+        ? ` · window ${fmtTs(state.start_ts)}-${fmtTs(state.end_ts)}`
         : '';
-    meta.textContent = `${page.start}–${page.end} of ${page.total}${timeNote}`;
+    meta.textContent = `${page.start}-${page.end} of ${page.total}${timeNote}`;
 
     renderRows(data.items || []);
 
     setOffsetPagerDisabled(pagerButtons, state);
   } catch (e) {
     toast(status, `Failed to load events: ${String(e)}`, 'danger');
-    meta.textContent = '—';
+    meta.textContent = '-';
     tbody.innerHTML = `<tr><td colspan="${columnCount}" class="small-muted p-4">Failed to load events.</td></tr>`;
   }
 }

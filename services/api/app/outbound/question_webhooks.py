@@ -231,7 +231,7 @@ def _compact_text(payload: dict[str, Any]) -> str:
 
         lines.append(header)
         lines.append(f"Event: {ev_sum}")
-        lines.append(f"Source: {ev_source}{(' • ' + ev_ts) if ev_ts else ''}")
+        lines.append(f"Source: {ev_source}{(' · ' + ev_ts) if ev_ts else ''}")
         if thread_author:
             lines.append(f"Thread author: {thread_author}")
         if post_author:
@@ -245,7 +245,7 @@ def _compact_text(payload: dict[str, Any]) -> str:
     else:
         lines.append("New question on event")
         lines.append(f"Event: {ev_sum}")
-        lines.append(f"Source: {ev_source}{(' • ' + ev_ts) if ev_ts else ''}")
+        lines.append(f"Source: {ev_source}{(' · ' + ev_ts) if ev_ts else ''}")
         if thread_author:
             lines.append(f"Asked by: {thread_author}")
 

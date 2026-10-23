@@ -126,7 +126,7 @@ const tab = (ui, id) => ui.el(id).dispatchEvent(new ui.window.Event('shown.bs.ta
 test('clause page renders header, guidance, evidence mappings and linked controls safely', async (t) => {
   const { ui } = await clausePage(t);
   assert.equal(ui.el('clauseTitle').textContent, '6.1.2  <b>Risk assessment</b>');
-  assert.equal(ui.el('clauseMeta').textContent, 'A • parent 6.1');
+  assert.equal(ui.el('clauseMeta').textContent, 'A · parent 6.1');
   assert.equal(ui.el('clauseLinks').querySelector('a').href, 'https://guidance.example/6.1.2');
   assert.match(ui.el('clausesBreadcrumb').getAttribute('href'), /clauses\.html\?framework=A/);
   // Only safe evidence URLs become links; blank URLs are dropped from the count.
@@ -312,7 +312,10 @@ test('PESTLE and ISMS tabs load linked records on demand', async (t) => {
     first.querySelector('a').getAttribute('href'),
     /pestle_item\.html\?id=p1&framework=A/,
   );
-  assert.match(ui.el('clausePestleRows').querySelectorAll('tr')[1].textContent, /—/);
+  assert.equal(
+    ui.el('clausePestleRows').querySelectorAll('tr')[1].cells[5].textContent.trim(),
+    '-',
+  );
 
   tab(ui, 'clauseIsmsTab');
   await settle(() => ui.el('clauseIsmsView').querySelector('table'));

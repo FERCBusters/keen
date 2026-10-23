@@ -318,7 +318,7 @@ test('the overview summarises integration health and each status', async (t) => 
   assert.equal(runs[0].querySelector('progress').getAttribute('value'), '4');
   assert.equal(runs[0].querySelector('progress').getAttribute('max'), '10');
   assert.match(runs[2].textContent, /Uptime checks · Preview/);
-  assert.match(runs[3].textContent, /deleted.*Waiting for worker…/s);
+  assert.match(runs[3].textContent, /deleted.*Waiting for worker/s);
   assert.match(
     el('connections').textContent,
     /Monitoring API · https:\/\/monitor\.example\.test · bearer \(credential saved\)/,
@@ -379,7 +379,7 @@ test('demo mode disables configuration and explains why', async (t) => {
   assert.match(el('new').title, /demo environment/);
   assert.match(el('status').textContent, /You are running in a demo environment/);
   assert.equal(el('connection-form').hidden, true);
-  assert.match(el('list').textContent, /API integrations in your own KEEN installation/);
+  assert.match(el('list').textContent, /API integrations in your own Keen installation/);
   const deleteConnection = buttonIn(el('connections'), 'Delete connection');
   assert.equal(deleteConnection.disabled, true);
   el('status').textContent = '';

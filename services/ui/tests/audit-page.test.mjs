@@ -253,7 +253,7 @@ test('audit page renders details, KPIs, people, findings and evidence with hosti
   assert.match(ui.el('attendees').textContent, /bob@example\.test · Auditor/);
   assert.equal(ui.el('attendees').querySelectorAll('[data-del-attendee]').length, 2);
   const findings = ui.el('findings').textContent;
-  assert.match(findings, /Major Non-Conformity/);
+  assert.match(findings, /Major non-conformity/);
   assert.match(findings, /In progress/);
   assert.match(findings, /<i>Missing review<\/i>/);
   assert.match(findings, /unknown_kind/);
@@ -568,7 +568,7 @@ test('attendees can be chosen from users or people and validation errors are sho
     ['', 'u9', 'u2'],
   );
   ui.el('attendeeForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => /Choose a Person or enter a name/.test(ui.el('status').textContent));
+  await settle(() => /Choose a person or enter a name/.test(ui.el('status').textContent));
 
   ui.el('attendeeUserId').value = 'u9';
   ui.el('attendeeUserId').dispatchEvent(new ui.window.Event('change'));
@@ -576,7 +576,7 @@ test('attendees can be chosen from users or people and validation errors are sho
   assert.equal(ui.el('attendeeEmail').value, 'carol@example.test');
   ui.el('attendeePersonId').value = 'p1';
   ui.el('attendeeForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => /Select a Person or KEEN user/.test(ui.el('status').textContent));
+  await settle(() => /Select either a person or a Keen user/.test(ui.el('status').textContent));
   assert.equal(state.posted.length, 0);
 
   ui.el('attendeePersonId').value = '';
@@ -1236,4 +1236,34 @@ test('audit ZIP names follow the served type when the download name is missing o
     'sampled-evidence/001 2026-01-02T00-00-00Z auth ev1/artifact-art3.zip',
     'sampled-evidence/001 2026-01-02T00-00-00Z auth ev1/artifact-art4',
   ]);
+});
+
+test('a new audit opens at its report notes, and finding evidence remembers the audit', async (t) => {
+  const stored = {};
+  const sessionStorage = {
+    getItem: (key) => stored[key] ?? null,
+    setItem: (key, value) => {
+      stored[key] = value;
+    },
+  };
+  const scrolled = [];
+  const { ui } = await auditPage(t, {
+    query: '&id=a1&focus=notes',
+    globals: { sessionStorage },
+    setup(window) {
+      window.HTMLFormElement.prototype.scrollIntoView = function () {
+        scrolled.push(this.id);
+      };
+    },
+  });
+  await idle(ui);
+  assert.deepEqual(scrolled, ['reportNotesForm']);
+  assert.equal(ui.document.activeElement?.id, 'auditNotes');
+  ui.el('sampleEventLink').dispatchEvent(new ui.window.MouseEvent('click', { cancelable: true }));
+  assert.equal(stored['keen.samplingAudit'], 'a1');
+
+  // Without the request the page opens at the top as before.
+  const plain = await auditPage(t);
+  await idle(plain.ui);
+  assert.notEqual(plain.ui.document.activeElement?.id, 'auditNotes');
 });

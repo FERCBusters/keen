@@ -638,7 +638,7 @@ def test_related_registers_are_matched_and_drafts_avoid_duplicates(
     assert regulators["draft"]["controls"] == result["draft_risk"]["controls"]
     existing_parties = result["existing_matches"]["interested_parties"]
     assert [p["id"] for p in existing_parties] == [str(rows["party"].id)]
-    assert existing_parties[0]["label"] == "Regulators — Enforcement"
+    assert existing_parties[0]["label"] == "Regulators - Enforcement"
     assert existing_parties[0]["confidence"] == "strong"
 
     cia = result["existing_matches"]["cia_risks"]

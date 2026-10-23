@@ -350,16 +350,16 @@ def test_prune_refuses_a_review_made_before_the_rules_changed(lab, stale):
 @pytest.mark.parametrize(
     "submit,source,detail",
     [
-        (lambda s: [], "ci", "Review 1–500 mapping IDs for a source first"),
+        (lambda s: [], "ci", "Review 1-500 mapping IDs for a source first"),
         (
             lambda s: [uuid.uuid4() for _ in range(501)],
             "ci",
-            "Review 1–500 mapping IDs for a source first",
+            "Review 1-500 mapping IDs for a source first",
         ),
         (
             lambda s: [s.no_longer_matches.id],
             "   ",
-            "Review 1–500 mapping IDs for a source first",
+            "Review 1-500 mapping IDs for a source first",
         ),
         (lambda s: ["not-a-uuid"], "ci", "Invalid mapping ID"),
         (lambda s: [s.no_longer_matches.id] * 2, "ci", "Duplicate mapping IDs"),
@@ -588,14 +588,14 @@ def test_preview_examines_only_the_rule_source_and_explains_each_mismatch(lab):
     reasons = {item["event_id"]: item["reasons"] for item in body["nonmatches"]}
     assert reasons == {
         str(failed.id): [
-            "Person/account: the rule asks for ‘ci-bot’; "
-            "this event has ‘not supplied’.",
-            "Activity: the rule asks for ‘deploy’; this event has ‘rollback’.",
-            "Result: the rule asks for ‘success’; this event has ‘failure’.",
+            "Person/account: the rule asks for 'ci-bot'; "
+            "this event has 'not supplied'.",
+            "Activity: the rule asks for 'deploy'; this event has 'rollback'.",
+            "Result: the rule asks for 'success'; this event has 'failure'.",
         ],
         str(anonymous.id): [
-            "Person/account: the rule asks for ‘ci-bot’; "
-            "this event has ‘not supplied’.",
+            "Person/account: the rule asks for 'ci-bot'; "
+            "this event has 'not supplied'.",
         ],
     }
     # Previewing saves nothing, queues nothing and maps nothing.

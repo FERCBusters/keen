@@ -192,3 +192,90 @@ def test_event_endpoints_keep_labels_and_provenance(catalogue, monkeypatch):
     )
     assert unmapped["total"] == 1
     assert unmapped["items"][0]["id"] == str(events[-1].id)
+
+
+def _event_sql(db, predicate):
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    sql_event.listen(db.bind, "before_cursor_execute", capture)
+    try:
+        ids = {row.id for row in db.query(Event.id).filter(predicate)}
+    finally:
+        sql_event.remove(db.bind, "before_cursor_execute", capture)
+    return ids, statements[-1]
+
+
+def test_control_filter_reads_events_by_resolved_ids(catalogue, monkeypatch):
+    """The crosswalk is resolved once; the events query never re-derives it."""
+    from app.services import control_inheritance
+    from app.services.event_filters import event_predicates, parse_event_filters
+
+    db, controls, events, _ = catalogue
+    target = controls[0][0].id
+    filters = parse_event_filters(framework="F0", control=str(target))
+    (predicate,) = event_predicates(filters, db)
+    ids, sql = _event_sql(db, predicate)
+    # Every event except the last maps to a crosswalked control of each framework.
+    assert ids == {e.id for e in events[:-1]}
+    assert "osa_control_mappings" not in sql
+    assert "cross_framework_control_links" not in sql
+    assert "mappings" not in sql
+
+    # Common evidence is read through the mappings of the resolved controls.
+    monkeypatch.setattr(control_inheritance, "LISTED_MAPPINGS", 10)
+    (predicate,) = event_predicates(filters, db)
+    ids, sql = _event_sql(db, predicate)
+    assert ids == {e.id for e in events[:-1]}
+    assert "mappings" in sql and "osa_control_mappings" not in sql
+
+    # A control without evidence or crosswalk links matches nothing.
+    lonely = ControlItem(framework_slug="F0", ref="lonely", type="control")
+    db.add(lonely)
+    db.flush()
+    empty = parse_event_filters(framework="F0", control=str(lonely.id))
+    (predicate,) = event_predicates(empty, db)
+    assert db.query(Event).filter(predicate).count() == 0
+
+
+def test_clause_filters_share_one_bounded_predicate(catalogue, monkeypatch):
+    """Chosen clauses resolve to one list of events, whatever their number."""
+    from app.db.models import ControlClauseLink, FrameworkClause
+    from app.services import control_inheritance
+    from app.services.event_filters import event_predicates, parse_event_filters
+
+    db, controls, events, _ = catalogue
+    clauses = [FrameworkClause(framework_slug="F0", ref=f"{n}.1") for n in range(1, 6)]
+    db.add_all(clauses)
+    db.flush()
+    for clause, control in zip(clauses, controls[0][1:6]):
+        db.add(
+            ControlClauseLink(
+                clause_id=clause.id,
+                control_item_id=control.id,
+                applicability="applicable",
+            )
+        )
+    db.flush()
+    filters = parse_event_filters(
+        framework="F0", clause=",".join(clause.ref for clause in clauses)
+    )
+    (predicate,) = event_predicates(filters, db)
+    ids, sql = _event_sql(db, predicate)
+    # The clause controls inherit every event mapped in the other frameworks.
+    assert ids == {e.id for e in events[:-1]}
+    assert "control_clause_links" not in sql and "mappings" not in sql
+    # One list of event ids, never one list per clause.
+    assert sql.count("?") <= len(events)
+
+    monkeypatch.setattr(control_inheritance, "LISTED_MAPPINGS", 10)
+    (predicate,) = event_predicates(filters, db)
+    ids, sql = _event_sql(db, predicate)
+    assert ids == {e.id for e in events[:-1]}
+    assert sql.count("FROM mappings") == 1
+
+    unknown = parse_event_filters(framework="F0", clause="9.9")
+    (predicate,) = event_predicates(unknown, db)
+    assert db.query(Event).filter(predicate).count() == 0

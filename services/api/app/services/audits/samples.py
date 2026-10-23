@@ -245,7 +245,7 @@ def audit_sample_entity_reference(
                 getattr(getattr(row, "nature", None), "name", "")
                 or "Nature of interest"
             )
-            title = f"Interested party: {name} — {nature}"
+            title = f"Interested party: {name} - {nature}"
             subtitle = short_text(row.note, 220)
             controls = interested_party_sample_controls(db, row.id, framework)
     elif entity_type == "isms_swot":

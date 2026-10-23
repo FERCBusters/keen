@@ -135,7 +135,7 @@ test('verified SSO addresses are listed as text and removed after confirmation',
     /requires a sign-in within the last five minutes/,
   );
   const item = ui.el('ssoEmailList').querySelector('li');
-  assert.equal(item.querySelector('span').textContent, '<b>alice</b>@example.test — verified');
+  assert.equal(item.querySelector('span').textContent, '<b>alice</b>@example.test - verified');
   assert.equal(item.querySelector('b'), null);
   item.querySelector('button').click();
   await settle(() => /No verified SSO email addresses/.test(ui.el('ssoEmailList').textContent));

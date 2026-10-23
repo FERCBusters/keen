@@ -41,9 +41,7 @@ async function controlsPage(t, options = {}) {
     },
     vendor: options.vendor,
   });
-  await settle(
-    () => ui.el('kpiEventsMapped').textContent !== '…' && ui.el('rows').querySelector('td'),
-  );
+  await settle(() => ui.idle() && !ui.el('rows').querySelector('.table-loading-row'));
   return { ui, posted };
 }
 
@@ -110,7 +108,7 @@ test('controls register shows in-scope controls with evidence counts and KPIs', 
   );
   assert.match(rows[1].textContent, /0/);
   // Counts withheld from accounts without event access render as a dash.
-  assert.match(rows[2].cells[3].textContent, /—/);
+  assert.equal(rows[2].cells[3].textContent.trim(), '-');
   assert.equal(ui.el('kpiEventsMapped').textContent, '10');
   assert.equal(ui.el('kpiEventsUnmapped').textContent, '2');
   assert.equal(ui.el('kpiControlsWith').textContent, '1');
@@ -157,9 +155,9 @@ test('controls handle empty catalogues, counter failures and load failures', asy
   assert.match(empty.ui.el('rows').textContent, /No controls loaded yet/);
   const counters = await controlsPage(t, { summaryFail: true });
   await settle(() => /failed to load counters/.test(counters.ui.el('status').textContent));
-  assert.equal(counters.ui.el('kpiEventsMapped').textContent, '–');
+  assert.equal(counters.ui.el('kpiEventsMapped').textContent, '-');
   const withheld = await controlsPage(t, { summary: { events: null } });
-  assert.equal(withheld.ui.el('kpiControlsWith').textContent, '–');
+  assert.equal(withheld.ui.el('kpiControlsWith').textContent, '-');
   const failed = await controlsPage(t, { fail: true });
   assert.match(failed.ui.el('status').textContent, /Failed to load controls: Error: Stats offline/);
   failed.ui.el('reload').click();
@@ -230,9 +228,9 @@ test('clauses register flattens the hierarchy and hides counts on parent clauses
   assert.equal(rows[1].cells[1].textContent, '<i>Organisation</i>');
   assert.equal(ui.el('rows').querySelector('i:not(.bi)'), null);
   // Parent clauses (children present or a child count) show a dash in the count column.
-  assert.equal(rows[0].cells[2].textContent, '—');
+  assert.equal(rows[0].cells[2].textContent, '-');
   assert.equal(rows[1].cells[2].textContent, '3');
-  assert.equal(rows[2].cells[2].textContent, '—');
+  assert.equal(rows[2].cells[2].textContent, '-');
   // Only safe evidence and guidance links are rendered.
   assert.deepEqual(
     [...rows[1].cells[3].querySelectorAll('a')].map((a) => a.getAttribute('href')),

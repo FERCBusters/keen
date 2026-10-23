@@ -33,7 +33,7 @@ def configuration(values):
             or len(value) > 256
             or any(ord(c) < 32 or ord(c) > 126 for c in value)
         ):
-            raise ValueError(f"IMAP {label} must be 1–256 printable ASCII characters")
+            raise ValueError(f"IMAP {label} must be 1-256 printable ASCII characters")
     try:
         raw_port = values.get("port") or "993"
         raw_chars = values.get("body_max_chars") or str(DEFAULT_BODY_CHARS)
@@ -47,7 +47,7 @@ def configuration(values):
         ) from None
     if not 1 <= port <= 65535 or not 1 <= chars <= MAX_BODY_CHARS:
         raise ValueError(
-            "IMAP port must be 1–65535; body character limit must be 1–65536"
+            "IMAP port must be 1-65535; body character limit must be 1-65536"
         )
     interval = values.get("poll_interval_minutes", "5")
     if not isinstance(interval, str) or not re.fullmatch(r"[0-9]{1,4}", interval):
@@ -55,7 +55,7 @@ def configuration(values):
     interval = int(interval)
     if not 5 <= interval <= 1440 or interval % 5:
         raise ValueError(
-            "IMAP collection interval must be 5–1440 minutes in steps of 5"
+            "IMAP collection interval must be 5-1440 minutes in steps of 5"
         )
     body = values.get("fetch_body") or "false"
     if body not in ("true", "false"):

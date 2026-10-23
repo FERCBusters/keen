@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – Risks</title>
+  <title>Keen - Risks</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css"/>
@@ -17,11 +17,11 @@
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
         <h1 class="h3 mb-1">Risks</h1>
-        <div class="small-muted">Every risk in one place: the register and heatmap, information-security (CIA) risks, PESTLE(E) factors and the reusable library.</div>
+        <div class="small-muted">Manage the risk register, information-security (CIA) risks, PESTLE(E) factors and the reusable risk library.</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
         <a class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" id="mitigatorLink" data-nav-fw="1" href="/mitigator.html" data-feature="mitigator"><img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon-sm"> Ask the Mitigator</a>
-        <a class="btn btn-outline-primary" id="interestedPartiesLink" data-nav-fw="1" href="/interested_parties.html" data-feature="interested_parties"><i class="bi bi-people" aria-hidden="true"></i> Interested Parties</a>
+        <a class="btn btn-outline-primary" id="interestedPartiesLink" data-nav-fw="1" href="/interested_parties.html" data-feature="interested_parties"><i class="bi bi-people" aria-hidden="true"></i> Interested parties</a>
         <a id="newRisk" class="btn btn-primary" data-nav-fw="1" href="/risk-wizard.html"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a risk</a>
       </div>
     </div>
@@ -43,7 +43,7 @@
         <div class="card mb-3 no-print" data-mosp-filter-section="risk-filters" data-mosp-filter-title="Risk filters">
           <div class="card-body" data-mosp-filter-body>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-              <input id="q" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search name, asset, category, scenario or note…">
+              <input id="q" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search name, asset, category, scenario or note">
               <select id="categoryFilter" class="form-select form-select-sm" style="min-width:160px;"><option value="">All categories</option></select>
               <select id="subcategoryFilter" class="form-select form-select-sm" style="min-width:180px;"><option value="">All subcategories</option></select>
               <select id="methodFilter" class="form-select form-select-sm" style="min-width:160px;" aria-label="Kind of risk">
@@ -62,44 +62,49 @@
             </div>
           </div>
         </div>
-        <div class="row g-3">
-          <div class="col-12 col-xl-4" id="heatmapColumn" data-feature="risk_register">
-            <section class="card mb-3">
-              <div class="card-header fw-semibold">5×5 heatmap</div>
-              <div class="card-body">
-                <p class="small-muted">Cells show how many rated risks sit at each likelihood and impact. Choose today's ratings or the ratings after controls. Thresholds apply to every risk.</p>
-                <div class="d-flex gap-3 mb-2">
-                  <label><input checked name="scoreMode" type="radio" value="inherent"> Today (inherent)</label>
-                  <label><input name="scoreMode" type="radio" value="residual"> After controls (residual)</label>
+        <div class="risk-register-layout" id="riskRegisterLayout">
+          <aside class="risk-register-sidebar" id="heatmapColumn" data-feature="risk_register" aria-label="Heatmap, export and import">
+            <div class="risk-sidebar-bar no-print">
+              <button class="btn btn-sm btn-outline-secondary" id="toggleRiskSidebar" type="button" aria-expanded="true" aria-controls="riskSidebarBody" title="Hide the heatmap, export and import"><i class="bi bi-chevron-double-left" aria-hidden="true"></i><span>Hide panel</span></button>
+            </div>
+            <div id="riskSidebarBody">
+              <section class="card mb-3">
+                <div class="card-header fw-semibold">5×5 heatmap</div>
+                <div class="card-body">
+                  <p class="small-muted">Cells show how many rated risks sit at each likelihood and impact. Choose today's ratings or the ratings after controls. Thresholds apply to every risk.</p>
+                  <div class="d-flex gap-3 mb-2">
+                    <label><input checked name="scoreMode" type="radio" value="inherent"> Today (inherent)</label>
+                    <label><input name="scoreMode" type="radio" value="residual"> After controls (residual)</label>
+                  </div>
+                  <div class="table-responsive"><table aria-label="Risk heatmap" class="table table-sm table-bordered text-center align-middle" id="heatmap"></table></div>
+                  <div class="small-muted">Impact increases left to right; likelihood increases bottom to top.</div>
+                  <form class="row g-2 mt-2 no-print" id="thresholdForm">
+                    <div class="col-4"><label class="form-label" for="lowMax">Low through</label><input class="form-control" id="lowMax" max="24" min="1" required type="number"></div>
+                    <div class="col-4"><label class="form-label" for="moderateMax">Moderate through</label><input class="form-control" id="moderateMax" max="24" min="2" required type="number"></div>
+                    <div class="col-4"><label class="form-label" for="highMax">High through</label><input class="form-control" id="highMax" max="24" min="3" required type="number"></div>
+                    <div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit">Save thresholds</button> <span class="small-muted">Scores above the high threshold are critical.</span></div>
+                  </form>
                 </div>
-                <div class="table-responsive"><table aria-label="Risk heatmap" class="table table-sm table-bordered text-center align-middle" id="heatmap"></table></div>
-                <div class="small-muted">Impact increases left to right; likelihood increases bottom to top.</div>
-                <form class="row g-2 mt-2 no-print" id="thresholdForm">
-                  <div class="col-4"><label class="form-label" for="lowMax">Low through</label><input class="form-control" id="lowMax" max="24" min="1" required type="number"></div>
-                  <div class="col-4"><label class="form-label" for="moderateMax">Moderate through</label><input class="form-control" id="moderateMax" max="24" min="2" required type="number"></div>
-                  <div class="col-4"><label class="form-label" for="highMax">High through</label><input class="form-control" id="highMax" max="24" min="3" required type="number"></div>
-                  <div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit">Save thresholds</button> <span class="small-muted">Scores above the high threshold are critical.</span></div>
-                </form>
-              </div>
-            </section>
-            <details class="card mb-3 no-print">
-              <summary class="card-header">Export and import</summary>
-              <div class="card-body">
-                <p>Export every risk as CSV. Import creates new risks and can assign controls by reference in the selected framework. The entire file is rejected if a row fails validation.</p>
-                <div class="d-flex flex-wrap gap-2 align-items-end">
-                  <a class="btn btn-outline-primary" href="#" id="exportRegister">Export CSV</a>
-                  <form class="d-flex flex-wrap gap-2 align-items-end" id="importForm"><div><label class="form-label" for="importFile">Import CSV</label><input accept=".csv,text/csv" class="form-control" id="importFile" required type="file"></div><button class="btn btn-outline-primary" type="submit">Import risks</button></form>
+              </section>
+              <details class="card mb-3 no-print">
+                <summary class="card-header">Export and import</summary>
+                <div class="card-body">
+                  <p>Export every risk as CSV. Import creates new risks and can assign controls by reference in the selected framework. The entire file is rejected if a row fails validation.</p>
+                  <div class="d-flex flex-wrap gap-2 align-items-end">
+                    <a class="btn btn-outline-primary" href="#" id="exportRegister">Export CSV</a>
+                    <form class="d-flex flex-wrap gap-2 align-items-end" id="importForm"><div><label class="form-label" for="importFile">Import CSV</label><input accept=".csv,text/csv" class="form-control" id="importFile" required type="file"></div><button class="btn btn-outline-primary" type="submit">Import risks</button></form>
+                  </div>
+                  <div class="small-muted mt-2">Columns: asset, category, subcategory, threat_summary, risk_types (semicolon-separated CIA, or blank), owner_username, four register ratings (1-5), treatment fields, and controls (semicolon-separated refs). Up to 1,000 rows or 2 MB.</div>
                 </div>
-                <div class="small-muted mt-2">Columns: asset, category, subcategory, threat_summary, risk_types (semicolon-separated CIA, or blank), owner_username, four register ratings (1–5), treatment fields, and controls (semicolon-separated refs). Up to 1,000 rows or 2 MB.</div>
-              </div>
-            </details>
-          </div>
-          <div class="col-12 col-xl-8" id="riskListColumn" style="min-width:0">
+              </details>
+            </div>
+          </aside>
+          <div class="risk-register-main" id="riskListColumn">
             <div class="card mb-3">
               <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
                 <div>
                   <div class="fw-bold">All risks</div>
-                  <div class="small-muted" id="resultMeta">—</div>
+                  <div class="small-muted" id="resultMeta">-</div>
                 </div>
               </div>
               <div class="card-body p-0">
@@ -119,7 +124,7 @@
                         <th style="width:190px;" class="no-print">Actions</th>
                       </tr>
                     </thead>
-                    <tbody id="rows"><tr class="table-loading-row"><td colspan="10" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risks…</span></div></td></tr></tbody>
+                    <tbody id="rows"><tr class="table-loading-row"><td colspan="10" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading risks</span></div></td></tr></tbody>
                   </table>
                 </div>
               </div>
@@ -181,7 +186,7 @@
         <div class="card mb-3 no-print" data-mosp-filter-section="pestle-filters" data-mosp-filter-title="PESTLE(E) filters">
           <div class="card-body" data-mosp-filter-body>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-              <input id="pestleQ" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search factors or rationale…">
+              <input id="pestleQ" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search factors or rationale">
               <select id="pestleTypeFilter" class="form-select form-select-sm" style="min-width:170px;"><option value="">All types</option></select>
               <select id="pestleLensFilter" class="form-select form-select-sm" style="min-width:150px;"><option value="">All lenses</option></select>
               <a class="btn btn-sm btn-outline-primary" id="newPestleRisk" data-nav-fw="1" href="/risk-wizard.html?method=pestle"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a PESTLE(E) factor</a>
@@ -215,7 +220,7 @@
             </div>
             <div class="d-flex gap-2 align-items-center no-print">
               <select id="libraryMethodFilter" class="form-select form-select-sm" aria-label="Kind of template"><option value="">All kinds</option><option value="risk">Risks</option><option value="pestle">PESTLE(E) factors</option></select>
-              <input id="librarySearch" class="form-control form-control-sm" type="search" placeholder="Search templates…" style="min-width:220px;" aria-label="Search templates">
+              <input id="librarySearch" class="form-control form-control-sm" type="search" placeholder="Search templates" style="min-width:220px;" aria-label="Search templates">
             </div>
           </div>
           <div class="card-body p-0"><div class="list-group list-group-flush" id="libraryList"></div></div>
@@ -245,19 +250,19 @@
           <div class="col-12">
             <div class="card">
               <div class="card-header">
-                <div class="fw-bold">Risks → Controls graph</div>
+                <div class="fw-bold">Risks × controls graph</div>
                 <div class="small-muted" id="riskControlsGraphMeta">Framework-specific risk/control mappings. Link thickness follows the residual risk score.</div>
               </div>
-              <div id="riskControlsGraph" class="card-body pestle-viz-box pestle-viz-box-lg small-muted">Loading visualisation…</div>
+              <div id="riskControlsGraph" class="card-body pestle-viz-box pestle-viz-box-lg small-muted">Loading visualisation</div>
             </div>
           </div>
           <div class="col-12">
             <div class="card">
               <div class="card-header">
-                <div class="fw-bold">Risks × Controls heatmap</div>
+                <div class="fw-bold">Risks × controls heatmap</div>
                 <div class="small-muted" id="riskControlsHeatmapMeta">Cells show framework-specific control mappings, weighted by the residual risk score.</div>
               </div>
-              <div id="riskControlsHeatmap" class="card-body small-muted">Loading visualisation…</div>
+              <div id="riskControlsHeatmap" class="card-body small-muted">Loading visualisation</div>
             </div>
           </div>
         </div>
@@ -268,7 +273,7 @@
         <div class="card mb-3 no-print" data-mosp-filter-section="controls-without-risks-filters" data-mosp-filter-title="Controls without risks filters">
           <div class="card-body" data-mosp-filter-body>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-              <input id="controlsWithoutRisksQ" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search control ref, title or type…">
+              <input id="controlsWithoutRisksQ" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search control ref, title or type">
               <button id="reloadControlsWithoutRisks" class="btn btn-sm btn-outline-primary" type="button">Reload</button>
             </div>
           </div>
@@ -284,7 +289,7 @@
             <div class="table-responsive">
               <table id="controlsWithoutRisksTable" class="table table-hover align-middle mb-0" data-sortable>
                 <thead><tr><th style="width:120px;">Ref</th><th>Title</th><th style="width:110px;">Scope</th><th style="width:120px;" class="no-print">Actions</th></tr></thead>
-                <tbody id="controlsWithoutRisksRows"><tr class="table-loading-row"><td colspan="4" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading controls…</span></div></td></tr></tbody>
+                <tbody id="controlsWithoutRisksRows"><tr class="table-loading-row"><td colspan="4" class="p-4"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading controls</span></div></td></tr></tbody>
               </table>
             </div>
           </div>

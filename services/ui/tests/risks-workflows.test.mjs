@@ -90,7 +90,7 @@ const graph = {
       node_kind: 'risk',
       risk_id: 'r1',
       label:
-        'Payroll DB — Ransomware with a very long descriptive label that wraps across several lines because operators like to write complete sentences into risk titles',
+        'Payroll DB - Ransomware with a very long descriptive label that wraps across several lines because operators like to write complete sentences into risk titles',
       category: 'Information',
       subcategory: 'Databases',
       risk_types: ['Availability'],
@@ -257,7 +257,7 @@ async function dashboard(t, options = {}) {
       return { ok: true };
     },
   });
-  await settle(() => ui.el('resultMeta').textContent !== '—' || ui.el('status').textContent);
+  await settle(() => ui.el('resultMeta').textContent !== '-' || ui.el('status').textContent);
   await new Promise((r) => setTimeout(r, 20));
   return { ui, state };
 }
@@ -515,7 +515,44 @@ test('without the register feature the heatmap and rating buttons are absent', a
   assert.equal(ui.el('rows').querySelector('[data-rate]'), null);
   assert.ok(!ui.calls.some((c) => c.url.startsWith('/api/v1/risks/register/heatmap')));
   assert.equal(ui.el('heatmapColumn').hasAttribute('data-feature-hidden'), true);
-  assert.equal(ui.el('riskListColumn').classList.contains('col-xl-8'), false);
+  assert.equal(ui.el('riskRegisterLayout').classList.contains('no-sidebar'), true);
+});
+
+test('the heatmap, export and import fold to the left so the register can widen', async (t) => {
+  // Without browser storage the panel starts open and still folds.
+  const { ui } = await dashboard(t);
+  const layout = ui.el('riskRegisterLayout');
+  const toggle = ui.el('toggleRiskSidebar');
+  assert.equal(layout.classList.contains('sidebar-collapsed'), false);
+  assert.equal(layout.classList.contains('no-sidebar'), false);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(toggle.getAttribute('aria-controls'), 'riskSidebarBody');
+  assert.equal(toggle.textContent, 'Hide panel');
+  toggle.click();
+  assert.equal(layout.classList.contains('sidebar-collapsed'), true);
+  assert.equal(ui.el('riskSidebarBody').hidden, true);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(toggle.textContent, 'Heatmap and import');
+  assert.equal(toggle.title, 'Show the heatmap, export and import');
+  toggle.click();
+  assert.equal(ui.el('riskSidebarBody').hidden, false);
+  assert.equal(toggle.title, 'Hide the heatmap, export and import');
+
+  // A browser that folded the panel before finds it folded, and remembers changes.
+  const stored = { 'keen.risks.sidebar': 'collapsed' };
+  const storage = {
+    getItem: (key) => stored[key] ?? null,
+    setItem: (key, value) => {
+      stored[key] = value;
+    },
+  };
+  const again = await dashboard(t, { globals: { localStorage: storage } });
+  assert.equal(again.ui.el('riskSidebarBody').hidden, true);
+  assert.equal(again.ui.el('riskRegisterLayout').classList.contains('sidebar-collapsed'), true);
+  again.ui.el('toggleRiskSidebar').click();
+  assert.equal(stored['keen.risks.sidebar'], 'open');
+  again.ui.el('toggleRiskSidebar').click();
+  assert.equal(stored['keen.risks.sidebar'], 'collapsed');
 });
 
 test('rating, threshold, template and heatmap failures are reported', async (t) => {

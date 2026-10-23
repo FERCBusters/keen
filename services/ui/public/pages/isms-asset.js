@@ -33,24 +33,24 @@ function assetHref(id = assetId) {
 function renderAsset(row) {
   asset = row || {};
   const title = asset.asset || asset.name || 'Asset';
-  document.title = `Keen – ${title}`;
+  document.title = `Keen - ${title}`;
   $('assetTitle').textContent = title;
   $('assetMeta').textContent = [
     asset.category?.name || asset.category_name,
     asset.subcategory?.name || asset.subcategory_name,
     asset.license_name || asset.license,
-    `updated ${fmtTs(asset.updated_at) || '—'}`,
+    `updated ${fmtTs(asset.updated_at) || '-'}`,
   ]
     .filter(Boolean)
-    .join(' • ');
+    .join(' · ');
   $('assetDescription').textContent = asset.description || 'No description recorded.';
-  $('assetCategory').textContent = asset.category?.name || asset.category_name || '—';
-  $('assetSubcategory').textContent = asset.subcategory?.name || asset.subcategory_name || '—';
-  $('assetLicense').textContent = asset.license_name || asset.license || '—';
-  $('assetOwner').textContent = asset.owner_org_node?.name || '—';
-  $('assetRegister').textContent = asset.register_held_by_org_node?.name || '—';
+  $('assetCategory').textContent = asset.category?.name || asset.category_name || '-';
+  $('assetSubcategory').textContent = asset.subcategory?.name || asset.subcategory_name || '-';
+  $('assetLicense').textContent = asset.license_name || asset.license || '-';
+  $('assetOwner').textContent = asset.owner_org_node?.name || '-';
+  $('assetRegister').textContent = asset.register_held_by_org_node?.name || '-';
   $('assetRiskCount').textContent = Number(asset.risk_count || 0);
-  $('assetUpdated').textContent = fmtTs(asset.updated_at) || '—';
+  $('assetUpdated').textContent = fmtTs(asset.updated_at) || '-';
   $('assetControls').innerHTML = controlBadges(asset.controls, framework);
   $('assetClauses').innerHTML = clauseBadges(asset.clauses, framework);
 
@@ -110,4 +110,6 @@ window.addEventListener('hashchange', () =>
 load();
 
 import { mountSwotRelated } from '/pages/swot-related.js';
+import { mountStoryRelated } from '/pages/story-related.js';
 mountSwotRelated('asset', new URLSearchParams(location.search).get('id'));
+mountStoryRelated({ me, kind: 'asset', id: new URLSearchParams(location.search).get('id') });

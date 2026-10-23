@@ -61,7 +61,7 @@ async function load() {
   }
 }
 const demoMessage =
-  'You are running in a demo environment. New API integrations cannot be configured or run here. The preset mig5 public RSS feed runs separately under Ingest runners. Use your own KEEN installation to connect other systems.';
+  'You are running in a demo environment. New API integrations cannot be configured or run here. The preset mig5 public RSS feed runs separately under Ingest runners. Use your own Keen installation to connect other systems.';
 function render() {
   for (const id of ['new', 'add-connection']) {
     $(id).disabled = !!data.demo_mode;
@@ -93,7 +93,7 @@ function render() {
   );
   if (!items.length && data.demo_mode)
     $('list').innerHTML =
-      '<div class="ig-card"><h3>API integrations in your own KEEN installation</h3><p class="small-muted mb-0">Connect APIs, map evidence and schedule collection when you deploy KEEN on your infrastructure.</p></div>';
+      '<div class="ig-card"><h3>API integrations in your own Keen installation</h3><p class="small-muted mb-0">Connect APIs, map evidence and schedule collection when you deploy Keen on your infrastructure.</p></div>';
   if (!items.length && !data.demo_mode)
     $('list').innerHTML =
       '<div class="ig-card"><h3>Build your first custom API ingester</h3><p class="small-muted mb-0">Add a connection, then use a template or describe your own API. Configure built-in adapters under Sources & evidence mapping.</p></div>';
@@ -115,7 +115,7 @@ function render() {
                   : 'scheduled';
     const div = document.createElement('article');
     div.className = 'ig-card';
-    div.innerHTML = `<div class="d-flex justify-content-between gap-2 flex-wrap"><h3>${esc(c.name)}</h3>${state(status)}</div><p class="small-muted mb-2">${esc(data.connections.find((x) => x.id === c.connection_id)?.name || 'Connection')} · ${c.live_revision ? 'Live revision ' + c.live_revision : 'Unpublished'} · Draft ${c.version}</p><div class="row small g-2"><div class="col-md-6">Last success: ${esc(date(c.last_success))}</div><div class="col-md-6">Next run: ${c.enabled ? esc(date(c.next_run)) : 'Paused'}</div></div>${run ? `<p class="small mt-2 mb-0">${esc(run.message || 'Waiting for worker…')}</p>` : ''}<div class="d-flex flex-wrap gap-2 mt-3 ig-actions"></div>`;
+    div.innerHTML = `<div class="d-flex justify-content-between gap-2 flex-wrap"><h3>${esc(c.name)}</h3>${state(status)}</div><p class="small-muted mb-2">${esc(data.connections.find((x) => x.id === c.connection_id)?.name || 'Connection')} · ${c.live_revision ? 'Live revision ' + c.live_revision : 'Unpublished'} · Draft ${c.version}</p><div class="row small g-2"><div class="col-md-6">Last success: ${esc(date(c.last_success))}</div><div class="col-md-6">Next run: ${c.enabled ? esc(date(c.next_run)) : 'Paused'}</div></div>${run ? `<p class="small mt-2 mb-0">${esc(run.message || 'Waiting for worker')}</p>` : ''}<div class="d-flex flex-wrap gap-2 mt-3 ig-actions"></div>`;
     const a = div.querySelector('.ig-actions');
     a.append(
       button('Edit / test', () => open(c)),
@@ -169,7 +169,7 @@ function render() {
   for (const r of data.runs.slice(0, 30)) {
     const div = document.createElement('div');
     div.className = 'ig-run';
-    div.innerHTML = `<div class="d-flex flex-wrap justify-content-between gap-2"><strong>${esc(data.collectors.find((c) => c.id === r.collector_id)?.name || r.collector_id)} ${r.preview ? '· Preview' : ''}</strong>${state(r.status)}</div><div class="small-muted">${esc(date(r.created_at))} · revision ${r.revision}</div><div class="small">${esc(r.message || 'Waiting for worker…')}</div>${r.status === 'running' && r.result?.records ? `<progress class="w-100 mt-2" max="${Number(r.result.records)}" value="${Number(r.result.processed || 0)}" aria-label="Records processed"></progress>` : ''}`;
+    div.innerHTML = `<div class="d-flex flex-wrap justify-content-between gap-2"><strong>${esc(data.collectors.find((c) => c.id === r.collector_id)?.name || r.collector_id)} ${r.preview ? '· Preview' : ''}</strong>${state(r.status)}</div><div class="small-muted">${esc(date(r.created_at))} · revision ${r.revision}</div><div class="small">${esc(r.message || 'Waiting for worker')}</div>${r.status === 'running' && r.result?.records ? `<progress class="w-100 mt-2" max="${Number(r.result.records)}" value="${Number(r.result.processed || 0)}" aria-label="Records processed"></progress>` : ''}`;
     if (r.preview && r.result?.samples)
       div.append(
         button('View preview', () => {
@@ -508,7 +508,7 @@ async function save() {
 function previewResult(r) {
   const node = $('preview-output');
   node.className = 'ig-preview mt-3';
-  node.innerHTML = `${state(r.status)}<p class="mt-2">${esc(r.message || 'Testing the first page…')}</p>`;
+  node.innerHTML = `${state(r.status)}<p class="mt-2">${esc(r.message || 'Testing the first page')}</p>`;
   for (const sample of r.result?.samples || []) {
     const details = document.createElement('details');
     details.open = true;

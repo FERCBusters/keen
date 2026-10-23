@@ -187,7 +187,7 @@ def test_people_link_users_org_nodes_and_assets(registers):
         {"name": "Ada", "user_id": str(linked_user.id)},
         status=409,
     )
-    assert response["detail"] == "This KEEN user is already linked to another person"
+    assert response["detail"] == "This Keen user is already linked to another person"
     # Re-saving the person who holds the link is allowed.
     registers.manage(
         "PATCH",

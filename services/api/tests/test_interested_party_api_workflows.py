@@ -160,7 +160,7 @@ def test_parties_are_created_with_lookups_controls_and_communications(parties):
         communications=[BREACH],
     )
     assert created["name"]["name"] == HOSTILE and created["note"] == HOSTILE
-    assert created["label"] == f"{HOSTILE} — Data subjects"
+    assert created["label"] == f"{HOSTILE} - Data subjects"
     assert [c["ref"] for c in created["controls"]] == ["A.5.2", "A.5.10"]
     assert created["communications"][0] | {
         "id": None,
@@ -481,7 +481,7 @@ def test_visualisations_summarise_controls_and_communications(parties):
     comms = view["bipartite_graphs"]["party_communications"]
     assert comms["stats"]["right_count"] == 2
     shared = next(node for node in comms["nodes"]["right"] if node["count"] == 2)
-    assert shared["label"] == "Business as Usual → Sender"
+    assert shared["label"] == "Business as Usual × Sender"
     # Another framework lists the same parties with no control links of its own.
     empty = parties.read("GET", "/v1/interested-parties/visualisations", framework="C")
     assert len(empty["items"]) == len(view["items"])

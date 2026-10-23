@@ -98,7 +98,7 @@ test('scope changes offer only existing values and clear incompatible selections
   );
 });
 
-test('a purge needs the typed confirmation, a preview and the administrator’s agreement', async (t) => {
+test("a purge needs the typed confirmation, a preview and the administrator's agreement", async (t) => {
   const ui = await fixture(t, true, { confirm: false });
   assert.equal(ui.$('purge').disabled, true);
   ui.$('confirm').value = 'purge evidence';

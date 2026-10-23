@@ -1,6 +1,6 @@
 // Keen Mitigator: a natural-language starting point for a risk. It analyses
-// the described issue and lays out three choices in order — an existing risk
-// that already covers it, a library template, or a new risk — and hands the
+// the described issue and lays out three choices in order - an existing risk
+// that already covers it, a library template, or a new risk - and hands the
 // chosen draft to the risk wizard, where everything is reviewed before saving.
 import {
   initNavbar,
@@ -276,9 +276,9 @@ function newRiskSection(data) {
       <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between">
         <div class="form-check">
           <input class="form-check-input mitigator-suggestion-select" type="checkbox" value="${esc(c.id || '')}" id="mitigatorSuggestion${idx}" ${idx < 8 ? 'checked' : ''}>
-          <label class="form-check-label" for="mitigatorSuggestion${idx}"><span class="fw-semibold"><a href="${esc(controlHref(c.id || '', framework))}">${esc(c.ref || 'Control')}</a> — ${esc(c.title || '')}</span></label>
+          <label class="form-check-label" for="mitigatorSuggestion${idx}"><span class="fw-semibold"><a href="${esc(controlHref(c.id || '', framework))}">${esc(c.ref || 'Control')}</a> - ${esc(c.title || '')}</span></label>
         </div>
-        <div class="d-flex flex-wrap gap-2 align-items-center">${c.in_scope === false ? '<span class="badge text-bg-warning">Out of scope — review applicability</span>' : ''}${confidenceBadge(item.confidence)}</div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">${c.in_scope === false ? '<span class="badge text-bg-warning">Out of scope - review applicability</span>' : ''}${confidenceBadge(item.confidence)}</div>
       </div>
       ${reasons ? `<ul class="small mt-2 mb-1">${reasons}</ul>` : ''}
       ${termBadges(item.matched_terms) ? `<div class="d-flex flex-wrap gap-1">${termBadges(item.matched_terms)}</div>` : ''}
@@ -289,7 +289,7 @@ function newRiskSection(data) {
     .map(
       (item, idx) => `<div class="form-check">
       <input class="form-check-input mitigator-interested-select" type="checkbox" value="${esc(String(idx))}" id="mitigatorParty${idx}" ${item.duplicate_exact ? 'disabled' : 'checked'}>
-      <label class="form-check-label" for="mitigatorParty${idx}"><span class="fw-semibold">${esc(item.name || 'Interested party')}</span> — ${esc(item.nature || '')}${item.duplicate_exact ? ' <span class="small-muted">(already recorded)</span>' : ''}</label>
+      <label class="form-check-label" for="mitigatorParty${idx}"><span class="fw-semibold">${esc(item.name || 'Interested party')}</span> - ${esc(item.nature || '')}${item.duplicate_exact ? ' <span class="small-muted">(already recorded)</span>' : ''}</label>
       <div class="small-muted">${esc(item.reason || '')}</div>
     </div>`,
     )
@@ -306,7 +306,7 @@ function newRiskSection(data) {
     : '<div class="small-muted mt-3">You need risk.manage permission to create risks.</div>';
   const body = `
     <div class="mb-3">
-      <div class="fw-semibold">Safeguards the new risk could link to <span class="badge text-bg-secondary ms-1">controls, not risks</span></div>
+      <div class="fw-semibold">Safeguards the new risk could link to <span class="badge text-bg-secondary ms-1">framework controls</span></div>
       <div class="small-muted mb-2">Each of these is a framework control that would reduce the risk. Untick any that do not apply; you can change them again in the wizard.</div>
       ${controlRows ? `<div class="vstack gap-2">${controlRows}</div>` : '<div class="alert alert-warning mb-0">No controls matched strongly enough. Add more detail or select more impact prompts, or choose controls in the wizard.</div>'}
     </div>

@@ -385,7 +385,7 @@ def import_register(
                     return None
                 number = int(val)
                 if number not in range(1, 6):
-                    raise ValueError(f"{key} must be 1–5")
+                    raise ValueError(f"{key} must be 1-5")
                 return number
 
             payload = RiskUpsertPayload(

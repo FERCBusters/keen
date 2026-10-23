@@ -20,7 +20,7 @@ export function createWindowStory({ me, framework, button, panel, statusEl, appl
   let autoTitle = '';
 
   function describe(window) {
-    const parts = [`${fmtTs(window.start_ts)} – ${fmtTs(window.end_ts)}`];
+    const parts = [`${fmtTs(window.start_ts)} - ${fmtTs(window.end_ts)}`];
     if (Number.isFinite(Number(window.total))) parts.push(`${window.total} events`);
     if (window.source) parts.push(`source ${window.source}`);
     return parts.join(' · ');

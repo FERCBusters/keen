@@ -66,7 +66,7 @@ async function load() {
     $('register-button').disabled = demo;
     if (demo)
       msg(
-        'You are running in a demo environment. Agent registration and external log ingestion are disabled. Use your own KEEN installation to connect servers.',
+        'You are running in a demo environment. Agent registration and external log ingestion are disabled. Use your own Keen installation to connect servers.',
       );
     const profileNames = await profiles.refresh(demo);
     $('agents').replaceChildren();

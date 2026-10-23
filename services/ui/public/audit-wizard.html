@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen - Start an audit</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <script src="/demo-notice.js" defer></script>
+</head>
+<body data-page="audits">
+  <div id="navbar"></div>
+
+  <main class="container container-tight py-4">
+    <div class="mb-3">
+      <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/audits.html">← Audits</a></div>
+      <h1 class="h3 mb-1">Start an audit</h1>
+      <div class="small-muted">Say what the audit covers and who takes part. Findings, notes and the executive summary come later, on the audit's own page.</div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <ol class="risk-wizard-steps list-unstyled d-flex flex-wrap gap-2 mb-3 no-print" id="wizardSteps" aria-label="Steps"></ol>
+
+    <form id="wizardForm" class="card" novalidate>
+      <div class="card-body">
+        <!-- Step 1: details -->
+        <section class="risk-wizard-step" data-step="details">
+          <h2 class="h5">Audit details</h2>
+          <p class="small-muted">A title you will recognise in the audit register, who runs the audit and when.</p>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label" for="auditTitle">Title</label>
+              <input id="auditTitle" class="form-control" maxlength="256" required placeholder="e.g. Surveillance audit, June 2026">
+            </div>
+            <div class="col-12">
+              <div class="form-label" id="auditTypeLabel">Who runs it?</div>
+              <div class="row g-2" role="radiogroup" aria-labelledby="auditTypeLabel">
+                <div class="col-12 col-md-6">
+                  <label class="card h-100 p-3 risk-method-card selected" data-audit-type="internal">
+                    <span><input class="form-check-input me-2" type="radio" name="auditType" value="internal" checked><span class="fw-semibold">Internal audit</span></span>
+                    <span class="small-muted mt-1">Your own team, or an internal auditor you appoint, checks the ISMS.</span>
+                  </label>
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="card h-100 p-3 risk-method-card" data-audit-type="external">
+                    <span><input class="form-check-input me-2" type="radio" name="auditType" value="external"><span class="fw-semibold">External audit</span></span>
+                    <span class="small-muted mt-1">A certification body, customer or other outside auditor checks the ISMS.</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="auditStart">Begins <span class="small-muted">(optional)</span></label>
+              <input id="auditStart" class="form-control" type="date">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="auditEnd">Ends <span class="small-muted">(optional)</span></label>
+              <input id="auditEnd" class="form-control" type="date">
+            </div>
+            <div class="col-12">
+              <div class="form-label">Framework</div>
+              <div id="auditFramework" class="fw-semibold"></div>
+              <div class="form-text">Audits use the framework selected in the top navigation. Switch it there to audit a different framework.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 2: scope -->
+        <section class="risk-wizard-step" data-step="scope" hidden>
+          <h2 class="h5">Audit scope</h2>
+          <p class="small-muted">Optional. Tick what the audit will examine. A policy, procedure or clause brings its linked clauses and controls with it. You can change the scope later on the audit's page.</p>
+          <div class="d-flex flex-wrap gap-2 mb-3" id="scopeTabs" role="tablist" aria-label="Scope lists"></div>
+          <div id="scopePanes"></div>
+          <p id="scopeNote" class="small-muted mt-2 mb-0" role="status" aria-live="polite"></p>
+        </section>
+
+        <!-- Step 3: attendees -->
+        <section class="risk-wizard-step" data-step="people" hidden>
+          <h2 class="h5">Attendees</h2>
+          <p class="small-muted">Optional. Add the auditors, auditees and anyone else taking part. People from the register and Keen accounts keep their contact details from there.</p>
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-lg-6">
+              <label class="form-label" for="attendeeWho">Person</label>
+              <select id="attendeeWho" class="form-select"><option value="">Someone else (enter their details)</option></select>
+            </div>
+            <div class="col-12 col-lg-6">
+              <label class="form-label" for="attendeeRole">Role <span class="small-muted">(optional)</span></label>
+              <input id="attendeeRole" class="form-control" maxlength="128" list="attendeeRoles" placeholder="e.g. Lead auditor">
+              <datalist id="attendeeRoles"><option value="Lead auditor"><option value="Auditor"><option value="Auditee"><option value="Observer"><option value="Technical expert"></datalist>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="attendeeName">Name</label>
+              <input id="attendeeName" class="form-control" maxlength="256">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="attendeeEmail">Email <span class="small-muted">(optional)</span></label>
+              <input id="attendeeEmail" class="form-control" type="email" maxlength="256">
+            </div>
+            <div class="col-12">
+              <button class="btn btn-outline-primary" id="addAttendee" type="button"><i class="bi bi-person-plus me-1" aria-hidden="true"></i>Add attendee</button>
+            </div>
+          </div>
+          <ul id="attendeeList" class="list-group mt-3"></ul>
+        </section>
+
+        <!-- Step 4: review -->
+        <section class="risk-wizard-step" data-step="review" hidden>
+          <h2 class="h5">Check and create</h2>
+          <p class="small-muted">This is what Keen will record. Use Change to go back to a step.</p>
+          <dl class="row mb-0" id="reviewSummary"></dl>
+        </section>
+
+        <!-- Done -->
+        <section class="risk-wizard-step" data-step="done" hidden>
+          <div class="text-center py-2">
+            <div class="display-6 text-success mb-2"><i class="bi bi-check-circle" aria-hidden="true"></i></div>
+            <h2 class="h5" id="doneTitle">Audit created</h2>
+            <p class="small-muted mb-0" id="doneDetail"></p>
+          </div>
+          <h3 class="h6 mt-4">Where would you like to start?</h3>
+          <p class="small-muted">Evidence you sample goes to this audit unless you pick another.</p>
+          <div class="row g-3" id="startChoices"></div>
+        </section>
+      </div>
+      <div class="card-footer d-flex flex-wrap gap-2 align-items-center justify-content-between no-print" id="wizardFooter">
+        <button class="btn btn-outline-secondary" id="backStep" type="button"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back</button>
+        <div class="small-muted" id="stepHint"></div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary" id="skipStep" type="button" hidden>Skip this step</button>
+          <button class="btn btn-primary" id="nextStep" type="submit">Next<i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></button>
+        </div>
+      </div>
+    </form>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/audit-wizard.js"></script>
+</body>
+</html>

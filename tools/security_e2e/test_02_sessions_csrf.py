@@ -245,7 +245,7 @@ def test_forwarded_headers_cannot_change_the_recorded_client_address(
         pytest.skip("The audit trail did not record the probe requests")
     if recorded.get("spoofed") == "203.0.113.9":
         pytest.skip(
-            "This client is inside KEEN's trusted proxy networks, so forwarded "
+            "This client is inside Keen's trusted proxy networks, so forwarded "
             "addresses are accepted; run from an address outside them"
         )
     baseline = recorded["plain"]

@@ -1,7 +1,7 @@
 """BookStack policy-section snapshots through the assembled application.
 
 ISMS managers capture a BookStack page as retained evidence of a policy section
-for one framework control or clause. KEEN reads the page with the configured
+for one framework control or clause. Keen reads the page with the configured
 BookStack credentials, stores the snapshot with its checksum, lists it and
 serves it back. An in-memory HTTP transport stands in for BookStack.
 """

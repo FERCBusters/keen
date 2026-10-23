@@ -89,7 +89,7 @@ test('effectiveness metric entry shows its value against the parent measure targ
     sources: true,
   });
   assert.equal(ui.el('metricTitle').textContent, row.value_display);
-  assert.equal(ui.el('metricMeta').textContent, 'MTTR • March • jira');
+  assert.equal(ui.el('metricMeta').textContent, 'MTTR · March · jira');
   assert.match(ui.el('metricValue').innerHTML, /eff-metric-value-bad/);
   assert.match(ui.el('metricValue').textContent, /Outside target/);
   assert.equal(ui.el('metricValue').querySelector('img'), null);
@@ -119,8 +119,8 @@ test('a minimal metric entry falls back to placeholders', async (t) => {
   });
   assert.equal(ui.el('metricTitle').textContent, 'Metric entry');
   assert.equal(ui.el('metricPeriod').textContent, 'No period recorded');
-  assert.equal(ui.el('sourceUrl').textContent, '—');
-  assert.equal(ui.el('sourceEvent').textContent, '—');
+  assert.equal(ui.el('sourceUrl').textContent, '-');
+  assert.equal(ui.el('sourceEvent').textContent, '-');
   assert.match(ui.el('metricControls').textContent, /No controls linked/);
   assert.equal(ui.el('sampleMetricAudit').style.display, 'none');
 });
@@ -146,7 +146,7 @@ test('meeting minutes render attendees, sanitised notes and safe supporting link
   };
   const { ui } = await detail(t, 'isms-meeting', { path: '/api/v1/isms/meetings/x1', row });
   assert.equal(ui.el('meetingTitle').textContent, row.title);
-  assert.equal(ui.el('meetingMeta').textContent, '2026-02-01 • 09:00–10:00');
+  assert.equal(ui.el('meetingMeta').textContent, '2026-02-01 · 09:00-10:00');
   assert.equal(ui.el('meetingNotes').querySelector('script'), null);
   assert.equal(ui.el('meetingNotes').querySelector('p').textContent, 'Agreed');
   const links = [...ui.el('meetingLinks').querySelectorAll('a')];
@@ -171,7 +171,7 @@ test('meetings without details show placeholders and hide editing from readers',
     row: { id: 'x1', links: [] },
     me: { can_view_isms: true },
   });
-  assert.equal(ui.el('meetingMeta').textContent, 'No date • No time recorded');
+  assert.equal(ui.el('meetingMeta').textContent, 'No date · No time recorded');
   assert.match(ui.el('meetingNotes').textContent, /No agenda\/minutes\/notes recorded/);
   assert.match(ui.el('meetingLinks').textContent, /No supporting links recorded/);
   assert.equal(ui.el('editMeetingLink').style.display, 'none');
@@ -200,7 +200,7 @@ test('ISMS documents link uploaded files and only safe external URLs', async (t)
   assert.equal(ui.el('documentTitle').textContent, hostile);
   assert.match(
     ui.el('documentMeta').textContent,
-    /^policy • uploaded file • external URL • updated/,
+    /^policy · uploaded file · external URL · updated/,
   );
   assert.equal(ui.el('documentContentCard').hidden, false);
   assert.equal(ui.el('documentContent').querySelector('img'), null);
@@ -251,7 +251,7 @@ test('access control rows show their service, accounts, approver and roles', asy
     row,
   });
   assert.equal(ui.el('accessTitle').textContent, row.task_action);
-  assert.match(ui.el('accessMeta').textContent, /^Prod DB • Approved • updated/);
+  assert.match(ui.el('accessMeta').textContent, /^Prod DB · Approved · updated/);
   assert.match(
     ui.el('accessService').querySelector('a').getAttribute('href'),
     /isms-asset\.html\?id=as1/,
@@ -275,7 +275,7 @@ test('access rows without a linked service or accounts show placeholders', async
   assert.equal(ui.el('accessService').textContent, 'Legacy <i>');
   assert.equal(ui.el('accessService').querySelector('a'), null);
   assert.equal(ui.el('accessStatusValue').textContent, 'Pending Approval');
-  assert.equal(ui.el('accessAccounts').textContent, '—');
+  assert.equal(ui.el('accessAccounts').textContent, '-');
   assert.equal(ui.el('editAccessLink').style.display, 'none');
 });
 
@@ -297,7 +297,7 @@ test('objectives show status, owners and linked requirements', async (t) => {
     swot: true,
   });
   assert.equal(ui.el('objectiveTitle').textContent, row.goal);
-  assert.match(ui.el('objectiveMeta').textContent, /^2026-12-31 • In Progress • updated/);
+  assert.match(ui.el('objectiveMeta').textContent, /^2026-12-31 · In Progress · updated/);
   assert.equal(ui.el('objectiveStatusValue').textContent, 'In Progress');
   assert.equal(ui.el('objectiveMetric').textContent, 'No metric recorded.');
   const body = await sample(ui, posted, 'sampleObjectiveAudit');
@@ -309,7 +309,7 @@ test('objectives show status, owners and linked requirements', async (t) => {
   });
   assert.equal(empty.ui.el('objectiveTitle').textContent, 'ISMS objective');
   assert.equal(empty.ui.el('objectiveStatusValue').textContent, 'Not Started');
-  assert.equal(empty.ui.el('objectiveResources').textContent, '—');
+  assert.equal(empty.ui.el('objectiveResources').textContent, '-');
 });
 
 test("a detail page link opens only the page's own tabs", async (t) => {
@@ -352,11 +352,11 @@ test('assets show classification, owners and risk counts', async (t) => {
     swot: true,
   });
   assert.equal(ui.el('assetTitle').textContent, row.asset);
-  assert.match(ui.el('assetMeta').textContent, /^Data • PII • Proprietary • updated/);
+  assert.match(ui.el('assetMeta').textContent, /^Data · PII · Proprietary · updated/);
   assert.equal(ui.el('assetOwner').textContent, 'Finance');
-  assert.equal(ui.el('assetRegister').textContent, '—');
+  assert.equal(ui.el('assetRegister').textContent, '-');
   assert.equal(ui.el('assetRiskCount').textContent, '3');
-  assert.equal(ui.el('assetClauses').textContent, '—');
+  assert.equal(ui.el('assetClauses').textContent, '-');
   const body = await sample(ui, posted, 'sampleAssetAudit');
   assert.equal(body.entity_type, 'isms_asset');
   const reader = await detail(t, 'isms-asset', {

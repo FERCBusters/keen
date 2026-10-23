@@ -293,7 +293,7 @@ test('BookStack policy capture links a page version to a framework requirement',
   const { ui, state } = await bookstack(t);
   assert.deepEqual(
     [...ui.el('policyDocument').options].map((o) => o.textContent),
-    ['Choose policy or process…', 'Access policy <b>'],
+    ['Choose policy or process', 'Access policy <b>'],
   );
   assert.equal(ui.el('targetFramework').value, 'A');
   assert.deepEqual(

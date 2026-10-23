@@ -91,17 +91,17 @@ async function partyPage(t, options = {}) {
     },
   });
   await settle(
-    () => ui.el('partyTitle').textContent !== 'Interested Party' || ui.el('status').textContent,
+    () => ui.el('partyTitle').textContent !== 'Interested party' || ui.el('status').textContent,
   );
   return { ui, state };
 }
 
 test('interested party details render selected lookups, controls and communications safely', async (t) => {
   const { ui } = await partyPage(t);
-  assert.equal(ui.el('partyTitle').textContent, 'Regulator <script> — Legal');
+  assert.equal(ui.el('partyTitle').textContent, 'Regulator <script> - Legal');
   assert.equal(
     ui.el('partyMeta').textContent,
-    'Organisation-wide • controls shown for A • Updated 2026-06-01T00:00:00Z',
+    'Organisation-wide · controls shown for A · Updated 2026-06-01T00:00:00Z',
   );
   assert.equal(ui.el('partyName').value, 'n2');
   assert.equal(ui.el('partyNature').value, 't2');
@@ -180,7 +180,7 @@ test('communications can be added, removed and saved', async (t) => {
 test('a new interested party is created before its communications are saved', async (t) => {
   const { ui, state } = await partyPage(t, { query: '' });
   assert.equal(ui.el('partyTitle').textContent, 'New interested party');
-  assert.equal(ui.el('partyMeta').textContent, 'Organisation-wide • controls for A');
+  assert.equal(ui.el('partyMeta').textContent, 'Organisation-wide · controls for A');
   assert.equal(ui.el('deleteParty').style.display, 'none');
   assert.match(ui.el('communicationsList').textContent, /No communications have been added yet/);
   ui.el('partyChangelogTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
@@ -222,7 +222,7 @@ test('read-only users see disabled inputs and no mutation actions', async (t) =>
 
 test('users without permission are warned', async (t) => {
   const { ui } = await partyPage(t, { me: {} });
-  assert.match(ui.el('status').textContent, /do not have permission to view Interested Parties/);
+  assert.match(ui.el('status').textContent, /do not have permission to view interested parties/);
 });
 
 test('changelog tab and deep link load entries', async (t) => {
@@ -272,7 +272,7 @@ test('lookup failures are reported and the party can be sampled into an audit', 
   const failed = await partyPage(t, { fail: true });
   assert.match(
     failed.ui.el('status').textContent,
-    /Failed to load Interested Party: Error: Meta offline/,
+    /Failed to load interested party: Error: Meta offline/,
   );
   const { ui, state } = await partyPage(t);
   ui.el('samplePartyAudit').click();
@@ -280,7 +280,7 @@ test('lookup failures are reported and the party can be sampled into an audit', 
   ui.document.getElementById('entityAuditSampleSubmit').click();
   await settle(() => state.posted.length === 1);
   assert.equal(state.posted[0].body.entity_type, 'interested_party');
-  assert.equal(state.posted[0].body.title, 'Regulator <script> — Legal');
+  assert.equal(state.posted[0].body.title, 'Regulator <script> - Legal');
 });
 
 test('disabled controls feature skips the control catalogue', async (t) => {

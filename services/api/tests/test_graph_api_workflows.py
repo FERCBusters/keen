@@ -309,7 +309,7 @@ def test_a_breakdown_splits_each_source_into_its_sub_elements(graph):
         == "connection:equals:Security feeds"
     )
 
-    # The source ↔ clause graph takes the same breakdown.
+    # The source × clause graph takes the same breakdown.
     clauses = client.get(
         "/v1/graph/clause_source",
         params={"framework": "A", "source": "rss", "breakdown": "system"},
@@ -503,7 +503,7 @@ def test_risk_control_graph_weights_links_by_risk_score(graph):
     logging = f"control:{graph.logging.id}"
     change = f"control:{graph.change.id}"
     assert set(nodes) == {severe_id, unrated_id, logging, change}
-    assert nodes[severe_id]["label"] == f"Payroll — {HOSTILE}"
+    assert nodes[severe_id]["label"] == f"Payroll - {HOSTILE}"
     assert nodes[unrated_id]["label"] == "Payroll"
     assert (
         nodes[severe_id]["risk_score"],

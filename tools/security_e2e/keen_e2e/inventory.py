@@ -1,4 +1,4 @@
-"""What the suite expects of a KEEN installation's public surface.
+"""What the suite expects of a Keen installation's public surface.
 
 Keep PUBLIC_API in step with services/api/app/security/route_policy.py. A route
 that is public on the server but missing here is reported as a finding.
@@ -51,7 +51,7 @@ PUBLIC_API = {
 PUBLIC_PAGES = {"login.html", "mfa.html", "sso-email.html"}
 ADMIN_PAGES = {"admin.html", "agents.html"}
 
-# Used when the suite runs outside a KEEN checkout.
+# Used when the suite runs outside a Keen checkout.
 FALLBACK_PAGES = [
     "index.html",
     "events.html",

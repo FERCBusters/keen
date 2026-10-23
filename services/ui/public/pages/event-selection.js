@@ -86,7 +86,7 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
       const data = await apiGet('/api/v1/stories?status=open&limit=200');
       const own = (data.items || []).filter((story) => story.can_edit);
       targetSelect.innerHTML =
-        '<option value="">Choose a story…</option>' +
+        '<option value="">Choose a story</option>' +
         own
           .map((story) => `<option value="${esc(story.id)}">${esc(story.title)}</option>`)
           .join('');

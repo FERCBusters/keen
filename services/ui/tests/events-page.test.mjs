@@ -40,10 +40,10 @@ test('events render safe content, bounded control badges and correct paging', as
   assert.match(ui.el('rows').textContent, /<img src=x onerror=evil\(\)>/);
   assert.equal(ui.el('rows').querySelector('img'), null);
   assert.match(ui.el('rows').textContent, /\+2/);
-  assert.match(ui.el('resultMeta').textContent, /1–50 of 101/);
+  assert.match(ui.el('resultMeta').textContent, /1-50 of 101/);
   assert.equal(ui.el('prev').disabled, true);
   ui.el('next').click();
-  await settle(() => ui.el('resultMeta').textContent === '51–100 of 101');
+  await settle(() => ui.el('resultMeta').textContent === '51-100 of 101');
   assert.equal(
     new URL(
       ui.calls.filter((c) => c.url.startsWith('/api/v1/events?')).at(-1).url,
@@ -61,7 +61,7 @@ test('applying filters resets pagination and preserves framework and clause', as
   pickFilter(ui, 'source', 'keen-agent');
   pickFilter(ui, 'control', 'A1');
   ui.el('filters').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => ui.el('resultMeta').textContent === '1–50 of 101');
+  await settle(() => ui.el('resultMeta').textContent === '1-50 of 101');
   const u = new URL(
     ui.calls.filter((c) => c.url.startsWith('/api/v1/events?')).at(-1).url,
     'https://keen.example',
@@ -90,7 +90,7 @@ test('date edits normalise reversed ranges and remove precise timestamps', async
   ui.el('startDateDmy').value = '04/02/2026';
   ui.el('endDateDmy').value = '01/02/2026';
   ui.el('filters').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => ui.el('resultMeta').textContent === '1–50 of 101');
+  await settle(() => ui.el('resultMeta').textContent === '1-50 of 101');
   const u = new URL(ui.window.location.href);
   assert.equal(u.searchParams.get('start_date'), '2026-02-01');
   assert.equal(u.searchParams.get('end_date'), '2026-02-04');

@@ -143,16 +143,16 @@ test('risk details render scores, types, controls and mitigator context as text'
   const { ui } = await riskPage(t);
   assert.equal(
     ui.el('riskTitle').textContent,
-    '<img src=x onerror=alert(1)>Payroll DB — Ransomware',
+    '<img src=x onerror=alert(1)>Payroll DB - Ransomware',
   );
-  assert.equal(ui.el('riskMeta').textContent, 'A • updated 2026-04-01T00:00:00Z');
+  assert.equal(ui.el('riskMeta').textContent, 'A · updated 2026-04-01T00:00:00Z');
   assert.equal(ui.el('editRisk').getAttribute('href'), '/risk-wizard.html?id=r1&framework=A');
   assert.match(ui.el('riskVisualisation').getAttribute('href'), /tab=visualisations/);
   assert.equal(ui.el('riskTypes').querySelector('b'), null);
   // The kind badge, then one badge per security property.
   assert.equal(ui.el('riskTypes').querySelectorAll('.badge').length, 3);
   assert.match(ui.el('riskTypes').textContent, /CIA.*Confidentiality.*<b>Integrity<\/b>/s);
-  // Affected parties link only to paths inside KEEN; other hrefs are plain badges.
+  // Affected parties link only to paths inside Keen; other hrefs are plain badges.
   const parties = ui.el('riskParties');
   assert.equal(parties.querySelector('b'), null);
   assert.equal(
@@ -208,9 +208,9 @@ test('risks without optional data show fallbacks and readers lose edit and sampl
   assert.equal(ui.el('riskTitle').textContent, 'Laptop');
   assert.equal(ui.el('threatSummary').textContent, 'No threat summary.');
   assert.equal(ui.el('riskNote').textContent, 'No note.');
-  assert.equal(ui.el('riskCategory').textContent, '—');
+  assert.equal(ui.el('riskCategory').textContent, '-');
   assert.equal(ui.el('riskTypes').textContent.trim(), 'Risk');
-  assert.equal(ui.el('riskParties').textContent, '—');
+  assert.equal(ui.el('riskParties').textContent, '-');
   assert.equal(ui.el('riskTreatment').textContent, 'Not decided yet (Open)');
   assert.match(ui.el('riskScore').innerHTML, /text-bg-success/);
   assert.equal(ui.el('riskMitigatorContextWrap').style.display, 'none');
@@ -333,7 +333,7 @@ test('risks can be sampled into audits with a descriptive title', async (t) => {
   await settle(() => state.posted.length === 1);
   assert.equal(state.posted[0].path, '/api/v1/audits/au1/evidence');
   assert.equal(state.posted[0].body.entity_type, 'risk');
-  assert.equal(state.posted[0].body.title, '<img src=x onerror=alert(1)>Payroll DB — Ransomware');
+  assert.equal(state.posted[0].body.title, '<img src=x onerror=alert(1)>Payroll DB - Ransomware');
 });
 
 test('load failures and a missing id are reported', async (t) => {

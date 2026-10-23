@@ -525,7 +525,7 @@ let lastView = { mode: null, payload: null, range: null };
 
 const VIZ_META = {
   graph: {
-    title: 'Source ↔ control graph',
+    title: 'Source × control graph',
     subtitle:
       'Click a source to open its source detail page. Click a control to open clause evidence.',
     caption: 'Edges represent number of mapped events from a source to a control.',
@@ -540,16 +540,16 @@ const VIZ_META = {
     title: 'Sunburst: by source',
     subtitle:
       'Ring 1 = sources. Ring 2 = controls mapped from that source. Click inner segments to zoom; click outer segments to open filtered events; click the center to zoom out. Hover over segments to see counters and other info.',
-    caption: 'Values are mapped-event counts (per source→control edge).',
+    caption: 'Values are mapped-event counts for each source and control pair.',
   },
   sunburst_control: {
     title: 'Sunburst: by control',
     subtitle:
       'Ring 1 = controls. Ring 2 = sources mapped to that control. Click inner segments to zoom; click outer segments to open filtered events; click the center to zoom out. Hover over segments to see counters and other info.',
-    caption: 'Values are mapped-event counts (per source→control edge).',
+    caption: 'Values are mapped-event counts for each source and control pair.',
   },
   graph_clause_events: {
-    title: 'Source ↔ clause graph',
+    title: 'Source × clause graph',
     subtitle: 'Click a source to open filtered events. Click a clause to open the clause page.',
     caption: 'Edges represent number of mapped events from a source to a clause.',
   },
@@ -559,7 +559,7 @@ const VIZ_META = {
     caption: 'Showing top sources and clauses by mapped events.',
   },
   graph_clause_control: {
-    title: 'Clause ↔ control graph',
+    title: 'Clause × control graph',
     subtitle: 'Click a clause or control to open its detail page.',
     caption: 'Edges represent clause/control applicability links.',
   },
@@ -752,9 +752,9 @@ function setViz(mode, opts = {}) {
   showControls();
   if (!opts?.skipDraw) {
     if (vizMode !== 'histogram' && !graphData) {
-      showTableLoading(topSourcesEl, 2, `Loading ${vizRelationshipLabels(vizMode).leftPlural}…`);
-      showTableLoading(topControlsEl, 2, `Loading ${vizRelationshipLabels(vizMode).rightPlural}…`);
-      showVizLoading('Loading visualisation data…');
+      showTableLoading(topSourcesEl, 2, `Loading ${vizRelationshipLabels(vizMode).leftPlural}`);
+      showTableLoading(topControlsEl, 2, `Loading ${vizRelationshipLabels(vizMode).rightPlural}`);
+      showVizLoading('Loading visualisation data');
       ensureGraphDatasetForMode(vizMode)
         .then(() => drawActive())
         .catch((err) =>
@@ -861,8 +861,8 @@ function renderTopLists() {
   enableTableSorting(document);
 }
 
-// `sourceKey` is a source name, or a source node whose sub-element (one RSS
-// feed, one connection…) the server describes as an Events text filter.
+// `sourceKey` is a source name, or a source node whose sub-element (such as one
+// RSS feed or one connection) the server describes as an Events text filter.
 function buildEventsHref(sourceKey, controlIdOrRef, rangeOverride = null, opts = {}) {
   const u = new URL('/events.html', location.origin);
   if (framework) u.searchParams.set('framework', framework);
@@ -1091,7 +1091,7 @@ function buildControlStatsUrl(range = getActiveRange()) {
 async function loadControlStatsForGaps(opts = {}) {
   if (controlStats && !opts.force) return controlStats;
   if (!controlStatsPromise || opts.force) {
-    if (gapsEl) showInlineLoading(gapsEl, 'Loading controls…');
+    if (gapsEl) showInlineLoading(gapsEl, 'Loading controls');
     controlStatsPromise = apiGet(buildControlStatsUrl())
       .then((payload) => {
         controlStats = payload;
@@ -1395,7 +1395,7 @@ function clearSvg() {
   svg.selectAll('*').remove();
 }
 
-function showVizLoading(message = 'Loading visualisation data…') {
+function showVizLoading(message = 'Loading visualisation data') {
   clearSvg();
   setSunburstOtherPanel('');
   const width = getWrapWidth();
@@ -1638,7 +1638,7 @@ function drawGraph(minW, topS = null, topC = null) {
   link.append('title').text((d) => {
     const s = d.sourceNode?.label || d.source;
     const c = d.targetNode?.label || d.target;
-    return `${s} → ${c}\n${linkMetricLabel}: ${d.value}`;
+    return `${s} × ${c}\n${linkMetricLabel}: ${d.value}`;
   });
 
   // Nodes
@@ -1744,7 +1744,7 @@ function drawGraph(minW, topS = null, topC = null) {
     .append('title')
     .text(
       (d) =>
-        `${d.label} — ${d.title || ''}\n${graphLabels.rightMetric}: ${
+        `${d.label} - ${d.title || ''}\n${graphLabels.rightMetric}: ${
           Number(d.mapped_events || 0) || totalById.get(d.id) || 0
         }`,
     );
@@ -1911,7 +1911,7 @@ function drawHeatmap() {
       openGraphNode(d, ev);
     })
     .append('title')
-    .text((d) => `${d.label} — ${d.title || ''}`);
+    .text((d) => `${d.label} - ${d.title || ''}`);
 
   // Row labels (sources)
   // Ensure the swatch never overlaps the first heatmap column.
@@ -2022,7 +2022,7 @@ function drawHeatmap() {
     .text((d) => {
       const s = d.s?.label || '';
       const c = d.c?.label || '';
-      return `${s} → ${c}\n${heatmapMetricLabel}: ${d.v}`;
+      return `${s} × ${c}\n${heatmapMetricLabel}: ${d.v}`;
     });
 
   // A note
@@ -2440,7 +2440,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
   // we're looking at a scoped subset (and how to go back).
   if (isDrill) {
     const meta = VIZ_META[mode] || VIZ_META.sunburst_source;
-    if (vizTitle) vizTitle.textContent = `${meta.title} — Other`;
+    if (vizTitle) vizTitle.textContent = `${meta.title} - Other`;
     if (vizSubtitle) {
       vizSubtitle.textContent =
         'Drill-down view of segments previously merged into "Other". ' +
@@ -2745,9 +2745,9 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
     <div class="border rounded p-2" style="background: rgba(31,31,42,0.03)">
       <div class="d-flex justify-content-between align-items-baseline">
         <div class="small-muted fw-bold">${title}</div>
-        <div class="small-muted">${items.length} segments • ${esc(String(total))} ${countLabel}${rangeTxt ? ` • ${rangeTxt}` : ''}</div>
+        <div class="small-muted">${items.length} segments · ${esc(String(total))} ${countLabel}${rangeTxt ? ` · ${rangeTxt}` : ''}</div>
       </div>
-      <div class="small-muted" style="margin-top:2px">Scope: <span class="fw-bold">${esc(scopeName)}</span> — click an item to ${itemActionLabel}.</div>
+      <div class="small-muted" style="margin-top:2px">Scope: <span class="fw-bold">${esc(scopeName)}</span> - click an item to ${itemActionLabel}.</div>
       <div class="table-responsive" style="max-height: 210px; overflow:auto; margin-top:6px">
         <table class="table table-sm mb-0">
           <thead>
@@ -3995,11 +3995,11 @@ async function load() {
   // Validate the saved/query-selected mode before deciding what to fetch.
   if (!isAvailableVizMode(vizMode)) vizMode = firstAvailableVizMode();
 
-  toast(status, 'Loading visualisation data…', 'secondary');
+  toast(status, 'Loading visualisation data', 'secondary');
   if (vizMode !== 'histogram') {
-    showTableLoading(topSourcesEl, 2, `Loading ${vizRelationshipLabels(vizMode).leftPlural}…`);
-    showTableLoading(topControlsEl, 2, `Loading ${vizRelationshipLabels(vizMode).rightPlural}…`);
-    showVizLoading('Loading visualisation data…');
+    showTableLoading(topSourcesEl, 2, `Loading ${vizRelationshipLabels(vizMode).leftPlural}`);
+    showTableLoading(topControlsEl, 2, `Loading ${vizRelationshipLabels(vizMode).rightPlural}`);
+    showVizLoading('Loading visualisation data');
   } else {
     if (topSourcesEl)
       topSourcesEl.innerHTML =

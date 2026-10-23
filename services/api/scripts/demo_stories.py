@@ -1,20 +1,29 @@
 """Fictional stories: evidence, records and notes that explain what happened.
 
 Each story places events from several sources beside the documents, assets,
-risks and objectives involved, with notes for the decisions in between. Boxes
-sit on the flow chart from left to right in time order, and labelled links
-show how one step led to the next.
+risks, objectives, people, suppliers, measures and meeting minutes involved,
+with notes for the decisions in between. Boxes sit on the flow chart from left
+to right in time order, and labelled links show how one step led to the next.
 """
 
 from datetime import datetime, time, timedelta
 
-from app.db.models import Story, StoryComment, StoryItem, StoryLink
+from app.db.models import (
+    IsmsEffectivenessMeasure,
+    IsmsMeeting,
+    IsmsPerson,
+    IsmsVendor,
+    Story,
+    StoryComment,
+    StoryItem,
+    StoryLink,
+)
 from app.services.entity_changelog import record_entity_changelog
 from app.services.stories import MARGIN, summary
 
 # An item: (name, kind, record key, label, note, column, row). A note names
 # no record; its third value is its time, as (days ago, (hour, minute)). The
-# columns and rows are wider apart than KEEN's arrangement for new items, so
+# columns and rows are wider apart than Keen's arrangement for new items, so
 # link labels sit clear of the boxes.
 COLUMN, ROW = 300, 170
 STORIES = (
@@ -106,6 +115,15 @@ STORIES = (
             ("policy", "document", "incident_process", "", "", 0, 2),
             ("asset", "asset", "platform", "", "", 3, 2),
             (
+                "supplier",
+                "vendor",
+                "hosting",
+                "Hosting supplier",
+                "Their test left port 22 open; the finding went to the next supplier review.",
+                4,
+                1,
+            ),
+            (
                 "risk",
                 "risk",
                 "admin_access",
@@ -127,6 +145,7 @@ STORIES = (
             ("closed", "lesson", "lesson"),
             ("policy", "triage", "guided"),
             ("risk", "asset", "threatens"),
+            ("revoke", "supplier", "raised with"),
         ),
         comments=(
             "Shared with the board at the management review as an example of layered monitoring working as intended.",
@@ -212,6 +231,8 @@ STORIES = (
             ),
             ("risk", "risk", "leaver_access", "", "", 3, 2),
             ("objective", "objective", "access_reviews", "", "", 5, 2),
+            ("contractor", "person", "contractor", "The contractor leaving", "", 1, 2),
+            ("idp", "vendor", "identity", "Single sign-on provider", "", 2, 2),
         ),
         links=(
             ("procedure", "ticket", "followed"),
@@ -225,6 +246,8 @@ STORIES = (
             ("aws", "reconcile", "checked by"),
             ("risk", "identity", "threatens"),
             ("reconcile", "objective", "evidence for"),
+            ("contractor", "ticket", "leaving"),
+            ("idp", "identity", "supplies"),
         ),
         comments=(),
     ),
@@ -308,6 +331,15 @@ STORIES = (
             ("procedure", "document", "vulnerability", "", "", 1, 2),
             ("asset", "asset", "web_app", "", "", 2, 2),
             ("risk", "risk", "unpatched_vulnerability", "", "", 3, 2),
+            (
+                "measure",
+                "effectiveness_measure",
+                "patching",
+                "",
+                "This month's result includes the patched hosts.",
+                4,
+                2,
+            ),
         ),
         links=(
             ("advisory", "weekly", "checked by"),
@@ -320,6 +352,7 @@ STORIES = (
             ("deploy", "clear", "verified by"),
             ("hosts", "clear", "verified by"),
             ("clear", "exception", "except"),
+            ("hosts", "measure", "counted in"),
         ),
         comments=(
             "The vendor expects the fixed build for the reporting server this week; rescan and close the story then.",
@@ -395,6 +428,16 @@ STORIES = (
             ),
             ("risk", "risk", "restore_failure", "", "", 4, 1),
             ("plan", "document", "continuity", "", "", 3, 2),
+            ("recovery", "effectiveness_measure", "recovery", "", "", 4, 2),
+            (
+                "review",
+                "meeting",
+                "review",
+                "Reported at the monthly review",
+                "The failed job, its rerun and the restore result were reviewed with the risk owner.",
+                5,
+                1,
+            ),
         ),
         links=(
             ("failed", "asset", "for"),
@@ -406,6 +449,8 @@ STORIES = (
             ("plan", "measured", "objective"),
             ("risk", "restore", "tested by"),
             ("restore", "runbook", "led to"),
+            ("measured", "recovery", "recorded in"),
+            ("runbook", "review", "reported at"),
         ),
         comments=(),
     ),
@@ -419,8 +464,41 @@ def _at(seeder, when):
     )
 
 
+def _supporting_records(seeder):
+    """The people, suppliers, measures and minutes the stories name, by key."""
+    db, label = seeder.db, seeder.label
+
+    def measure(key):
+        identity = f"{seeder.account_code('SLA')}-iso_27001_2022-{key}"
+        return db.query(IsmsEffectivenessMeasure).filter_by(metric_key=identity).one()
+
+    return {
+        "person": {
+            "contractor": db.query(IsmsPerson)
+            .filter_by(name=label("Morgan Example"))
+            .one()
+        },
+        "vendor": {
+            key: db.query(IsmsVendor).filter_by(name=label(name)).one()
+            for key, name in (
+                ("hosting", "Example Hosting"),
+                ("identity", "Example Identity Services"),
+            )
+        },
+        "effectiveness_measure": {
+            "patching": measure("patch_sla"),
+            "recovery": measure("recovery"),
+        },
+        "meeting": {
+            "review": db.query(IsmsMeeting)
+            .filter_by(title=label("Monthly ISMS Review"))
+            .one()
+        },
+    }
+
+
 def seed_stories(seeder, events, docs, assets, risks, objectives):
-    """Seed the stories once; later runs keep any rearrangement made in KEEN."""
+    """Seed the stories once; later runs keep any rearrangement made in Keen."""
     db = seeder.db
     records = {
         "event": events,
@@ -428,6 +506,7 @@ def seed_stories(seeder, events, docs, assets, risks, objectives):
         "asset": assets,
         "risk": risks,
         "objective": objectives,
+        **_supporting_records(seeder),
     }
     for spec in STORIES:
         title = seeder.label(spec["title"])

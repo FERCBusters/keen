@@ -1,6 +1,6 @@
 """Incident creation through the assembled application and the outbound webhook.
 
-The webhook receiver is faked at the HTTP transport, so KEEN's own code
+The webhook receiver is faked at the HTTP transport, so Keen's own code
 builds, signs and sends each message.
 """
 

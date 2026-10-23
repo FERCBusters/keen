@@ -25,7 +25,7 @@ function errorMessage(err) {
 }
 function options(id, values, blank = true) {
   $(id).innerHTML =
-    (blank ? '<option value="">— None —</option>' : '') +
+    (blank ? '<option value="">None</option>' : '') +
     values.map((row) => `<option value="${esc(row.id)}">${esc(row.name)}</option>`).join('');
 }
 function selectedIds(id) {
@@ -119,8 +119,8 @@ function renderAssurances() {
         .map(
           (a) => `
     <tr><td>${esc(a.category)}</td><td>${esc(a.name)}</td><td>${esc(a.status.replaceAll('_', ' '))}</td>
-    <td>${esc(a.source_system || '—')}</td><td>${esc(a.completed_at || '—')}</td><td>${esc(a.expires_at || '—')}</td>
-    <td>${a.evidence_url ? `<a href="${esc(safeExternalHref(a.evidence_url) || '#')}" target="_blank" rel="noopener noreferrer">View</a>` : '—'}</td>
+    <td>${esc(a.source_system || '-')}</td><td>${esc(a.completed_at || '-')}</td><td>${esc(a.expires_at || '-')}</td>
+    <td>${a.evidence_url ? `<a href="${esc(safeExternalHref(a.evidence_url) || '#')}" target="_blank" rel="noopener noreferrer">View</a>` : '-'}</td>
     <td>${manage ? `<button type="button" class="btn btn-sm btn-outline-primary" data-edit-assurance="${esc(a.id)}">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" data-delete-assurance="${esc(a.id)}">Delete</button>` : ''}</td></tr>`,
         )
         .join('')
@@ -135,7 +135,7 @@ function clearPerson() {
   renderAssurances();
 }
 function fillPerson(person) {
-  showSwot('person', person.id);
+  showRelated('person', person);
   selectedPerson = person;
   $('personFormTitle').textContent = `Edit ${person.name}`;
   $('personName').value = person.name;
@@ -154,7 +154,7 @@ function clearVendor() {
   $('vendorFormTitle').textContent = 'Add a vendor';
 }
 function fillVendor(v) {
-  showSwot('vendor', v.id);
+  showRelated('vendor', v);
   selectedVendor = v;
   $('vendorFormTitle').textContent = `Edit ${v.name}`;
   $('vendorName').value = v.name;
@@ -334,15 +334,37 @@ if (!manage) {
 await reload();
 
 import { mountSwotRelated } from '/pages/swot-related.js';
-function showSwot(type, id) {
-  let host = document.getElementById('assuranceSwot');
-  if (!host) {
-    host = document.createElement('div');
-    host.id = 'assuranceSwot';
-    document.querySelector('main').append(host);
+import { canViewStories, mountStoryRelated } from '/pages/story-related.js';
+// A chosen person or vendor shows the SWOT items and stories that refer to it.
+function showRelated(type, record) {
+  let card = document.getElementById('assuranceRelated');
+  if (!card) {
+    card = document.createElement('section');
+    card.id = 'assuranceRelated';
+    card.className = 'card mt-3';
+    document.querySelector('main').append(card);
   }
-  host.replaceChildren();
-  mountSwotRelated(type, id, host);
+  const stories = canViewStories(me);
+  card.innerHTML = `<div class="card-header">
+      <div class="fw-semibold">Related to ${esc(record.name)}</div>
+      <ul class="nav nav-tabs card-header-tabs mt-2" role="tablist">
+        <li class="nav-item" role="presentation"><button class="nav-link active" id="assuranceSwotTab" type="button" role="tab" data-bs-toggle="tab" data-bs-target="#assuranceSwot" aria-controls="assuranceSwot" aria-selected="true">SWOT items</button></li>
+        ${stories ? '<li class="nav-item" role="presentation"><button class="nav-link" id="assuranceStoriesTab" type="button" role="tab" data-bs-toggle="tab" data-bs-target="#assuranceStories" aria-controls="assuranceStories" aria-selected="false">Stories</button></li>' : ''}
+      </ul>
+    </div>
+    <div class="card-body tab-content">
+      <div class="tab-pane fade show active" id="assuranceSwot" role="tabpanel" aria-labelledby="assuranceSwotTab"></div>
+      ${stories ? '<div class="tab-pane fade" id="assuranceStories" role="tabpanel" aria-labelledby="assuranceStoriesTab"></div>' : ''}
+    </div>`;
+  mountSwotRelated(type, record.id, $('assuranceSwot'));
+  if (stories)
+    mountStoryRelated({
+      me,
+      kind: type,
+      id: record.id,
+      host: $('assuranceStories'),
+      trigger: $('assuranceStoriesTab'),
+    });
 }
 
 const swotLinkParams = new URLSearchParams(location.search);

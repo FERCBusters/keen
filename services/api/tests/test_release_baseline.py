@@ -3,6 +3,7 @@
 import gzip
 import json
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -136,6 +137,8 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0018_keen_seed_wording",
+        "0017_story_records",
         "0016_parties_org_wide",
         "0015_risk_wizard",
         "0014_measure_source_type",
@@ -527,6 +530,194 @@ def test_interested_parties_recorded_per_framework_are_merged():
                     "SELECT id, framework_slug FROM interested_parties ORDER BY created_at"
                 )
             ).all() == [(ids["a"], "A"), (ids["staff"], "")]
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_stories_take_the_new_record_kinds_and_downgrade_drops_them():
+    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires PostgreSQL integration database")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "story_kinds_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+    story, event_item = uuid.uuid4(), uuid.uuid4()
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0016_parties_org_wide")
+            run = lambda sql, **params: conn.execute(text(sql), params)  # noqa: E731
+
+            def add_item(item_id, kind):
+                run(
+                    "INSERT INTO story_items (id, story_id, kind, entity_id) VALUES"
+                    " (:id, :story, :kind, :entity)",
+                    id=item_id,
+                    story=story,
+                    kind=kind,
+                    entity=uuid.uuid4(),
+                )
+
+            run(
+                "INSERT INTO stories (id, title, created_at, updated_at) VALUES"
+                " (:id, 'Backup failure', now(), now())",
+                id=story,
+            )
+            add_item(event_item, "event")
+            conn.commit()
+            with pytest.raises(Exception, match="ck_story_item_kind"):
+                add_item(uuid.uuid4(), "meeting")
+            conn.rollback()
+
+            command.upgrade(config, "0017_story_records")
+            new_items = {
+                kind: uuid.uuid4()
+                for kind in (
+                    "swot",
+                    "person",
+                    "vendor",
+                    "effectiveness_measure",
+                    "meeting",
+                )
+            }
+            for kind, item_id in new_items.items():
+                add_item(item_id, kind)
+            run(
+                "INSERT INTO story_links (id, story_id, from_item_id, to_item_id)"
+                " VALUES (:id, :story, :a, :b)",
+                id=uuid.uuid4(),
+                story=story,
+                a=event_item,
+                b=new_items["meeting"],
+            )
+            conn.commit()
+            with pytest.raises(Exception, match="ck_story_item_kind"):
+                add_item(uuid.uuid4(), "books")
+            conn.rollback()
+
+            command.downgrade(config, "0016_parties_org_wide")
+            assert conn.execute(text("SELECT id, kind FROM story_items")).all() == [
+                (event_item, "event")
+            ]
+            assert conn.scalar(text("SELECT count(*) FROM story_links")) == 0
+            with pytest.raises(Exception, match="ck_story_item_kind"):
+                add_item(uuid.uuid4(), "swot")
+            conn.rollback()
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_seeded_text_names_keen_and_downgrade_restores_it(monkeypatch):
+    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires PostgreSQL integration database")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "seed_wording_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    for field in type(settings).model_fields:
+        value = getattr(settings, field)
+        if isinstance(value, str) and value.startswith("/app/config/"):
+            monkeypatch.setattr(
+                settings, field, str(root.parents[1] / "config" / Path(value).name)
+            )
+    monkeypatch.setattr(settings, "default_framework_slug", "KEEN-AF:1.0")
+    monkeypatch.setattr(settings, "enabled_frameworks", "")
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+    columns = (
+        ("frameworks", "slug", "name"),
+        ("frameworks", "slug", "description"),
+        ("control_items", "id", "metadata"),
+        ("framework_clauses", "id", "metadata"),
+        ("cross_framework_control_links", "id", "rationale"),
+    )
+
+    def seeded_text(conn):
+        return {
+            f"{table}.{column}": dict(
+                conn.execute(text(f"SELECT {key}::text, {column}::text FROM {table}"))
+                .tuples()
+                .all()
+            )
+            for table, key, column in columns
+        }
+
+    # The product name in capitals, as a word; KEEN-AF:1.0 is an identifier.
+    capitals = re.compile(r"(?<![\w-])KEEN(?![\w-])")
+    own_wording = "Our KEEN controls, as the organisation’s auditors described them"
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0017_story_records")
+            conn.execute(
+                text("UPDATE frameworks SET description = :d WHERE slug = 'soc2_tsc'"),
+                {"d": own_wording},
+            )
+            conn.commit()
+            before = seeded_text(conn)
+            assert (
+                before["frameworks.name"]["KEEN-AF:1.0"] == "KEEN Assurance Framework"
+            )
+
+            command.upgrade(config, "0018_keen_seed_wording")
+            after = seeded_text(conn)
+            descriptions = after["frameworks.description"]
+            assert descriptions.pop("soc2_tsc") == own_wording
+            for name, values in after.items():
+                for key, value in values.items():
+                    assert not capitals.search(value or ""), (name, key, value)
+                    assert not re.search("[‘’]", value or ""), (name, key, value)
+            assert after["frameworks.name"]["KEEN-AF:1.0"] == "Keen Assurance Framework"
+            assert "based on Vanta's controls" in descriptions["KEEN-AF:1.0"]
+            assert "Coverage is OSA's assessment" in descriptions["iso_27001_2022"]
+            changed = {
+                name: {k for k, v in values.items() if before[name][k] != v}
+                for name, values in after.items()
+            }
+            assert len(changed["cross_framework_control_links.rationale"]) == 312
+            assert all(
+                after["cross_framework_control_links.rationale"][k].startswith(
+                    "Keen starter crosswalk ["
+                )
+                for k in changed["cross_framework_control_links.rationale"]
+            )
+            control_metadata = after["control_items.metadata"]
+            keen_af = conn.scalars(
+                text(
+                    "SELECT id::text FROM control_items WHERE framework_slug = 'KEEN-AF:1.0'"
+                )
+            ).all()
+            assert len(keen_af) == 247
+            for key in keen_af:
+                document = json.loads(control_metadata[key])
+                assert document["attribution"].endswith("Adapted by Keen.")
+                assert document["donation"].startswith("Auditor-donated Keen ")
+            editorial = [
+                json.loads(value)
+                for value in after["framework_clauses.metadata"].values()
+                if '"Keen editorial summaries"' in value
+            ]
+            assert len(editorial) == 76
+            assert sum("organisation's" in m["description"] for m in editorial) == 6
+
+            command.downgrade(config, "0017_story_records")
+            assert seeded_text(conn) == before
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

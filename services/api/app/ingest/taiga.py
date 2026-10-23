@@ -207,7 +207,7 @@ def _build_summary(
         parts.append(_clean_snippet(str(obj_subject), limit=120))
 
     if comment:
-        parts.append("—")
+        parts.append("-")
         parts.append(_clean_snippet(comment, limit=180))
 
     if actor:

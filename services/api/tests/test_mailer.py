@@ -50,7 +50,7 @@ def smtp(monkeypatch):
         "smtp_host": "smtp.example.test",
         "smtp_port": 587,
         "smtp_from_email": "keen@example.test",
-        "smtp_from_name": "KEEN Alerts",
+        "smtp_from_name": "Keen Alerts",
         "smtp_username": "",
         "smtp_password": "",
         "smtp_use_tls": True,
@@ -96,7 +96,7 @@ def test_starttls_precedes_login_and_sending(smtp, monkeypatch):
     assert client.calls[1][1].verify_mode == ssl.CERT_REQUIRED
     assert client.calls[1][1].check_hostname is True
     (message,) = client.messages
-    assert message["From"] == "KEEN Alerts <keen@example.test>"
+    assert message["From"] == "Keen Alerts <keen@example.test>"
     assert message["To"] == "auditor@example.test"
     assert message["Subject"] == "Audit scheduled"
     attachments = list(message.iter_attachments())
@@ -215,7 +215,7 @@ def test_scheduled_audit_emails_attach_a_calendar_invite(smtp):
         uid="keen-audit-1",
     )
     (message,) = smtp.instances[0].messages
-    assert message["Subject"] == "KEEN Alerts: Audit scheduled - Access review"
+    assert message["Subject"] == "Keen Alerts: Audit scheduled - Access review"
     body = message.get_body(preferencelist=("plain",)).get_content()
     assert body.startswith("Hello there,")
     assert "Scheduled end date: 2026-04-11" in body

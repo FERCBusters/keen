@@ -95,7 +95,7 @@ const STEPS = [
   ['subject', 'What is affected'],
   ['parties', 'Who is affected'],
   ['describe', 'Describe it'],
-  ['rate', 'How big it is'],
+  ['rate', 'Likelihood and impact'],
   ['controls', 'Controls'],
   ['review', 'Check and save'],
 ];
@@ -126,7 +126,9 @@ function currentStep() {
 function renderStepper() {
   const steps = visibleSteps();
   $('wizardSteps').innerHTML = steps
-    .map(([step, label], index) => {
+    .map(([step, stepLabel], index) => {
+      // A PESTLE(E) factor is rated against clauses, so its rating step is named for them.
+      const label = step === 'rate' && isPestle() ? 'Relevant clauses' : stepLabel;
       const cls = index < stepIndex ? 'done' : index === stepIndex ? 'current' : '';
       return `<li class="risk-wizard-step-pill ${cls}"><button class="btn btn-sm ${index === stepIndex ? 'btn-primary' : index < stepIndex ? 'btn-outline-success' : 'btn-outline-secondary'}" type="button" data-goto-step="${esc(step)}" ${index > stepIndex ? 'disabled' : ''}>${index + 1}. ${esc(label)}</button></li>`;
     })
@@ -429,7 +431,7 @@ function renderParties() {
     .map(
       (p) => `<label class="list-group-item d-flex gap-2 align-items-center">
       <input class="form-check-input mt-0" type="checkbox" data-party="${esc(partyKey(p))}" ${chosen.has(partyKey(p)) ? 'checked' : ''}>
-      <span class="flex-grow-1"><span class="fw-semibold">${esc(p.label)}</span>${p.detail ? ` <span class="small-muted">— ${esc(p.detail)}</span>` : ''}</span>
+      <span class="flex-grow-1"><span class="fw-semibold">${esc(p.label)}</span>${p.detail ? ` <span class="small-muted">- ${esc(p.detail)}</span>` : ''}</span>
       <span class="badge text-bg-light border">${esc(kindLabel[p.kind] || p.kind)}</span>
     </label>`,
     );
@@ -606,8 +608,8 @@ function renderControls() {
   if (templateRefs.length && !isPestle())
     bits.push(
       keenAfEnabled
-        ? `The template links KEEN Assurance Framework controls ${templateRefs.join(', ')}; KEEN saves those links under KEEN-AF:1.0 when you save.`
-        : `The template’s control links (${templateRefs.join(', ')}) belong to the KEEN Assurance Framework, which is not enabled here.`,
+        ? `The template links Keen Assurance Framework controls ${templateRefs.join(', ')}; Keen saves those links under KEEN-AF:1.0 when you save.`
+        : `The template's control links (${templateRefs.join(', ')}) belong to the Keen Assurance Framework, which is not enabled here.`,
     );
   note.hidden = !bits.length;
   note.textContent = bits.join(' ');
@@ -637,13 +639,13 @@ function renderReview() {
         'subject',
       ),
     );
-    rows.push(reviewRow('Factor', esc(state.description || '—'), 'describe'));
+    rows.push(reviewRow('Factor', esc(state.description || '-'), 'describe'));
     rows.push(
-      reviewRow('Type and lens', esc(`${state.pestleType || '—'} · ${state.lens}`), 'describe'),
+      reviewRow('Type and lens', esc(`${state.pestleType || '-'} · ${state.lens}`), 'describe'),
     );
     const level = (pestleMeta.relevance_levels || []).find((l) => l.code === state.relevance);
     rows.push(
-      reviewRow('Overall relevance', esc(level?.label || state.relevance || '—'), 'describe'),
+      reviewRow('Overall relevance', esc(level?.label || state.relevance || '-'), 'describe'),
     );
     if (state.rationale) rows.push(reviewRow('Rationale', esc(state.rationale), 'describe'));
     const picked = [...state.clauseRelevance.keys()].map(
@@ -682,8 +684,8 @@ function renderReview() {
         'parties',
       ),
     );
-    rows.push(reviewRow('Name', esc(state.title || '—'), 'describe'));
-    rows.push(reviewRow('What could happen', esc(state.description || '—'), 'describe'));
+    rows.push(reviewRow('Name', esc(state.title || '-'), 'describe'));
+    rows.push(reviewRow('What could happen', esc(state.description || '-'), 'describe'));
     if (state.method === 'cia')
       rows.push(
         reviewRow(
@@ -710,7 +712,7 @@ function renderReview() {
     rows.push(
       reviewRow(
         'Treatment',
-        esc(strategy.split(' — ')[0]) +
+        esc(strategy.split(' - ')[0]) +
           ` <span class="small-muted">(${esc(TREATMENT_STATUSES.find(([v]) => v === state.treatment.status)?.[1] || 'Open')}${state.treatment.due ? `, due ${esc(state.treatment.due)}` : ''})</span>`,
         'rate',
       ),
@@ -880,7 +882,7 @@ function showDone({ saved, created }) {
       ? 'PESTLE(E) factor recorded'
       : 'Risk recorded';
   $('doneDetail').textContent = created.length
-    ? `KEEN also added ${created.join(' and ')} for you.`
+    ? `Keen also added ${created.join(' and ')} for you.`
     : 'Everything is in the register.';
   const openHref = isPestle() ? pestleHref(saved.id, framework) : riskHref(saved.id, framework);
   $('doneActions').innerHTML = `
@@ -1049,7 +1051,7 @@ function applyDraft(draft) {
   if (draft.pestle_type) state.pestleType = String(draft.pestle_type);
   if (draft.lens) state.lens = String(draft.lens);
   notify(
-    'The Mitigator’s analysis has been carried into the wizard. Review each step before saving.',
+    "The Mitigator's analysis has been carried into the wizard. Review each step before saving.",
     'info',
   );
 }

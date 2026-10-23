@@ -1,6 +1,6 @@
 """Digest pins for third-party container images.
 
-KEEN pins every third-party image it builds from or runs, and
+Keen pins every third-party image it builds from or runs, and
 tools/docker_image_pins.py keeps those pins current. These tests cover how the
 tool reads references, verifies registry responses and rewrites files, and
 hold the repository's own images and workflows to the same policy.
@@ -918,7 +918,7 @@ def test_every_third_party_image_in_the_repository_is_pinned():
         "moby/buildkit",
         "tonistiigi/binfmt",
     }
-    # Only KEEN's own release and local build images follow tags alone.
+    # Only Keen's own release and local build images follow tags alone.
     assert {r.image.name for r in references if r.keen} == set(pins.KEEN_IMAGES)
     assert {path for path, _ in pins.tracked_files(ROOT)} >= {
         "services/api/Dockerfile",

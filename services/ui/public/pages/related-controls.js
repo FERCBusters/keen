@@ -35,7 +35,7 @@ export function createRelatedControlsBrowser(root, { isAdmin = false } = {}) {
     const matches = items.filter((link) => link.source_framework === select.value);
     page = Math.min(page, Math.max(0, Math.ceil(matches.length / pageSize) - 1));
     const start = page * pageSize;
-    summary.textContent = `Showing ${start + 1}–${Math.min(start + pageSize, matches.length)} of ${matches.length} related control${matches.length === 1 ? '' : 's'}.`;
+    summary.textContent = `Showing ${start + 1}-${Math.min(start + pageSize, matches.length)} of ${matches.length} related control${matches.length === 1 ? '' : 's'}.`;
     list.innerHTML = matches
       .slice(start, start + pageSize)
       .map(
@@ -84,7 +84,7 @@ export function createRelatedControlsBrowser(root, { isAdmin = false } = {}) {
         (names.get(a) || a).localeCompare(names.get(b) || b),
       );
       select.innerHTML =
-        '<option value="">Choose framework…</option>' +
+        '<option value="">Choose framework</option>' +
         groups
           .map(
             ([slug, count]) =>

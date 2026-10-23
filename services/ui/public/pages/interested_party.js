@@ -104,13 +104,13 @@ function controlHref(id) {
 }
 function renderChrome() {
   const label = currentItem
-    ? `${currentItem.name?.name || ''} — ${currentItem.nature?.name || ''}`
+    ? `${currentItem.name?.name || ''} - ${currentItem.nature?.name || ''}`
     : 'New interested party';
   if (title) title.textContent = label;
   if (metaEl)
     metaEl.textContent = currentItem
-      ? `Organisation-wide • controls shown for ${framework} • Updated ${fmtTs(currentItem.updated_at) || '—'}`
-      : `Organisation-wide • controls for ${framework}`;
+      ? `Organisation-wide · controls shown for ${framework} · Updated ${fmtTs(currentItem.updated_at) || '-'}`
+      : `Organisation-wide · controls for ${framework}`;
   if (partyId) partyId.value = itemId || '';
   if (partyNote) partyNote.value = currentItem?.note || '';
   if (samplePartyAudit)
@@ -308,7 +308,7 @@ function wireEvents() {
 
 samplePartyAudit?.addEventListener('click', () => {
   const label = currentItem
-    ? `${currentItem.name?.name || ''} — ${currentItem.nature?.name || ''}`
+    ? `${currentItem.name?.name || ''} - ${currentItem.nature?.name || ''}`
     : 'Interested party';
   openAuditSampleModal({
     me,
@@ -321,7 +321,7 @@ samplePartyAudit?.addEventListener('click', () => {
 });
 
 try {
-  if (!canView) toast(status, 'You do not have permission to view Interested Parties.', 'warning');
+  if (!canView) toast(status, 'You do not have permission to view interested parties.', 'warning');
   wireTabs();
   wireEvents();
   setReadonly();
@@ -329,5 +329,5 @@ try {
   await loadItem();
   if (requestedTab === 'changelog') await loadChangelog();
 } catch (e) {
-  toast(status, `Failed to load Interested Party: ${String(e)}`, 'danger');
+  toast(status, `Failed to load interested party: ${String(e)}`, 'danger');
 }

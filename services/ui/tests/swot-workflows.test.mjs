@@ -250,7 +250,7 @@ test('the search box waits for a pause and the list pages in hundreds', async (t
   const ui = await workspace(t, { items, total: 250 });
   assert.equal(
     ui.el('resultCount').textContent,
-    'Showing 1–100 of 250 matching items. This view includes these items only; use Previous/Next to see more.',
+    'Showing 1-100 of 250 matching items. This view includes these items only; use Previous/Next to see more.',
   );
   assert.equal(ui.el('previous').disabled, true);
   assert.equal(ui.el('next').disabled, false);

@@ -133,7 +133,7 @@ def validate_definition(db, d):
                     re.I,
                 ):
                     raise DomainError(
-                        422, "Store credentials in a Connection, not a definition"
+                        422, "Move credentials from the definition to a Connection"
                     )
                 walk(x)
         elif isinstance(v, list):

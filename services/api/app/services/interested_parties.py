@@ -34,6 +34,10 @@ from app.services.entity_changelog import (
     record_entity_changelog,
 )
 from app.services.errors import DomainError
+from app.services.isms.link_diary import (
+    remove_entity_link_diary,
+    sync_entity_link_diary,
+)
 
 INTERESTED_PARTIES_READ_PERMISSION = "interested_parties.read"
 INTERESTED_PARTIES_MANAGE_PERMISSION = "interested_parties.manage"
@@ -273,7 +277,7 @@ def _party_out(
         "nature": _nature_out(row.nature),
         "nature_id": str(row.nature_id),
         "note": row.note or "",
-        "label": f"{row.name.name if row.name else 'Interested party'} — {row.nature.name if row.nature else 'Nature of Interest'}",
+        "label": f"{row.name.name if row.name else 'Interested party'} - {row.nature.name if row.nature else 'Nature of interest'}",
         "controls": [_control_out(c) for c in controls],
         "communications": [_communication_out(c) for c in comms],
         "control_count": len(controls),
@@ -365,15 +369,15 @@ def _interested_party_bipartite_graphs(
     graphs = {
         "party_controls": _new_bipartite_graph(
             key="party_controls",
-            title="Interested Parties → Controls",
-            left_label="Interested Parties",
+            title="Interested parties × controls",
+            left_label="Interested parties",
             right_label="Controls",
             empty="No interested parties have linked controls yet.",
         ),
         "party_communications": _new_bipartite_graph(
             key="party_communications",
-            title="Interested Parties → Communications",
-            left_label="Interested Parties",
+            title="Interested parties × communications",
+            left_label="Interested parties",
             right_label="Communication rules",
             empty="No interested parties have communication rules yet.",
         ),
@@ -382,7 +386,7 @@ def _interested_party_bipartite_graphs(
         party = {
             "id": item["id"],
             "label": item.get("label") or (item.get("name") or {}).get("name"),
-            "subtitle": (item.get("nature") or {}).get("name") or "Nature of Interest",
+            "subtitle": (item.get("nature") or {}).get("name") or "Nature of interest",
             "note": item.get("note") or "",
             "kind": "party",
         }
@@ -422,8 +426,8 @@ def _interested_party_bipartite_graphs(
                 left=party,
                 right={
                     "id": communication_id,
-                    "label": f"{event} → {with_whom}",
-                    "subtitle": f"{when} • {method_label}",
+                    "label": f"{event} × {with_whom}",
+                    "subtitle": f"{when} · {method_label}",
                     "kind": "communication",
                 },
                 detail={
@@ -542,9 +546,17 @@ def _controls_for_payload(
 
 
 def _replace_control_links(
-    db: Session, party: InterestedParty, framework: str, controls: list[ControlItem]
+    db: Session,
+    party: InterestedParty,
+    framework: str,
+    controls: list[ControlItem],
+    user,
 ) -> None:
-    """Replace the party's links in one framework; other frameworks keep theirs."""
+    """Replace the party's links in one framework; other frameworks keep theirs.
+
+    The party's automatic diary entry follows, so its linked controls count
+    towards control coverage like those of ISMS records and risks.
+    """
 
     db.query(InterestedPartyControlLink).filter(
         InterestedPartyControlLink.interested_party_id == party.id,
@@ -561,6 +573,7 @@ def _replace_control_links(
             )
         )
     db.flush()
+    sync_entity_link_diary(db, "interested_party", party.id, user)
 
 
 def _communication_from_payload(payload: CommunicationPayload) -> dict[str, Any]:
@@ -951,7 +964,9 @@ def create_interested_party(
     )
     db.add(row)
     db.flush()
-    _replace_control_links(db, row, fw, _controls_for_payload(db, payload.controls, fw))
+    _replace_control_links(
+        db, row, fw, _controls_for_payload(db, payload.controls, fw), user
+    )
     if payload.communications is not None:
         _replace_communications(db, row, payload.communications)
     record_entity_changelog(
@@ -1034,7 +1049,7 @@ def update_interested_party(
     db.flush()
     if payload.controls is not None:
         _replace_control_links(
-            db, row, fw, _controls_for_payload(db, payload.controls, fw)
+            db, row, fw, _controls_for_payload(db, payload.controls, fw), user
         )
     if payload.communications is not None:
         _replace_communications(db, row, payload.communications)
@@ -1060,6 +1075,7 @@ def delete_interested_party(
     row = _party_or_404(db, party_id)
     before = _party_changelog_state(db, row)
     rid = row.id
+    remove_entity_link_diary(db, "interested_party", rid)
     db.delete(row)
     db.flush()
     record_entity_changelog(
@@ -1105,7 +1121,9 @@ def update_interested_party_controls(
     row = _party_or_404(db, party_id)
     fw = _clean_framework(framework)
     before = _party_changelog_state(db, row)
-    _replace_control_links(db, row, fw, _controls_for_payload(db, payload.controls, fw))
+    _replace_control_links(
+        db, row, fw, _controls_for_payload(db, payload.controls, fw), user
+    )
     row.updated_at = _utcnow()
     db.add(row)
     record_entity_changelog(

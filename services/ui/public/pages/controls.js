@@ -80,19 +80,19 @@ function render() {
     const withheld = c.evidence_count === null;
     const ev = c.evidence_count || 0;
     const evHtml = withheld
-      ? '<span class="small-muted">—</span>'
+      ? '<span class="small-muted">-</span>'
       : ev > 0
         ? `<a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" class="badge badge-soft">${ev}</a>`
         : `<span class="badge text-bg-light">0</span>`;
 
     const lastIso = c.last_evidence || '';
-    const lastTxt = c.last_evidence ? fmtTs(c.last_evidence) : '—';
+    const lastTxt = c.last_evidence ? fmtTs(c.last_evidence) : '-';
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td data-sort="${esc(c.ref)}"><a class="fw-semibold" href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}">${esc(c.ref)}</a></td>
       <td class="wrap">${esc(c.title || '')}</td>
-      <td class="small-muted" data-sort="${esc(c.justification || '')}">${esc(c.justification || '—')}</td>
+      <td class="small-muted" data-sort="${esc(c.justification || '')}">${esc(c.justification || '-')}</td>
       <td data-sort="${ev}">${evHtml}</td>
       <td class="small-muted" data-sort="${esc(lastIso)}">${esc(lastTxt)}</td>
       <td data-sort="${c.in_scope ? 1 : 0}">${scope}</td>`;
@@ -112,15 +112,15 @@ function setKpiText(id, value) {
 }
 
 function applySummary(summary) {
-  setKpiText('kpiEventsMapped', summary?.events?.mapped ?? '–');
-  setKpiText('kpiEventsUnmapped', summary?.events?.unmapped ?? '–');
+  setKpiText('kpiEventsMapped', summary?.events?.mapped ?? '-');
+  setKpiText('kpiEventsUnmapped', summary?.events?.unmapped ?? '-');
   setKpiText(
     'kpiControlsWith',
-    summary?.events ? all.filter((c) => c.in_scope && (c.evidence_count || 0) > 0).length : '–',
+    summary?.events ? all.filter((c) => c.in_scope && (c.evidence_count || 0) > 0).length : '-',
   );
   setKpiText(
     'kpiControlsWithout',
-    summary?.events ? all.filter((c) => c.in_scope && !(c.evidence_count || 0)).length : '–',
+    summary?.events ? all.filter((c) => c.in_scope && !(c.evidence_count || 0)).length : '-',
   );
 }
 
@@ -138,11 +138,11 @@ async function loadSummary() {
 
 async function load() {
   status.style.display = 'none';
-  showTableLoading(tbody, 6, 'Loading controls…');
-  setKpiText('kpiEventsMapped', '…');
-  setKpiText('kpiEventsUnmapped', '…');
-  setKpiText('kpiControlsWith', '…');
-  setKpiText('kpiControlsWithout', '…');
+  showTableLoading(tbody, 6, 'Loading controls');
+  setKpiText('kpiEventsMapped', '-');
+  setKpiText('kpiEventsUnmapped', '-');
+  setKpiText('kpiControlsWith', '-');
+  setKpiText('kpiControlsWithout', '-');
   try {
     const data = await apiGet(
       `/api/v1/stats/controls?limit=5000&framework=${encodeURIComponent(framework)}`,

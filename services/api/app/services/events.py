@@ -66,7 +66,7 @@ from app.services.presentation import extract_source_url as _extract_source_url
 INCIDENT_CREATE_PERMISSION = "incident.create"
 INCIDENT_DELETE_PERMISSION = "incident.delete"
 EVENTS_READ_PERMISSION = "events.read"
-# Question attachments are discussion material uploaded by KEEN users. They stay
+# Question attachments are discussion material uploaded by Keen users. They stay
 # with their question thread and never appear as the event's collected evidence.
 QUESTION_ATTACHMENT_KIND = "question_attachment"
 

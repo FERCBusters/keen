@@ -1,5 +1,5 @@
 // Evidence PDF, preview, ZIP and print exports on the event page markup. The
-// canvas, renderer and network are substituted; KEEN's pagination, masking and
+// canvas, renderer and network are substituted; Keen's pagination, masking and
 // naming run unchanged.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -206,7 +206,7 @@ test('a PDF export keeps the attachment heading with its thumbnail and numbers e
 
   assert.deepEqual(ui.downloads, [[stem + '.pdf', 'blob:keen/1']]);
   assert.deepEqual(ui.notices, [
-    ['Rendering evidence PDF…', 'info'],
+    ['Rendering evidence PDF', 'info'],
     ['PDF download started', 'success'],
   ]);
   const button = ui.document.getElementById('btnPdf');
@@ -562,7 +562,7 @@ test('PDF capture masks addresses that end a sentence', async (t) => {
   );
 });
 
-test('a ZIP export bundles the PDF and every artifact under the event’s name', async (t) => {
+test("a ZIP export bundles the PDF and every artifact under the event's name", async (t) => {
   const requests = [];
   const ui = await exportPage(
     t,
@@ -629,13 +629,13 @@ with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as z:
   assert.deepEqual(
     ui.notices.map(([message]) => message),
     [
-      'Rendering evidence PDF…',
-      'Collecting 4 artifact(s)…',
-      'Downloading 1/4…',
-      'Downloading 2/4…',
-      'Downloading 3/4…',
-      'Downloading 4/4…',
-      'Building ZIP…',
+      'Rendering evidence PDF',
+      'Collecting 4 artifact(s)',
+      'Downloading 1/4',
+      'Downloading 2/4',
+      'Downloading 3/4',
+      'Downloading 4/4',
+      'Building ZIP',
       'ZIP download started',
     ],
   );

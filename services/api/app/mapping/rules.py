@@ -195,7 +195,7 @@ _WARNED: set[tuple[str, str]] = set()
 
 
 class _Invalid(ValueError):
-    """A rule entry KEEN cannot read as it is written."""
+    """A rule entry Keen cannot read as it is written."""
 
 
 def _skip(rule_id: str, problem: str) -> None:

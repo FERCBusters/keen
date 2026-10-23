@@ -118,7 +118,7 @@ test('groups distinguish observed, predefined and saved fields without duplicate
   );
   const keys = groups.flatMap((g) => g.items.map((i) => JSON.stringify(i.path)));
   assert.equal(keys.length, new Set(keys).size);
-  assert.equal(groups[0].items[0].label, 'fields["ossec.rule.id"] — Ossec Rule Id');
+  assert.equal(groups[0].items[0].label, 'fields["ossec.rule.id"] - Ossec Rule Id');
   assert.ok(!fieldChoiceGroups([], []).some((g) => g.label === 'Fields in this event'));
 });
 

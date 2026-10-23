@@ -87,7 +87,7 @@ def _webhook_coerce_metric_source_type(db: Session, raw: Any) -> str:
     if resolved is None:
         raise DomainError(
             status_code=400,
-            detail="Invalid source_type; choose an existing KEEN source or other",
+            detail="Invalid source_type; choose an existing Keen source or other",
         )
     return resolved
 

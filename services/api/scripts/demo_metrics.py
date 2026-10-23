@@ -22,7 +22,7 @@ SPECS = {
         operator="gte",
         values=[99.95, 99.97, 99.72, 99.93, 99.98, 99.99],
         method="Calendar-month availability = 100 × (eligible minutes − unavailable minutes) / eligible minutes. All minutes included; no maintenance exclusions. Synthetic monitor coverage is 100%.",
-        action="Breach: simulated failover delay; repair routing and verify next month’s result.",
+        action="Breach: simulated failover delay; repair routing and verify next month's result.",
     ),
     "patch_sla": dict(
         title="Critical updates installed within 14 days",

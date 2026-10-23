@@ -16,9 +16,9 @@ class Element {
 const elements=Object.fromEntries(['organisation-frameworks','organisation-default','organisation-note','select-all','deselect-all'].map(k=>[k,new Element()]));
 const ctx=vm.createContext({$:id=>elements[id],document:{createElement:()=>new Element()},Option:class{constructor(text,value){this.text=text;this.value=value}},selectionVersion:0});
 vm.runInContext(fn,ctx);
-const data={version:2,default:'keen',items:[{slug:'keen',name:'KEEN Assurance Framework',enabled:true,allowed:true},{slug:'iso_machine',name:'ISO 27001:2022',enabled:false,allowed:true},{slug:'restricted',name:'Restricted',enabled:false,allowed:false}]};
+const data={version:2,default:'keen',items:[{slug:'keen',name:'Keen Assurance Framework',enabled:true,allowed:true},{slug:'iso_machine',name:'ISO 27001:2022',enabled:false,allowed:true},{slug:'restricted',name:'Restricted',enabled:false,allowed:false}]};
 ctx.renderOrganisationFrameworks(data);
-assert.equal(elements['organisation-default'].options[0].text,'KEEN Assurance Framework');
+assert.equal(elements['organisation-default'].options[0].text,'Keen Assurance Framework');
 elements['select-all'].onclick();
 assert.equal(elements['organisation-frameworks'].querySelectorAll('input:checked').length,2);
 assert.equal(elements['organisation-default'].value,'keen');

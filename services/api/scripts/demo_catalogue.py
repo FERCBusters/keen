@@ -384,7 +384,7 @@ def seed_catalogue(seeder, frameworks):
                 ),
             )
             if index < 2:
-                html = f"<h2>Fictional sample: {escape(title)}</h2><p><strong>DEMO ONLY — not a policy for real use.</strong></p><p>{escape(detail)}</p><h3>Responsibilities</h3><p>The fictional service owner reviews exceptions monthly.</p><h3>Review</h3><p>Record the reviewer, decision, scope and next review date. Adapt a real policy to the organisation before use.</p>"
+                html = f"<h2>Fictional sample: {escape(title)}</h2><p><strong>DEMO ONLY - not a policy for real use.</strong></p><p>{escape(detail)}</p><h3>Responsibilities</h3><p>The fictional service owner reviews exceptions monthly.</p><h3>Review</h3><p>Record the reviewer, decision, scope and next review date. Adapt a real policy to the organisation before use.</p>"
                 doc_title = seeder.label(framework + " " + title)
                 approved = datetime.combine(
                     seeder.seed_date - timedelta(days=index + 1), time(9, 0)
@@ -399,7 +399,7 @@ def seed_catalogue(seeder, frameworks):
                     updated_at=approved,
                 )
                 current = db.query(IsmsDocument).filter_by(title=doc_title).first()
-                # Content arrives once; later edits made in KEEN are kept.
+                # Content arrives once; later edits made in Keen are kept.
                 if current is None or not current.content_version:
                     values.update(content_html=html, content_version=1)
                 doc = seeder.upsert(IsmsDocument, {"title": doc_title}, values)

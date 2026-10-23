@@ -52,7 +52,7 @@ export function mountFeatures(me) {
         busy = true;
         const checked = input.checked;
         pending = { key: item.key, checked };
-        show(`Saving ${item.label}…`, 'info');
+        show(`Saving ${item.label}`, 'info');
         render();
         try {
           config = await apiPut('/api/v1/admin/features', {
@@ -89,7 +89,7 @@ export function mountFeatures(me) {
     root.setAttribute('aria-busy', 'true');
     if (reload) reload.disabled = true;
     if (config) render();
-    show('Loading feature settings…', 'info');
+    show('Loading feature settings', 'info');
     try {
       config = await apiGet('/api/v1/admin/features');
       status.hidden = true;

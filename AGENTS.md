@@ -1,4 +1,4 @@
-# Working on KEEN
+# Working on Keen
 
 ## Scope and structure
 
@@ -39,7 +39,7 @@
 
 ## Security re-review whenever completing a round of work
 
-Whenever completing a round of work, work through the required security review checklist in SECURITY.md, record evidence and untested limitations, and re-review the SECURITY.md and consider whether the changes you have implemented weaken in any way the security of KEEN. Examples of security issues include but are not limited to:
+Whenever completing a round of work, work through the required security review checklist in SECURITY.md, record evidence and untested limitations, and re-review the SECURITY.md and consider whether the changes you have implemented weaken in any way the security of Keen. Examples of security issues include but are not limited to:
 
 - account takeover (session fixation/replay/confusion/race condition/concurrent revocation)
 - privilege escalation or auth bypass
@@ -61,7 +61,7 @@ Whenever completing a round of work, work through the required security review c
 - insufficient expiry of stale records
 - sensitive data leaking into logs or output, including excessive exception traceback data
 - inappropriate trusting of client-side request data
-- insufficient redaction of sensitive values where redaction features are expected in KEEN
+- insufficient redaction of sensitive values where redaction features are expected in Keen
 - other cryptographic failures
 - data integrity risks and/or other race conditions
 - lack of appropriate rate-limiting

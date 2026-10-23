@@ -20,6 +20,8 @@ from .related_records import search_targets, target_summary
 from .serializers import _attach_links
 
 KINDS = ("strength", "weakness", "opportunity", "threat")
+# Records a SWOT item relates to; stories reach further through the same resolver.
+LINK_TYPES = ("objective", "document", "asset", "person", "vendor", "risk")
 STATUSES = (
     "defined",
     "planned",
@@ -430,4 +432,6 @@ def change_link(*, item_id, payload, remove, user, db, context):
 
 def choices(*, target_type, q, user, db):
     require_access(db, user)
+    if target_type not in LINK_TYPES:
+        raise DomainError(400, "Unknown relationship type")
     return {"items": search_targets(db, user, target_type, q)}

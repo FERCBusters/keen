@@ -1,6 +1,6 @@
-"""The hosted demo portal's contract with KEEN.
+"""The hosted demo portal's contract with Keen.
 
-The demo portal starts one KEEN installation per visitor. It configures KEEN
+The demo portal starts one Keen installation per visitor. It configures Keen
 through environment variables, runs the migrations, `python -m
 app.bootstrap_hosted` and the demo seeding, then polls `/api/v1/auth/methods`
 and `/api/v1/auth/check` until the installation reports an unexpired demo that
@@ -44,7 +44,7 @@ CALLBACK = BASE + "/api/v1/auth/oidc/callback"
 
 
 def portal_environment(expires_at):
-    """The KEEN variables a demo tenant receives, with synthetic values."""
+    """The Keen variables a demo tenant receives, with synthetic values."""
     return {
         "KEEN_DATABASE_URL": "postgresql+psycopg2://keen:synthetic@postgres:5432/keen",
         "KEEN_REDIS_URL": "redis://:synthetic@valkey:6379/0",
@@ -88,7 +88,7 @@ def portal_environment(expires_at):
     }
 
 
-# Variables the tenant also receives that KEEN reads outside its settings: the
+# Variables the tenant also receives that Keen reads outside its settings: the
 # broker password configures the Valkey container, and the owner bootstrap
 # reads the owner's address.
 OWNER_EMAIL = {"KEEN_HOSTED_OWNER_EMAIL": "owner@example.com"}
@@ -308,7 +308,7 @@ def test_another_auth0_account_cannot_enter_the_workspace(demo):
 # --- The demo ends at its expiry -------------------------------------------------
 
 ENDED = {
-    "detail": "This KEEN demo has ended.",
+    "detail": "This Keen demo has ended.",
     "consultation_url": "https://consult.example/",
 }
 

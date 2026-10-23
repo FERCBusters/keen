@@ -36,7 +36,7 @@ class DemoExpiryMiddleware:
             if demo_expired() and scope["path"] not in ("/v1/auth/methods", "/health"):
                 return await JSONResponse(
                     {
-                        "detail": "This KEEN demo has ended.",
+                        "detail": "This Keen demo has ended.",
                         "consultation_url": settings.demo_consultation_url,
                     },
                     status_code=401 if scope["path"] == "/v1/auth/check" else 410,

@@ -637,7 +637,7 @@ def test_request_paths_stay_relative_to_the_connection(path):
 
 @pytest.mark.parametrize("path", ["/issues?state=open", "/issues#open"])
 def test_query_and_fragment_belong_in_the_query_mapping(path):
-    with pytest.raises(ValueError, match="Put query parameters in Query"):
+    with pytest.raises(ValueError, match="Move query parameters to Query"):
         Definition(path=path)
 
 

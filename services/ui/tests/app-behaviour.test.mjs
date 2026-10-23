@@ -341,7 +341,7 @@ test('changelog values show blanks, booleans and long objects as inert text', ()
     row.cells[2].textContent,
   ]);
   assert.deepEqual(cells[0], ['No', 'Yes']);
-  assert.deepEqual(cells[1], ['—', '—']);
+  assert.deepEqual(cells[1], ['-', '-']);
   assert.match(cells[2][0], /"a": "<b>1<\/b>"/);
   assert.equal(doc.querySelector('b'), null);
   // Long objects are cut at 1200 characters; an unserialisable one falls back to its string form.

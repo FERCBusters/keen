@@ -137,6 +137,8 @@ async function eventPage(t, options = {}) {
           ],
         };
       }
+      if (p === '/api/v1/stories/related/event/e1') return { items: options.stories || [] };
+      if (p === '/api/v1/stories') return { items: [] };
       if (p === '/api/v1/audits/by-event/e1') {
         if (options.samplesFail) throw new Error('hidden');
         return {
@@ -523,6 +525,28 @@ test('question authors reply, mark threads seen and focus a linked thread', asyn
   assert.equal(ui.el('btnAskQuestion').style.display, '');
 });
 
+test('a tab named in the address opens; unknown or inherited names keep the snapshot', async (t) => {
+  for (const [name, expected] of [
+    ['questions', 'eventQuestionsTab'],
+    ['constructor', 'eventSnapshotTab'],
+    ['__proto__', 'eventSnapshotTab'],
+  ]) {
+    const shown = [];
+    const { ui } = await eventPage(t, {
+      query: `&id=e1&tab=${name}`,
+      setup(window) {
+        window.bootstrap = {
+          ...bootstrap,
+          Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+        };
+      },
+    });
+    await settle(() => shown.length > 0);
+    assert.deepEqual(shown, [expected], name);
+    assert.ok(ui.el('eventTabs'));
+  }
+});
+
 test('question failures are contained in the questions panel', async (t) => {
   const failed = await eventPage(t, { questionsFail: true });
   assert.match(failed.ui.el('questions').textContent, /Failed to load questions/);
@@ -631,11 +655,11 @@ test('an event without a source or a framework in the address still links its re
       window.history.replaceState(null, '', '/event.html?id=e1');
     },
   });
-  assert.equal(ui.el('srcBadge').textContent, '—');
+  assert.equal(ui.el('srcBadge').textContent, '-');
   assert.equal(ui.el('bySource').getAttribute('href'), '/events.html?framework=A');
   // The framework comes from the mapped control when the address has none.
   ui.el('btnSampleAudit').click();
-  assert.equal(ui.el('auditSampleCreate').getAttribute('href'), '/audits.html?new=1&framework=B');
+  assert.equal(ui.el('auditSampleCreate').getAttribute('href'), '/audit-wizard.html?framework=B');
   assert.equal(ui.el('openSource').getAttribute('href'), 'https://upstream.example/items/1');
   assert.equal(ui.el('openSource').style.display, '');
 
@@ -710,4 +734,44 @@ test('the print view loads the viewer directly, masks the page and prints once',
   assert.equal(ui.el('pdfHeader').dataset.enabled, '1');
   await new Promise((r) => setTimeout(r, 200));
   assert.equal(prints, 1);
+});
+
+test('the stories that include the event are listed for readers and offered to authors', async (t) => {
+  const listed = await eventPage(t, {
+    me: { can_view_events: true, can_view_stories: true },
+    stories: [
+      {
+        id: 's1',
+        title: 'Backup <b>failure</b>',
+        status: 'open',
+        item_count: 3,
+        updated_at: '2026-05-01',
+        can_edit: false,
+        version: 1,
+      },
+    ],
+  });
+  await settle(() => /Backup <b>failure<\/b>/.test(listed.ui.el('eventStories').textContent));
+  assert.equal(listed.ui.el('storiesCard').style.display, '');
+  assert.equal(listed.ui.el('eventStories').querySelector('b'), null);
+  assert.equal(listed.ui.el('eventStories').querySelector('h2'), null);
+  assert.equal(listed.ui.document.querySelector('[data-story-add]'), null);
+
+  // A reader sees no card for an event that is in no story.
+  const empty = await eventPage(t, { me: { can_view_events: true, can_view_stories: true } });
+  await settle(() => empty.ui.calls.some((c) => c.url.includes('/stories/related/event/e1')));
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(empty.ui.el('storiesCard').style.display, 'none');
+
+  // Authors can always add the event, so the card stays for them.
+  const author = await eventPage(t);
+  await settle(() => author.ui.el('storiesCard').style.display === '');
+  assert.match(author.ui.el('eventStories').textContent, /This event is not in a story yet/);
+  assert.ok(author.ui.document.querySelector('[data-story-add]'));
+
+  // Without story access nothing is requested.
+  const none = await eventPage(t, { me: { can_view_events: true } });
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(none.ui.el('storiesCard').style.display, 'none');
+  assert.ok(!none.ui.calls.some((c) => c.url.includes('/stories/')));
 });

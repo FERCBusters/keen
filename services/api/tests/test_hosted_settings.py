@@ -36,12 +36,12 @@ HOSTED = dict(
     s3_secret_key="",
     s3_endpoint_url="",
 )
-IDENTITY = "Hosted KEEN requires an exact OIDC issuer and owner subject"
-SIGN_IN = "Hosted KEEN requires OIDC only, with automatic account linking disabled"
-COOKIES = "Hosted KEEN requires secure __Host- cookies and HTTPS OIDC"
-ORIGIN = "Hosted KEEN requires an exact public HTTPS origin"
-BUCKET = "Hosted KEEN requires its own AWS bucket and no static S3 credentials"
-ROLE = "Hosted KEEN requires S3 with instance-role credentials"
+IDENTITY = "Hosted Keen requires an exact OIDC issuer and owner subject"
+SIGN_IN = "Hosted Keen requires OIDC only, with automatic account linking disabled"
+COOKIES = "Hosted Keen requires secure __Host- cookies and HTTPS OIDC"
+ORIGIN = "Hosted Keen requires an exact public HTTPS origin"
+BUCKET = "Hosted Keen requires its own AWS bucket and no static S3 credentials"
+ROLE = "Hosted Keen requires S3 with instance-role credentials"
 
 
 def test_the_hosted_profile_starts():

@@ -425,16 +425,16 @@ test('the organisation chart draws the hierarchy, and a node is edited from the 
   await settle(() => ui.el('orgChartViz').querySelector('svg'));
   const chart = ui.el('orgChartViz');
   const titles = [...chart.querySelectorAll('.isms-org-node-title')].map((n) => n.textContent);
-  assert.deepEqual(titles, ['ISMS Organisation', 'Security team', 'Platform operations']);
+  assert.deepEqual(titles, ['ISMS organisation', 'Security team', 'Platform operations']);
   // Parents link to children: the root to the team lead, the lead to operations.
   assert.equal(chart.querySelectorAll('svg > g > g:first-child path').length, 2);
   assert.deepEqual(
     [...chart.querySelectorAll('.isms-org-node-subtitle')].map((n) => n.textContent),
-    ['root', 'role • alice', 'team'],
+    ['root', 'role · alice', 'team'],
   );
   assert.deepEqual(
     [...chart.querySelectorAll('svg > g > g:last-child > g > title')].map((n) => n.textContent),
-    ['ISMS Organisation', 'Security team (alice)', 'Platform operations'],
+    ['ISMS organisation', 'Security team (alice)', 'Platform operations'],
   );
 
   ui.click('[data-isms-edit="org"][data-isms-id="n2"]');
@@ -490,7 +490,7 @@ test('long organisation names wrap onto two lines and end with an ellipsis', asy
   assert.deepEqual(
     titles.map((n) => n.textContent),
     [
-      'ISMS Organisation',
+      'ISMS organisation',
       'Security team (alice)',
       'Information security governance and assurance working group',
       'Platform operations',
@@ -610,8 +610,8 @@ test('the access matrix groups by service with role columns and account pills', 
   // Organisation roles become columns; teams do not.
   assert.deepEqual(head, [
     'Service',
-    'Task/Action',
-    'Managed Hosting Accounts',
+    'Task/action',
+    'Managed hosting accounts',
     'Status',
     'Approved by',
     'Security team',
@@ -621,8 +621,8 @@ test('the access matrix groups by service with role columns and account pills', 
   const row = ui.el('accessMatrixRows').querySelector('tr[data-isms-row="access"]');
   assert.equal(
     row.dataset.ismsFilterText,
-    'Deploy • Database • Approved • Production (111122223333), Staging (444455556666), ' +
-      'Sandbox • Security team • alice • Quarterly review',
+    'Deploy · Database · Approved · Production (111122223333), Staging (444455556666), ' +
+      'Sandbox · Security team · alice · Quarterly review',
   );
   assert.equal(row.querySelector('a').getAttribute('href'), '/isms-asset.html?id=a1&framework=A');
   const pills = [...row.querySelectorAll('.isms-aws-account-pill')];

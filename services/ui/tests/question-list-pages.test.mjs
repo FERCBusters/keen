@@ -71,9 +71,12 @@ test('administrators see the question queue with safe titles and target links', 
   assert.equal(rows.length, 3);
   assert.equal(ui.el('queueBody').querySelector('img'), null);
   assert.match(rows[0].textContent, /<img src=x onerror=alert\(1\)> Login/);
-  assert.match(rows[0].textContent, /auth • 2026-01-01T00:00:00Z/);
-  assert.match(rows[1].textContent, /pestle item • P-1/);
-  assert.match(rows[2].textContent, /\(no summary\)[\s\S]*—/);
+  assert.match(rows[0].textContent, /auth · 2026-01-01T00:00:00Z/);
+  assert.match(rows[1].textContent, /pestle item · P-1/);
+  assert.deepEqual(
+    [...rows[2].cells].slice(1, 4).map((c) => c.textContent.replace(/\s+/g, ' ').trim()),
+    ['-', '(no summary) -', '-'],
+  );
   assert.match(rows[1].querySelector('.badge').textContent, /reviewing/);
   assert.match(rows[2].querySelector('.badge').textContent, /unanswered/);
   const hrefs = rows.map((r) => r.querySelector('a.btn').getAttribute('href'));
@@ -148,7 +151,7 @@ test('my questions lists threads, deletes after confirmation and explains failur
   assert.equal(state.bell, 1);
   assert.equal(ui.el('questionsTbody').querySelector('img'), null);
   assert.match(rows[0].textContent, /new reply/);
-  assert.match(rows[1].textContent, /pestle item • P-1/);
+  assert.match(rows[1].textContent, /pestle item · P-1/);
   assert.equal(
     rows[1].querySelector('a').getAttribute('href'),
     '/pestle_item.html?id=p1&thread=t2&framework=A#questions',

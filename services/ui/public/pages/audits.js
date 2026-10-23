@@ -24,12 +24,7 @@ import {
 const me = await initNavbar();
 const status = document.getElementById('status');
 const rows = document.getElementById('rows');
-const createCard = document.getElementById('createCard');
 const showCreate = document.getElementById('showCreate');
-const cancelCreate = document.getElementById('cancelCreate');
-const createForm = document.getElementById('createForm');
-const newTitle = document.getElementById('newTitle');
-const newFramework = document.getElementById('newFramework');
 // Audits belong to the framework chosen in the top navigation; the form only shows it.
 function currentFrameworkLabel() {
   const slug = getCurrentFramework() || '';
@@ -37,20 +32,6 @@ function currentFrameworkLabel() {
   const name = option && option.value === slug ? option.textContent.trim() : '';
   return name && name !== slug ? `${name} (${slug})` : slug;
 }
-const newType = document.getElementById('newType');
-const newStart = document.getElementById('newStart');
-const newEnd = document.getElementById('newEnd');
-const newNotes = document.getElementById('newNotes');
-const newExecutiveSummary = document.getElementById('newExecutiveSummary');
-const newDocumentFilter = document.getElementById('newDocumentFilter');
-const newClauseFilter = document.getElementById('newClauseFilter');
-const newControlFilter = document.getElementById('newControlFilter');
-const newDocumentsList = document.getElementById('newDocumentsList');
-const newClausesList = document.getElementById('newClausesList');
-const newControlsList = document.getElementById('newControlsList');
-const newDocumentCount = document.getElementById('newDocumentCount');
-const newClauseCount = document.getElementById('newClauseCount');
-const newControlCount = document.getElementById('newControlCount');
 const q = document.getElementById('q');
 const statusFilter = document.getElementById('statusFilter');
 const scheduledRows = document.getElementById('scheduledRows');
@@ -80,14 +61,6 @@ const coverageGapRows = document.getElementById('coverageGapRows');
 const coverageChart = document.getElementById('coverageChart');
 const coverageGapMatrix = document.getElementById('coverageGapMatrix');
 
-let createDocuments = [];
-let createClauses = [];
-let createControls = [];
-let selectedCreateDocumentIds = new Set();
-let selectedCreateClauseIds = new Set();
-let selectedCreateControlIds = new Set();
-let createClauseControlMap = new Map();
-let createScopeFramework = '';
 let scheduledAttendees = [];
 let scheduledAttendeeUsers = [];
 let scheduledTemplates = [];
@@ -153,245 +126,6 @@ function auditTypeLabel(v) {
   return String(v || 'internal').toLowerCase() === 'external' ? 'External' : 'Internal';
 }
 
-function _graphRawId(value) {
-  const s = String(value || '');
-  const idx = s.indexOf(':');
-  return idx >= 0 ? s.slice(idx + 1) : s;
-}
-
-function _buildCreateClauseControlMap(graphData) {
-  const out = new Map();
-  for (const link of graphData?.links || []) {
-    const clauseId = _graphRawId(link.source);
-    const controlId = _graphRawId(link.target);
-    if (!clauseId || !controlId) continue;
-    if (!out.has(clauseId)) out.set(clauseId, new Set());
-    out.get(clauseId).add(controlId);
-  }
-  return out;
-}
-
-function addScopeLinkedToCreateDocument(documentId) {
-  const doc = createDocuments.find((d) => String(d.id) === String(documentId));
-  let added = 0;
-  for (const clause of doc?.clauses || []) {
-    const id = String(clause.id || '');
-    if (!id) continue;
-    if (!selectedCreateClauseIds.has(id)) {
-      selectedCreateClauseIds.add(id);
-      added += 1;
-    }
-    added += addControlsLinkedToCreateClause(id);
-  }
-  for (const control of doc?.controls || []) {
-    const id = String(control.id || '');
-    if (id && !selectedCreateControlIds.has(id)) {
-      selectedCreateControlIds.add(id);
-      added += 1;
-    }
-  }
-  return added;
-}
-
-function addControlsLinkedToCreateClause(clauseId) {
-  const linked = createClauseControlMap.get(String(clauseId)) || new Set();
-  let added = 0;
-  for (const controlId of linked) {
-    if (!selectedCreateControlIds.has(String(controlId))) {
-      selectedCreateControlIds.add(String(controlId));
-      added += 1;
-    }
-  }
-  return added;
-}
-
-function matchesFilter(item, filter) {
-  if (!filter) return true;
-  return (
-    String(item.ref || '')
-      .toLowerCase()
-      .includes(filter) ||
-    String(item.title || '')
-      .toLowerCase()
-      .includes(filter)
-  );
-}
-
-function clauseIndent(c) {
-  const ref = String(c.ref || '');
-  return Math.min(Math.max(ref.split('.').length - 1, 0), 3);
-}
-
-function updateCreateScopeCounts() {
-  if (newDocumentCount)
-    newDocumentCount.textContent = `${selectedCreateDocumentIds.size} documents`;
-  if (newClauseCount) newClauseCount.textContent = `${selectedCreateClauseIds.size} clauses`;
-  if (newControlCount) newControlCount.textContent = `${selectedCreateControlIds.size} controls`;
-}
-
-function renderCreateDocuments() {
-  if (!newDocumentsList) return;
-  const filter = (newDocumentFilter?.value || '').trim().toLowerCase();
-  const items = createDocuments.filter((d) =>
-    matchesFilter({ ref: d.document_type, title: d.title }, filter),
-  );
-  newDocumentsList.innerHTML =
-    items
-      .map((d) => {
-        const id = String(d.id);
-        const checked = selectedCreateDocumentIds.has(id) ? 'checked' : '';
-        const linked = `${(d.clauses || []).length} clauses, ${(d.controls || []).length} controls`;
-        return `<div class="col-12">
-      <label class="border rounded p-2 d-flex gap-2 align-items-start h-100">
-        <input class="form-check-input mt-1" type="checkbox" data-new-document-id="${esc(id)}" ${checked}>
-        <span><span class="fw-semibold">${esc(d.title || 'Document')}</span> <span class="badge text-bg-light ms-1">${esc(d.document_type || 'document')}</span><div class="small-muted">${esc(linked)}</div></span>
-      </label>
-    </div>`;
-      })
-      .join('') || '<div class="small-muted">No ISMS documents match.</div>';
-  newDocumentsList.querySelectorAll('[data-new-document-id]').forEach((cb) =>
-    cb.addEventListener('change', () => {
-      const id = cb.getAttribute('data-new-document-id');
-      if (cb.checked) {
-        selectedCreateDocumentIds.add(id);
-        const added = addScopeLinkedToCreateDocument(id);
-        if (added > 0) {
-          renderCreateClauses();
-          renderCreateControls();
-        }
-      } else {
-        selectedCreateDocumentIds.delete(id);
-      }
-      updateCreateScopeCounts();
-    }),
-  );
-  updateCreateScopeCounts();
-}
-
-function renderCreateClauses() {
-  if (!newClausesList) return;
-  const filter = (newClauseFilter?.value || '').trim().toLowerCase();
-  const items = createClauses.filter((c) => matchesFilter(c, filter));
-  newClausesList.innerHTML =
-    items
-      .map((c) => {
-        const id = String(c.id);
-        const checked = selectedCreateClauseIds.has(id) ? 'checked' : '';
-        const pad = clauseIndent(c) * 1.1;
-        return `<div class="col-12">
-      <label class="border rounded p-2 d-flex gap-2 align-items-start h-100" style="margin-left:${pad}rem">
-        <input class="form-check-input mt-1" type="checkbox" data-new-clause-id="${esc(id)}" ${checked}>
-        <span><span class="fw-semibold">${esc(c.ref || '')}</span> <span class="small-muted">${esc(c.title || '')}</span></span>
-      </label>
-    </div>`;
-      })
-      .join('') || '<div class="small-muted">No clauses match.</div>';
-  newClausesList.querySelectorAll('[data-new-clause-id]').forEach((cb) =>
-    cb.addEventListener('change', () => {
-      const id = cb.getAttribute('data-new-clause-id');
-      if (cb.checked) {
-        selectedCreateClauseIds.add(id);
-        const added = addControlsLinkedToCreateClause(id);
-        if (added > 0) renderCreateControls();
-      } else {
-        selectedCreateClauseIds.delete(id);
-      }
-      updateCreateScopeCounts();
-    }),
-  );
-  updateCreateScopeCounts();
-}
-
-function renderCreateControls() {
-  if (!newControlsList) return;
-  const filter = (newControlFilter?.value || '').trim().toLowerCase();
-  const items = createControls.filter((c) => matchesFilter(c, filter));
-  newControlsList.innerHTML =
-    items
-      .map((c) => {
-        const id = String(c.id);
-        const checked = selectedCreateControlIds.has(id) ? 'checked' : '';
-        return `<div class="col-12 col-lg-6">
-      <label class="border rounded p-2 d-flex gap-2 align-items-start h-100">
-        <input class="form-check-input mt-1" type="checkbox" data-new-control-id="${esc(id)}" ${checked}>
-        <span><span class="fw-semibold">${esc(c.ref || '')}</span> <span class="small-muted">${esc(c.title || '')}</span></span>
-      </label>
-    </div>`;
-      })
-      .join('') || '<div class="small-muted">No controls match.</div>';
-  newControlsList.querySelectorAll('[data-new-control-id]').forEach((cb) =>
-    cb.addEventListener('change', () => {
-      const id = cb.getAttribute('data-new-control-id');
-      if (cb.checked) selectedCreateControlIds.add(id);
-      else selectedCreateControlIds.delete(id);
-      updateCreateScopeCounts();
-    }),
-  );
-  updateCreateScopeCounts();
-}
-
-function renderCreateScope() {
-  renderCreateDocuments();
-  renderCreateClauses();
-  renderCreateControls();
-}
-
-async function loadCreateScope({ resetSelection = false } = {}) {
-  const fw = (getCurrentFramework() || '').trim();
-  if (!fw || createScopeFramework === fw) {
-    renderCreateScope();
-    return;
-  }
-  if (resetSelection) {
-    selectedCreateDocumentIds = new Set();
-    selectedCreateClauseIds = new Set();
-    selectedCreateControlIds = new Set();
-  }
-  if (newDocumentsList)
-    newDocumentsList.innerHTML = '<div class="small-muted">Loading ISMS documents…</div>';
-  if (newClausesList) newClausesList.innerHTML = '<div class="small-muted">Loading clauses…</div>';
-  if (newControlsList)
-    newControlsList.innerHTML = '<div class="small-muted">Loading controls…</div>';
-  try {
-    const [controlsData, clausesData, graphData, documentsData] = await Promise.all([
-      apiGet(`/api/v1/controls?framework=${encodeURIComponent(fw)}&limit=5000`),
-      apiGet(`/api/v1/clauses?framework=${encodeURIComponent(fw)}`),
-      apiGet(`/api/v1/graph/clause_control?framework=${encodeURIComponent(fw)}`),
-      apiGet(`/api/v1/isms/documents?framework=${encodeURIComponent(fw)}&limit=1000`),
-    ]);
-    createScopeFramework = fw;
-    createDocuments = documentsData?.items || [];
-    createControls = (controlsData?.items || []).filter((c) => String(c.type || '') !== 'clause');
-    createClauses = clausesData?.items || [];
-    createClauseControlMap = _buildCreateClauseControlMap(graphData);
-    renderCreateScope();
-  } catch (e) {
-    createScopeFramework = '';
-    createClauseControlMap = new Map();
-    if (newDocumentsList)
-      newDocumentsList.innerHTML = `<div class="text-danger small">${esc(String(e))}</div>`;
-    if (newClausesList)
-      newClausesList.innerHTML = `<div class="text-danger small">${esc(String(e))}</div>`;
-    if (newControlsList)
-      newControlsList.innerHTML = `<div class="text-danger small">${esc(String(e))}</div>`;
-  }
-}
-
-function showCreateCard() {
-  if (!ensureAuditManage()) return;
-  if (newFramework) newFramework.value = currentFrameworkLabel();
-  if (newType) newType.value = 'internal';
-  setRichTextEditorValue(newExecutiveSummary, '');
-  setRichTextEditorValue(newNotes, '');
-  createScopeFramework = '';
-  selectedCreateDocumentIds = new Set();
-  selectedCreateClauseIds = new Set();
-  selectedCreateControlIds = new Set();
-  createCard.style.display = '';
-  loadCreateScope({ resetSelection: true });
-  setTimeout(() => newTitle?.focus(), 50);
-}
-
 function renderAudits(items) {
   const arr = Array.isArray(items) ? items : [];
   if (!arr.length) {
@@ -404,7 +138,7 @@ function renderAudits(items) {
         `/audit.html?id=${encodeURIComponent(a.id)}`,
         a.framework_slug || getCurrentFramework(),
       );
-      const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ') || '—';
+      const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ') || '-';
       const scope = `${a.scope_count ?? 0}`;
       const scopeBreakdown = `${a.document_scope_count ?? 0} documents, ${a.clause_scope_count ?? 0} clauses, ${a.control_scope_count ?? 0} controls`;
       return `<tr>
@@ -457,7 +191,7 @@ function renderAudits(items) {
 
 async function loadAudits() {
   if (!ensureAuditRead()) return;
-  rows.innerHTML = `<tr><td colspan="10" class="p-4 small-muted">Loading…</td></tr>`;
+  rows.innerHTML = `<tr><td colspan="10" class="p-4 small-muted">Loading</td></tr>`;
   const params = new URLSearchParams();
   const fw = getCurrentFramework();
   if (fw) params.set('framework', fw);
@@ -520,7 +254,7 @@ function flattenCoverage(group, type) {
 
 function coverageSourceHtml(sources) {
   const arr = Array.isArray(sources) ? sources : [];
-  if (!arr.length) return '<span class="small-muted">—</span>';
+  if (!arr.length) return '<span class="small-muted">-</span>';
   return (
     arr
       .slice(0, 8)
@@ -763,7 +497,7 @@ function renderCoverageVisualisations(data) {
       .attr(
         'aria-label',
         (d) =>
-          `${coverageTypeLabel(d.type)}: ${coverageItemTitle(d.type, d.item)} — ${d.covered ? 'included' : 'gap'}`,
+          `${coverageTypeLabel(d.type)}: ${coverageItemTitle(d.type, d.item)} - ${d.covered ? 'included' : 'gap'}`,
       );
     links
       .append('rect')
@@ -778,7 +512,7 @@ function renderCoverageVisualisations(data) {
       .append('title')
       .text(
         (d) =>
-          `${coverageTypeLabel(d.type)}: ${coverageItemTitle(d.type, d.item)} — ${d.covered ? 'included' : 'gap'}`,
+          `${coverageTypeLabel(d.type)}: ${coverageItemTitle(d.type, d.item)} - ${d.covered ? 'included' : 'gap'}`,
       );
     y += maxRows * (cell + cellGap) + 34;
   });
@@ -838,8 +572,8 @@ async function loadScopeCoverage() {
   if (!coverageIncludedRows || !coverageGapRows) return;
   if (!ensureAuditRead()) return;
   setDefaultCoverageDates();
-  coverageIncludedRows.innerHTML = '<tr><td colspan="3" class="p-4 small-muted">Loading…</td></tr>';
-  coverageGapRows.innerHTML = '<tr><td colspan="3" class="p-4 small-muted">Loading…</td></tr>';
+  coverageIncludedRows.innerHTML = '<tr><td colspan="3" class="p-4 small-muted">Loading</td></tr>';
+  coverageGapRows.innerHTML = '<tr><td colspan="3" class="p-4 small-muted">Loading</td></tr>';
   const params = new URLSearchParams();
   const fw = getCurrentFramework();
   if (fw) params.set('framework', fw);
@@ -1091,7 +825,7 @@ function renderScheduledRows(items) {
         <a class="fw-semibold" href="${esc(url)}">${esc(a.title || 'Scheduled audit')}</a>
         <div class="small-muted">${esc(auditTypeLabel(a.audit_type))} · ${esc(a.framework_slug || '')}</div>
       </td>
-      <td>${esc(a.schedule_next_run_date || '—')}</td>
+      <td>${esc(a.schedule_next_run_date || '-')}</td>
       <td>${esc(recurrenceLabel(a))}${a.schedule_until_date ? `<div class="small-muted">Until ${esc(a.schedule_until_date)}</div>` : ''}</td>
       <td>${esc(attendees.length)}</td>
       <td class="text-end">
@@ -1171,7 +905,7 @@ async function loadScheduledAudits() {
   if (!featureEnabled(me, 'audit_scheduling')) return;
   if (!canViewAudits()) return;
   if (!scheduledRows) return;
-  scheduledRows.innerHTML = '<tr><td colspan="5" class="p-4 small-muted">Loading…</td></tr>';
+  scheduledRows.innerHTML = '<tr><td colspan="5" class="p-4 small-muted">Loading</td></tr>';
   const monthEl = document.getElementById('schedMonth');
   if (monthEl && !monthEl.value) monthEl.value = _monthValue();
   const range = _monthRange(monthEl?.value || _monthValue());
@@ -1192,7 +926,7 @@ async function loadScheduledDocuments() {
   if (!schedDocuments) return;
   const fw = (getCurrentFramework() || '').trim();
   if (!fw) return;
-  schedDocuments.innerHTML = '<option>Loading ISMS documents…</option>';
+  schedDocuments.innerHTML = '<option>Loading ISMS documents</option>';
   try {
     const data = await apiGet(
       `/api/v1/isms/documents?framework=${encodeURIComponent(fw)}&limit=1000`,
@@ -1234,20 +968,10 @@ function resetScheduleForm() {
   loadScheduledDocuments();
 }
 
-if (!canManageAudits()) {
-  showCreate?.classList.add('d-none');
-  if (createCard) createCard.style.display = 'none';
-}
-showCreate?.addEventListener('click', showCreateCard);
-cancelCreate?.addEventListener('click', () => {
-  createCard.style.display = 'none';
-});
+if (!canManageAudits()) showCreate?.classList.add('d-none');
 document.getElementById('reload')?.addEventListener('click', loadAudits);
 q?.addEventListener('input', debounce(loadAudits, 350));
 statusFilter?.addEventListener('change', loadAudits);
-newDocumentFilter?.addEventListener('input', renderCreateDocuments);
-newClauseFilter?.addEventListener('input', renderCreateClauses);
-newControlFilter?.addEventListener('input', renderCreateControls);
 
 document.getElementById('reloadSchedules')?.addEventListener('click', loadScheduledAudits);
 document.getElementById('schedMonth')?.addEventListener('change', loadScheduledAudits);
@@ -1360,35 +1084,10 @@ scheduleForm?.addEventListener('submit', async (ev) => {
   }
 });
 
-createForm?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  try {
-    syncRichTextEditors(document);
-    const body = {
-      title: (newTitle?.value || '').trim(),
-      framework_slug: (getCurrentFramework() || '').trim(),
-      audit_type: newType?.value || 'internal',
-      start_date: newStart?.value || null,
-      end_date: newEnd?.value || null,
-      executive_summary: syncRichTextEditor(newExecutiveSummary) || '',
-      report_notes: syncRichTextEditor(newNotes) || '',
-      documents: Array.from(selectedCreateDocumentIds),
-      clauses: Array.from(selectedCreateClauseIds),
-      controls: Array.from(selectedCreateControlIds),
-    };
-    const res = await apiPost('/api/v1/audits', body);
-    toast(status, 'Audit created', 'success');
-    location.href = withFramework(
-      `/audit.html?id=${encodeURIComponent(res.id)}`,
-      res.framework_slug,
-    );
-  } catch (e) {
-    toast(status, `Failed: ${String(e)}`, 'danger');
-  }
-});
-
 setDefaultCoverageDates();
-if ((qs('new') === '1' || qs('new') === 'true') && canManageAudits()) showCreateCard();
+// Older links ask this page to start an audit; the wizard does that now.
+if ((qs('new') === '1' || qs('new') === 'true') && canManageAudits())
+  location.replace(withFramework('/audit-wizard.html', getCurrentFramework()));
 if (location.hash === '#coverage' || qs('tab') === 'coverage') {
   try {
     new bootstrap.Tab(document.getElementById('coverage-tab')).show();

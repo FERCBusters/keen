@@ -285,7 +285,7 @@ function restrictToAuditOnly() {
 
 async function runJsonPost(path, body) {
   status.style.display = 'none';
-  setOut('Running…');
+  setOut('Running');
   try {
     const res = await apiPost(path, body);
     setOut(typeof res === 'string' ? res : JSON.stringify(res, null, 2));
@@ -331,8 +331,8 @@ function renderUsers(users) {
       const effRole = (u.effective_role || role || 'normal').toLowerCase();
       const showEff = effRole && effRole !== role;
       const activeChecked = u.is_active ? 'checked' : '';
-      const created = u.created_at ? fmtTs(u.created_at) : '–';
-      const updated = u.updated_at ? fmtTs(u.updated_at) : '–';
+      const created = u.created_at ? fmtTs(u.created_at) : '-';
+      const updated = u.updated_at ? fmtTs(u.updated_at) : '-';
 
       return `
       <tr data-user-id="${esc(u.id)}">
@@ -357,8 +357,8 @@ function renderUsers(users) {
         <td class="small-muted">${esc(updated)}</td>
         <td class="d-flex flex-wrap gap-2">
           <button class="btn btn-outline-primary btn-sm" type="button" data-save>Save</button>
-          <button class="btn btn-outline-primary btn-sm" type="button" data-access>Access…</button>
-          <button class="btn btn-outline-primary btn-sm" type="button" data-reset ${u.auth_backend === 'ldap' ? 'disabled title="Change this password in your LDAP directory"' : ''}>${u.auth_backend === 'ldap' ? 'LDAP password' : 'Password…'}</button>
+          <button class="btn btn-outline-primary btn-sm" type="button" data-access>Access</button>
+          <button class="btn btn-outline-primary btn-sm" type="button" data-reset ${u.auth_backend === 'ldap' ? 'disabled title="Change this password in your LDAP directory"' : ''}>${u.auth_backend === 'ldap' ? 'LDAP password' : 'Password'}</button>
           <button class="btn btn-outline-danger btn-sm" type="button" data-delete>Delete</button>
         </td>
       </tr>
@@ -452,7 +452,7 @@ function renderUsers(users) {
 async function refreshUsers(showLoading = true) {
   if (!usersRows) return;
   if (showLoading) {
-    usersRows.innerHTML = `<tr><td colspan="7" class="small-muted">Loading…</td></tr>`;
+    usersRows.innerHTML = `<tr><td colspan="7" class="small-muted">Loading</td></tr>`;
   }
 
   try {
@@ -554,12 +554,12 @@ async function openUserAccessModal(userId, username) {
     userAccessPerms,
     (cachedPerms || []).slice().sort((a, b) => String(a.code).localeCompare(String(b.code))),
     (p) => p.code,
-    (p) => (p.description ? `${p.code} — ${p.description}` : p.code),
+    (p) => (p.description ? `${p.code} - ${p.description}` : p.code),
     [],
   );
 
   try {
-    showUserAccessStatus('Loading…', 'info');
+    showUserAccessStatus('Loading', 'info');
     const access = await apiGet(`/api/v1/users/${encodeURIComponent(String(userId))}/access`);
     showUserAccessStatus('', 'info');
 
@@ -574,7 +574,7 @@ async function openUserAccessModal(userId, username) {
       userAccessPerms,
       (cachedPerms || []).slice().sort((a, b) => String(a.code).localeCompare(String(b.code))),
       (p) => p.code,
-      (p) => (p.description ? `${p.code} — ${p.description}` : p.code),
+      (p) => (p.description ? `${p.code} - ${p.description}` : p.code),
       access.explicit_permission_codes || [],
     );
 
@@ -596,7 +596,7 @@ if (userAccessSave) {
     if (!userId) return;
 
     try {
-      showUserAccessStatus('Saving…', 'info');
+      showUserAccessStatus('Saving', 'info');
       const group_ids = selValues(userAccessGroups);
       const explicit_permission_codes = selValues(userAccessPerms);
       const res = await apiPut(`/api/v1/users/${encodeURIComponent(String(userId))}/access`, {
@@ -657,7 +657,7 @@ function renderGroups(groups) {
   const rows = items
     .map((g) => {
       const isSel = selectedGroupId && String(g.id) === String(selectedGroupId);
-      const roleText = g.role ? roleLabel(g.role) : '—';
+      const roleText = g.role ? roleLabel(g.role) : '-';
       return `
       <tr data-group-id="${esc(g.id)}" style="cursor:pointer;" class="${isSel ? 'table-active' : ''}">
         <td class="mono">${esc(g.name || '')}</td>
@@ -682,7 +682,7 @@ function renderGroups(groups) {
 async function refreshGroups(showLoading = true) {
   if (!groupsRows) return;
   if (showLoading) {
-    groupsRows.innerHTML = `<tr><td colspan="4" class="small-muted">Loading…</td></tr>`;
+    groupsRows.innerHTML = `<tr><td colspan="4" class="small-muted">Loading</td></tr>`;
   }
   try {
     const groups = await apiGet('/api/v1/admin/groups');
@@ -741,7 +741,7 @@ async function openGroupDetail(gid, { keepStatus = false } = {}) {
       groupPermissions,
       permsSorted,
       (p) => p.code,
-      (p) => (p.description ? `${p.code} — ${p.description}` : p.code),
+      (p) => (p.description ? `${p.code} - ${p.description}` : p.code),
       detail.permission_codes || [],
     );
     enhanceWrappedMultiSelect(groupPermissions);
@@ -823,7 +823,7 @@ if (groupApplyMembers) {
   groupApplyMembers.addEventListener('click', async () => {
     if (!selectedGroupId) return;
     try {
-      showGroupsStatus('Saving members…', 'info');
+      showGroupsStatus('Saving members', 'info');
       const user_ids = selValues(groupMembers);
       await apiPut(`/api/v1/admin/groups/${encodeURIComponent(String(selectedGroupId))}/members`, {
         user_ids,
@@ -841,7 +841,7 @@ if (groupApplyPermissions) {
   groupApplyPermissions.addEventListener('click', async () => {
     if (!selectedGroupId) return;
     try {
-      showGroupsStatus('Saving permissions…', 'info');
+      showGroupsStatus('Saving permissions', 'info');
       const permission_codes = selValues(groupPermissions);
       await apiPut(
         `/api/v1/admin/groups/${encodeURIComponent(String(selectedGroupId))}/permissions`,
@@ -874,7 +874,7 @@ document.querySelectorAll('[data-run]').forEach((btn) => {
 
 document.getElementById('resetLokiCursors')?.addEventListener('click', async () => {
   const ok = window.confirm(
-    'Reset all Loki ingestion cursors to now? Existing events are not deleted, but old Loki backlog will be skipped.',
+    'Reset all Loki ingestion cursors to now? Existing events stay, and earlier Loki backlog is skipped.',
   );
   if (!ok) return;
   await runJsonPost('/api/v1/admin/ingest/loki/reset', {});
@@ -928,7 +928,7 @@ function diaryAddLinkRow(url = '', text = '') {
   row.innerHTML = `
     <div class="col-12 col-lg-6">
       <label class="form-label small-muted mb-1">URL</label>
-      <input class="form-control" data-link-url value="${esc(url)}" placeholder="https://…" />
+      <input class="form-control" data-link-url value="${esc(url)}" placeholder="https://" />
     </div>
     <div class="col-10 col-lg-5">
       <label class="form-label small-muted mb-1">Link text</label>
@@ -1052,7 +1052,7 @@ document.getElementById('controlSearch')?.addEventListener('input', (ev) => {
 document.getElementById('diaryForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   status.style.display = 'none';
-  setOut('Submitting diary evidence…');
+  setOut('Submitting diary evidence');
 
   try {
     const summary = document.getElementById('diarySummary').value.trim();
@@ -1137,7 +1137,7 @@ function renderEntityChanges(items, total) {
   if (entityChangeMeta) {
     const from = total ? entityChangeOffset + 1 : 0;
     const to = Math.min(entityChangeOffset + entityChangeLimit, total || 0);
-    entityChangeMeta.textContent = `Showing ${from}–${to} of ${total || 0}`;
+    entityChangeMeta.textContent = `Showing ${from}-${to} of ${total || 0}`;
   }
   if (entityChangePrev) entityChangePrev.disabled = entityChangeOffset <= 0;
   if (entityChangeNext)
@@ -1146,7 +1146,7 @@ function renderEntityChanges(items, total) {
 
 async function refreshEntityChanges() {
   if (entityChangeRows)
-    entityChangeRows.innerHTML = '<div class="p-3 small-muted">Loading changelog…</div>';
+    entityChangeRows.innerHTML = '<div class="p-3 small-muted">Loading changelog</div>';
   const url = new URL('/api/v1/admin/entity-changelog', location.origin);
   url.searchParams.set('limit', String(entityChangeLimit));
   url.searchParams.set('offset', String(entityChangeOffset));
@@ -1251,7 +1251,7 @@ function renderAudit(items, total) {
   if (auditMeta) {
     const from = total ? auditOffset + 1 : 0;
     const to = Math.min(auditOffset + auditLimit, total || 0);
-    auditMeta.textContent = `Showing ${from}–${to} of ${total || 0}`;
+    auditMeta.textContent = `Showing ${from}-${to} of ${total || 0}`;
   }
 
   if (auditPrev) auditPrev.disabled = auditOffset <= 0;
@@ -1259,7 +1259,7 @@ function renderAudit(items, total) {
 }
 
 async function refreshAudit() {
-  if (auditRows) auditRows.innerHTML = `<tr><td colspan="8" class="small-muted">Loading…</td></tr>`;
+  if (auditRows) auditRows.innerHTML = `<tr><td colspan="8" class="small-muted">Loading</td></tr>`;
 
   const url = new URL('/api/v1/admin/audit', location.origin);
   url.searchParams.set('limit', String(auditLimit));

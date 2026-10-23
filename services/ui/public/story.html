@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – Story</title>
+  <title>Keen - Story</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css"/>
@@ -19,7 +19,7 @@
     <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between mb-3">
       <div>
         <a href="/stories.html" data-nav-fw="1">← Stories</a>
-        <h1 id="storyTitle" class="h3 mt-2 mb-1">Loading…</h1>
+        <h1 id="storyTitle" class="h3 mt-2 mb-1">Loading</h1>
         <div class="small-muted"><span id="storyStatus" class="badge text-bg-success">open</span> <span id="storyMeta"></span></div>
         <p id="storySummary" class="mt-2 mb-0 story-summary"></p>
       </div>
@@ -53,7 +53,7 @@
         <section id="addItems" class="card card-body mt-3" hidden>
           <h2 class="h6">Add to the story</h2>
           <div class="row g-2 align-items-end">
-            <div class="col-md-3"><label for="addKind" class="form-label">Kind</label><select id="addKind" class="form-select"><option value="event">Event</option><option value="risk" data-feature="risk_cia">Risk</option><option value="document" data-feature="documents">Document</option><option value="asset" data-feature="assets">Asset</option><option value="objective" data-feature="objectives">Objective</option><option value="note">Note</option></select></div>
+            <div class="col-md-3"><label for="addKind" class="form-label">Kind</label><select id="addKind" class="form-select"><option value="event">Event</option><option value="risk" data-feature="risk_cia">Risk</option><option value="document" data-feature="documents">Document</option><option value="asset" data-feature="assets">Asset</option><option value="objective" data-feature="objectives">Objective</option><option value="swot" data-feature="swot">SWOT item</option><option value="person" data-feature="people">Person</option><option value="vendor" data-feature="vendors">Vendor</option><option value="effectiveness_measure" data-feature="effectiveness">Effectiveness measure</option><option value="meeting" data-feature="meetings">Meeting minutes</option><option value="note">Note</option></select></div>
             <div class="col-md-6" id="searchField"><label for="addSearch" class="form-label">Search</label><input id="addSearch" class="form-control" maxlength="256" placeholder="Summary, title or name"></div>
             <div class="col-md-3" id="searchAction"><button id="findItems" class="btn btn-outline-primary" type="button">Search</button></div>
             <div class="col-md-4" id="noteLabelField" hidden><label for="noteLabel" class="form-label">Note title</label><input id="noteLabel" class="form-control" maxlength="256"></div>
@@ -70,7 +70,7 @@
           <span id="linkEditor" class="d-flex gap-2 align-items-center" hidden><label class="small-muted" for="linkLabel">Link label</label><input id="linkLabel" class="form-control form-control-sm" maxlength="128" style="width:14rem;"><button id="removeLink" class="btn btn-sm btn-outline-danger" type="button">Remove link</button></span>
           <button id="saveLayout" class="btn btn-sm btn-primary ms-auto" type="button" disabled>Save layout</button>
         </div>
-        <p id="flowHint" class="small-muted">Drag boxes to arrange the story. Choose <strong>Link items</strong>, then an item and the item it leads to, to draw an arrow between them.</p>
+        <p id="flowHint" class="small-muted">Drag boxes to arrange the story. Choose <strong>Link items</strong>, then an item and the item it leads to, to draw an arrow between them. A box's title opens its record in a new tab.</p>
         <div id="flow" class="story-flow-host" role="region" aria-label="Story flow chart"></div>
       </section>
       <section class="tab-pane fade" id="commentsPane" role="tabpanel">

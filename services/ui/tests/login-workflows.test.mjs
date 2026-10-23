@@ -100,7 +100,7 @@ test('a directory sign-in offers the method choice and sends the chosen method',
     [...ui.el('login-method').options].map((o) => [o.value, o.textContent]),
     [
       ['ldap', 'LDAP directory'],
-      ['local', 'Local KEEN account'],
+      ['local', 'Local Keen account'],
     ],
   );
   assert.equal(ui.el('ssoSection').classList.contains('d-none'), true);

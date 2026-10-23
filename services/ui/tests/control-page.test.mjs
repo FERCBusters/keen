@@ -218,10 +218,19 @@ async function controlPage(t, options = {}) {
     },
   });
   await settle(
-    () => ui.calls.some((c) => c.url.startsWith('/api/v1/events?')) || ui.el('status').textContent,
+    () =>
+      (ui.calls.some((c) => c.url.startsWith('/api/v1/events?')) && ui.idle()) ||
+      ui.el('status').textContent,
   );
   await new Promise((r) => setTimeout(r, 10));
   return { ui, state };
+}
+
+// Related controls load when their tab first opens.
+async function openRelated(ui) {
+  ui.el('controlRelatedTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('crossFrameworkLinks').textContent !== 'Loading linked controls');
+  await settle(() => ui.idle());
 }
 
 const lastEventsUrl = (ui) =>
@@ -235,17 +244,13 @@ test('control page renders details, linked records and evidence with untrusted t
   assert.equal(ui.el('ctrlTitle').textContent, 'A.5.1  <b>Policies</b>');
   assert.equal(
     ui.el('ctrlMeta').textContent,
-    'A • control • in scope • Justification: Best Practice',
+    'A · control · in scope · Justification: Best Practice',
   );
   const description = ui.el('osaControlDescription');
   assert.equal(description.querySelector('script'), null);
   assert.match(description.textContent, /Line one\n<script>alert\(1\)<\/script>/);
   assert.match(description.textContent, /Open Security Architecture/);
   assert.equal(ui.el('ctrlLinks').querySelector('a').href, 'https://guidance.example/a51');
-  assert.match(
-    ui.el('viewAllEvents').getAttribute('href'),
-    /events\.html\?control=A\.5\.1&framework=A/,
-  );
   assert.match(ui.el('controlsBreadcrumb').getAttribute('href'), /controls\.html\?framework=A/);
 
   // Clauses are sorted numerically; only linked clauses become links.
@@ -293,15 +298,29 @@ test('control page renders details, linked records and evidence with untrusted t
     ui.el('rows').querySelector('a').getAttribute('href'),
     /event\.html\?id=e1&framework=A/,
   );
-  assert.equal(ui.el('resultMeta').textContent, '1–50 of 120');
+  assert.equal(ui.el('resultMeta').textContent, '1-50 of 120');
   assert.deepEqual(
     [...ui.el('sourceFilter').options].map((o) => o.value),
     ['', 'aws', 'github'],
   );
   assert.match(ui.el('sourceFilter').options[1].textContent, /aws \(5\)/);
+  // The page asks for source counts only.
+  const facets = new URL(
+    ui.calls.find((c) => c.url.startsWith('/api/v1/events/facets?')).url,
+    'https://keen.example',
+  );
+  assert.equal(facets.searchParams.get('max_controls'), '0');
   // Administrators see the justification and cross-framework link controls.
+  assert.equal(ui.el('controlJustificationTabItem').hidden, false);
   assert.equal(ui.el('controlJustificationCard').style.display, '');
   assert.equal(ui.el('controlJustification').value, 'Best Practice');
+  // Related controls wait for their tab.
+  assert.equal(
+    ui.calls.some((c) => c.url.startsWith('/api/v1/controls/c1/cross-framework')),
+    false,
+  );
+  await openRelated(ui);
+  assert.match(ui.window.location.search, /tab=related/);
   assert.equal(ui.el('crossFrameworkForm').style.display, '');
   assert.deepEqual(
     [...ui.el('crossFrameworkSource').options].map((o) => o.value),
@@ -314,15 +333,15 @@ test('non-HTTP guidance URLs are not rendered as links', async (t) => {
     control: baseControl({ upstream_url: 'javascript:alert(1)', metadata: {}, justification: '' }),
   });
   assert.equal(ui.el('ctrlLinks').querySelector('a'), null);
-  assert.equal(ui.el('ctrlMeta').textContent, 'A • control • in scope');
+  assert.equal(ui.el('ctrlMeta').textContent, 'A · control · in scope');
   assert.equal(ui.el('osaControlDescription').textContent, '');
 });
 
-test('the KEEN Assurance Framework attribution is shown for its controls', async (t) => {
+test('the Keen Assurance Framework attribution is shown for its controls', async (t) => {
   const { ui } = await controlPage(t, {
     control: baseControl({ framework: 'KEEN-AF:1.0', metadata: {} }),
   });
-  assert.match(ui.el('osaControlDescription').textContent, /Vanta’s controls/);
+  assert.match(ui.el('osaControlDescription').textContent, /Vanta's controls/);
 });
 
 test('readers without risk or ISMS permission do not request restricted links', async (t) => {
@@ -334,6 +353,10 @@ test('readers without risk or ISMS permission do not request restricted links', 
   assert.ok(!ui.calls.some((c) => /\/(risks|interested-parties)\?/.test(c.url)));
   assert.equal(ui.el('editClauseApplicability').style.display, 'none');
   assert.equal(ui.el('controlJustificationCard').style.display, 'none');
+  assert.equal(ui.el('controlJustificationTabItem').hidden, true);
+  assert.ok(ui.el('controlJustificationPane').classList.contains('d-none'));
+  await openRelated(ui);
+  assert.ok([...ui.el('crossFrameworkView').options].some((o) => o.value === 'B'));
   assert.notEqual(ui.el('crossFrameworkForm').style.display, '');
   ui.el('controlIsmsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() =>
@@ -354,9 +377,9 @@ test('ISMS and changelog tabs load on demand and update the URL', async (t) => {
       'SWOT',
       'Objectives',
       'Documents',
-      'Organisation Chart',
+      'Organisation chart',
       'Assets',
-      'Effectiveness Measures',
+      'Effectiveness measures',
       'Meetings',
       'Meetings',
     ],
@@ -387,6 +410,78 @@ test('deep links to the ISMS and changelog tabs load their data with the page', 
   assert.ok(isms.ui.el('controlIsmsView').querySelector('table'));
   const log = await controlPage(t, { query: '&id=c1&tab=changelog' });
   assert.match(log.ui.el('controlChangelog').textContent, /Justification changed/);
+  const related = await controlPage(t, { query: '&id=c1&tab=related' });
+  assert.ok([...related.ui.el('crossFrameworkView').options].some((o) => o.value === 'B'));
+  // A second activation reuses the loaded links.
+  const before = related.ui.calls.length;
+  related.ui.el('controlRelatedTab').dispatchEvent(new related.ui.window.Event('shown.bs.tab'));
+  assert.equal(related.ui.calls.length, before);
+  related.ui
+    .el('controlJustificationTab')
+    .dispatchEvent(new related.ui.window.Event('shown.bs.tab'));
+  assert.match(related.ui.window.location.search, /tab=justification/);
+});
+
+test('a reader deep-linked to the justification tab sees the evidence tab', async (t) => {
+  const shown = [];
+  await controlPage(t, {
+    me: { can_view_controls: true },
+    query: '&id=c1&tab=justification',
+    setup(window) {
+      window.bootstrap = {
+        Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+      };
+    },
+  });
+  assert.deepEqual(shown, ['controlEvidenceTab']);
+});
+
+test('an unknown or inherited tab name in the address opens the evidence tab', async (t) => {
+  for (const name of ['constructor', '__proto__', 'nothing']) {
+    const shown = [];
+    await controlPage(t, {
+      query: `&id=c1&tab=${name}`,
+      setup(window) {
+        window.bootstrap = {
+          Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+        };
+      },
+    });
+    assert.deepEqual(shown, ['controlEvidenceTab'], name);
+  }
+});
+
+test('evidence appears while slower sections are still loading', async (t) => {
+  let releaseRisks;
+  const risksPending = new Promise((resolve) => {
+    releaseRisks = resolve;
+  });
+  const ui = await page(t, 'control', {
+    query: '&id=c1',
+    get: async (u) => {
+      const p = u.pathname;
+      if (p === '/api/v1/controls/c1') return baseControl();
+      if (p === '/api/v1/controls/c1/risks') {
+        await risksPending;
+        return { items: [] };
+      }
+      if (p === '/api/v1/controls/c1/interested-parties') return { items: [] };
+      if (p === '/api/v1/events/facets') return { sources: [{ source: 'github', count: 1 }] };
+      if (p === '/api/v1/events')
+        return {
+          total: 1,
+          items: [
+            { id: 'e1', timestamp: '2026-02-01T00:00:00Z', source: 'github', summary: 'Push' },
+          ],
+        };
+      throw new Error('Unexpected GET ' + u);
+    },
+  });
+  await settle(() => /Push/.test(ui.el('rows').textContent));
+  assert.equal(ui.el('resultMeta').textContent, '1-1 of 1');
+  assert.equal(ui.el('risksCount').textContent, '0');
+  releaseRisks();
+  await settle(() => /No risks mapped/.test(ui.el('risksView').textContent));
 });
 
 test('evidence filters, paging and saved searches use the canonical control URL', async (t) => {
@@ -508,7 +603,7 @@ test('administrators save justification and guidance URL, refreshing the guidanc
     path: '/api/v1/admin/controls/c1/justification',
     body: { justification: null },
   });
-  await settle(() => ui.el('ctrlMeta').textContent === 'A • control • in scope');
+  await settle(() => ui.el('ctrlMeta').textContent === 'A · control · in scope');
 
   ui.el('editClauseApplicability').click();
   await settle(() => ui.el('adminClausesList').querySelector('select'));
@@ -526,6 +621,7 @@ test('administrators link and unlink controls from another framework', async (t)
   const { ui, state } = await controlPage(t, {
     globals: { confirm: (m) => (prompts.push(m), true) },
   });
+  await openRelated(ui);
   ui.el('crossFrameworkForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   assert.equal(state.posted.length, 0);
   ui.el('crossFrameworkSource').value = 'B';
@@ -560,7 +656,7 @@ test('control load failures and evidence failures are reported', async (t) => {
   await settle(() =>
     /Failed to load control: Error: Control offline/.test(broken.ui.el('status').textContent),
   );
-  assert.equal(broken.ui.el('resultMeta').textContent, '—');
+  assert.equal(broken.ui.el('resultMeta').textContent, '-');
 
   const events = await controlPage(t, { fail: { events: true } });
   await settle(() => /Failed to load evidence/.test(events.ui.el('status').textContent));
@@ -569,7 +665,7 @@ test('control load failures and evidence failures are reported', async (t) => {
   const parties = await controlPage(t, { fail: { parties: true } });
   assert.match(
     parties.ui.el('interestedPartiesView').textContent,
-    /Failed to load Interested Parties/,
+    /Failed to load interested parties/,
   );
   assert.equal(parties.ui.el('interestedPartiesCount').textContent, '0');
 });
@@ -596,7 +692,7 @@ test('a control with nothing linked says so in every tab', async (t) => {
   assert.equal(ui.el('risksCount').textContent, '0');
   ui.el('controlInterestedPartiesTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() =>
-    /No Interested Parties mapped/.test(ui.el('interestedPartiesView').textContent),
+    /No interested parties mapped/.test(ui.el('interestedPartiesView').textContent),
   );
   // Without the facets the source filter keeps whatever it had.
   assert.equal(ui.el('status').dataset.alert, undefined);
@@ -610,6 +706,7 @@ test('failed or forbidden link lookups are contained in their own panels', async
     fail: { risks: true, isms: true, changelog: true, cross: true },
   });
   await settle(() => ui.el('risksCard').style.display === 'none');
+  await openRelated(ui);
   assert.equal(
     ui.el('crossFrameworkLinks').textContent,
     'Could not load control links: Error: Links offline',
@@ -648,6 +745,7 @@ test('refused saves and link changes are reported and leave the controls usable'
   assert.equal(ui.el('saveControlUpstreamUrl').disabled, false);
   assert.equal(state.patched.length, 3);
 
+  await openRelated(ui);
   ui.el('crossFrameworkSource').value = 'B';
   ui.el('crossFrameworkSource').dispatchEvent(new ui.window.Event('change'));
   await settle(() => /Could not load source controls/.test(ui.el('status').textContent));

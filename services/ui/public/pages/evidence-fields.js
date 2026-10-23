@@ -46,7 +46,7 @@ export function fieldLabel(path) {
       index === 0 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : '[' + JSON.stringify(key) + ']',
     )
     .join('');
-  return `${exact} — ${label}`;
+  return `${exact} - ${label}`;
 }
 export function draftFields(payload) {
   const f = payload?.fields || {};

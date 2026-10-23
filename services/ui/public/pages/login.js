@@ -113,7 +113,7 @@ async function loadAuthMethods() {
     select.id = 'login-method';
     select.className = 'form-select mb-3';
     select.add(new Option('LDAP directory', 'ldap'));
-    if (methods.local_enabled) select.add(new Option('Local KEEN account', 'local'));
+    if (methods.local_enabled) select.add(new Option('Local Keen account', 'local'));
     form.prepend(label, select);
   }
   if (methods && methods.local_enabled === false && !methods.ldap_enabled) {

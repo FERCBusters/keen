@@ -50,7 +50,7 @@ from app.services.isms.link_diary import (
     remove_entity_link_diary,
     sync_entity_link_diary,
 )
-from app.services.isms.mutations import org_node_or_400
+from app.services.isms.mutations import _delete_entity_links, org_node_or_400
 from app.services.risk_mitigator import analyse_risk_mitigation
 
 RISK_READ_PERMISSION = "risk.read"
@@ -745,7 +745,7 @@ def risk_display(risk: Risk) -> str:
     asset_name = risk.asset.name if risk.asset else ""
     threat = (risk.threat_summary or "").strip()
     if asset_name and threat:
-        return f"{asset_name} — {threat[:120]}"
+        return f"{asset_name} - {threat[:120]}"
     return asset_name or threat[:120] or "Risk"
 
 
@@ -1447,6 +1447,9 @@ def delete_risk_asset(*, asset_id: str, user, db: Session):
         raise DomainError(
             status_code=400, detail="Cannot delete an asset used by risks"
         )
+    # The asset is also an ISMS record: its framework links, and the diary entry
+    # that counts them as control evidence, go with it.
+    _delete_entity_links(db, "asset", row.id, settings.default_framework_slug)
     db.delete(row)
     db.commit()
     return {"ok": True}

@@ -1,5 +1,5 @@
 flowchart TB
-  K["KEEN writes a redacted artifact"] --> W{"Configured backend"}
+  K["Keen writes a redacted artifact"] --> W{"Configured backend"}
   W -->|Local| L["Create a new file; refuse replacement"]
   W -->|S3| S["PutObject to the configured bucket"]
   P["Bucket and IAM policy"] --> S

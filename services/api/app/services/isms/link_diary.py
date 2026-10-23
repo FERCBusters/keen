@@ -1,9 +1,10 @@
-"""Automatic diary entries for ISMS and risk framework links.
+"""Automatic diary entries for ISMS, risk and interested-party framework links.
 
-Saving an ISMS record or a risk with framework links maintains one diary event
-per record. The entry lists the linked control and clause references and links
-to the record by UUID. Its automatic mappings follow the live link state, so
-control evidence counts include each association.
+Saving an ISMS record, a risk or an interested party with framework links
+maintains one diary event per record. The entry lists the linked control and
+clause references and links to the record by UUID. Its automatic mappings
+follow the live link state, so control evidence counts include each
+association.
 
 Entries carry no record titles; app/security/diary_visibility.py decides who
 can read them. Diary events are immune to evidence retention.
@@ -26,6 +27,7 @@ from app.db.models import (
     EventIncident,
     EventQuestionThread,
     FrameworkClause,
+    InterestedPartyControlLink,
     IsmsEntityClauseLink,
     IsmsEntityControlLink,
     Mapping,
@@ -33,6 +35,7 @@ from app.db.models import (
     User,
 )
 from app.ingest.common import normalise_ingested_fields, store_event_with_artifact
+from app.ingest.connections import outside_connection
 from app.security.diary_visibility import (
     DIARY_SOURCE,
     LINK_ENTRY_SYSTEM,
@@ -62,6 +65,7 @@ _LABELS = {
     "meeting": "Meeting",
     "effectiveness_measure": "Effectiveness measure",
     "risk": "Risk",
+    "interested_party": "Interested party",
 }
 # Record pages take only the record UUID. Organisation chart nodes have no
 # page of their own, so their entries open the organisation chart.
@@ -73,6 +77,15 @@ _RECORD_PAGES = {
     "meeting": "/isms-meeting.html?id={id}",
     "effectiveness_measure": "/isms-effectiveness-measure.html?id={id}",
     "risk": "/risk.html?id={id}",
+    "interested_party": "/interested_party.html?id={id}",
+}
+# Risks and interested parties keep their control links in tables of their own.
+_DIRECT_LINKS = {
+    "risk": (RiskControlLink, RiskControlLink.risk_id),
+    "interested_party": (
+        InterestedPartyControlLink,
+        InterestedPartyControlLink.interested_party_id,
+    ),
 }
 _SECTION_PAGES = {"org_node": "/isms.html?tab=org"}
 
@@ -109,11 +122,12 @@ def _link_state(
     """Return the catalogue item IDs to map and the references per framework."""
 
     refs: dict[str, list[str]] = {}
-    if entity_type == "risk":
+    if entity_type in _DIRECT_LINKS:
+        link, owner = _DIRECT_LINKS[entity_type]
         rows = (
             db.query(ControlItem.id, ControlItem.framework_slug, ControlItem.ref)
-            .join(RiskControlLink, RiskControlLink.control_item_id == ControlItem.id)
-            .filter(RiskControlLink.risk_id == entity_id)
+            .join(link, link.control_item_id == ControlItem.id)
+            .filter(owner == entity_id)
             .all()
         )
         for _item_id, framework, ref in rows:
@@ -383,18 +397,31 @@ def _revise_entry(
 
 
 def sync_entity_link_diary(
-    db: Session, entity_type: str, entity_id: uuid.UUID, user: User | None = None
+    db: Session,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    user: User | None = None,
+    *,
+    actor: str | None = None,
 ) -> None:
     """Create or update the automatic diary entry for a record's links.
 
     Runs inside the caller's transaction; the caller owns the commit. A save
     whose links are unchanged writes nothing. Once an administrator has edited
     the entry, its text stays as edited and only the mappings follow the links.
+    A collector that writes links names itself as ``actor`` in place of a user.
     """
 
     entity_type = _record_type(entity_type)
     entity_id = uuid.UUID(str(entity_id))
-    actor = getattr(user, "username", None) or None
+    actor = getattr(user, "username", None) or actor or None
+    # Entries belong to Keen, so a collection run that changes links writes
+    # them as a save in Keen would.
+    with outside_connection():
+        _sync(db, entity_type, entity_id, actor)
+
+
+def _sync(db: Session, entity_type: str, entity_id: uuid.UUID, actor: str | None):
     desired, refs = _link_state(db, entity_type, entity_id)
     event = _find_event(db, link_entry_external_id(entity_type, entity_id))
     if event is None:
@@ -425,6 +452,11 @@ def remove_entity_link_diary(
 
     entity_type = _record_type(entity_type)
     entity_id = uuid.UUID(str(entity_id))
+    with outside_connection():
+        _remove(db, entity_type, entity_id)
+
+
+def _remove(db: Session, entity_type: str, entity_id: uuid.UUID) -> None:
     event = _find_event(db, link_entry_external_id(entity_type, entity_id))
     if event is None:
         return

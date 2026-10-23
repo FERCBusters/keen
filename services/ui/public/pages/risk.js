@@ -118,8 +118,8 @@ function _qStatusBadge(status) {
 function _renderRiskQuestionThread(t) {
   const tid = t?.id || '';
   const createdBy = t?.created_by_username || '';
-  const createdAt = t?.created_at ? fmtTs(t.created_at) : '—';
-  const updatedAt = t?.updated_at ? fmtTs(t.updated_at) : '—';
+  const createdAt = t?.created_at ? fmtTs(t.created_at) : '-';
+  const updatedAt = t?.updated_at ? fmtTs(t.updated_at) : '-';
   const statusVal = String(t?.status || 'unanswered').toLowerCase();
   const posts = Array.isArray(t?.posts) ? t.posts : [];
   const isAdmin = !!me?.is_admin;
@@ -140,7 +140,7 @@ function _renderRiskQuestionThread(t) {
     .map(
       (p) => `
     <div class="question-post">
-      <div class="question-post-meta"><div class="small-muted"><span class="fw-bold">${esc(p?.author_username || '—')}</span> • ${esc(p?.created_at ? fmtTs(p.created_at) : '—')}</div></div>
+      <div class="question-post-meta"><div class="small-muted"><span class="fw-bold">${esc(p?.author_username || '-')}</span> · ${esc(p?.created_at ? fmtTs(p.created_at) : '-')}</div></div>
       <div class="mt-2">${esc(p?.body || '').replace(/\n/g, '<br>')}</div>
     </div>`,
     )
@@ -149,7 +149,7 @@ function _renderRiskQuestionThread(t) {
     ? `
     <div class="mt-3 no-print">
       <div class="small-muted mb-1">Reply</div>
-      <textarea class="form-control" rows="3" id="riskReplyBody-${esc(tid)}" placeholder="Write a response…"></textarea>
+      <textarea class="form-control" rows="3" id="riskReplyBody-${esc(tid)}" placeholder="Write a response"></textarea>
       <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
         <button class="btn btn-sm btn-primary" data-action="reply-risk-question" data-thread="${esc(tid)}">Send reply</button>
       </div>
@@ -160,8 +160,8 @@ function _renderRiskQuestionThread(t) {
     <div class="question-thread" id="thread-${esc(tid)}">
       <div class="question-header">
         <div>
-          <div class="question-title">Thread by <span class="mono">${esc(createdBy || '—')}</span></div>
-          <div class="small-muted">Created ${esc(createdAt)} • Updated ${esc(updatedAt)}</div>
+          <div class="question-title">Thread by <span class="mono">${esc(createdBy || '-')}</span></div>
+          <div class="small-muted">Created ${esc(createdAt)} · Updated ${esc(updatedAt)}</div>
         </div>
         <div class="d-flex flex-wrap gap-2 align-items-center">${_qStatusBadge(statusVal)}${statusCtl}${deleteCtl}</div>
       </div>
@@ -224,7 +224,7 @@ function scoreBadge(score, title = '') {
   return `<span class="badge ${riskScoreClass(n)}"${title ? ` title="${esc(title)}"` : ''}>${esc(String(n))}</span>`;
 }
 
-function setText(el, value, fallback = '—') {
+function setText(el, value, fallback = '-') {
   if (!el) return;
   const txt = String(value || '').trim();
   el.textContent = txt || fallback;
@@ -317,7 +317,7 @@ function renderRisk(risk) {
       risk?.framework || framework,
       `updated ${fmtTs(risk?.updated_at) || 'unknown'}`,
     ].filter(Boolean);
-    riskMeta.textContent = bits.join(' • ');
+    riskMeta.textContent = bits.join(' · ');
   }
   if (risksBreadcrumb)
     risksBreadcrumb.href = withFramework('/risks.html', risk?.framework || framework);
@@ -377,7 +377,7 @@ riskAskQuestion?.addEventListener('click', async () => {
   if (!body) return toast(status, 'Please enter a question', 'warning');
   riskAskQuestion.disabled = true;
   const prev = riskAskQuestion.textContent;
-  riskAskQuestion.textContent = 'Submitting…';
+  riskAskQuestion.textContent = 'Submitting';
   try {
     await apiPost(`/api/v1/questions/entities/risk/${encodeURIComponent(id)}`, { body });
     if (riskQuestionBody) riskQuestionBody.value = '';
@@ -417,7 +417,7 @@ riskQuestionsEl?.addEventListener('click', async (ev) => {
   if (!body) return toast(status, 'Please enter a reply', 'warning');
   btn.disabled = true;
   const prev = btn.textContent;
-  btn.textContent = 'Sending…';
+  btn.textContent = 'Sending';
   try {
     await apiPost(`/api/v1/questions/${encodeURIComponent(tid)}/posts`, { body });
     if (bodyEl) bodyEl.value = '';
@@ -470,4 +470,6 @@ async function loadRisk() {
 await loadRisk();
 
 import { mountSwotRelated } from '/pages/swot-related.js';
+import { mountStoryRelated } from '/pages/story-related.js';
 mountSwotRelated('risk', new URLSearchParams(location.search).get('id'));
+mountStoryRelated({ me, kind: 'risk', id: new URLSearchParams(location.search).get('id') });

@@ -1,6 +1,6 @@
 """Loki collection: the query window, cursor, stored evidence and failures.
 
-The Loki server is faked at the HTTP transport, so KEEN's own client sends each
+The Loki server is faked at the HTTP transport, so Keen's own client sends each
 request with its configured authentication. Collection writes with PostgreSQL
 upserts and stores artifacts in a local test bucket.
 """
@@ -90,7 +90,7 @@ def lk(contract_db, monkeypatch, tmp_path):
     )
     upstream = Upstream()
     real_client = httpx.Client
-    # KEEN's ingestion client keeps its headers, auth, timeout and redirect
+    # Keen's ingestion client keeps its headers, auth, timeout and redirect
     # policy; only the network transport is replaced.
     monkeypatch.setattr(
         loki.httpx,

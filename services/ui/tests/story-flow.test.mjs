@@ -229,3 +229,75 @@ test('arranging by order lays boxes out on the grid and a reader cannot drag', a
   pointer('pointerup', host, 50, 50);
   assert.deepEqual(changes, ['positions', 'positions']);
 });
+
+test('box titles open their records in a new tab and stay out of dragging and linking', async (t) => {
+  const items = [
+    { ...ITEMS[0], url: '/event.html?id=e1' },
+    { ...ITEMS[1], url: '/risk.html?id=r1' },
+    { ...ITEMS[2], url: '/risk.html?id=hidden' },
+    { id: 'n', kind: 'note', kind_label: 'Note', title: 'Plan', label: 'Plan', x: 760, y: 40 },
+    ...[
+      ['j', 'javascript:alert(1)'],
+      ['p', '//evil.example/x'],
+      ['h', 'https://evil.example/x'],
+      ['b', '/\\evil.example'],
+    ].map(([id, url], index) => ({
+      id,
+      kind: 'document',
+      kind_label: 'Document',
+      title: 'Policy ' + id,
+      label: '',
+      x: 40 + index * 240,
+      y: 240,
+      url,
+    })),
+  ];
+  const ui = await loadUi('pages/story-flow.js', { html: '<div id="flow"></div>' });
+  t.after(ui.close);
+  const host = ui.document.getElementById('flow');
+  const changes = [];
+  const flow = ui.api.createFlowCanvas({
+    host,
+    editable: true,
+    onChange: (c) => changes.push(c.type),
+    linkFor: (item) => (item.url ? `${item.url}&framework=A` : ''),
+  });
+  flow.load(items, []);
+  const link = (id) => host.querySelector(`[data-item-id="${id}"] .story-node-title a`);
+  assert.equal(link('i1').getAttribute('href'), '/event.html?id=e1&framework=A');
+  assert.equal(link('i1').target, '_blank');
+  assert.equal(link('i1').rel, 'noopener noreferrer');
+  assert.equal(link('i1').getAttribute('draggable'), 'false');
+  assert.equal(link('i1').getAttribute('aria-label'), 'Open Event: Sign-in (opens in a new tab)');
+  // The author's label is the visible title; the record's own title names the link.
+  assert.equal(link('i2').textContent, 'Realised <b>risk</b>');
+  assert.equal(link('i2').querySelector('b'), null);
+  assert.equal(link('i2').getAttribute('aria-label'), 'Open Risk: Export (opens in a new tab)');
+  // Withheld items, notes and anything outside Keen stay plain text.
+  for (const id of ['i3', 'n', 'j', 'p', 'h', 'b']) assert.equal(link(id), null, id);
+  assert.equal(ui.api.recordHref('/swot.html?id=s1'), '/swot.html?id=s1');
+  assert.equal(ui.api.recordHref(undefined), '');
+
+  const pointer = (type, target) =>
+    target.dispatchEvent(
+      new ui.window.MouseEvent(type, { bubbles: true, clientX: 0, clientY: 0, button: 0 }),
+    );
+  const click = (target) =>
+    target.dispatchEvent(new ui.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  // Pressing a title leaves the box where it is.
+  pointer('pointerdown', link('i1'));
+  pointer('pointermove', host);
+  pointer('pointerup', host);
+  assert.deepEqual(changes, []);
+  assert.equal(click(link('i1')), true, 'outside link mode the browser opens the record');
+
+  // In link mode a title chooses its box and does not navigate.
+  flow.setLinkMode(true);
+  pointer('pointerdown', link('i1'));
+  assert.equal(click(link('i1')), false);
+  pointer('pointerdown', link('i2'));
+  assert.deepEqual(plain(flow.layout().links), [
+    { from_item_id: 'i1', to_item_id: 'i2', label: '' },
+  ]);
+  assert.ok(changes.includes('links'));
+});

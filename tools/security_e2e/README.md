@@ -1,6 +1,6 @@
-# KEEN security end-to-end suite
+# Keen security end-to-end suite
 
-This suite tests a running KEEN installation through its real nginx front end,
+This suite tests a running Keen installation through its real nginx front end,
 API, sessions, database and browser UI. It signs in as an administrator,
 creates synthetic accounts with single permissions, seeds records whose text
 fields carry hostile markup, and then checks that the deployment enforces the
@@ -32,7 +32,7 @@ backend or in `test_03_authorisation.py`.
 
 ## Use an installation you control
 
-Run the suite only against a KEEN installation you operate, preferably a
+Run the suite only against a Keen installation you operate, preferably a
 disposable copy with synthetic data. It creates users, records and an agent
 enrolment profile, uploads files, and sends malformed input at a sustained rate.
 It never needs production credentials.
@@ -95,7 +95,7 @@ Run one module with `.venv/bin/python -m pytest test_06_fuzz.py`, or vary the
 fuzzing with `KEEN_E2E_SEED=7 KEEN_E2E_FUZZ_CASES=3000`. A full run takes
 several minutes; most of that is browser rendering and sign-in pacing.
 
-KEEN limits sign-in attempts per client address (30 per five minutes by
+Keen limits sign-in attempts per client address (30 per five minutes by
 default). The suite waits out the limit when it reaches it, which can add
 several minutes. On a disposable installation, raising
 `KEEN_LOGIN_RATE_LIMIT_PER_IP` for the test client shortens runs.

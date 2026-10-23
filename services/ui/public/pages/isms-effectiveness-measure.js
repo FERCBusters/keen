@@ -1,3 +1,4 @@
+import { mountStoryRelated } from '/pages/story-related.js';
 import { safeExternalHref } from '/app.js';
 import { mountMeasurementExamples } from '/pages/measurement-examples.js';
 import {
@@ -70,12 +71,12 @@ function sourceHtml(entry) {
     ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || 'Open source')}</a>`
     : esc(entry?.source_title || '');
   const event = entry?.source_event_id
-    ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open KEEN event">${esc(entry.source_event_id)}</a>`
+    ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open Keen event">${esc(entry.source_event_id)}</a>`
     : '';
   const ref = entry?.source_reference
     ? ` · <span class="small-muted">${esc(entry.source_reference)}</span>`
     : '';
-  return `<div>${badge}</div><div class="small-muted mt-1">${title || '—'}${ref}${event}</div>`;
+  return `<div>${badge}</div><div class="small-muted mt-1">${title || '-'}${ref}${event}</div>`;
 }
 
 function latestValueHtml(entry, row) {
@@ -93,7 +94,7 @@ export function thresholdExplanationHtml(row) {
   if (!target) {
     return `<p class="mb-0">This measure has no numeric target. Each metric entry records the observed value or qualitative result for its period; review the history to judge the trend.</p>`;
   }
-  return `<p>Each metric entry records the observed value for a period. KEEN compares that value with the target <strong>${esc(target)}</strong>${unit ? ` (values must be recorded in <strong>${esc(unit)}</strong> to be compared)` : ''} and marks it <span class="eff-metric-threshold-label eff-metric-threshold-label-ok">Meets target</span> or <span class="eff-metric-threshold-label eff-metric-threshold-label-bad">Outside target</span>.</p><p class="mb-0 small-muted">Values recorded in another unit, or qualitative results, are kept but not judged against the target.</p>`;
+  return `<p>Each metric entry records the observed value for a period. Keen compares that value with the target <strong>${esc(target)}</strong>${unit ? ` (values must be recorded in <strong>${esc(unit)}</strong> to be compared)` : ''} and marks it <span class="eff-metric-threshold-label eff-metric-threshold-label-ok">Meets target</span> or <span class="eff-metric-threshold-label eff-metric-threshold-label-bad">Outside target</span>.</p><p class="mb-0 small-muted">Values recorded in another unit, or qualitative results, are kept but not judged against the target.</p>`;
 }
 
 function measureSourceHtml(row) {
@@ -109,7 +110,7 @@ function measureSourceHtml(row) {
 function renderMeasure(row) {
   measure = row || {};
   const title = measure.summary || 'Effectiveness measure';
-  document.title = `Keen – ${title}`;
+  document.title = `Keen - ${title}`;
   $('measureTitle').textContent = title;
   $('measureMeta').textContent = [
     measure.framework || framework,
@@ -119,18 +120,18 @@ function renderMeasure(row) {
       : 'No metric entries',
   ]
     .filter(Boolean)
-    .join(' • ');
+    .join(' · ');
   $('measureSummary').textContent = measure.summary || 'Effectiveness measure';
   $('measureDescription').textContent = measure.description || 'No description recorded.';
   $('measureThresholdExplanation').innerHTML = thresholdExplanationHtml(measure);
   $('measureNotes').textContent = measure.notes || 'No notes recorded.';
   $('latestValue').innerHTML = latestValueHtml(measure.latest_entry, measure);
-  $('targetDisplay').textContent = measure.target_display || '—';
+  $('targetDisplay').textContent = measure.target_display || '-';
   $('measureSource').innerHTML = measureSourceHtml(measure);
   $('metricCount').innerHTML = measure.metric_entry_count
     ? `<a href="#metrics">${esc(measure.metric_entry_count)} metric ${measure.metric_entry_count === 1 ? 'entry' : 'entries'}</a>`
     : '0';
-  $('measureFrequency').textContent = measure.frequency || '—';
+  $('measureFrequency').textContent = measure.frequency || '-';
   $('measureOwner').innerHTML = userPillHtml(measure.owner);
   if (canManageIsms && !document.getElementById('measurement-examples')) {
     const panel = document.createElement('div');
@@ -143,8 +144,8 @@ function renderMeasure(row) {
       sourceType: measure.source_type || 'other',
     }));
   }
-  $('metricKey').innerHTML = measure.metric_key ? `<code>${esc(measure.metric_key)}</code>` : '—';
-  $('measureUpdated').textContent = fmtTs(measure.updated_at) || '—';
+  $('metricKey').innerHTML = measure.metric_key ? `<code>${esc(measure.metric_key)}</code>` : '-';
+  $('measureUpdated').textContent = fmtTs(measure.updated_at) || '-';
   $('linkedControls').innerHTML = controlBadges(measure.controls);
   const edit = $('editMeasureLink');
   if (edit) {
@@ -183,7 +184,7 @@ function renderMetrics() {
       entry.qualitative_value,
     ]
       .filter(Boolean)
-      .join(' • ')
+      .join(' · ')
       .toLowerCase();
     return !q || hay.includes(q);
   });
@@ -198,11 +199,11 @@ function renderMetrics() {
           ? `<button class="btn btn-sm btn-outline-danger" type="button" data-delete-metric="${esc(entry.id)}" title="Delete metric entry"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete metric entry</span></button>`
           : '';
         return `<tr data-metric-id="${esc(entry.id)}">
-      <td class="small-muted" data-sort="${esc(entry.recorded_at || '')}">${esc(fmtTs(entry.recorded_at) || '—')}</td>
-      <td>${esc(entry.period || '—')}</td>
+      <td class="small-muted" data-sort="${esc(entry.recorded_at || '')}">${esc(fmtTs(entry.recorded_at) || '-')}</td>
+      <td>${esc(entry.period || '-')}</td>
       <td>${effectivenessMetricValueHtml(entry, measure, { href: metricHref(entry.id), fallback: 'Metric entry' })}${effectivenessMetricThresholdBadgeHtml(measure, entry)}</td>
       <td class="wrap">${sourceHtml(entry)}</td>
-      <td class="wrap small-muted">${esc(shorten(entry.notes || entry.qualitative_value || '', 180) || '—')}</td>
+      <td class="wrap small-muted">${esc(shorten(entry.notes || entry.qualitative_value || '', 180) || '-')}</td>
       <td class="no-print text-nowrap"><div class="btn-group btn-group-sm"><a class="btn btn-outline-primary" href="${esc(metricHref(entry.id))}" title="Open metric entry"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span class="visually-hidden">Open</span></a>${sample}${del}</div></td>
     </tr>`;
       })
@@ -555,4 +556,5 @@ for (const btn of Array.from(document.querySelectorAll('#measureTabs [data-bs-to
   });
 }
 
+mountStoryRelated({ me, kind: 'effectiveness_measure', id: measureId, framework });
 load();

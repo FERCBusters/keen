@@ -317,7 +317,7 @@ def _validate_clause_evidence_url(raw: str | None) -> str | None:
         return value
     raise DomainError(
         status_code=400,
-        detail="Evidence URLs must start with http://, https://, or / for KEEN pages",
+        detail="Evidence URLs must start with http://, https://, or / for Keen pages",
     )
 
 

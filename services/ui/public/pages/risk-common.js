@@ -37,17 +37,17 @@ export const RISK_METHODS = {
     label: 'PESTLE(E) factor',
     short: 'PESTLE(E)',
     description:
-      'An outside or inside influence — political, economic, social, technological, legal, environmental or ethical — scored for how relevant it is to your processes and framework clauses.',
+      'An outside or inside influence - political, economic, social, technological, legal, environmental or ethical - scored for how relevant it is to your processes and framework clauses.',
     icon: 'bi-globe2',
   },
 };
 
 export const TREATMENT_STRATEGIES = [
   ['', 'Not decided yet'],
-  ['mitigate', 'Mitigate — reduce it with controls'],
-  ['accept', 'Accept — live with it, and say why'],
-  ['avoid', 'Avoid — stop doing the risky thing'],
-  ['transfer', 'Transfer — insure or contract it out'],
+  ['mitigate', 'Mitigate - reduce it with controls'],
+  ['accept', 'Accept - live with it, and say why'],
+  ['avoid', 'Avoid - stop doing the risky thing'],
+  ['transfer', 'Transfer - insure or contract it out'],
 ];
 export const TREATMENT_STATUSES = [
   ['open', 'Open'],
@@ -56,7 +56,7 @@ export const TREATMENT_STATUSES = [
   ['closed', 'Closed'],
 ];
 
-// Plain-language anchors for the 1–5 scales, so a non-specialist can rate a
+// Plain-language anchors for the 1-5 scales, so a non-specialist can rate a
 // risk without a scoring manual.
 export const LIKELIHOOD_SCALE = [
   [1, 'Rare', 'Hard to imagine it happening here.'],
@@ -96,7 +96,7 @@ export function riskTypeBadgesHtml(types) {
 
 export function partyBadgesHtml(parties, framework) {
   const items = Array.isArray(parties) ? parties : [];
-  if (!items.length) return '<span class="small-muted">—</span>';
+  if (!items.length) return '<span class="small-muted">-</span>';
   return items
     .map((p) => {
       const icon =
@@ -137,7 +137,7 @@ export function clampScore(value) {
   return Math.max(1, Math.min(5, n));
 }
 
-// Register thresholds turn a 1–25 score into a severity word and colour.
+// Register thresholds turn a 1-25 score into a severity word and colour.
 export function severityFor(score, thresholds) {
   const t = thresholds || { low_max: 4, moderate_max: 9, high_max: 16 };
   if (score == null) return { text: 'Needs rating', color: '#eef0f4' };
@@ -154,7 +154,7 @@ export function severityBadge(score, thresholds) {
 
 export function treatmentLabel(strategy) {
   const found = TREATMENT_STRATEGIES.find(([value]) => value === String(strategy || ''));
-  return found ? found[1].split(' — ')[0] : 'Not decided yet';
+  return found ? found[1].split(' - ')[0] : 'Not decided yet';
 }
 
 export function treatmentStatusLabel(status) {
@@ -169,7 +169,7 @@ export function riskDisplayTitle(risk) {
   if (title) return title;
   const asset = String(risk.asset || risk.asset_entity?.name || '').trim();
   const threat = String(risk.threat_summary || '').trim();
-  if (asset && threat) return `${asset} — ${threat.slice(0, 120)}`;
+  if (asset && threat) return `${asset} - ${threat.slice(0, 120)}`;
   return asset || threat.slice(0, 120) || 'Risk';
 }
 

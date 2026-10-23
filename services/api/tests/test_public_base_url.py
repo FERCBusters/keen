@@ -1,4 +1,4 @@
-"""KEEN requires its browser-facing origin before any process starts.
+"""Keen requires its browser-facing origin before any process starts.
 
 Absolute links in emails, notifications and outbound webhook messages are
 built from KEEN_PUBLIC_BASE_URL, and browser Origin checks compare against it,

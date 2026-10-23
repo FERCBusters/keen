@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Keep KEEN's third-party container images pinned to reviewed digests.
+"""Keep Keen's third-party container images pinned to reviewed digests.
 
 Usage:
   docker_image_pins.py check [--root DIR]
   docker_image_pins.py update [--root DIR] [--report-dir DIR]
 
-Every third-party image that KEEN builds from or runs is written as
+Every third-party image that Keen builds from or runs is written as
 ``name:tag@sha256:<digest>``. The tag names the upstream line the image
 follows. The digest identifies one multi-platform image index, so Docker pulls
 that exact content even after the tag moves to another image.
@@ -48,7 +48,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # so every pinned index must serve both of them.
 RELEASE_PLATFORMS = ("linux/amd64", "linux/arm64")
 
-# KEEN's own images follow release version tags and are pinned by the release
+# Keen's own images follow release version tags and are pinned by the release
 # process, so these names are left alone.
 KEEN_IMAGES = frozenset(
     {

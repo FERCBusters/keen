@@ -47,7 +47,7 @@ export function initEvidenceRetention(isAdmin) {
       );
       for (const saved of savedOverrides)
         if (saved.scope === scope.value && !options.has(saved.key))
-          options.set(saved.key, 'Unavailable — saved override');
+          options.set(saved.key, 'Unavailable - saved override');
       for (const [id, label] of options)
         key.add(new Option(label === id ? id : `${label} (${id})`, id));
       key.value = selected;

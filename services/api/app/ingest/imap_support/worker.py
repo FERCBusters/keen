@@ -1,4 +1,4 @@
-"""Short-lived constrained network process. No database, storage or KEEN secrets."""
+"""Short-lived constrained network process. No database, storage or Keen secrets."""
 
 import json
 import re

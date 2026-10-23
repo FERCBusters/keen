@@ -78,7 +78,7 @@ def clean_rich_text(raw: str | None, *, max_len: int, label: str = "value") -> s
     """Trim, length-check, and allowlist-sanitise a rich-text HTML field.
 
     Audit report notes, executive summaries, and finding descriptions are
-    rendered as HTML in the UI. KEEN's security model requires the backend to be
+    rendered as HTML in the UI. Keen's security model requires the backend to be
     the authoritative sanitiser (the client sanitiser is defence-in-depth only),
     so every stored value passes through the shared allowlist sanitiser here.
     """
@@ -237,7 +237,7 @@ def clean_url(raw: str | None) -> str | None:
     if len(v) > 2048:
         raise DomainError(status_code=400, detail="evidence_url is too long")
     # Browsers read a backslash as "/" and drop tabs and newlines, so a path that
-    # starts with "/" followed by one of them can leave KEEN while looking local.
+    # starts with "/" followed by one of them can leave Keen while looking local.
     if "\\" in v or any(ord(c) < 32 or ord(c) == 127 for c in v):
         raise DomainError(
             status_code=400,

@@ -33,7 +33,7 @@ function assetHref(id) {
 
 function serviceHtml(row) {
   const service = row?.service || null;
-  const label = service?.asset || service?.name || service?.display || '—';
+  const label = service?.asset || service?.name || service?.display || '-';
   if (!service?.id) return esc(label);
   return `<a href="${esc(assetHref(service.id))}">${esc(label)}</a>`;
 }
@@ -44,7 +44,7 @@ function accountLabel(acct) {
 
 function accountBadges(items) {
   const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">—</span>';
+  if (!arr.length) return '<span class="small-muted">-</span>';
   return arr
     .map(
       (acct) =>
@@ -56,23 +56,23 @@ function accountBadges(items) {
 function renderAccess(row) {
   access = row || {};
   const title = access.task_action || 'Access control row';
-  document.title = `Keen – ${title}`;
+  document.title = `Keen - ${title}`;
   $('accessTitle').textContent = title;
   $('accessMeta').textContent = [
     access.service?.asset || access.service?.name,
     access.status || 'Pending Approval',
-    `updated ${fmtTs(access.updated_at) || '—'}`,
+    `updated ${fmtTs(access.updated_at) || '-'}`,
   ]
     .filter(Boolean)
-    .join(' • ');
-  $('accessTask').textContent = access.task_action || '—';
+    .join(' · ');
+  $('accessTask').textContent = access.task_action || '-';
   $('accessNotes').textContent = access.notes || 'No notes recorded.';
   $('accessService').innerHTML = serviceHtml(access);
   $('accessAccounts').innerHTML = accountBadges(access.aws_accounts);
   $('accessStatusValue').textContent = access.status || 'Pending Approval';
   $('accessApprovedBy').innerHTML = userPillHtml(access.approved_by);
   $('accessRoles').innerHTML = badgeList(access.roles, 'name');
-  $('accessUpdated').textContent = fmtTs(access.updated_at) || '—';
+  $('accessUpdated').textContent = fmtTs(access.updated_at) || '-';
 
   const edit = $('editAccessLink');
   if (edit) {

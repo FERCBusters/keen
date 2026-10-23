@@ -95,7 +95,7 @@ function setupPestleFilterPickers() {
     emptyText: 'All types',
     emptySelectedText: 'No type filters selected. All types are included.',
     noMatchText: 'No PESTLE(E) types match your filter.',
-    searchPlaceholder: 'Filter types…',
+    searchPlaceholder: 'Filter types',
   });
   enhanceFilterPillMultiSelect(pestleLensFilter, {
     title: 'Choose PESTLE(E) lenses',
@@ -106,7 +106,7 @@ function setupPestleFilterPickers() {
     emptyText: 'All lenses',
     emptySelectedText: 'No lens filters selected. All lenses are included.',
     noMatchText: 'No lenses match your filter.',
-    searchPlaceholder: 'Filter lenses…',
+    searchPlaceholder: 'Filter lenses',
   });
   enhanceFilterPillMultiSelect(pestleRelevanceFilter, {
     title: 'Choose relevance levels',
@@ -118,7 +118,7 @@ function setupPestleFilterPickers() {
     emptyText: 'All relevance',
     emptySelectedText: 'No relevance filters selected. All relevance levels are included.',
     noMatchText: 'No relevance levels match your filter.',
-    searchPlaceholder: 'Filter relevance…',
+    searchPlaceholder: 'Filter relevance',
   });
 }
 
@@ -214,7 +214,7 @@ function renderItems() {
       <td>${esc(it.lens || '')}</td>
       <td><a class="fw-semibold" href="${esc(href)}">${esc(shorten(it.item || '', 160))}</a></td>
       <td>${badgeForRelevance(it.overall_relevance)}</td>
-      <td class="wrap small-muted">${esc(shorten(it.rationale || '', 220) || '—')}</td>
+      <td class="wrap small-muted">${esc(shorten(it.rationale || '', 220) || '-')}</td>
       <td><span class="badge text-bg-light">${esc(String(it.business_process_count || 0))} process${Number(it.business_process_count || 0) === 1 ? '' : 'es'}</span></td>
       <td><span class="badge text-bg-light">${esc(String(it.clause_count || 0))} clause${Number(it.clause_count || 0) === 1 ? '' : 's'}</span></td>
       <td class="no-print"><div class="d-flex flex-wrap gap-1"><a class="btn btn-sm btn-outline-primary" href="${esc(href)}">${canManagePestle ? 'Edit' : 'View'}</a>${canSampleAudits ? `<button class="btn btn-sm btn-outline-success" type="button" data-sample-pestle="${esc(it.id)}"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>` : ''}</div></td>
@@ -256,7 +256,7 @@ function renderBusinessProcesses() {
       .map(
         (bp) => `<tr>
       <td class="fw-semibold">${esc(bp.name || '')}</td>
-      <td class="no-print">${canManagePestle ? `<button class="btn btn-sm btn-outline-danger" type="button" data-delete-process="${esc(bp.id)}">Delete</button>` : '<span class="small-muted">—</span>'}</td>
+      <td class="no-print">${canManagePestle ? `<button class="btn btn-sm btn-outline-danger" type="button" data-delete-process="${esc(bp.id)}">Delete</button>` : '<span class="small-muted">-</span>'}</td>
     </tr>`,
       )
       .join('')}</tbody>
@@ -545,7 +545,7 @@ function pestleClauseHref(id) {
 }
 
 function splitPestleVizLabel(value, maxChars = 34, maxLines = 2) {
-  const text = String(value || '').trim() || '—';
+  const text = String(value || '').trim() || '-';
   if (text.length <= maxChars) return [text];
   const words = text.split(/\s+/);
   const lines = [];
@@ -593,7 +593,7 @@ function addPestleBipartiteText(
     .attr('fill', 'currentColor')
     .attr('opacity', opacity);
   if (underline) text.style('text-decoration', 'underline');
-  (lines || ['—']).forEach((line, idx) => {
+  (lines || ['-']).forEach((line, idx) => {
     text
       .append('tspan')
       .attr('x', x)
@@ -832,7 +832,7 @@ function drawClauseNetwork(data) {
     .text((link) => {
       const clause = clauseMap.get(link.source)?.label || 'Clause';
       const item = itemMap.get(link.target)?.label || 'PESTLE(E) item';
-      return `${clause} → ${item}\nRelevance: ${link.relevanceLabel}`;
+      return `${clause} × ${item}\nRelevance: ${link.relevanceLabel}`;
     });
 
   const renderNode = (selection, side) => {
@@ -915,7 +915,7 @@ async function loadMeta() {
 
 async function loadItems() {
   if (!canViewPestle) return;
-  showTableLoading(pestleRows, 8, 'Loading PESTLE(E) items…');
+  showTableLoading(pestleRows, 8, 'Loading PESTLE(E) items');
   const u = new URL('/api/v1/pestle/items', location.origin);
   if (framework) u.searchParams.set('framework', framework);
   if (pestleQ?.value) u.searchParams.set('q', pestleQ.value.trim());

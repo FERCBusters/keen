@@ -294,7 +294,7 @@ def _apply_effectiveness_links(
     payload: IsmsLinksPayload,
     user: User,
 ) -> None:
-    # Effectiveness Measures are control-scoped ISMS records. They link to no
+    # Effectiveness measures are control-scoped ISMS records. They link to no
     # clauses: the applicable clauses follow from the linked controls.
     _replace_control_links(
         db, "effectiveness_measure", entity_id, framework, payload.controls, user

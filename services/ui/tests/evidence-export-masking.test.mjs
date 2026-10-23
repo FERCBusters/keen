@@ -90,7 +90,7 @@ test('an address written in full with an IPv4 tail is masked whole', async (t) =
   assert.equal(api.maskEventDataString('1:2:3:4:5:6:7:192.0.2.1'), '1:2:3:4:5:6:7:[MASKED_IP]');
 });
 
-test('IPv6 addresses are read as Python’s ipaddress module reads them', async (t) => {
+test("IPv6 addresses are read as Python's ipaddress module reads them", async (t) => {
   const { api } = await masking(t);
   const masked = [
     '::',

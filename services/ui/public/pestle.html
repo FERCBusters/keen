@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – PESTLE(E)</title>
+  <title>Keen - PESTLE(E)</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css"/>
@@ -17,7 +17,7 @@
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
         <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/risks.html?tab=pestle">← Risks</a></div>
-        <h1 class="h3 mb-1">PESTLE(E) Impact Assessment</h1>
+        <h1 class="h3 mb-1">PESTLE(E) impact assessment</h1>
         <div class="small-muted">Assess Political, Economical, Social, Technological, Legal, Environmental and Ethical items against business processes and framework clauses.</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
@@ -46,7 +46,7 @@
         <div class="card mb-3 no-print" data-mosp-filter-section="pestle-filters" data-mosp-filter-title="PESTLE(E) filters">
           <div class="card-body" data-mosp-filter-body>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-              <input id="pestleQ" class="form-control form-control-sm" style="min-width:260px;" type="search" placeholder="Search items or rationale…">
+              <input id="pestleQ" class="form-control form-control-sm" style="min-width:260px;" type="search" placeholder="Search items or rationale">
               <select id="pestleTypeFilter" class="form-select form-select-sm" style="min-width:170px;"><option value="">All types</option></select>
               <select id="pestleLensFilter" class="form-select form-select-sm" style="min-width:150px;"><option value="">All lenses</option></select>
               <select id="pestleRelevanceFilter" class="form-select form-select-sm" style="min-width:150px;"><option value="">All relevance</option></select>
@@ -59,7 +59,7 @@
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
               <div class="fw-bold">PESTLE(E) items</div>
-              <div class="small-muted" id="pestleItemsMeta">—</div>
+              <div class="small-muted" id="pestleItemsMeta">-</div>
             </div>
           </div>
           <div class="card-body p-0">
@@ -77,7 +77,7 @@
                     <th style="width:120px;" class="no-print">Actions</th>
                   </tr>
                 </thead>
-                <tbody id="pestleRows"><tr><td colspan="8" class="p-4 small-muted">Loading PESTLE(E) items…</td></tr></tbody>
+                <tbody id="pestleRows"><tr><td colspan="8" class="p-4 small-muted">Loading PESTLE(E) items</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -94,13 +94,13 @@
             <div class="row g-2 align-items-end mb-3">
               <div class="col-12 col-lg-8">
                 <label class="form-label" for="businessProcessName">Business process name</label>
-                <input id="businessProcessName" class="form-control" maxlength="256" placeholder="E.g. Customer onboarding">
+                <input id="businessProcessName" class="form-control" maxlength="256" placeholder="e.g. Customer onboarding">
               </div>
               <div class="col-12 col-lg-4">
                 <button id="addBusinessProcess" class="btn btn-primary w-100" type="button">Add business process</button>
               </div>
             </div>
-            <div id="businessProcessList" class="small-muted">Loading business processes…</div>
+            <div id="businessProcessList" class="small-muted">Loading business processes</div>
           </div>
         </div>
       </section>
@@ -110,10 +110,10 @@
           <div class="col-12 col-xl-6">
             <div class="card h-100">
               <div class="card-header">
-                <div class="fw-bold">Internal / External lens by type</div>
+                <div class="fw-bold">Internal / external lens by type</div>
                 <div class="small-muted">Shows where PESTLE(E) items cluster across lens and PESTLE(E) type.</div>
               </div>
-              <div id="pestleLensTypeViz" class="card-body pestle-viz-box small-muted">Loading visualisation…</div>
+              <div id="pestleLensTypeViz" class="card-body pestle-viz-box small-muted">Loading visualisation</div>
             </div>
           </div>
           <div class="col-12 col-xl-6">
@@ -122,7 +122,7 @@
                 <div class="fw-bold">Overall relevance overlap</div>
                 <div class="small-muted">A compact relevance bubble view for High, Medium, Low and N/A items.</div>
               </div>
-              <div id="pestleRelevanceVenn" class="card-body pestle-viz-box small-muted">Loading visualisation…</div>
+              <div id="pestleRelevanceVenn" class="card-body pestle-viz-box small-muted">Loading visualisation</div>
             </div>
           </div>
           <div class="col-12">
@@ -131,7 +131,7 @@
                 <div class="fw-bold">Clauses × PESTLE(E) relationship map</div>
                 <div class="small-muted">Bipartite mapping of framework clauses to PESTLE(E) items with non-N/A relevance scores.</div>
               </div>
-              <div id="pestleClauseNetwork" class="card-body pestle-viz-box pestle-viz-box-lg small-muted">Loading visualisation…</div>
+              <div id="pestleClauseNetwork" class="card-body pestle-viz-box pestle-viz-box-lg small-muted">Loading visualisation</div>
             </div>
           </div>
         </div>

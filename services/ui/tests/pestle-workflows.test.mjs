@@ -184,7 +184,7 @@ test('the PESTLE(E) register lists items safely with relevance badges and counts
   assert.match(rows[0].textContent, /2 clauses/);
   assert.match(rows[1].textContent, /2 processes/);
   assert.match(rows[1].textContent, /1 clause\b/);
-  assert.match(rows[1].textContent, /—/);
+  assert.equal(rows[1].cells[4].textContent.trim(), '-');
   assert.equal(rows[0].querySelector('.btn-outline-primary').textContent, 'Edit');
   assert.ok(rows[0].querySelector('[data-sample-pestle="p1"]'));
   assert.equal(ui.el('pestleItemsMeta').textContent, '4 PESTLE(E) items for A.');
@@ -436,9 +436,9 @@ test('visualisations draw the lens/type heatmap, relevance circles and clause ne
   );
   const linkTitles = [...svg.querySelectorAll('path > title')].map((x) => x.textContent);
   assert.deepEqual(linkTitles, [
-    `4.1 Context → ${HOSTILE}Privacy law\nRelevance: High`,
-    `4.10 Interested parties → ${longLabel}\nRelevance: Medium`,
-    `4.1 Context → ${longLabel}\nRelevance: Low`,
+    `4.1 Context × ${HOSTILE}Privacy law\nRelevance: High`,
+    `4.10 Interested parties × ${longLabel}\nRelevance: Medium`,
+    `4.1 Context × ${longLabel}\nRelevance: Low`,
   ]);
   network.querySelector('[data-zoom="in"]').click();
   network.querySelector('[data-zoom="out"]').click();
@@ -572,9 +572,9 @@ test('visualisation labels follow a dark hex page background and equal relevance
   const svg = ui.el('pestleClauseNetwork').querySelector('svg');
   const linkTitles = [...svg.querySelectorAll('path > title')].map((x) => x.textContent);
   assert.deepEqual(linkTitles, [
-    '4.2 → Second\nRelevance: Medium',
-    '4.10 → Second\nRelevance: Medium',
-    '4.2 → Mystery\nRelevance: N/A',
+    '4.2 × Second\nRelevance: Medium',
+    '4.10 × Second\nRelevance: Medium',
+    '4.2 × Mystery\nRelevance: N/A',
   ]);
   const nodes = [...svg.querySelectorAll('.interested-party-bipartite-node')];
   assert.match(nodes[0].querySelector('text').textContent, /^4\.2 \(2\)/);

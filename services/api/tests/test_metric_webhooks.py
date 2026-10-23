@@ -229,7 +229,7 @@ def test_a_paused_source_is_revealed_only_after_the_secret_is_checked(metrics):
         ({"value": 1, "event_id": str(uuid.uuid4())}, "Unknown source_event_id"),
         (
             {"value": 1, "source_type": "made-up-source"},
-            "Invalid source_type; choose an existing KEEN source or other",
+            "Invalid source_type; choose an existing Keen source or other",
         ),
         (
             {"value": 1, "source_url": "javascript:alert(1)"},

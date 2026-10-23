@@ -132,9 +132,10 @@ def test_import_repeat_preserve_edits_and_snapshot_changes(db, records):
     vendor.name = "Local supplier"
     db.query(ControlItem).filter_by(type="control").one().title = "Local control"
     db.commit()
+    # Four snapshots and the imported risk's automatic link entry.
     assert (
         rl._collect(db, client, cfg)["created_events"] == 0
-        and db.query(Event).count() == 4
+        and db.query(Event).count() == 5
     )
     records["supplier"]["numEvidence"] = 4
     records["risk"]["description"] = "Changed upstream"

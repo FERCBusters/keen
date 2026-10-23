@@ -160,7 +160,7 @@ def _save_person(db: Session, row: IsmsPerson, payload: PersonInput):
             .first()
         )
         if other:
-            raise DomainError(409, "This KEEN user is already linked to another person")
+            raise DomainError(409, "This Keen user is already linked to another person")
     if payload.org_node_id:
         _row(db, IsmsOrgNode, payload.org_node_id)
     ids = _asset_ids(db, payload.asset_ids)

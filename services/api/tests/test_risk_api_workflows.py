@@ -1162,7 +1162,7 @@ def test_a_general_risk_has_a_title_and_no_cia_associations(reg):
     # Without a title the register shows the asset and threat.
     untitled = _create(reg, risk_types=None)
     assert untitled["display"] == (
-        "Payroll database — Unauthorised export of salary records"
+        "Payroll database - Unauthorised export of salary records"
     )
     assert untitled["method"] == "general"
     cia = _create(reg, risk_types=["availability", "Confidentiality"])
@@ -1493,7 +1493,7 @@ def test_affected_parties_whose_records_are_gone_are_left_out(reg):
     assert db.get(Risk, uuid.UUID(created["id"])) is not None
 
 
-# --- Library templates for the KEEN framework ---------------------------------------
+# --- Library templates for the Keen framework ---------------------------------------
 
 
 def test_a_keen_af_risk_from_a_template_links_the_template_controls(reg):

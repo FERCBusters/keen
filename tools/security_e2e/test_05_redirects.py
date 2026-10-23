@@ -1,4 +1,4 @@
-"""Post-authentication destinations and server redirects stay on the KEEN origin."""
+"""Post-authentication destinations and server redirects stay on the Keen origin."""
 
 from __future__ import annotations
 

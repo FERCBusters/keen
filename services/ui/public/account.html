@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – Account</title>
+  <title>Keen - Account</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css"/>
@@ -35,10 +35,10 @@
         <button class="nav-link" id="saved-searches-tab" data-bs-toggle="tab" data-bs-target="#saved-searches-pane" type="button" role="tab" aria-controls="saved-searches-pane" aria-selected="false" data-tab-hash="#saved-searches">Saved searches</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-questions-tab" data-feature="questions" data-bs-toggle="tab" data-bs-target="#my-questions-pane" type="button" role="tab" aria-controls="my-questions-pane" aria-selected="false" data-tab-hash="#my-questions">My Questions</button>
+        <button class="nav-link" id="my-questions-tab" data-feature="questions" data-bs-toggle="tab" data-bs-target="#my-questions-pane" type="button" role="tab" aria-controls="my-questions-pane" aria-selected="false" data-tab-hash="#my-questions">My questions</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-audits-tab" data-feature="audits" data-bs-toggle="tab" data-bs-target="#my-audits-pane" type="button" role="tab" aria-controls="my-audits-pane" aria-selected="false" data-tab-hash="#my-audits">My Audits</button>
+        <button class="nav-link" id="my-audits-tab" data-feature="audits" data-bs-toggle="tab" data-bs-target="#my-audits-pane" type="button" role="tab" aria-controls="my-audits-pane" aria-selected="false" data-tab-hash="#my-audits">My audits</button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="my-meetings-tab" data-feature="meetings" data-bs-toggle="tab" data-bs-target="#my-meetings-pane" type="button" role="tab" aria-controls="my-meetings-pane" aria-selected="false" data-tab-hash="#my-meetings">My meetings</button>
@@ -47,10 +47,10 @@
         <button class="nav-link" id="my-risks-tab" data-feature="risk_cia" data-bs-toggle="tab" data-bs-target="#my-risks-pane" type="button" role="tab" aria-controls="my-risks-pane" aria-selected="false" data-tab-hash="#my-risks">Risks I own</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-isms-objectives-tab" data-feature="objectives" data-bs-toggle="tab" data-bs-target="#my-isms-objectives-pane" type="button" role="tab" aria-controls="my-isms-objectives-pane" aria-selected="false" data-tab-hash="#my-isms-objectives">My ISMS Objectives</button>
+        <button class="nav-link" id="my-isms-objectives-tab" data-feature="objectives" data-bs-toggle="tab" data-bs-target="#my-isms-objectives-pane" type="button" role="tab" aria-controls="my-isms-objectives-pane" aria-selected="false" data-tab-hash="#my-isms-objectives">My ISMS objectives</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-isms-role-tab" data-feature="organisation" data-bs-toggle="tab" data-bs-target="#my-isms-role-pane" type="button" role="tab" aria-controls="my-isms-role-pane" aria-selected="false" data-tab-hash="#my-isms-role">My Role</button>
+        <button class="nav-link" id="my-isms-role-tab" data-feature="organisation" data-bs-toggle="tab" data-bs-target="#my-isms-role-pane" type="button" role="tab" aria-controls="my-isms-role-pane" aria-selected="false" data-tab-hash="#my-isms-role">My role</button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="my-isms-assets-tab" data-feature="assets" data-bs-toggle="tab" data-bs-target="#my-isms-assets-pane" type="button" role="tab" aria-controls="my-isms-assets-pane" aria-selected="false" data-tab-hash="#my-isms-assets">Assets I manage</button>
@@ -62,7 +62,7 @@
         <div id="pwCard" class="card mb-3">
           <div class="card-body">
             <h2 class="h5">Change password</h2>
-            <p class="text-secondary">Change the password for your local KEEN account. You will need to sign in again afterwards.</p>
+            <p class="text-secondary">Change the password for your local Keen account. You will need to sign in again afterwards.</p>
             <form id="pwForm">
               <div class="mb-3"><label for="curPw" class="form-label">Current password</label><input id="curPw" type="password" class="form-control" autocomplete="current-password" required></div>
               <div class="mb-3"><label for="newPw" class="form-label">New password</label><input id="newPw" type="password" class="form-control" autocomplete="new-password" required></div>
@@ -70,8 +70,8 @@
             </form>
           </div>
         </div>
-<div class="card mb-3"><div class="card-body"><h2 class="h5">SSO email addresses</h2><p>SSO providers must report a verified email that exactly matches an address verified here. Verify your primary address or additional addresses you own. Existing linked SSO identities continue working independently of this list.</p><p id="ssoEmailStatus" role="status">Loading…</p><ul id="ssoEmailList" class="list-unstyled"></ul><form id="ssoEmailForm"><label for="ssoEmail" class="form-label">Email address</label><input id="ssoEmail" type="email" class="form-control mb-3" maxlength="256" autocomplete="email" required><button class="btn btn-primary" type="submit">Send verification link</button></form></div></div>
-<div class="card mb-3"><div class="card-body"><h2 class="h5">Two-factor authentication</h2><p id="securitySummary" role="status">Loading…</p><p>Protect local sign-in with an authenticator app, security key or passkey. Recovery codes let you sign in if you lose access to your authenticator.</p><form id="securityForm"><label for="securityPassword" class="form-label">Confirm your local password to manage authenticators</label><input id="securityPassword" type="password" class="form-control mb-3" autocomplete="current-password" required><button class="btn btn-primary" type="submit">Manage account security</button></form></div></div></section>
+<div class="card mb-3"><div class="card-body"><h2 class="h5">SSO email addresses</h2><p>SSO providers must report a verified email that exactly matches an address verified here. Verify your primary address or additional addresses you own. Existing linked SSO identities continue working independently of this list.</p><p id="ssoEmailStatus" role="status">Loading</p><ul id="ssoEmailList" class="list-unstyled"></ul><form id="ssoEmailForm"><label for="ssoEmail" class="form-label">Email address</label><input id="ssoEmail" type="email" class="form-control mb-3" maxlength="256" autocomplete="email" required><button class="btn btn-primary" type="submit">Send verification link</button></form></div></div>
+<div class="card mb-3"><div class="card-body"><h2 class="h5">Two-factor authentication</h2><p id="securitySummary" role="status">Loading</p><p>Protect local sign-in with an authenticator app, security key or passkey. Recovery codes let you sign in if you lose access to your authenticator.</p><form id="securityForm"><label for="securityPassword" class="form-label">Confirm your local password to manage authenticators</label><input id="securityPassword" type="password" class="form-control mb-3" autocomplete="current-password" required><button class="btn btn-primary" type="submit">Manage account security</button></form></div></div></section>
       <section class="tab-pane fade show active" id="preferences-pane" role="tabpanel" aria-labelledby="preferences-tab" tabindex="0">
         <div class="card mb-3">
           <div class="card-header">
@@ -92,7 +92,7 @@
                   <input id="prefTimezone" class="form-control" type="text" placeholder="e.g. Australia/Melbourne" />
                   <button class="btn btn-outline-primary" id="prefUseBrowserTz" type="button">Use browser</button>
                 </div>
-                <div class="form-text">Tip: most browsers expose this as <span class="mono" id="prefBrowserTz">–</span>.</div>
+                <div class="form-text">Tip: most browsers expose this as <span class="mono" id="prefBrowserTz">-</span>.</div>
               </div>
 
               <div class="col-12 col-lg-6">
@@ -118,7 +118,7 @@
               <div class="col-12 col-lg-6">
                 <label class="form-label small-muted mb-1" for="prefDefaultFramework">Default framework</label>
                 <select id="prefDefaultFramework" class="form-select" disabled>
-                  <option value="">Loading frameworks…</option>
+                  <option value="">Loading frameworks</option>
                 </select>
                 <div class="form-text">Used when you sign in and no framework is explicitly selected in the URL.</div>
               </div>
@@ -135,7 +135,7 @@
                 <details class="border rounded-3 p-3">
                   <summary class="fw-semibold">Source badge colours</summary>
                   <div class="form-text mb-2">Override the hex colours used for source badges and graphs. Leave blank (or reset) to use the global defaults.</div>
-                  <div id="sourceColorsLoading" class="small-muted">Loading sources…</div>
+                  <div id="sourceColorsLoading" class="small-muted">Loading sources</div>
                   <div id="sourceColorsWrap" style="display:none;" class="mt-2">
                     <div class="table-responsive">
                       <table class="table table-sm align-middle mb-2">
@@ -185,7 +185,7 @@
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
-              <div class="fw-semibold">My Questions</div>
+              <div class="fw-semibold">My questions</div>
               <div class="small-muted">Threads you have opened on events, including any admin responses.</div>
             </div>
             <button class="btn btn-sm btn-outline-primary" id="myQuestionsRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
@@ -214,7 +214,7 @@
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
-              <div class="fw-semibold">My Audits</div>
+              <div class="fw-semibold">My audits</div>
               <div class="small-muted">Audits where you were marked as an attendee.</div>
             </div>
             <button class="btn btn-sm btn-outline-primary" id="myAuditsRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
@@ -246,12 +246,12 @@
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
               <div class="fw-semibold">My meetings</div>
-              <div class="small-muted">Minutes of Meetings where you were marked as an attendee or apology.</div>
+              <div class="small-muted">Minutes of meetings where you were marked as an attendee or apology.</div>
             </div>
             <button class="btn btn-sm btn-outline-primary" id="myMeetingsRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
           </div>
           <div class="card-body">
-            <div id="myMeetingsEmpty" class="small-muted" style="display:none;">You are not currently marked as an attendee or apology for any Minutes of Meetings.</div>
+            <div id="myMeetingsEmpty" class="small-muted" style="display:none;">You are not currently marked as an attendee or apology for any minutes of meetings.</div>
             <div class="table-responsive" id="myMeetingsTableWrap" style="display:none;">
               <table class="table table-sm align-middle mb-0">
                 <thead>
@@ -310,7 +310,7 @@
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
-              <div class="fw-semibold">My ISMS Objectives</div>
+              <div class="fw-semibold">My ISMS objectives</div>
               <div class="small-muted">Objectives where you are the owner or one of the named resource requirements.</div>
             </div>
             <button class="btn btn-sm btn-outline-primary" id="myIsmsObjectivesRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
@@ -341,13 +341,13 @@
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
-              <div class="fw-semibold">My Role</div>
-              <div class="small-muted">Organisation Chart categories and roles linked to your KEEN user account.</div>
+              <div class="fw-semibold">My role</div>
+              <div class="small-muted">Organisation chart categories and roles linked to your Keen user account.</div>
             </div>
             <button class="btn btn-sm btn-outline-primary" id="myIsmsRoleRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
           </div>
           <div class="card-body">
-            <div id="myIsmsRoleEmpty" class="small-muted" style="display:none;">You are not currently linked to any ISMS Organisation Chart role.</div>
+            <div id="myIsmsRoleEmpty" class="small-muted" style="display:none;">You are not currently linked to any ISMS organisation chart role.</div>
             <div class="table-responsive" id="myIsmsRoleTableWrap" style="display:none;">
               <table class="table table-sm align-middle mb-0">
                 <thead>
@@ -372,7 +372,7 @@
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
               <div class="fw-semibold">Assets I manage</div>
-              <div class="small-muted">Assets where your ISMS Organisation Chart role is the owner or register holder.</div>
+              <div class="small-muted">Assets where your ISMS organisation chart role is the owner or register holder.</div>
             </div>
             <button class="btn btn-sm btn-outline-primary" id="myIsmsAssetsRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
           </div>

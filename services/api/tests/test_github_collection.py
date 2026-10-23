@@ -1,6 +1,6 @@
 """GitHub collection against a fake GitHub API, with real event and artifact storage.
 
-The fake answers at the HTTP transport, so KEEN's collectors choose
+The fake answers at the HTTP transport, so Keen's collectors choose
 endpoints, send credentials, follow cursors and store events through the
 same code that runs in production.
 """

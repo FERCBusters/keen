@@ -14,6 +14,9 @@ from app.db.models import (
     Event,
     EventQuestionThread,
     FrameworkClause,
+    InterestedParty,
+    InterestedPartyName,
+    InterestedPartyNature,
     IsmsDocument,
     IsmsEntityClauseLink,
     IsmsSwot,
@@ -100,7 +103,7 @@ def _document(db, title="Records policy"):
     return row
 
 
-def _risk(db, summary="Laptop theft"):
+def _asset(db):
     category = RiskCategory(name="Category " + uuid.uuid4().hex[:8])
     db.add(category)
     db.flush()
@@ -114,10 +117,37 @@ def _risk(db, summary="Laptop theft"):
     )
     db.add(asset)
     db.flush()
+    return asset
+
+
+def _risk(db, summary="Laptop theft"):
+    asset = _asset(db)
     risk = Risk(asset_id=asset.id, threat_summary=summary)
     db.add(risk)
     db.flush()
     return risk
+
+
+def _party(db, name="Customers"):
+    names = InterestedPartyName(name=name + " " + uuid.uuid4().hex[:6])
+    nature = InterestedPartyNature(name="Contract " + uuid.uuid4().hex[:6])
+    db.add_all([names, nature])
+    db.flush()
+    row = InterestedParty(name_id=names.id, nature_id=nature.id)
+    db.add(row)
+    db.flush()
+    return row
+
+
+def _link_party(db, party, user, *controls):
+    from app.services.interested_parties import (
+        _controls_for_payload,
+        _replace_control_links,
+    )
+
+    _replace_control_links(
+        db, party, FW, _controls_for_payload(db, list(controls), FW), user
+    )
 
 
 def _link(db, record, user, *controls, entity_type="document"):
@@ -287,6 +317,60 @@ def test_risk_entries_carry_no_threat_summary(db):
         {"url": f"/risk.html?id={risk.id}", "text": "Risk"}
     ]
     assert _automatic(db, entry.id) == {"A.8.2": "editor"}
+
+
+def test_interested_party_links_count_like_other_records(db, storage):
+    from app.services.context import ChangeContext
+    from app.services.interested_parties import delete_interested_party
+
+    editor, reviewer = _user(db, "editor"), _user(db, "reviewer")
+    party = _party(db)
+    _link_party(db, party, editor, "A.5.1", "A.8.2")
+    entry = _entry(db, "interested_party", party.id)
+    assert (entry.system, entry.action, entry.actor) == ("isms", "isms_link", "editor")
+    assert entry.normalized_payload["links"] == [
+        {"url": f"/interested_party.html?id={party.id}", "text": "Interested party"}
+    ]
+    assert entry.normalized_payload["details"] == {"linked": {FW: "A.5.1, A.8.2"}}
+    # The entry names no party, so the party's name stays behind its own rule.
+    assert "Customers" not in json.dumps(entry.normalized_payload)
+    assert _automatic(db, entry.id) == {"A.5.1": "editor", "A.8.2": "editor"}
+
+    _link_party(db, party, reviewer, "A.8.2")
+    assert _automatic(db, entry.id) == {"A.8.2": "editor"}
+    _link_party(db, party, reviewer)
+    assert _automatic(db, entry.id) == {}
+
+    _link_party(db, party, reviewer, "A.5.1")
+    delete_interested_party(
+        party_id=str(party.id),
+        context=ChangeContext(method="DELETE", path="/v1/interested-parties/x"),
+        user=reviewer,
+        db=db,
+    )
+    assert _entry(db, "interested_party", party.id) is None
+    assert db.query(Mapping).filter_by(event_id=entry.id).count() == 0
+
+
+def test_deleting_an_asset_from_the_risk_register_withdraws_its_links(db, storage):
+    from app.db.models import IsmsEntityControlLink
+    from app.services.risks import delete_risk_asset
+
+    editor = _user(db, "editor")
+    asset = _asset(db)
+    _link(db, asset, editor, "A.5.1", entity_type="asset")
+    entry = _entry(db, "asset", asset.id)
+    assert _automatic(db, entry.id) == {"A.5.1": "editor"}
+
+    delete_risk_asset(asset_id=str(asset.id), user=editor, db=db)
+    assert _entry(db, "asset", asset.id) is None
+    assert db.query(Mapping).filter_by(event_id=entry.id).count() == 0
+    assert (
+        db.query(IsmsEntityControlLink)
+        .filter_by(entity_type="asset", entity_id=asset.id)
+        .count()
+        == 0
+    )
 
 
 def test_deleting_a_record_withdraws_its_entry(db, storage):
@@ -490,6 +574,9 @@ PERMISSION_SETS = [
     ("risk.read",),
     ("risk.manage",),
     ("isms.read", "risk.read"),
+    ("interested_parties.read",),
+    ("interested_parties.manage",),
+    ("isms.read", "interested_parties.read"),
 ]
 
 
@@ -499,17 +586,19 @@ def test_link_entries_follow_the_source_record_read_rules(db, codes):
         diary_filter_condition,
         is_diary_event_visible,
     )
+    from app.services.interested_parties import _can_read_interested_parties
     from app.services.isms.access import _can_read_isms
     from app.services.risks import _can_read_risks
 
     editor = _user(db, "editor")
-    document, risk = _document(db), _risk(db)
+    document, risk, party = _document(db), _risk(db), _party(db)
     _link(db, document, editor, "A.5.1")
     from app.services import risks
 
     risks._replace_control_links(
         db, risk, framework=FW, control_values=["A.5.1"], user=editor
     )
+    _link_party(db, party, editor, "A.5.1")
     manual = Event(
         timestamp=_entry(db, "risk", risk.id).timestamp,
         source="diary",
@@ -524,11 +613,13 @@ def test_link_entries_follow_the_source_record_read_rules(db, codes):
     entries = {
         "document": _entry(db, "document", document.id).id,
         "risk": _entry(db, "risk", risk.id).id,
+        "interested_party": _entry(db, "interested_party", party.id).id,
         "manual": manual.id,
     }
     expected = {
         "document": _can_read_isms(db, reader),
         "risk": _can_read_risks(db, reader),
+        "interested_party": _can_read_interested_parties(db, reader),
         "manual": True,
     }
     listed = {
@@ -581,13 +672,31 @@ def test_assembled_reads_follow_the_source_record_rules(keen):  # noqa: F811
         headers=unsafe(risk_manager),
     )
     assert linked.status_code == 200, linked.text
+    party_manager = keen.client(keen.user("interested_parties.manage"))
+    party = party_manager.post(
+        "/v1/interested-parties",
+        json={
+            "framework": FW,
+            "name": "Regulator",
+            "nature": "Statutory",
+            "controls": ["A.5.9"],
+        },
+        headers=unsafe(party_manager),
+    )
+    assert party.status_code == 200, party.text
     document_entry = _entry(db, "document", uuid.UUID(created.json()["id"]))
     risk_entry = _entry(db, "risk", risk.id)
+    party_entry = _entry(db, "interested_party", uuid.UUID(party.json()["id"]))
 
     cases = {
         ("events.read",): set(),
         ("events.read", "isms.read"): {document_entry.id},
-        ("events.read", "risk.read"): {document_entry.id, risk_entry.id},
+        ("events.read", "interested_parties.read"): {party_entry.id},
+        ("events.read", "risk.read"): {
+            document_entry.id,
+            risk_entry.id,
+            party_entry.id,
+        },
     }
     for codes, visible in cases.items():
         client = keen.client(keen.user(*codes))
@@ -596,7 +705,7 @@ def test_assembled_reads_follow_the_source_record_rules(keen):  # noqa: F811
         assert {uuid.UUID(item["id"]) for item in listing.json()["items"]} == visible
         evidence = client.get(f"/v1/controls/{control.id}/evidence")
         assert evidence.status_code == 200, evidence.text
-        for entry in (document_entry, risk_entry):
+        for entry in (document_entry, risk_entry, party_entry):
             detail = client.get(f"/v1/events/{entry.id}", params={"framework": FW})
             assert detail.status_code == (200 if entry.id in visible else 404)
             assert (str(entry.id) in evidence.text) is (entry.id in visible)

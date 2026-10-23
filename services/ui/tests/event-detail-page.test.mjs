@@ -42,6 +42,8 @@ async function fixture(t, options = {}) {
           ],
         };
       }
+      if (u.pathname === '/api/v1/stories/related/event/e1') return { items: [] };
+      if (u.pathname === '/api/v1/stories') return { items: [] };
       if (u.pathname === '/api/v1/audits/by-event/e1') return { items: [] };
       if (u.pathname === '/api/v1/audits') return { items: options.audits || [] };
       throw new Error('Unexpected GET ' + u);

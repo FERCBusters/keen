@@ -45,7 +45,7 @@ def scrub(value, secrets):
 def queue_run(db, collector, preview=False):
     if is_paused(db, "api-ingesters"):
         raise ValueError(
-            "API ingester collection is paused in Sources & Evidence Mapping"
+            "API ingester collection is paused in Sources & evidence mapping"
         )
     if (
         db.query(Run)
@@ -119,7 +119,7 @@ def run_job(run_id):
         conn = db.get(Connection, run.connection_id)
         d = Definition.model_validate(run.definition)
         auth, credential = connection_auth(conn)
-        run.message = "Fetching records and checking field mappings…"
+        run.message = "Fetching records and checking field mappings"
         db.commit()
         records, cursor, pages = collect(d, conn.base_url, auth, c.cursor, run.preview)
         measure = (

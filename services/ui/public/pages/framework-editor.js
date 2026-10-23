@@ -88,11 +88,11 @@ function updateChoices() {
   for (const item of nodes.filter(
     (item) => item.kind === kind && (!selected || key(item) !== key(selected)),
   ))
-    $('parent').add(new Option(`${item.ref} — ${item.title}`, item.ref));
+    $('parent').add(new Option(`${item.ref} - ${item.title}`, item.ref));
   $('clauses').replaceChildren();
   $('clauses').disabled = kind === 'clause';
   for (const item of nodes.filter((item) => item.kind === 'clause'))
-    $('clauses').add(new Option(`${item.ref} — ${item.title}`, item.ref));
+    $('clauses').add(new Option(`${item.ref} - ${item.title}`, item.ref));
 }
 
 function editNode(item, { scroll = false } = {}) {

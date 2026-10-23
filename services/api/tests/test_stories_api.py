@@ -19,6 +19,11 @@ from app.db.models import (
     Event,
     Framework,
     IsmsDocument,
+    IsmsEffectivenessMeasure,
+    IsmsMeeting,
+    IsmsPerson,
+    IsmsSwot,
+    IsmsVendor,
     Mapping,
     Risk,
     RiskAsset,
@@ -633,7 +638,7 @@ def test_questions_target_stories_readers_can_see(world):
     )
     assert posted.status_code == 200, posted.text
     (thread,) = asker.get(path).json()["threads"]
-    assert thread["target_label"] == "Story: open — Payroll export incident"
+    assert thread["target_label"] == "Story: open - Payroll export incident"
     assert thread["target_url"].startswith(
         f"/story.html?id={story['id']}&tab=questions&thread="
     )
@@ -697,6 +702,189 @@ def test_choices_list_readable_records_for_authors(world):
     assert isms_author.get("/v1/stories/choices/document?q=zzz").json()["items"] == []
 
 
+@pytest.fixture
+def records(world):
+    """A SWOT item, a person, a vendor, a measure and meeting minutes."""
+    db = world.db
+    rows = SimpleNamespace(
+        swot=IsmsSwot(title="Single backup region", kind="weakness"),
+        person=IsmsPerson(name="Riley Example", position="On-call engineer"),
+        vendor=IsmsVendor(name="Example Hosting"),
+        measure=IsmsEffectivenessMeasure(
+            framework_slug=FW, summary="Restore tests pass", metric_key="restores"
+        ),
+        meeting=IsmsMeeting(title="Incident review", date=datetime(2026, 5, 3).date()),
+    )
+    db.add_all(vars(rows).values())
+    db.commit()
+    return rows
+
+
+NEW_KINDS = (
+    ("swot", "swot", "SWOT item", "Single backup region", "/swot.html?id={}"),
+    (
+        "person",
+        "person",
+        "Person",
+        "Riley Example",
+        "/assurance.html?tab=persons&edit={}",
+    ),
+    (
+        "vendor",
+        "vendor",
+        "Vendor",
+        "Example Hosting",
+        "/assurance.html?tab=vendors&edit={}",
+    ),
+    (
+        "effectiveness_measure",
+        "measure",
+        "Effectiveness measure",
+        "Restore tests pass",
+        "/isms-effectiveness-measure.html?id={}",
+    ),
+    (
+        "meeting",
+        "meeting",
+        "Meeting minutes",
+        "Incident review",
+        "/isms-meeting.html?id={}",
+    ),
+)
+
+
+def test_stories_include_swot_items_people_vendors_measures_and_minutes(world, records):
+    author = world.client("stories.manage", "isms.read")
+    story = world.create(
+        author,
+        items=[
+            world.item(kind, getattr(records, attr)) for kind, attr, *_ in NEW_KINDS
+        ],
+    )
+    assert [
+        (i["kind"], i["kind_label"], i["title"], i["url"], i["withheld"])
+        for i in story["items"]
+    ] == [
+        (kind, label, title, url.format(getattr(records, attr).id), False)
+        for kind, attr, label, title, url in NEW_KINDS
+    ]
+
+    # Each needs ISMS read access, like the records' own pages.
+    seen = world.client("stories.read").get(f"/v1/stories/{story['id']}").json()
+    assert [(i["title"], i["entity_id"]) for i in seen["items"]] == [
+        (f"{label} you cannot view", None) for _, _, label, _, _ in NEW_KINDS
+    ]
+    assert "Riley" not in str(seen) and "Hosting" not in str(seen)
+    unable = world.client("stories.manage")
+    blank = world.create(unable)
+    for kind, attr, *_ in NEW_KINDS:
+        refused = unable.post(
+            f"/v1/stories/{blank['id']}/items",
+            json={
+                "items": [world.item(kind, getattr(records, attr))],
+                "expected_version": 1,
+            },
+            headers=unsafe(unable),
+        )
+        assert refused.status_code == 404, kind
+        assert refused.json()["detail"] == "Related item not available"
+
+    # Authors find them by name or title.
+    for kind, attr, _, title, url in NEW_KINDS:
+        found = author.get(
+            f"/v1/stories/choices/{kind}?q={title.split()[0].lower()}"
+        ).json()["items"]
+        assert [(i["title"], i["url"]) for i in found] == [
+            (title, url.format(getattr(records, attr).id))
+        ], kind
+
+    # A disabled feature withholds its records and refuses new ones.
+    features.update(world.db, world.keen.user(role="admin"), 0, {"meetings": False})
+    seen = author.get(f"/v1/stories/{story['id']}").json()
+    assert [i["withheld"] for i in seen["items"]] == [False, False, False, False, True]
+    own = world.create(author)
+    refused = author.post(
+        f"/v1/stories/{own['id']}/items",
+        json={"items": [world.item("meeting", records.meeting)], "expected_version": 1},
+        headers=unsafe(author),
+    )
+    assert refused.status_code == 404
+    assert refused.json()["detail"] == "Related feature is disabled"
+
+
+def test_a_record_page_lists_the_stories_that_include_it(world, records):
+    author_user = world.keen.user("stories.manage", "isms.read", "events.read")
+    author = world.keen.client(author_user)
+    older = world.create(
+        author,
+        title="Backup failure",
+        items=[world.item("swot", records.swot), world.item("event", world.login)],
+    )
+    newer = world.create(
+        author,
+        title="Restore test",
+        items=[
+            world.item("swot", records.swot),
+            world.item("meeting", records.meeting),
+        ],
+    )
+    world.create(author, title="Unrelated", items=[world.item("note", label="n")])
+
+    def related(client, kind, entity_id, status=200):
+        response = client.get(f"/v1/stories/related/{kind}/{entity_id}")
+        assert response.status_code == status, response.text
+        return response.json()
+
+    listed = related(author, "swot", records.swot.id)
+    assert (listed["kind"], listed["entity_id"]) == ("swot", str(records.swot.id))
+    assert [
+        (s["title"], s["item_count"], s["created_by"], s["can_edit"])
+        for s in listed["items"]
+    ] == [
+        ("Restore test", 2, author_user.username, True),
+        ("Backup failure", 2, author_user.username, True),
+    ]
+    assert [
+        s["id"] for s in related(author, "meeting", records.meeting.id)["items"]
+    ] == [newer["id"]]
+    assert [s["id"] for s in related(author, "event", world.login.id)["items"]] == [
+        older["id"]
+    ]
+    assert related(author, "vendor", records.vendor.id)["items"] == []
+    # Another reader sees the same stories without the right to edit them.
+    reader = world.client("stories.read", "isms.read")
+    assert [
+        s["can_edit"] for s in related(reader, "swot", records.swot.id)["items"]
+    ] == [
+        False,
+        False,
+    ]
+
+    # The record itself must be readable, so the list confirms nothing more.
+    assert related(world.client("stories.read"), "swot", records.swot.id, 404) == {
+        "detail": "SWOT item not found"
+    }
+    assert related(world.client("stories.read"), "event", world.login.id, 404)
+    assert related(world.client("isms.read"), "swot", records.swot.id, 403)
+    assert related(author, "note", uuid.uuid4(), 400)["detail"] == (
+        "Unknown story item kind"
+    )
+    assert related(author, "books", uuid.uuid4(), 400)
+    assert related(author, "swot", "not-a-uuid", 404)
+    assert related(author, "swot", uuid.uuid4(), 404)
+    features.update(world.db, world.keen.user(role="admin"), 0, {"swot": False})
+    assert related(author, "swot", records.swot.id, 404)
+
+
+def test_swot_relationships_keep_their_own_record_types(world, records):
+    reader = world.client("isms.read")
+    assert reader.get("/v1/isms/swot-choices/document").status_code == 200
+    for kind in ("swot", "effectiveness_measure", "meeting"):
+        refused = reader.get(f"/v1/isms/swot-choices/{kind}")
+        assert refused.status_code == 400, kind
+        assert refused.json()["detail"] == "Unknown relationship type"
+
+
 def test_list_filters_by_status_and_text(world):
     author = world.client("stories.manage")
     first = world.create(author, title="Phishing wave", summary="Mail campaign")
@@ -744,6 +932,12 @@ def test_the_service_checks_permissions_itself(world):
             403,
         ),
         (lambda: service.choices(kind="risk", q="", user=reader, db=world.db), 403),
+        (
+            lambda: service.related_stories(
+                kind="event", entity_id=str(world.login.id), user=nobody, db=world.db
+            ),
+            403,
+        ),
         (
             lambda: service.changelog(
                 story_id=story["id"], limit=10, offset=0, user=nobody, db=world.db

@@ -1,4 +1,4 @@
-"""Fail-closed owner restriction for dedicated hosted KEEN installations."""
+"""Fail-closed owner restriction for dedicated hosted Keen installations."""
 
 from fastapi import HTTPException
 

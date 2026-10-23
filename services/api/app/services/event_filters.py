@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 
-from sqlalchemy import and_, exists, false, or_, text
+from sqlalchemy import and_, exists, false, or_, select, text
 from sqlalchemy.exc import DataError, OperationalError
 from sqlalchemy.orm import Session, aliased
 
@@ -37,8 +37,8 @@ from app.mapping.rules import rule_rationale
 from app.security.regex import validate_pattern
 from app.services.control_inheritance import (
     effective_framework_ids,
-    event_has_control,
-    source_ids_for_control,
+    events_mapped_to,
+    inherited_control_ids,
 )
 from app.services.control_refs import control_by_ref
 from app.services.errors import DomainError
@@ -438,39 +438,43 @@ def unmapped_event_condition(framework: str, db=None):
     )
 
 
-def clause_event_condition(framework: str, clause: str, db=None):
-    """Return an EXISTS predicate for events mapped to controls linked to a clause.
+def clause_control_ids(framework: str, clause: str, db: Session) -> list:
+    """Controls in this framework linked to a clause.
 
     `clause` may be a FrameworkClause UUID or a clause ref such as ``5.1``.
-    The condition is framework-scoped so refs from another framework cannot leak in.
+    Both sides are framework-scoped so refs from another framework cannot leak in.
     """
 
     cid = try_uuid(clause)
-    # Aliases keep the subquery's rows apart from any mapping or control the
-    # enclosing aggregate query joins.
-    mapping = aliased(Mapping)
-    control = aliased(ControlItem)
-    link = aliased(ControlClauseLink)
-    clause_row = aliased(FrameworkClause)
-    cond = (
-        exists()
-        .where(mapping.event_id == Event.id)
-        .where(
-            or_(
-                mapping.control_item_id == control.id,
-                mapping.control_item_id.in_(source_ids_for_control(control.id, db)),
-            )
-        )
-        .where(link.control_item_id == control.id)
-        .where(link.clause_id == clause_row.id)
-        .where(control.framework_slug == framework)
-        .where(clause_row.framework_slug == framework)
+    query = (
+        select(ControlClauseLink.control_item_id)
+        .join(ControlItem, ControlItem.id == ControlClauseLink.control_item_id)
+        .join(FrameworkClause, FrameworkClause.id == ControlClauseLink.clause_id)
+        .where(ControlItem.framework_slug == framework)
+        .where(FrameworkClause.framework_slug == framework)
     )
     if cid:
-        cond = cond.where(clause_row.id == cid)
+        query = query.where(FrameworkClause.id == cid)
     else:
-        cond = cond.where(clause_row.ref == str(clause or "").strip())
-    return cond
+        query = query.where(FrameworkClause.ref == str(clause or "").strip())
+    return list(db.execute(query).scalars())
+
+
+def clause_event_condition(framework: str, clauses, db: Session):
+    """Events mapped to a control linked to any of the clauses, or inherited by one.
+
+    The chosen clauses share one list of controls, so the database receives a
+    single bounded predicate however many clauses are chosen.
+    """
+
+    controls = {
+        control
+        for clause in clauses
+        for control in clause_control_ids(framework, clause, db)
+    }
+    if not controls:
+        return false()
+    return events_mapped_to(db, inherited_control_ids(db, controls))
 
 
 def event_predicates(filters: EventFilters, db: Session) -> list:
@@ -492,21 +496,15 @@ def event_predicates(filters: EventFilters, db: Session) -> list:
     for condition in filters.conditions:
         predicates.append(text_condition_predicate(condition))
     if applies(filters, "control"):
+        # A control lists its own evidence and the evidence it inherits.
         ids = control_ids_for(filters, db)
         if ids is not None:
             predicates.append(
-                or_(*(event_has_control(cid, Event.id, db) for cid in ids))
-                if ids
-                else false()
+                events_mapped_to(db, inherited_control_ids(db, ids)) if ids else false()
             )
     if filters.clauses and applies(filters, "clause"):
         predicates.append(
-            or_(
-                *(
-                    clause_event_condition(filters.framework, c, db)
-                    for c in filters.clauses
-                )
-            )
+            clause_event_condition(filters.framework, filters.clauses, db)
         )
     if filters.rules and applies(filters, "rule"):
         predicates.append(rule_predicate(filters))

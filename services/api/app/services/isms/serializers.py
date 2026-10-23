@@ -191,7 +191,7 @@ def _objective_out(
         "status": row.status or "not_started",
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-        "display": row.goal or row.requirement or "ISMS Objective",
+        "display": row.goal or row.requirement or "ISMS objective",
     }
     return _attach_links(db, out, "objective", row.id, framework, include_links)
 
@@ -398,7 +398,7 @@ def _access_control_matrix_out(
         "notes": row.notes or "",
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-        "display": f"{row.task_action or 'Access control'} → {service.get('asset') if service else 'Service'}",
+        "display": f"{row.task_action or 'Access control'} × {service.get('asset') if service else 'Service'}",
     }
     return out
 

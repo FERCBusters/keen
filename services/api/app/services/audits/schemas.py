@@ -6,8 +6,17 @@ from datetime import date
 from pydantic import BaseModel, Field
 
 
+class AuditAttendeePayload(BaseModel):
+    user_id: uuid.UUID | None = None
+    person_id: uuid.UUID | None = None
+    name: str | None = Field(default=None, max_length=256)
+    email: str | None = Field(default=None, max_length=256)
+    role: str | None = Field(default=None, max_length=128)
+
+
 class AuditCreatePayload(BaseModel):
     swot_ids: list[uuid.UUID] | None = Field(None, max_length=200)
+    attendees: list[AuditAttendeePayload] = Field(default_factory=list, max_length=100)
     title: str = Field(..., min_length=1, max_length=256)
     framework_slug: str | None = Field(default=None, max_length=64)
     audit_type: str | None = Field(default="internal", max_length=16)
@@ -57,14 +66,6 @@ class AuditScopePayload(BaseModel):
     controls: list[str] = Field(default_factory=list)
     clauses: list[str] = Field(default_factory=list)
     documents: list[str] = Field(default_factory=list)
-
-
-class AuditAttendeePayload(BaseModel):
-    user_id: uuid.UUID | None = None
-    person_id: uuid.UUID | None = None
-    name: str | None = Field(default=None, max_length=256)
-    email: str | None = Field(default=None, max_length=256)
-    role: str | None = Field(default=None, max_length=128)
 
 
 class AuditFindingPayload(BaseModel):

@@ -473,7 +473,7 @@ def test_replies_come_from_admins_or_the_author_and_move_the_status(qa):
     (item,) = client.get("/v1/me/questions").json()["items"]
     assert (item["status"], item["unread"]) == ("answered", True)
     assert item["target_label"] == (
-        "CIA Triad risk: Payroll database — Unauthorised export"
+        "CIA Triad risk: Payroll database - Unauthorised export"
     )
     assert (
         item["target_url"] == f"/risk.html?id={qa.risk.id}&thread={thread_id}#questions"
@@ -843,16 +843,16 @@ def test_the_admin_queue_shows_open_questions_unless_asked_for_more(qa):
     }
     assert labels == {
         risk_thread: (
-            "CIA Triad risk: Payroll database — Unauthorised export",
+            "CIA Triad risk: Payroll database - Unauthorised export",
             f"/risk.html?id={qa.risk.id}&thread={risk_thread}#questions",
         ),
         pestle_thread: (
-            "PESTLE(E) item: Legal / External — Privacy law reform",
+            "PESTLE(E) item: Legal / External - Privacy law reform",
             f"/pestle_item.html?id={qa.pestle.id}&tab=questions"
             f"&thread={pestle_thread}#questions",
         ),
         swot_thread: (
-            "SWOT item: weakness — Ageing hardware",
+            "SWOT item: weakness - Ageing hardware",
             f"/isms-swot.html?id={qa.swot.id}&tab=questions&thread={swot_thread}",
         ),
     }
@@ -1096,7 +1096,7 @@ def test_the_admin_queue_describes_evidence_questions_by_their_event(qa):
         "cloud-logs",
     )
     assert item["event_timestamp"] == "2026-05-01T09:30:00"
-    assert item["target_label"] == "Evidence: cloud-logs — Root account sign-in"
+    assert item["target_label"] == "Evidence: cloud-logs - Root account sign-in"
     assert item["target_url"] == (
         f"/event.html?id={qa.event.id}&thread={item['thread_id']}#questions"
     )

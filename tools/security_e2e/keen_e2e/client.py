@@ -1,4 +1,4 @@
-"""HTTP access to a KEEN installation through its public origin (nginx + API).
+"""HTTP access to a Keen installation through its public origin (nginx + API).
 
 Credentials stay in memory. Reports and assertion messages carry status codes,
 paths and synthetic identifiers only, never cookies, tokens or response bodies.
@@ -20,7 +20,7 @@ class KeenError(AssertionError):
 
 
 def _detail(response):
-    """A short validation message from a KEEN error body, without echoing payloads."""
+    """A short validation message from a Keen error body, without echoing payloads."""
     try:
         detail = response.json().get("detail")
     except Exception:
@@ -147,7 +147,7 @@ class Session:
                     self.csrf_cookie = name
 
     def password_login(self, username, password, *, patience=360):
-        """Submit the password form, waiting out KEEN's sign-in rate limit."""
+        """Submit the password form, waiting out Keen's sign-in rate limit."""
         deadline = time.monotonic() + patience
         while True:
             response = self.request(

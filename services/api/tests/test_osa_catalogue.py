@@ -16,7 +16,7 @@ from app.db.models import (
     Mapping,
     OsaControlMapping,
 )
-from app.services.control_inheritance import effective_control_ids, evidence_pairs
+from app.services.control_inheritance import evidence_pairs, source_ids_for_controls
 from app.services.frameworks import FrameworkNodeInput
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -170,7 +170,7 @@ def test_shared_nist_dedup_explicit_precedence_and_no_transitive_evidence(db):
         .count()
         == 1
     )
-    assert set(db.scalars(effective_control_ids(b.id))) == {a.id, b.id, c.id}
+    assert set(db.scalars(source_ids_for_controls([b.id]))) == {a.id, c.id}
     assert db.execute(select(evidence_pairs("B"))).all() == [(b.id, event.id)]
     assert db.execute(select(evidence_pairs("C"))).all() == []
     db.add(
@@ -192,7 +192,8 @@ def test_only_enabled_frameworks_contribute_inherited_evidence(db, monkeypatch):
     from app.db.models import ManagedConfiguration
     from app.services.control_inheritance import (
         effective_framework_ids,
-        event_has_control,
+        events_mapped_to,
+        inherited_control_ids,
     )
 
     monkeypatch.setattr(settings, "enabled_frameworks", "")
@@ -225,12 +226,15 @@ def test_only_enabled_frameworks_contribute_inherited_evidence(db, monkeypatch):
     db.add(config)
     db.commit()
     assert db.execute(select(evidence_pairs("B", db))).all() == [(b.id, event.id)]
+    inherited = inherited_control_ids(db, [b.id])
+    assert set(inherited) == {a.id, b.id}
+    assert db.query(Event).filter(events_mapped_to(db, inherited)).one() == event
     config.document = {"enabled": ["B"], "default": "B"}
     db.commit()
     assert db.execute(select(evidence_pairs("B", db))).all() == []
-    assert a.id not in set(db.scalars(effective_control_ids(b.id, db)))
+    assert inherited_control_ids(db, [b.id]) == [b.id]
     assert a.id not in set(db.scalars(effective_framework_ids("B", db)))
-    assert db.query(Event).filter(event_has_control(b.id, Event.id, db)).count() == 0
+    assert db.query(Event).filter(events_mapped_to(db, [b.id])).count() == 0
     # Direct mappings remain; hiding a framework is not evidence deletion.
     assert db.query(Mapping).count() == 1
 

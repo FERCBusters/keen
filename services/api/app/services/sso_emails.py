@@ -152,9 +152,9 @@ def request_address(
     try:
         mailer.send_email(
             to_email=email,
-            subject="Verify your KEEN SSO email address",
-            body=f"You requested to add {email} to KEEN account {user.username}.\n\n"
-            f"While signed into that KEEN account, open this link and confirm:\n"
+            subject="Verify your Keen SSO email address",
+            body=f"You requested to add {email} to Keen account {user.username}.\n\n"
+            f"While signed into that Keen account, open this link and confirm:\n"
             f"{settings.public_base_url}/sso-email.html#token={token}\n\n"
             "This link expires in 30 minutes and works once. If you did not request it, ignore this email.",
         )

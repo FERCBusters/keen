@@ -25,6 +25,7 @@ import {
   renderGraph,
 } from '/pages/planning-views.js';
 import { controlBadges, clauseBadges } from '/pages/isms-detail-common.js';
+import { mountStoryRelated } from '/pages/story-related.js';
 const $ = (id) => document.getElementById(id),
   params = new URLSearchParams(location.search);
 const me = await initNavbar(),
@@ -173,7 +174,7 @@ function showList(data, requestedOffset) {
   $('resultCount').textContent =
     total === data.items.length && requestedOffset === 0
       ? `Showing all ${total} matching items.`
-      : `Showing ${requestedOffset + (data.items.length ? 1 : 0)}–${requestedOffset + data.items.length} of ${total} matching items. This view includes these items only; use Previous/Next to see more.`;
+      : `Showing ${requestedOffset + (data.items.length ? 1 : 0)}-${requestedOffset + data.items.length} of ${total} matching items. This view includes these items only; use Previous/Next to see more.`;
   $('previous').disabled = offset === 0;
   $('next').disabled = offset + 100 >= total;
   draw();
@@ -469,6 +470,7 @@ try {
       ? params.get('tab')
       : 'details';
     if (window.bootstrap) window.bootstrap.Tab.getOrCreateInstance($(tab + 'Tab')).show();
+    if (itemId) mountStoryRelated({ me, kind: 'swot', id: itemId, framework });
   } else {
     const meta = await apiGet(`/api/v1/isms/meta?${fw}`);
     mappingOptions('controlFilter', meta.controls, [], true);
@@ -529,13 +531,13 @@ async function exportSwot(format) {
   try {
     const { collectExport, buildWorkbook, buildSwotPdf } = await import('/pages/swot-export.js');
     const filters = filterQuery();
-    toast($('status'), 'Preparing all matching SWOT items…', 'info');
+    toast($('status'), 'Preparing all matching SWOT items', 'info');
     const items = await collectExport(
       apiGet,
       base,
       filters,
       () => exportCancelled,
-      (done, count) => toast($('status'), `Preparing export: ${done} of ${count} items…`, 'info'),
+      (done, count) => toast($('status'), `Preparing export: ${done} of ${count} items`, 'info'),
     );
     const meta = await apiGet(`/api/v1/isms/meta?${fw}`);
     const owners = new Map(

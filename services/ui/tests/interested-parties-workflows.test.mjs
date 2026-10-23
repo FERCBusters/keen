@@ -49,8 +49,8 @@ const longParty =
   'An interested party with a remarkably long descriptive name that will need wrapping';
 const graphs = {
   party_controls: {
-    title: 'Interested Parties → Controls',
-    left_label: 'Interested Parties',
+    title: 'Interested parties × controls',
+    left_label: 'Interested parties',
     right_label: 'Controls',
     nodes: {
       left: [
@@ -69,8 +69,8 @@ const graphs = {
     stats: { left_count: 2, right_count: 2, link_count: 2 },
   },
   party_communications: {
-    title: 'Interested Parties → Communications',
-    left_label: 'Interested Parties',
+    title: 'Interested parties × communications',
+    left_label: 'Interested parties',
     right_label: 'Communication rules',
     nodes: {
       left: [
@@ -80,8 +80,8 @@ const graphs = {
       right: [
         {
           id: 'communication|Breach|72h|Commissioner|Email',
-          label: 'Breach → Commissioner',
-          subtitle: '72h • Email',
+          label: 'Breach × Commissioner',
+          subtitle: '72h · Email',
           kind: 'communication',
           count: 2,
         },
@@ -184,7 +184,7 @@ test('a party can be sampled into an audit from the register', async (t) => {
   await settle(() => ui.document.getElementById('entityAuditSampleSelect')?.value === 'au1');
   assert.equal(
     ui.document.getElementById('entityAuditSampleTitle').textContent,
-    `Sample “${HOSTILE}Regulator — Statutory” into audit`,
+    `Sample “${HOSTILE}Regulator - Statutory” into audit`,
   );
   ui.document.getElementById('entityAuditSampleSubmit').click();
   await settle(() => state.posted.length === 1);
@@ -290,21 +290,21 @@ test('the party/control matrix links both sides and filters by party or control'
     headers.map((h) => h.textContent.trim()),
     ['A.5.1', 'A.8.2'],
   );
-  assert.equal(headers[0].getAttribute('title'), 'A.5.1 Policies — Policies');
+  assert.equal(headers[0].getAttribute('title'), 'A.5.1 Policies - Policies');
   const rows = [...matrix.querySelectorAll('tbody tr')];
   assert.equal(rows[0].querySelector('a').textContent, HOSTILE + 'Regulator');
   assert.equal(
     rows[0].querySelector('a').getAttribute('href'),
     '/interested_party.html?id=p1&framework=A',
   );
-  assert.match(rows[0].textContent, /Statutory • 1 shown control\(s\)/);
+  assert.match(rows[0].textContent, /Statutory · 1 shown control\(s\)/);
   assert.equal(
     rows[0].querySelector('.matrix-party-note').getAttribute('title'),
     'Notify within 72 hours',
   );
   assert.equal(rows[1].querySelector('.matrix-party-note'), null);
   const linked = rows[0].querySelector('.matrix-cell-linked');
-  assert.equal(linked.getAttribute('title'), `${HOSTILE}Regulator → A.5.1 Policies`);
+  assert.equal(linked.getAttribute('title'), `${HOSTILE}Regulator × A.5.1 Policies`);
   assert.equal(
     linked.querySelector('a').getAttribute('href'),
     '/control.html?id=c1&tab=interested-parties&framework=A',
@@ -345,7 +345,7 @@ test('the communications graph draws linked parties and rules with full-label to
       2,
   );
   const svg = host.querySelector('svg');
-  assert.equal(svg.getAttribute('aria-label'), 'Interested Parties → Communications');
+  assert.equal(svg.getAttribute('aria-label'), 'Interested parties × communications');
   assert.match(svg.textContent, /2 interested parties, 2 communication rules, 3 relationship\(s\)/);
   const nodes = [...svg.querySelectorAll('.interested-party-bipartite-node')];
   assert.equal(nodes.length, 4);
@@ -357,16 +357,16 @@ test('the communications graph draws linked parties and rules with full-label to
   assert.equal(nodes[0].style.cursor, 'pointer');
   // Communication rules have no page of their own; controls do.
   assert.equal(nodes[2].style.cursor, '');
-  assert.match(nodes[2].textContent, /Breach → Commissioner \(2\)/);
-  assert.match(nodes[2].textContent, /72h • Email/);
+  assert.match(nodes[2].textContent, /Breach × Commissioner \(2\)/);
+  assert.match(nodes[2].textContent, /72h · Email/);
   assert.equal(nodes[3].style.cursor, 'pointer');
   assert.match(nodes[3].textContent, /^A\.9/);
   assert.match(nodes[3].textContent, /Access control/);
   const links = [...svg.querySelectorAll('path > title')].map((x) => x.textContent);
   assert.deepEqual(links, [
-    `${longParty} → Breach → Commissioner (2)`,
-    'Customers → A.9 Access control',
-    'Customers → Related item',
+    `${longParty} × Breach × Commissioner (2)`,
+    'Customers × A.9 Access control',
+    'Customers × Related item',
   ]);
   host.querySelector('[data-zoom="in"]').click();
   host.querySelector('[data-zoom="out"]').click();
@@ -432,8 +432,8 @@ test('party graph labels mark every truncation with an ellipsis', async (t) => {
         right: [
           {
             id: 'comm',
-            label: 'Breach → Regulator',
-            subtitle: '72h • Email',
+            label: 'Breach × Regulator',
+            subtitle: '72h · Email',
             kind: 'communication',
           },
         ],

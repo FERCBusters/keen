@@ -869,7 +869,7 @@ test('a SWOT page that cannot load says so, and paging back returns to the start
     },
   });
   ui.el('swotTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  await settle(() => ui.el('swotSummary').textContent === '1–1 of 201 items.');
+  await settle(() => ui.el('swotSummary').textContent === '1-1 of 201 items.');
   assert.equal(ui.el('swotPrevious').disabled, true);
 
   fail = true;
@@ -882,7 +882,7 @@ test('a SWOT page that cannot load says so, and paging back returns to the start
   assert.equal(ui.el('swotPrevious').disabled, false);
   fail = false;
   ui.el('swotPrevious').click();
-  await settle(() => ui.el('swotSummary').textContent === '1–1 of 201 items.');
+  await settle(() => ui.el('swotSummary').textContent === '1-1 of 201 items.');
   assert.equal(ui.el('swotPrevious').disabled, true);
   assert.match(ui.el('swotQuadrants').textContent, /Stable team/);
   assert.deepEqual(

@@ -1,7 +1,7 @@
 // Explicit guide associations. Text and URLs are authored here, never taken from form data.
 const topics = {
   start: [
-    'Your assurance workspace',
+    'Getting started',
     'using-start.html',
     'Collect evidence, map it to framework controls, and review what it supports. Framework scope determines which controls you work with.',
     'Choose a framework, then explore its evidence and coverage.',
@@ -28,18 +28,18 @@ const topics = {
     'Map evidence to controls',
     'using-mapping.html',
     'A mapping rule selects events and associates them with the controls you choose. Preview the matches and confirm the source, input and framework.',
-    'Save applies the rule to future matching evidence. Apply saved rule to past evidence also reconciles the rule’s earlier mappings, removing associations it no longer supports.',
+    "Save applies the rule to future matching evidence. Apply saved rule to past evidence also reconciles the rule's earlier mappings, removing associations it no longer supports.",
   ],
   events: [
     'Review evidence',
     'using-events.html',
-    'Check the event’s source connection, timestamp, structured fields and artifacts. Control mappings show where the event contributes evidence. Suggested controls match the event’s wording against the catalogue; they are proposals for review, nothing is mapped until a rule is saved.',
+    "Check the event's source connection, timestamp, structured fields and artifacts. Control mappings show where the event contributes evidence. Suggested controls match the event's wording against the catalogue; they are proposals for review, nothing is mapped until a rule is saved.",
     'Create a mapping rule from an event, or tick suggested controls and propose a rule with them. Sample the event into an audit, download a PDF or artifact ZIP, or ask a question. The guide explains each action.',
   ],
   sourceInsights: [
     'Source activity insights',
     'using-events.html#source-insights',
-    'Insights compare recent activity with this source’s own history: how often it usually sends events, whether it has gone quiet, which days spiked and which summaries keep repeating.',
+    "Insights compare recent activity with this source's own history: how often it usually sends events, whether it has gone quiet, which days spiked and which summaries keep repeating.",
     'A quiet source can mean a stalled collector, expired credentials or a genuinely idle system; check collection before drawing a control conclusion. Open a repeated unmapped summary to see suggested controls for a rule.',
   ],
   frameworks: [
@@ -61,7 +61,7 @@ const topics = {
     'Filter by user and the relevant entity or request path, then compare timestamps and field differences when investigating a change.',
   ],
   mitigator: [
-    'KEEN Mitigator',
+    'Keen Mitigator',
     'using-risks.html#mitigator',
     'Describe a concern in natural language. Local language matching suggests controls, similar existing risks, related assessment signals and reusable library scenarios in any framework.',
     'Analyse scenario produces suggestions; the mascot turns while it runs. Review matching terms, existing risks, control scope and ratings, then Create risk register entry saves the draft as a risk.',
@@ -82,7 +82,7 @@ const topics = {
     'ISMS records',
     'using-isms.html',
     'Maintain organisational records such as assets, documents, objectives, meetings and effectiveness measures alongside your evidence.',
-    'Check owners, related records and scope before saving. Use the record’s history where available to review changes.',
+    "Check owners, related records and scope before saving. Use the record's history where available to review changes.",
   ],
   account: [
     'Your account',
@@ -91,7 +91,7 @@ const topics = {
     'Keep recovery information securely when setting up multi-factor authentication.',
   ],
   agents: [
-    'KEEN Agents',
+    'Keen Agents',
     'administrator-agents.html',
     'Register an individual collector or create an enrollment profile for a fleet. Each agent receives its own evidence-submission credential.',
     'Save one-time credentials securely. Revoking a profile also revokes credentials issued through that profile.',
@@ -99,7 +99,7 @@ const topics = {
   retention: [
     'Evidence retention',
     'administrator-retention.html',
-    'Retention controls how much evidence KEEN keeps. Audit protection and stored-file cleanup are part of the retention workflow.',
+    'Retention controls how much evidence Keen keeps. Audit protection and stored-file cleanup are part of the retention workflow.',
     'Preview the affected records before saving a policy or confirming a purge. Read the retention guide before deleting evidence.',
   ],
   integrations: [
@@ -111,7 +111,7 @@ const topics = {
   identity: [
     'Accounts and access',
     'administrator-identity.html',
-    'Accounts, groups and permissions control access to KEEN. Administrators manage local account security and authentication settings.',
+    'Accounts, groups and permissions control access to Keen. Administrators manage local account security and authentication settings.',
     'Check the effective permissions before saving. Deactivating an account invalidates its existing sessions.',
   ],
   scheduling: [
@@ -121,7 +121,7 @@ const topics = {
     'Running an ingester collects evidence. Use historical mapping to apply a saved mapping rule to evidence already stored.',
   ],
   diary: [
-    'Diary Evidence',
+    'Diary evidence',
     'administrator-diary.html',
     'Record a human observation as evidence, with enough context for a reviewer to understand its source and relevance.',
     'Saving creates an evidence record. Check its timestamp and content before submitting.',
@@ -135,7 +135,7 @@ const topics = {
   storyFlow: [
     'Story flow chart',
     'using-events.html#build-the-story',
-    'The flow chart shows the story’s items as boxes you drag into place and join with labelled arrows, for example from the sign-in to the export it led to.',
+    "The flow chart shows the story's items as boxes you drag into place and join with labelled arrows, for example from the sign-in to the export it led to.",
     'If you can edit the story, drag boxes, choose Link items to draw an arrow, then Save layout. Arrange by time resets the positions; the Timeline order is unchanged.',
   ],
   storyComments: [
@@ -177,7 +177,7 @@ const topics = {
   documents: [
     'Policies, processes and documents',
     'using-documents.html',
-    'Write a policy in KEEN, upload a document, or link one maintained elsewhere. Every version is kept and can be linked to controls.',
+    'Write a policy in Keen, upload a document, or link one maintained elsewhere. Every version is kept and can be linked to controls.',
     'Pick the workflow that matches where the document lives. The guide covers approvals, versions and framework links.',
   ],
   peopleAssets: [
@@ -207,7 +207,7 @@ const topics = {
   adminOverview: [
     'Administration',
     'administrator.html',
-    'Administration is where KEEN is connected and shaped: the Workspace panes bring evidence in (agents, API ingesters, sources and mapping, frameworks, runners, diary, retention), Access manages users and groups, and System holds feature switches and the audit trail.',
+    'Administration is where Keen is connected and shaped: the Workspace panes bring evidence in (agents, API ingesters, sources and mapping, frameworks, runners, diary, retention), Access manages users and groups, and System holds feature switches and the audit trail.',
     'Most installations start with Frameworks, then Sources & evidence mapping. The administrator handbook has one chapter per pane.',
   ],
   features: [
@@ -239,7 +239,7 @@ const sourceGuides = {
   google_workspace: ['Google Workspace', 'google-workspace'],
   cloudwatch_logs: ['Amazon CloudWatch Logs', 'cloudwatch'],
   webhook: ['Incoming webhooks', 'webhooks'],
-  'keen-agent': ['KEEN Agent', 'agents'],
+  'keen-agent': ['Keen Agent', 'agents'],
 };
 const pages = {
   home: 'start',
@@ -385,7 +385,7 @@ export function openContextHelp(trigger) {
   close.autofocus = true;
   close.addEventListener('click', () => dialog.close());
   const header = element('div', '', 'd-flex align-items-center justify-content-between gap-3 mb-4');
-  header.append(element('span', 'KEEN · Page help', 'small text-secondary'), close);
+  header.append(element('span', 'Keen · Page help', 'small text-secondary'), close);
   const title = element('h2', topic.title, 'h4');
   title.id = 'keen-help-title';
   const links = element('div', '', 'd-grid gap-2 mt-4');

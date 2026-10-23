@@ -1,6 +1,6 @@
 """Rule parsing and evaluation contracts: layout, conditions, targets and provenance.
 
-Rules are read strictly. An entry KEEN cannot read exactly as written, such as
+Rules are read strictly. An entry Keen cannot read exactly as written, such as
 a misspelt key, a value of the wrong type, an unsafe pattern or a malformed
 target, is skipped with one logged warning, so a typo never widens what a rule
 maps.
@@ -83,7 +83,7 @@ def test_disabled_rules_are_left_out():
     assert [r.id for r in parse(rule(enabled=True))] == ["test"]
 
 
-# --- Entries KEEN cannot read --------------------------------------------------------
+# --- Entries Keen cannot read --------------------------------------------------------
 
 
 INVALID = [

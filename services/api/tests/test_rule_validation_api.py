@@ -1,6 +1,6 @@
 """Rule limits and rule scope through the assembled application.
 
-A saved rule names a source, conditions KEEN evaluates within fixed bounds and
+A saved rule names a source, conditions Keen evaluates within fixed bounds and
 framework targets. Rules outside those limits are refused before anything is
 saved. Previews and event samples examine only the rule's connection and
 collection item. Requests pass through the production middleware, password
@@ -39,12 +39,12 @@ REFUSED = [
     (
         "spaced-id",
         {**_rule("bad id")},
-        "Rule ID must be 1–96 letters, numbers, underscores or hyphens",
+        "Rule ID must be 1-96 letters, numbers, underscores or hyphens",
     ),
     (
         "long-id",
         {**_rule("r" * 97)},
-        "Rule ID must be 1–96 letters, numbers, underscores or hyphens",
+        "Rule ID must be 1-96 letters, numbers, underscores or hyphens",
     ),
     (
         "no-source",

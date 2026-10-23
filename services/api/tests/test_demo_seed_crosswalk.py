@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from app.core.datetime_utils import utc_now_naive
@@ -412,7 +413,7 @@ def test_risk_register_holds_cia_risks_scored_like_the_register(seeded):
     risks = db.query(Risk).all()
     cia = [r for r in risks if r.risk_types]
     assert len(risks) >= 25 and len(cia) >= 20 and len(risks) > len(cia)
-    # The CIA Triad tab filters on the canonical names KEEN stores.
+    # The CIA Triad tab filters on the canonical names Keen stores.
     assert {t for r in cia for t in r.risk_types} == {
         "Confidentiality",
         "Integrity",
@@ -531,12 +532,74 @@ def test_documents_link_controls_and_record_their_automatic_diary_entries(seeded
     assert seeder.stats["document link diary entries.created"] == len(documents)
 
 
+def test_every_linked_record_counts_towards_control_coverage(seeded):
+    """Measures, SWOT items, risks and the rest count, as saving them does."""
+    from app.db.models import (
+        InterestedPartyControlLink,
+        IsmsEntityClauseLink,
+        IsmsEntityControlLink,
+        RiskControlLink,
+    )
+
+    db, seeder = seeded
+    linked = defaultdict(set)
+    for record_type, record_id, control_id in db.query(
+        IsmsEntityControlLink.entity_type,
+        IsmsEntityControlLink.entity_id,
+        IsmsEntityControlLink.control_item_id,
+    ):
+        linked[record_type, record_id].add(control_id)
+    # A record linked only to clauses has an entry too.
+    for record_type, record_id in db.query(
+        IsmsEntityClauseLink.entity_type, IsmsEntityClauseLink.entity_id
+    ):
+        linked[record_type, record_id] |= set()
+    for model, record_type, column in (
+        (RiskControlLink, "risk", RiskControlLink.risk_id),
+        (
+            InterestedPartyControlLink,
+            "interested_party",
+            InterestedPartyControlLink.interested_party_id,
+        ),
+    ):
+        for record_id, control_id in db.query(column, model.control_item_id):
+            linked[record_type, record_id].add(control_id)
+    counted = Counter()
+    for (record_type, record_id), controls in linked.items():
+        if record_type == "access_control_matrix":
+            continue
+        entry = (
+            db.query(Event)
+            .filter_by(
+                source="diary", external_id=f"isms-link:{record_type}:{record_id}"
+            )
+            .one()
+        )
+        mapped = {
+            m.control_item_id for m in db.query(Mapping).filter_by(event_id=entry.id)
+        }
+        assert controls <= mapped, record_type
+        counted[record_type] += 1
+    assert set(counted) == {
+        "document",
+        "effectiveness_measure",
+        "interested_party",
+        "meeting",
+        "objective",
+        "risk",
+        "swot",
+    }
+    for record_type, count in counted.items():
+        name = record_type.replace("_", " ")
+        assert seeder.stats[f"{name} link diary entries.created"] == count
+
+
 def test_a_dry_run_leaves_document_link_entries_out(db, artifact_storage):
     seeder = DemoSeeder(db, DemoConfig("iso_27001_2022", "Demo", None, True, True))
     seeder.run()
     db.flush()
     assert db.query(Event).filter_by(source="diary", system="isms").count() == 0
-    assert seeder.stats["document link diary entries.skipped in dry run"] == 1
+    assert seeder.stats["link diary entries.skipped in dry run"] == 1
     assert not artifact_storage.exists()
 
 
@@ -607,12 +670,14 @@ def test_stories_show_linked_records_on_a_timeline_and_flow(seeded):
     assert listing["total"] == 4
     assert {s["status"] for s in listing["items"]} == {"open", "closed"}
     comments = 0
+    every_kind = set()
     for row in listing["items"]:
         story = stories.get_story(
             story_id=row["id"], framework="iso_27001_2022", user=user, db=db
         )
         items = story["items"]
         kinds = {item["kind"] for item in items}
+        every_kind |= kinds
         assert {"event", "note", "document", "risk", "asset"} <= kinds
         assert not any(item["withheld"] for item in items)
         assert all(item["occurred_at"] for item in items if item["kind"] == "event")
@@ -629,6 +694,23 @@ def test_stories_show_linked_records_on_a_timeline_and_flow(seeded):
         )
         assert [entry["action"] for entry in history["items"]] == ["created"]
     assert comments >= 1
+    # People, suppliers, measures and minutes take part too, and their pages
+    # list the stories back.
+    assert {"person", "vendor", "effectiveness_measure", "meeting"} <= every_kind
+    contractor = next(
+        item
+        for row in listing["items"]
+        for item in stories.get_story(
+            story_id=row["id"], framework="iso_27001_2022", user=user, db=db
+        )["items"]
+        if item["kind"] == "person"
+    )
+    related = stories.related_stories(
+        kind="person", entity_id=contractor["entity_id"], user=user, db=db
+    )
+    assert [s["title"] for s in related["items"]] == [
+        "Demo Contractor leaver: every route in closed on the last day"
+    ]
 
 
 def test_seeded_frameworks_join_the_selection_with_iso_as_default(db, monkeypatch):
@@ -696,25 +778,19 @@ def test_teardown_removes_the_seeded_dataset(artifact_storage):
         before = counts()
         DemoSeeder(db, DemoConfig("iso_27001_2022", "Demo", None, False, True)).run()
         db.flush()
-        entries = db.query(Event).filter_by(source="diary", system="isms").count()
-        # Saving seeded records in the app gives them automatic entries too.
-        from app.db.models import IsmsEntityControlLink, RiskControlLink
-        from app.services.isms.link_diary import sync_entity_link_diary
-
-        user = db.query(User).one()
-        sync_entity_link_diary(
-            db, "risk", db.query(RiskControlLink.risk_id).first()[0], user
-        )
-        for record_type in ("objective", "effectiveness_measure", "meeting", "swot"):
-            record = (
-                db.query(IsmsEntityControlLink.entity_id)
-                .filter_by(entity_type=record_type)
-                .first()
-            )
-            sync_entity_link_diary(db, record_type, record[0], user)
-        db.flush()
-        artefacts = db.query(Event).filter_by(source="diary", system="isms").count()
-        assert artefacts == entries + 5
+        # Every kind of linked record has automatic entries, and teardown
+        # removes them all.
+        entries = db.query(Event).filter_by(source="diary", system="isms").all()
+        assert {entry.external_id.split(":")[1] for entry in entries} == {
+            "document",
+            "effectiveness_measure",
+            "interested_party",
+            "meeting",
+            "objective",
+            "risk",
+            "swot",
+        }
+        artefacts = len(entries)
         teardown = DemoTeardown(
             db, TeardownConfig("iso_27001_2022", "Demo", False, True)
         )

@@ -1,4 +1,4 @@
-"""Fixtures for the KEEN security end-to-end suite.
+"""Fixtures for the Keen security end-to-end suite.
 
 Configuration comes from environment variables so credentials never appear in
 process listings. See README.md before running against any installation.
@@ -48,7 +48,7 @@ def _env(name, default=None):
 def pytest_report_header(config):
     url = _env("KEEN_E2E_BASE_URL") or "(unset)"
     writes = "enabled" if _env("KEEN_E2E_ALLOW_WRITES") == "1" else "disabled"
-    return [f"KEEN target: {url}; synthetic writes: {writes}"]
+    return [f"Keen target: {url}; synthetic writes: {writes}"]
 
 
 @pytest.fixture(scope="session")
@@ -61,7 +61,7 @@ def target():
     url = _env("KEEN_E2E_BASE_URL")
     if not url:
         pytest.exit(
-            "Set KEEN_E2E_BASE_URL to the origin of a KEEN installation you control", 2
+            "Set KEEN_E2E_BASE_URL to the origin of a Keen installation you control", 2
         )
     ca_file = _env("KEEN_E2E_CA_FILE")
     verify = ssl.create_default_context(cafile=ca_file) if ca_file else True
@@ -148,7 +148,7 @@ def cleanup(admin):
     yield registry
     failures = registry.run(admin)
     if failures:
-        print("\nKEEN e2e cleanup could not remove:", failures)
+        print("\nKeen e2e cleanup could not remove:", failures)
 
 
 @pytest.fixture(scope="session")

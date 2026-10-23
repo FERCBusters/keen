@@ -49,14 +49,14 @@ OPENAPI_TAGS = [
     {"name": "Questions", "description": "Q&A and event question endpoints."},
     {
         "name": "Risks",
-        "description": "CIA Triad risk register, categories and risk/control mappings.",
+        "description": "CIA triad risk register, categories and risk/control mappings.",
     },
     {
         "name": "PESTLE(E)",
         "description": "PESTLE(E) impact items, business processes and relevance mappings.",
     },
     {
-        "name": "Interested Parties",
+        "name": "Interested parties",
         "description": "Interested party names, nature of interest, linked controls and communications.",
     },
     {
@@ -77,7 +77,7 @@ OPENAPI_TAGS = [
     },
     {
         "name": "Statement of Applicability",
-        "description": "Read-only SoA summary across controls, clauses, CIA risks, PESTLE(E), Interested Parties and ISMS.",
+        "description": "Read-only SoA summary across controls, clauses, CIA risks, PESTLE(E), interested parties and ISMS.",
     },
     {
         "name": "Stories",
@@ -104,7 +104,7 @@ router.include_router(managed_configurations_router, tags=["Admin"])
 router.include_router(events_router, tags=["Events"])
 router.include_router(questions_router, tags=["Questions"])
 router.include_router(pestle_router, tags=["PESTLE(E)"])
-router.include_router(interested_parties_router, tags=["Interested Parties"])
+router.include_router(interested_parties_router, tags=["Interested parties"])
 router.include_router(isms_router, tags=["ISMS"])
 router.include_router(assurance_router, tags=["Assurance"])
 router.include_router(bookstack_sections_router, tags=["ISMS"])
@@ -123,7 +123,7 @@ router.include_router(integrations_router, tags=["Admin"])
 
 from .agents import router as agents_router
 
-router.include_router(agents_router, tags=["KEEN Agent"])
+router.include_router(agents_router, tags=["Keen Agent"])
 
 from .evidence_retention import router as evidence_retention_router
 

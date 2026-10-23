@@ -405,7 +405,7 @@ def me(*, context: ChangeContext, db: Session) -> dict:
             and not trust_remote
             and not oidc_enabled
         ),
-        # In native OIDC mode, logout_url clears KEEN's session and then starts
+        # In native OIDC mode, logout_url clears Keen's session and then starts
         # RP-initiated logout when the provider end-session endpoint is configured.
         "logout_enabled": bool((not trust_remote) or logout_url),
         "logout_url": logout_url,

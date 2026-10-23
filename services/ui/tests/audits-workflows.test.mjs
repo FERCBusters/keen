@@ -336,75 +336,6 @@ test('exact schedules require a first run date', async (t) => {
   assert.equal(ui.el('schedTitle').value, '');
 });
 
-test('creating an audit selects scope from documents, clauses and their linked controls', async (t) => {
-  const { ui, state } = await auditsPage(t);
-  ui.el('showCreate').click();
-  assert.equal(ui.el('createCard').style.display, '');
-  // The framework comes from the navigation picker and cannot be typed over.
-  assert.equal(ui.el('newFramework').readOnly, true);
-  assert.equal(ui.el('newFramework').value, 'A');
-  ui.el('newFramework').value = 'B';
-  await settle(() => ui.el('newControlsList').querySelector('input'));
-  assert.equal(ui.el('newControlsList').querySelectorAll('input').length, 2);
-  assert.equal(
-    ui.el('newClausesList').querySelector('label[style="margin-left:1.1rem"]') !== null,
-    true,
-  );
-  const doc = ui.document.querySelector('[data-new-document-id="d1"]');
-  doc.checked = true;
-  doc.dispatchEvent(new ui.window.Event('change'));
-  assert.equal(ui.el('newDocumentCount').textContent, '1 documents');
-  assert.equal(ui.el('newClauseCount').textContent, '1 clauses');
-  // k41 links to c1 in the clause/control graph; d1 also links c9 directly.
-  assert.equal(ui.el('newControlCount').textContent, '2 controls');
-  const clause = ui.document.querySelector('[data-new-clause-id="k4"]');
-  clause.checked = true;
-  clause.dispatchEvent(new ui.window.Event('change'));
-  const control = ui.document.querySelector('[data-new-control-id="c9"]');
-  control.checked = false;
-  control.dispatchEvent(new ui.window.Event('change'));
-  doc.checked = false;
-  doc.dispatchEvent(new ui.window.Event('change'));
-  ui.el('newControlFilter').value = 'zzz';
-  ui.el('newControlFilter').dispatchEvent(new ui.window.Event('input'));
-  assert.match(ui.el('newControlsList').textContent, /No controls match/);
-  ui.el('newClauseFilter').value = 'zzz';
-  ui.el('newClauseFilter').dispatchEvent(new ui.window.Event('input'));
-  assert.match(ui.el('newClausesList').textContent, /No clauses match/);
-  ui.el('newDocumentFilter').value = 'policy';
-  ui.el('newDocumentFilter').dispatchEvent(new ui.window.Event('input'));
-  assert.equal(ui.el('newDocumentsList').querySelectorAll('input').length, 1);
-  ui.el('newTitle').value = '  Spring audit ';
-  ui.el('newType').value = 'external';
-  ui.el('newStart').value = '2026-03-01';
-  ui.el('createForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => state.posted.length === 1);
-  assert.equal(state.posted[0].path, '/api/v1/audits');
-  const body = state.posted[0].body;
-  assert.equal(body.framework_slug, 'A');
-  assert.equal(body.title, 'Spring audit');
-  assert.equal(body.audit_type, 'external');
-  assert.equal(body.start_date, '2026-03-01');
-  assert.equal(body.end_date, null);
-  assert.deepEqual(body.documents, []);
-  assert.deepEqual(body.clauses.sort(), ['k4', 'k41']);
-  assert.deepEqual(body.controls, ['c1']);
-  await settle(() => ui.el('status').textContent === 'Audit created');
-  ui.el('cancelCreate').click();
-  assert.equal(ui.el('createCard').style.display, 'none');
-});
-
-test('scope catalogue failures are shown in the create form and the new=1 link opens it', async (t) => {
-  const { ui } = await auditsPage(t, { query: '&new=1', scopeFail: true });
-  await settle(() => /Graph offline/.test(ui.el('newClausesList').textContent));
-  assert.equal(ui.el('newClausesList').querySelector('i'), null);
-  const rejected = await auditsPage(t, { postFail: true });
-  rejected.ui
-    .el('createForm')
-    .dispatchEvent(new rejected.ui.window.Event('submit', { cancelable: true }));
-  await settle(() => rejected.ui.el('status').textContent === 'Failed: Error: Rejected');
-});
-
 test('audit readers cannot create or delete audits or schedules', async (t) => {
   const { ui, state } = await auditsPage(t, { me: { can_view_audits: true } });
   await settle(() => ui.el('scheduledRows').querySelector('td:not([colspan])'));
@@ -494,32 +425,6 @@ test('attendee and document lookups degrade with warnings', async (t) => {
   );
 });
 
-test('unticking a clause leaves the create scope, and without a framework no catalogue is fetched', async (t) => {
-  const { ui } = await auditsPage(t);
-  ui.el('showCreate').click();
-  await settle(() => ui.document.querySelector('[data-new-clause-id="k41"]'));
-  const clause = ui.document.querySelector('[data-new-clause-id="k41"]');
-  clause.checked = true;
-  clause.dispatchEvent(new ui.window.Event('change'));
-  assert.equal(ui.el('newClauseCount').textContent, '1 clauses');
-  assert.equal(ui.el('newControlCount').textContent, '1 controls');
-  clause.checked = false;
-  clause.dispatchEvent(new ui.window.Event('change'));
-  assert.equal(ui.el('newClauseCount').textContent, '0 clauses');
-  // The linked control stays ticked until the auditor unticks it.
-  assert.equal(ui.el('newControlCount').textContent, '1 controls');
-
-  const unscoped = await auditsPage(t, { vendor: { getCurrentFramework: () => '' } });
-  unscoped.ui.el('showCreate').click();
-  await new Promise((r) => setTimeout(r, 20));
-  assert.equal(unscoped.ui.el('createCard').style.display, '');
-  assert.equal(
-    unscoped.ui.calls.some((c) => c.url.startsWith('/api/v1/controls')),
-    false,
-  );
-  assert.equal(unscoped.ui.el('newClausesList').querySelector('input'), null);
-});
-
 test('a refused audit or template deletion is reported and the row stays', async (t) => {
   const { ui, state } = await auditsPage(t, {
     removeFail: true,
@@ -562,4 +467,23 @@ test('a schedule with a malformed end or until date is not sent, and a refused o
   await settle(() => ui.el('status').textContent === 'Failed: Error: Rejected');
   assert.equal(state.posted[0].path, '/api/v1/audits/scheduled');
   assert.equal(ui.el('schedTitle').value, 'Supplier review');
+});
+
+test('starting an audit opens the wizard, and older links to the register go there too', async (t) => {
+  const { ui } = await auditsPage(t);
+  assert.equal(ui.el('showCreate').getAttribute('href'), '/audit-wizard.html');
+  assert.equal(ui.el('createCard'), null);
+
+  const replaced = [];
+  const location = { hash: '', replace: (url) => replaced.push(url) };
+  await auditsPage(t, { query: '&new=1', globals: { location } });
+  assert.deepEqual(replaced, ['/audit-wizard.html?framework=A']);
+
+  const reader = { hash: '', replace: (url) => replaced.push(url) };
+  await auditsPage(t, {
+    query: '&new=1',
+    me: { can_view_audits: true },
+    globals: { location: reader },
+  });
+  assert.equal(replaced.length, 1, 'readers stay on the register');
 });

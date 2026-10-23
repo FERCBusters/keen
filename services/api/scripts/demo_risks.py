@@ -1,6 +1,6 @@
 """Fictional risk register: CIA triad risks and general risks, with treatments.
 
-Ratings follow KEEN's 5x5 register; the score columns derive from them as the
+Ratings follow Keen's 5x5 register; the score columns derive from them as the
 application derives them. Control links name explicit references per
 framework; a framework the run does not seed is left out.
 """

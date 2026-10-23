@@ -46,7 +46,7 @@ test('initial view stays compact and selects only frameworks with links', async 
   assert.equal(ui.el('crossFrameworkLinks').querySelectorAll('a').length, 0);
   assert.deepEqual(
     [...ui.el('crossFrameworkView').options].map((o) => o.textContent),
-    ['Choose framework…', 'Alpha (2)', 'Beta (1)'],
+    ['Choose framework', 'Alpha (2)', 'Beta (1)'],
   );
   ui.choose('B');
   assert.equal(ui.el('crossFrameworkLinks').querySelectorAll('a').length, 1);
@@ -67,7 +67,7 @@ test('large frameworks paginate and preserve selection after refresh/removal', a
   ui.browser.update(links.slice(0, 10));
   assert.equal(ui.el('crossFrameworkView').value, 'A');
   assert.equal(ui.el('crossFrameworkPager').hidden, true);
-  assert.match(ui.el('crossFrameworkSummary').textContent, /1–10 of 10/);
+  assert.match(ui.el('crossFrameworkSummary').textContent, /1-10 of 10/);
   ui.browser.update([link(1, 'B')]);
   assert.equal(ui.el('crossFrameworkView').value, '');
   assert.equal(ui.el('crossFrameworkLinks').querySelectorAll('a').length, 0);

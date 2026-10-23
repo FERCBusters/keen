@@ -113,10 +113,10 @@ function createModal(id, config) {
           <div class="keen-filter-pill-toolbar mb-3">
             <div class="input-group input-group-sm">
               <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
-              <input type="search" class="form-control keen-filter-pill-search" placeholder="${esc(config.searchPlaceholder || 'Filter values…')}">
+              <input type="search" class="form-control keen-filter-pill-search" placeholder="${esc(config.searchPlaceholder || 'Filter values')}">
             </div>
             <div class="d-flex flex-wrap align-items-center gap-2">
-              <span class="small text-secondary keen-filter-pill-modal-summary">—</span>
+              <span class="small text-secondary keen-filter-pill-modal-summary">-</span>
               <button type="button" class="btn btn-sm btn-outline-secondary keen-filter-pill-modal-clear">Clear all</button>
             </div>
           </div>
@@ -166,7 +166,7 @@ function buildInstance(el, config = {}) {
       emptyText: 'All values',
       emptySelectedText: 'No filters selected. All values are included.',
       noMatchText: 'No values match your filter.',
-      searchPlaceholder: 'Filter values…',
+      searchPlaceholder: 'Filter values',
       ...config,
     },
   };

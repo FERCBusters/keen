@@ -473,7 +473,7 @@ def _find_pages_by_slug_regex(
     """Find BookStack pages whose page slug matches a configured regex.
 
     BookStack's page API supports exact field filters well, but arbitrary regex
-    matching is KEEN-side logic. Limit the scan to the most specific configured
+    matching is Keen-side logic. Limit the scan to the most specific configured
     book scope available so a broad regex does not need to enumerate the whole
     instance unless the config explicitly has no book scope.
     """
@@ -901,7 +901,7 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
                     if pm.match_slug_regex:
                         # Regex page-slug mappings can match multiple pages. There is no
                         # generic BookStack regex filter, so list within the narrowest
-                        # available book scope and apply the regex in KEEN.
+                        # available book scope and apply the regex in Keen.
                         scopes: list[tuple[Optional[int], Optional[str]]] = []
                         if pm.match_book_id is not None or pm.match_book_slug:
                             scopes = [(pm.match_book_id, pm.match_book_slug)]

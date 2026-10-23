@@ -65,7 +65,7 @@ function applicabilityLabel(value) {
 function applicabilityShort(value) {
   if (value === 'applicable') return 'A';
   if (value === 'partially_applicable') return 'P';
-  return '—';
+  return '-';
 }
 
 function applicabilityCell(value) {
@@ -74,7 +74,7 @@ function applicabilityCell(value) {
     return `<span class="badge badge-soft" title="${esc(label)}">A</span>`;
   if (value === 'partially_applicable')
     return `<span class="badge text-bg-warning" title="${esc(label)}">P</span>`;
-  return `<span class="small-muted" title="${esc(label)}">—</span>`;
+  return `<span class="small-muted" title="${esc(label)}">-</span>`;
 }
 
 function scopeBadge(control) {
@@ -102,7 +102,7 @@ function clauseLink(clause) {
 function riskLink(risk) {
   const href = withFramework(`/risk.html?id=${encodeURIComponent(risk.id)}`, framework);
   const label =
-    [risk.asset, shorten(risk.threat_summary || '', 60)].filter(Boolean).join(' – ') || 'Risk';
+    [risk.asset, shorten(risk.threat_summary || '', 60)].filter(Boolean).join(' - ') || 'Risk';
   return `<a href="${esc(href)}">${esc(label)}</a>`;
 }
 
@@ -119,12 +119,12 @@ function interestedPartyLink(item) {
     `/interested_party.html?id=${encodeURIComponent(item.id)}`,
     item.framework || framework,
   );
-  return `<a href="${esc(href)}">${esc(item.name?.name || 'Interested Party')}</a>`;
+  return `<a href="${esc(href)}">${esc(item.name?.name || 'Interested party')}</a>`;
 }
 
 function badgeList(items, labelKey = 'ref', urlFn = null) {
   const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">—</span>';
+  if (!arr.length) return '<span class="small-muted">-</span>';
   return arr
     .map((it) => {
       const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
@@ -157,7 +157,7 @@ function documentLink(item) {
     return `<a href="${esc(safeExternalHref(item.external_url) || '#')}" target="_blank" rel="noopener noreferrer">External URL</a>`;
   if (item?.has_file)
     return `<a href="/api/v1/isms/documents/${encodeURIComponent(item.id)}/file" target="_blank" rel="noopener noreferrer">${esc(item.filename || 'Uploaded file')}</a>`;
-  return '<span class="small-muted">—</span>';
+  return '<span class="small-muted">-</span>';
 }
 
 function effectivenessMeasureLink(item) {
@@ -186,7 +186,7 @@ function effectivenessLatestValue(item) {
 }
 
 function relevanceBadge(rel) {
-  const label = rel?.label || '—';
+  const label = rel?.label || '-';
   const code = rel?.code || '';
   let cls = 'text-bg-light';
   if (code === 'high') cls = 'text-bg-danger';
@@ -226,7 +226,7 @@ function renderControls() {
       <td class="soa-sticky-col fw-semibold" data-sort="${esc(c.ref || '')}">${controlLink(c)}</td>
       <td class="wrap">${esc(c.title || '')}</td>
       <td>${scopeBadge(c)}</td>
-      <td class="small-muted">${esc(c.justification || '—')}</td>
+      <td class="small-muted">${esc(c.justification || '-')}</td>
       ${clauses.map((clause) => `<td class="text-center" data-sort="${esc(applicabilityShort(links[clause.id]))}">${applicabilityCell(links[clause.id])}</td>`).join('')}
     </tr>`;
     })
@@ -263,7 +263,7 @@ function renderClauses() {
       return `<tr>
       <td class="soa-sticky-col fw-semibold">${clauseLink(clause)}</td>
       <td class="wrap">${esc(clause.title || '')}</td>
-      <td>${titledLinksHtml(clause.evidence_mappings || [], { title: 'Open evidence mapping', empty: '<span class="small-muted">—</span>' })}</td>
+      <td>${titledLinksHtml(clause.evidence_mappings || [], { title: 'Open evidence mapping', empty: '<span class="small-muted">-</span>' })}</td>
       ${controls.map((control) => `<td class="text-center" data-sort="${esc(applicabilityShort(links[control.id]))}">${applicabilityCell(links[control.id])}</td>`).join('')}
     </tr>`;
     })
@@ -308,12 +308,12 @@ function renderRisks() {
             (c) =>
               `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`,
           )
-          .join('') || '<span class="small-muted">—</span>';
+          .join('') || '<span class="small-muted">-</span>';
       return `<tr>
       <td>${riskLink(r)}</td>
-      <td>${esc(r.category?.name || '—')}</td>
-      <td>${esc(r.subcategory?.name || '—')}</td>
-      <td>${esc((r.risk_types || []).join(', ') || '—')}</td>
+      <td>${esc(r.category?.name || '-')}</td>
+      <td>${esc(r.subcategory?.name || '-')}</td>
+      <td>${esc((r.risk_types || []).join(', ') || '-')}</td>
       <td class="wrap">${esc(shorten(r.threat_summary || '', 220))}</td>
       <td class="text-end">${riskScoreBadge(r.risk_score)}</td>
       <td class="text-end">${riskScoreBadge(r.residual_risk_score)}</td>
@@ -359,9 +359,9 @@ function renderPestle() {
         (item.business_processes || [])
           .map(
             (x) =>
-              `<span class="badge badge-soft me-1 mb-1" title="${esc(x.relevance?.label || '—')}">${esc(x.business_process?.name || 'Business process')}</span>`,
+              `<span class="badge badge-soft me-1 mb-1" title="${esc(x.relevance?.label || '-')}">${esc(x.business_process?.name || 'Business process')}</span>`,
           )
-          .join('') || '<span class="small-muted">—</span>';
+          .join('') || '<span class="small-muted">-</span>';
       const clauses =
         (item.clauses || [])
           .map((x) => {
@@ -370,15 +370,15 @@ function renderPestle() {
               `/clause.html?id=${encodeURIComponent(c.id || '')}&tab=pestle`,
               c.framework || framework,
             );
-            return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(`${c.title || ''} · ${x.relevance?.label || '—'}`)}">${esc(c.ref || 'Clause')}</a>`;
+            return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(`${c.title || ''} · ${x.relevance?.label || '-'}`)}">${esc(c.ref || 'Clause')}</a>`;
           })
-          .join('') || '<span class="small-muted">—</span>';
+          .join('') || '<span class="small-muted">-</span>';
       return `<tr>
-      <td>${esc(item.type || '—')}</td>
-      <td>${esc(item.lens || '—')}</td>
+      <td>${esc(item.type || '-')}</td>
+      <td>${esc(item.lens || '-')}</td>
       <td class="wrap fw-semibold">${pestleLink(item)}</td>
       <td>${relevanceBadge(item.overall_relevance)}</td>
-      <td class="wrap small-muted">${esc(shorten(item.rationale || '', 220) || '—')}</td>
+      <td class="wrap small-muted">${esc(shorten(item.rationale || '', 220) || '-')}</td>
       <td>${processes}</td>
       <td>${clauses}</td>
     </tr>`;
@@ -398,7 +398,7 @@ function renderInterestedParties() {
 
   if (!soa.can_view_interested_parties) {
     interestedPartiesRows.innerHTML =
-      '<tr><td colspan="6" class="p-4 small-muted">You do not have permission to view Interested Parties.</td></tr>';
+      '<tr><td colspan="6" class="p-4 small-muted">You do not have permission to view interested parties.</td></tr>';
     return;
   }
 
@@ -424,21 +424,21 @@ function renderInterestedParties() {
             (c) =>
               `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=interested-parties`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`,
           )
-          .join('') || '<span class="small-muted">—</span>';
+          .join('') || '<span class="small-muted">-</span>';
       const comms =
         (item.communications || [])
-          .map((c) => `${esc(c.event || '')} • ${esc(c.when || '')} • ${esc(c.with_whom || '')}`)
-          .join('<br>') || '<span class="small-muted">—</span>';
+          .map((c) => `${esc(c.event || '')} · ${esc(c.when || '')} · ${esc(c.with_whom || '')}`)
+          .join('<br>') || '<span class="small-muted">-</span>';
       const methods =
         Array.from(new Set((item.communications || []).flatMap((c) => c.methods || [])))
           .map((m) => `<span class="badge badge-soft me-1 mb-1">${esc(m)}</span>`)
-          .join('') || '<span class="small-muted">—</span>';
+          .join('') || '<span class="small-muted">-</span>';
       const note = (item.note || '').trim()
         ? esc(shorten(item.note, 180))
-        : '<span class="small-muted">—</span>';
+        : '<span class="small-muted">-</span>';
       return `<tr>
       <td class="fw-semibold">${interestedPartyLink(item)}</td>
-      <td>${esc(item.nature?.name || '—')}</td>
+      <td>${esc(item.nature?.name || '-')}</td>
       <td class="wrap small-muted">${note}</td>
       <td>${controls}</td>
       <td class="small">${comms}</td>
@@ -449,7 +449,7 @@ function renderInterestedParties() {
 
   if (!rows.length) {
     interestedPartiesRows.innerHTML =
-      '<tr><td colspan="6" class="p-4 small-muted">No Interested Parties match.</td></tr>';
+      '<tr><td colspan="6" class="p-4 small-muted">No interested parties match.</td></tr>';
   }
 }
 
@@ -472,7 +472,7 @@ function renderIsmsObjectives() {
     rows
       .map(
         (o) =>
-          `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement || '', 180))}</div></td><td>${esc(o.metric || '—')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(o.completion_target_date || '—')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${ismsControlBadges(o.controls)}</td><td>${ismsClauseBadges(o.clauses)}</td></tr>`,
+          `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement || '', 180))}</div></td><td>${esc(o.metric || '-')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(o.completion_target_date || '-')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${ismsControlBadges(o.controls)}</td><td>${ismsClauseBadges(o.clauses)}</td></tr>`,
       )
       .join('') ||
     '<tr><td colspan="7" class="p-4 small-muted">No ISMS objectives match.</td></tr>';
@@ -497,7 +497,7 @@ function renderIsmsDocuments() {
     rows
       .map(
         (d) =>
-          `<tr><td class="fw-semibold wrap">${esc(d.title || 'Document')}</td><td>${esc(d.document_type || '—')}</td><td>${documentLink(d)}</td><td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '—')}</td><td>${ismsControlBadges(d.controls)}</td><td>${ismsClauseBadges(d.clauses)}</td></tr>`,
+          `<tr><td class="fw-semibold wrap">${esc(d.title || 'Document')}</td><td>${esc(d.document_type || '-')}</td><td>${documentLink(d)}</td><td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '-')}</td><td>${ismsControlBadges(d.controls)}</td><td>${ismsClauseBadges(d.clauses)}</td></tr>`,
       )
       .join('') || '<tr><td colspan="6" class="p-4 small-muted">No ISMS documents match.</td></tr>';
 }
@@ -525,8 +525,8 @@ function renderIsmsEffectiveness() {
     <td class="wrap fw-semibold">${effectivenessMeasureLink(item)}${item.description ? `<div class="small-muted mt-1">${esc(shorten(item.description || '', 180))}</div>` : ''}${item.metric_key ? `<div class="small-muted mt-1"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
     <td>${esc(item.source_type && item.source_type !== 'other' ? item.source_type : 'Other')}</td>
     <td class="wrap">${effectivenessLatestValue(item)}${Number(item.metric_entry_count || 0) ? `<div class="small-muted">${esc(String(item.metric_entry_count))} metric ${Number(item.metric_entry_count || 0) === 1 ? 'entry' : 'entries'}</div>` : ''}</td>
-    <td>${esc(item.target_display || '—')}</td>
-    <td>${esc(item.frequency || '—')}</td>
+    <td>${esc(item.target_display || '-')}</td>
+    <td>${esc(item.frequency || '-')}</td>
     <td>${userPillHtml(item.owner)}</td>
     <td>${ismsControlBadges(item.controls)}</td>
   </tr>`,
@@ -553,7 +553,7 @@ function renderIsmsOrgAssets() {
       assets
         .map(
           (a) =>
-            `<tr><td class="fw-semibold">${esc(a.asset || a.name || 'Asset')}</td><td>${esc(a.category?.name || a.category_name || '—')}</td><td>${esc(a.subcategory?.name || a.subcategory_name || '—')}</td><td>${esc(a.license || '—')}</td><td>${esc(a.owner_org_node?.name || '—')}</td><td>${esc(a.register_held_by_org_node?.name || '—')}</td><td>${ismsControlBadges(a.controls)}</td><td>${ismsClauseBadges(a.clauses)}</td></tr>`,
+            `<tr><td class="fw-semibold">${esc(a.asset || a.name || 'Asset')}</td><td>${esc(a.category?.name || a.category_name || '-')}</td><td>${esc(a.subcategory?.name || a.subcategory_name || '-')}</td><td>${esc(a.license || '-')}</td><td>${esc(a.owner_org_node?.name || '-')}</td><td>${esc(a.register_held_by_org_node?.name || '-')}</td><td>${ismsControlBadges(a.controls)}</td><td>${ismsClauseBadges(a.clauses)}</td></tr>`,
         )
         .join('') ||
       `<tr><td colspan="8" class="p-4 small-muted">${soa.can_view_isms ? 'No ISMS assets yet.' : 'You do not have permission to view ISMS.'}</td></tr>`;
@@ -568,7 +568,7 @@ function renderSwot() {
     (soa.swot_items || [])
       .map((item) => {
         const href = withFramework(`/swot.html?id=${encodeURIComponent(item.id)}`, framework);
-        const refs = (items, link) => (items || []).map(link).join(', ') || '—';
+        const refs = (items, link) => (items || []).map(link).join(', ') || '-';
         return `<tr><td><a href="${esc(href)}">${esc(item.title)}</a></td><td>${esc(item.kind)}</td><td>${esc(item.significance)}/5</td><td>${esc(String(item.status).replaceAll('_', ' '))}</td><td>${refs(item.controls, controlLink)}</td><td>${refs(item.clauses, clauseLink)}</td></tr>`;
       })
       .join('') ||
@@ -579,7 +579,7 @@ function renderAll() {
   const counts = soa.counts || {};
   if (meta) {
     const businessProcessCount = counts.isms_business_processes ?? counts.business_processes ?? 0;
-    meta.textContent = `${soa.framework || framework} • ${counts.controls || 0} controls • ${counts.clauses || 0} clauses • ${counts.risks || 0} CIA risks • ${counts.pestle || 0} PESTLE(E) items • ${businessProcessCount || 0} business processes • ${counts.interested_parties || 0} Interested Parties • ${counts.isms_objectives || 0} ISMS objectives • ${counts.isms_documents || 0} ISMS documents • ${counts.isms_effectiveness_measures || 0} effectiveness measures • ${counts.isms_assets || 0} assets`;
+    meta.textContent = `${soa.framework || framework} · ${counts.controls || 0} controls · ${counts.clauses || 0} clauses · ${counts.risks || 0} CIA risks · ${counts.pestle || 0} PESTLE(E) items · ${businessProcessCount || 0} business processes · ${counts.interested_parties || 0} interested parties · ${counts.isms_objectives || 0} ISMS objectives · ${counts.isms_documents || 0} ISMS documents · ${counts.isms_effectiveness_measures || 0} effectiveness measures · ${counts.isms_assets || 0} assets`;
   }
   renderSwot();
   renderControls();
@@ -611,7 +611,7 @@ async function load() {
         '<tr><td colspan="7" class="p-4 small-muted">Failed to load PESTLE(E) items.</td></tr>';
     if (interestedPartiesRows)
       interestedPartiesRows.innerHTML =
-        '<tr><td colspan="6" class="p-4 small-muted">Failed to load Interested Parties.</td></tr>';
+        '<tr><td colspan="6" class="p-4 small-muted">Failed to load interested parties.</td></tr>';
     if (ismsObjectivesRows)
       ismsObjectivesRows.innerHTML =
         '<tr><td colspan="7" class="p-4 small-muted">Failed to load ISMS objectives.</td></tr>';

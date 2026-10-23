@@ -284,7 +284,7 @@ test('factor management lists authenticators as text and removes one after confi
   });
   assert.equal(ui.el('manage').hidden, false);
   assert.equal(ui.el('verify').hidden, true);
-  assert.equal(ui.el('intro').textContent, 'Choose an authenticator for your local KEEN account.');
+  assert.equal(ui.el('intro').textContent, 'Choose an authenticator for your local Keen account.');
   assert.equal(ui.el('remaining').textContent, '3 recovery codes remaining.');
   assert.equal(ui.el('addTotp').hidden, true);
   const labels = [...ui.el('factors').querySelectorAll('span')].map((s) => s.textContent);

@@ -40,23 +40,23 @@ function fileHref(row) {
 function renderDocument(row) {
   documentRow = row || {};
   const title = documentRow.title || 'Policy / Process';
-  document.title = `Keen – ${title}`;
+  document.title = `Keen - ${title}`;
   $('documentTitle').textContent = title;
   $('documentMeta').textContent = [
     documentRow.document_type || 'document',
     documentRow.has_file ? 'uploaded file' : '',
     documentRow.external_url ? 'external URL' : '',
-    `updated ${fmtTs(documentRow.updated_at) || '—'}`,
+    `updated ${fmtTs(documentRow.updated_at) || '-'}`,
   ]
     .filter(Boolean)
-    .join(' • ');
+    .join(' · ');
   $('documentDescription').textContent = documentRow.description || 'No description recorded.';
   $('documentContentCard').hidden = !documentRow.content_html;
   $('documentContent').innerHTML = renderRichTextContent(documentRow.content_html);
-  $('documentTags').textContent = (documentRow.tags || []).join(', ') || '—';
-  $('documentType').textContent = documentRow.document_type || '—';
-  $('documentUpdated').textContent = fmtTs(documentRow.updated_at) || '—';
-  $('documentUploadedAt').textContent = fmtTs(documentRow.uploaded_at) || '—';
+  $('documentTags').textContent = (documentRow.tags || []).join(', ') || '-';
+  $('documentType').textContent = documentRow.document_type || '-';
+  $('documentUpdated').textContent = fmtTs(documentRow.updated_at) || '-';
+  $('documentUploadedAt').textContent = fmtTs(documentRow.uploaded_at) || '-';
   $('documentUploadedBy').innerHTML = userPillHtml(documentRow.uploaded_by);
   $('documentControls').innerHTML = controlBadges(documentRow.controls, framework);
   $('documentClauses').innerHTML = clauseBadges(documentRow.clauses, framework);
@@ -65,10 +65,10 @@ function renderDocument(row) {
   const file = fileHref(documentRow);
   $('documentUrl').innerHTML = external
     ? `<a href="${esc(safeExternalHref(external) || '#')}" target="_blank" rel="noopener noreferrer">${esc(external)}</a>`
-    : '<span class="small-muted">—</span>';
+    : '<span class="small-muted">-</span>';
   $('documentFile').innerHTML = file
     ? `<a href="${esc(file)}" target="_blank" rel="noopener noreferrer">${esc(documentRow.filename || 'Uploaded file')}</a>`
-    : '<span class="small-muted">—</span>';
+    : '<span class="small-muted">-</span>';
 
   const open = $('openDocumentLink');
   if (open) {
@@ -132,4 +132,6 @@ window.addEventListener('hashchange', () =>
 load();
 
 import { mountSwotRelated } from '/pages/swot-related.js';
+import { mountStoryRelated } from '/pages/story-related.js';
 mountSwotRelated('document', new URLSearchParams(location.search).get('id'));
+mountStoryRelated({ me, kind: 'document', id: new URLSearchParams(location.search).get('id') });

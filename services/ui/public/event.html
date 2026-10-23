@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Keen – Event</title>
+  <title>Keen - Event</title>
   <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css"/>
@@ -18,12 +18,12 @@
       <div>
         <div class="small-muted mb-1"><a class="link-subtle" href="/events.html">← Events</a></div>
         <h1 class="h4 mb-1" id="summary">Event</h1>
-        <div class="small-muted" id="meta">—</div>
+        <div class="small-muted" id="meta">-</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
         <a id="btnCreateMapping" class="btn btn-outline-primary" hidden>Create mapping from this event</a>
         <button id="btnEditDiary" class="btn btn-outline-primary" style="display:none;">Edit diary entry</button>
-        <button id="btnCreateIncident" data-feature="incidents" class="btn btn-warning" style="display:none;"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Create Incident</button>
+        <button id="btnCreateIncident" data-feature="incidents" class="btn btn-warning" style="display:none;"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Create incident</button>
         <button id="btnSampleAudit" data-feature="event_sampling" class="btn btn-success" style="display:none;"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i>Sample into audit</button>
         <button id="btnPdf" data-feature="event_sampling" class="btn btn-primary">Sample as PDF evidence</button>
         <button id="btnZip" class="btn btn-outline-primary" style="display:none;">Download all artifacts as evidence</button>
@@ -32,117 +32,160 @@
 
     <div id="status" class="alert alert-info" style="display:none;"></div>
 
-    <div id="incidentsCard" class="card mb-3 no-print" style="display:none;">
-      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-        <div>
-          <div class="fw-bold">Incident references</div>
-          <div class="small-muted">External incidents that were created from this event.</div>
-        </div>
-      </div>
-      <div class="card-body" id="incidents">—</div>
-    </div>
+    <ul class="nav nav-tabs mb-3 no-print" id="eventTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="eventSnapshotTab" data-bs-toggle="tab" data-bs-target="#eventSnapshotPane" type="button" role="tab" aria-controls="eventSnapshotPane" aria-selected="true">Evidence snapshot</button>
+      </li>
+      <li class="nav-item" role="presentation" id="eventStoriesTabItem" hidden>
+        <button class="nav-link" id="eventStoriesTab" data-feature="stories" data-bs-toggle="tab" data-bs-target="#eventStoriesPane" type="button" role="tab" aria-controls="eventStoriesPane" aria-selected="false">Stories <span id="eventStoriesCount" class="badge text-bg-light" hidden></span></button>
+      </li>
+      <li class="nav-item" role="presentation" id="eventAuditsTabItem" hidden>
+        <button class="nav-link" id="eventAuditsTab" data-feature="audits" data-bs-toggle="tab" data-bs-target="#eventAuditsPane" type="button" role="tab" aria-controls="eventAuditsPane" aria-selected="false">Audits <span id="eventAuditsCount" class="badge text-bg-light" hidden></span></button>
+      </li>
+      <li class="nav-item" role="presentation" id="eventIncidentsTabItem" hidden>
+        <button class="nav-link" id="eventIncidentsTab" data-feature="incidents" data-bs-toggle="tab" data-bs-target="#eventIncidentsPane" type="button" role="tab" aria-controls="eventIncidentsPane" aria-selected="false">Incidents <span id="eventIncidentsCount" class="badge text-bg-light" hidden></span></button>
+      </li>
+      <li class="nav-item" role="presentation" id="eventQuestionsTabItem" data-feature="questions">
+        <button class="nav-link" id="eventQuestionsTab" data-bs-toggle="tab" data-bs-target="#eventQuestionsPane" type="button" role="tab" aria-controls="eventQuestionsPane" aria-selected="false">Questions <span id="eventQuestionsCount" class="badge text-bg-light" hidden></span></button>
+      </li>
+    </ul>
 
-    <div id="auditSamplesCard" data-feature="audits" class="card mb-3 no-print" style="display:none;">
-      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-        <div>
-          <div class="fw-bold">Audit sampling</div>
-          <div class="small-muted">Audits that already include this event as sampled evidence.</div>
-        </div>
-      </div>
-      <div class="card-body" id="auditSamples">—</div>
-    </div>
-
-    <div class="card mb-3" id="evidenceCard">
-      <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-        <div>
-          <div class="fw-bold">Evidence snapshot</div>
-          <div class="small-muted">This view is designed to be printed or captured as a screenshot for auditors.</div>
-        </div>
-        <div class="d-flex flex-wrap gap-2 align-items-center no-print">
-          <a id="openSource" class="btn btn-sm btn-outline-primary" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open in source ↗</a>
-          <a id="bySource" class="btn btn-sm btn-outline-primary" href="#">More from this source</a>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="row g-3">
-          <div class="col-12 col-lg-7">
-            <div class="mb-2"><span class="small-muted">Source:</span> <span id="srcBadge"></span></div>
-            <div class="mb-2"><span class="small-muted">Timestamp:</span> <span id="ts"></span></div>
-            <div class="mb-2"><span class="small-muted">System:</span> <span id="system"></span></div>
-            <div class="mb-2"><span class="small-muted">Actor:</span> <span id="actor"></span></div>
-            <div class="mb-2"><span class="small-muted">Action:</span> <span id="action"></span></div>
-            <div class="mb-2"><span class="small-muted">Outcome:</span> <span id="outcome"></span></div>
-            <div class="mb-2"><span class="small-muted">Severity:</span> <span id="severity"></span></div>
-          </div>
-          <div class="col-12 col-lg-5">
-            <div class="row g-3">
-              <div class="col-12 col-md-6">
-                <div class="fw-bold mb-2">Mapped controls</div>
-                <div id="controls" class="mb-2"></div>
-              </div>
-              <div class="col-12 col-md-6">
-                <div class="fw-bold mb-2">Rationale</div>
-                <div id="rationale" class="mb-2 small-muted">—</div>
-              </div>
+    <div class="tab-content" id="eventTabContent">
+      <section class="tab-pane fade show active" id="eventSnapshotPane" role="tabpanel" aria-labelledby="eventSnapshotTab" tabindex="0">
+        <div class="card mb-3" id="evidenceCard">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Evidence snapshot</div>
+              <div class="small-muted">This view is designed to be printed or captured as a screenshot for auditors.</div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center no-print">
+              <a id="openSource" class="btn btn-sm btn-outline-primary" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open in source ↗</a>
+              <a id="bySource" class="btn btn-sm btn-outline-primary" href="#">More from this source</a>
             </div>
           </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-12 col-lg-7">
+                <div class="mb-2"><span class="small-muted">Source:</span> <span id="srcBadge"></span></div>
+                <div class="mb-2"><span class="small-muted">Timestamp:</span> <span id="ts"></span></div>
+                <div class="mb-2"><span class="small-muted">System:</span> <span id="system"></span></div>
+                <div class="mb-2"><span class="small-muted">Actor:</span> <span id="actor"></span></div>
+                <div class="mb-2"><span class="small-muted">Action:</span> <span id="action"></span></div>
+                <div class="mb-2"><span class="small-muted">Outcome:</span> <span id="outcome"></span></div>
+                <div class="mb-2"><span class="small-muted">Severity:</span> <span id="severity"></span></div>
+              </div>
+              <div class="col-12 col-lg-5">
+                <div class="row g-3">
+                  <div class="col-12 col-md-6">
+                    <div class="fw-bold mb-2">Mapped controls</div>
+                    <div id="controls" class="mb-2"></div>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <div class="fw-bold mb-2">Rationale</div>
+                    <div id="rationale" class="mb-2 small-muted">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="suggestedControls" class="mt-3 no-print" hidden>
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <div class="fw-bold">Suggested controls</div>
+                <span class="small-muted" id="suggestedControlsMeta"></span>
+                <button id="suggestedControlsLoad" class="btn btn-sm btn-outline-primary ms-auto" type="button" hidden>Suggest controls</button>
+              </div>
+              <div id="suggestedControlsList" class="list-group mb-2"></div>
+              <div class="d-flex flex-wrap align-items-center gap-2" id="suggestedControlsActions" hidden>
+                <a id="suggestedControlsPropose" class="btn btn-sm btn-outline-primary" href="#">Propose a rule with the ticked controls</a>
+                <span class="small-muted">Opens the mapping editor with this event as the draft and the ticked controls as targets. Nothing is mapped until the rule is saved.</span>
+              </div>
+            </div>
+
+            <hr class="my-3">
+
+            <div id="diaryBlock" style="display:none;"></div>
+
+            <div id="imagePreviews" class="mb-3" style="display:none;"></div>
+
+            <div class="fw-bold mb-2">Artifacts</div>
+            <div id="artifacts" class="small-muted">-</div>
+
+          </div>
         </div>
 
-        <div id="suggestedControls" class="mt-3 no-print" hidden>
-          <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-            <div class="fw-bold">Suggested controls</div>
-            <span class="small-muted" id="suggestedControlsMeta"></span>
-            <button id="suggestedControlsLoad" class="btn btn-sm btn-outline-primary ms-auto" type="button" hidden>Suggest controls</button>
+
+        <div class="card mb-3">
+          <div class="card-header">
+            <div class="fw-bold">Normalised event payload</div>
+            <div class="small-muted">What Keen stored after ingestion + redaction.</div>
           </div>
-          <div id="suggestedControlsList" class="list-group mb-2"></div>
-          <div class="d-flex flex-wrap align-items-center gap-2" id="suggestedControlsActions" hidden>
-            <a id="suggestedControlsPropose" class="btn btn-sm btn-outline-primary" href="#">Propose a rule with the ticked controls</a>
-            <span class="small-muted">Opens the mapping editor with this event as the draft and the ticked controls as targets. Nothing is mapped until the rule is saved.</span>
+          <div class="card-body">
+            <pre id="normalized" class="pretty mono mb-0"></pre>
           </div>
         </div>
 
-        <hr class="my-3">
 
-        <div id="diaryBlock" style="display:none;"></div>
-
-        <div id="imagePreviews" class="mb-3" style="display:none;"></div>
-
-        <div class="fw-bold mb-2">Artifacts</div>
-        <div id="artifacts" class="small-muted">—</div>
-
-        <hr class="my-3">
-
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-          <div>
-            <div class="fw-bold">Questions</div>
-            <div class="small-muted">Auditor questions and responses associated with this evidence.</div>
+        <details class="card mb-3" id="rawPointerCard">
+          <summary class="card-header">
+            <span class="fw-bold">Raw pointer</span>
+            <span class="small-muted d-block">Linkage back to the original provider record (IDs, URLs, etc).</span>
+          </summary>
+          <div class="card-body">
+            <pre id="raw" class="pretty mono mb-0"></pre>
           </div>
-          <div class="no-print">
-            <button id="btnAskQuestion" data-feature="questions" class="btn btn-sm btn-outline-primary" type="button" style="display:none;"><i class="bi bi-chat-left-text me-1" aria-hidden="true"></i>Ask a question about this event</button>
+        </details>
+      </section>
+
+      <section class="tab-pane fade" id="eventStoriesPane" role="tabpanel" aria-labelledby="eventStoriesTab" tabindex="0">
+        <div id="storiesCard" data-feature="stories" class="card mb-3 no-print" style="display:none;">
+          <div class="card-header">
+            <div class="fw-bold">Stories</div>
+            <div class="small-muted">Stories that include this event, with the records around it.</div>
+          </div>
+          <div class="card-body" id="eventStories"></div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="eventAuditsPane" role="tabpanel" aria-labelledby="eventAuditsTab" tabindex="0">
+        <div id="auditSamplesCard" data-feature="audits" class="card mb-3 no-print" style="display:none;">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Audit sampling</div>
+              <div class="small-muted">Audits that already include this event as sampled evidence.</div>
+            </div>
+          </div>
+          <div class="card-body" id="auditSamples">-</div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="eventIncidentsPane" role="tabpanel" aria-labelledby="eventIncidentsTab" tabindex="0">
+        <div id="incidentsCard" class="card mb-3 no-print" style="display:none;">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Incident references</div>
+              <div class="small-muted">External incidents that were created from this event.</div>
+            </div>
+          </div>
+          <div class="card-body" id="incidents">-</div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="eventQuestionsPane" role="tabpanel" aria-labelledby="eventQuestionsTab" tabindex="0">
+        <div id="questionsCard" class="card mb-3" data-feature="questions">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Questions</div>
+              <div class="small-muted">Auditor questions and responses associated with this evidence.</div>
+            </div>
+            <div class="no-print">
+              <button id="btnAskQuestion" class="btn btn-sm btn-outline-primary" type="button" style="display:none;"><i class="bi bi-chat-left-text me-1" aria-hidden="true"></i>Ask a question about this event</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="questions" class="small-muted">-</div>
           </div>
         </div>
-        <div id="questions" data-feature="questions" class="small-muted">—</div>
-      </div>
-    </div>
-
-    <div class="card mb-3">
-      <div class="card-header">
-        <div class="fw-bold">Normalized event payload</div>
-        <div class="small-muted">What Keen stored after ingestion + redaction.</div>
-      </div>
-      <div class="card-body">
-        <pre id="normalized" class="pretty mono mb-0"></pre>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <div class="fw-bold">Raw pointer</div>
-        <div class="small-muted">Linkage back to the original provider record (IDs, URLs, etc).</div>
-      </div>
-      <div class="card-body">
-        <pre id="raw" class="pretty mono mb-0"></pre>
-      </div>
+      </section>
     </div>
 
     <!-- Printed PDF header (populated from KEEN_SAMPLE_PDF_HEADER via /api/v1/me) -->
@@ -205,7 +248,6 @@
   </div>
 
   <!-- Evidence PDF options (orientation) -->
-  <!-- Evidence PDF options (orientation) -->
   <div class="modal fade" id="pdfOptionsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
       <div class="modal-content">
@@ -218,7 +260,7 @@
 
           <div id="pdfPreviewStatus" class="pdf-preview-status small-muted mb-2" style="display:none;">
             <span class="spinner-border spinner-border-sm align-text-bottom me-2" role="status" aria-hidden="true"></span>
-            Generating previews…
+            Generating previews
           </div>
 
           <div class="row g-3 pdf-preview-grid">
@@ -273,7 +315,7 @@
           <div class="mb-3">
             <label class="form-label small-muted mb-1">Audit</label>
             <select id="auditSampleSelect" class="form-select"></select>
-            <div class="form-text">Only Open and In progress audits can receive sampled evidence. Start an Audit if none are available.</div>
+            <div class="form-text">Only open and in-progress audits can receive sampled evidence. Start an audit if none are available.</div>
           </div>
           <div class="mb-3">
             <label class="form-label small-muted mb-1">Audit notes for this evidence</label>
@@ -285,7 +327,7 @@
           </div>
         </div>
         <div class="modal-footer">
-          <a id="auditSampleCreate" class="btn btn-outline-primary me-auto" href="/audits.html?new=1">Start an Audit</a>
+          <a id="auditSampleCreate" class="btn btn-outline-primary me-auto" href="/audit-wizard.html">Start an audit</a>
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
           <button id="auditSampleSubmit" type="button" class="btn btn-primary">Sample into audit</button>
         </div>
@@ -317,7 +359,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button id="incidentSubmit" type="button" class="btn btn-warning">Create Incident</button>
+          <button id="incidentSubmit" type="button" class="btn btn-warning">Create incident</button>
         </div>
       </div>
     </div>
@@ -336,7 +378,7 @@
           <form id="questionForm" data-feature="questions">
             <div class="mb-3">
               <label class="form-label small-muted mb-1">Question</label>
-              <textarea id="questionBody" class="form-control" rows="4" placeholder="E.g. What was this about?" required></textarea>
+              <textarea id="questionBody" class="form-control" rows="4" placeholder="e.g. What was this about?" required></textarea>
             </div>
             <div class="mb-2">
               <label class="form-label small-muted mb-1">Attachments (optional)</label>

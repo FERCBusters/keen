@@ -9,7 +9,7 @@ const EMBEDDED_VIZ_MODE_OPTIONS = {
   graph_clause_events: 'Graph: sources × clauses',
   heatmap_clause_events: 'Heatmap: sources × clauses',
   graph_clause_control: 'Graph: clauses × controls',
-  histogram: 'Histogram: Events over time',
+  histogram: 'Histogram: events over time',
 };
 
 const EMBEDDED_VIZ_MODE_ORDER = [
@@ -69,7 +69,7 @@ export function ensureEmbeddedVisualisationMarkup() {
                 <div class="fw-bold" id="vizTitle">Visualisation</div>
                 <select id="vizSelect" class="form-select form-select-sm" style="width:auto;">${options}</select>
               </div>
-              <div class="small-muted" id="vizSubtitle">Loading visualisation…</div>
+              <div class="small-muted" id="vizSubtitle">Loading visualisation</div>
               <div class="small text-body-secondary mt-1" id="vizCaption" role="note"></div>
             </div>
           </div>
@@ -149,11 +149,11 @@ export function ensureEmbeddedVisualisationMarkup() {
               <div class="d-flex flex-wrap gap-2 align-items-end">
                 <div class="me-auto"><strong>Story from this window</strong><div class="small-muted" data-window></div></div>
                 <label class="small-muted">Title<input class="form-control form-control-sm d-block" data-window-title maxlength="256" style="width:20rem;"></label>
-                <label class="small-muted">What happened here?<textarea class="form-control form-control-sm d-block" data-window-note rows="2" maxlength="4000" style="width:24rem;" placeholder="Your annotation becomes the story’s first note"></textarea></label>
+                <label class="small-muted">What happened here?<textarea class="form-control form-control-sm d-block" data-window-note rows="2" maxlength="4000" style="width:24rem;" placeholder="Your annotation becomes the story's first note"></textarea></label>
                 <button class="btn btn-sm btn-primary" type="button" data-window-create>Create story</button>
                 <button class="btn btn-sm btn-outline-secondary" type="button" data-window-cancel>Cancel</button>
               </div>
-              <div class="small-muted mt-2">Right-click a bar to pick that bar alone, or zoom into a range first. The story takes the window’s events under the current filters, newest first, up to 200.</div>
+              <div class="small-muted mt-2">Right-click a bar to pick that bar alone, or zoom into a range first. The story takes the window's events under the current filters, newest first, up to 200.</div>
             </div>
             <div id="vizWrap">
               <svg id="viz"></svg>
@@ -176,7 +176,7 @@ export function ensureEmbeddedVisualisationMarkup() {
               <div class="table-responsive">
                 <table class="table table-sm mb-0" data-sortable>
                   <thead><tr><th id="topSourcesColHeader">Source</th><th id="topSourcesCountHeader" class="text-end">Mapped events</th></tr></thead>
-                  <tbody id="topSources"><tr class="table-loading-row"><td colspan="2" class="p-3"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading sources…</span></div></td></tr></tbody>
+                  <tbody id="topSources"><tr class="table-loading-row"><td colspan="2" class="p-3"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading sources</span></div></td></tr></tbody>
                 </table>
               </div>
             </div>
@@ -185,7 +185,7 @@ export function ensureEmbeddedVisualisationMarkup() {
               <div class="table-responsive">
                 <table class="table table-sm mb-0" data-sortable>
                   <thead><tr><th id="topControlsColHeader">Control</th><th id="topControlsCountHeader" class="text-end">Mapped events</th></tr></thead>
-                  <tbody id="topControls"><tr class="table-loading-row"><td colspan="2" class="p-3"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading controls…</span></div></td></tr></tbody>
+                  <tbody id="topControls"><tr class="table-loading-row"><td colspan="2" class="p-3"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading controls</span></div></td></tr></tbody>
                 </table>
               </div>
             </div>
@@ -206,10 +206,10 @@ export function ensureEmbeddedVisualisationMarkup() {
           <div id="coverageGapsPanel" class="collapse">
             <div class="card-body">
               <div class="d-flex gap-2 align-items-center mb-2 no-print">
-                <input id="gapQ" class="form-control form-control-sm" type="text" placeholder="Filter controls…">
+                <input id="gapQ" class="form-control form-control-sm" type="text" placeholder="Filter controls">
                 <button id="vizReloadGaps" type="button" class="btn btn-sm btn-outline-primary">Reload</button>
               </div>
-              <div id="gaps" class="small-muted"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading controls…</span></div></div>
+              <div id="gaps" class="small-muted"><div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>Loading controls</span></div></div>
             </div>
           </div>
         </div>`

@@ -35,6 +35,9 @@ export async function page(
 ) {
   const calls = [],
     unexpected = [];
+  // Requests the page has started and not yet seen answered, so a test can
+  // wait for pages that load their sections in parallel.
+  let inflight = 0;
   const route = (method, handler) => async (url, body) => {
     calls.push({ method, url, body });
     if (!handler) throw new Error(`Unexpected ${method} ${url}`);
@@ -42,11 +45,14 @@ export async function page(
     // Shared navbar catalog, independent of the page's API fixture.
     if (method === 'GET' && parsed.pathname === '/api/v1/frameworks')
       return { items: frameworks, default: 'A' };
+    inflight += 1;
     try {
       return await handler(parsed, body);
     } catch (error) {
       if (String(error).includes('Unexpected ')) unexpected.push(String(error));
       throw error;
+    } finally {
+      inflight -= 1;
     }
   };
   let win;
@@ -148,7 +154,12 @@ export async function page(
     ui.close();
     assert.deepEqual(unexpected, [], 'Every API request must have an explicit fixture');
   });
-  return { ...ui, calls, el: (id) => ui.document.getElementById(id) };
+  return {
+    ...ui,
+    calls,
+    idle: () => inflight === 0,
+    el: (id) => ui.document.getElementById(id),
+  };
 }
 
 // Chooses `value` in the pill picker for the select `id`, as a user clicking

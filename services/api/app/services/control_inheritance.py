@@ -1,11 +1,12 @@
 """One-hop evidence inheritance, starting from evidence before joining OSA memberships."""
 
-from sqlalchemy import or_, select
+from sqlalchemy import false, select
 from sqlalchemy.orm import aliased
 
 from app.db.models import (
     ControlItem,
     CrossFrameworkControlLink,
+    Event,
     Mapping,
     OsaControlMapping,
 )
@@ -26,9 +27,10 @@ def enabled_control_ids(db):
     return select(ControlItem.id).where(ControlItem.framework_slug.in_(enabled))
 
 
-def source_ids_for_control(control_id, db=None):
+def source_ids_for_controls(control_ids, db=None):
+    """Controls whose evidence any of the given controls inherits, one hop away."""
     explicit = select(CrossFrameworkControlLink.source_control_id).where(
-        CrossFrameworkControlLink.target_control_id == control_id
+        CrossFrameworkControlLink.target_control_id.in_(control_ids)
     )
     source, target, sc, tc = osa_pairs()
     osa = (
@@ -39,7 +41,7 @@ def source_ids_for_control(control_id, db=None):
             .join(tc, tc.c.id == target.c.control_id)
         )
         .where(
-            target.c.control_id == control_id,
+            target.c.control_id.in_(control_ids),
             sc.c.framework_slug != tc.c.framework_slug,
         )
     )
@@ -53,13 +55,18 @@ def source_ids_for_control(control_id, db=None):
     return explicit.union(osa)
 
 
-def effective_control_ids(control_id, db=None):
-    return select(ControlItem.id).where(
-        or_(
-            ControlItem.id == control_id,
-            ControlItem.id.in_(source_ids_for_control(control_id, db)),
-        )
-    )
+def inherited_control_ids(db, control_ids):
+    """The given controls and every enabled control whose evidence they inherit.
+
+    Evidence lists resolve this short list in one query before they read events
+    or mappings, so the crosswalk is evaluated once per request, never once per
+    event.
+    """
+    found = set(control_ids)
+    if found:
+        chosen = sorted(found, key=str)
+        found.update(db.execute(source_ids_for_controls(chosen, db)).scalars())
+    return sorted(found, key=str)
 
 
 def effective_framework_ids(framework, db=None):
@@ -93,18 +100,30 @@ def effective_framework_ids(framework, db=None):
     return direct.union(explicit, osa)
 
 
-def event_has_control(control_id, event_id, db=None):
-    # An alias keeps the subquery's mappings apart from any mapping the
-    # enclosing query joins, so the predicate works in aggregate queries too.
+# Up to this many matching mappings are read first and the events are named by
+# id, so the database fetches exactly those events. Beyond it the evidence is
+# common enough for an ordered scan of events to fill a page quickly.
+LISTED_MAPPINGS = 5000
+
+
+def events_mapped_to(db, control_ids):
+    """Events with a mapping to any of the given controls.
+
+    The mappings index answers which events those are. When few events match,
+    their ids go to the database directly, so a page of rare evidence never
+    walks the whole events table. An alias keeps the subquery's mappings apart
+    from any mapping the enclosing query joins, so the predicate works in
+    aggregate queries too.
+    """
+    if not control_ids:
+        return false()
     mapping = aliased(Mapping)
-    return (
-        select(mapping.id)
-        .where(
-            mapping.event_id == event_id,
-            mapping.control_item_id.in_(effective_control_ids(control_id, db)),
-        )
-        .exists()
-    )
+    matched = select(mapping.event_id).where(mapping.control_item_id.in_(control_ids))
+    rows = db.execute(matched.limit(LISTED_MAPPINGS + 1)).scalars().all()
+    if len(rows) > LISTED_MAPPINGS:
+        return Event.id.in_(matched)
+    ids = sorted(set(rows), key=str)
+    return Event.id.in_(ids) if ids else false()
 
 
 def evidence_pairs(framework, db=None, event_ids=None):

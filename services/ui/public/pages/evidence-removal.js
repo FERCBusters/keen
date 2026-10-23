@@ -49,9 +49,9 @@ export async function confirmEvidenceRemoval(item, { onRemoved, onError }) {
   el('retained').textContent =
     'Collected events, evidence artifacts, measurements, manual/imported mappings and shared cross-source rules remain. ' +
     (individual
-      ? 'This ingester’s revisions and run history are removed. Its connection and other ingesters remain available.'
+      ? "This ingester's revisions and run history are removed. Its connection and other ingesters remain available."
       : plan.kind === 'api'
-        ? 'The connection’s credentials and affected ingesters’ revisions and run history are removed.'
+        ? "The connection's credentials and affected ingesters' revisions and run history are removed."
         : 'Server environment credentials remain configured.');
   el('confirm-name').textContent = plan.name;
   el('typed-name').value = '';

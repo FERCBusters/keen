@@ -77,7 +77,7 @@ test('profile revocation is explicit and revoked profiles have no reactivation c
   assert.equal(host.querySelector('[data-create]').disabled, true);
 });
 
-test('creation errors are shown as the server’s detail, and the key can be revealed or copied', async (t) => {
+test("creation errors are shown as the server's detail, and the key can be revealed or copied", async (t) => {
   let failure = null;
   const copied = [];
   const ui = await loadUi('pages/agent-enrollment.js', {

@@ -1,10 +1,11 @@
 """Stories: a curated set of events, records and notes that explain what happened.
 
 A story collects evidence that belongs together, such as the events of an
-incident, the risk it realised and the policy that applied, with a note for
-each step. Items sit on a timeline and on a flow chart whose boxes and links
-the author arranges. Stories are sampled into audits and questioned like
-other records.
+incident, the risk it realised, the policy that applied and the meeting that
+reviewed it, with a note for each step. Items sit on a timeline and on a flow
+chart whose boxes and links the author arranges. Each record's own page lists
+the stories that include it. Stories are sampled into audits and questioned
+like other records.
 
 Permissions:
 
@@ -15,7 +16,9 @@ Permissions:
 
 A story is a container, so a reader sees each item only when they can read
 the referenced record themselves: events need ``events.read`` and diary
-visibility, risks their own read rule, and ISMS records ISMS read access.
+visibility, risks their own read rule, and ISMS records (documents, assets,
+objectives, SWOT items, people, vendors, effectiveness measures and meeting
+minutes) ISMS read access.
 Items a reader cannot see stay in the story as placeholders without the
 record's identifier, label or note, so the shape of the story remains while
 its restricted content does not. Adding an item needs the same read access.
@@ -57,8 +60,18 @@ from app.services.isms.related_records import (
     target_summary,
 )
 
-KINDS = ("event", "risk", "document", "asset", "objective", "note")
-RECORD_KINDS = ("risk", "document", "asset", "objective")
+RECORD_KINDS = (
+    "risk",
+    "document",
+    "asset",
+    "objective",
+    "swot",
+    "person",
+    "vendor",
+    "effectiveness_measure",
+    "meeting",
+)
+KINDS = ("event", *RECORD_KINDS, "note")
 STATUSES = ("open", "closed")
 MAX_ITEMS = 200
 MAX_LINKS = 400
@@ -72,10 +85,29 @@ KIND_LABELS = {
     "document": "Document",
     "asset": "Asset",
     "objective": "Objective",
+    "swot": "SWOT item",
+    "person": "Person",
+    "vendor": "Vendor",
+    "effectiveness_measure": "Effectiveness measure",
+    "meeting": "Meeting minutes",
     "note": "Note",
 }
+# The stories that include one record are listed on its page, up to this many.
+MAX_RELATED = 200
 
-Kind = Literal["event", "risk", "document", "asset", "objective", "note"]
+Kind = Literal[
+    "event",
+    "risk",
+    "document",
+    "asset",
+    "objective",
+    "swot",
+    "person",
+    "vendor",
+    "effectiveness_measure",
+    "meeting",
+    "note",
+]
 Status = Literal["open", "closed"]
 
 
@@ -459,6 +491,41 @@ def _record(db, row, action, before, after, user, context: ChangeContext | None)
 # --- Reads --------------------------------------------------------------------
 
 
+def _listing(db: Session, user: User, rows: list[Story]) -> list[dict]:
+    """Stories as list entries, with their item counts and authors."""
+    ids = [row.id for row in rows]
+    counts = dict(
+        db.query(StoryItem.story_id, func.count(StoryItem.id))
+        .filter(StoryItem.story_id.in_(ids))
+        .group_by(StoryItem.story_id)
+        .all()
+        if ids
+        else []
+    )
+    names = dict(
+        db.query(User.id, User.username)
+        .filter(
+            User.id.in_(
+                {row.created_by_user_id for row in rows if row.created_by_user_id}
+            )
+        )
+        .all()
+        if rows
+        else []
+    )
+    return [
+        {
+            **summary(
+                row,
+                created_by=names.get(row.created_by_user_id),
+                item_count=int(counts.get(row.id, 0)),
+            ),
+            "can_edit": can_edit(db, user, row),
+        }
+        for row in rows
+    ]
+
+
 def get_story(*, story_id, framework, user, db):
     require_read(db, user)
     return output(db, user, _story_or_404(db, story_id), _clean_framework(framework))
@@ -482,41 +549,40 @@ def list_stories(*, user, db, q="", status="", limit=50, offset=0):
         .limit(limit)
         .all()
     )
-    ids = [row.id for row in rows]
-    counts = dict(
-        db.query(StoryItem.story_id, func.count(StoryItem.id))
-        .filter(StoryItem.story_id.in_(ids))
-        .group_by(StoryItem.story_id)
-        .all()
-        if ids
-        else []
-    )
-    names = dict(
-        db.query(User.id, User.username)
-        .filter(
-            User.id.in_(
-                {row.created_by_user_id for row in rows if row.created_by_user_id}
-            )
-        )
-        .all()
-        if rows
-        else []
-    )
     return {
-        "items": [
-            {
-                **summary(
-                    row,
-                    created_by=names.get(row.created_by_user_id),
-                    item_count=int(counts.get(row.id, 0)),
-                ),
-                "can_edit": can_edit(db, user, row),
-            }
-            for row in rows
-        ],
+        "items": _listing(db, user, rows),
         "total": total,
         "limit": limit,
         "offset": offset,
+    }
+
+
+def related_stories(*, kind, entity_id, user, db):
+    """The stories that include one record, for the record's own page.
+
+    The caller must be able to read the record itself, as they can on its
+    page, so the list never confirms that a record they cannot see belongs to
+    a story.
+    """
+    require_read(db, user)
+    if kind not in KINDS or kind == "note":
+        raise DomainError(400, "Unknown story item kind")
+    record_id = try_uuid(entity_id)
+    record = _resolve(db, user, kind, record_id) if record_id else None
+    if record is None:
+        raise DomainError(404, f"{KIND_LABELS[kind]} not found")
+    rows = (
+        db.query(Story)
+        .join(StoryItem, StoryItem.story_id == Story.id)
+        .filter(StoryItem.kind == kind, StoryItem.entity_id == record.id)
+        .order_by(Story.updated_at.desc(), Story.id)
+        .limit(MAX_RELATED)
+        .all()
+    )
+    return {
+        "kind": kind,
+        "entity_id": str(record.id),
+        "items": _listing(db, user, rows),
     }
 
 

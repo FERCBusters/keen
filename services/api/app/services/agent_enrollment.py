@@ -56,7 +56,7 @@ class ProfileInput(Strict):
     def labels_valid(cls, value):
         if any(not k or len(k) > 64 or len(v) > 256 for k, v in value.items()):
             raise ValueError(
-                "Label keys must be 1–64 characters and values at most 256"
+                "Label keys must be 1-64 characters and values at most 256"
             )
         return value
 

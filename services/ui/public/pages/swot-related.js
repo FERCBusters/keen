@@ -6,12 +6,13 @@ export async function mountSwotRelated(type, id, container = null) {
   const host = container || document.querySelector('main .tab-content');
   if (!host) return;
   const section = document.createElement('section');
-  section.className = container ? 'card card-body mt-3' : 'tab-pane fade';
   section.id = 'swotRelatedPane';
-  section.setAttribute('role', 'tabpanel');
+  // A host supplies its own frame; without one the list becomes a page tab.
   if (!container) {
     const tabs = document.querySelector('main .nav-tabs');
     if (!tabs) return;
+    section.className = 'tab-pane fade';
+    section.setAttribute('role', 'tabpanel');
     const li = document.createElement('li');
     li.className = 'nav-item';
     li.innerHTML =

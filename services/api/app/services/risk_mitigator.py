@@ -775,7 +775,7 @@ def _party_out(
         "id": str(row.id),
         "name": getattr(row.name, "name", "") or "",
         "nature": getattr(row.nature, "name", "") or "",
-        "label": f"{getattr(row.name, 'name', '') or ''} — {getattr(row.nature, 'name', '') or ''}",
+        "label": f"{getattr(row.name, 'name', '') or ''} - {getattr(row.nature, 'name', '') or ''}",
         "note": row.note or "",
         "score": round(score, 2) if score else 0,
         "confidence": _confidence(score, strong=24, medium=12) if score else "existing",

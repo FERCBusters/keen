@@ -30,7 +30,7 @@ def bootstrap(db, *, issuer, subject, email):
             raise RuntimeError("Existing owner does not match a usable admin identity")
         return user
     if db.query(User).count():
-        raise RuntimeError("Refusing to claim an existing KEEN installation")
+        raise RuntimeError("Refusing to claim an existing Keen installation")
     user = User(
         username="workspace-owner",
         email=email,

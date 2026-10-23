@@ -65,7 +65,7 @@ SOURCE_LABELS = {
     "taiga": "Taiga",
     "google_workspace": "Google Workspace",
     "cloudwatch_logs": "AWS CloudWatch Logs",
-    "keen-agent": "KEEN Agent",
+    "keen-agent": "Keen Agent",
     "webhooks": "Webhooks",
     "diary": "Diary",
 }
@@ -146,7 +146,7 @@ def _configured_source_meta(refresh_bucket: int) -> dict[str, dict[str, str]]:
     """Load configured source meta from YAML configs + env overrides."""
 
     meta: dict[str, dict[str, str]] = {
-        "keen-agent": {"label": "KEEN Agent", "color": "#6935BE"}
+        "keen-agent": {"label": "Keen Agent", "color": "#6935BE"}
     }
 
     # Plugin configs (poll + other ingestion providers)

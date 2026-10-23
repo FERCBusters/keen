@@ -1,4 +1,4 @@
-"""UTC values for KEEN's existing timestamp-without-time-zone columns.
+"""UTC values for Keen's existing timestamp-without-time-zone columns.
 
 Obtain an aware UTC value first, then deliberately remove tzinfo at the existing
 naive-UTC storage boundary. This preserves comparisons, defaults and API output;

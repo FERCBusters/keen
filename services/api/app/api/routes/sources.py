@@ -71,7 +71,7 @@ def source_effectiveness_measures(
     user=Depends(require_isms_read),
     db: Session = Depends(get_db),
 ):
-    "Return effectiveness measures with metric entries recorded against a KEEN source."
+    "Return effectiveness measures with metric entries recorded against a Keen source."
     return service.source_effectiveness_measures(
         source_name=source_name, framework=framework, user=user, db=db
     )

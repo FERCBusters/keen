@@ -288,7 +288,7 @@ def _require_provider_config(provider_key: str | None) -> SsoProvider:
     if provider.auto_provision:
         raise HTTPException(
             status_code=500,
-            detail="SSO auto-provisioning is not supported; KEEN only allows existing active users",
+            detail="SSO auto-provisioning is not supported; Keen only allows existing active users",
         )
 
     missing = _required_missing(provider)
@@ -300,7 +300,7 @@ def _require_provider_config(provider_key: str | None) -> SsoProvider:
                 f"{', '.join(missing)}"
             ),
         )
-    # Both supported methods authenticate KEEN with its client secret.
+    # Both supported methods authenticate Keen with its client secret.
     if provider.token_endpoint_auth_method not in TOKEN_ENDPOINT_AUTH_METHODS:
         raise HTTPException(
             status_code=500,
@@ -531,7 +531,7 @@ def _get_or_create_user_for_identity(
         )
 
     candidates: dict[str, User] = {}
-    # Both KEEN mailbox verification and provider verification are required.
+    # Both Keen mailbox verification and provider verification are required.
     if email and _email_is_verified(provider, claims):
         for user in (
             db.query(User)
@@ -544,9 +544,9 @@ def _get_or_create_user_for_identity(
     active = [user for user in candidates.values() if user.is_active]
     if len(active) != 1:
         detail = (
-            "Multiple active KEEN users match this SSO identity"
+            "Multiple active Keen users match this SSO identity"
             if len(active) > 1
-            else "No active KEEN account matches this SSO identity"
+            else "No active Keen account matches this SSO identity"
         )
         raise HTTPException(status_code=403, detail=detail)
 
@@ -772,7 +772,7 @@ async def _handle_oidc_callback(
         KeySet.import_key_set(jwks),
         algorithms=list(provider.allowed_algs),
     )
-    # KEEN configures one trusted audience: its own client ID. A matching azp
+    # Keen configures one trusted audience: its own client ID. A matching azp
     # does not establish trust in additional audiences or make non-string IDs safe.
     raw_claims = decoded.claims
     aud = raw_claims.get("aud")

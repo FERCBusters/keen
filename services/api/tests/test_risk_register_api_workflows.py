@@ -554,7 +554,7 @@ def test_exported_cells_cannot_become_spreadsheet_formulas(reg):  # noqa: F811
         (_csv("A,B,C,D,Integrity,,,,,,,,,,,,extra"), "row 2: Row 2: extra columns"),
         (
             _csv("A,B,C,D,Integrity,,,6,,,,,,,,"),
-            "row 2: register_likelihood must be 1–5",
+            "row 2: register_likelihood must be 1-5",
         ),
         (_csv("A,B,C,D,Integrity,,,high,,,,,,,,"), "row 2: invalid literal"),
         (

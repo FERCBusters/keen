@@ -67,8 +67,8 @@ function questionSubline(it) {
     it?.target_type && it.target_type !== 'event'
       ? it.target_type.replaceAll('_', ' ')
       : it?.event_source || '';
-  const ts = it?.event_timestamp ? fmtTs(it.event_timestamp) : it?.target_ref || '—';
-  return [typ, ts].filter(Boolean).join(' • ');
+  const ts = it?.event_timestamp ? fmtTs(it.event_timestamp) : it?.target_ref || '-';
+  return [typ, ts].filter(Boolean).join(' · ');
 }
 
 function renderAdmin(items) {
@@ -79,7 +79,7 @@ function renderAdmin(items) {
       return `
       <tr>
         <td>${statusBadge(it.status)}</td>
-        <td class="small-muted">${esc(it.updated_at ? fmtTs(it.updated_at) : '—')}</td>
+        <td class="small-muted">${esc(it.updated_at ? fmtTs(it.updated_at) : '-')}</td>
         <td class="wrap">
           <div class="fw-semibold">${esc(questionTitle(it))}</div>
           <div class="small-muted">${esc(questionSubline(it))}</div>
@@ -119,7 +119,7 @@ function renderUser(items) {
           <div class="small-muted">${esc(questionSubline(it))}</div>
         </td>
         <td>${statusBadge(it.status, !!it.unread)}</td>
-        <td class="small-muted">${esc(it.updated_at ? fmtTs(it.updated_at) : '—')}</td>
+        <td class="small-muted">${esc(it.updated_at ? fmtTs(it.updated_at) : '-')}</td>
         <td class="text-end">
           <div class="btn-group btn-group-sm" role="group" aria-label="Question actions">
             <a class="btn btn-outline-primary" href="${esc(href)}">Open</a>
@@ -181,14 +181,14 @@ async function load() {
     if (isAdmin) {
       pageTitleEl.textContent = 'Questions';
       pageSubtitleEl.textContent =
-        'Open and answered question threads across evidence, CIA Triad risks and PESTLE(E) items.';
+        'Open and answered question threads across evidence, CIA triad risks and PESTLE(E) items.';
       adminCardEl.style.display = '';
       userCardEl.style.display = 'none';
       await loadAdmin();
     } else {
       pageTitleEl.textContent = 'Questions';
       pageSubtitleEl.textContent =
-        'Threads you have opened on evidence, CIA Triad risks and PESTLE(E) items, including any admin responses.';
+        'Threads you have opened on evidence, CIA triad risks and PESTLE(E) items, including any admin responses.';
       userCardEl.style.display = '';
       adminCardEl.style.display = 'none';
       await loadUser();

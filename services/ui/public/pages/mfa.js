@@ -88,7 +88,7 @@ async function refresh() {
     state.stage === 'verify'
       ? 'Verify your second factor to continue.'
       : managing
-        ? 'Choose an authenticator for your local KEEN account.'
+        ? 'Choose an authenticator for your local Keen account.'
         : 'Verification complete.';
   $('verify').hidden = state.stage !== 'verify';
   $('manage').hidden = !managing;

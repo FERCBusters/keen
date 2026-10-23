@@ -101,7 +101,7 @@ def _audit_ts(entry: dict[str, Any]) -> datetime | None:
 def _within_api(url: str) -> bool:
     """Return whether a URL GitHub returned lies within the configured API.
 
-    Pagination links are followed with KEEN's token, so they must stay on the
+    Pagination links are followed with Keen's token, so they must stay on the
     API origin and under its base path.
     """
     try:

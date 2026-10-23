@@ -22,8 +22,8 @@
     const notice = document.createElement('strong');
     const update = () => {
       notice.textContent = expired()
-        ? 'DEMO ENDED — access is closed and this instance is scheduled for deletion. '
-        : `DEMO ONLY — ends ${end.toLocaleString()}. Use fictional data only; do not enter sensitive business information, personal data or credentials. `;
+        ? 'DEMO ENDED - access is closed and this instance is scheduled for deletion. '
+        : `DEMO ONLY - ends ${end.toLocaleString()}. Use fictional data only; do not enter sensitive business information, personal data or credentials. `;
     };
     update();
     const timer = setInterval(update, 30000);
@@ -33,7 +33,7 @@
       if (target.protocol === 'https:') {
         const link = document.createElement('a');
         link.href = target.href;
-        link.textContent = 'Discuss a KEEN installation.';
+        link.textContent = 'Discuss a Keen installation.';
         link.style.color = '#332701';
         content.append(link);
       }

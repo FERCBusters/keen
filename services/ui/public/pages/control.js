@@ -66,6 +66,10 @@ const saveClauseLinksBtn = document.getElementById('saveClauseLinks');
 const editClauseApplicabilityBtn = document.getElementById('editClauseApplicability');
 const controlsBreadcrumb = document.getElementById('controlsBreadcrumb');
 const controlEvidenceTab = document.getElementById('controlEvidenceTab');
+const controlRelatedTab = document.getElementById('controlRelatedTab');
+const controlJustificationTab = document.getElementById('controlJustificationTab');
+const controlJustificationTabItem = document.getElementById('controlJustificationTabItem');
+const controlJustificationPane = document.getElementById('controlJustificationPane');
 const controlClausesTab = document.getElementById('controlClausesTab');
 const controlRisksTab = document.getElementById('controlRisksTab');
 const controlIsmsTab = document.getElementById('controlIsmsTab');
@@ -103,6 +107,7 @@ const pagerButtons = collectOffsetPagerButtons();
 let sourceMeta = {};
 let ctrl = null;
 let crossFrameworks = [];
+let relatedLoaded = false;
 const relatedControls = createRelatedControlsBrowser(document, { isAdmin: !!me?.is_admin });
 
 async function loadCrossFrameworkLinks() {
@@ -122,7 +127,7 @@ async function loadCrossFrameworkLinks() {
     crossForm.style.display = '';
     const previous = crossFrameworkSource.value;
     crossFrameworkSource.innerHTML =
-      '<option value="">Choose framework…</option>' +
+      '<option value="">Choose framework</option>' +
       crossFrameworks
         .map((f) => `<option value="${esc(f.slug)}">${esc(f.name || f.slug)}</option>`)
         .join('');
@@ -135,7 +140,7 @@ async function loadCrossFrameworkLinks() {
 
 async function loadCrossSourceControls() {
   const source = crossFrameworkSource.value;
-  crossFrameworkControl.innerHTML = '<option value="">Choose control…</option>';
+  crossFrameworkControl.innerHTML = '<option value="">Choose control</option>';
   if (!source) return;
   try {
     const data = await apiGet(
@@ -147,6 +152,13 @@ async function loadCrossSourceControls() {
   } catch (e) {
     toast(status, `Could not load source controls: ${String(e)}`, 'danger');
   }
+}
+
+// Related controls load when their tab first opens, once the control is known.
+async function loadRelatedControls() {
+  if (relatedLoaded || !ctrl) return;
+  relatedLoaded = true;
+  await loadCrossFrameworkLinks();
 }
 
 crossFrameworkSource?.addEventListener('change', loadCrossSourceControls);
@@ -204,7 +216,7 @@ function renderControlChrome() {
   if (titleEl) titleEl.textContent = `${ctrl.ref}  ${ctrl.title || ''}`.trim();
   const bits = [ctrl.framework, ctrl.type, ctrl.in_scope ? 'in scope' : 'out of scope'];
   if (ctrl.justification) bits.push(`Justification: ${ctrl.justification}`);
-  if (metaEl) metaEl.textContent = bits.filter(Boolean).join(' • ');
+  if (metaEl) metaEl.textContent = bits.filter(Boolean).join(' · ');
   let description = document.getElementById('osaControlDescription');
   if (!description && metaEl) {
     description = document.createElement('div');
@@ -226,15 +238,14 @@ function renderControlChrome() {
     ) {
       const credit = document.createElement('p');
       credit.className = 'small-muted';
-      credit.innerHTML =
-        'KEEN Assurance Framework is based on <a href="https://github.com/VantaInc/vanta-control-set" target="_blank" rel="noopener">Vanta’s controls</a>, licensed under <a href="/licenses/VANTA-LICENSE.txt" target="_blank" rel="noopener">Apache 2.0</a>. Copyright 2021 Vanta Inc. Adapted by KEEN. KEEN is also licensed under Apache 2.0.';
+      credit.innerHTML = `Keen Assurance Framework is based on <a href="https://github.com/VantaInc/vanta-control-set" target="_blank" rel="noopener">Vanta's controls</a>, licensed under <a href="/licenses/VANTA-LICENSE.txt" target="_blank" rel="noopener">Apache 2.0</a>. Copyright 2021 Vanta Inc. Adapted by Keen. Keen is also licensed under Apache 2.0.`;
       description.append(credit);
     }
     if (ctrl.metadata?.source === 'https://www.opensecurityarchitecture.org/') {
       const credit = document.createElement('p');
       credit.className = 'small-muted';
       credit.innerHTML =
-        'Adapted from <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a> · <a href="/licenses/OSA-LICENSE.txt" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Copyright Open Security Architecture and contributors. <a href="/licenses/OSA-NOTICE.txt" target="_blank" rel="noopener">Attribution and KEEN adaptations</a>. Shared NIST controls identify related evidence; coverage estimates do not certify compliance.';
+        'Adapted from <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a> · <a href="/licenses/OSA-LICENSE.txt" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Copyright Open Security Architecture and contributors. <a href="/licenses/OSA-NOTICE.txt" target="_blank" rel="noopener">Attribution and Keen adaptations</a>. Shared NIST controls identify related evidence; coverage estimates do not certify compliance.';
       description.append(credit);
     }
   }
@@ -243,6 +254,7 @@ function renderControlChrome() {
 function renderControlJustificationCard() {
   if (!controlJustificationCard) return;
   const canEditJustification = !!me?.is_admin;
+  if (controlJustificationTabItem) controlJustificationTabItem.hidden = !canEditJustification;
   controlJustificationCard.style.display = canEditJustification ? '' : 'none';
   if (!canEditJustification) return;
   if (controlJustification) controlJustification.value = ctrl?.justification || '';
@@ -261,17 +273,21 @@ function activateControlTab(tabName) {
   if (name === 'risks' && !canViewRisks) name = 'evidence';
   if (name === 'interested-parties' && !canViewInterestedParties) name = 'evidence';
   if (name === 'isms' && !canViewIsms) name = 'evidence';
+  if (name === 'justification' && !me?.is_admin) name = 'evidence';
   if ((name === 'effectiveness' || name === 'effectiveness-measures') && !canViewIsms)
     name = 'evidence';
-  const tab =
-    {
-      evidence: controlEvidenceTab,
-      clauses: controlClausesTab,
-      risks: controlRisksTab,
-      'interested-parties': controlInterestedPartiesTab,
-      isms: controlIsmsTab,
-      changelog: controlChangelogTab,
-    }[name] || controlEvidenceTab;
+  const tabs = {
+    evidence: controlEvidenceTab,
+    related: controlRelatedTab,
+    justification: controlJustificationTab,
+    clauses: controlClausesTab,
+    risks: controlRisksTab,
+    'interested-parties': controlInterestedPartiesTab,
+    isms: controlIsmsTab,
+    changelog: controlChangelogTab,
+  };
+  // Only the page's own tab names count; `?tab=constructor` opens the evidence.
+  const tab = (Object.hasOwn(tabs, name) && tabs[name]) || controlEvidenceTab;
   if (!tab || !window.bootstrap?.Tab) return;
   window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
@@ -285,7 +301,19 @@ function wireControlTabs() {
     controlInterestedPartiesTabItem?.classList.add('d-none');
     controlInterestedPartiesPane?.classList.add('d-none');
   }
+  if (me?.is_admin) {
+    if (controlJustificationTabItem) controlJustificationTabItem.hidden = false;
+  } else {
+    controlJustificationPane?.classList.add('d-none');
+  }
   controlEvidenceTab?.addEventListener('shown.bs.tab', () => setControlTabQuery('evidence'));
+  controlRelatedTab?.addEventListener('shown.bs.tab', async () => {
+    setControlTabQuery('related');
+    await loadRelatedControls();
+  });
+  controlJustificationTab?.addEventListener('shown.bs.tab', () =>
+    setControlTabQuery('justification'),
+  );
   controlClausesTab?.addEventListener('shown.bs.tab', () => setControlTabQuery('clauses'));
   controlRisksTab?.addEventListener('shown.bs.tab', () => setControlTabQuery('risks'));
   controlInterestedPartiesTab?.addEventListener('shown.bs.tab', async () => {
@@ -328,10 +356,10 @@ function _ismsEntityRows(data) {
       () => '/isms.html?tab=objectives',
     ],
     ['Documents', data.documents, (x) => x.title || 'Document', () => '/isms.html?tab=documents'],
-    ['Organisation Chart', data.org_nodes, (x) => x.name || 'Org node', () => '/isms.html?tab=org'],
+    ['Organisation chart', data.org_nodes, (x) => x.name || 'Org node', () => '/isms.html?tab=org'],
     ['Assets', data.assets, (x) => x.asset || 'Asset', () => '/isms.html?tab=assets'],
     [
-      'Effectiveness Measures',
+      'Effectiveness measures',
       data.effectiveness_measures,
       (x) => x.summary || 'Effectiveness measure',
       (x) => `/isms-effectiveness-measure.html?id=${encodeURIComponent(x.id)}`,
@@ -367,7 +395,7 @@ async function loadControlIsms({ force = false } = {}) {
     return;
   }
   if (ismsLoaded && !force) return;
-  controlIsmsView.innerHTML = '<span class="small-muted">Loading ISMS references…</span>';
+  controlIsmsView.innerHTML = '<span class="small-muted">Loading ISMS references</span>';
   try {
     const data = await apiGet(
       `/api/v1/controls/${encodeURIComponent(id)}/isms?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
@@ -504,7 +532,7 @@ async function loadLinkedRisks() {
                 <td><a class="fw-semibold" href="${esc(href)}">${esc(r.asset || '')}</a><div class="small-muted text-truncate" style="max-width:360px;">${esc(r.threat_summary || '')}</div></td>
                 <td>${esc(r.category?.name || '')}</td>
                 <td>${esc(r.subcategory?.name || '')}</td>
-                <td>${types || '<span class="small-muted">—</span>'}</td>
+                <td>${types || '<span class="small-muted">-</span>'}</td>
                 <td class="text-end">${riskScoreBadge(r.risk_score)}</td>
                 <td class="text-end">${riskScoreBadge(r.residual_risk_score)}</td>
                 <td>${userPillHtml(r.risk_owner)}</td>
@@ -528,7 +556,7 @@ async function loadLinkedInterestedParties({ force = false } = {}) {
   }
   if (interestedPartiesLoaded && !force) return;
   interestedPartiesCard.style.display = '';
-  interestedPartiesView.innerHTML = '<span class="small-muted">Loading Interested Parties…</span>';
+  interestedPartiesView.innerHTML = '<span class="small-muted">Loading interested parties</span>';
   try {
     const data = await apiGet(
       `/api/v1/controls/${encodeURIComponent(id)}/interested-parties?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
@@ -538,13 +566,13 @@ async function loadLinkedInterestedParties({ force = false } = {}) {
     if (interestedPartiesCount) interestedPartiesCount.textContent = String(items.length);
     if (!items.length) {
       interestedPartiesView.innerHTML =
-        '<span class="small-muted">No Interested Parties mapped to this control for this framework.</span>';
+        '<span class="small-muted">No interested parties mapped to this control for this framework.</span>';
       return;
     }
     interestedPartiesView.innerHTML = `
       <div class="table-responsive">
         <table class="table table-sm align-middle mb-0">
-          <thead><tr><th>Name</th><th>Nature of Interest</th><th>Note</th><th>Communications</th><th>Methods</th></tr></thead>
+          <thead><tr><th>Name</th><th>Nature of interest</th><th>Note</th><th>Communications</th><th>Methods</th></tr></thead>
           <tbody>
             ${items
               .map((it) => {
@@ -555,14 +583,14 @@ async function loadLinkedInterestedParties({ force = false } = {}) {
                 const comms =
                   (it.communications || [])
                     .map((c) => `${esc(c.event || '')} / ${esc(c.with_whom || '')}`)
-                    .join('<br>') || '<span class="small-muted">—</span>';
+                    .join('<br>') || '<span class="small-muted">-</span>';
                 const methods =
                   Array.from(new Set((it.communications || []).flatMap((c) => c.methods || [])))
                     .map((m) => `<span class="badge badge-soft me-1 mb-1">${esc(m)}</span>`)
-                    .join('') || '<span class="small-muted">—</span>';
+                    .join('') || '<span class="small-muted">-</span>';
                 const note = (it.note || '').trim()
                   ? esc(shorten(it.note, 140))
-                  : '<span class="small-muted">—</span>';
+                  : '<span class="small-muted">-</span>';
                 return `<tr><td><a class="fw-semibold" href="${esc(href)}">${esc(it.name?.name || '')}</a></td><td>${esc(it.nature?.name || '')}</td><td class="small text-wrap" style="min-width:220px;">${note}</td><td class="small">${comms}</td><td>${methods}</td></tr>`;
               })
               .join('')}
@@ -573,7 +601,7 @@ async function loadLinkedInterestedParties({ force = false } = {}) {
     interestedPartiesLoaded = false;
     if (interestedPartiesCount) interestedPartiesCount.textContent = '0';
     interestedPartiesView.innerHTML =
-      '<span class="text-danger">Failed to load Interested Parties for this control.</span>';
+      '<span class="text-danger">Failed to load interested parties for this control.</span>';
   }
 }
 
@@ -794,6 +822,8 @@ async function loadFacets() {
     p.set('control', id);
     if (ctrl?.framework || framework) p.set('framework', ctrl?.framework || framework);
     if (state.q) p.set('q', state.q);
+    // The page offers a source filter only; the controls facet is not needed.
+    p.set('max_controls', '0');
 
     const data = await apiGet(`/api/v1/events/facets?${p.toString()}`);
     renderSourceOptions(data?.sources || []);
@@ -837,8 +867,8 @@ function renderSourceOptions(facets) {
 
 async function loadEvents() {
   status.style.display = 'none';
-  if (meta) meta.textContent = 'Loading…';
-  showTableLoading(tbody, 4, 'Loading evidence…');
+  if (meta) meta.textContent = 'Loading';
+  showTableLoading(tbody, 4, 'Loading evidence');
 
   try {
     const p = new URLSearchParams();
@@ -853,14 +883,14 @@ async function loadEvents() {
     state.total = data.total || 0;
 
     const page = offsetPagerState(state);
-    if (meta) meta.textContent = `${page.start}–${page.end} of ${page.total}`;
+    if (meta) meta.textContent = `${page.start}-${page.end} of ${page.total}`;
 
     renderRows(data.items || []);
 
     setOffsetPagerDisabled(pagerButtons, state);
   } catch (e) {
     toast(status, `Failed to load evidence: ${String(e)}`, 'danger');
-    if (meta) meta.textContent = '—';
+    if (meta) meta.textContent = '-';
     tbody.innerHTML =
       '<tr><td colspan="4" class="small-muted p-4">Failed to load evidence.</td></tr>';
   }
@@ -885,12 +915,7 @@ async function load() {
       `/api/v1/controls/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
     );
     renderControlChrome();
-    await loadCrossFrameworkLinks();
     renderControlJustificationCard();
-    document.getElementById('viewAllEvents').href = withFramework(
-      `/events.html?control=${encodeURIComponent(ctrl.ref)}`,
-      ctrl.framework || framework,
-    );
     if (controlsBreadcrumb)
       controlsBreadcrumb.href = withFramework('/controls.html', ctrl.framework || framework);
 
@@ -906,21 +931,26 @@ async function load() {
     }
 
     renderLinkedClauses();
-    await loadLinkedRisks();
-    await loadLinkedInterestedParties({ force: true });
     renderAdminClauses();
-    if (qs('tab') === 'changelog') await loadControlChangelog();
-    if (qs('tab') === 'isms') await loadControlIsms({ force: true });
 
-    sourceMeta = await getSourceMeta();
-
-    syncInputs();
-    // Populate source dropdown with counts, then load the current page.
-    await loadFacets();
-    await loadEvents();
+    // Evidence loads first; the other sections load alongside it.
+    const evidence = (async () => {
+      sourceMeta = await getSourceMeta();
+      syncInputs();
+      await Promise.all([loadEvents(), loadFacets()]);
+    })();
+    const tab = qs('tab');
+    await Promise.all([
+      evidence,
+      loadLinkedRisks(),
+      loadLinkedInterestedParties({ force: true }),
+      tab === 'related' ? loadRelatedControls() : null,
+      tab === 'changelog' ? loadControlChangelog() : null,
+      tab === 'isms' ? loadControlIsms({ force: true }) : null,
+    ]);
   } catch (e) {
     toast(status, `Failed to load control: ${String(e)}`, 'danger');
-    if (meta) meta.textContent = '—';
+    if (meta) meta.textContent = '-';
   }
 }
 

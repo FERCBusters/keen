@@ -1,5 +1,5 @@
 // Load complete first-party ES modules into an isolated DOM. Only the external
-// design-system/network boundary is substituted; KEEN functions run unchanged.
+// design-system/network boundary is substituted; Keen functions run unchanged.
 import { JSDOM, VirtualConsole } from 'jsdom';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';

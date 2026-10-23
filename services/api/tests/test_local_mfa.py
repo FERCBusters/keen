@@ -524,7 +524,7 @@ class LocalMfaTests(unittest.TestCase):
                 # Each notice names the installation by its public origin.
                 self.assertTrue(
                     all(
-                        "KEEN installation: https://keen.example\n" in x.body
+                        "Keen installation: https://keen.example\n" in x.body
                         for x in rows
                     )
                 )

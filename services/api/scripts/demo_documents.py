@@ -2,19 +2,16 @@
 
 Every document is a short worked example with in-app content and a first
 revision. Links name explicit references per framework; a framework the run
-does not seed is left out. After the run links controls to the documents,
-``seed_link_diary`` records each document's automatic diary entry exactly as
-linking a control to a document does in the application.
+does not seed is left out. Their automatic diary entries come later, with those
+of every other linked record (``demo_link_diary``).
 """
 
 import hashlib
 from datetime import datetime, time, timedelta
 from html import escape
 
-from app.db.models import Event, IsmsDocument, IsmsDocumentFolder, IsmsDocumentRevision
-from app.security.diary_visibility import DIARY_SOURCE, link_entry_external_id
+from app.db.models import IsmsDocument, IsmsDocumentFolder, IsmsDocumentRevision
 from app.security.rich_text import sanitize_rich_text_html
-from app.services.isms.link_diary import sync_entity_link_diary
 
 ISO, SOC2, PCI = "iso_27001_2022", "soc2_tsc", "pci_dss_v4"
 NOTICE = "Fictional demonstration document. Adapt it to the organisation before use."
@@ -1043,7 +1040,7 @@ def seed_documents(seeder):
             "updated_at": created,
         }
         existing = db.query(IsmsDocument).filter_by(title=title).first()
-        # Content arrives once; later edits made in KEEN are kept.
+        # Content arrives once; later edits made in Keen are kept.
         if existing is None or not existing.content_version:
             values.update(content_html=html, content_version=1)
         doc = seeder.upsert(IsmsDocument, {"title": title}, values)
@@ -1063,47 +1060,3 @@ def seed_documents(seeder):
         seeder.link_isms_clauses("document", doc.id, spec.get("clauses", ()))
         docs[key] = doc
     return docs
-
-
-def _link_entry(db, external_id):
-    return (
-        db.query(Event)
-        .filter_by(source=DIARY_SOURCE, external_id=external_id)
-        .one_or_none()
-    )
-
-
-def seed_link_diary(seeder):
-    """Record the automatic diary entry for each seeded document's links.
-
-    The application's own link synchronisation writes each entry, its JSON
-    artefact and its automatic mappings. A new entry takes the time its
-    document was linked; a later run leaves existing entries to the
-    application. A dry run skips this step because artefacts are stored
-    outside the database transaction.
-    """
-    if seeder.config.dry_run:
-        seeder.stats["document link diary entries.skipped in dry run"] += 1
-        return
-    db = seeder.db
-    docs = (
-        db.query(IsmsDocument)
-        .filter(IsmsDocument.title.like(seeder.prefix + " %"))
-        .order_by(IsmsDocument.created_at, IsmsDocument.title)
-        .all()
-    )
-    for doc in docs:
-        external_id = link_entry_external_id("document", doc.id)
-        existed = _link_entry(db, external_id) is not None
-        sync_entity_link_diary(db, "document", doc.id, seeder.user)
-        event = _link_entry(db, external_id)
-        if event is None:
-            continue
-        if existed:
-            seeder.stats["document link diary entries.unchanged"] += 1
-            continue
-        linked = doc.created_at + timedelta(minutes=12)
-        if linked < event.timestamp:
-            event.timestamp = linked
-            db.flush()
-        seeder.stats["document link diary entries.created"] += 1

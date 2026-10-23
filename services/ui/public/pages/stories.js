@@ -66,18 +66,18 @@ async function load() {
   if (state.status) params.set('status', state.status);
   params.set('limit', String(state.limit));
   params.set('offset', String(state.offset));
-  $('meta').textContent = 'Loading…';
+  $('meta').textContent = 'Loading';
   try {
     const data = await apiGet(`/api/v1/stories?${params}`);
     state.total = data.total || 0;
     const page = offsetPagerState(state);
-    $('meta').textContent = `${page.start}–${page.end} of ${page.total}`;
+    $('meta').textContent = `${page.start}-${page.end} of ${page.total}`;
     $('prev').disabled = state.offset <= 0;
     $('next').disabled = state.offset + state.limit >= state.total;
     renderRows(data.items || []);
   } catch (error) {
     toast($('status'), `Failed to load stories: ${String(error)}`, 'danger');
-    $('meta').textContent = '—';
+    $('meta').textContent = '-';
   }
 }
 

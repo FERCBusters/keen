@@ -259,7 +259,7 @@ def materialize_missing_monthly_zero_metrics(
                 source_url=None,
                 source_reference=reference,
                 notes=(
-                    "Automatically recorded by KEEN because this zero-target "
+                    "Automatically recorded by Keen because this zero-target "
                     "effectiveness measure had no metric entries for the closed period."
                 ),
                 raw_payload={

@@ -46,6 +46,8 @@ async function fixture(
     frameworks = [{ slug: 'A', name: 'Framework A' }],
     active = 'F1',
     targets = '',
+    // A promise that holds the framework list, to observe the first load.
+    hold = null,
   } = {},
 ) {
   const options = { targets };
@@ -73,7 +75,10 @@ async function fixture(
       return { rules: rule ? [rule] : [], collectors: [], rules_version: 1 };
     if (url.pathname.startsWith('/api/v1/admin/adapter-settings/'))
       return { settings: {}, version: 1 };
-    if (url.pathname === '/api/v1/frameworks') return { items: frameworks };
+    if (url.pathname === '/api/v1/frameworks') {
+      await hold;
+      return { items: frameworks };
+    }
     if (url.pathname === '/api/v1/controls')
       return {
         items:
@@ -201,7 +206,7 @@ test('Next never adds the dropdown control or restores a removed target', async 
   assert.equal(control.value, '');
   document.getElementById('ec-next-step').click();
   document.getElementById('ec-description').value = 'Selected evidence';
-  control.add(new window.Option('A.5.1 — Policies', 'A.5.1'));
+  control.add(new window.Option('A.5.1 - Policies', 'A.5.1'));
   control.value = 'A.5.1';
   document.getElementById('ec-next-step').click();
   assert.equal(document.getElementById('ec-step-number').textContent, '2');
@@ -274,6 +279,25 @@ test('a rule deep link opens the saved rule and its retention shortcut', async (
 test('a deleted rule deep link reports that the rule is unavailable', async (t) => {
   const ui = await fixture(t, { requestedRule: 'deleted-rule' });
   assert.match(ui.document.getElementById('ec-status').textContent, /no longer exists/);
+  // The first load has finished, so a new mapping can still be started.
+  assert.equal(ui.document.getElementById('ec-new-rule').disabled, false);
+});
+
+test('Create mapping is unavailable until the first load finishes', async (t) => {
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const ui = await fixture(t, { defaultView: true, hold: held });
+  const create = ui.document.getElementById('ec-new-rule');
+  assert.equal(create.disabled, true);
+  release();
+  await until(() => !create.disabled);
+  create.click();
+  await until(() => !ui.document.getElementById('ec-editor').hidden);
+  // Nothing from the first load closes the editor afterwards.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(ui.document.getElementById('ec-editor').hidden, false);
 });
 
 test('summary regex is prominent and structured conditions offer bounded regex', async (t) => {
@@ -310,7 +334,10 @@ test('mapping editor hides overview and restores it on return', async (t) => {
     'More filters',
   );
   assert.ok(document.getElementById('ec-regex-conditions').closest('#ec-more-filters'));
-  assert.equal(document.getElementById('ec-regex-help').closest('[data-ec-step]'), null);
+  assert.equal(
+    document.getElementById('ec-regex-help').closest('[data-ec-step]').dataset.ecStep,
+    '1',
+  );
   assert.equal(document.getElementById('ec-regex-help').open, false);
   document.getElementById('ec-close-editor').click();
   assert.ok(context.every((node) => !node.hidden && !node.classList.contains('d-none')));
@@ -318,7 +345,7 @@ test('mapping editor hides overview and restores it on return', async (t) => {
 
 test('regex guide only appears on the matching step', async (t) => {
   const { document } = await fixture(t);
-  const guide = document.getElementById('ec-regex-help');
+  const guide = document.getElementById('ec-regex-help').closest('[data-ec-step]');
   assert.equal(guide.hidden, false);
   document.getElementById('ec-next-step').click();
   assert.equal(guide.hidden, true);
@@ -333,6 +360,87 @@ test('regex guide only appears on the matching step', async (t) => {
   assert.equal(guide.hidden, true);
   document.getElementById('ec-prev-step').click();
   assert.equal(guide.hidden, false);
+});
+
+test('step pills, hints and the review guide the mapping journey', async (t) => {
+  const { document } = await fixture(t);
+  const pills = [...document.querySelectorAll('#ec-steps [data-ec-goto]')];
+  const state = () =>
+    pills.map((pill) =>
+      [pill.className.split(' ').at(-1), pill.disabled, pill.getAttribute('aria-current')].join(),
+    );
+  assert.deepEqual(state(), [
+    'btn-primary,false,step',
+    'btn-outline-secondary,true,',
+    'btn-outline-secondary,true,',
+  ]);
+  assert.equal(
+    document.getElementById('ec-step-hint').textContent,
+    'Fill in only the conditions that matter. Blank boxes match anything.',
+  );
+  assert.equal(document.getElementById('ec-prev-step').hidden, true);
+  assert.equal(document.getElementById('ec-editor-heading').textContent, 'Create a mapping');
+  // Unsaved mappings have no saved-rule tools to offer.
+  assert.equal(document.getElementById('ec-saved-rule').hidden, true);
+  // The draft's advice appears once, above the step.
+  assert.match(document.getElementById('ec-draft-notice').textContent, /^Draft from event /);
+  assert.doesNotMatch(document.getElementById('ec-sample-details').textContent, /Draft from/);
+
+  document.getElementById('ec-next-step').click();
+  assert.equal(document.getElementById('ec-step-number').textContent, '2');
+  assert.equal(document.getElementById('ec-step-title').textContent, 'Name and controls');
+  assert.equal(document.activeElement, document.getElementById('ec-step-2-heading'));
+  assert.deepEqual(state(), [
+    'btn-outline-success,false,',
+    'btn-primary,false,step',
+    'btn-outline-secondary,true,',
+  ]);
+
+  document.getElementById('ec-description').value = 'Mail <b>evidence</b>';
+  await until(() => document.getElementById('ec-control').options.length > 1);
+  document.getElementById('ec-control').value = 'A1';
+  document.getElementById('ec-add-target').click();
+  document.getElementById('ec-next-step').click();
+  assert.equal(document.getElementById('ec-step-number').textContent, '3');
+  assert.equal(document.getElementById('ec-saved-rule').hidden, true);
+  assert.equal(document.getElementById('ec-next-step').hidden, true);
+  assert.equal(document.getElementById('ec-save-rule').hidden, false);
+  assert.equal(
+    document.getElementById('ec-step-hint').textContent,
+    'Preview the matches, then save to publish.',
+  );
+  const review = document.getElementById('ec-review');
+  assert.deepEqual(
+    [...review.querySelectorAll('dt')].map((node) => node.textContent),
+    ['Events', 'Mapping name', 'Maps to'],
+  );
+  const values = [...review.querySelectorAll('dd .text-break')].map((node) => node.textContent);
+  assert.match(values[0], /^From Keen Agent \/ OTLP logs, on system “server”/);
+  assert.equal(values[1], 'Mail <b>evidence</b>');
+  assert.equal(review.querySelector('b'), null);
+  assert.equal(values[2], 'Framework A / A1');
+
+  // Change goes back to the step that holds the answer.
+  const changes = [...review.querySelectorAll('[data-ec-goto]')];
+  assert.equal(changes[1].getAttribute('aria-label'), 'Change mapping name');
+  changes[1].click();
+  assert.equal(document.getElementById('ec-step-number').textContent, '2');
+  assert.equal(document.getElementById('ec-save-rule').hidden, true);
+  // Without a target the step stays put.
+  document.querySelector('#ec-targets button').click();
+  document.getElementById('ec-next-step').click();
+  assert.equal(document.getElementById('ec-step-number').textContent, '2');
+  assert.match(
+    document.getElementById('ec-status').textContent,
+    /Add at least one framework control/,
+  );
+
+  // Earlier pills go back; later ones stay closed until the step is complete.
+  pills[2].click();
+  assert.equal(document.getElementById('ec-step-number').textContent, '2');
+  pills[0].click();
+  assert.equal(document.getElementById('ec-step-number').textContent, '1');
+  assert.equal(document.activeElement, document.getElementById('ec-step-1-heading'));
 });
 
 test('initial rule loading preserves Sources until an editor is requested', async (t) => {
@@ -364,8 +472,8 @@ test('a clause and a control sharing a reference become separate targets', async
     [...control.options].map((option) => [option.textContent, option.dataset.kind ?? null]),
     [
       ['Choose a control or clause', null],
-      ['Clause 5.1 — Leadership', 'clause'],
-      ['5.1 — <b>Policies</b>', 'control'],
+      ['Clause 5.1 - Leadership', 'clause'],
+      ['5.1 - <b>Policies</b>', 'control'],
     ],
   );
   // Both options carry the reference; the chosen option decides the kind.
@@ -375,7 +483,7 @@ test('a clause and a control sharing a reference become separate targets', async
   }
   const targets = document.getElementById('ec-targets');
   const labels = () => [...targets.children].map((row) => row.querySelector('span').textContent);
-  assert.deepEqual(labels(), ['A / Clause 5.1', 'A / 5.1']);
+  assert.deepEqual(labels(), ['Framework A / Clause 5.1', 'Framework A / 5.1']);
   assert.equal(targets.querySelector('b'), null);
 
   document.getElementById('ec-suggest-controls').click();
@@ -383,7 +491,11 @@ test('a clause and a control sharing a reference become separate targets', async
   await until(() => list.children.length === 2);
   assert.match(list.children[1].textContent, /^Clause 6\.1 · Planning/);
   for (const button of list.children) button.click();
-  assert.deepEqual(labels(), ['A / Clause 5.1', 'A / 5.1', 'A / Clause 6.1']);
+  assert.deepEqual(labels(), [
+    'Framework A / Clause 5.1',
+    'Framework A / 5.1',
+    'Framework A / Clause 6.1',
+  ]);
 
   document.getElementById('ec-preview').click();
   await until(() => posts.some((post) => post.path.endsWith('/mapping-rules/preview')));
@@ -434,7 +546,7 @@ test('a new rule opens the control picker on the active framework', async (t) =>
     [...document.getElementById('ec-targets').children].map(
       (row) => row.querySelector('span').textContent,
     ),
-    ['B / B1'],
+    ['Framework B / B1'],
   );
 });
 

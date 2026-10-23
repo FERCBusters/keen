@@ -86,7 +86,7 @@ def ensure_session_authorization_current(db: Session, user: User) -> None:
     tables repeatedly while rendering pages and nav. When the version changes, we
     recompute once from the DB and refresh the session snapshot.
 
-    Trusted REMOTE_USER deployments do not have a KEEN session to cache into, so
+    Trusted REMOTE_USER deployments do not have a Keen session to cache into, so
     they fall back to the existing DB-backed behaviour.
     """
     if not isinstance(user, User) or not getattr(user, "is_active", False):
@@ -100,7 +100,7 @@ def ensure_session_authorization_current(db: Session, user: User) -> None:
     cached_version = getattr(user, "session_authz_version", None)
 
     if not sid:
-        # No KEEN-owned session (for example trusted remote-user auth). Compute the
+        # No Keen-owned session (for example trusted remote-user auth). Compute the
         # role for this request and let has_permission() query the DB as before.
         if not cached_role:
             user.effective_role = compute_effective_role(db, user)

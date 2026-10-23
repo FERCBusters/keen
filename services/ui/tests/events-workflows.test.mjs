@@ -252,7 +252,7 @@ test('filters that match nothing stay selected and show a zero count', async (t)
   assert.deepEqual(chosenChips(ui, 'rule'), [['old-rule', 'Current filter: old-rule (0)']]);
   assert.deepEqual(filterChips(ui, 'rule'), [
     ['old-rule', 'Current filter: old-rule (0)'],
-    ['deploys', 'deploys — Deployments (2)'],
+    ['deploys', 'deploys - Deployments (2)'],
   ]);
   assert.equal(ui.lastEvents().get('control'), 'A.9');
   assert.equal(ui.lastEvents().get('rule'), 'old-rule');
@@ -269,13 +269,13 @@ test('without the control catalogue the page keeps the filter and names it from 
   });
   assert.equal(ui.el('pageTitle').textContent, 'Events for control A.1');
   await settle(() => /Access/.test(chosenChips(ui, 'control')[0][1]));
-  assert.deepEqual(chosenChips(ui, 'control'), [['A.1', 'A.1 — Access (2)']]);
+  assert.deepEqual(chosenChips(ui, 'control'), [['A.1', 'A.1 - Access (2)']]);
 
   // Choosing a source names the control from its result option.
   pickFilter(ui, 'source', 'ci');
 
-  assert.equal(ui.el('pageTitle').textContent, 'Events for CI and control A.1 — Access');
-  assert.equal(ui.document.title, 'Keen – Events for CI and control A.1 — Access');
+  assert.equal(ui.el('pageTitle').textContent, 'Events for CI and control A.1 - Access');
+  assert.equal(ui.document.title, 'Keen - Events for CI and control A.1 - Access');
 });
 
 test('a filter missing from the catalogue stays available while the catalogue is unavailable', async (t) => {
@@ -374,7 +374,7 @@ test('several sources, controls and mapping rules combine into one request', asy
   );
   // The rule chip carries the rule's description and targets.
   assert.deepEqual(filterChips(ui, 'rule'), [
-    ['deploys', 'deploys — Deployments (2)'],
+    ['deploys', 'deploys - Deployments (2)'],
     ['backup-runs', 'backup-runs (1)'],
   ]);
   assert.equal(
