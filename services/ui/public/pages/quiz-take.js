@@ -176,6 +176,8 @@ function render(view) {
   attempt = view;
   document.title = `Keen - ${view.title}`;
   $('quizTitle').textContent = view.title;
+  $('quizMeta').hidden = false;
+  $('quizTitle').textContent = view.title;
   $('quizMeta').textContent =
     `Due ${dateText(view.due_on)}${view.description ? ` · ${view.description}` : ''}`;
   if (view.status !== 'in_progress') {

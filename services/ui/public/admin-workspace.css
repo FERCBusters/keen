@@ -7,8 +7,8 @@ body[data-page='admin'] .container-tight {
   position: sticky;
   top: 90px;
   padding: 12px;
-  background: #faf9ff;
-  border: 1px solid #e7e2f3;
+  background: rgba(var(--keen-accent-rgb), 0.04);
+  border: 1px solid rgba(var(--keen-accent-rgb), 0.16);
   border-radius: 18px;
 }
 .admin-tab-nav .nav-link {
@@ -21,9 +21,9 @@ body[data-page='admin'] .container-tight {
   align-items: center;
 }
 .admin-tab-nav .nav-link.active {
-  background: #6935be;
-  color: white;
-  box-shadow: 0 4px 12px #6935be25;
+  background: rgba(var(--keen-accent-rgb), 0.16);
+  color: var(--keen-accent-700);
+  box-shadow: none;
 }
 .admin-nav-label {
   padding: 16px 14px 6px;
@@ -31,7 +31,7 @@ body[data-page='admin'] .container-tight {
   letter-spacing: 0.1em;
   font-size: 0.68rem;
   font-weight: 750;
-  color: #786e89;
+  color: var(--keen-muted);
 }
 #adminTabContent {
   min-width: 0;
@@ -43,7 +43,7 @@ body[data-page='admin'] .container-tight {
 }
 .admin-quicklinks a {
   padding: 16px;
-  border: 1px solid #e8e1f2;
+  border: 1px solid rgba(var(--keen-accent-rgb), 0.16);
   border-radius: 12px;
   display: flex;
   justify-content: space-between;
@@ -56,19 +56,19 @@ body[data-page='admin'] .container-tight {
   flex-wrap: wrap;
 }
 .ig-steps button {
-  border: 1px solid #ded5ed;
+  border: 1px solid rgba(var(--keen-accent-rgb), 0.16);
   border-radius: 30px;
   padding: 7px 12px;
-  background: white;
-  color: #645474;
+  background: var(--bs-body-bg);
+  color: var(--keen-muted);
 }
 .ig-steps button[aria-current='step'] {
-  background: #6935be;
+  background: var(--keen-accent);
   color: white;
-  border-color: #6935be;
+  border-color: var(--keen-accent);
 }
 .ig-card {
-  border: 1px solid #e4deec;
+  border: 1px solid rgba(var(--keen-accent-rgb), 0.2);
   border-radius: 16px;
   padding: 20px;
   background: white;
@@ -83,7 +83,7 @@ body[data-page='admin'] .container-tight {
   border-radius: 20px;
   padding: 4px 10px;
   font-size: 0.8rem;
-  background: #eee;
+  background: var(--bs-tertiary-bg, #eee);
 }
 .ig-state.good {
   background: #e4f7ee;
@@ -94,18 +94,8 @@ body[data-page='admin'] .container-tight {
   color: #a2263d;
 }
 .ig-state.busy {
-  background: #ede6ff;
-  color: #6935be;
-}
-.ig-stat {
-  border: 1px solid #e4deec;
-  border-radius: 14px;
-  padding: 20px;
-  background: white;
-}
-.ig-stat strong {
-  font-size: 1.8rem;
-  display: block;
+  background: rgba(var(--keen-accent-rgb), 0.14);
+  color: var(--keen-accent-700);
 }
 .ig-field {
   display: grid;
@@ -115,12 +105,12 @@ body[data-page='admin'] .container-tight {
 }
 .ig-run {
   padding: 14px 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--bs-border-color);
 }
 .ig-preview pre {
   max-height: 350px;
   overflow: auto;
-  background: #faf8ff;
+  background: var(--bs-tertiary-bg);
   padding: 16px;
   border-radius: 12px;
   white-space: pre-wrap;
@@ -159,8 +149,8 @@ body[data-page='admin'] .container-tight {
   }
   .ig-field {
     padding: 12px;
-    background: #faf8ff;
-    border: 1px solid #e8e0f2;
+    background: rgba(var(--keen-accent-rgb), 0.04);
+    border: 1px solid rgba(var(--keen-accent-rgb), 0.16);
     border-radius: 12px;
   }
   .ig-field .btn {
@@ -170,23 +160,23 @@ body[data-page='admin'] .container-tight {
   }
 }
 body[data-page='admin'] .btn-primary {
-  --bs-btn-bg: #6935be;
-  --bs-btn-border-color: #6935be;
-  --bs-btn-hover-bg: #56289f;
-  --bs-btn-hover-border-color: #56289f;
-  --bs-btn-active-bg: #56289f;
-  --bs-btn-active-border-color: #56289f;
+  --bs-btn-bg: var(--keen-accent);
+  --bs-btn-border-color: var(--keen-accent);
+  --bs-btn-hover-bg: var(--keen-accent-700);
+  --bs-btn-hover-border-color: var(--keen-accent-700);
+  --bs-btn-active-bg: var(--keen-accent-700);
+  --bs-btn-active-border-color: var(--keen-accent-700);
 }
 body[data-page='admin'] .btn-outline-primary {
-  --bs-btn-color: #6935be;
-  --bs-btn-border-color: #6935be;
-  --bs-btn-hover-bg: #6935be;
-  --bs-btn-hover-border-color: #6935be;
-  --bs-btn-active-bg: #56289f;
-  --bs-btn-active-border-color: #56289f;
+  --bs-btn-color: var(--keen-accent-700);
+  --bs-btn-border-color: var(--keen-accent-700);
+  --bs-btn-hover-bg: var(--keen-accent);
+  --bs-btn-hover-border-color: var(--keen-accent);
+  --bs-btn-active-bg: var(--keen-accent-700);
+  --bs-btn-active-border-color: var(--keen-accent-700);
 }
 .admin-tab-nav .nav-link:not(.active) {
-  color: #57426f;
+  color: var(--keen-muted);
 }
 
 @media (max-width: 991px) {
@@ -239,7 +229,6 @@ body[data-page='admin'] .btn-outline-primary {
 }
 :root[data-bs-theme='dark'] .admin-tab-nav,
 :root[data-bs-theme='dark'] .ig-card,
-:root[data-bs-theme='dark'] .ig-stat,
 :root[data-bs-theme='dark'] .ig-field,
 :root[data-bs-theme='dark'] .ig-preview pre {
   background: var(--bs-secondary-bg);

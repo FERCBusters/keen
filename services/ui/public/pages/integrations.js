@@ -81,7 +81,7 @@ function render() {
     ]
       .map(
         ([n, label]) =>
-          `<div class="col-md-4"><div class="ig-stat"><strong>${n}</strong>${label}</div></div>`,
+          `<div class="col-md-4"><div class="kpi"><div class="label">${label}</div><div class="value">${n}</div></div></div>`,
       )
       .join('') +
     (failed

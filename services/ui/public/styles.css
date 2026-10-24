@@ -1,5 +1,97 @@
 @import url('/vendor/mosp-design-system/styles.css');
 
+/* Anchors resolve rgba(var(--bs-link-color-rgb)), which the shared design
+   system binds only as --bs-link-color; without this the browser falls back to
+   Bootstrap blue and breaks the One Voice Rule. Read the theme-bound variables
+   directly. mosp-design-system owns the root fix for Keen-generic apps. */
+a {
+  color: var(--bs-link-color);
+}
+
+a:hover {
+  color: var(--bs-link-hover-color);
+}
+
+/* Bootstrap compiles the focus ring at build time as rgba(13,110,253); derive
+   it from the theme accent instead. */
+:root {
+  --bs-focus-ring-color: rgba(var(--keen-accent-rgb), var(--bs-focus-ring-opacity, 0.25));
+  --bs-dropdown-link-active-bg: var(--keen-accent);
+  --bs-pagination-active-bg: var(--keen-accent);
+  --bs-pagination-active-border-color: var(--keen-accent);
+}
+
+/* Native controls (checkbox, radio, range, progress, date parts) otherwise
+   follow the browser's default blue rather than the theme accent. */
+:root {
+  accent-color: var(--bs-primary);
+}
+
+/* Bootstrap compiles the checked form-control colours at build time, so they
+   stay browser blue in every theme; bind them to the accent like the other
+   components. */
+.form-check-input:checked {
+  background-color: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+
+/* The same compile-time issue hits the range thumb on Firefox. */
+.form-range::-webkit-slider-thumb,
+.form-range::-moz-range-thumb {
+  background-color: var(--bs-primary);
+}
+
+.form-range:focus::-webkit-slider-thumb,
+.form-range:focus::-moz-range-thumb {
+  box-shadow:
+    0 0 0 1px #fff,
+    0 0 0 0.25rem rgba(var(--keen-accent-rgb), 0.25);
+}
+
+/* Bootstrap also compiles input focus borders and rings; focus stays visible
+   in the accent family. */
+.form-control:focus,
+.form-select:focus {
+  border-color: rgba(var(--keen-accent-rgb), 0.5);
+  box-shadow: 0 0 0 0.25rem rgba(var(--keen-accent-rgb), 0.25);
+}
+
+/* Selected list-group items (folder lists on the documents and admin pages)
+   compile to Bootstrap blue; selected state belongs to the accent family. */
+.list-group-item.active {
+  background-color: rgba(var(--keen-accent-rgb), 0.16);
+  color: var(--keen-accent-700);
+  border-color: rgba(var(--keen-accent-rgb), 0.24);
+}
+
+.list-group-item.active:hover,
+.list-group-item.active:focus {
+  background-color: rgba(var(--keen-accent-rgb), 0.22);
+}
+
+/* Navbar controls sit on the solid accent bar; their focus ring kept the
+   compiled white-on-blue pair. */
+.navbar-keen .form-control:focus,
+.navbar-keen .btn:focus-visible {
+  border-color: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 0 0 0.25rem rgba(255, 255, 255, 0.2);
+}
+
+.navbar-keen .nav-link:focus-visible {
+  box-shadow: 0 0 0 0.25rem rgba(255, 255, 255, 0.3);
+}
+
+.form-check-input:focus {
+  border-color: rgba(var(--keen-accent-rgb), 0.6);
+  box-shadow: 0 0 0 0.25rem rgba(var(--keen-accent-rgb), 0.25);
+}
+
+/* The wizards move focus to each step heading to announce it; the visible ring
+   reads as a defect on a heading that is not reachable by keyboard focus. */
+.risk-wizard-step h2[tabindex='-1']:focus {
+  outline: none;
+}
+
 /* The hidden attribute wins over Bootstrap display utilities such as d-flex,
    so a toolbar or notice that is hidden stays hidden. */
 [hidden] {
@@ -127,7 +219,7 @@
 .keen-home .home-node-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 0.65rem 1.5rem rgba(15, 23, 42, 0.1);
-  border-color: rgba(13, 110, 253, 0.35);
+  border-color: rgba(var(--keen-accent-rgb), 0.35);
 }
 
 .keen-home .home-entry-icon,
@@ -413,6 +505,15 @@
 /* Statement of Applicability matrices */
 .soa-table-wrap {
   max-height: 70vh;
+  /* These matrices are wider than the container at any viewport; keep the
+     scroll contained here instead of letting the shared desktop un-clip push
+     the whole page wider than the window. */
+  overflow-x: auto !important;
+}
+.soa-table-wrap .table thead th {
+  /* The wrapper is the scroll container for the matrix, so headers pin to it
+     rather than to the page beneath the navbar. */
+  top: 0;
 }
 .soa-matrix-table th {
   white-space: nowrap;
@@ -549,6 +650,21 @@ a.schedule-calendar-event {
 }
 .risk-register-main {
   min-width: 0;
+}
+
+/* The register's ten columns need more width than the main column leaves next
+   to the sidebar. Contain the horizontal (and, with the header pinned, the
+   vertical) scroll inside the card, as the SOA matrices do, instead of letting
+   the shared desktop un-clip push the page wider than the window. */
+@media (min-width: 992px) {
+  .risk-register-main .table-responsive {
+    max-height: calc(100vh - var(--ui-nav-height, 3.5rem) - 6rem);
+    overflow-x: auto !important;
+    overflow-y: auto;
+  }
+  .risk-register-main .table thead th {
+    top: 0;
+  }
 }
 .risk-sidebar-bar {
   display: flex;
@@ -842,8 +958,9 @@ a.schedule-calendar-event {
 /* ISMS overview navigation flow */
 .isms-flow-card .card-body {
   background:
-    radial-gradient(circle at 18% 22%, rgba(13, 110, 253, 0.08), transparent 28%),
-    radial-gradient(circle at 84% 26%, rgba(32, 201, 151, 0.08), transparent 24%), var(--bs-body-bg);
+    radial-gradient(circle at 18% 22%, rgba(var(--keen-accent-rgb), 0.08), transparent 28%),
+    radial-gradient(circle at 84% 26%, rgba(var(--keen-accent-rgb), 0.06), transparent 24%),
+    var(--bs-body-bg);
 }
 
 .isms-flow-wrap {
@@ -913,8 +1030,8 @@ a.schedule-calendar-event {
 
 .isms-flow-button:hover .isms-flow-button-bg,
 .isms-flow-button:focus .isms-flow-button-bg {
-  fill: #5f46a6;
-  filter: drop-shadow(0 0 0.45rem rgba(111, 85, 199, 0.45));
+  fill: var(--keen-accent);
+  filter: drop-shadow(0 0 0.45rem rgba(var(--keen-accent-rgb), 0.45));
 }
 
 .isms-flow-button:focus-visible .isms-flow-button-bg {
@@ -1010,9 +1127,9 @@ a.schedule-calendar-event {
   position: sticky;
   top: 0;
   z-index: 3;
-  --bs-table-bg: #5f46a6;
+  --bs-table-bg: var(--keen-accent);
   --bs-table-color: #fff;
-  background-color: #5f46a6 !important;
+  background-color: var(--keen-accent) !important;
   color: #fff !important;
   text-align: center;
   vertical-align: middle;
@@ -1055,9 +1172,9 @@ a.schedule-calendar-event {
   position: sticky;
   left: 0;
   z-index: 2;
-  --bs-table-bg: #5f46a6;
+  --bs-table-bg: var(--keen-accent);
   --bs-table-color: #fff;
-  background-color: #5f46a6 !important;
+  background-color: var(--keen-accent) !important;
   color: #fff !important;
   font-weight: 700;
   text-align: center;
@@ -1085,9 +1202,9 @@ a.schedule-calendar-event {
 
 .isms-app-matrix-table thead .isms-app-head-linkage {
   z-index: 4;
-  --bs-table-bg: #5f46a6;
+  --bs-table-bg: var(--keen-accent);
   --bs-table-color: #fff;
-  background-color: #5f46a6 !important;
+  background-color: var(--keen-accent) !important;
   color: #fff !important;
 }
 
@@ -1156,14 +1273,14 @@ a.schedule-calendar-event {
 
 .isms-org-node {
   fill: var(--bs-body-bg);
-  stroke: #5f46a6;
+  stroke: var(--keen-accent);
   stroke-width: 1.4px;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.08));
 }
 
 .isms-org-node-root {
-  fill: #5f46a6;
-  stroke: #5f46a6;
+  fill: var(--keen-accent);
+  stroke: var(--keen-accent);
 }
 
 .isms-org-node-title {
@@ -1195,7 +1312,9 @@ a.schedule-calendar-event {
 .rich-text-content,
 .rich-text-editor [contenteditable] {
   color: #000;
-  font-family: 'Open Sans', Arial, Helvetica, sans-serif;
+  /* Keep the system-sans stack; 'Open Sans' is not shipped so it never applied
+     and locally-installed copies made editor text render in a second face. */
+  font-family: var(--bs-body-font-family);
   font-size: 11px;
   line-height: 1.55;
 }
@@ -1345,10 +1464,11 @@ a.schedule-calendar-event {
 }
 
 .isms-app-matrix-table .isms-access-cell-linked {
-  --bs-table-bg: #e7f1ff;
-  --bs-table-color: #0d6efd;
-  background-color: #e7f1ff !important;
-  color: #0d6efd !important;
+  /* Linked rows read as the selected/accent wash, not a second hue. */
+  --bs-table-bg: rgba(var(--keen-accent-rgb), 0.1);
+  --bs-table-color: var(--keen-accent-700);
+  background-color: rgba(var(--keen-accent-rgb), 0.1) !important;
+  color: var(--keen-accent-700) !important;
   font-weight: 700;
 }
 

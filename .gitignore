@@ -15,3 +15,4 @@ htmlcov/
 /services/ui/dist/
 *.orig
 *.rej
+services/ui/public/vendor

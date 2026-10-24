@@ -283,8 +283,8 @@ test('the overview summarises integration health and each status', async (t) => 
   const ctx = await builder(t);
   const { el, ui } = ctx;
   assert.deepEqual(
-    [...el('overview').querySelectorAll('.ig-stat')].map((s) => s.textContent),
-    ['7Configured integrations', '5Scheduled', '1Need attention'],
+    [...el('overview').querySelectorAll('.kpi')].map((s) => s.textContent),
+    ['Configured integrations7', 'Scheduled5', 'Need attention1'],
   );
   assert.match(el('overview').textContent, /paused after repeated failures/);
   assert.equal(ui.document.querySelector('#ig-list img, #ig-runs img, #ig-connections img'), null);

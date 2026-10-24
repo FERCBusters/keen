@@ -94,6 +94,7 @@ async function attempt(action, done, failure) {
 function renderHeader() {
   document.title = `Keen - ${quiz.title}`;
   $('quizTitle').textContent = quiz.title;
+  $('quizMeta').hidden = false;
   $('quizMeta').textContent = [
     frameworkLabel(quiz.framework),
     quiz.status,
