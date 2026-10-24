@@ -185,4 +185,7 @@ if (form) {
 if (form) {
   document.getElementById('loginFields').disabled = false;
   document.getElementById('loginLoading').hidden = true;
+  // An autofocus attribute is lost while the fields start disabled, so focus
+  // the username here and typing can start straight away.
+  usernameEl?.focus();
 }

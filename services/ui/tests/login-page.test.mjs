@@ -53,6 +53,11 @@ test('login handler sends credentials only in a JSON POST body', async (t) => {
   });
   t.after(() => ui.close());
   assert.equal(ui.document.getElementById('loginFields').disabled, false);
+  // Typing can start at once: the username has focus as soon as it is enabled.
+  assert.equal(ui.document.activeElement, ui.document.getElementById('username'));
+  // The card sits in the middle of a full-height column.
+  assert.ok(ui.document.body.classList.contains('min-vh-100'));
+  assert.ok(ui.document.querySelector('main').classList.contains('my-auto'));
   ui.document.getElementById('username').value = 'synthetic-user';
   ui.document.getElementById('password').value = 'synthetic-test-password';
   const event = new ui.window.Event('submit', { cancelable: true, bubbles: true });

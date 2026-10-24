@@ -10,8 +10,10 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <script src="/demo-notice.js" defer></script>
 </head>
-<body data-page="login">
-  <main class="container container-tight py-5">
+<body data-page="login" class="d-flex flex-column min-vh-100">
+  <!-- The page is a full-height column, so the sign-in card sits in the
+       middle of the window, below the demo notice when there is one. -->
+  <main class="container container-tight py-5 my-auto">
     <div class="row justify-content-center">
       <div class="col-12 col-sm-10 col-md-6 col-lg-5">
         <div class="card">
