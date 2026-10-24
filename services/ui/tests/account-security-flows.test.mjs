@@ -200,6 +200,8 @@ async function confirmPage(t, fragment, options = {}) {
 
 test('the SSO email proof token is read from the fragment and removed from the address bar', async (t) => {
   const { ui, posted } = await confirmPage(t, '#token=proof-123');
+  // The card sits in the middle of the window, as on the sign-in page.
+  assert.ok(ui.document.querySelector('main').classList.contains('my-auto'));
   // The one-time token leaves browser history before any request is made.
   assert.equal(ui.window.location.hash, '');
   assert.doesNotMatch(ui.window.location.href, /proof-123/);

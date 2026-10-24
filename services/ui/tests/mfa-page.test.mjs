@@ -87,6 +87,10 @@ test('a TOTP-only account is asked for its authenticator code and completes sign
   assert.equal(ui.el('keyPrompt').hidden, true);
   assert.equal(ui.el('codeLabel').textContent, 'Six-digit authenticator code');
   assert.equal(ui.el('code').inputMode, 'numeric');
+  // As on the sign-in page, the card sits mid-window and the code field has focus.
+  assert.ok(ui.document.body.classList.contains('min-vh-100'));
+  assert.ok(ui.document.querySelector('main').classList.contains('my-auto'));
+  assert.equal(ui.document.activeElement, ui.el('code'));
   assert.equal(ui.el('chooseKey').hidden, true);
   ui.el('code').value = '123456';
   ui.el('codeForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
