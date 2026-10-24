@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import uuid
 from datetime import datetime
 from typing import Any
@@ -36,6 +35,8 @@ from app.services.entity_changelog import (
     record_entity_changelog,
 )
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
+from app.services.text import clean_text
 
 PESTLE_READ_PERMISSION = "pestle.read"
 PESTLE_MANAGE_PERMISSION = "pestle.manage"
@@ -134,28 +135,8 @@ def _can_manage_pestle(db: Session, user: User | None) -> bool:
     )
 
 
-def _clean_text(
-    raw: str | None, *, max_len: int, required: bool = False, label: str = "value"
-) -> str:
-    value = (raw or "").strip()
-    if required and not value:
-        raise DomainError(status_code=400, detail=f"{label} is required")
-    if len(value) > max_len:
-        raise DomainError(status_code=400, detail=f"{label} is too long")
-    return value
-
-
-def _clean_framework(raw: str | None) -> str:
-    value = (raw or settings.default_framework_slug or "").strip()
-    if not value:
-        raise DomainError(status_code=400, detail="framework is required")
-    if len(value) > 64 or not re.match(r"^[A-Za-z0-9._:-]+$", value):
-        raise DomainError(status_code=400, detail="Invalid framework")
-    return value
-
-
 def _clean_type(raw: str | None) -> str:
-    value = _clean_text(raw, max_len=32, required=True, label="type")
+    value = clean_text(raw, max_len=32, required=True, label="type")
     match = {x.lower(): x for x in PESTLE_TYPES}.get(value.lower())
     if not match:
         raise DomainError(status_code=400, detail="type must be a valid PESTLE(E) type")
@@ -163,7 +144,7 @@ def _clean_type(raw: str | None) -> str:
 
 
 def _clean_lens(raw: str | None) -> str:
-    value = _clean_text(raw, max_len=16, required=True, label="lens")
+    value = clean_text(raw, max_len=16, required=True, label="lens")
     match = {x.lower(): x for x in PESTLE_LENSES}.get(value.lower())
     if not match:
         raise DomainError(status_code=400, detail="lens must be Internal or External")
@@ -421,15 +402,13 @@ def _apply_item_payload(
 ) -> None:
     fields = set(payload.model_fields_set or set())
     if is_create or "framework" in fields:
-        item.framework_slug = _clean_framework(payload.framework)
+        item.framework_slug = framework_parameter(payload.framework)
     if is_create or "type" in fields:
         item.type = _clean_type(payload.type)
     if is_create or "lens" in fields:
         item.lens = _clean_lens(payload.lens)
     if is_create or "item" in fields:
-        item.item = _clean_text(
-            payload.item, max_len=20000, required=True, label="item"
-        )
+        item.item = clean_text(payload.item, max_len=20000, required=True, label="item")
     if (
         is_create
         or "overall_relevance_id" in fields
@@ -442,7 +421,7 @@ def _apply_item_payload(
         )
         item.overall_relevance_id = relevance.id
     if is_create or "rationale" in fields:
-        item.rationale = _clean_text(
+        item.rationale = clean_text(
             payload.rationale, max_len=20000, required=False, label="rationale"
         )
     item.updated_at = _utcnow()
@@ -472,7 +451,7 @@ def list_pestle_items(
     user,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     limit = max(1, min(int(limit or 500), 5000))
     offset = max(0, int(offset or 0))
     qry = db.query(PestleItem).filter(PestleItem.framework_slug == fw)
@@ -521,7 +500,7 @@ def list_pestle_items(
 def create_pestle_item(*, payload: PestleItemPayload, user, db: Session):
     now = _utcnow()
     row = PestleItem(
-        framework_slug=_clean_framework(payload.framework),
+        framework_slug=framework_parameter(payload.framework),
         type=_clean_type(payload.type),
         lens=_clean_lens(payload.lens),
         item="",
@@ -621,7 +600,7 @@ def list_business_processes(
 
 
 def create_business_process(*, payload: BusinessProcessPayload, user, db: Session):
-    name = _clean_text(payload.name, max_len=256, required=True, label="name")
+    name = clean_text(payload.name, max_len=256, required=True, label="name")
     existing = (
         db.query(PestleBusinessProcess)
         .filter(func.lower(PestleBusinessProcess.name) == name.lower())
@@ -657,7 +636,7 @@ def update_business_process(
     *, process_id: str, payload: BusinessProcessPayload, user, db: Session
 ):
     row = _business_process_or_404(db, process_id)
-    name = _clean_text(payload.name, max_len=256, required=True, label="name")
+    name = clean_text(payload.name, max_len=256, required=True, label="name")
     conflict = (
         db.query(PestleBusinessProcess)
         .filter(
@@ -897,7 +876,7 @@ def pestle_business_process_changelog(
 def pestle_visualisations(
     *, framework: str = settings.default_framework_slug, user, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     items = (
         db.query(PestleItem)
         .filter(PestleItem.framework_slug == fw)

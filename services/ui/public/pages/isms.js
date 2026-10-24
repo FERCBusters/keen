@@ -1,9 +1,5 @@
-import { featureEnabled, sectionFeatures } from '/pages/feature-availability.js';
-import { renderBoard, renderTimeline, normalise, statuses, label } from '/pages/planning-views.js';
-import { safeExternalHref } from '/app.js';
-import { mountMeasurementExamples } from '/pages/measurement-examples.js';
-import { clauseBadges, controlBadges } from '/pages/isms-detail-common.js';
 import {
+  safeExternalHref,
   initNavbar,
   apiGet,
   apiPost,
@@ -29,6 +25,11 @@ import {
   effectivenessMetricValueHtml,
   effectivenessMetricThresholdBadgeHtml,
 } from '/app.js';
+
+import { featureEnabled, sectionFeatures } from '/pages/feature-availability.js';
+import { renderBoard, renderTimeline, normalise, statuses, label } from '/pages/planning-views.js';
+import { mountMeasurementExamples } from '/pages/measurement-examples.js';
+import { clauseBadges, controlBadges } from '/pages/isms-detail-common.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -1712,15 +1713,21 @@ function metricHistoryLinkHtml(item) {
   return `<div class="small-muted mt-1"><a href="${esc(effectivenessMeasureHref(item))}#metrics">${esc(label)} in metric history</a></div>`;
 }
 
+// A quiz's measure records the quiz's results and changes from the quiz.
+function quizHref(quiz) {
+  return withFramework(`/quiz.html?id=${encodeURIComponent(quiz.id)}`, framework);
+}
+
 function effectivenessActionsHtml(item) {
   const open = `<a class="btn btn-outline-primary" href="${esc(effectivenessMeasureHref(item))}" title="Open effectiveness measure"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span class="visually-hidden">Open</span></a>`;
-  const record = canManage
+  const editable = canManage && !item.quiz;
+  const record = editable
     ? `<button class="btn btn-outline-secondary" type="button" data-effectiveness-record="${esc(item.id)}" title="Record metric entry"><i class="bi bi-plus-circle" aria-hidden="true"></i><span class="visually-hidden">Record metric entry</span></button>`
     : '';
   const sample = canSampleAudits
     ? `<button class="btn btn-outline-success" type="button" data-audit-sample-entity="effectiveness" data-isms-id="${esc(item.id)}" title="Sample into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>`
     : '';
-  const editDelete = canManage
+  const editDelete = editable
     ? `<button class="btn btn-outline-primary" type="button" data-isms-edit="effectiveness" data-isms-id="${esc(item.id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit</span></button><button class="btn btn-outline-danger" type="button" data-isms-delete="effectiveness" data-isms-id="${esc(item.id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete</span></button>`
     : '';
   return `<td class="text-nowrap no-print isms-effectiveness-actions"><div class="btn-group btn-group-sm" role="group">${open}${record}${sample}${editDelete}</div></td>`;
@@ -1762,7 +1769,7 @@ function renderEffectivenessMeasures() {
         (
           item,
         ) => `<tr data-isms-row="effectiveness" data-isms-id="${esc(item.id)}" data-isms-filter-text="${esc(effectivenessFilterText(item))}">
-    <td class="wrap"><div class="fw-semibold"><a href="${esc(effectivenessMeasureHref(item))}">${esc(shorten(item.summary || 'Effectiveness measure', 140))}</a></div>${item.description ? `<div class="small-muted whitespace-pre-wrap mt-1">${esc(shorten(item.description, 260))}</div>` : ''}${item.metric_key ? `<div class="small-muted mt-1"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
+    <td class="wrap"><div class="fw-semibold"><a href="${esc(effectivenessMeasureHref(item))}">${esc(shorten(item.summary || 'Effectiveness measure', 140))}</a></div>${item.description ? `<div class="small-muted whitespace-pre-wrap mt-1">${esc(shorten(item.description, 260))}</div>` : ''}${item.metric_key ? `<div class="small-muted mt-1"><code>${esc(item.metric_key)}</code></div>` : ''}${item.quiz ? `<div class="small-muted mt-1"><i class="bi bi-patch-question me-1" aria-hidden="true"></i>Results of the quiz <a href="${esc(quizHref(item.quiz))}">${esc(item.quiz.title)}</a></div>` : ''}</td>
     <td class="wrap">${measureSourceHtml(item)}</td>
     <td class="wrap">${metricValueHtml(item.latest_entry, item)}${metricHistoryLinkHtml(item)}</td>
     <td>${esc(item.target_display || '-')}</td>

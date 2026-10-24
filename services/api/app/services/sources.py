@@ -17,7 +17,7 @@ from app.db.models import (
 )
 from app.security.diary_visibility import diary_filter_condition
 from app.services.control_inheritance import effective_framework_ids
-from app.services.isms.common import _clean_framework
+from app.services.frameworks import framework_parameter
 from app.services.isms.serializers import _effectiveness_measure_out
 
 EVENTS_READ_PERMISSION = "events.read"
@@ -35,7 +35,7 @@ def source_effectiveness_measures(
     db: Session,
 ):
     """Return effectiveness measures with metric entries recorded against a Keen source."""
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     src = str(source_name or "").strip()
     if not src:
         return {"framework": fw, "source": src, "items": []}

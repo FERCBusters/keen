@@ -1,7 +1,5 @@
-import { mountStoryRelated } from '/pages/story-related.js';
-import { safeExternalHref } from '/app.js';
-import { mountMeasurementExamples } from '/pages/measurement-examples.js';
 import {
+  safeExternalHref,
   initNavbar,
   apiGet,
   apiDelete,
@@ -20,6 +18,8 @@ import {
   effectivenessMetricValueHtml,
   effectivenessMetricThresholdBadgeHtml,
 } from '/app.js';
+import { mountStoryRelated } from '/pages/story-related.js';
+import { mountMeasurementExamples } from '/pages/measurement-examples.js';
 
 const me = await initNavbar();
 enableTableSorting();
@@ -133,7 +133,7 @@ function renderMeasure(row) {
     : '0';
   $('measureFrequency').textContent = measure.frequency || '-';
   $('measureOwner').innerHTML = userPillHtml(measure.owner);
-  if (canManageIsms && !document.getElementById('measurement-examples')) {
+  if (canManageIsms && !measure.quiz && !document.getElementById('measurement-examples')) {
     const panel = document.createElement('div');
     panel.id = 'measurement-examples';
     $('metricKey').closest('.card').after(panel);
@@ -147,13 +147,21 @@ function renderMeasure(row) {
   $('metricKey').innerHTML = measure.metric_key ? `<code>${esc(measure.metric_key)}</code>` : '-';
   $('measureUpdated').textContent = fmtTs(measure.updated_at) || '-';
   $('linkedControls').innerHTML = controlBadges(measure.controls);
+  // A quiz's measure records the quiz's results and changes from the quiz.
+  const quiz = measure.quiz;
+  const editable = canManageIsms && !quiz;
+  $('quizNotice').hidden = !quiz;
+  if (quiz) {
+    $('quizNotice').innerHTML =
+      `This measure records the results of the quiz <a href="${esc(withFramework(`/quiz.html?id=${encodeURIComponent(quiz.id)}`, framework))}">${esc(quiz.title)}</a>: each closed round's average. Change it from the quiz.`;
+  }
   const edit = $('editMeasureLink');
   if (edit) {
     edit.href = withFramework(
       `/isms.html?tab=effectiveness&edit=effectiveness:${encodeURIComponent(measure.id)}`,
       framework,
     );
-    edit.style.display = canManageIsms ? '' : 'none';
+    edit.style.display = editable ? '' : 'none';
   }
   const record = $('recordMetricLink');
   if (record) {
@@ -161,7 +169,7 @@ function renderMeasure(row) {
       `/isms.html?tab=effectiveness&record=${encodeURIComponent(measure.id)}`,
       framework,
     );
-    record.style.display = canManageIsms ? '' : 'none';
+    record.style.display = editable ? '' : 'none';
   }
   const sample = $('sampleMeasureAudit');
   if (sample) sample.style.display = canSampleAudits ? '' : 'none';
@@ -195,9 +203,10 @@ function renderMetrics() {
         const sample = canSampleAudits
           ? `<button class="btn btn-sm btn-outline-success" type="button" data-sample-metric="${esc(entry.id)}" title="Sample metric into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample metric into audit</span></button>`
           : '';
-        const del = canManageIsms
-          ? `<button class="btn btn-sm btn-outline-danger" type="button" data-delete-metric="${esc(entry.id)}" title="Delete metric entry"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete metric entry</span></button>`
-          : '';
+        const del =
+          canManageIsms && !measure.quiz
+            ? `<button class="btn btn-sm btn-outline-danger" type="button" data-delete-metric="${esc(entry.id)}" title="Delete metric entry"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete metric entry</span></button>`
+            : '';
         return `<tr data-metric-id="${esc(entry.id)}">
       <td class="small-muted" data-sort="${esc(entry.recorded_at || '')}">${esc(fmtTs(entry.recorded_at) || '-')}</td>
       <td>${esc(entry.period || '-')}</td>

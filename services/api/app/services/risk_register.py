@@ -26,12 +26,12 @@ from app.services.entity_changelog import (
     risk_changelog_state,
 )
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
 from app.services.isms.link_diary import sync_entity_link_diary
 from app.services.pestle import _clean_lens, _clean_type
 from app.services.risks import (
     RiskUpsertPayload,
     _apply_payload,
-    _clean_framework,
     _clean_risk_types,
     _replace_control_links,
     _risk_or_404,
@@ -167,7 +167,7 @@ def list_register(
     user,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     limit, offset = max(1, min(limit, 1000)), max(0, offset)
     rows = (
         db.query(Risk)
@@ -350,7 +350,7 @@ def remove_library(*, item_id: uuid.UUID, user, db: Session):
 def import_register(
     *, raw: bytes, framework: str = "iso_27001_2022", user, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     if len(raw) > 2_000_000:
         raise DomainError(413, "Risk CSV exceeds 2 MB")
     try:
@@ -479,7 +479,7 @@ def import_register(
 
 
 def export_register(*, framework: str = "iso_27001_2022", user, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
 
     def generate():
         output = io.StringIO()

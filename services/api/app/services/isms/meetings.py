@@ -7,15 +7,10 @@ from sqlalchemy.orm import Session
 from app.db.models import IsmsMeeting, User
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
+from app.services.text import clean_text
 
-from .common import (
-    _by_id_or_404,
-    _clean_framework,
-    _clean_minutes_html,
-    _clean_text,
-    _record,
-    _utcnow,
-)
+from .common import _by_id_or_404, _clean_minutes_html, _record, _utcnow
 from .mutations import (
     _apply_links,
     _delete_entity_links,
@@ -35,11 +30,11 @@ def create_meeting(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     if not payload.date:
         raise DomainError(status_code=400, detail="date is required")
     row = IsmsMeeting(
-        title=_clean_text(
+        title=clean_text(
             payload.title or "ISMS meeting", max_len=256, required=True, label="title"
         ),
         date=payload.date,
@@ -68,7 +63,7 @@ def create_meeting(
 
 
 def list_meetings(*, framework: str, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     rows = (
         db.query(IsmsMeeting)
         .order_by(IsmsMeeting.date.desc(), IsmsMeeting.start_time.desc())
@@ -78,7 +73,7 @@ def list_meetings(*, framework: str, user: User, db: Session):
 
 
 def get_meeting(*, meeting_id: str, framework: str, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(db, IsmsMeeting, meeting_id, "Meeting")
     return _meeting_out(db, row, fw)
 
@@ -92,14 +87,12 @@ def update_meeting(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(db, IsmsMeeting, meeting_id, "Meeting")
     before = _meeting_out(db, row, fw)
     fields = set(payload.model_fields_set or set())
     if "title" in fields:
-        row.title = _clean_text(
-            payload.title, max_len=256, required=True, label="title"
-        )
+        row.title = clean_text(payload.title, max_len=256, required=True, label="title")
     if "date" in fields and payload.date:
         row.date = payload.date
     if "start_time" in fields:
@@ -132,7 +125,7 @@ def update_meeting(
 def delete_meeting(
     *, meeting_id: str, context: ChangeContext, framework: str, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(db, IsmsMeeting, meeting_id, "Meeting")
     before = _meeting_out(db, row, fw)
     _record(db, "meeting", row, "deleted", before, None, user, context)

@@ -1,11 +1,17 @@
+"""Scheduled audits and audit reminders.
+
+A scheduled audit is an Audit row with status 'template' whose schedule
+follows app.services.schedules. Each due run creates an open audit with the
+template's scope and attendees and emails the attendees. Each attendee of an
+open audit is reminded once, shortly before the audit starts.
+"""
+
 from __future__ import annotations
 
 import logging
 import uuid
-from calendar import monthrange
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.orm import Session
 
@@ -20,291 +26,35 @@ from app.db.models import (
     AuditSwotScope,
     User,
 )
-from app.services.mailer import send_scheduled_audit_created_email, smtp_configured
+from app.services.mailer import (
+    looks_like_email,
+    send_audit_reminder_email,
+    send_scheduled_audit_created_email,
+    smtp_configured,
+    user_email,
+)
+from app.services.schedules import (
+    deliver_once,
+    materialise_due,
+    reminder_window,
+    today_for_schedule,
+)
 
 log = logging.getLogger(__name__)
 
-SCHEDULE_RECURRENCES = {"once", "weekly", "monthly", "quarterly", "yearly"}
-SCHEDULE_DATE_RULES = {
-    "exact",
-    "first_weekday_of_month",
-    "first_monday_of_month",
-    "first_tuesday_of_month",
-    "first_wednesday_of_month",
-    "first_thursday_of_month",
-    "first_friday_of_month",
-}
-FIRST_NAMED_WEEKDAY_RULES = {
-    "first_monday_of_month": 0,
-    "first_tuesday_of_month": 1,
-    "first_wednesday_of_month": 2,
-    "first_thursday_of_month": 3,
-    "first_friday_of_month": 4,
-}
-FUZZY_MONTH_DATE_RULES = SCHEDULE_DATE_RULES - {"exact"}
-_MONTHS_PER_STEP = {"monthly": 1, "quarterly": 3, "yearly": 12}
-
-
-def utcnow() -> datetime:
-    return utc_now_naive()
-
-
-def _today_for_schedule() -> date:
-    """Return today's date in Keen's configured timezone for date-only schedules."""
-
-    tz_name = str(settings.timezone or "Etc/UTC").strip() or "Etc/UTC"
-    try:
-        return datetime.now(ZoneInfo(tz_name)).date()
-    except ZoneInfoNotFoundError:
-        log.warning(
-            "Invalid KEEN_TIMEZONE=%r; falling back to server-local date for scheduled audits",
-            tz_name,
-        )
-    except Exception:
-        log.exception(
-            "Failed to resolve KEEN_TIMEZONE=%r; falling back to server-local date for scheduled audits",
-            tz_name,
-        )
-    return date.today()
-
-
-def _add_months(d: date, months: int) -> date:
-    month_idx = (d.month - 1) + months
-    year = d.year + month_idx // 12
-    month = month_idx % 12 + 1
-    day = min(d.day, monthrange(year, month)[1])
-    return date(year, month, day)
-
-
-def _weekday_within_month(d: date) -> date:
-    """Move a weekend date to the Friday before it, staying inside its month.
-
-    A Saturday or Sunday at the start of a month has no Friday in that month, so
-    it moves to the following Monday instead.
-    """
-
-    if d.weekday() < 5:
-        return d
-    friday = d - timedelta(days=d.weekday() - 4)
-    if friday.month == d.month:
-        return friday
-    return d + timedelta(days=7 - d.weekday())
-
-
-def anchored_month_date(year: int, month: int, anchor_day: int) -> date:
-    """Return the run date for an exact monthly, quarterly or yearly schedule.
-
-    The schedule keeps the day of the month it started on. A month too short for
-    that day uses its last day, so a schedule that started on the 31st runs on the
-    last day of every month. Weekend dates move to the Friday before, or to the
-    Monday after when that Friday falls in the previous month.
-    """
-
-    last = monthrange(year, month)[1]
-    day = max(1, min(int(anchor_day), last))
-    return _weekday_within_month(date(year, month, day))
-
-
-def _first_matching_weekday_of_month(
-    year: int, month: int, *, weekday: int | None = None
-) -> date:
-    """Return the first matching weekday date for a month.
-
-    weekday=None means the first business weekday, Monday through Friday.
-    Otherwise weekday follows Python's date.weekday(): Monday=0 ... Friday=4.
-    """
-
-    m = max(1, min(12, int(month or 1)))
-    d = date(int(year), m, 1)
-    if weekday is None:
-        while d.weekday() >= 5:
-            d += timedelta(days=1)
-        return d
-
-    target = max(0, min(4, int(weekday)))
-    while d.weekday() != target:
-        d += timedelta(days=1)
-    return d
-
-
-def first_scheduled_rule_date(year: int, month: int, rule: str) -> date:
-    """Return the first concrete date for a supported fuzzy monthly rule."""
-
-    weekday = FIRST_NAMED_WEEKDAY_RULES.get(str(rule or "").strip().lower())
-    return _first_matching_weekday_of_month(year, month, weekday=weekday)
-
-
-def _fuzzy_month_rule_next(
-    current: date,
-    *,
-    recurrence: str,
-    interval: int,
-    anchor_month: int | None,
-    rule: str,
-) -> date | None:
-    recur = str(recurrence or "once").strip().lower()
-    step = max(1, int(interval or 1))
-    if recur == "once":
-        return None
-    if recur == "weekly":
-        return None
-    if recur == "monthly":
-        candidate = _add_months(date(current.year, current.month, 1), step)
-        return first_scheduled_rule_date(candidate.year, candidate.month, rule)
-    if recur == "quarterly":
-        candidate = _add_months(date(current.year, current.month, 1), 3 * step)
-        return first_scheduled_rule_date(candidate.year, candidate.month, rule)
-    if recur == "yearly":
-        month = max(1, min(12, int(anchor_month or current.month)))
-        return first_scheduled_rule_date(current.year + step, month, rule)
-    return None
-
-
-def next_occurrence_after(
-    current: date,
-    *,
-    recurrence: str,
-    interval: int = 1,
-    until: date | None = None,
-    date_rule: str = "exact",
-    anchor_month: int | None = None,
-    anchor_day: int | None = None,
-) -> date | None:
-    """Return the run after ``current``, or None when the schedule has ended.
-
-    Exact monthly, quarterly and yearly runs are placed on ``anchor_day`` (the
-    day the schedule started on; ``current``'s day when omitted) in the month
-    they fall in, so an earlier short month or weekend move never shifts them.
-    """
-
-    recur = str(recurrence or "once").strip().lower()
-    step = max(1, int(interval or 1))
-    rule = str(date_rule or "exact").strip().lower()
-    if rule in FUZZY_MONTH_DATE_RULES:
-        nxt = _fuzzy_month_rule_next(
-            current,
-            recurrence=recur,
-            interval=step,
-            anchor_month=anchor_month,
-            rule=rule,
-        )
-        if not nxt:
-            return None
-    elif recur == "once":
-        return None
-    elif recur == "weekly":
-        nxt = current + timedelta(days=7 * step)
-    elif recur in _MONTHS_PER_STEP:
-        month = _add_months(
-            date(current.year, current.month, 1), _MONTHS_PER_STEP[recur] * step
-        )
-        nxt = anchored_month_date(month.year, month.month, anchor_day or current.day)
-    else:
-        return None
-    if until and nxt > until:
-        return None
-    return nxt
-
-
-def _anchor_day(template: Audit) -> int | None:
-    """Return the day of the month a template's exact schedule keeps."""
-
-    start = getattr(template, "start_date", None)
-    return start.day if start else None
-
-
-def occurrences_between(
-    template: Audit, *, start: date, end: date, limit: int = 100
-) -> list[date]:
-    """Return scheduled occurrence dates for a template within [start, end]."""
-
-    recur = (
-        str(getattr(template, "schedule_recurrence", None) or "once").strip().lower()
-    )
-    if recur not in SCHEDULE_RECURRENCES:
-        recur = "once"
-    interval = max(1, int(getattr(template, "schedule_interval", None) or 1))
-    until = getattr(template, "schedule_until_date", None)
-    date_rule = (
-        str(getattr(template, "schedule_date_rule", None) or "exact").strip().lower()
-    )
-    if date_rule not in SCHEDULE_DATE_RULES:
-        date_rule = "exact"
-    anchor_month = getattr(template, "schedule_anchor_month", None)
-    anchor_day = _anchor_day(template)
-
-    cur = getattr(template, "schedule_next_run_date", None) or getattr(
-        template, "start_date", None
-    )
-    if not cur:
-        return []
-
-    out: list[date] = []
-    guard = 0
-    # Advance cheaply until the window if the saved next date is before it.
-    while cur and cur < start and guard < 1000:
-        cur = next_occurrence_after(
-            cur,
-            recurrence=recur,
-            interval=interval,
-            until=until,
-            date_rule=date_rule,
-            anchor_month=anchor_month,
-            anchor_day=anchor_day,
-        )
-        guard += 1
-    while cur and cur <= end and len(out) < limit:
-        if cur >= start:
-            out.append(cur)
-        cur = next_occurrence_after(
-            cur,
-            recurrence=recur,
-            interval=interval,
-            until=until,
-            date_rule=date_rule,
-            anchor_month=anchor_month,
-            anchor_day=anchor_day,
-        )
-        if recur == "once":
-            break
-    return out
-
-
-def _looks_like_email(raw: str | None) -> bool:
-    value = (raw or "").strip()
-    return bool(
-        value
-        and "@" in value
-        and not value.startswith("@")
-        and not value.endswith("@")
-        and len(value) <= 256
-    )
-
-
-def _user_notification_email(user: User | None) -> str | None:
-    if user is None:
-        return None
-    email = getattr(user, "email", None)
-    if _looks_like_email(email):
-        return str(email).strip()
-    username = getattr(user, "username", None)
-    if _looks_like_email(username):
-        return str(username).strip()
-    return None
+# Audits that have not finished yet; their attendees are due reminders.
+REMINDER_AUDIT_STATUSES = ("open", "in_progress")
 
 
 def _attendee_notification_email(db: Session, attendee: AuditAttendee) -> str | None:
-    email = str(attendee.email or "").strip()
-    if _looks_like_email(email):
-        return email
-    if attendee.user_id is None:
+    """The attendee's address; an attendee whose account is deactivated gets none."""
+    user = db.get(User, attendee.user_id) if attendee.user_id else None
+    if user is not None and not user.is_active:
         return None
-    user = (
-        db.query(User)
-        .filter(User.id == attendee.user_id, User.is_active.is_(True))
-        .one_or_none()
-    )
-    return _user_notification_email(user)
+    email = str(attendee.email or "").strip()
+    if looks_like_email(email):
+        return email
+    return user_email(user) if user is not None else None
 
 
 def _audit_url(audit_id: uuid.UUID) -> str:
@@ -319,51 +69,10 @@ def _audit_end_for_run(template: Audit, run_date: date) -> date | None:
     return run_date + (template.end_date - template.start_date)
 
 
-def _next_template_occurrence(template: Audit, run_date: date) -> date | None:
-    return next_occurrence_after(
-        run_date,
-        recurrence=template.schedule_recurrence or "once",
-        interval=template.schedule_interval or 1,
-        until=template.schedule_until_date,
-        date_rule=template.schedule_date_rule or "exact",
-        anchor_month=template.schedule_anchor_month,
-        anchor_day=_anchor_day(template),
-    )
-
-
-def _advance_template_past_missed_runs(
-    template: Audit, *, run_today: date, max_steps: int = 1000
-) -> tuple[date | None, list[str]]:
-    """Advance stale schedule dates without creating backfilled audits.
-
-    A scheduled audit should only materialise when the occurrence's begin date is
-    today or inside the configured look-ahead window. If the worker was offline
-    for prior occurrences, those missed dates are skipped rather than creating
-    audits whose begin date is already in the past.
-    """
-
-    run_date = template.schedule_next_run_date
-    skipped: list[str] = []
-    steps = 0
-    while run_date and run_date < run_today and steps < max_steps:
-        skipped.append(run_date.isoformat())
-        run_date = _next_template_occurrence(template, run_date)
-        steps += 1
-    if run_date and run_date < run_today:
-        log.warning(
-            "Stopped advancing stale scheduled audit template %s after %s missed "
-            "runs; disabling next run date to avoid creating a past audit",
-            getattr(template, "id", "unknown"),
-            max_steps,
-        )
-        return None, skipped
-    return run_date, skipped
-
-
 def _copy_template_scope_and_attendees(
     db: Session, *, template: Audit, audit: Audit
 ) -> None:
-    now = utcnow()
+    now = utc_now_naive()
     controls = (
         db.query(AuditScopedControl.control_item_id)
         .filter(AuditScopedControl.audit_id == template.id)
@@ -424,12 +133,25 @@ def _copy_template_scope_and_attendees(
             AuditAttendee(
                 audit_id=audit.id,
                 user_id=attendee.user_id,
+                person_id=attendee.person_id,
                 name=attendee.name,
                 email=_attendee_notification_email(db, attendee),
                 role=attendee.role,
                 created_at=now,
             )
         )
+
+
+def _audit_email_fields(audit: Audit) -> dict[str, Any]:
+    return {
+        "audit_title": audit.title,
+        "audit_type": audit.audit_type or "internal",
+        "framework_slug": audit.framework_slug,
+        "scheduled_for": audit.start_date.isoformat() if audit.start_date else "today",
+        "scheduled_until": audit.end_date.isoformat() if audit.end_date else None,
+        "audit_url": _audit_url(audit.id),
+        "uid": f"keen-audit-{audit.id}",
+    }
 
 
 def _email_attendees(db: Session, *, audit: Audit) -> int:
@@ -460,17 +182,7 @@ def _email_attendees(db: Session, *, audit: Audit) -> int:
             send_scheduled_audit_created_email(
                 to_email=email,
                 attendee_name=attendee.name,
-                audit_title=audit.title,
-                audit_type=audit.audit_type or "internal",
-                framework_slug=audit.framework_slug,
-                scheduled_for=(
-                    audit.start_date.isoformat() if audit.start_date else "today"
-                ),
-                scheduled_until=(
-                    audit.end_date.isoformat() if audit.end_date else None
-                ),
-                audit_url=_audit_url(audit.id),
-                uid=f"keen-audit-{audit.id}",
+                **_audit_email_fields(audit),
             )
             sent += 1
         except Exception:
@@ -482,68 +194,36 @@ def _email_attendees(db: Session, *, audit: Audit) -> int:
     return sent
 
 
-def _materialise_template(
-    db: Session, template: Audit, *, run_today: date, latest_create_date: date
-) -> tuple[Audit | None, dict[str, Any] | None]:
-    """Advance one locked template and create its due audit, if it has one.
+def _audit_run(db: Session):
+    """Return the function that creates one template's audit for a run date."""
 
-    Returns the created audit and the record of any missed runs it skipped;
-    the caller commits.
-    """
-    skipped = None
-    run_date = template.schedule_next_run_date
-    if not run_date or run_date > latest_create_date:
-        return None, None
-
-    if run_date < run_today:
-        next_run_date, skipped_dates = _advance_template_past_missed_runs(
-            template, run_today=run_today
+    def create(template: Audit, run_date: date) -> Audit:
+        now = utc_now_naive()
+        audit = Audit(
+            title=f"{template.title} ({run_date.isoformat()})",
+            framework_slug=template.framework_slug,
+            status="open",
+            audit_type=template.audit_type or "internal",
+            start_date=run_date,
+            end_date=_audit_end_for_run(template, run_date),
+            created_by_user_id=template.created_by_user_id,
+            created_at=now,
+            updated_at=now,
+            notes=template.notes or "",
+            executive_summary=template.executive_summary or "",
+            meta={
+                **(template.meta or {}),
+                "scheduled_from_template_id": str(template.id),
+                "scheduled_run_date": run_date.isoformat(),
+            },
         )
-        template.schedule_next_run_date = next_run_date
-        template.updated_at = utcnow()
-        if skipped_dates:
-            skipped = {
-                "template_id": str(template.id),
-                "skipped_run_dates": skipped_dates,
-                "next_run_date": (next_run_date.isoformat() if next_run_date else None),
-            }
-        run_date = next_run_date
-        if not run_date or run_date > latest_create_date:
-            return None, skipped
+        db.add(audit)
+        db.flush()
+        _copy_template_scope_and_attendees(db, template=template, audit=audit)
+        template.schedule_last_created_audit_id = audit.id
+        return audit
 
-    # Defensive idempotency guard for repeated runs on the same persisted template state.
-    if template.schedule_last_run_date and template.schedule_last_run_date >= run_date:
-        template.schedule_next_run_date = _next_template_occurrence(template, run_date)
-        return None, skipped
-
-    now = utcnow()
-    audit = Audit(
-        title=f"{template.title} ({run_date.isoformat()})",
-        framework_slug=template.framework_slug,
-        status="open",
-        audit_type=template.audit_type or "internal",
-        start_date=run_date,
-        end_date=_audit_end_for_run(template, run_date),
-        created_by_user_id=template.created_by_user_id,
-        created_at=now,
-        updated_at=now,
-        notes=template.notes or "",
-        executive_summary=template.executive_summary or "",
-        meta={
-            **(template.meta or {}),
-            "scheduled_from_template_id": str(template.id),
-            "scheduled_run_date": run_date.isoformat(),
-        },
-    )
-    db.add(audit)
-    db.flush()
-    _copy_template_scope_and_attendees(db, template=template, audit=audit)
-
-    template.schedule_last_run_date = run_date
-    template.schedule_last_created_audit_id = audit.id
-    template.schedule_next_run_date = _next_template_occurrence(template, run_date)
-    template.updated_at = now
-    return audit, skipped
+    return create
 
 
 def materialize_due_scheduled_audits(
@@ -553,60 +233,82 @@ def materialize_due_scheduled_audits(
 
     if not state(db, refresh=True).enabled("audit_scheduling"):
         return {"enabled": False, "created": [], "skipped_past": []}
-    run_today = today or _today_for_schedule()
+    run_today = today or today_for_schedule()
     days_ahead = max(0, int(settings.scheduled_audit_create_days_ahead or 0))
     latest_create_date = run_today + timedelta(days=days_ahead)
-    due = (
-        db.query(Audit.id)
-        .filter(Audit.status == "template")
-        .filter(Audit.schedule_next_run_date.isnot(None))
-        .filter(Audit.schedule_next_run_date <= latest_create_date)
-        .order_by(Audit.schedule_next_run_date.asc(), Audit.created_at.asc())
-        .all()
+    checked, created, skipped = materialise_due(
+        db,
+        model=Audit,
+        filters=[Audit.status == "template"],
+        run_today=run_today,
+        latest_create_date=latest_create_date,
+        create_run=_audit_run(db),
+        after_commit=lambda template_id, audit: {
+            "template_id": str(template_id),
+            "audit_id": str(audit.id),
+            "run_date": audit.start_date.isoformat(),
+            "emails_sent": _email_attendees(db, audit=audit),
+        },
     )
-
-    created: list[dict[str, Any]] = []
-    skipped_past: list[dict[str, Any]] = []
-    for (template_id,) in due:
-        # Each template is read again under its row lock, which template edits
-        # also take, so an overlapping run or edit is seen before an audit is
-        # created and one run date never produces two audits. The commit ends
-        # the template's transaction and releases the lock.
-        template = (
-            db.query(Audit)
-            .filter(Audit.id == template_id, Audit.status == "template")
-            .with_for_update()
-            .one_or_none()
-        )
-        audit, skipped = (
-            _materialise_template(
-                db,
-                template,
-                run_today=run_today,
-                latest_create_date=latest_create_date,
-            )
-            if template is not None
-            else (None, None)
-        )
-        db.commit()
-        if skipped:
-            skipped_past.append(skipped)
-        if audit is not None:
-            db.refresh(audit)
-            created.append(
-                {
-                    "template_id": str(template_id),
-                    "audit_id": str(audit.id),
-                    "run_date": audit.start_date.isoformat(),
-                    "emails_sent": _email_attendees(db, audit=audit),
-                }
-            )
-
     return {
-        "checked": len(due),
+        "checked": checked,
         "created": created,
-        "skipped_past": skipped_past,
+        "skipped_past": [
+            {"template_id": str(template_id), **record}
+            for template_id, record in skipped
+        ],
         "create_days_ahead": days_ahead,
         "create_window_start": run_today.isoformat(),
         "create_window_end": latest_create_date.isoformat(),
+    }
+
+
+def send_audit_reminders(db: Session, *, today: date | None = None) -> dict[str, Any]:
+    """Remind each attendee of an open audit once before it starts."""
+    from app.services.features import state
+
+    window = reminder_window(today)
+    if window is None or not state(db, refresh=True).enabled("audits"):
+        return {"enabled": False, "sent": 0}
+    first, last = window
+    ids = [
+        attendee_id
+        for (attendee_id,) in db.query(AuditAttendee.id)
+        .join(Audit, Audit.id == AuditAttendee.audit_id)
+        .filter(
+            Audit.status.in_(REMINDER_AUDIT_STATUSES),
+            Audit.start_date.isnot(None),
+            Audit.start_date >= first,
+            Audit.start_date <= last,
+            AuditAttendee.reminded_at.is_(None),
+        )
+        .order_by(Audit.start_date.asc(), AuditAttendee.created_at.asc())
+        .all()
+    ]
+
+    reminded: set[tuple[uuid.UUID, str]] = set()
+
+    def compose(attendee: AuditAttendee):
+        email = _attendee_notification_email(db, attendee)
+        if not email:
+            return False
+        # Two attendee rows for one address share a reminder.
+        key = (attendee.audit_id, email.lower())
+        if key in reminded:
+            return True
+        name, fields = attendee.name, _audit_email_fields(attendee.audit)
+
+        def deliver() -> None:
+            send_audit_reminder_email(to_email=email, attendee_name=name, **fields)
+            reminded.add(key)
+
+        return deliver
+
+    return {
+        "enabled": True,
+        "sent": deliver_once(
+            db, model=AuditAttendee, marker="reminded_at", ids=ids, compose=compose
+        ),
+        "window_start": first.isoformat(),
+        "window_end": last.isoformat(),
     }

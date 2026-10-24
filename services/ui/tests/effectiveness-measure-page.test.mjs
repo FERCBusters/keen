@@ -346,3 +346,21 @@ test('a measure without a target explains that values are reviewed as a trend', 
   assert.match(ui.el('measureThresholdExplanation').textContent, /no numeric target/);
   assert.doesNotMatch(ui.el('measureThresholdExplanation').textContent, /Outside target/);
 });
+
+test("a quiz's measure points to its quiz and offers no edits of its own", async (t) => {
+  const { ui } = await measurePage(t, {
+    measure: measure({ metric_key: null, quiz: { id: 'q1', title: 'Security <basics>' } }),
+  });
+  const notice = ui.el('quizNotice');
+  assert.equal(notice.hidden, false);
+  assert.match(notice.textContent, /results of the quiz Security <basics>/);
+  assert.equal(notice.querySelector('a').getAttribute('href'), '/quiz.html?id=q1&framework=A');
+  for (const id of ['editMeasureLink', 'recordMetricLink'])
+    assert.equal(ui.el(id).style.display, 'none', id);
+  assert.equal(ui.el('measurement-examples'), null);
+  assert.equal(ui.document.querySelector('[data-delete-metric]'), null);
+  // Results can still be sampled into an audit.
+  assert.ok(ui.document.querySelector('[data-sample-metric]'));
+  const own = await measurePage(t);
+  assert.equal(own.ui.el('quizNotice').hidden, true);
+});

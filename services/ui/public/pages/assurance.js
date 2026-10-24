@@ -1,6 +1,14 @@
+import {
+  safeExternalHref,
+  initNavbar,
+  apiGet,
+  apiPost,
+  apiPatch,
+  apiDelete,
+  esc,
+  toast,
+} from '/app.js';
 import { featureEnabled } from '/pages/feature-availability.js';
-import { safeExternalHref } from '/app.js';
-import { initNavbar, apiGet, apiPost, apiPatch, apiDelete, esc, toast } from '/app.js';
 
 const me = await initNavbar();
 if (!featureEnabled(me, 'people') && featureEnabled(me, 'vendors')) {

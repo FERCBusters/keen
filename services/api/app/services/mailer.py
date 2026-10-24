@@ -9,6 +9,33 @@ from email.message import EmailMessage
 from app.core.config import settings
 
 
+def looks_like_email(raw: str | None) -> bool:
+    """Whether a stored address is plausible enough to send to."""
+    value = (raw or "").strip()
+    return bool(
+        value
+        and "@" in value
+        and not value.startswith("@")
+        and not value.endswith("@")
+        and len(value) <= 256
+    )
+
+
+def user_email(user) -> str | None:
+    """The address Keen emails a user at: their email, or an email username."""
+    if user is None:
+        return None
+    email = getattr(user, "email", None)
+    if looks_like_email(email):
+        return str(email).strip()
+    # A username that is an email address serves as the user's email. Where
+    # usernames are other identifiers, administrators set the email field.
+    username = getattr(user, "username", None)
+    if looks_like_email(username):
+        return str(username).strip()
+    return None
+
+
 def smtp_configured() -> bool:
     return bool((settings.smtp_host or "").strip()) and bool(
         (settings.smtp_from_email or "").strip()
@@ -79,7 +106,8 @@ def send_email(
     from_name = (settings.smtp_from_name or "Keen").strip() or "Keen"
 
     msg = EmailMessage()
-    msg["Subject"] = subject
+    # A header holds one line; stored titles can hold more.
+    msg["Subject"] = " ".join(subject.split())
     msg["From"] = f"{from_name} <{from_email}>" if from_name else from_email
     msg["To"] = to_addr
     msg.set_content(body)
@@ -154,10 +182,57 @@ def _ics_date(value: str | date | None, *, default: date) -> date:
         return default
 
 
-def _ics_uid(value: str | None, title: str, start_date: date) -> str:
-    raw = (value or f"keen-audit-{title}-{start_date.isoformat()}").strip()
-    safe = re.sub(r"[^A-Za-z0-9._@-]+", "-", raw).strip("-") or "keen-audit"
+def _ics_uid(value: str | None, fallback: str, prefix: str) -> str:
+    raw = (value or fallback).strip()
+    safe = re.sub(r"[^A-Za-z0-9._@-]+", "-", raw).strip("-") or prefix
     return f"{safe}@keen"
+
+
+def build_calendar_invite(
+    *,
+    summary: str,
+    description: str,
+    starts: str | date | None,
+    ends: str | date | None = None,
+    url: str,
+    uid: str | None = None,
+    uid_prefix: str = "keen-event",
+    product: str = "Schedule",
+) -> str:
+    """Build a small all-day iCalendar event for a Keen email attachment.
+
+    The same ``uid`` updates the recipient's existing calendar entry, so a
+    reminder and the original invitation describe one event.
+    """
+
+    start_date = _ics_date(starts, default=date.today())
+    end_date = _ics_date(ends, default=start_date)
+    # All-day DTEND is exclusive. Include the selected end date when one exists.
+    exclusive_end = (end_date if end_date >= start_date else start_date) + timedelta(
+        days=1
+    )
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        f"PRODID:-//Keen//{product}//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        f"UID:{_ics_uid(uid, f'{uid_prefix}-{summary}-{start_date.isoformat()}', uid_prefix)}",
+        f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
+        f"DTSTART;VALUE=DATE:{start_date.strftime('%Y%m%d')}",
+        f"DTEND;VALUE=DATE:{exclusive_end.strftime('%Y%m%d')}",
+        f"SUMMARY:{_ics_escape(summary)}",
+        f"DESCRIPTION:{_ics_escape(description)}",
+        f"URL:{_ics_escape(url)}",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ]
+    return "\r\n".join(_ics_fold(line) for line in lines) + "\r\n"
+
+
+def _audit_type_label(audit_type: str | None) -> str:
+    return "External" if str(audit_type or "").lower() == "external" else "Internal"
 
 
 def build_audit_ics(
@@ -172,34 +247,60 @@ def build_audit_ics(
 ) -> str:
     """Build a small all-day iCalendar invite for an audit attendee email."""
 
-    start_date = _ics_date(scheduled_for, default=date.today())
-    end_date = _ics_date(scheduled_until, default=start_date)
-    # All-day DTEND is exclusive. Include the selected end date when one exists.
-    exclusive_end = (end_date if end_date >= start_date else start_date) + timedelta(
-        days=1
+    return build_calendar_invite(
+        summary=audit_title or "Keen audit",
+        description=(
+            f"{_audit_type_label(audit_type)} audit for {framework_slug}. "
+            f"Open audit: {audit_url}"
+        ),
+        starts=scheduled_for,
+        ends=scheduled_until,
+        url=audit_url,
+        uid=uid,
+        uid_prefix="keen-audit",
+        product="Audit Schedule",
     )
-    type_label = (
-        "External" if str(audit_type or "").lower() == "external" else "Internal"
+
+
+def _sender_name() -> str:
+    return (settings.smtp_from_name or "Keen").strip() or "Keen"
+
+
+def _send_with_invite(
+    *, to_email: str, subject: str, body: str, invite: str, filename: str
+) -> None:
+    send_email(
+        to_email=to_email,
+        subject=subject,
+        body=body,
+        attachments=[
+            {
+                "filename": filename,
+                "content": invite,
+                "maintype": "text",
+                "subtype": "calendar",
+            }
+        ],
     )
-    description = f"{type_label} audit for {framework_slug}. Open audit: {audit_url}"
-    lines = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//Keen//Audit Schedule//EN",
-        "CALSCALE:GREGORIAN",
-        "METHOD:PUBLISH",
-        "BEGIN:VEVENT",
-        f"UID:{_ics_uid(uid, audit_title, start_date)}",
-        f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
-        f"DTSTART;VALUE=DATE:{start_date.strftime('%Y%m%d')}",
-        f"DTEND;VALUE=DATE:{exclusive_end.strftime('%Y%m%d')}",
-        f"SUMMARY:{_ics_escape(audit_title or 'Keen audit')}",
-        f"DESCRIPTION:{_ics_escape(description)}",
-        f"URL:{_ics_escape(audit_url)}",
-        "END:VEVENT",
-        "END:VCALENDAR",
-    ]
-    return "\r\n".join(_ics_fold(line) for line in lines) + "\r\n"
+
+
+def _audit_details(
+    *,
+    audit_title: str,
+    audit_type: str,
+    framework_slug: str,
+    scheduled_for: str,
+    scheduled_until: str | None,
+) -> str:
+    details = (
+        f"Audit: {audit_title}\n"
+        f"Type: {_audit_type_label(audit_type)}\n"
+        f"Framework: {framework_slug}\n"
+        f"Scheduled start date: {scheduled_for}\n"
+    )
+    if scheduled_until:
+        details += f"Scheduled end date: {scheduled_until}\n"
+    return details
 
 
 def send_scheduled_audit_created_email(
@@ -214,45 +315,148 @@ def send_scheduled_audit_created_email(
     audit_url: str,
     uid: str | None = None,
 ) -> None:
-    from_name = (settings.smtp_from_name or "Keen").strip() or "Keen"
-    subject = f"{from_name}: Audit scheduled - {audit_title}"
     who = (attendee_name or "").strip() or "there"
-    type_label = (
-        "External" if str(audit_type or "").lower() == "external" else "Internal"
-    )
-
     body = (
         f"Hello {who},\n\n"
         f"A scheduled audit has been created in Keen. An .ics calendar file is attached so you can add it to your calendar.\n\n"
-        f"Audit: {audit_title}\n"
-        f"Type: {type_label}\n"
-        f"Framework: {framework_slug}\n"
-        f"Scheduled start date: {scheduled_for}\n"
+        + _audit_details(
+            audit_title=audit_title,
+            audit_type=audit_type,
+            framework_slug=framework_slug,
+            scheduled_for=scheduled_for,
+            scheduled_until=scheduled_until,
+        )
+        + f"\nOpen audit: {audit_url}\n\n"
+        + "You are receiving this email because you were listed as an attendee on the scheduled audit template.\n"
     )
-    if scheduled_until:
-        body += f"Scheduled end date: {scheduled_until}\n"
-    body += f"\nOpen audit: {audit_url}\n\n"
-    body += "You are receiving this email because you were listed as an attendee on the scheduled audit template.\n"
-
-    ics = build_audit_ics(
-        audit_title=audit_title,
-        audit_type=audit_type,
-        framework_slug=framework_slug,
-        scheduled_for=scheduled_for,
-        scheduled_until=scheduled_until,
-        audit_url=audit_url,
-        uid=uid,
-    )
-    send_email(
+    _send_with_invite(
         to_email=to_email,
-        subject=subject,
+        subject=f"{_sender_name()}: Audit scheduled - {audit_title}",
         body=body,
-        attachments=[
-            {
-                "filename": "keen-audit.ics",
-                "content": ics,
-                "maintype": "text",
-                "subtype": "calendar",
-            }
-        ],
+        invite=build_audit_ics(
+            audit_title=audit_title,
+            audit_type=audit_type,
+            framework_slug=framework_slug,
+            scheduled_for=scheduled_for,
+            scheduled_until=scheduled_until,
+            audit_url=audit_url,
+            uid=uid,
+        ),
+        filename="keen-audit.ics",
+    )
+
+
+def send_audit_reminder_email(
+    *,
+    to_email: str,
+    attendee_name: str | None,
+    audit_title: str,
+    audit_type: str,
+    framework_slug: str,
+    scheduled_for: str,
+    scheduled_until: str | None = None,
+    audit_url: str,
+    uid: str | None = None,
+) -> None:
+    who = (attendee_name or "").strip() or "there"
+    body = (
+        f"Hello {who},\n\n"
+        f"An audit you are attending starts soon. An .ics calendar file is attached.\n\n"
+        + _audit_details(
+            audit_title=audit_title,
+            audit_type=audit_type,
+            framework_slug=framework_slug,
+            scheduled_for=scheduled_for,
+            scheduled_until=scheduled_until,
+        )
+        + f"\nOpen audit: {audit_url}\n\n"
+        + "You are receiving this reminder because you are listed as an attendee on the audit.\n"
+    )
+    _send_with_invite(
+        to_email=to_email,
+        subject=f"{_sender_name()}: Audit starts {scheduled_for} - {audit_title}",
+        body=body,
+        invite=build_audit_ics(
+            audit_title=audit_title,
+            audit_type=audit_type,
+            framework_slug=framework_slug,
+            scheduled_for=scheduled_for,
+            scheduled_until=scheduled_until,
+            audit_url=audit_url,
+            uid=uid,
+        ),
+        filename="keen-audit.ics",
+    )
+
+
+def _quiz_invite(*, quiz_title: str, due_on: str, quiz_url: str, uid: str) -> str:
+    return build_calendar_invite(
+        summary=f"Quiz due: {quiz_title}",
+        description=f"Complete the Keen quiz {quiz_title} by {due_on}: {quiz_url}",
+        starts=due_on,
+        url=quiz_url,
+        uid=uid,
+        uid_prefix="keen-quiz",
+        product="Quiz Schedule",
+    )
+
+
+def send_quiz_open_email(
+    *,
+    to_email: str,
+    person_name: str | None,
+    quiz_title: str,
+    opens_on: str,
+    due_on: str,
+    quiz_url: str,
+    uid: str,
+) -> None:
+    who = (person_name or "").strip() or "there"
+    body = (
+        f"Hello {who},\n\n"
+        f"A quiz is ready for you in Keen. An .ics calendar file is attached with its due date.\n\n"
+        f"Quiz: {quiz_title}\n"
+        f"Open from: {opens_on}\n"
+        f"Due: {due_on}\n\n"
+        f"Start the quiz: {quiz_url}\n\n"
+        "Your progress is saved each time you move to the next page, so you can finish it later.\n"
+        "You are receiving this email because the quiz is assigned to you.\n"
+    )
+    _send_with_invite(
+        to_email=to_email,
+        subject=f"{_sender_name()}: Quiz ready - {quiz_title}",
+        body=body,
+        invite=_quiz_invite(
+            quiz_title=quiz_title, due_on=due_on, quiz_url=quiz_url, uid=uid
+        ),
+        filename="keen-quiz.ics",
+    )
+
+
+def send_quiz_reminder_email(
+    *,
+    to_email: str,
+    person_name: str | None,
+    quiz_title: str,
+    due_on: str,
+    quiz_url: str,
+    uid: str,
+) -> None:
+    who = (person_name or "").strip() or "there"
+    body = (
+        f"Hello {who},\n\n"
+        f"A quiz assigned to you is due soon.\n\n"
+        f"Quiz: {quiz_title}\n"
+        f"Due: {due_on}\n\n"
+        f"Continue the quiz: {quiz_url}\n\n"
+        "You are receiving this reminder because the quiz is assigned to you and is not finished yet.\n"
+    )
+    _send_with_invite(
+        to_email=to_email,
+        subject=f"{_sender_name()}: Quiz due {due_on} - {quiz_title}",
+        body=body,
+        invite=_quiz_invite(
+            quiz_title=quiz_title, due_on=due_on, quiz_url=quiz_url, uid=uid
+        ),
+        filename="keen-quiz.ics",
     )

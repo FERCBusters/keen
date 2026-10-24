@@ -17,8 +17,8 @@ from app.db.models import (
 )
 from app.services.entity_changelog import list_entity_changelogs
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
 
-from .common import _clean_framework
 from .constants import ENTITY_TYPES
 from .serializers import _effectiveness_measure_out, _entity_out
 
@@ -109,7 +109,7 @@ def _reverse_refs_for(
 def control_effectiveness_measures(
     *, control_id: str, framework: str, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     cid = _try_uuid(control_id)
     if not cid:
         raise DomainError(status_code=400, detail="control_id must be a UUID")
@@ -143,7 +143,7 @@ def control_effectiveness_measures(
 
 
 def control_isms(*, control_id: str, framework: str, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     cid = _try_uuid(control_id)
     if not cid:
         raise DomainError(status_code=400, detail="control_id must be a UUID")
@@ -151,7 +151,7 @@ def control_isms(*, control_id: str, framework: str, user: User, db: Session):
 
 
 def clause_isms(*, clause_id: str, framework: str, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     cid = _try_uuid(clause_id)
     if not cid:
         raise DomainError(status_code=400, detail="clause_id must be a UUID")

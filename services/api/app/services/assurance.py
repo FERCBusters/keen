@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.models import (
@@ -16,10 +17,18 @@ from app.db.models import (
     IsmsPersonAsset,
     IsmsPersonAssurance,
     IsmsVendor,
+    QuizAttempt,
+    QuizParticipant,
     RiskAsset,
     User,
 )
+from app.security.permissions import has_permission
 from app.services.errors import DomainError
+from app.services.mailer import user_email
+
+# The account linked to someone who sits quizzes decides whose rounds and
+# results it reaches, so moving that link is for quiz managers.
+QUIZ_MANAGE = "quiz.manage"
 
 
 class PersonInput(BaseModel):
@@ -133,6 +142,39 @@ def assurance_meta(*, user, db: Session):
     }
 
 
+def person_for_user(db: Session, user_id) -> IsmsPerson | None:
+    """The People record linked to a Keen account, if there is one."""
+    if user_id is None:
+        return None
+    return db.query(IsmsPerson).filter(IsmsPerson.user_id == user_id).one_or_none()
+
+
+def ensure_person_for_user(db: Session, account: User) -> IsmsPerson:
+    """The account's People record, created from the account when it has none.
+
+    Runs in the caller's transaction. A concurrent request linking the same
+    account wins the unique link; this request then uses that record.
+    """
+    existing = person_for_user(db, account.id)
+    if existing is not None:
+        return existing
+    person = IsmsPerson(
+        name=(account.username or "Keen user")[:256],
+        email=user_email(account) or "",
+        user_id=account.id,
+    )
+    try:
+        with db.begin_nested():
+            db.add(person)
+            db.flush()
+    except IntegrityError:
+        found = person_for_user(db, account.id)
+        if found is None:
+            raise
+        return found
+    return person
+
+
 def list_people(*, user, db: Session):
     rows = (
         db.query(IsmsPerson)
@@ -148,10 +190,27 @@ def list_people(*, user, db: Session):
     return {"items": [_person_out(row) for row in rows]}
 
 
-def _save_person(db: Session, row: IsmsPerson, payload: PersonInput):
+def _sits_quizzes(db: Session, person_id: uuid.UUID) -> bool:
+    return any(
+        db.query(model.id).filter(model.person_id == person_id).first() is not None
+        for model in (QuizParticipant, QuizAttempt)
+    )
+
+
+def _save_person(db: Session, row: IsmsPerson, payload: PersonInput, user: User):
     name = payload.name.strip()
     if not name:
         raise DomainError(400, "Name is required")
+    if (
+        row.id is not None
+        and payload.user_id != row.user_id
+        and _sits_quizzes(db, row.id)
+        and not has_permission(db, user, QUIZ_MANAGE)
+    ):
+        raise DomainError(
+            403,
+            "Changing the Keen account of someone who sits quizzes needs quiz.manage",
+        )
     if payload.user_id:
         _row(db, User, payload.user_id)
         other = (
@@ -195,11 +254,11 @@ def _save_person(db: Session, row: IsmsPerson, payload: PersonInput):
 
 
 def create_person(*, payload: PersonInput, user, db: Session):
-    return _person_out(_save_person(db, IsmsPerson(), payload))
+    return _person_out(_save_person(db, IsmsPerson(), payload, user))
 
 
 def update_person(*, person_id: uuid.UUID, payload: PersonInput, user, db: Session):
-    return _person_out(_save_person(db, _row(db, IsmsPerson, person_id), payload))
+    return _person_out(_save_person(db, _row(db, IsmsPerson, person_id), payload, user))
 
 
 def delete_person(*, person_id: uuid.UUID, user, db: Session):

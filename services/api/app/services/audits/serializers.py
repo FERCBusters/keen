@@ -24,7 +24,7 @@ from app.db.models import (
 )
 from app.services.audits.references import clause_out, control_out, document_out
 from app.services.audits.samples import audit_sample_entity_reference
-from app.services.audits.validation import user_email_snapshot
+from app.services.mailer import user_email
 
 
 def scope_response(
@@ -229,7 +229,7 @@ def attendee_dict(x: AuditAttendee) -> dict[str, Any]:
         "person_id": str(x.person_id) if x.person_id else None,
         "username": u.username if u else None,
         "name": x.name,
-        "email": x.email or user_email_snapshot(u),
+        "email": x.email or user_email(u),
         "role": x.role,
         "created_at": iso_dt(x.created_at),
     }

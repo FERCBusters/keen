@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # 0 means scheduled audits are created only on their scheduled begin date.
     # N means they may be created up to N calendar days before their begin date.
     scheduled_audit_create_days_ahead: int = Field(default=0)
+    # Days before an audit starts, or a quiz round falls due, that Keen emails
+    # attendees and unfinished participants a reminder. 0 sends no reminders.
+    reminder_days_before: int = Field(default=2)
 
     # -----------------------------------------------------------------------------
     # Authentication / sessions
@@ -601,6 +604,21 @@ class Settings(BaseSettings):
         if mode not in {"false", "true", "samples"}:
             raise ValueError("KEEN_EVENT_DATA_MASKING must be false, true, or samples")
         return mode
+
+    @field_validator("reminder_days_before")
+    @classmethod
+    def validate_reminder_days_before(cls, value: int) -> int:
+        try:
+            days = int(value or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "KEEN_REMINDER_DAYS_BEFORE must be an integer from 0 to 90"
+            ) from exc
+        if days < 0 or days > 90:
+            raise ValueError(
+                "KEEN_REMINDER_DAYS_BEFORE must be an integer from 0 to 90"
+            )
+        return days
 
     @field_validator("scheduled_audit_create_days_ahead")
     @classmethod

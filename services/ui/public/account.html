@@ -41,6 +41,9 @@
         <button class="nav-link" id="my-audits-tab" data-feature="audits" data-bs-toggle="tab" data-bs-target="#my-audits-pane" type="button" role="tab" aria-controls="my-audits-pane" aria-selected="false" data-tab-hash="#my-audits">My audits</button>
       </li>
       <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-quizzes-tab" data-feature="quizzes" data-bs-toggle="tab" data-bs-target="#my-quizzes-pane" type="button" role="tab" aria-controls="my-quizzes-pane" aria-selected="false" data-tab-hash="#my-quizzes">My quizzes</button>
+      </li>
+      <li class="nav-item" role="presentation">
         <button class="nav-link" id="my-meetings-tab" data-feature="meetings" data-bs-toggle="tab" data-bs-target="#my-meetings-pane" type="button" role="tab" aria-controls="my-meetings-pane" aria-selected="false" data-tab-hash="#my-meetings">My meetings</button>
       </li>
       <li class="nav-item" role="presentation">
@@ -237,6 +240,34 @@
               </table>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="my-quizzes-pane" role="tabpanel" aria-labelledby="my-quizzes-tab" tabindex="0">
+        <div id="myQuizzesStatus" class="alert alert-info" style="display:none;"></div>
+        <div id="myQuizzesUnlinked" class="alert alert-warning" hidden>Your account is not linked to a People record yet, so no quizzes can be assigned to you. An ISMS manager can link it, or assign you a quiz, which links it for you.</div>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-semibold">My progress</div>
+              <div class="small-muted">Points for every quiz you finish, more for finishing early, and trophies where a quiz shows your score.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="myQuizzesRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          </div>
+          <div class="card-body" id="myQuizzesProgress"></div>
+        </div>
+        <div class="card mb-3">
+          <div class="card-header"><div class="fw-semibold">My quizzes</div><div class="small-muted">Quizzes to sit come first; your progress is saved each time you move to the next page.</div></div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead><tr><th>Quiz</th><th>State</th><th>When</th><th>Result</th><th class="text-end">Actions</th></tr></thead>
+              <tbody id="myQuizzesRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card mb-3">
+          <div class="card-header fw-semibold">Coming up</div>
+          <div class="card-body"><ul class="mb-0" id="myQuizzesUpcoming"></ul></div>
         </div>
       </section>
 

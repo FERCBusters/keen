@@ -1,6 +1,5 @@
-import { safeExternalHref } from '/app.js';
-import { mountStoryRelated } from '/pages/story-related.js';
 import {
+  safeExternalHref,
   initNavbar,
   apiGet,
   esc,
@@ -12,6 +11,7 @@ import {
   loadEntityChangelog,
   userPillsHtml,
 } from '/app.js';
+import { mountStoryRelated } from '/pages/story-related.js';
 
 const me = await initNavbar();
 const canManageIsms = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);

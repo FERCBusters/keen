@@ -31,6 +31,58 @@ def utcnow() -> datetime:
     return utc_now_naive()
 
 
+SCHEDULE_RECURRENCE_VALUES = "'once','weekly','monthly','quarterly','yearly'"
+SCHEDULE_DATE_RULE_VALUES = (
+    "'exact','first_weekday_of_month','first_monday_of_month',"
+    "'first_tuesday_of_month','first_wednesday_of_month',"
+    "'first_thursday_of_month','first_friday_of_month'"
+)
+
+
+class ScheduleColumns:
+    """The recurring schedule a record keeps; app.services.schedules reads it.
+
+    The record's ``start_date`` is the first run; exact monthly, quarterly and
+    yearly runs keep its day of the month.
+    """
+
+    schedule_recurrence: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="once"
+    )
+    schedule_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    schedule_date_rule: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="exact"
+    )
+    schedule_anchor_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    schedule_next_run_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, index=True
+    )
+    schedule_until_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    schedule_last_run_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+def schedule_constraints(table: str) -> tuple[CheckConstraint, ...]:
+    """Check constraints for a table with the ScheduleColumns."""
+    return (
+        CheckConstraint(
+            f"schedule_recurrence in ({SCHEDULE_RECURRENCE_VALUES})",
+            name=f"ck_{table}_schedule_recurrence",
+        ),
+        CheckConstraint(
+            f"schedule_date_rule in ({SCHEDULE_DATE_RULE_VALUES})",
+            name=f"ck_{table}_schedule_date_rule",
+        ),
+        CheckConstraint(
+            "schedule_anchor_month is null or (schedule_anchor_month >= 1 and schedule_anchor_month <= 12)",
+            name=f"ck_{table}_schedule_anchor_month",
+        ),
+        CheckConstraint(
+            "schedule_interval >= 1",
+            name=f"ck_{table}_schedule_interval",
+        ),
+    )
+
+
 class Framework(Base):
     __tablename__ = "frameworks"
     id: Mapped[uuid.UUID] = mapped_column(
@@ -2634,7 +2686,7 @@ class IsmsEntityClauseLink(Base):
 # -----------------------------------------------------------------------------
 
 
-class Audit(Base):
+class Audit(ScheduleColumns, Base):
     __tablename__ = "audits"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -2650,22 +2702,9 @@ class Audit(Base):
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
-    # Scheduled audit templates use status='template'. Their schedule metadata
-    # lives on the template row; due runs create ordinary open audits and copy
-    # the template scope and attendee rows.
-    schedule_recurrence: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="once"
-    )
-    schedule_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    schedule_date_rule: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="exact"
-    )
-    schedule_anchor_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    schedule_next_run_date: Mapped[date | None] = mapped_column(
-        Date, nullable=True, index=True
-    )
-    schedule_until_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    schedule_last_run_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Scheduled audit templates use status='template'. Their schedule (the
+    # ScheduleColumns) lives on the template row; due runs create ordinary open
+    # audits and copy the template scope and attendee rows.
     schedule_last_created_audit_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("audits.id", ondelete="SET NULL"),
@@ -2739,22 +2778,7 @@ class Audit(Base):
             "audit_type in ('internal','external')",
             name="ck_audits_audit_type",
         ),
-        CheckConstraint(
-            "schedule_recurrence in ('once','weekly','monthly','quarterly','yearly')",
-            name="ck_audits_schedule_recurrence",
-        ),
-        CheckConstraint(
-            "schedule_date_rule in ('exact','first_weekday_of_month','first_monday_of_month','first_tuesday_of_month','first_wednesday_of_month','first_thursday_of_month','first_friday_of_month')",
-            name="ck_audits_schedule_date_rule",
-        ),
-        CheckConstraint(
-            "schedule_anchor_month is null or (schedule_anchor_month >= 1 and schedule_anchor_month <= 12)",
-            name="ck_audits_schedule_anchor_month",
-        ),
-        CheckConstraint(
-            "schedule_interval >= 1",
-            name="ck_audits_schedule_interval",
-        ),
+        *schedule_constraints("audits"),
     )
 
 
@@ -2902,6 +2926,8 @@ class AuditAttendee(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False
     )
+    # Set when the attendee is reminded that the audit starts soon.
+    reminded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     audit = relationship("Audit", back_populates="attendees")
     user = relationship("User")
@@ -3542,4 +3568,417 @@ class StoryComment(Base):
     )
     __table_args__ = (
         Index("ix_story_comments_story_created", "story_id", "created_at"),
+    )
+
+
+# --- Quizzes -----------------------------------------------------------------------
+#
+# A quiz is a set of multiple-choice and free-text questions linked to controls
+# through the effectiveness measure it owns. Each round is a dated sitting for
+# the quiz's audience; a person sits one attempt per round. An attempt keeps a
+# snapshot of the questions as shown, in its own shuffled order, so later edits
+# to the quiz leave its answers readable.
+
+QUIZ_STATUSES = ("draft", "active", "archived")
+QUIZ_QUESTION_KINDS = ("choice", "text")
+QUIZ_REVEAL_ANSWERS = ("never", "after_close", "after_submit")
+QUIZ_ROUND_STATUSES = ("open", "closed")
+QUIZ_ATTEMPT_STATUSES = ("in_progress", "submitted", "complete")
+
+
+def _quoted(values: tuple[str, ...]) -> str:
+    return ",".join(f"'{value}'" for value in values)
+
+
+class Quiz(ScheduleColumns, Base):
+    __tablename__ = "quizzes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    framework_slug: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="draft", index=True
+    )
+    # Percentage needed to pass, also the effectiveness measure's target.
+    pass_mark: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Questions drawn for each sitting; None asks every question.
+    questions_per_attempt: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Questions per page; progress is saved as the student turns each page.
+    page_size: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    show_scores: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reveal_answers: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="after_close"
+    )
+    # Days a scheduled round stays open before it falls due.
+    due_days: Mapped[int] = mapped_column(Integer, nullable=False, default=14)
+    # The first scheduled round; exact recurrences keep its day of the month.
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # The measure the quiz's round averages are recorded on; it goes with the
+    # quiz and cannot be deleted while the quiz exists.
+    measure_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_effectiveness_measures.id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    measure = relationship("IsmsEffectivenessMeasure")
+    questions = relationship(
+        "QuizQuestion",
+        back_populates="quiz",
+        cascade="all, delete-orphan",
+        order_by="QuizQuestion.position",
+    )
+    audience = relationship(
+        "QuizAudience", back_populates="quiz", cascade="all, delete-orphan"
+    )
+    rounds = relationship(
+        "QuizRound",
+        back_populates="quiz",
+        cascade="all, delete-orphan",
+        order_by="QuizRound.opens_on.desc()",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            f"status in ({_quoted(QUIZ_STATUSES)})", name="ck_quizzes_status"
+        ),
+        CheckConstraint(
+            f"reveal_answers in ({_quoted(QUIZ_REVEAL_ANSWERS)})",
+            name="ck_quizzes_reveal_answers",
+        ),
+        CheckConstraint(
+            "pass_mark is null or (pass_mark >= 0 and pass_mark <= 100)",
+            name="ck_quizzes_pass_mark",
+        ),
+        CheckConstraint(
+            "questions_per_attempt is null or questions_per_attempt >= 1",
+            name="ck_quizzes_questions_per_attempt",
+        ),
+        CheckConstraint(
+            "page_size >= 1 and page_size <= 50", name="ck_quizzes_page_size"
+        ),
+        CheckConstraint(
+            "due_days >= 1 and due_days <= 365", name="ck_quizzes_due_days"
+        ),
+        *schedule_constraints("quizzes"),
+    )
+
+
+class QuizQuestion(Base):
+    __tablename__ = "quiz_questions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    quiz_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quizzes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="choice")
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    # Shown with the correct answer once the quiz reveals answers.
+    explanation: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    quiz = relationship("Quiz", back_populates="questions")
+    options = relationship(
+        "QuizOption",
+        back_populates="question",
+        cascade="all, delete-orphan",
+        order_by="QuizOption.position",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            f"kind in ({_quoted(QUIZ_QUESTION_KINDS)})", name="ck_quiz_questions_kind"
+        ),
+    )
+
+
+class QuizOption(Base):
+    __tablename__ = "quiz_options"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    question_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quiz_questions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    question = relationship("QuizQuestion", back_populates="options")
+
+
+class QuizAudience(Base):
+    """A person or an organisation role a quiz is assigned to."""
+
+    __tablename__ = "quiz_audience"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    quiz_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quizzes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    person_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_people.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    org_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_org_nodes.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+
+    quiz = relationship("Quiz", back_populates="audience")
+    person = relationship("IsmsPerson")
+    org_node = relationship("IsmsOrgNode")
+
+    __table_args__ = (
+        CheckConstraint(
+            "(person_id is null) <> (org_node_id is null)",
+            name="ck_quiz_audience_member",
+        ),
+        UniqueConstraint("quiz_id", "person_id", name="uq_quiz_audience_person"),
+        UniqueConstraint("quiz_id", "org_node_id", name="uq_quiz_audience_org_node"),
+    )
+
+
+class QuizRound(Base):
+    """One dated sitting of a quiz for its audience."""
+
+    __tablename__ = "quiz_rounds"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    quiz_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quizzes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    opens_on: Mapped[date] = mapped_column(Date, nullable=False)
+    due_on: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    # True when the quiz's schedule created the round.
+    scheduled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    quiz = relationship("Quiz", back_populates="rounds")
+    participants = relationship(
+        "QuizParticipant", back_populates="round", cascade="all, delete-orphan"
+    )
+    attempts = relationship(
+        "QuizAttempt", back_populates="round", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            f"status in ({_quoted(QUIZ_ROUND_STATUSES)})",
+            name="ck_quiz_rounds_status",
+        ),
+        CheckConstraint("due_on >= opens_on", name="ck_quiz_rounds_dates"),
+        Index("ix_quiz_rounds_status_due_on", "status", "due_on"),
+    )
+
+
+class QuizParticipant(Base):
+    """A person a round is assigned to, with the emails sent to them."""
+
+    __tablename__ = "quiz_participants"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    round_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quiz_rounds.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    person_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_people.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    # Set when the person is told the round is open, and when reminded it is due.
+    invited_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reminded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    round = relationship("QuizRound", back_populates="participants")
+    person = relationship("IsmsPerson")
+
+    __table_args__ = (
+        UniqueConstraint("round_id", "person_id", name="uq_quiz_participant"),
+    )
+
+
+class QuizAttempt(Base):
+    """One person's sitting of a round, with the questions as shown to them."""
+
+    __tablename__ = "quiz_attempts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    quiz_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quizzes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    round_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quiz_rounds.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    person_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_people.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="in_progress"
+    )
+    # The questions in the order shown, each with its options in shown order:
+    # [{"question_id", "kind", "prompt", "explanation",
+    #   "options": [{"id", "text", "correct"}]}]. Never sent to the student as is.
+    layout: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    page_size: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    # Pages whose answers are saved; the student resumes on the next one.
+    pages_saved: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    saved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Percentage, once every answer is marked.
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    round = relationship("QuizRound", back_populates="attempts")
+    person = relationship("IsmsPerson")
+    answers = relationship(
+        "QuizAnswer",
+        back_populates="attempt",
+        cascade="all, delete-orphan",
+        order_by="QuizAnswer.position",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            f"status in ({_quoted(QUIZ_ATTEMPT_STATUSES)})",
+            name="ck_quiz_attempts_status",
+        ),
+        CheckConstraint(
+            "score is null or (score >= 0 and score <= 100)",
+            name="ck_quiz_attempts_score",
+        ),
+        UniqueConstraint("round_id", "person_id", name="uq_quiz_attempt_person"),
+    )
+
+
+class QuizAnswer(Base):
+    __tablename__ = "quiz_answers"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    attempt_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quiz_attempts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # The question's place in the attempt's layout.
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    question_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quiz_questions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="choice")
+    # A chosen option from the layout; options can change after an attempt.
+    option_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    text_answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # A free-text grade from 1 to 5 in half points.
+    grade: Mapped[float | None] = mapped_column(Float, nullable=True)
+    feedback: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    graded_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    graded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # The answer's share of one question's mark, from 0 to 1, once marked.
+    points: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    attempt = relationship("QuizAttempt", back_populates="answers")
+
+    __table_args__ = (
+        CheckConstraint(
+            f"kind in ({_quoted(QUIZ_QUESTION_KINDS)})", name="ck_quiz_answers_kind"
+        ),
+        CheckConstraint(
+            "grade is null or (grade >= 1 and grade <= 5 and grade * 2 = round(grade * 2))",
+            name="ck_quiz_answers_grade",
+        ),
+        CheckConstraint(
+            "points is null or (points >= 0 and points <= 1)",
+            name="ck_quiz_answers_points",
+        ),
+        UniqueConstraint("attempt_id", "position", name="uq_quiz_answer_position"),
     )

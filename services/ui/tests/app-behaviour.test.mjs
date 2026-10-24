@@ -160,6 +160,17 @@ for (const color of ['#fff', '#ffffff'])
 for (const color of ['#000', '#000000'])
   test('dark badge ' + color, () => assert.equal(a.idealTextColor(color), '#f8fafc'));
 
+test('a framework reads as the top navigation names it, with its slug', () => {
+  const doc = ui.document;
+  doc.body.innerHTML =
+    '<select id="navFrameworkSelect"><option value="iso">ISO 27001:2022</option><option value="soc2">soc2</option></select>';
+  assert.equal(a.frameworkLabel('iso'), 'ISO 27001:2022 (iso)');
+  assert.equal(a.frameworkLabel('soc2'), 'soc2');
+  assert.equal(a.frameworkLabel('pci'), 'pci');
+  doc.body.innerHTML = '';
+  assert.equal(a.frameworkLabel('iso'), 'iso');
+});
+
 test('changelog loader reports an API failure in its tab without the error text', async () => {
   const u = await loadUi('app.js', {
     vendor: {

@@ -1,5 +1,5 @@
-import { safeExternalHref } from '/app.js';
 import {
+  safeExternalHref,
   initNavbar,
   apiGet,
   esc,

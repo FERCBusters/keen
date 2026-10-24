@@ -7,7 +7,6 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.db.models import Audit, AuditAttendee, User
-from app.services.audit_schedules import FUZZY_MONTH_DATE_RULES, occurrences_between
 from app.services.audits.access import (
     audit_or_404,
     can_manage_audits,
@@ -26,17 +25,23 @@ from app.services.audits.validation import (
     clean_email,
     clean_framework,
     clean_rich_text,
-    clean_schedule_anchor_month,
-    clean_schedule_date_rule,
-    clean_schedule_interval,
-    clean_schedule_recurrence,
-    clean_text,
-    schedule_start_for_rule,
-    user_email_snapshot,
     utcnow,
     validate_dates,
 )
 from app.services.errors import DomainError
+from app.services.mailer import user_email
+from app.services.schedules import (
+    FUZZY_MONTH_DATE_RULES,
+    apply_schedule_fields,
+    clean_schedule_anchor_month,
+    clean_schedule_date_rule,
+    clean_schedule_interval,
+    clean_schedule_recurrence,
+    occurrences_between,
+    revise_schedule,
+    schedule_start_for_rule,
+)
+from app.services.text import clean_text
 
 
 def schedule_summary(
@@ -84,41 +89,13 @@ def replace_template_attendees(
             audit_id=audit.id,
             user_id=linked_user.id if linked_user is not None else None,
             name=display_name,
-            email=explicit_email or user_email_snapshot(linked_user),
+            email=explicit_email or user_email(linked_user),
             role=clean_text(payload.role, max_len=128, label="attendee role") or None,
             created_at=now,
         )
         db.add(row)
         rows.append(row)
     return rows
-
-
-def apply_schedule_fields(
-    audit: Audit,
-    *,
-    recurrence: str,
-    interval: int,
-    next_run_date: date | None,
-    until_date: date | None,
-    date_rule: str = "exact",
-    anchor_month: int | None = None,
-) -> None:
-    if until_date and next_run_date and until_date < next_run_date:
-        raise DomainError(
-            status_code=400,
-            detail="schedule_until_date cannot be before the next run date",
-        )
-    if date_rule in FUZZY_MONTH_DATE_RULES and recurrence == "weekly":
-        raise DomainError(
-            status_code=400,
-            detail="First weekday schedules can recur monthly, quarterly or yearly",
-        )
-    audit.schedule_recurrence = recurrence
-    audit.schedule_interval = interval
-    audit.schedule_date_rule = date_rule
-    audit.schedule_anchor_month = anchor_month if date_rule != "exact" else None
-    audit.schedule_next_run_date = next_run_date
-    audit.schedule_until_date = until_date
 
 
 def template_occurrences_payload(
@@ -244,10 +221,6 @@ def update_scheduled_audit(
         a.audit_type = clean_audit_type(
             payload.audit_type, default=a.audit_type or "internal"
         )
-    if "start_date" in fields:
-        if payload.start_date is None:
-            raise DomainError(status_code=400, detail="start_date is required")
-        a.start_date = payload.start_date
     if "end_date" in fields:
         a.end_date = payload.end_date
     if "report_notes" in fields:
@@ -259,66 +232,8 @@ def update_scheduled_audit(
             payload.executive_summary, max_len=20000, label="executive_summary"
         )
 
-    date_rule = (
-        clean_schedule_date_rule(
-            payload.schedule_date_rule, default=a.schedule_date_rule or "exact"
-        )
-        if "schedule_date_rule" in fields
-        else (a.schedule_date_rule or "exact")
-    )
-    anchor_month = clean_schedule_anchor_month(
-        (
-            payload.schedule_anchor_month
-            if "schedule_anchor_month" in fields
-            else a.schedule_anchor_month
-        ),
-        required=(date_rule in FUZZY_MONTH_DATE_RULES),
-    )
-    if a.start_date is None:
-        raise DomainError(status_code=400, detail="start_date is required")
-    a.start_date = schedule_start_for_rule(
-        a.start_date, date_rule=date_rule, anchor_month=anchor_month
-    )
+    revise_schedule(a, payload, fields)
     validate_dates(a.start_date, a.end_date)
-
-    recurrence = (
-        clean_schedule_recurrence(
-            payload.schedule_recurrence, default=a.schedule_recurrence or "once"
-        )
-        if "schedule_recurrence" in fields
-        else (a.schedule_recurrence or "once")
-    )
-    interval = (
-        clean_schedule_interval(payload.schedule_interval)
-        if "schedule_interval" in fields
-        else int(a.schedule_interval or 1)
-    )
-    until = (
-        payload.schedule_until_date
-        if "schedule_until_date" in fields
-        else a.schedule_until_date
-    )
-    if {
-        "start_date",
-        "schedule_date_rule",
-        "schedule_anchor_month",
-    } & fields:
-        # Editing a scheduled template's date/rule is an explicit instruction to
-        # move the future run date. Do this even when the template has already
-        # materialised earlier audits; otherwise a user cannot reschedule the next
-        # occurrence from the template page after the first run.
-        next_run = a.start_date
-    else:
-        next_run = a.schedule_next_run_date or a.start_date
-    apply_schedule_fields(
-        a,
-        recurrence=recurrence,
-        interval=interval,
-        next_run_date=next_run,
-        until_date=until,
-        date_rule=date_rule,
-        anchor_month=anchor_month,
-    )
 
     if (
         payload.controls is not None

@@ -61,18 +61,18 @@ from app.services.audits.validation import (
     clean_framework,
     clean_rich_text,
     clean_status,
-    clean_text,
     clean_url,
     event_id_from_url,
     is_locked_audit,
     require_mutable_audit,
     try_uuid,
-    user_email_snapshot,
     utcnow,
     validate_dates,
 )
 from app.services.errors import DomainError
 from app.services.isms.related_records import resolve_target
+from app.services.mailer import user_email
+from app.services.text import clean_text
 
 
 def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):
@@ -450,7 +450,7 @@ def _attendee_row(
         name=display_name,
         email=explicit_email
         or (linked_person.email if linked_person else None)
-        or user_email_snapshot(linked_user),
+        or user_email(linked_user),
         role=clean_text(payload.role, max_len=128, label="role") or None,
         created_at=utcnow(),
     )

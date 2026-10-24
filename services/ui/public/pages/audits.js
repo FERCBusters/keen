@@ -10,6 +10,7 @@ import {
   debounce,
   qs,
   getCurrentFramework,
+  frameworkLabel,
   withFramework,
   wireIsoDateTextField,
   dateFormatPlaceholder,
@@ -19,25 +20,13 @@ import {
   syncRichTextEditors,
   userPillHtml,
 } from '/app.js';
-import {
-  fuzzyRuleLabel,
-  isFuzzyDateRule,
-  monthName,
-  recurrenceName,
-  scheduleDateFields,
-} from '/pages/audit-schedule.js';
+import { scheduleDateFields, scheduleSummary } from '/pages/schedule-fields.js';
+import { monthRange, renderMonthCalendar, wireMonthPicker } from '/pages/schedule-calendar.js';
 
 const me = await initNavbar();
 const status = document.getElementById('status');
 const rows = document.getElementById('rows');
 const showCreate = document.getElementById('showCreate');
-// Audits belong to the framework chosen in the top navigation; the form only shows it.
-function currentFrameworkLabel() {
-  const slug = getCurrentFramework() || '';
-  const option = document.getElementById('navFrameworkSelect')?.selectedOptions?.[0];
-  const name = option && option.value === slug ? option.textContent.trim() : '';
-  return name && name !== slug ? `${name} (${slug})` : slug;
-}
 const q = document.getElementById('q');
 const statusFilter = document.getElementById('statusFilter');
 const scheduledRows = document.getElementById('scheduledRows');
@@ -619,43 +608,6 @@ function _todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function _monthValue(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function _monthRange(monthValue) {
-  const [yRaw, mRaw] = String(monthValue || _monthValue()).split('-');
-  const y = Number(yRaw) || new Date().getFullYear();
-  const m = Math.max(1, Math.min(12, Number(mRaw) || new Date().getMonth() + 1));
-  const start = new Date(y, m - 1, 1);
-  const end = new Date(y, m, 0);
-  return {
-    start,
-    end,
-    startIso: `${y}-${String(m).padStart(2, '0')}-01`,
-    endIso: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`,
-  };
-}
-
-function _shiftMonth(value, delta) {
-  const [yRaw, mRaw] = String(value || _monthValue()).split('-');
-  const d = new Date(Number(yRaw) || new Date().getFullYear(), (Number(mRaw) || 1) - 1 + delta, 1);
-  return _monthValue(d);
-}
-
-function recurrenceLabel(a) {
-  const recur = String(a?.schedule_recurrence || 'once');
-  const interval = Number(a?.schedule_interval || 1);
-  const base = recurrenceName(recur);
-  const recurText = interval > 1 && recur !== 'once' ? `${base} × ${interval}` : base;
-  const dateRule = String(a?.schedule_date_rule || 'exact');
-  if (isFuzzyDateRule(dateRule)) {
-    const month = monthName(a?.schedule_anchor_month).slice(0, 3) || 'month';
-    return `${recurText} · ${fuzzyRuleLabel(dateRule)} of ${month}`;
-  }
-  return recurText;
-}
-
 function renderScheduledAttendeeUserOptions() {
   const sel = schedAttendeeUserId;
   if (!sel) return;
@@ -751,7 +703,7 @@ function renderScheduledRows(items) {
         <div class="small-muted">${esc(auditTypeLabel(a.audit_type))} · ${esc(a.framework_slug || '')}</div>
       </td>
       <td>${esc(a.schedule_next_run_date || '-')}</td>
-      <td>${esc(recurrenceLabel(a))}${a.schedule_until_date ? `<div class="small-muted">Until ${esc(a.schedule_until_date)}</div>` : ''}</td>
+      <td>${esc(scheduleSummary(a))}${a.schedule_until_date ? `<div class="small-muted">Until ${esc(a.schedule_until_date)}</div>` : ''}</td>
       <td>${esc(attendees.length)}</td>
       <td class="text-end">
         <div class="btn-group btn-group-sm">
@@ -780,67 +732,22 @@ function renderScheduledRows(items) {
   );
 }
 
-function renderScheduleCalendar(occurrences) {
-  const el = document.getElementById('scheduleCalendar');
-  const monthEl = document.getElementById('schedMonth');
-  if (!el || !monthEl) return;
-  const { start, end } = _monthRange(monthEl.value);
-  const byDate = new Map();
-  for (const occ of occurrences || []) {
-    const key = occ.date;
-    if (!byDate.has(key)) byDate.set(key, []);
-    byDate.get(key).push(occ);
-  }
-  const first = new Date(start);
-  first.setDate(first.getDate() - first.getDay());
-  const last = new Date(end);
-  last.setDate(last.getDate() + (6 - last.getDay()));
-  const days = [];
-  for (const d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    days.push({
-      iso,
-      day: d.getDate(),
-      inMonth: d.getMonth() === start.getMonth(),
-      items: byDate.get(iso) || [],
-    });
-  }
-  const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  el.innerHTML = `
-    <div class="schedule-calendar-grid schedule-calendar-head">${dow.map((d) => `<div>${d}</div>`).join('')}</div>
-    <div class="schedule-calendar-grid">${days
-      .map(
-        (d) => `
-      <div class="schedule-calendar-day ${d.inMonth ? '' : 'muted'}">
-        <div class="schedule-calendar-date">${d.day}</div>
-        ${d.items
-          .slice(0, 4)
-          .map(
-            (x) =>
-              `<div class="schedule-calendar-event" title="${esc(x.title || '')}">${esc(x.title || 'Audit')}</div>`,
-          )
-          .join('')}
-        ${d.items.length > 4 ? `<div class="small-muted">+${d.items.length - 4} more</div>` : ''}
-      </div>`,
-      )
-      .join('')}</div>`;
-}
-
 async function loadScheduledAudits() {
   if (!featureEnabled(me, 'audit_scheduling')) return;
   if (!canViewAudits()) return;
   if (!scheduledRows) return;
   scheduledRows.innerHTML = '<tr><td colspan="5" class="p-4 small-muted">Loading</td></tr>';
-  const monthEl = document.getElementById('schedMonth');
-  if (monthEl && !monthEl.value) monthEl.value = _monthValue();
-  const range = _monthRange(monthEl?.value || _monthValue());
+  const month = document.getElementById('schedMonth').value;
+  const range = monthRange(month);
   const params = new URLSearchParams({ start: range.startIso, end: range.endIso });
   try {
     const data = await apiGet(`/api/v1/audits/scheduled?${params.toString()}`);
     scheduledTemplates = data?.items || [];
     scheduledOccurrences = data?.occurrences || [];
     renderScheduledRows(scheduledTemplates);
-    renderScheduleCalendar(scheduledOccurrences);
+    renderMonthCalendar(document.getElementById('scheduleCalendar'), month, scheduledOccurrences, {
+      fallback: 'Audit',
+    });
   } catch (e) {
     scheduledRows.innerHTML = `<tr><td colspan="5" class="p-4 text-danger">${esc(String(e))}</td></tr>`;
   }
@@ -875,7 +782,8 @@ function resetScheduleForm() {
   const fw = getCurrentFramework();
   const schedFramework = document.getElementById('schedFramework');
   const schedInterval = document.getElementById('schedInterval');
-  if (schedFramework) schedFramework.value = currentFrameworkLabel();
+  // Audits belong to the framework chosen in the top navigation; the form only shows it.
+  if (schedFramework) schedFramework.value = frameworkLabel(getCurrentFramework() || '');
   if (schedStart) schedStart.value = _todayIsoDate();
   if (schedFuzzyYear) schedFuzzyYear.value = String(new Date().getFullYear());
   if (schedFuzzyMonth) schedFuzzyMonth.value = String(new Date().getMonth() + 1);
@@ -899,20 +807,11 @@ q?.addEventListener('input', debounce(loadAudits, 350));
 statusFilter?.addEventListener('change', loadAudits);
 
 document.getElementById('reloadSchedules')?.addEventListener('click', loadScheduledAudits);
-document.getElementById('schedMonth')?.addEventListener('change', loadScheduledAudits);
-document.getElementById('schedPrevMonth')?.addEventListener('click', () => {
-  const el = document.getElementById('schedMonth');
-  if (el) {
-    el.value = _shiftMonth(el.value, -1);
-    loadScheduledAudits();
-  }
-});
-document.getElementById('schedNextMonth')?.addEventListener('click', () => {
-  const el = document.getElementById('schedMonth');
-  if (el) {
-    el.value = _shiftMonth(el.value, 1);
-    loadScheduledAudits();
-  }
+wireMonthPicker({
+  month: document.getElementById('schedMonth'),
+  previous: document.getElementById('schedPrevMonth'),
+  next: document.getElementById('schedNextMonth'),
+  onChange: loadScheduledAudits,
 });
 coverageReload?.addEventListener('click', loadScopeCoverage);
 coverageMode?.addEventListener('change', loadScopeCoverage);

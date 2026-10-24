@@ -32,15 +32,16 @@ from app.db.models import (
     User,
 )
 from app.services.errors import DomainError
+from app.services.text import clean_text
 
-from .common import _clause_by_ref_or_id, _clean_text, _control_by_ref_or_id, _utcnow
+from .common import _clause_by_ref_or_id, _control_by_ref_or_id, _utcnow
 from .constants import MEETING_LINK_TYPES
 from .link_diary import remove_entity_link_diary, sync_entity_link_diary
 from .schemas import AssetPayload, IsmsLinksPayload, LicensePayload, MeetingLinkPayload
 
 
 def _asset_name_from_payload(payload: AssetPayload) -> str:
-    return _clean_text(
+    return clean_text(
         payload.asset,
         max_len=256,
         required=True,
@@ -60,7 +61,7 @@ def _asset_category_or_create(
 ) -> RiskCategory:
     if category_id:
         return _asset_category_by_id(db, category_id)
-    name = _clean_text(category_name, max_len=128, required=True, label="category")
+    name = clean_text(category_name, max_len=128, required=True, label="category")
     row = (
         db.query(RiskCategory)
         .filter(func.lower(RiskCategory.name) == name.lower())
@@ -97,9 +98,7 @@ def _asset_subcategory_or_create(
 ) -> RiskAssetSubcategory:
     if subcategory_id:
         return _asset_subcategory_by_id(db, subcategory_id, category=category)
-    name = _clean_text(
-        subcategory_name, max_len=128, required=True, label="subcategory"
-    )
+    name = clean_text(subcategory_name, max_len=128, required=True, label="subcategory")
     row = (
         db.query(RiskAssetSubcategory)
         .filter(
@@ -134,7 +133,7 @@ def _license_or_404(db: Session, license_id: str | uuid.UUID) -> IsmsLicense:
 
 
 def _license_by_name(db: Session, name: str) -> IsmsLicense | None:
-    cleaned = _clean_text(name, max_len=256)
+    cleaned = clean_text(name, max_len=256)
     if not cleaned:
         return None
     return (
@@ -147,7 +146,7 @@ def _license_by_name(db: Session, name: str) -> IsmsLicense | None:
 def _license_or_create_by_name(
     db: Session, name: str | None, user: User | None = None
 ) -> IsmsLicense | None:
-    cleaned = _clean_text(name, max_len=256)
+    cleaned = clean_text(name, max_len=256)
     if not cleaned:
         return None
     row = _license_by_name(db, cleaned)
@@ -177,8 +176,8 @@ def _license_from_payload(
 
 
 def _apply_license_payload(row: IsmsLicense, payload: LicensePayload) -> None:
-    row.name = _clean_text(payload.name, max_len=256, required=True, label="license")
-    row.description = _clean_text(payload.description, max_len=12000)
+    row.name = clean_text(payload.name, max_len=256, required=True, label="license")
+    row.description = clean_text(payload.description, max_len=12000)
     row.updated_at = _utcnow()
 
 
@@ -421,7 +420,7 @@ def _replace_org_node_users(
 ) -> None:
     if user_ids is None:
         return
-    rel = _clean_text(
+    rel = clean_text(
         relationship_type or "member",
         max_len=32,
         required=True,
@@ -533,7 +532,7 @@ def _replace_meeting_links(
     )
     now = _utcnow()
     for payload in links or []:
-        link_type = _clean_text(
+        link_type = clean_text(
             payload.link_type or "external_url",
             max_len=32,
             required=True,
@@ -542,10 +541,8 @@ def _replace_meeting_links(
         if link_type not in MEETING_LINK_TYPES:
             raise DomainError(status_code=400, detail="Invalid meeting link_type")
         document_id = payload.document_id
-        url = (
-            _clean_text(payload.url, max_len=2048, required=False, label="url") or None
-        )
-        title = _clean_text(payload.title, max_len=256, required=False, label="title")
+        url = clean_text(payload.url, max_len=2048, required=False, label="url") or None
+        title = clean_text(payload.title, max_len=256, required=False, label="title")
         if link_type == "isms_document":
             if (
                 not document_id

@@ -1,15 +1,14 @@
-"""Scheduled audit templates: occurrence rules and materialisation.
+"""Scheduled audit templates: materialisation and audit reminders.
 
-Occurrence rules are checked directly. Materialisation runs against persisted
-templates (PostgreSQL when KEEN_CONTRACT_TEST_DATABASE_URL is set) with the
-mailer replaced at its owning module.
+Materialisation runs against persisted templates (PostgreSQL when
+KEEN_CONTRACT_TEST_DATABASE_URL is set) with the mailer replaced at its owning
+module. The shared occurrence rules are checked in test_schedules.py.
 """
 
 import uuid
-from datetime import date, datetime
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import Mock
-from zoneinfo import ZoneInfo
 
 import pytest
 from app.core.config import settings
@@ -28,262 +27,6 @@ from app.services import audit_schedules as schedules
 TODAY = date(2026, 4, 10)  # a Friday
 
 
-@pytest.mark.parametrize(
-    "current,recurrence,interval,expected",
-    [
-        (date(2026, 4, 10), "weekly", 1, date(2026, 4, 17)),
-        (date(2026, 4, 10), "weekly", 2, date(2026, 4, 24)),
-        # 10 May 2026 is a Sunday, so the run moves back to Friday 8 May.
-        (date(2026, 4, 10), "monthly", 1, date(2026, 5, 8)),
-        (date(2026, 4, 10), "monthly", 3, date(2026, 7, 10)),
-        (date(2026, 4, 10), "quarterly", 1, date(2026, 7, 10)),
-        (date(2026, 11, 10), "quarterly", 2, date(2027, 5, 10)),
-        # 10 April 2027 is a Saturday, so the run moves back to Friday 9 April.
-        (date(2026, 4, 10), "yearly", 1, date(2027, 4, 9)),
-        (date(2026, 4, 10), "YEARLY", 0, date(2027, 4, 9)),
-        (date(2026, 4, 10), "once", 1, None),
-        (date(2026, 4, 10), "fortnightly", 1, None),
-    ],
-)
-def test_exact_occurrences_follow_the_recurrence(
-    current, recurrence, interval, expected
-):
-    assert (
-        schedules.next_occurrence_after(
-            current, recurrence=recurrence, interval=interval
-        )
-        == expected
-    )
-
-
-def _anchored(start, recurrence="monthly", **kw):
-    return SimpleNamespace(
-        start_date=start,
-        schedule_next_run_date=start,
-        schedule_recurrence=recurrence,
-        schedule_interval=1,
-        schedule_until_date=None,
-        schedule_date_rule="exact",
-        schedule_anchor_month=None,
-        **kw,
-    )
-
-
-def test_month_end_schedules_keep_their_day_through_short_months():
-    # Started on Tuesday 31 March: every run is the month's last weekday.
-    template = _anchored(date(2026, 3, 31))
-    runs = schedules.occurrences_between(
-        template, start=date(2026, 3, 1), end=date(2027, 3, 31)
-    )
-    assert runs == [
-        date(2026, 3, 31),
-        date(2026, 4, 30),
-        date(2026, 5, 29),  # 31 May is a Sunday
-        date(2026, 6, 30),
-        date(2026, 7, 31),
-        date(2026, 8, 31),
-        date(2026, 9, 30),
-        date(2026, 10, 30),  # 31 October is a Saturday
-        date(2026, 11, 30),
-        date(2026, 12, 31),
-        date(2027, 1, 29),  # 31 January is a Sunday
-        date(2027, 2, 26),  # 28 February is a Sunday
-        date(2027, 3, 31),
-    ]
-
-
-def test_weekend_runs_at_the_start_of_a_month_move_to_the_monday():
-    template = _anchored(date(2026, 1, 1))
-    runs = schedules.occurrences_between(
-        template, start=date(2026, 1, 1), end=date(2026, 8, 31)
-    )
-    assert runs == [
-        date(2026, 1, 1),
-        date(2026, 2, 2),  # 1 February is a Sunday; 30 January is in January
-        date(2026, 3, 2),  # 1 March is a Sunday
-        date(2026, 4, 1),
-        date(2026, 5, 1),
-        date(2026, 6, 1),
-        date(2026, 7, 1),
-        date(2026, 8, 3),  # 1 August is a Saturday
-    ]
-
-
-@pytest.mark.parametrize(
-    "recurrence,start,end,expected",
-    [
-        # A leap-day schedule runs on the last weekday of February otherwise.
-        (
-            "yearly",
-            date(2024, 2, 29),
-            date(2028, 12, 31),
-            [
-                date(2024, 2, 29),
-                date(2025, 2, 28),
-                date(2026, 2, 27),
-                date(2027, 2, 26),
-                date(2028, 2, 29),
-            ],
-        ),
-        (
-            "quarterly",
-            date(2025, 8, 31),
-            date(2026, 9, 1),
-            [
-                date(2025, 8, 31),  # the first run is the chosen start date
-                date(2025, 11, 28),  # 30 November is a Sunday
-                date(2026, 2, 27),  # 28 February is a Saturday
-                date(2026, 5, 29),  # 31 May is a Sunday
-                date(2026, 8, 31),
-            ],
-        ),
-    ],
-)
-def test_longer_recurrences_keep_the_anchor_day(recurrence, start, end, expected):
-    template = _anchored(start, recurrence)
-    assert schedules.occurrences_between(template, start=start, end=end) == expected
-
-
-def test_weekly_schedules_keep_the_weekday_they_were_given():
-    saturday = date(2026, 4, 11)
-    assert schedules.next_occurrence_after(saturday, recurrence="weekly") == date(
-        2026, 4, 18
-    )
-
-
-def test_occurrences_stop_after_the_until_date():
-    until = date(2026, 4, 20)
-    assert schedules.next_occurrence_after(
-        date(2026, 4, 10), recurrence="weekly", until=until
-    ) == date(2026, 4, 17)
-    assert (
-        schedules.next_occurrence_after(
-            date(2026, 4, 17), recurrence="weekly", until=until
-        )
-        is None
-    )
-
-
-@pytest.mark.parametrize(
-    "current,recurrence,rule,anchor,expected",
-    [
-        # 1 May 2026 is a Friday; 1 August 2026 is a Saturday.
-        (date(2026, 4, 1), "monthly", "first_weekday_of_month", None, date(2026, 5, 1)),
-        (date(2026, 7, 1), "monthly", "first_weekday_of_month", None, date(2026, 8, 3)),
-        (date(2026, 4, 6), "monthly", "first_monday_of_month", None, date(2026, 5, 4)),
-        (date(2026, 4, 7), "monthly", "first_tuesday_of_month", None, date(2026, 5, 5)),
-        (
-            date(2026, 4, 1),
-            "monthly",
-            "first_wednesday_of_month",
-            None,
-            date(2026, 5, 6),
-        ),
-        (
-            date(2026, 4, 2),
-            "monthly",
-            "first_thursday_of_month",
-            None,
-            date(2026, 5, 7),
-        ),
-        (date(2026, 4, 3), "monthly", "first_friday_of_month", None, date(2026, 5, 1)),
-        (
-            date(2026, 4, 3),
-            "quarterly",
-            "first_friday_of_month",
-            None,
-            date(2026, 7, 3),
-        ),
-        (date(2026, 4, 3), "yearly", "first_friday_of_month", 9, date(2027, 9, 3)),
-        (date(2026, 4, 3), "yearly", "first_friday_of_month", None, date(2027, 4, 2)),
-        (date(2026, 4, 3), "weekly", "first_friday_of_month", None, None),
-        (date(2026, 4, 3), "once", "first_friday_of_month", None, None),
-    ],
-)
-def test_first_weekday_rules_pick_the_matching_day(
-    current, recurrence, rule, anchor, expected
-):
-    assert (
-        schedules.next_occurrence_after(
-            current, recurrence=recurrence, date_rule=rule, anchor_month=anchor
-        )
-        == expected
-    )
-
-
-def test_first_weekday_helpers_skip_weekends():
-    first_weekday = "first_weekday_of_month"
-    # 1 February 2026 is a Sunday.
-    assert schedules.first_scheduled_rule_date(2026, 2, first_weekday) == date(
-        2026, 2, 2
-    )
-    assert schedules.first_scheduled_rule_date(2026, 4, first_weekday) == date(
-        2026, 4, 1
-    )
-    assert schedules.first_scheduled_rule_date(
-        2026, 2, "first_thursday_of_month"
-    ) == date(2026, 2, 5)
-    # Unknown rules fall back to the first business day.
-    assert schedules.first_scheduled_rule_date(2026, 8, "unknown") == date(2026, 8, 3)
-
-
-def _template(**kw):
-    defaults = dict(
-        schedule_recurrence="weekly",
-        schedule_interval=1,
-        schedule_until_date=None,
-        schedule_date_rule="exact",
-        schedule_anchor_month=None,
-        schedule_next_run_date=date(2026, 4, 3),
-        start_date=date(2026, 3, 27),
-    )
-    defaults.update(kw)
-    return SimpleNamespace(**defaults)
-
-
-def test_occurrences_between_lists_dates_inside_the_window():
-    weekly = _template()
-    assert schedules.occurrences_between(
-        weekly, start=date(2026, 4, 9), end=date(2026, 4, 30)
-    ) == [
-        date(2026, 4, 10),
-        date(2026, 4, 17),
-        date(2026, 4, 24),
-    ]
-    assert schedules.occurrences_between(
-        weekly, start=date(2026, 4, 1), end=date(2026, 6, 1), limit=2
-    ) == [
-        date(2026, 4, 3),
-        date(2026, 4, 10),
-    ]
-    bounded = _template(schedule_until_date=date(2026, 4, 12))
-    assert schedules.occurrences_between(
-        bounded, start=date(2026, 4, 1), end=date(2026, 6, 1)
-    ) == [
-        date(2026, 4, 3),
-        date(2026, 4, 10),
-    ]
-    # Unknown recurrences and rules fall back to a single exact occurrence.
-    odd = _template(schedule_recurrence="hourly", schedule_date_rule="whenever")
-    assert schedules.occurrences_between(
-        odd, start=date(2026, 4, 1), end=date(2026, 6, 1)
-    ) == [date(2026, 4, 3)]
-    unscheduled = _template(schedule_next_run_date=None, start_date=None)
-    assert (
-        schedules.occurrences_between(
-            unscheduled, start=date(2026, 1, 1), end=date(2027, 1, 1)
-        )
-        == []
-    )
-    from_start = _template(schedule_next_run_date=None, schedule_recurrence="monthly")
-    assert schedules.occurrences_between(
-        from_start, start=date(2026, 4, 1), end=date(2026, 5, 31)
-    ) == [
-        date(2026, 4, 27),
-        date(2026, 5, 27),
-    ]
-
-
 def test_run_length_is_preserved_for_each_occurrence():
     template = SimpleNamespace(start_date=date(2026, 4, 1), end_date=date(2026, 4, 3))
     assert schedules._audit_end_for_run(template, date(2026, 5, 4)) == date(2026, 5, 6)
@@ -293,36 +36,6 @@ def test_run_length_is_preserved_for_each_occurrence():
     assert schedules._audit_end_for_run(open_ended, date(2026, 5, 4)) == date(
         2026, 4, 3
     )
-
-
-def test_schedule_dates_use_the_configured_timezone(monkeypatch):
-    monkeypatch.setattr(settings, "timezone", "Pacific/Kiritimati")
-    assert (
-        schedules._today_for_schedule()
-        == datetime.now(ZoneInfo("Pacific/Kiritimati")).date()
-    )
-    log = Mock()
-    monkeypatch.setattr(schedules, "log", log)
-    monkeypatch.setattr(settings, "timezone", "Not/A_Zone")
-    assert schedules._today_for_schedule() == date.today()
-    assert "Invalid KEEN_TIMEZONE" in log.warning.call_args.args[0]
-
-
-@pytest.mark.parametrize(
-    "value,expected",
-    [
-        ("auditor@example.test", True),
-        ("  auditor@example.test ", True),
-        ("@example.test", False),
-        ("auditor@", False),
-        ("auditor", False),
-        ("", False),
-        (None, False),
-        ("a@" + "x" * 300, False),
-    ],
-)
-def test_notification_addresses_are_sanity_checked(value, expected):
-    assert schedules._looks_like_email(value) is expected
 
 
 # --- Materialisation -----------------------------------------------------------------
@@ -635,3 +348,142 @@ def test_scheduling_can_be_switched_off(contract_db, mailer):
         "skipped_past": [],
     }
     assert db.query(Audit).filter(Audit.status == "open").count() == 0
+
+
+def test_template_attendees_keep_their_people_records(contract_db, mailer):
+    from app.db.models import IsmsPerson
+
+    db = contract_db
+    template = _persisted_template(db)
+    person = IsmsPerson(name="Auditor", email="auditor@example.test")
+    db.add(person)
+    db.flush()
+    db.add(AuditAttendee(audit_id=template.id, person_id=person.id, name="Auditor"))
+    db.commit()
+    (created,) = schedules.materialize_due_scheduled_audits(db, today=TODAY)["created"]
+    copied = db.query(AuditAttendee).filter_by(audit_id=uuid.UUID(created["audit_id"]))
+    assert [a.person_id for a in copied] == [person.id]
+
+
+# --- Reminders -----------------------------------------------------------------------
+
+
+@pytest.fixture
+def reminders(monkeypatch):
+    from app.services import schedules as shared
+
+    sent = []
+    monkeypatch.setattr(shared, "smtp_configured", lambda: True)
+    monkeypatch.setattr(settings, "reminder_days_before", 2)
+    monkeypatch.setattr(settings, "public_base_url", "https://keen.example")
+    monkeypatch.setattr(
+        schedules, "send_audit_reminder_email", lambda **kw: sent.append(kw)
+    )
+    return sent
+
+
+def _audit(db, start, *, status="open", title="Access review"):
+    audit = Audit(
+        title=title,
+        framework_slug="A",
+        status=status,
+        audit_type="internal",
+        start_date=start,
+        end_date=start,
+    )
+    db.add(audit)
+    db.flush()
+    return audit
+
+
+def test_attendees_are_reminded_once_shortly_before_an_audit(contract_db, reminders):
+    db = contract_db
+    soon = _audit(db, date(2026, 4, 12))
+    later = _audit(db, date(2026, 4, 20), title="Later")
+    finished = _audit(db, date(2026, 4, 11), status="completed", title="Done")
+    for audit in (soon, later, finished):
+        db.add(AuditAttendee(audit_id=audit.id, name="Lead", email="lead@example.test"))
+    # A second row for the same address shares one reminder.
+    db.add(
+        AuditAttendee(audit_id=soon.id, name="Lead again", email="LEAD@example.test")
+    )
+    db.add(AuditAttendee(audit_id=soon.id, name="No address"))
+    db.commit()
+
+    report = schedules.send_audit_reminders(db, today=TODAY)
+    assert (report["enabled"], report["window_end"]) == (True, "2026-04-12")
+    assert [m["audit_title"] for m in reminders] == ["Access review"]
+    assert reminders[0]["uid"] == f"keen-audit-{soon.id}"
+    assert reminders[0]["scheduled_for"] == "2026-04-12"
+    reminded = {
+        a.name: a.reminded_at is not None
+        for a in db.query(AuditAttendee).filter_by(audit_id=soon.id)
+    }
+    assert reminded == {"Lead": True, "Lead again": True, "No address": False}
+    assert schedules.send_audit_reminders(db, today=TODAY)["sent"] == 0
+    assert len(reminders) == 1
+
+
+def test_a_failed_reminder_is_tried_again(contract_db, reminders, monkeypatch):
+    db = contract_db
+    audit = _audit(db, date(2026, 4, 11))
+    db.add(AuditAttendee(audit_id=audit.id, name="Lead", email="lead@example.test"))
+    db.add(AuditAttendee(audit_id=audit.id, name="Again", email="lead@example.test"))
+    db.commit()
+    monkeypatch.setattr(
+        schedules,
+        "send_audit_reminder_email",
+        Mock(side_effect=RuntimeError("relay down")),
+    )
+    assert schedules.send_audit_reminders(db, today=TODAY)["sent"] == 0
+    assert {a.reminded_at for a in db.query(AuditAttendee)} == {None}
+    monkeypatch.setattr(
+        schedules, "send_audit_reminder_email", lambda **kw: reminders.append(kw)
+    )
+    assert schedules.send_audit_reminders(db, today=TODAY)["sent"] == 2
+    assert len(reminders) == 1
+
+
+def test_an_attendee_whose_account_is_deactivated_gets_no_reminder(
+    contract_db, reminders
+):
+    db = contract_db
+    audit = _audit(db, date(2026, 4, 11))
+    gone = User(
+        username="gone-attendee",
+        password_hash="x",
+        role="normal",
+        is_active=False,
+        email="gone@example.test",
+    )
+    db.add(gone)
+    db.flush()
+    db.add(
+        AuditAttendee(
+            audit_id=audit.id, name="Gone", email="gone@example.test", user_id=gone.id
+        )
+    )
+    db.add(AuditAttendee(audit_id=audit.id, name="Guest", email="guest@example.test"))
+    db.commit()
+    assert schedules.send_audit_reminders(db, today=TODAY)["sent"] == 1
+    assert [m["to_email"] for m in reminders] == ["guest@example.test"]
+
+
+def test_reminders_need_smtp_a_lead_time_and_audits(
+    contract_db, reminders, monkeypatch
+):
+    from app.services import schedules as shared
+
+    db = contract_db
+    monkeypatch.setattr(settings, "reminder_days_before", 0)
+    assert schedules.send_audit_reminders(db, today=TODAY) == {
+        "enabled": False,
+        "sent": 0,
+    }
+    monkeypatch.setattr(settings, "reminder_days_before", 2)
+    monkeypatch.setattr(shared, "smtp_configured", lambda: False)
+    assert schedules.send_audit_reminders(db, today=TODAY)["enabled"] is False
+    monkeypatch.setattr(shared, "smtp_configured", lambda: True)
+    db.add(ManagedConfiguration(name="features", version=1, document={"audits": False}))
+    db.commit()
+    assert schedules.send_audit_reminders(db, today=TODAY)["enabled"] is False

@@ -1,7 +1,6 @@
-// Audit schedule dates, shared by the new schedule form on the audits page and
-// the template schedule card on an audit: the date rules, months and
-// recurrences on offer, and the first day each fuzzy rule picks. The API keeps
-// the same rules in app/services/audit_schedules.py.
+// Schedule dates, shared by scheduled audits and quizzes: the date rules,
+// months and recurrences on offer, the first day each fuzzy rule picks and a
+// schedule's summary. The API keeps the same rules in app/services/schedules.py.
 import { esc, isoDateToDisplay } from '/app.js';
 
 // Each fuzzy rule: its value, its words in labels and previews, and the
@@ -63,6 +62,21 @@ export function monthName(number) {
 
 export function recurrenceName(value) {
   return RECURRENCES.find(([choice]) => choice === value)?.[1] || value;
+}
+
+// How often a schedule runs, from its schedule_* fields, such as
+// "Monthly × 2 · first Monday of Jan".
+export function scheduleSummary(schedule) {
+  const recur = String(schedule?.schedule_recurrence || 'once');
+  const interval = Number(schedule?.schedule_interval || 1);
+  const base = recurrenceName(recur);
+  const recurText = interval > 1 && recur !== 'once' ? `${base} × ${interval}` : base;
+  const dateRule = String(schedule?.schedule_date_rule || 'exact');
+  if (isFuzzyDateRule(dateRule)) {
+    const month = monthName(schedule?.schedule_anchor_month).slice(0, 3) || 'month';
+    return `${recurText} · ${fuzzyRuleLabel(dateRule)} of ${month}`;
+  }
+  return recurText;
 }
 
 // The year and month of an ISO date, or this year and month.

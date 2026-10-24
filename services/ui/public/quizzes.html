@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen - Quizzes</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/demo-notice.js" defer></script>
+</head>
+<body data-page="quizzes">
+  <div id="navbar"></div>
+
+  <main class="container-fluid py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1">Quizzes</h1>
+        <div class="small-muted">Short, regular checks that people know your policies. Each quiz records the average of every round on an effectiveness measure, so the controls it tests show how well the training lands.</div>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary" href="/account.html#my-quizzes"><i class="bi bi-person-check me-1" aria-hidden="true"></i>My quizzes</a>
+        <button id="showCreate" class="btn btn-primary" type="button" hidden><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New quiz</button>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+    <div id="createCard" class="card mb-3" hidden>
+      <div class="card-header"><div class="fw-bold">New quiz</div><div class="small-muted">The quiz starts as a draft. Add its questions, people and schedule on its page, then activate it.</div></div>
+      <div class="card-body">
+        <form id="createForm" class="row g-2">
+          <div class="col-md-5"><label for="createTitle" class="form-label">Title</label><input id="createTitle" class="form-control" maxlength="256" required></div>
+          <div class="col-md-5"><label for="createDescription" class="form-label">Description (optional)</label><input id="createDescription" class="form-control" maxlength="20000"></div>
+          <div class="col-md-2"><label for="createPassMark" class="form-label">Pass mark (%)</label><input id="createPassMark" class="form-control" type="number" min="0" max="100" placeholder="None"></div>
+          <div class="col-12 d-flex gap-2"><button class="btn btn-primary" type="submit">Create quiz</button><button class="btn btn-outline-secondary" type="button" id="cancelCreate">Cancel</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-xxl-7">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center"><span class="fw-bold">Quizzes in this framework</span><span id="meta" class="small-muted">Loading</span></div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead><tr><th>Quiz</th><th>Status</th><th>Questions</th><th>Schedule</th><th>People</th><th>Average</th></tr></thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-xxl-5">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div><div class="fw-bold">Calendar</div><div class="small-muted">Rounds open on their first day; dashed entries are rounds a schedule will open.</div></div>
+            <div class="d-flex gap-2 align-items-center">
+              <button id="prevMonth" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Previous month">‹</button>
+              <input id="month" class="form-control form-control-sm" type="month" style="width:150px" aria-label="Month">
+              <button id="nextMonth" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Next month">›</button>
+            </div>
+          </div>
+          <div class="card-body"><div id="calendar" class="schedule-calendar"></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/quizzes.js"></script>
+</body>
+</html>

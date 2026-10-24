@@ -39,9 +39,19 @@ from app.outbound.question_webhooks import (
     send_question_created_webhooks,
     send_question_reply_webhooks,
 )
-from app.services.audit_schedules import materialize_due_scheduled_audits
+from app.services.audit_schedules import (
+    materialize_due_scheduled_audits,
+    send_audit_reminders,
+)
 from app.services.control_evidence_stats import refresh_framework_event_counts_cache
 from app.services.effectiveness_metrics import materialize_missing_monthly_zero_metrics
+from app.services.quizzes.rounds import (
+    close_due_quiz_rounds,
+    invite_waiting,
+    materialize_due_quiz_rounds,
+    send_quiz_invitations,
+    send_quiz_reminders,
+)
 from app.worker.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -139,6 +149,41 @@ def materialize_scheduled_audits_task() -> dict:
     db: Session = SessionLocal()
     try:
         return materialize_due_scheduled_audits(db)
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.tasks.quiz_rounds_task")
+def quiz_rounds_task() -> dict:
+    """Close rounds past their due date, open the rounds due today, then
+    invite anyone an open round has not reached yet."""
+    db: Session = SessionLocal()
+    try:
+        return {
+            "closed": close_due_quiz_rounds(db),
+            "opened": materialize_due_quiz_rounds(db),
+            "invited": invite_waiting(db),
+        }
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.tasks.send_quiz_invitations_task")
+def send_quiz_invitations_task(round_ids: list[str]) -> dict:
+    """Invite the people of rounds a quiz manager has just started or added to."""
+    db: Session = SessionLocal()
+    try:
+        return send_quiz_invitations(db, [uuid.UUID(str(rid)) for rid in round_ids])
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.worker.tasks.send_reminders_task")
+def send_reminders_task() -> dict:
+    """Remind audit attendees and quiz participants of what is coming up."""
+    db: Session = SessionLocal()
+    try:
+        return {"audits": send_audit_reminders(db), "quizzes": send_quiz_reminders(db)}
     finally:
         db.close()
 

@@ -6,12 +6,18 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.db.models import IsmsEffectivenessMeasure, IsmsEffectivenessMetricEntry, User
+from app.db.models import (
+    IsmsEffectivenessMeasure,
+    IsmsEffectivenessMetricEntry,
+    Quiz,
+    User,
+)
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
 
-from .common import _by_id_or_404, _clean_framework, _record, _utcnow
+from .common import _by_id_or_404, _record, _utcnow
 from .metric_values import (
     _apply_effectiveness_measure_payload,
     _apply_metric_entry_payload,
@@ -24,19 +30,35 @@ from .schemas import EffectivenessMeasurePayload, EffectivenessMetricEntryPayloa
 from .serializers import _effectiveness_measure_out, _metric_entry_out
 
 
-def create_effectiveness_measure(
+def measure_quiz(db: Session, measure_id) -> Quiz | None:
+    """The quiz that owns a measure and records its results, if any."""
+    return db.query(Quiz).filter(Quiz.measure_id == measure_id).one_or_none()
+
+
+def _refuse_quiz_measure(db: Session, measure: IsmsEffectivenessMeasure) -> None:
+    # A quiz keeps its measure's settings, links and results in step with the
+    # quiz itself, so they change only through the quiz.
+    if measure_quiz(db, measure.id) is not None:
+        raise DomainError(
+            status_code=409,
+            detail="This measure belongs to a quiz; change it from the quiz",
+        )
+
+
+def add_effectiveness_measure(
     *,
     payload: EffectivenessMeasurePayload,
-    context: ChangeContext,
+    context: ChangeContext | None,
     framework: str,
-    user: User,
+    user: User | None,
     db: Session,
-):
-    fw = _clean_framework(framework)
+) -> IsmsEffectivenessMeasure:
+    """Create a measure and its control links in the caller's transaction."""
+    fw = framework_parameter(framework)
     _validate_effectiveness_measure_payload(db, payload)
     row = IsmsEffectivenessMeasure(
         framework_slug=fw,
-        created_by_user_id=user.id,
+        created_by_user_id=user.id if user else None,
         created_at=_utcnow(),
         updated_at=_utcnow(),
     )
@@ -47,12 +69,62 @@ def create_effectiveness_measure(
     db.flush()
     after = _effectiveness_measure_out(db, row, fw)
     _record(db, "effectiveness_measure", row, "created", None, after, user, context)
+    return row
+
+
+def revise_effectiveness_measure(
+    *,
+    row: IsmsEffectivenessMeasure,
+    payload: EffectivenessMeasurePayload,
+    context: ChangeContext | None,
+    user: User | None,
+    db: Session,
+) -> None:
+    """Apply the payload's fields to a measure in the caller's transaction."""
+    fw = row.framework_slug
+    before = _effectiveness_measure_out(db, row, fw)
+    fields = set(payload.model_fields_set or set())
+    _validate_effectiveness_measure_payload(db, payload, fields=fields, row_id=row.id)
+    _apply_effectiveness_measure_payload(db, row, payload, partial=True)
+    _apply_effectiveness_links(db, row.id, fw, payload, user)
+    db.add(row)
+    db.flush()
+    after = _effectiveness_measure_out(db, row, fw)
+    _record(db, "effectiveness_measure", row, "updated", before, after, user, context)
+
+
+def remove_effectiveness_measure(
+    *,
+    row: IsmsEffectivenessMeasure,
+    context: ChangeContext | None,
+    user: User | None,
+    db: Session,
+) -> None:
+    """Delete a measure, its links and its results in the caller's transaction."""
+    fw = row.framework_slug
+    before = _effectiveness_measure_out(db, row, fw)
+    _record(db, "effectiveness_measure", row, "deleted", before, None, user, context)
+    _delete_entity_links(db, "effectiveness_measure", row.id, fw)
+    db.delete(row)
+
+
+def create_effectiveness_measure(
+    *,
+    payload: EffectivenessMeasurePayload,
+    context: ChangeContext,
+    framework: str,
+    user: User,
+    db: Session,
+):
+    row = add_effectiveness_measure(
+        payload=payload, context=context, framework=framework, user=user, db=db
+    )
     db.commit()
-    return _effectiveness_measure_out(db, row, fw)
+    return _effectiveness_measure_out(db, row, row.framework_slug)
 
 
 def list_effectiveness_measures(*, framework: str, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     rows = (
         db.query(IsmsEffectivenessMeasure)
         .filter(IsmsEffectivenessMeasure.framework_slug == fw)
@@ -68,7 +140,7 @@ def list_effectiveness_measures(*, framework: str, user: User, db: Session):
 def get_effectiveness_measure(
     *, measure_id: str, framework: str, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(
         db, IsmsEffectivenessMeasure, measure_id, "Effectiveness measure"
     )
@@ -86,21 +158,16 @@ def update_effectiveness_measure(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(
         db, IsmsEffectivenessMeasure, measure_id, "Effectiveness measure"
     )
     if row.framework_slug != fw:
         raise DomainError(status_code=404, detail="Effectiveness measure not found")
-    before = _effectiveness_measure_out(db, row, fw)
-    fields = set(payload.model_fields_set or set())
-    _validate_effectiveness_measure_payload(db, payload, fields=fields, row_id=row.id)
-    _apply_effectiveness_measure_payload(db, row, payload, partial=True)
-    _apply_effectiveness_links(db, row.id, fw, payload, user)
-    db.add(row)
-    db.flush()
-    after = _effectiveness_measure_out(db, row, fw)
-    _record(db, "effectiveness_measure", row, "updated", before, after, user, context)
+    _refuse_quiz_measure(db, row)
+    revise_effectiveness_measure(
+        row=row, payload=payload, context=context, user=user, db=db
+    )
     db.commit()
     return _effectiveness_measure_out(db, row, fw)
 
@@ -108,39 +175,53 @@ def update_effectiveness_measure(
 def delete_effectiveness_measure(
     *, measure_id: str, context: ChangeContext, framework: str, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(
         db, IsmsEffectivenessMeasure, measure_id, "Effectiveness measure"
     )
     if row.framework_slug != fw:
         raise DomainError(status_code=404, detail="Effectiveness measure not found")
-    before = _effectiveness_measure_out(db, row, fw)
-    _record(db, "effectiveness_measure", row, "deleted", before, None, user, context)
-    _delete_entity_links(db, "effectiveness_measure", row.id, fw)
-    db.delete(row)
+    _refuse_quiz_measure(db, row)
+    remove_effectiveness_measure(row=row, context=context, user=user, db=db)
     db.commit()
     return {"ok": True}
 
 
-def create_effectiveness_metric_entry(
-    *,
-    measure_id: str,
-    payload: EffectivenessMetricEntryPayload,
-    context: ChangeContext,
-    framework: str,
-    user: User,
+def _record_metric_change(
     db: Session,
-):
-    fw = _clean_framework(framework)
-    measure = _by_id_or_404(
-        db, IsmsEffectivenessMeasure, measure_id, "Effectiveness measure"
+    row: IsmsEffectivenessMetricEntry,
+    action: str,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    user: User | None,
+    context: ChangeContext | None,
+) -> None:
+    record_entity_changelog(
+        db,
+        entity_type="isms_effectiveness_metric",
+        entity_id=row.id,
+        action=action,
+        before=before,
+        after=after,
+        user=user,
+        request_method=context.method if context else None,
+        request_path=context.path if context else None,
     )
-    if measure.framework_slug != fw:
-        raise DomainError(status_code=404, detail="Effectiveness measure not found")
+
+
+def add_effectiveness_result(
+    *,
+    measure: IsmsEffectivenessMeasure,
+    payload: EffectivenessMetricEntryPayload,
+    context: ChangeContext | None,
+    user: User | None,
+    db: Session,
+) -> IsmsEffectivenessMetricEntry:
+    """Record a result on a measure in the caller's transaction."""
     _validate_metric_entry_payload(db, payload)
     row = IsmsEffectivenessMetricEntry(
         measure_id=measure.id,
-        created_by_user_id=user.id,
+        created_by_user_id=user.id if user else None,
         created_at=_utcnow(),
         updated_at=_utcnow(),
     )
@@ -153,17 +234,68 @@ def create_effectiveness_metric_entry(
     measure.updated_at = _utcnow()
     db.add(measure)
     db.flush()
-    after = _metric_entry_out(row)
-    record_entity_changelog(
-        db,
-        entity_type="isms_effectiveness_metric",
-        entity_id=row.id,
-        action="created",
-        before=None,
-        after=after,
-        user=user,
-        request_method=context.method,
-        request_path=context.path,
+    _record_metric_change(
+        db, row, "created", None, _metric_entry_out(row), user, context
+    )
+    return row
+
+
+def revise_effectiveness_result(
+    *,
+    row: IsmsEffectivenessMetricEntry,
+    payload: EffectivenessMetricEntryPayload,
+    context: ChangeContext | None,
+    user: User | None,
+    db: Session,
+) -> None:
+    """Apply the payload's fields to a recorded result in the caller's transaction."""
+    before = _metric_entry_out(row)
+    _validate_metric_entry_payload(db, payload, partial=True)
+    _apply_metric_entry_payload(row, payload, db, partial=True)
+    row.measure.updated_at = _utcnow()
+    db.add(row)
+    db.add(row.measure)
+    db.flush()
+    _record_metric_change(
+        db, row, "updated", before, _metric_entry_out(row), user, context
+    )
+
+
+def remove_effectiveness_result(
+    *,
+    row: IsmsEffectivenessMetricEntry,
+    context: ChangeContext | None,
+    user: User | None,
+    db: Session,
+) -> None:
+    """Delete a recorded result in the caller's transaction."""
+    _record_metric_change(
+        db, row, "deleted", _metric_entry_out(row), None, user, context
+    )
+    measure = row.measure
+    measure.updated_at = _utcnow()
+    db.add(measure)
+    db.delete(row)
+
+
+def create_effectiveness_metric_entry(
+    *,
+    measure_id: str,
+    payload: EffectivenessMetricEntryPayload,
+    context: ChangeContext,
+    framework: str,
+    user: User,
+    db: Session,
+):
+    fw = framework_parameter(framework)
+    measure = _by_id_or_404(
+        db, IsmsEffectivenessMeasure, measure_id, "Effectiveness measure"
+    )
+    if measure.framework_slug != fw:
+        raise DomainError(status_code=404, detail="Effectiveness measure not found")
+    _refuse_quiz_measure(db, measure)
+    row = add_effectiveness_result(
+        measure=measure, payload=payload, context=context, user=user, db=db
     )
     db.commit()
     return _metric_entry_out(row)
@@ -172,7 +304,7 @@ def create_effectiveness_metric_entry(
 def list_effectiveness_metric_entries(
     *, measure_id: str, framework: str, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     measure = _by_id_or_404(
         db, IsmsEffectivenessMeasure, measure_id, "Effectiveness measure"
     )
@@ -209,7 +341,7 @@ def _metric_entry_detail_out(
 def get_effectiveness_metric_entry(
     *, entry_id: str, framework: str, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(
         db, IsmsEffectivenessMetricEntry, entry_id, "Effectiveness metric"
     )
@@ -227,30 +359,15 @@ def update_effectiveness_metric_entry(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(
         db, IsmsEffectivenessMetricEntry, entry_id, "Effectiveness metric"
     )
     if not row.measure or row.measure.framework_slug != fw:
         raise DomainError(status_code=404, detail="Effectiveness metric not found")
-    before = _metric_entry_out(row)
-    _validate_metric_entry_payload(db, payload, partial=True)
-    _apply_metric_entry_payload(row, payload, db, partial=True)
-    row.measure.updated_at = _utcnow()
-    db.add(row)
-    db.add(row.measure)
-    db.flush()
-    after = _metric_entry_out(row)
-    record_entity_changelog(
-        db,
-        entity_type="isms_effectiveness_metric",
-        entity_id=row.id,
-        action="updated",
-        before=before,
-        after=after,
-        user=user,
-        request_method=context.method,
-        request_path=context.path,
+    _refuse_quiz_measure(db, row.measure)
+    revise_effectiveness_result(
+        row=row, payload=payload, context=context, user=user, db=db
     )
     db.commit()
     return _metric_entry_out(row)
@@ -259,27 +376,13 @@ def update_effectiveness_metric_entry(
 def delete_effectiveness_metric_entry(
     *, entry_id: str, context: ChangeContext, framework: str, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(
         db, IsmsEffectivenessMetricEntry, entry_id, "Effectiveness metric"
     )
     if not row.measure or row.measure.framework_slug != fw:
         raise DomainError(status_code=404, detail="Effectiveness metric not found")
-    before = _metric_entry_out(row)
-    measure = row.measure
-    record_entity_changelog(
-        db,
-        entity_type="isms_effectiveness_metric",
-        entity_id=row.id,
-        action="deleted",
-        before=before,
-        after=None,
-        user=user,
-        request_method=context.method,
-        request_path=context.path,
-    )
-    measure.updated_at = _utcnow()
-    db.add(measure)
-    db.delete(row)
+    _refuse_quiz_measure(db, row.measure)
+    remove_effectiveness_result(row=row, context=context, user=user, db=db)
     db.commit()
     return {"ok": True}

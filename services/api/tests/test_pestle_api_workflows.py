@@ -553,6 +553,8 @@ def test_pestle_access_and_text_helpers_guard_their_bounds(pestle, monkeypatch):
     from app.core.config import settings
     from app.services import pestle as service
     from app.services.errors import DomainError
+    from app.services.frameworks import framework_parameter
+    from app.services.text import clean_text
 
     assert service._can_read_pestle(pestle.db, None) is False
     assert service._can_manage_pestle(pestle.db, None) is False
@@ -564,9 +566,9 @@ def test_pestle_access_and_text_helpers_guard_their_bounds(pestle, monkeypatch):
     pestle.db.commit()
     assert service._can_manage_pestle(pestle.db, pestle.manager) is True
     with pytest.raises(DomainError, match="item is too long"):
-        service._clean_text("x" * 11, max_len=10, label="item")
+        clean_text("x" * 11, max_len=10, label="item")
     monkeypatch.setattr(settings, "default_framework_slug", "")
     with pytest.raises(DomainError, match="framework is required"):
-        service._clean_framework("  ")
+        framework_parameter("  ")
     with pytest.raises(DomainError, match="Invalid framework"):
-        service._clean_framework("bad slug")
+        framework_parameter("bad slug")

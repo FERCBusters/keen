@@ -2056,6 +2056,7 @@ class DemoSeeder:
         from demo_evidence import seed_evidence, seed_further_mappings
         from demo_link_diary import seed_link_diary
         from demo_pestle import seed_pestle
+        from demo_quizzes import seed_quizzes
         from demo_risks import seed_risks
         from demo_stories import seed_stories
 
@@ -2079,6 +2080,8 @@ class DemoSeeder:
         objectives = self.seed_objectives()
         self.seed_meetings(docs)
         seed_catalogue(self, frameworks)
+        # The quiz is assigned to the fictional people the catalogue adds.
+        seed_quizzes(self)
         seed_link_diary(self)
         seed_stories(self, events, docs, assets, risks, objectives)
         # The ISMS dataset is written against ISO 27001, so it leads.

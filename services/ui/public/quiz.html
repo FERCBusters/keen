@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen - Quiz</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/demo-notice.js" defer></script>
+</head>
+<body data-page="quiz">
+  <div id="navbar"></div>
+
+  <main class="container-fluid py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/quizzes.html">← Quizzes</a></div>
+        <h1 class="h3 mb-1" id="quizTitle">Quiz</h1>
+        <div class="small-muted" id="quizMeta">Loading the quiz</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2" id="headerActions" hidden>
+        <button id="activate" class="btn btn-success" type="button" hidden><i class="bi bi-play-fill me-1" aria-hidden="true"></i>Activate</button>
+        <button id="archive" class="btn btn-outline-secondary" type="button" hidden><i class="bi bi-archive me-1" aria-hidden="true"></i>Archive</button>
+        <button id="deleteQuiz" class="btn btn-outline-danger" type="button" hidden><i class="bi bi-trash me-1" aria-hidden="true"></i>Delete</button>
+      </div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;"></div>
+    <div id="availability" hidden>
+      <div id="availabilityBox" class="alert alert-secondary d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3" role="status">
+        <span id="availabilityText"></span>
+        <button id="startRoundNow" class="btn btn-sm btn-primary" type="button" hidden><i class="bi bi-play-fill me-1" aria-hidden="true"></i>Start a round now</button>
+      </div>
+    </div>
+
+    <ul class="nav nav-tabs mb-3" id="quizTabs" role="tablist">
+      <li class="nav-item" role="presentation"><button class="nav-link active" id="quizOverviewTab" data-bs-toggle="tab" data-bs-target="#overviewPane" type="button" role="tab" data-tab-hash="#overview">Overview</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="quizQuestionsTab" data-bs-toggle="tab" data-bs-target="#questionsPane" type="button" role="tab" data-tab-hash="#questions">Questions</button></li>
+      <li class="nav-item manager-only" role="presentation"><button class="nav-link" id="quizPeopleTab" data-bs-toggle="tab" data-bs-target="#peoplePane" type="button" role="tab" data-tab-hash="#people">People</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="quizRoundsTab" data-bs-toggle="tab" data-bs-target="#roundsPane" type="button" role="tab" data-tab-hash="#rounds">Schedule and rounds</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="quizResultsTab" data-bs-toggle="tab" data-bs-target="#resultsPane" type="button" role="tab" data-tab-hash="#results">Results</button></li>
+      <li class="nav-item manager-only" role="presentation"><button class="nav-link" id="quizGradingTab" data-bs-toggle="tab" data-bs-target="#gradingPane" type="button" role="tab" data-tab-hash="#grading">Grading <span class="badge text-bg-primary" id="gradingCount" hidden>0</span></button></li>
+    </ul>
+
+    <div class="tab-content">
+      <section class="tab-pane fade show active" id="overviewPane" role="tabpanel" tabindex="0">
+        <div class="row g-3">
+          <div class="col-12 col-xl-7">
+            <div class="card">
+              <div class="card-header"><div class="fw-bold">Settings</div><div class="small-muted">The pass mark decides pass or fail, is the measure's target and sets the trophies: bronze, silver and gold each cover a third of the way from the pass mark (50% without one) to full marks.</div></div>
+              <div class="card-body">
+                <form id="settingsForm" class="row g-3">
+                  <div class="col-12"><label for="title" class="form-label">Title</label><input id="title" class="form-control" maxlength="256" required></div>
+                  <div class="col-12"><label for="description" class="form-label">Description</label><textarea id="description" class="form-control" rows="2" maxlength="20000"></textarea></div>
+                  <div class="col-6 col-md-3"><label for="passMark" class="form-label">Pass mark (%)</label><input id="passMark" class="form-control" type="number" min="0" max="100" placeholder="None"></div>
+                  <div class="col-6 col-md-3"><label for="perAttempt" class="form-label">Questions per sitting</label><input id="perAttempt" class="form-control" type="number" min="1" max="200" placeholder="All"></div>
+                  <div class="col-6 col-md-3"><label for="pageSize" class="form-label">Questions per page</label><input id="pageSize" class="form-control" type="number" min="1" max="50" required></div>
+                  <div class="col-6 col-md-3"><label for="dueDays" class="form-label">Days to answer</label><input id="dueDays" class="form-control" type="number" min="1" max="365" required></div>
+                  <div class="col-12 col-md-6">
+                    <div class="form-check form-switch mt-md-4"><input class="form-check-input" type="checkbox" role="switch" id="showScores"><label class="form-check-label" for="showScores">People see their own score and trophy</label></div>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label for="revealAnswers" class="form-label">People review their answers</label>
+                    <select id="revealAnswers" class="form-select">
+                      <option value="after_close">When the round closes</option>
+                      <option value="after_submit">As soon as each person hands in</option>
+                      <option value="never">Never</option>
+                    </select>
+                    <div class="form-text">A review shows each answer beside the right one while people see their scores, until the quiz's next round opens.</div>
+                  </div>
+                  <div class="col-12 d-flex gap-2 manager-only"><button class="btn btn-primary" type="submit">Save settings</button></div>
+                </form>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-5">
+            <div class="vstack gap-3">
+              <div class="card">
+                <div class="card-header"><div class="fw-bold">Controls it tests</div><div class="small-muted">Each round's average reaches these controls through the quiz's effectiveness measure.</div></div>
+                <div class="card-body">
+                  <div id="controlBadges" class="mb-2"></div>
+                  <div class="manager-only">
+                    <label for="controls" class="form-label small-muted mb-1">Choose controls</label>
+                    <select id="controls" class="form-select" multiple size="8"></select>
+                    <button id="saveControls" class="btn btn-sm btn-outline-primary mt-2" type="button">Save controls</button>
+                  </div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header fw-bold">Effectiveness measure</div>
+                <div class="card-body" id="measureInfo">-</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="questionsPane" role="tabpanel" tabindex="0">
+        <div class="card">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div><div class="fw-bold">Questions</div><div class="small-muted" id="questionsNote">Each sitting shuffles the questions and their options. Changes apply from the next sitting.</div></div>
+            <div class="d-flex flex-wrap gap-2 manager-only">
+              <button id="addChoice" class="btn btn-sm btn-outline-primary" type="button"><i class="bi bi-ui-radios me-1" aria-hidden="true"></i>Add multiple choice</button>
+              <button id="addWritten" class="btn btn-sm btn-outline-primary" type="button"><i class="bi bi-textarea-t me-1" aria-hidden="true"></i>Add written</button>
+              <button id="saveQuestions" class="btn btn-sm btn-primary" type="button">Save questions</button>
+            </div>
+          </div>
+          <div class="card-body vstack gap-3" id="questionList"></div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="peoplePane" role="tabpanel" tabindex="0">
+        <div class="row g-3">
+          <div class="col-12 col-xl-6">
+            <div class="card">
+              <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                <div><div class="fw-bold">Assigned to</div><div class="small-muted" id="audienceSize">-</div></div>
+                <button id="saveAudience" class="btn btn-sm btn-primary" type="button">Save people</button>
+              </div>
+              <div class="card-body" id="audienceList"></div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-6">
+            <div class="card">
+              <div class="card-header"><div class="fw-bold">Add people</div><div class="small-muted">A round is for everyone assigned who can sign in to Keen. Saving changes the open rounds as well.</div></div>
+              <div class="card-body vstack gap-3">
+                <div><label for="pickPerson" class="form-label small-muted mb-1">A person from People</label><div class="input-group"><select id="pickPerson" class="form-select"></select><button id="addPerson" class="btn btn-outline-primary" type="button">Add</button></div></div>
+                <div><label for="pickAccount" class="form-label small-muted mb-1">A Keen account without a People record</label><div class="input-group"><select id="pickAccount" class="form-select"></select><button id="addAccount" class="btn btn-outline-primary" type="button">Add</button></div><div class="form-text">Saving creates a People record linked to the account, so its scores have a person to belong to.</div></div>
+                <div><label for="pickRole" class="form-label small-muted mb-1">An organisation role</label><div class="input-group"><select id="pickRole" class="form-select"></select><button id="addRole" class="btn btn-outline-primary" type="button">Add</button></div><div class="form-text">Everyone placed in the role, and every account holding it, when each round starts.</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="roundsPane" role="tabpanel" tabindex="0">
+        <div class="row g-3">
+          <div class="col-12 col-xl-5">
+            <div class="card mb-3 manager-only">
+              <div class="card-header"><div class="fw-bold">Start a round</div><div class="small-muted">Choose when it opens and falls due. Everyone assigned is invited by email when SMTP is set up.</div></div>
+              <div class="card-body">
+                <form id="roundForm" class="row g-2 align-items-end">
+                  <div class="col-6"><label for="roundOpensText" class="form-label small-muted mb-1">Opens</label><input id="roundOpens" class="form-control visually-hidden" type="date"><div class="input-group"><input id="roundOpensText" class="form-control" type="text" autocomplete="off" inputmode="numeric"><button id="roundOpensPick" class="btn btn-outline-secondary" type="button" title="Pick date" aria-label="Pick a date"><i class="bi bi-calendar" aria-hidden="true"></i></button></div></div>
+                  <div class="col-6"><label for="roundDueText" class="form-label small-muted mb-1">Due</label><input id="roundDue" class="form-control visually-hidden" type="date"><div class="input-group"><input id="roundDueText" class="form-control" type="text" autocomplete="off" inputmode="numeric"><button id="roundDuePick" class="btn btn-outline-secondary" type="button" title="Pick date" aria-label="Pick a date"><i class="bi bi-calendar" aria-hidden="true"></i></button></div></div>
+                  <div class="col-12"><button class="btn btn-primary" type="submit">Start round</button></div>
+                </form>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><div class="fw-bold">Schedule</div><div class="small-muted" id="scheduleInfo">-</div></div>
+              <div class="card-body">
+                <form id="scheduleForm" class="row g-2">
+                  <!-- pages/schedule-fields.js adds the fuzzy date rules, months and recurrences. -->
+                  <div class="col-12">
+                    <label class="form-label small-muted mb-1" for="dateRule">Date selector</label>
+                    <select id="dateRule" class="form-select"><option value="exact">Exact first round date</option></select>
+                  </div>
+                  <div class="col-12" id="exactDateFields">
+                    <div><label for="scheduleStartText" class="form-label small-muted mb-1">First round</label><input id="scheduleStart" class="form-control visually-hidden" type="date"><div class="input-group"><input id="scheduleStartText" class="form-control" type="text" autocomplete="off" inputmode="numeric"><button id="scheduleStartPick" class="btn btn-outline-secondary" type="button" title="Pick date" aria-label="Pick a date"><i class="bi bi-calendar" aria-hidden="true"></i></button></div></div>
+                  </div>
+                  <div class="col-12" id="fuzzyDateFields" style="display:none;">
+                    <div class="row g-2">
+                      <div class="col-7"><label class="form-label small-muted mb-1" for="fuzzyMonth" id="fuzzyMonthLabel">First weekday of</label><select id="fuzzyMonth" class="form-select"></select></div>
+                      <div class="col-5"><label class="form-label small-muted mb-1" for="fuzzyYear">Start year</label><input id="fuzzyYear" class="form-control" type="number" min="1900" max="3000"></div>
+                      <div class="col-12"><div class="small-muted" id="schedulePreview"></div></div>
+                    </div>
+                  </div>
+                  <div class="col-8"><label class="form-label small-muted mb-1" for="recurrence">Recurrence</label><select id="recurrence" class="form-select"></select></div>
+                  <div class="col-4"><label class="form-label small-muted mb-1" for="interval">Every</label><input id="interval" class="form-control" type="number" min="1" max="120" value="1"></div>
+                  <div class="col-12"><label for="untilText" class="form-label small-muted mb-1">Until</label><input id="until" class="form-control visually-hidden" type="date"><div class="input-group"><input id="untilText" class="form-control" type="text" autocomplete="off" inputmode="numeric"><button id="untilPick" class="btn btn-outline-secondary" type="button" title="Pick date" aria-label="Pick a date"><i class="bi bi-calendar" aria-hidden="true"></i></button></div></div>
+                  <div class="col-12 d-flex gap-2 manager-only">
+                    <button class="btn btn-primary" type="submit">Save schedule</button>
+                    <button id="clearSchedule" class="btn btn-outline-secondary" type="button">Stop scheduling</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-7">
+            <div class="card">
+              <div class="card-header"><div class="fw-bold">Rounds</div><div class="small-muted">A round closes on its due date. Its average reaches the measure once every response is graded and at least three people finished.</div></div>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                  <thead><tr><th>Opens</th><th>Due</th><th>Status</th><th>Finished</th><th>Average</th><th class="text-end manager-only">Actions</th></tr></thead>
+                  <tbody id="roundRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="resultsPane" role="tabpanel" tabindex="0">
+        <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+          <div><label for="resultRound" class="form-label small-muted mb-1">Round</label><select id="resultRound" class="form-select"><option value="">All rounds</option></select></div>
+          <div class="small-muted" id="hiddenRounds"></div>
+        </div>
+        <div class="row g-3 mb-3" id="summaryTiles"></div>
+        <div class="row g-3">
+          <div class="col-12 col-xl-5">
+            <div class="card mb-3">
+              <div class="card-header"><div class="fw-bold">Scores</div><div class="small-muted">Completed responses in each tenth of the score range.</div></div>
+              <div class="card-body"><div class="quiz-histogram" id="histogram"></div><div class="d-flex justify-content-between small-muted mt-1"><span>0%</span><span>100%</span></div><div class="mt-3" id="trophyCounts"></div></div>
+            </div>
+            <div class="card mb-3">
+              <div class="card-header fw-bold">Insights</div>
+              <div class="card-body" id="insights"></div>
+            </div>
+          </div>
+          <div class="col-12 col-xl-7">
+            <div class="card mb-3">
+              <div class="card-header"><div class="fw-bold">Questions</div><div class="small-muted">How well each question was answered, as an average of its marks.</div></div>
+              <div class="card-body vstack gap-3" id="questionStats"></div>
+            </div>
+            <div class="card mb-3 manager-only" id="peopleCard" hidden>
+              <div class="card-header"><div class="fw-bold">People in this round</div><div class="small-muted">Open an attempt to read its answers and grade written ones.</div></div>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                  <thead><tr><th>Person</th><th>Status</th><th>Handed in</th><th>Score</th><th></th></tr></thead>
+                  <tbody id="peopleRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="gradingPane" role="tabpanel" tabindex="0">
+        <div class="card">
+          <div class="card-header"><div class="fw-bold">Written answers to grade</div><div class="small-muted" id="gradingNote">Answers appear without names so each is graded on its merits. Grade from 1 to 5 in half points.</div></div>
+          <div class="card-body vstack gap-3" id="gradingList"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal fade" id="attemptModal" tabindex="-1" aria-labelledby="attemptTitle" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header"><h2 class="modal-title h5" id="attemptTitle">Attempt</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+          <div class="modal-body vstack gap-3" id="attemptBody"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/quiz.js"></script>
+</body>
+</html>

@@ -319,6 +319,8 @@ def me(*, context: ChangeContext, db: Session) -> dict:
     can_view_stories = bool(
         can_manage_stories or has_permission(db, user, "stories.read")
     )
+    can_manage_quizzes = bool(is_admin or has_permission(db, user, "quiz.manage"))
+    can_view_quizzes = bool(can_manage_quizzes or has_permission(db, user, "quiz.read"))
     can_create_questions = bool(is_admin or has_permission(db, user, "question.create"))
     can_question_events = can_create_questions
     can_delete_questions = bool(is_admin or has_permission(db, user, "question.delete"))
@@ -389,6 +391,8 @@ def me(*, context: ChangeContext, db: Session) -> dict:
         "can_view_stories": can_view_stories and enabled("stories"),
         "can_manage_stories": can_manage_stories and enabled("stories"),
         "can_admin_stories": can_admin_stories and enabled("stories"),
+        "can_view_quizzes": can_view_quizzes and enabled("quizzes"),
+        "can_manage_quizzes": can_manage_quizzes and enabled("quizzes"),
         "can_create_questions": can_create_questions and enabled("questions"),
         "can_question_events": can_question_events and enabled("questions"),
         "can_delete_questions": can_delete_questions and enabled("questions"),

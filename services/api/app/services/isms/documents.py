@@ -22,19 +22,14 @@ from app.security.request_limits import MAX_FILE_UPLOAD
 from app.security.rich_text import sanitize_rich_text_html
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
 from app.services.hierarchy import validate_parent
+from app.services.text import clean_text
 from app.services.uploads import upload_size
 from app.storage.filenames import safe_download_ext
 from app.storage.s3 import put_file
 
-from .common import (
-    _by_id_or_404,
-    _clean_framework,
-    _clean_text,
-    _list_response,
-    _record,
-    _utcnow,
-)
+from .common import _by_id_or_404, _list_response, _record, _utcnow
 from .constants import DOCUMENT_TYPES
 from .mutations import _apply_links, _delete_entity_links
 from .schemas import DocumentCommentPayload, DocumentFolderPayload, DocumentPayload
@@ -222,15 +217,15 @@ def create_document(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     dtype = (payload.document_type or "policy").strip().lower() or "policy"
     if dtype not in DOCUMENT_TYPES:
         raise DomainError(status_code=400, detail="Invalid document_type")
     row = IsmsDocument(
-        title=_clean_text(payload.title, max_len=256, required=True, label="title"),
+        title=clean_text(payload.title, max_len=256, required=True, label="title"),
         document_type=dtype,
-        description=_clean_text(payload.description, max_len=20000),
-        external_url=_clean_text(payload.external_url, max_len=2048) or None,
+        description=clean_text(payload.description, max_len=20000),
+        external_url=clean_text(payload.external_url, max_len=2048) or None,
         folder_id=_document_folder(db, payload.folder_id),
         tags=_document_tags(payload.tags),
         content_html=sanitize_rich_text_html(payload.content_html or "")
@@ -256,7 +251,7 @@ def create_document(
 def list_documents(
     *, q: str, framework: str, limit: int, offset: int, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     limit = max(1, min(int(limit or 200), 1000))
     offset = max(0, int(offset or 0))
     qry = db.query(IsmsDocument)
@@ -285,7 +280,7 @@ def get_document(*, document_id: str, framework: str, user: User, db: Session):
     return _document_out(
         db,
         _by_id_or_404(db, IsmsDocument, document_id, "Document"),
-        _clean_framework(framework),
+        framework_parameter(framework),
     )
 
 
@@ -298,25 +293,23 @@ def update_document(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     # Saves of one document queue on its row, so each checks the version the
     # previous save committed.
     row = _by_id_or_404(db, IsmsDocument, document_id, "Document", lock=True)
     before = _document_out(db, row, fw)
     fields = set(payload.model_fields_set or set())
     if "title" in fields:
-        row.title = _clean_text(
-            payload.title, max_len=256, required=True, label="title"
-        )
+        row.title = clean_text(payload.title, max_len=256, required=True, label="title")
     if "document_type" in fields:
         dtype = (payload.document_type or "policy").strip().lower() or "policy"
         if dtype not in DOCUMENT_TYPES:
             raise DomainError(status_code=400, detail="Invalid document_type")
         row.document_type = dtype
     if "description" in fields:
-        row.description = _clean_text(payload.description, max_len=20000)
+        row.description = clean_text(payload.description, max_len=20000)
     if "external_url" in fields:
-        row.external_url = _clean_text(payload.external_url, max_len=2048) or None
+        row.external_url = clean_text(payload.external_url, max_len=2048) or None
     if "folder_id" in fields:
         row.folder_id = _document_folder(db, payload.folder_id)
     if "tags" in fields:
@@ -357,7 +350,7 @@ def upload_document_file(
     db: Session,
     context: ChangeContext,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     # Locked so a concurrent replacement or deletion retires this file in turn.
     row = _by_id_or_404(db, IsmsDocument, document_id, "Document", lock=True)
     before = _document_out(db, row, fw)
@@ -406,7 +399,7 @@ def document_file(*, db: Session, document_id: str):
 def delete_document(
     *, document_id: str, context: ChangeContext, framework: str, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(db, IsmsDocument, document_id, "Document", lock=True)
     if (
         db.query(BookStackSectionEvidence.id)

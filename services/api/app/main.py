@@ -304,6 +304,12 @@ async def auth_middleware(request: Request, call_next):
                         {"detail": "interested_parties.manage permission required"},
                         status_code=403,
                     )
+            elif path.startswith("/v1/quizzes"):
+                if not has_permission(db, user, "quiz.manage"):
+                    return JSONResponse(
+                        {"detail": "quiz.manage permission required"},
+                        status_code=403,
+                    )
             elif path.startswith("/v1/isms"):
                 if not (
                     has_permission(db, user, "isms.manage")

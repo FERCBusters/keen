@@ -131,6 +131,13 @@ def record_metric(*, db, metric_key, payload, context: ChangeContext):
         64,
     )
     measure = _webhook_measure_by_key(db, metric_key=metric_key, framework=framework)
+    from app.services.isms.effectiveness import measure_quiz
+
+    if measure_quiz(db, measure.id) is not None:
+        raise DomainError(
+            status_code=409,
+            detail="This measure records its quiz's results; it takes no submissions",
+        )
     metric_value = _webhook_metric_value(
         payload.get("metric_value", payload.get("value"))
     )

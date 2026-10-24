@@ -20,6 +20,7 @@ OWNERS = {
     "bookstack_sections": "documents",
     "soa": "soa",
     "stories": "stories",
+    "quizzes": "quizzes",
 }
 ISMS_OWNERS = {
     "objectives": "objectives",

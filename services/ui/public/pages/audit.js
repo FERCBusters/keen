@@ -1,6 +1,6 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { maskDomText, maskEventDataString } from '/pages/evidence-export/masking.js';
-import { isoYearMonth, scheduleDateFields } from '/pages/audit-schedule.js';
+import { isoYearMonth, scheduleDateFields } from '/pages/schedule-fields.js';
 let selectedSwotIds = new Set(),
   swotScopeLoaded = false;
 import {

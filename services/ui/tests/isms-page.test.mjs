@@ -121,6 +121,31 @@ for (const [tab, id, text] of [
     );
   });
 }
+test("a quiz's measure links to its quiz and is changed only there", async (t) => {
+  const quizMeasure = {
+    id: 'e2',
+    summary: 'Quiz: Phishing',
+    controls: [],
+    clauses: [],
+    metric_entries: [],
+    quiz: { id: 'q1', title: 'Phishing <basics>' },
+  };
+  records.effectiveness_measures.push(quizMeasure);
+  t.after(() => records.effectiveness_measures.pop());
+  const ui = await fixture(t, { query: '&tab=effectiveness', me: { can_manage_isms: true } });
+  await settle(() => ui.el('effectivenessRows').textContent.includes('Quiz: Phishing'));
+  const rows = [...ui.el('effectivenessRows').querySelectorAll('tr')];
+  const quizRow = rows.find((row) => row.dataset.ismsId === 'e2');
+  assert.match(quizRow.textContent, /Results of the quiz Phishing <basics>/);
+  assert.equal(
+    quizRow.querySelector('a[href^="/quiz.html"]').getAttribute('href'),
+    '/quiz.html?id=q1&framework=A',
+  );
+  assert.equal(quizRow.querySelector('[data-isms-edit], [data-effectiveness-record]'), null);
+  const ownRow = rows.find((row) => row.dataset.ismsId === 'e1');
+  assert.ok(ownRow.querySelector('[data-isms-edit="effectiveness"]'));
+});
+
 test('inherited object names in the tab parameter open the overview', async (t) => {
   for (const name of ['constructor', '__proto__', 'toString', 'valueOf']) {
     const ui = await fixture(t, { query: '&tab=' + name });

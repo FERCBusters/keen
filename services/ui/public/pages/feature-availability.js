@@ -36,6 +36,9 @@ const pages = {
   '/isms-asset.html': 'assets',
   '/isms-effectiveness-measure.html': 'effectiveness',
   '/isms-meeting.html': 'meetings',
+  '/quizzes.html': 'quizzes',
+  '/quiz.html': 'quizzes',
+  '/quiz-take.html': 'quizzes',
 };
 export const sectionFeatures = {
   objectives: 'objectives',

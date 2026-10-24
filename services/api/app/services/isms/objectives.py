@@ -10,15 +10,10 @@ from sqlalchemy.orm import Session
 from app.db.models import IsmsObjective, User
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
+from app.services.text import clean_text
 
-from .common import (
-    _by_id_or_404,
-    _clean_framework,
-    _clean_text,
-    _list_response,
-    _record,
-    _utcnow,
-)
+from .common import _by_id_or_404, _list_response, _record, _utcnow
 from .constants import OBJECTIVE_STATUSES
 from .mutations import _apply_links, _delete_entity_links, _replace_objective_resources
 from .schemas import ObjectivePayload
@@ -33,7 +28,7 @@ def create_objective(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     status = (payload.status or "not_started").strip() or "not_started"
     if status not in OBJECTIVE_STATUSES:
         raise DomainError(status_code=400, detail="Invalid objective status")
@@ -46,18 +41,18 @@ def create_objective(
         raise DomainError(status_code=400, detail="Unknown owner user")
     row = IsmsObjective(
         start_date=payload.start_date,
-        requirement=_clean_text(
+        requirement=clean_text(
             payload.requirement, max_len=20000, required=True, label="requirement"
         ),
-        goal=_clean_text(payload.goal, max_len=20000, required=True, label="goal"),
-        metric=_clean_text(payload.metric, max_len=20000),
-        completion_method=_clean_text(payload.completion_method, max_len=12000),
-        resource_requirements_text=_clean_text(
+        goal=clean_text(payload.goal, max_len=20000, required=True, label="goal"),
+        metric=clean_text(payload.metric, max_len=20000),
+        completion_method=clean_text(payload.completion_method, max_len=12000),
+        resource_requirements_text=clean_text(
             payload.resource_requirements_text, max_len=12000
         ),
         owner_user_id=payload.owner_user_id,
-        completion_target_date=_clean_text(payload.completion_target_date, max_len=64),
-        evaluation_method=_clean_text(payload.evaluation_method, max_len=12000),
+        completion_target_date=clean_text(payload.completion_target_date, max_len=64),
+        evaluation_method=clean_text(payload.evaluation_method, max_len=12000),
         status=status,
         created_by_user_id=user.id,
         created_at=_utcnow(),
@@ -85,7 +80,7 @@ def list_objectives(
     db: Session,
     status: str = "",
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     limit = max(1, min(int(limit or 200), 1000))
     offset = max(0, int(offset or 0))
     qry = db.query(IsmsObjective)
@@ -119,7 +114,7 @@ def get_objective(*, objective_id: str, framework: str, user: User, db: Session)
     return _objective_out(
         db,
         _by_id_or_404(db, IsmsObjective, objective_id, "Objective"),
-        _clean_framework(framework),
+        framework_parameter(framework),
     )
 
 
@@ -132,7 +127,7 @@ def update_objective(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(db, IsmsObjective, objective_id, "Objective")
     before = _objective_out(db, row, fw)
     fields = set(payload.model_fields_set or set())
@@ -150,7 +145,7 @@ def update_objective(
             setattr(
                 row,
                 attr,
-                _clean_text(
+                clean_text(
                     getattr(payload, attr),
                     max_len=max_len,
                     required=attr in {"requirement", "goal"},
@@ -165,7 +160,7 @@ def update_objective(
     if "owner_user_id" in fields:
         row.owner_user_id = payload.owner_user_id
     if "completion_target_date" in fields:
-        row.completion_target_date = _clean_text(
+        row.completion_target_date = clean_text(
             payload.completion_target_date, max_len=64
         )
     row.updated_at = _utcnow()
@@ -190,7 +185,7 @@ def delete_objective(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(db, IsmsObjective, objective_id, "Objective")
     before = _objective_out(db, row, fw)
     _record(db, "objective", row, "deleted", before, None, user, context)

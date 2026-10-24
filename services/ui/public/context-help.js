@@ -192,6 +192,30 @@ const topics = {
     'The organisation chart, People directory, vendors, asset matrix and access matrix describe who and what your controls protect.',
     'Keep owners current; assets, risks and access records reference them. The guide explains each matrix.',
   ],
+  quizzes: [
+    'Quizzes',
+    'using-quizzes.html',
+    "A quiz checks that people know your policies with multiple-choice and written questions. Each round's average is recorded on an effectiveness measure, so the controls it tests show the result.",
+    'Write the questions and assign people or roles, then activate the quiz: a one-off quiz opens straight away, a scheduled one on its first round date. The guide covers privacy, grading and how scores win trophies.',
+  ],
+  quizResults: [
+    'Quiz results and insights',
+    'using-quizzes.html#read-the-results',
+    "Results show each round: completion, the average score, the hardest and best-known questions and, for quiz managers, the wrong answers people choose most and each person's attempt.",
+    'quiz.read sees a round once it has closed with every response graded and at least three people finished. The guide explains why.',
+  ],
+  quizGrading: [
+    'Grading written answers',
+    'using-quizzes.html#grade-written-answers',
+    'Written answers are graded from 1 to 5 in half points, without names. An attempt completes with its score once its last written answer is graded.',
+    'Read the guidance with each question, then choose a grade and add feedback. Your own answers wait for another quiz manager.',
+  ],
+  myQuizzes: [
+    'Your quizzes',
+    'using-quizzes.html#sit-a-quiz',
+    'The quizzes assigned to you, what to do next, and your level, streak and badges. Your answers are saved each time you move to the next page.',
+    'Start or carry on a quiz before its due date. Your score shows when the quiz allows, and you can review your answers until its next round opens.',
+  ],
   measures: [
     'Effectiveness measures',
     'using-measures.html',
@@ -272,6 +296,9 @@ const pages = {
   'isms-effectiveness-metric': 'measures',
   'isms-objective': 'objectives',
   'isms-meeting': 'meetings',
+  quizzes: 'quizzes',
+  quiz: 'quizzes',
+  'quiz-take': 'myQuizzes',
 };
 // Tabs that change the subject of a page. Keys are the tab buttons' ids.
 const tabs = {
@@ -313,6 +340,10 @@ const tabs = {
   controlEvidenceTab: 'events',
   sourceEventsTab: 'events',
   sourceInsightsTab: 'sourceInsights',
+  quizQuestionsTab: 'quizzes',
+  quizResultsTab: 'quizResults',
+  quizGradingTab: 'quizGrading',
+  'my-quizzes-tab': 'myQuizzes',
 };
 // Tabs that recur across pages are recognised by their id's ending.
 const tabEndings = [

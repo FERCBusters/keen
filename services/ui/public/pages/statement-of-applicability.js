@@ -1,6 +1,5 @@
-import { safeExternalHref } from '/app.js';
-import { clauseBadges, controlBadges } from '/pages/isms-detail-common.js';
 import {
+  safeExternalHref,
   initNavbar,
   apiGet,
   enableTableSorting,
@@ -13,6 +12,7 @@ import {
   userPillHtml,
   userPillsHtml,
 } from '/app.js';
+import { clauseBadges, controlBadges } from '/pages/isms-detail-common.js';
 
 await initNavbar();
 enableTableSorting();

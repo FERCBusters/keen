@@ -1,5 +1,6 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { deleteQuestionThread, myQuestionRowHtml } from '/pages/question-threads.js';
+import { mountMyQuizzes } from '/pages/my-quizzes.js';
 import {
   initNavbar,
   apiGet,
@@ -855,6 +856,11 @@ const accountLists = {
     columns: 6,
     row: myAuditRow,
   }),
+  // The My quizzes tab is richer than a list; its tab is hidden while
+  // quizzes are switched off.
+  ...(featureEnabled(me, 'quizzes')
+    ? { '#my-quizzes-pane': mountMyQuizzes(document.getElementById('my-quizzes-pane')) }
+    : {}),
   '#my-meetings-pane': accountList({
     prefix: 'myMeetings',
     feature: 'meetings',

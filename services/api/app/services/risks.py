@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import uuid
 from datetime import date, datetime
 from typing import Any
@@ -45,6 +44,7 @@ from app.services.entity_changelog import (
     risk_changelog_state,
 )
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
 from app.services.interested_parties import _lookup_by_id_or_name
 from app.services.isms.link_diary import (
     remove_entity_link_diary,
@@ -52,6 +52,7 @@ from app.services.isms.link_diary import (
 )
 from app.services.isms.mutations import _delete_entity_links, org_node_or_400
 from app.services.risk_mitigator import analyse_risk_mitigation
+from app.services.text import clean_text
 
 RISK_READ_PERMISSION = "risk.read"
 RISK_MANAGE_PERMISSION = "risk.manage"
@@ -219,26 +220,6 @@ def _require_risk_read_or_owner(db: Session, user: User, risk: Risk) -> None:
         )
 
 
-def _clean_text(
-    raw: str | None, *, max_len: int, required: bool = False, label: str = "value"
-) -> str:
-    value = (raw or "").strip()
-    if required and not value:
-        raise DomainError(status_code=400, detail=f"{label} is required")
-    if len(value) > max_len:
-        raise DomainError(status_code=400, detail=f"{label} is too long")
-    return value
-
-
-def _clean_framework(raw: str | None) -> str:
-    value = (raw or settings.default_framework_slug or "").strip()
-    if not value:
-        raise DomainError(status_code=400, detail="framework is required")
-    if len(value) > 64 or not re.match(r"^[A-Za-z0-9._:-]+$", value):
-        raise DomainError(status_code=400, detail="Invalid framework")
-    return value
-
-
 def _clean_score(raw: int | None, *, default: int = 1, label: str = "score") -> int:
     # The request schema has already made the score an integer.
     n = default if raw is None else int(raw)
@@ -296,7 +277,7 @@ def _category_or_create(
     if category_id:
         return _category_by_id(db, category_id)
 
-    name = _clean_text(category_name, max_len=128, required=False, label="category")
+    name = clean_text(category_name, max_len=128, required=False, label="category")
     if name:
         row = (
             db.query(RiskCategory)
@@ -340,7 +321,7 @@ def _subcategory_or_create(
     if subcategory_id:
         return _subcategory_by_id(db, subcategory_id, category=category)
 
-    name = _clean_text(
+    name = clean_text(
         subcategory_name, max_len=128, required=False, label="subcategory"
     )
     if name:
@@ -393,7 +374,7 @@ def _license_or_404(db: Session, license_id: str | uuid.UUID) -> IsmsLicense:
 
 
 def _license_by_name(db: Session, name: str) -> IsmsLicense | None:
-    cleaned = _clean_text(name, max_len=256)
+    cleaned = clean_text(name, max_len=256)
     if not cleaned:
         return None
     return (
@@ -404,7 +385,7 @@ def _license_by_name(db: Session, name: str) -> IsmsLicense | None:
 
 
 def _license_or_create_by_name(db: Session, name: str | None) -> IsmsLicense | None:
-    cleaned = _clean_text(name, max_len=256)
+    cleaned = clean_text(name, max_len=256)
     if not cleaned:
         return None
     row = _license_by_name(db, cleaned)
@@ -479,7 +460,7 @@ def _asset_or_create(
         return _asset_or_404(db, asset_id)
 
     base_asset = _asset_or_404(db, asset_id) if asset_id else existing
-    name = _clean_text(
+    name = clean_text(
         _asset_name_from_payload(payload) or (base_asset.name if base_asset else None),
         max_len=256,
         required=require_asset,
@@ -528,7 +509,7 @@ def _asset_or_create(
         register_held_by_org_node_id=org_node_or_400(
             db, getattr(payload, "register_held_by_org_node_id", None)
         ),
-        description=_clean_text(getattr(payload, "description", None), max_len=20000),
+        description=clean_text(getattr(payload, "description", None), max_len=20000),
         created_at=_utcnow(),
         updated_at=_utcnow(),
     )
@@ -917,7 +898,7 @@ def _risk_out(
     include_controls: bool = False,
 ) -> dict[str, Any]:
     fw = (
-        _clean_framework(framework)
+        framework_parameter(framework)
         if framework is not None
         else settings.default_framework_slug
     )
@@ -1004,7 +985,7 @@ def _apply_payload(
         )
 
     if is_create or "title" in fields:
-        risk.title = _clean_text(
+        risk.title = clean_text(
             payload.title, max_len=256, required=False, label="title"
         )
 
@@ -1022,7 +1003,7 @@ def _apply_payload(
             raise DomainError(400, "Invalid treatment status")
         risk.treatment_status = status
     if is_create or "treatment_plan" in fields:
-        risk.treatment_plan = _clean_text(
+        risk.treatment_plan = clean_text(
             payload.treatment_plan,
             max_len=20000,
             required=False,
@@ -1058,7 +1039,7 @@ def _apply_payload(
             risk.owner = _owner_or_none(db, payload)
 
     if is_create or "threat_summary" in fields:
-        risk.threat_summary = _clean_text(
+        risk.threat_summary = clean_text(
             payload.threat_summary,
             max_len=12000,
             required=False,
@@ -1085,7 +1066,7 @@ def _apply_payload(
         )
 
     if is_create or "note" in fields:
-        risk.note = _clean_text(
+        risk.note = clean_text(
             payload.note, max_len=20000, required=False, label="note"
         )
 
@@ -1166,7 +1147,7 @@ def list_risk_categories(*, user, db: Session):
 
 
 def create_risk_category(*, payload: RiskCategoryPayload, user, db: Session):
-    name = _clean_text(payload.name, max_len=128, required=True, label="name")
+    name = clean_text(payload.name, max_len=128, required=True, label="name")
     existing = (
         db.query(RiskCategory)
         .filter(func.lower(RiskCategory.name) == name.lower())
@@ -1200,7 +1181,7 @@ def update_risk_category(
     row = db.query(RiskCategory).filter(RiskCategory.id == cid).one_or_none()
     if not row:
         raise DomainError(status_code=404, detail="Asset category not found")
-    name = _clean_text(payload.name, max_len=128, required=True, label="name")
+    name = clean_text(payload.name, max_len=128, required=True, label="name")
     conflict = (
         db.query(RiskCategory)
         .filter(
@@ -1267,7 +1248,7 @@ def create_risk_subcategory(*, payload: RiskSubcategoryPayload, user, db: Sessio
         required=True,
     )
     assert category is not None
-    name = _clean_text(payload.name, max_len=128, required=True, label="name")
+    name = clean_text(payload.name, max_len=128, required=True, label="name")
     existing = (
         db.query(RiskAssetSubcategory)
         .filter(
@@ -1312,7 +1293,7 @@ def update_risk_subcategory(
     category = row.category
     if payload.category_id and payload.category_id != row.category_id:
         category = _category_by_id(db, payload.category_id)
-    name = _clean_text(payload.name, max_len=128, required=True, label="name")
+    name = clean_text(payload.name, max_len=128, required=True, label="name")
     conflict = (
         db.query(RiskAssetSubcategory)
         .filter(
@@ -1405,7 +1386,7 @@ def update_risk_asset(*, asset_id: str, payload: RiskAssetPayload, user, db: Ses
         required=True,
     )
     assert subcategory is not None
-    name = _clean_text(payload.name, max_len=256, required=True, label="asset")
+    name = clean_text(payload.name, max_len=256, required=True, label="asset")
     conflict = (
         db.query(RiskAsset)
         .filter(
@@ -1433,7 +1414,7 @@ def update_risk_asset(*, asset_id: str, payload: RiskAssetPayload, user, db: Ses
             db, payload.register_held_by_org_node_id
         )
     if "description" in fields:
-        row.description = _clean_text(payload.description, max_len=20000)
+        row.description = clean_text(payload.description, max_len=20000)
     row.updated_at = _utcnow()
     db.add(row)
     db.commit()
@@ -1478,8 +1459,8 @@ def list_risk_party_options(*, framework: str, q: str = "", user, db: Session):
     """Who a risk can affect, for the risk wizard: the organisation's interested
     parties, people from the ISMS directory and vendors, by name only."""
 
-    fw = _clean_framework(framework)
-    needle = _clean_text(q, max_len=256, required=False, label="q").lower()
+    fw = framework_parameter(framework)
+    needle = clean_text(q, max_len=256, required=False, label="q").lower()
 
     def matches(*values: str | None) -> bool:
         return not needle or any(needle in (v or "").lower() for v in values)
@@ -1547,7 +1528,7 @@ def list_my_owned_risks(
 ):
     """List risks where the current user is explicitly set as the owner."""
 
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     limit = max(1, min(int(limit or 100), 500))
     offset = max(0, int(offset or 0))
 
@@ -1602,7 +1583,7 @@ def list_risks(
     user,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     limit = max(1, min(int(limit or 200), 1000))
     offset = max(0, int(offset or 0))
 
@@ -1684,7 +1665,7 @@ def list_controls_without_risks(
 ):
     """List framework controls that are not associated with any risk scenario."""
 
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     limit = max(1, min(int(limit or 500), 5000))
     offset = max(0, int(offset or 0))
 
@@ -1734,7 +1715,7 @@ def list_controls_without_risks(
 
 
 def analyse_mitigator_risk(*, payload: RiskMitigatorAnalysePayload, user, db: Session):
-    fw = _clean_framework(payload.framework)
+    fw = framework_parameter(payload.framework)
     # Reuse existing validation helpers for framework/category/subcategory shape where
     # possible, but do not create assets/categories merely to run an analysis.
     category = None
@@ -1748,16 +1729,16 @@ def analyse_mitigator_risk(*, payload: RiskMitigatorAnalysePayload, user, db: Se
     return analyse_risk_mitigation(
         db,
         framework=fw,
-        issue=_clean_text(payload.issue, max_len=12000, required=True, label="issue"),
-        asset_name=_clean_text(
+        issue=clean_text(payload.issue, max_len=12000, required=True, label="issue"),
+        asset_name=clean_text(
             payload.asset_name, max_len=256, required=False, label="asset_name"
         ),
         category_id=payload.category_id,
-        category_name=_clean_text(
+        category_name=clean_text(
             payload.category_name, max_len=128, required=False, label="category_name"
         ),
         subcategory_id=payload.subcategory_id,
-        subcategory_name=_clean_text(
+        subcategory_name=clean_text(
             payload.subcategory_name,
             max_len=128,
             required=False,
@@ -1807,7 +1788,7 @@ def create_risk(
         _apply_payload(db, risk, payload, is_create=True)
     db.add(risk)
     db.flush()
-    fw = _clean_framework(payload.framework)
+    fw = framework_parameter(payload.framework)
     if payload.interested_parties is not None:
         _replace_party_links(
             db, risk, payload.interested_parties, framework=fw, user=user
@@ -1851,7 +1832,7 @@ def get_risk(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     risk = _risk_or_404(db, risk_id)
     _require_risk_read_or_owner(db, user, risk)
     return _risk_out(db, risk, framework=fw, include_controls=True)
@@ -1866,7 +1847,7 @@ def risk_changelog(
     user: User,
     db: Session,
 ):
-    _clean_framework(framework)  # validates the parameter
+    framework_parameter(framework)  # validates the parameter
     risk = _risk_or_404(db, risk_id)
     _require_risk_read_or_owner(db, user, risk)
     return list_entity_changelogs(
@@ -1876,7 +1857,7 @@ def risk_changelog(
 
 def update_risk(*, risk_id: str, payload: RiskUpsertPayload, user, db: Session):
     risk = _risk_or_404(db, risk_id)
-    fw = _clean_framework(payload.framework)
+    fw = framework_parameter(payload.framework)
     before_risk = risk_changelog_state(db, risk.id, framework=fw)
     _apply_payload(db, risk, payload, is_create=False)
     if payload.interested_parties is not None:
@@ -1935,7 +1916,7 @@ def get_risk_controls(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     risk = _risk_or_404(db, risk_id)
     _require_risk_read_or_owner(db, user, risk)
     controls = _risk_controls(db, risk.id, fw)
@@ -1954,7 +1935,7 @@ def update_risk_controls(
     user,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     risk = _risk_or_404(db, risk_id)
     before_risk = risk_changelog_state(db, risk.id, framework=fw)
     controls = _replace_control_links(
@@ -1990,7 +1971,7 @@ def control_risks(
     user,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     cid = _try_uuid(control_id)
     if not cid:
         raise DomainError(status_code=400, detail="control_id must be a UUID")

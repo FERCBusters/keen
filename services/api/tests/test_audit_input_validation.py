@@ -13,6 +13,7 @@ import pytest
 from app.core.config import settings
 from app.services.audits import validation as v
 from app.services.errors import DomainError
+from app.services.text import clean_text
 
 
 def refused(call, *args, **kwargs):
@@ -93,75 +94,8 @@ def test_emails_are_trimmed_and_blank_means_none():
     assert v.clean_email("  ") is None
 
 
-@pytest.mark.parametrize(
-    "user,expected",
-    [
-        (
-            SimpleNamespace(email="lead@example.test", username="lead"),
-            "lead@example.test",
-        ),
-        (
-            SimpleNamespace(email="not-an-email", username="ops@example.test"),
-            "ops@example.test",
-        ),
-        (SimpleNamespace(email=None, username="ops"), None),
-        (None, None),
-    ],
-)
-def test_the_email_snapshot_uses_the_best_address_a_user_has(user, expected):
-    assert v.user_email_snapshot(user) == expected
-
-
-@pytest.mark.parametrize(
-    "call,value,detail",
-    [
-        (v.clean_schedule_interval, "weekly", "Invalid schedule_interval"),
-        (v.clean_schedule_interval, 0, None),
-        (v.clean_schedule_interval, 121, "schedule_interval must be between 1 and 120"),
-        (v.clean_schedule_recurrence, "fortnightly", "Invalid schedule_recurrence"),
-        (
-            v.clean_schedule_date_rule,
-            "last_friday_of_month",
-            "Invalid schedule_date_rule",
-        ),
-        (v.clean_audit_type, "surveillance", "Invalid audit_type"),
-    ],
-)
-def test_schedule_settings_outside_the_supported_set_are_refused(call, value, detail):
-    if detail is None:
-        # Zero reads as unset, which is one.
-        assert call(value) == 1
-        return
-    assert refused(call, value) == (400, detail)
-
-
-def test_anchor_months_are_required_only_for_first_weekday_rules():
-    assert refused(v.clean_schedule_anchor_month, None, required=True) == (
-        400,
-        "schedule_anchor_month is required for first weekday schedules",
-    )
-    assert v.clean_schedule_anchor_month(" ", required=False) is None
-    assert v.clean_schedule_anchor_month("3", required=True) == 3
-    assert refused(v.clean_schedule_anchor_month, "March", required=True) == (
-        400,
-        "Invalid schedule_anchor_month",
-    )
-    assert refused(v.clean_schedule_anchor_month, 13, required=True) == (
-        400,
-        "schedule_anchor_month must be between 1 and 12",
-    )
-
-
-def test_first_weekday_rules_start_in_the_anchor_month():
-    start = date(2026, 5, 20)
-
-    assert v.schedule_start_for_rule(start, date_rule="exact", anchor_month=1) == start
-    assert v.schedule_start_for_rule(
-        start, date_rule="first_monday_of_month", anchor_month=6
-    ) == date(2026, 6, 1)
-    assert v.schedule_start_for_rule(
-        start, date_rule="first_weekday_of_month", anchor_month=None
-    ) == date(2026, 5, 1)
+def test_audit_types_outside_the_supported_set_are_refused():
+    assert refused(v.clean_audit_type, "surveillance") == (400, "Invalid audit_type")
 
 
 def test_framework_slugs_are_checked_and_default_to_the_deployment(monkeypatch):
@@ -187,7 +121,7 @@ def test_report_text_is_sanitised_and_bounded_after_sanitising():
         400,
         "notes is too long",
     )
-    assert refused(v.clean_text, " ", max_len=10, required=True, label="title") == (
+    assert refused(clean_text, " ", max_len=10, required=True, label="title") == (
         400,
         "title is required",
     )

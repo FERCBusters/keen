@@ -1,5 +1,5 @@
-import { safeExternalHref } from '/app.js';
 import {
+  safeExternalHref,
   initNavbar,
   apiGet,
   esc,
@@ -13,6 +13,7 @@ import {
   loadEntityChangelog,
   renderRichTextContent,
 } from '/app.js';
+
 import {
   activateTabFromHashOrQuery,
   clauseBadges,

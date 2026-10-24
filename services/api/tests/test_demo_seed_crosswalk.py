@@ -713,6 +713,52 @@ def test_stories_show_linked_records_on_a_timeline_and_flow(seeded):
     ]
 
 
+def test_the_awareness_quiz_records_each_round_on_its_measure(seeded):
+    from app.db.models import (
+        IsmsEffectivenessMetricEntry,
+        IsmsEntityControlLink,
+        Quiz,
+        QuizAttempt,
+    )
+    from app.services.quizzes import authoring, results
+
+    db, _ = seeded
+    user = db.query(User).filter_by(username="demo").one()
+    quiz = db.query(Quiz).one()
+    assert (quiz.title, quiz.status, quiz.pass_mark) == (
+        "Demo Security awareness refresher",
+        "active",
+        70,
+    )
+    attempts = db.query(QuizAttempt).all()
+    assert len(attempts) == 16 and {a.status for a in attempts} == {"complete"}
+    entries = (
+        db.query(IsmsEffectivenessMetricEntry)
+        .filter_by(measure_id=quiz.measure_id)
+        .order_by(IsmsEffectivenessMetricEntry.period_start)
+        .all()
+    )
+    assert len(entries) == 3
+    assert all(0 < entry.metric_value <= 100 for entry in entries)
+    linked = {
+        ref
+        for (ref,) in db.query(ControlItem.ref)
+        .join(
+            IsmsEntityControlLink,
+            IsmsEntityControlLink.control_item_id == ControlItem.id,
+        )
+        .filter(IsmsEntityControlLink.entity_id == quiz.measure_id)
+    }
+    assert linked == {"A.6.3", "A.5.10", "A.5.17", "A.6.8", "A.8.7"}
+    detail = authoring.get_quiz(quiz_id=quiz.id, db=db, user=user)
+    assert [r["recorded"] for r in detail["rounds"]] == [True, True, True]
+    # The fictional people have no accounts to sit the next round with.
+    assert detail["audience"]["size"] == 0
+    insights = results.quiz_results(quiz_id=quiz.id, round_id=None, db=db, user=user)
+    assert insights["summary"]["responses"] == 16
+    assert insights["insights"]["common_wrong_answers"]
+
+
 def test_seeded_frameworks_join_the_selection_with_iso_as_default(db, monkeypatch):
     from app.core.config import settings
     from app.db.models import ManagedConfiguration

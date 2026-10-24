@@ -18,13 +18,13 @@ from app.db.models import (
     RiskAsset,
     User,
 )
+from app.services.frameworks import framework_parameter
 
-from .common import _clean_framework
 from .serializers import _asset_out, _meeting_out, _objective_out, _org_node_out
 
 
 def my_isms_objectives(*, framework: str, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     rows = (
         db.query(IsmsObjective)
         .outerjoin(
@@ -80,7 +80,7 @@ def _org_path(node: IsmsOrgNode | None) -> list[dict[str, Any]]:
 
 
 def my_isms_meetings(*, framework: str, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     attendee_links = (
         db.query(IsmsMeetingAttendee)
         .join(IsmsMeeting, IsmsMeeting.id == IsmsMeetingAttendee.meeting_id)
@@ -117,7 +117,7 @@ def my_isms_meetings(*, framework: str, user: User, db: Session):
 
 
 def my_isms_assets(*, framework: str, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     node_ids = [
         nid
         for (nid,) in db.query(IsmsOrgNodeUser.org_node_id)

@@ -21,7 +21,6 @@ from app.db.models import (
     IsmsDocument,
     User,
 )
-from app.services.audit_schedules import occurrences_between
 from app.services.audits.access import (
     audit_or_404,
     can_read_audit,
@@ -51,9 +50,10 @@ from app.services.audits.validation import (
     clean_status,
     date_overlaps,
     try_uuid,
-    user_email_snapshot,
 )
 from app.services.errors import DomainError
+from app.services.mailer import user_email
+from app.services.schedules import occurrences_between
 
 
 def list_my_attendee_audits(*, limit: int, offset: int, db: Session, user: User):
@@ -127,7 +127,7 @@ def list_audit_attendee_users(*, db: Session, user: User):
             {
                 "id": str(u.id),
                 "username": u.username,
-                "email": user_email_snapshot(u) or "",
+                "email": user_email(u) or "",
             }
             for u in rows
         ]

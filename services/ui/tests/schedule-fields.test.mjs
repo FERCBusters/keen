@@ -17,7 +17,7 @@ const FORM = `<form>
 </form>`;
 
 async function fixture(t, options = { lead: 'First run' }) {
-  const ui = await loadUi('pages/audit-schedule.js', {
+  const ui = await loadUi('pages/schedule-fields.js', {
     html: FORM,
     vendor: { isoDateToDisplay: (iso) => `display ${iso}` },
   });

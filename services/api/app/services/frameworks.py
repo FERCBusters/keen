@@ -37,6 +37,16 @@ def validate_framework_slug(slug: str) -> str:
     return slug
 
 
+def framework_parameter(raw: str | None) -> str:
+    """The framework a request names, or the deployment's default framework."""
+    value = (raw or settings.default_framework_slug or "").strip()
+    if not value:
+        raise DomainError(status_code=400, detail="framework is required")
+    if not _SLUG_RE.fullmatch(value):
+        raise DomainError(status_code=400, detail="Invalid framework")
+    return value
+
+
 def list_frameworks(*, db: Session):
     catalog, _, _, enabled, default = _framework_selection(db=db)
     return {

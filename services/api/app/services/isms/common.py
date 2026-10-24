@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import ControlItem, FrameworkClause, User
@@ -18,6 +16,7 @@ from app.services.context import ChangeContext
 from app.services.control_refs import control_by_id_or_ref
 from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
+from app.services.text import clean_text
 
 from .constants import ENTITY_TYPES, ISMS_SECTION_ALIASES
 
@@ -40,33 +39,15 @@ def _utcnow() -> datetime:
     return utc_now_naive()
 
 
-def _clean_text(
-    raw: str | None, *, max_len: int, required: bool = False, label: str = "value"
-) -> str:
-    value = (raw or "").strip()
-    if required and not value:
-        raise DomainError(status_code=400, detail=f"{label} is required")
-    if len(value) > max_len:
-        raise DomainError(status_code=400, detail=f"{label} is too long")
-    return value
-
-
 def _clean_minutes_html(raw: str | None) -> str:
     # Trim/length-check the raw input, then apply the shared server-side
     # rich-text allowlist sanitiser (single source of truth for all Keen
     # rich-text fields; see app.security.rich_text).
-    value = _clean_text(raw, max_len=50000)
+    value = clean_text(raw, max_len=50000)
     cleaned = sanitize_rich_text_html(value)
     if len(cleaned) > 50000:
         raise DomainError(status_code=400, detail="agenda/minutes/notes is too long")
     return cleaned
-
-
-def _clean_framework(raw: str | None) -> str:
-    value = (raw or settings.default_framework_slug or "").strip()
-    if not value or len(value) > 64 or not re.match(r"^[A-Za-z0-9._:-]+$", value):
-        raise DomainError(status_code=400, detail="Invalid framework")
-    return value
 
 
 def _by_id_or_404(db: Session, model, raw_id: str, label: str, *, lock=False):

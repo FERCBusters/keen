@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 from app.db.models import IsmsBusinessProcess, User
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
+from app.services.text import clean_text
 
-from .common import _clean_text, _utcnow
+from .common import _utcnow
 from .schemas import BusinessProcessPayload
 from .serializers import _business_process_out
 
@@ -17,8 +18,8 @@ def create_business_process(
     *, payload: BusinessProcessPayload, context: ChangeContext, user: User, db: Session
 ):
     row = IsmsBusinessProcess(
-        name=_clean_text(payload.name, max_len=256, required=True, label="name"),
-        description=_clean_text(payload.description, max_len=20000),
+        name=clean_text(payload.name, max_len=256, required=True, label="name"),
+        description=clean_text(payload.description, max_len=20000),
         sort_order=int(payload.sort_order or 0),
         is_default=False,
         created_at=_utcnow(),

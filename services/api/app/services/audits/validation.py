@@ -9,15 +9,10 @@ from sqlalchemy import func
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import Audit, User
+from app.db.models import Audit
 from app.security.rich_text import sanitize_rich_text_html
-from app.services.audit_schedules import (
-    FUZZY_MONTH_DATE_RULES,
-    SCHEDULE_DATE_RULES,
-    SCHEDULE_RECURRENCES,
-    first_scheduled_rule_date,
-)
 from app.services.errors import DomainError
+from app.services.text import clean_text
 
 AUDIT_SAMPLE_ENTITY_LABELS = {
     "risk": "CIA Triad risk",
@@ -63,17 +58,6 @@ def utcnow() -> datetime:
     return utc_now_naive()
 
 
-def clean_text(
-    raw: str | None, *, max_len: int, required: bool = False, label: str = "value"
-) -> str:
-    v = (raw or "").strip()
-    if required and not v:
-        raise DomainError(status_code=400, detail=f"{label} is required")
-    if len(v) > max_len:
-        raise DomainError(status_code=400, detail=f"{label} is too long")
-    return v
-
-
 def clean_rich_text(raw: str | None, *, max_len: int, label: str = "value") -> str:
     """Trim, length-check, and allowlist-sanitise a rich-text HTML field.
 
@@ -112,61 +96,6 @@ def clean_audit_type(raw: str | None, *, default: str = "internal") -> str:
     return v
 
 
-def clean_schedule_recurrence(raw: str | None, *, default: str = "once") -> str:
-    v = (raw or default).strip().lower()
-    if v not in SCHEDULE_RECURRENCES:
-        raise DomainError(status_code=400, detail="Invalid schedule_recurrence")
-    return v
-
-
-def clean_schedule_interval(raw: int | None) -> int:
-    try:
-        value = int(raw or 1)
-    except Exception:
-        raise DomainError(status_code=400, detail="Invalid schedule_interval")
-    if value < 1 or value > 120:
-        raise DomainError(
-            status_code=400, detail="schedule_interval must be between 1 and 120"
-        )
-    return value
-
-
-def clean_schedule_date_rule(raw: str | None, *, default: str = "exact") -> str:
-    v = (raw or default).strip().lower()
-    if v not in SCHEDULE_DATE_RULES:
-        raise DomainError(status_code=400, detail="Invalid schedule_date_rule")
-    return v
-
-
-def clean_schedule_anchor_month(raw: int | None, *, required: bool) -> int | None:
-    if raw is None or str(raw).strip() == "":
-        if required:
-            raise DomainError(
-                status_code=400,
-                detail="schedule_anchor_month is required for first weekday schedules",
-            )
-        return None
-    try:
-        value = int(raw)
-    except Exception:
-        raise DomainError(status_code=400, detail="Invalid schedule_anchor_month")
-    if value < 1 or value > 12:
-        raise DomainError(
-            status_code=400, detail="schedule_anchor_month must be between 1 and 12"
-        )
-    return value
-
-
-def schedule_start_for_rule(
-    start_date: date, *, date_rule: str, anchor_month: int | None
-) -> date:
-    if date_rule in FUZZY_MONTH_DATE_RULES:
-        return first_scheduled_rule_date(
-            start_date.year, anchor_month or start_date.month, date_rule
-        )
-    return start_date
-
-
 def clean_email(raw: str | None, *, label: str = "email") -> str | None:
     v = (raw or "").strip()
     if not v:
@@ -176,31 +105,6 @@ def clean_email(raw: str | None, *, label: str = "email") -> str | None:
     if any(ord(c) < 32 or ord(c) == 127 for c in v):
         raise DomainError(status_code=400, detail=f"Invalid {label}")
     return v
-
-
-def looks_like_email(raw: str | None) -> bool:
-    v = (raw or "").strip()
-    return bool(
-        v
-        and "@" in v
-        and not v.startswith("@")
-        and not v.endswith("@")
-        and len(v) <= 256
-    )
-
-
-def user_email_snapshot(user: User | None) -> str | None:
-    if user is None:
-        return None
-    email = getattr(user, "email", None)
-    if looks_like_email(email):
-        return str(email).strip()
-    # A username that is an email address serves as the user's email. Where
-    # usernames are other identifiers, administrators set the email field.
-    username = getattr(user, "username", None)
-    if looks_like_email(username):
-        return str(username).strip()
-    return None
 
 
 def audit_status_value(audit: Audit | None) -> str:

@@ -107,6 +107,17 @@ def test_starttls_precedes_login_and_sending(smtp, monkeypatch):
     ]
 
 
+def test_a_subject_stays_on_one_line(smtp):
+    # A stored title with a line break would otherwise fail every send.
+    mailer.send_email(
+        to_email="a@example.test", subject="Quiz ready -\r\nBcc: x@evil.test", body="B"
+    )
+    (client,) = smtp.instances
+    (message,) = client.messages
+    assert message["Subject"] == "Quiz ready - Bcc: x@evil.test"
+    assert message["Bcc"] is None
+
+
 def test_implicit_tls_uses_a_verifying_context(smtp, monkeypatch):
     monkeypatch.setattr(settings, "smtp_use_ssl", True)
     monkeypatch.setattr(settings, "smtp_port", 465)
@@ -137,12 +148,6 @@ def test_header_injection_is_refused_by_the_message_builder(smtp):
     with pytest.raises(ValueError):
         mailer.send_email(
             to_email="a@example.test\r\nBcc: other@example.test", subject="S", body="B"
-        )
-    with pytest.raises(ValueError):
-        mailer.send_email(
-            to_email="a@example.test",
-            subject="Audit\nBcc: other@example.test",
-            body="B",
         )
 
 
@@ -187,10 +192,10 @@ def test_invite_dates_fall_back_safely():
     )
     assert mailer._ics_date("", default=date(2000, 1, 1)) == date(2000, 1, 1)
     assert (
-        mailer._ics_uid(None, "Audit / 1", date(2026, 1, 2))
+        mailer._ics_uid(None, "keen-audit-Audit / 1-2026-01-02", "keen-audit")
         == "keen-audit-Audit-1-2026-01-02@keen"
     )
-    assert mailer._ics_uid("!!!", "x", date(2026, 1, 2)) == "keen-audit@keen"
+    assert mailer._ics_uid("!!!", "x", "keen-audit") == "keen-audit@keen"
 
 
 def test_long_multibyte_lines_fold_on_character_boundaries():

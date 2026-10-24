@@ -154,6 +154,7 @@ _ENTITY_LABELS = {
     "pestle_business_process": "PESTLE(E) business process",
     "interested_party": "Interested party",
     "story": "Story",
+    "quiz": "Quiz",
 }
 
 

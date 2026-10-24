@@ -85,6 +85,7 @@ from app.db.models import (  # noqa: E402
     PestleBusinessProcessRelevance,
     PestleClauseRelevance,
     PestleItem,
+    Quiz,
     Risk,
     RiskAsset,
     RiskAssetSubcategory,
@@ -191,6 +192,9 @@ class DemoTeardown:
         )
         found = self.find()
         self.delete_stories(found)
+        # Rounds, attempts and answers go with their quiz; its measure follows
+        # with the other measures.
+        self.delete_ids(Quiz, Quiz.id, found["quizzes"])
         self.delete_audit_dependents(found)
         self.delete_event_dependents(found["events"])
         self.delete_isms_dependents(found)
@@ -230,11 +234,18 @@ class DemoTeardown:
             "vendors": self.labelled_ids(IsmsVendor, IsmsVendor.name),
             "swot": self.labelled_ids(IsmsSwot, IsmsSwot.title),
             "stories": self.labelled_ids(Story, Story.title),
+            "quizzes": self.labelled_ids(Quiz, Quiz.title),
         }
+        # Seeded measures carry the prefix; a seeded quiz's measure goes with it.
         found["measures"] = self.ids(
             db.query(IsmsEffectivenessMeasure.id).filter(
                 or_(
                     self.labelled(IsmsEffectivenessMeasure.summary),
+                    IsmsEffectivenessMeasure.id.in_(
+                        db.query(Quiz.measure_id).filter(
+                            Quiz.id.in_(found["quizzes"] or [None])
+                        )
+                    ),
                     *(
                         self.starts_with(
                             IsmsEffectivenessMeasure.metric_key,

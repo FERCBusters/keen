@@ -9,6 +9,7 @@ import {
   esc,
   toast,
   getCurrentFramework,
+  frameworkLabel,
   withFramework,
   rememberSamplingAudit,
 } from '/app.js';
@@ -156,15 +157,6 @@ async function next() {
   }
   status.style.display = 'none';
   goTo(STEPS[stepIndex + 1][0]);
-}
-
-// --- Details -----------------------------------------------------------------
-
-// The audit belongs to the framework chosen in the top navigation.
-function frameworkLabel() {
-  const option = document.getElementById('navFrameworkSelect')?.selectedOptions?.[0];
-  const name = option && option.value === framework ? option.textContent.trim() : '';
-  return name && name !== framework ? `${name} (${framework})` : framework;
 }
 
 // --- Scope -------------------------------------------------------------------
@@ -464,7 +456,7 @@ function renderReview() {
       `${esc(dateText($('auditStart').value))} to ${esc(dateText($('auditEnd').value))}`,
       'details',
     ],
-    ['Framework', esc(frameworkLabel()), ''],
+    ['Framework', esc(frameworkLabel(framework)), ''],
     ['Scope', esc(scopeSummary()), 'scope'],
     [
       'Attendees',
@@ -584,7 +576,8 @@ document.addEventListener('click', (ev) => {
   if (target) goTo(target.dataset.gotoStep);
 });
 
-$('auditFramework').textContent = frameworkLabel();
+// The audit belongs to the framework chosen in the top navigation.
+$('auditFramework').textContent = frameworkLabel(framework);
 if (!canManage) {
   notify('You need audits.manage permission to start an audit.');
   $('wizardForm').hidden = true;

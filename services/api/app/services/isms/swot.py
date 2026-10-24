@@ -10,9 +10,10 @@ from sqlalchemy import or_, text
 
 from app.db.models import AuditSwotScope, IsmsSwot, IsmsSwotLink, User
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
 
 from .access import _can_manage_isms, _can_read_isms
-from .common import _by_id_or_404, _clean_framework, _record, _utcnow
+from .common import _by_id_or_404, _record, _utcnow
 from .link_diary import remove_entity_link_diary
 from .mutations import _apply_links
 from .related_records import resolve_target as _target
@@ -137,7 +138,7 @@ def get_item(*, item_id, framework, user, db):
     return output(
         db,
         _by_id_or_404(db, IsmsSwot, item_id, "SWOT"),
-        _clean_framework(framework),
+        framework_parameter(framework),
         user,
     )
 
@@ -193,7 +194,7 @@ def list_items(
 
         from .common import _clause_by_ref_or_id, _control_by_ref_or_id
 
-        fw = _clean_framework(framework)
+        fw = framework_parameter(framework)
         for value, model, resolve, column in (
             (
                 control,
@@ -237,7 +238,7 @@ def list_items(
 
 def save_item(*, payload, framework, user, db, context, item_id=None):
     require_access(db, user, write=True)
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     if item_id and "links" in payload.model_fields_set:
         raise DomainError(400, "Use relationship actions for an existing SWOT item")
     # Validate every draft target before adding the item or any mappings/history.

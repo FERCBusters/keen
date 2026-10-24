@@ -427,7 +427,7 @@
   z-index: 4;
 }
 
-/* Scheduled audit calendar */
+/* Schedule calendar: scheduled audits, quiz rounds and planned openings */
 .schedule-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -467,6 +467,15 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+a.schedule-calendar-event {
+  display: block;
+  text-decoration: none;
+}
+.schedule-calendar-planned {
+  background: transparent;
+  border: 1px dashed var(--bs-primary-border-subtle);
 }
 
 .keen-mitigator-icon {
@@ -2289,4 +2298,159 @@ button.keen-filter-pill-chip:focus-visible {
 .source-insight-bar:focus-visible {
   opacity: 1;
   outline: 2px solid var(--bs-primary);
+}
+
+/* Quizzes: the sitting, the result with the Mitigator's trophy, and progress. */
+.quiz-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.quiz-dot {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  border: 2px solid var(--bs-primary);
+  background: transparent;
+}
+.quiz-dot.answered {
+  background: var(--bs-primary);
+}
+.quiz-dot.current {
+  box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.25);
+}
+.quiz-question {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: var(--bs-body-bg);
+}
+.quiz-option {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+}
+.quiz-option:has(input:checked) {
+  border-color: var(--bs-primary);
+  background: var(--bs-primary-bg-subtle);
+}
+.quiz-option.right {
+  border-color: var(--bs-success);
+  background: var(--bs-success-bg-subtle);
+}
+.quiz-option.wrong {
+  border-color: var(--bs-danger);
+  background: var(--bs-danger-bg-subtle);
+}
+.quiz-mascot {
+  position: relative;
+  width: min(15rem, 60vw);
+  aspect-ratio: 1;
+  margin: 0 auto;
+}
+.quiz-mascot img,
+.quiz-mascot svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.quiz-trophy-cup {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: quiz-trophy-arrive 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.quiz-trophy-sparkles polygon {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: quiz-trophy-twinkle 2.4s ease-in-out 0.8s infinite both;
+}
+.quiz-trophy-sparkles polygon:nth-child(2) {
+  animation-delay: 1.6s;
+}
+.quiz-trophy-sparkles polygon:nth-child(3) {
+  animation-delay: 1.2s;
+}
+@keyframes quiz-trophy-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(12%) scale(0.4);
+  }
+}
+@keyframes quiz-trophy-twinkle {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.55);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(45deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quiz-trophy-cup,
+  .quiz-trophy-sparkles polygon {
+    animation: none;
+  }
+}
+.quiz-score {
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.quiz-level {
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 1.35rem;
+  color: #fff;
+  background: linear-gradient(135deg, var(--bs-primary), #a855f7);
+  flex: 0 0 auto;
+}
+.quiz-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.82rem;
+  border: 1px solid var(--bs-border-color);
+  color: var(--bs-secondary-color);
+}
+.quiz-badge.earned {
+  border-color: var(--bs-primary-border-subtle);
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+}
+.quiz-bar {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--bs-tertiary-bg);
+  overflow: hidden;
+}
+.quiz-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--bs-primary);
+}
+.quiz-histogram {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 0.25rem;
+  align-items: end;
+  height: 7rem;
+}
+.quiz-histogram > div {
+  background: var(--bs-primary-bg-subtle);
+  border-top: 3px solid var(--bs-primary);
+  min-height: 3px;
 }

@@ -16,8 +16,10 @@ from app.db.models import (
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
+from app.services.text import clean_text
 
-from .common import _by_id_or_404, _clean_framework, _clean_text, _record, _utcnow
+from .common import _by_id_or_404, _record, _utcnow
 from .constants import ACCESS_STATUSES
 from .mutations import _replace_access_control_accounts, _replace_access_control_roles
 from .schemas import AccessControlMatrixPayload, AwsAccountPayload
@@ -27,10 +29,10 @@ from .serializers import _access_control_matrix_out, _aws_account_out, _aws_acco
 def create_aws_account(
     *, payload: AwsAccountPayload, context: ChangeContext, user: User, db: Session
 ):
-    name = _clean_text(
+    name = clean_text(
         payload.name, max_len=256, required=True, label="hosting account name"
     )
-    account_id = _clean_text(payload.account_id, max_len=32) or None
+    account_id = clean_text(payload.account_id, max_len=32) or None
     if (
         account_id
         and db.query(IsmsAwsAccount.id)
@@ -41,7 +43,7 @@ def create_aws_account(
     row = IsmsAwsAccount(
         name=name,
         account_id=account_id,
-        notes=_clean_text(payload.notes, max_len=12000),
+        notes=clean_text(payload.notes, max_len=12000),
         created_by_user_id=user.id,
         created_at=_utcnow(),
         updated_at=_utcnow(),
@@ -80,11 +82,11 @@ def update_aws_account(
     before = _aws_account_out(row, include_entry_count=True)
     fields = set(payload.model_fields_set or set())
     if "name" in fields:
-        row.name = _clean_text(
+        row.name = clean_text(
             payload.name, max_len=256, required=True, label="hosting account name"
         )
     if "account_id" in fields:
-        next_account_id = _clean_text(payload.account_id, max_len=32) or None
+        next_account_id = clean_text(payload.account_id, max_len=32) or None
         if next_account_id:
             existing = (
                 db.query(IsmsAwsAccount.id)
@@ -100,7 +102,7 @@ def update_aws_account(
                 )
         row.account_id = next_account_id
     if "notes" in fields:
-        row.notes = _clean_text(payload.notes, max_len=12000)
+        row.notes = clean_text(payload.notes, max_len=12000)
     row.updated_at = _utcnow()
     db.add(row)
     db.flush()
@@ -178,7 +180,7 @@ def create_access_control_matrix_entry(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     if not payload.service_asset_id:
         raise DomainError(status_code=400, detail="service_asset_id is required")
     if not payload.aws_account_ids:
@@ -189,13 +191,13 @@ def create_access_control_matrix_entry(
     # Validation has refused blank and unknown statuses.
     status = (payload.status or "Pending Approval").strip()
     row = IsmsAccessControlMatrixEntry(
-        task_action=_clean_text(
+        task_action=clean_text(
             payload.task_action, max_len=20000, required=True, label="task/action"
         ),
         service_asset_id=payload.service_asset_id,
         status=status,
         approved_by_user_id=payload.approved_by_user_id,
-        notes=_clean_text(payload.notes, max_len=12000),
+        notes=clean_text(payload.notes, max_len=12000),
         created_by_user_id=user.id,
         created_at=_utcnow(),
         updated_at=_utcnow(),
@@ -213,7 +215,7 @@ def create_access_control_matrix_entry(
 
 
 def list_access_control_matrix(*, framework: str, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     rows = (
         db.query(IsmsAccessControlMatrixEntry)
         .order_by(IsmsAccessControlMatrixEntry.updated_at.desc())
@@ -233,7 +235,7 @@ def get_access_control_matrix_entry(
         _by_id_or_404(
             db, IsmsAccessControlMatrixEntry, entry_id, "Access control matrix row"
         ),
-        _clean_framework(framework),
+        framework_parameter(framework),
     )
 
 
@@ -246,7 +248,7 @@ def update_access_control_matrix_entry(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(
         db, IsmsAccessControlMatrixEntry, entry_id, "Access control matrix row"
     )
@@ -254,7 +256,7 @@ def update_access_control_matrix_entry(
     fields = set(payload.model_fields_set or set())
     _validate_access_control_payload(db, payload, fields)
     if "task_action" in fields:
-        row.task_action = _clean_text(
+        row.task_action = clean_text(
             payload.task_action, max_len=20000, required=True, label="task/action"
         )
     if "service_asset_id" in fields:
@@ -268,7 +270,7 @@ def update_access_control_matrix_entry(
     if "role_org_node_ids" in fields:
         _replace_access_control_roles(db, row, payload.role_org_node_ids or [])
     if "notes" in fields:
-        row.notes = _clean_text(payload.notes, max_len=12000)
+        row.notes = clean_text(payload.notes, max_len=12000)
     if "aws_account_ids" in fields:
         if not payload.aws_account_ids:
             raise DomainError(
@@ -287,7 +289,7 @@ def update_access_control_matrix_entry(
 def delete_access_control_matrix_entry(
     *, entry_id: str, context: ChangeContext, framework: str, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(
         db, IsmsAccessControlMatrixEntry, entry_id, "Access control matrix row"
     )

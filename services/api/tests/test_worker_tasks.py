@@ -210,6 +210,57 @@ def test_materialise_tasks_close_session(task_name, fn_name):
     sessions[0].close.assert_called_once()
 
 
+def test_quiz_rounds_close_before_new_ones_open():
+    calls = []
+    with (
+        running_session([]) as sessions,
+        patch.object(
+            wt,
+            "close_due_quiz_rounds",
+            side_effect=lambda db: calls.append("close") or 1,
+        ),
+        patch.object(
+            wt,
+            "materialize_due_quiz_rounds",
+            side_effect=lambda db: calls.append("open") or 2,
+        ),
+        patch.object(
+            wt, "invite_waiting", side_effect=lambda db: calls.append("invite") or 3
+        ),
+    ):
+        assert wt.quiz_rounds_task() == {"closed": 1, "opened": 2, "invited": 3}
+    assert calls == ["close", "open", "invite"]
+    sessions[0].close.assert_called_once()
+
+
+def test_quiz_invitations_run_for_the_rounds_queued():
+    rid = uuid.uuid4()
+    with (
+        running_session([]) as sessions,
+        patch.object(
+            wt, "send_quiz_invitations", return_value={"invited": 2}
+        ) as invite,
+    ):
+        assert wt.send_quiz_invitations_task([str(rid)]) == {"invited": 2}
+    invite.assert_called_once_with(sessions[0], [rid])
+    sessions[0].close.assert_called_once()
+
+
+def test_reminders_go_to_audit_attendees_and_quiz_participants():
+    with (
+        running_session([]) as sessions,
+        patch.object(wt, "send_audit_reminders", return_value={"sent": 1}) as audits,
+        patch.object(wt, "send_quiz_reminders", return_value={"sent": 2}) as quizzes,
+    ):
+        assert wt.send_reminders_task() == {
+            "audits": {"sent": 1},
+            "quizzes": {"sent": 2},
+        }
+    audits.assert_called_once_with(sessions[0])
+    quizzes.assert_called_once_with(sessions[0])
+    sessions[0].close.assert_called_once()
+
+
 def test_refresh_event_counter_cache_task():
     with (
         running_session([]) as sessions,

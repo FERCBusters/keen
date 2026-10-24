@@ -8,9 +8,11 @@ from app.db.models import IsmsOrgNode, IsmsOrgNodeUser, Risk, User
 from app.security.permissions import has_permission
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
 from app.services.hierarchy import validate_parent
+from app.services.text import clean_text
 
-from .common import _by_id_or_404, _clean_framework, _clean_text, _record, _utcnow
+from .common import _by_id_or_404, _record, _utcnow
 from .mutations import _apply_links, _delete_entity_links, _replace_org_node_users
 from .schemas import OrgNodePayload
 from .serializers import _entity_out
@@ -44,15 +46,15 @@ def create_org_node(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     validate_parent(db, IsmsOrgNode, payload.parent_id)
     row = IsmsOrgNode(
         parent_id=payload.parent_id,
-        name=_clean_text(payload.name, max_len=256, required=True, label="name"),
-        node_type=_clean_text(
+        name=clean_text(payload.name, max_len=256, required=True, label="name"),
+        node_type=clean_text(
             payload.node_type or "role", max_len=64, required=True, label="node_type"
         ),
-        description=_clean_text(payload.description, max_len=20000),
+        description=clean_text(payload.description, max_len=20000),
         sort_order=int(payload.sort_order or 0),
         created_by_user_id=user.id,
         created_at=_utcnow(),
@@ -70,7 +72,7 @@ def create_org_node(
 
 
 def list_org_nodes(*, framework: str, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     rows = (
         db.query(IsmsOrgNode)
         .order_by(IsmsOrgNode.sort_order.asc(), IsmsOrgNode.name.asc())
@@ -91,7 +93,7 @@ def update_org_node(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(db, IsmsOrgNode, node_id, "Organisation chart node")
     before = _entity_out(db, "org_node", row, fw)
     fields = set(payload.model_fields_set or set())
@@ -99,13 +101,13 @@ def update_org_node(
         validate_parent(db, IsmsOrgNode, payload.parent_id, row.id)
         row.parent_id = payload.parent_id
     if "name" in fields:
-        row.name = _clean_text(payload.name, max_len=256, required=True, label="name")
+        row.name = clean_text(payload.name, max_len=256, required=True, label="name")
     if "node_type" in fields:
-        row.node_type = _clean_text(
+        row.node_type = clean_text(
             payload.node_type, max_len=64, required=True, label="node_type"
         )
     if "description" in fields:
-        row.description = _clean_text(payload.description, max_len=20000)
+        row.description = clean_text(payload.description, max_len=20000)
     if "sort_order" in fields:
         row.sort_order = int(payload.sort_order or 0)
     row.updated_at = _utcnow()
@@ -136,7 +138,7 @@ def update_org_node(
 def delete_org_node(
     *, node_id: str, context: ChangeContext, framework: str, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _by_id_or_404(db, IsmsOrgNode, node_id, "Organisation chart node")
     _require_risk_authority_for_owner_role(db, user, row, "delete")
     before = _entity_out(db, "org_node", row, fw)

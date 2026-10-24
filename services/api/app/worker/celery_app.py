@@ -120,6 +120,15 @@ celery_app.conf.beat_schedule = {
         "task": "app.worker.tasks.materialize_scheduled_audits_task",
         "schedule": crontab(hour=0, minute=15),
     },
+    "quiz-rounds-daily": {
+        "task": "app.worker.tasks.quiz_rounds_task",
+        "schedule": crontab(hour=0, minute=20),
+    },
+    # Each audit attendee and quiz participant is reminded at most once.
+    "send-reminders-daily": {
+        "task": "app.worker.tasks.send_reminders_task",
+        "schedule": crontab(hour=6, minute=45),
+    },
     "materialize-effectiveness-auto-zero-metrics-daily": {
         "task": "app.worker.tasks.materialize_missing_monthly_zero_metrics_task",
         "schedule": crontab(hour=0, minute=35),

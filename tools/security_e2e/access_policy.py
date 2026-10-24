@@ -48,6 +48,8 @@ PERMISSIONS = (
     "stories.read",
     "stories.manage",
     "stories.admin",
+    "quiz.read",
+    "quiz.manage",
 )
 
 
@@ -97,6 +99,10 @@ AUDIT_TRAIL = any_of("audittrail.read")
 # the ownership rule that limits stories.manage to its holder's own stories.
 STORIES_READ = any_of("stories.read", "stories.manage", "stories.admin")
 STORIES_MANAGE = any_of("stories.manage", "stories.admin")
+# quiz.manage includes quiz reads; a person sits the quizzes assigned to them
+# without either permission (OBJECT_RULES).
+QUIZ_READ = any_of("quiz.read", "quiz.manage")
+QUIZ_MANAGE = any_of("quiz.manage")
 
 # Additional object rules. The matrix probe account owns nothing, so these
 # operations are checked with their permission gate only.
@@ -141,6 +147,25 @@ OBJECT_RULES = {
         "The comment's author can delete it; stories.admin can delete any comment."
     ),
     "GET /v1/stats/controls": "Evidence counts need events.read.",
+    "GET /v1/quizzes/{quiz_id}": "quiz.read sees the questions without their answers.",
+    "GET /v1/quizzes/{quiz_id}/results": (
+        "quiz.read sees rounds that have closed with every response marked and at "
+        "least three completed, without names, answers or option choices."
+    ),
+    "PUT /v1/quizzes/{quiz_id}/answers/{answer_id}/grade": (
+        "A quiz manager cannot grade their own answers."
+    ),
+    "POST /v1/me/quizzes/rounds/{round_id}/attempt": (
+        "The round must be assigned to the account's linked People record."
+    ),
+    "GET /v1/me/quizzes/attempts/{attempt_id}": (
+        "The attempt must belong to the account's linked People record; scores and "
+        "answers appear only as the quiz allows."
+    ),
+    "PUT /v1/me/quizzes/attempts/{attempt_id}/pages/{page}": (
+        "As above, while the attempt is in progress and its round is open."
+    ),
+    "POST /v1/me/quizzes/attempts/{attempt_id}/submit": "As above.",
     "GET /v1/controls/{control_id}/evidence/summary": (
         "Diary entries count only when the account can see them, as in the evidence list."
     ),
@@ -405,6 +430,23 @@ POLICY = {
     "POST /v1/stories/{story_id}/comments": STORIES_READ,
     "DELETE /v1/stories/{story_id}/comments/{comment_id}": STORIES_READ,
     "GET /v1/stats/summary": SIGNED_IN,
+    # --- Quizzes -------------------------------------------------------------------
+    "GET /v1/quizzes": QUIZ_READ,
+    "POST /v1/quizzes": QUIZ_MANAGE,
+    "GET /v1/quizzes/calendar": QUIZ_READ,
+    "GET /v1/quizzes/assignees": QUIZ_MANAGE,
+    "GET /v1/quizzes/{quiz_id}": QUIZ_READ,
+    "PATCH /v1/quizzes/{quiz_id}": QUIZ_MANAGE,
+    "DELETE /v1/quizzes/{quiz_id}": QUIZ_MANAGE,
+    "PUT /v1/quizzes/{quiz_id}/questions": QUIZ_MANAGE,
+    "PUT /v1/quizzes/{quiz_id}/audience": QUIZ_MANAGE,
+    "POST /v1/quizzes/{quiz_id}/rounds": QUIZ_MANAGE,
+    "PATCH /v1/quizzes/{quiz_id}/rounds/{round_id}": QUIZ_MANAGE,
+    "DELETE /v1/quizzes/{quiz_id}/rounds/{round_id}": QUIZ_MANAGE,
+    "GET /v1/quizzes/{quiz_id}/results": QUIZ_READ,
+    "GET /v1/quizzes/{quiz_id}/attempts/{attempt_id}": QUIZ_MANAGE,
+    "GET /v1/quizzes/{quiz_id}/grading": QUIZ_MANAGE,
+    "PUT /v1/quizzes/{quiz_id}/answers/{answer_id}/grade": QUIZ_MANAGE,
     # --- ISMS ----------------------------------------------------------------------
     "GET /v1/isms/access-control-matrix": ISMS_READ,
     "POST /v1/isms/access-control-matrix": ISMS_MANAGE,
@@ -592,6 +634,11 @@ POLICY = {
     "PATCH /v1/me/preferences": SIGNED_IN,
     "GET /v1/me/questions": SIGNED_IN,
     "GET /v1/me/questions/summary": SIGNED_IN,
+    "GET /v1/me/quizzes": SIGNED_IN,
+    "POST /v1/me/quizzes/rounds/{round_id}/attempt": SIGNED_IN,
+    "GET /v1/me/quizzes/attempts/{attempt_id}": SIGNED_IN,
+    "PUT /v1/me/quizzes/attempts/{attempt_id}/pages/{page}": SIGNED_IN,
+    "POST /v1/me/quizzes/attempts/{attempt_id}/submit": SIGNED_IN,
     "GET /v1/me/risks": SIGNED_IN,
     "GET /v1/me/saved-searches": SIGNED_IN,
     "POST /v1/me/saved-searches": SIGNED_IN,

@@ -24,9 +24,10 @@ from app.db.models import (
     RiskAsset,
     User,
 )
+from app.services.frameworks import framework_parameter
 
 from .access import _can_manage_isms, _can_read_isms
-from .common import _clean_framework, _clean_isms_section
+from .common import _clean_isms_section
 from .constants import APP_SOURCE_TYPES, DOCUMENT_TYPES, OBJECTIVE_STATUSES
 from .metric_values import _effectiveness_metric_sources_out
 from .serializers import (
@@ -48,7 +49,7 @@ from .serializers import (
 
 
 def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     section_key = _clean_isms_section(section)
     include_all = section_key is None
 
@@ -178,7 +179,7 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
 
 
 def isms_summary(*, framework: str, section: str | None, user: User, db: Session):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     section_key = _clean_isms_section(section)
     include_all = section_key is None
 

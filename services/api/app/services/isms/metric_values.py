@@ -18,8 +18,9 @@ from app.db.models import (
     User,
 )
 from app.services.errors import DomainError
+from app.services.text import clean_text
 
-from .common import _clean_text, _utcnow
+from .common import _utcnow
 from .constants import (
     EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE,
     EFFECTIVENESS_THRESHOLD_OPERATORS,
@@ -100,11 +101,11 @@ def _apply_effectiveness_measure_payload(
         }
     )
     if "summary" in fields:
-        row.summary = _clean_text(
+        row.summary = clean_text(
             payload.summary, max_len=20000, required=not partial, label="summary"
         )
     if "description" in fields:
-        row.description = _clean_text(payload.description, max_len=40000)
+        row.description = clean_text(payload.description, max_len=40000)
     if "metric_key" in fields:
         row.metric_key = _metric_key_from_payload(payload.metric_key)
     if "source_type" in fields:
@@ -112,15 +113,15 @@ def _apply_effectiveness_measure_payload(
     if "target_value" in fields:
         row.target_value = payload.target_value
     if "target_unit" in fields:
-        row.target_unit = _clean_text(payload.target_unit, max_len=64)
+        row.target_unit = clean_text(payload.target_unit, max_len=64)
     if "threshold_operator" in fields:
         row.threshold_operator = (payload.threshold_operator or "").strip()
     if "owner_user_id" in fields:
         row.owner_user_id = payload.owner_user_id
     if "frequency" in fields:
-        row.frequency = _clean_text(payload.frequency, max_len=64)
+        row.frequency = clean_text(payload.frequency, max_len=64)
     if "notes" in fields:
-        row.notes = _clean_text(payload.notes, max_len=12000)
+        row.notes = clean_text(payload.notes, max_len=12000)
     row.updated_at = _utcnow()
 
 
@@ -170,7 +171,7 @@ def resolve_metric_source_type(db: Session, raw: str | None) -> str | None:
     the same collected source. None means no collected source has that name.
     """
 
-    source_type = _clean_text(raw, max_len=64).strip()
+    source_type = clean_text(raw, max_len=64).strip()
     if not source_type:
         return EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
     if source_type.lower() == EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE:
@@ -247,7 +248,7 @@ def _validate_metric_entry_payload(
     db: Session, payload: EffectivenessMetricEntryPayload, *, partial: bool = False
 ) -> None:
     fields = set(payload.model_fields_set or set()) if partial else set()
-    qualitative = _clean_text(payload.qualitative_value, max_len=20000)
+    qualitative = clean_text(payload.qualitative_value, max_len=20000)
     if not partial or "metric_value" in fields or "qualitative_value" in fields:
         if payload.metric_value is None and not qualitative:
             raise DomainError(
@@ -303,21 +304,21 @@ def _apply_metric_entry_payload(
     if "metric_value" in fields:
         row.metric_value = payload.metric_value
     if "metric_unit" in fields:
-        row.metric_unit = _clean_text(payload.metric_unit, max_len=64)
+        row.metric_unit = clean_text(payload.metric_unit, max_len=64)
     if "qualitative_value" in fields:
-        row.qualitative_value = _clean_text(payload.qualitative_value, max_len=20000)
+        row.qualitative_value = clean_text(payload.qualitative_value, max_len=20000)
     if "source_type" in fields:
         row.source_type = _coerce_metric_source_type(db, payload.source_type)
     if "source_title" in fields:
-        row.source_title = _clean_text(payload.source_title, max_len=256)
+        row.source_title = clean_text(payload.source_title, max_len=256)
     if "source_url" in fields:
-        row.source_url = _clean_text(payload.source_url, max_len=2048) or None
+        row.source_url = clean_text(payload.source_url, max_len=2048) or None
     if "source_reference" in fields:
-        row.source_reference = _clean_text(payload.source_reference, max_len=256)
+        row.source_reference = clean_text(payload.source_reference, max_len=256)
     if "source_event_id" in fields:
         row.source_event_id = payload.source_event_id
     if "notes" in fields:
-        row.notes = _clean_text(payload.notes, max_len=12000)
+        row.notes = clean_text(payload.notes, max_len=12000)
     if "raw_payload" in fields:
         row.raw_payload = payload.raw_payload or {}
     row.updated_at = _utcnow()

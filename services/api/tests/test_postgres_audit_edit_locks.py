@@ -423,7 +423,7 @@ def test_a_run_waits_for_a_template_edit_and_follows_its_schedule(race, template
         reschedule,
         materialise(results),
         # The edit holds here, after reading the template and before it commits.
-        pause_at=(scheduling, "apply_schedule_fields"),
+        pause_at=(scheduling, "revise_schedule"),
     )
 
     assert outcome == ("done", "done")

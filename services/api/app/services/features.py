@@ -35,6 +35,7 @@ DEFINITIONS = (
     ("business_processes", "Business processes", "isms"),
     ("access_control", "Access control matrix", "isms"),
     ("effectiveness", "Effectiveness measures", "isms"),
+    ("quizzes", "Quizzes", "isms"),
     ("meetings", "Meetings", "isms"),
     ("people", "People and personnel assurance", "isms"),
     ("vendors", "Vendors", "isms"),
@@ -80,6 +81,7 @@ ENTITY_FEATURES = {
     "org_node": "organisation",
     "business_process": "business_processes",
     "story": "stories",
+    "quiz": "quizzes",
 }
 SECTION_FEATURES = {
     "objectives": "objectives",

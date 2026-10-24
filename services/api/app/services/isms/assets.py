@@ -16,8 +16,10 @@ from app.db.models import (
 )
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
+from app.services.text import clean_text
 
-from .common import _clean_framework, _clean_text, _list_response, _record, _utcnow
+from .common import _list_response, _record, _utcnow
 from .mutations import (
     _apply_license_payload,
     _apply_links,
@@ -45,7 +47,7 @@ def list_asset_categories(*, user: User, db: Session):
 
 
 def create_asset_category(*, payload: AssetCategoryPayload, user: User, db: Session):
-    name = _clean_text(payload.name, max_len=128, required=True, label="name")
+    name = clean_text(payload.name, max_len=128, required=True, label="name")
     existing = (
         db.query(RiskCategory)
         .filter(func.lower(RiskCategory.name) == name.lower())
@@ -75,7 +77,7 @@ def create_asset_subcategory(
     category = _asset_category_or_create(
         db, category_id=payload.category_id, category_name=payload.category_name
     )
-    name = _clean_text(payload.name, max_len=128, required=True, label="name")
+    name = clean_text(payload.name, max_len=128, required=True, label="name")
     existing = (
         db.query(RiskAssetSubcategory)
         .filter(
@@ -101,7 +103,7 @@ def create_asset_subcategory(
 def list_licenses(
     *, q: str, framework: str, limit: int, offset: int, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     limit = max(1, min(int(limit or 500), 1000))
     offset = max(0, int(offset or 0))
     qry = db.query(IsmsLicense)
@@ -137,14 +139,14 @@ def create_license(
     user: User,
     db: Session,
 ):
-    _clean_framework(framework)
-    name = _clean_text(payload.name, max_len=256, required=True, label="license")
+    framework_parameter(framework)
+    name = clean_text(payload.name, max_len=256, required=True, label="license")
     existing = _license_by_name(db, name)
     if existing:
         raise DomainError(status_code=400, detail="License already exists")
     row = IsmsLicense(
         name=name,
-        description=_clean_text(payload.description, max_len=12000),
+        description=clean_text(payload.description, max_len=12000),
         created_by_user_id=user.id,
         created_at=_utcnow(),
         updated_at=_utcnow(),
@@ -167,10 +169,10 @@ def update_license(
     user: User,
     db: Session,
 ):
-    _clean_framework(framework)
+    framework_parameter(framework)
     row = _license_or_404(db, license_id)
     before = _license_out(row, include_asset_count=True)
-    new_name = _clean_text(payload.name, max_len=256, required=True, label="license")
+    new_name = clean_text(payload.name, max_len=256, required=True, label="license")
     conflict = (
         db.query(IsmsLicense)
         .filter(
@@ -198,7 +200,7 @@ def update_license(
 def delete_license(
     *, license_id: str, context: ChangeContext, framework: str, user: User, db: Session
 ):
-    _clean_framework(framework)
+    framework_parameter(framework)
     row = _license_or_404(db, license_id)
     in_use = db.query(RiskAsset.id).filter(RiskAsset.license_id == row.id).first()
     if in_use:
@@ -221,7 +223,7 @@ def create_asset(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     category = _asset_category_or_create(
         db, category_id=payload.category_id, category_name=payload.category_name
     )
@@ -239,7 +241,7 @@ def create_asset(
         register_held_by_org_node_id=org_node_or_400(
             db, payload.register_held_by_org_node_id
         ),
-        description=_clean_text(payload.description, max_len=20000),
+        description=clean_text(payload.description, max_len=20000),
         created_by_user_id=user.id,
         created_at=_utcnow(),
         updated_at=_utcnow(),
@@ -279,7 +281,7 @@ def list_assets(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     limit = max(1, min(int(limit or 500), 1000))
     offset = max(0, int(offset or 0))
     # Each join names its condition: a subcategory also joins to the category,
@@ -324,7 +326,7 @@ def list_assets(
 
 
 def get_asset(*, asset_id: str, framework: str, user: User, db: Session):
-    return _asset_out(db, _asset_or_404(db, asset_id), _clean_framework(framework))
+    return _asset_out(db, _asset_or_404(db, asset_id), framework_parameter(framework))
 
 
 def update_asset(
@@ -336,7 +338,7 @@ def update_asset(
     user: User,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _asset_or_404(db, asset_id)
     before = _asset_out(db, row, fw)
     fields = set(payload.model_fields_set or set())
@@ -390,7 +392,7 @@ def update_asset(
             db, payload.register_held_by_org_node_id
         )
     if "description" in fields:
-        row.description = _clean_text(payload.description, max_len=20000)
+        row.description = clean_text(payload.description, max_len=20000)
     row.updated_at = _utcnow()
     db.add(row)
     db.flush()
@@ -405,7 +407,7 @@ def update_asset(
 def delete_asset(
     *, asset_id: str, context: ChangeContext, framework: str, user: User, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     row = _asset_or_404(db, asset_id)
     in_use = db.query(Risk.id).filter(Risk.asset_id == row.id).first()
     if in_use:

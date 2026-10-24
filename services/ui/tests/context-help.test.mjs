@@ -206,6 +206,13 @@ test('page help follows the page and the active tab', async (t) => {
     ['soa', 'soaControlsTab', '/help/using-frameworks.html#4-controls-clauses-and-applicability'],
     ['controls', 'controlRequirementsTab', '/help/using-frameworks.html#control-requirements'],
     ['controls', 'controlEvidenceTab', '/help/using-events.html'],
+    ['quizzes', 'none', '/help/using-quizzes.html'],
+    ['quiz', 'quizOverviewTab', '/help/using-quizzes.html'],
+    ['quiz', 'quizQuestionsTab', '/help/using-quizzes.html'],
+    ['quiz', 'quizResultsTab', '/help/using-quizzes.html#read-the-results'],
+    ['quiz', 'quizGradingTab', '/help/using-quizzes.html#grade-written-answers'],
+    ['quiz-take', 'none', '/help/using-quizzes.html#sit-a-quiz'],
+    ['account', 'my-quizzes-tab', '/help/using-quizzes.html#sit-a-quiz'],
   ];
   for (const [page, tab, url] of cases) {
     ui.document.body.dataset.page = page;
@@ -269,6 +276,10 @@ test('every help topic points at a published chapter and anchor', async (t) => {
     'features',
     'sourceInsights',
     'controlRequirements',
+    'quizzes',
+    'quizResults',
+    'quizGrading',
+    'myQuizzes',
   ];
   for (const key of keys) {
     trigger.dataset.helpTopic = key;

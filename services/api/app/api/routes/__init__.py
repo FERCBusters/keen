@@ -21,6 +21,7 @@ from .managed_configurations import router as managed_configurations_router
 from .me import router as me_router
 from .pestle import router as pestle_router
 from .questions import router as questions_router
+from .quizzes import router as quizzes_router
 from .risk_register import router as risk_register_router
 from .risks import router as risks_router
 from .soa import router as soa_router
@@ -80,6 +81,10 @@ OPENAPI_TAGS = [
         "description": "Read-only SoA summary across controls, clauses, CIA risks, PESTLE(E), interested parties and ISMS.",
     },
     {
+        "name": "Quizzes",
+        "description": "Quizzes, their rounds, results and grading, and each person's own quizzes.",
+    },
+    {
         "name": "Stories",
         "description": "Curated sets of events, records and notes with a timeline and flow chart.",
     },
@@ -114,6 +119,7 @@ router.include_router(artifacts_router, tags=["Artifacts"])
 router.include_router(sources_router, tags=["Sources"])
 router.include_router(soa_router, tags=["Statement of Applicability"])
 router.include_router(stories_router, tags=["Stories"])
+router.include_router(quizzes_router, tags=["Quizzes"])
 router.include_router(stats_router, tags=["Stats"])
 router.include_router(graph_router, tags=["Graph"])
 

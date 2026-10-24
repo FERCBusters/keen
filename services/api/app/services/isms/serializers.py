@@ -25,6 +25,7 @@ from app.db.models import (
     IsmsMeetingPerson,
     IsmsObjective,
     IsmsOrgNode,
+    Quiz,
     RiskAsset,
     RiskAssetSubcategory,
     RiskCategory,
@@ -527,6 +528,9 @@ def _effectiveness_measure_out(
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "display": row.summary or "Effectiveness measure",
     }
+    # A quiz's measure records the quiz's round averages and changes with it.
+    quiz = db.query(Quiz.id, Quiz.title).filter(Quiz.measure_id == row.id).first()
+    out["quiz"] = {"id": str(quiz.id), "title": quiz.title} if quiz else None
     if include_entries:
         out["metric_entries"] = [
             _metric_entry_out(entry, row) for entry in entries[:25] if entry is not None

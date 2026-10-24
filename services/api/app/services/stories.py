@@ -53,7 +53,8 @@ from app.services.entity_changelog import (
     record_entity_changelog,
 )
 from app.services.errors import DomainError
-from app.services.isms.common import _by_id_or_404, _clean_framework, _utcnow
+from app.services.frameworks import framework_parameter
+from app.services.isms.common import _by_id_or_404, _utcnow
 from app.services.isms.related_records import (
     resolve_target,
     search_targets,
@@ -528,7 +529,7 @@ def _listing(db: Session, user: User, rows: list[Story]) -> list[dict]:
 
 def get_story(*, story_id, framework, user, db):
     require_read(db, user)
-    return output(db, user, _story_or_404(db, story_id), _clean_framework(framework))
+    return output(db, user, _story_or_404(db, story_id), framework_parameter(framework))
 
 
 def list_stories(*, user, db, q="", status="", limit=50, offset=0):
@@ -673,7 +674,7 @@ def create_story(*, payload: StoryPayload, framework, user, db, context):
     after = summary(row, item_count=added)
     _record(db, row, "created", None, after, user, context)
     db.commit()
-    return output(db, user, row, _clean_framework(framework))
+    return output(db, user, row, framework_parameter(framework))
 
 
 def update_story(*, story_id, payload: StoryPayload, framework, user, db, context):
@@ -692,7 +693,7 @@ def update_story(*, story_id, payload: StoryPayload, framework, user, db, contex
     row.updated_at = _utcnow()
     _record(db, row, "updated", before, summary(row), user, context)
     db.commit()
-    return output(db, user, row, _clean_framework(framework))
+    return output(db, user, row, framework_parameter(framework))
 
 
 def delete_story(*, story_id, expected_version, user, db, context):
@@ -720,7 +721,7 @@ def add_items(*, story_id, payload: ItemsPayload, framework, user, db, context):
         context,
     )
     db.commit()
-    return output(db, user, row, _clean_framework(framework))
+    return output(db, user, row, framework_parameter(framework))
 
 
 def _item_or_404(db: Session, row: Story, item_id) -> StoryItem:
@@ -764,7 +765,7 @@ def update_item(
         context,
     )
     db.commit()
-    return output(db, user, row, _clean_framework(framework))
+    return output(db, user, row, framework_parameter(framework))
 
 
 def remove_item(*, story_id, item_id, expected_version, framework, user, db, context):
@@ -781,7 +782,7 @@ def remove_item(*, story_id, item_id, expected_version, framework, user, db, con
     row.updated_at = _utcnow()
     _note(db, row, "item_removed", {"item_id": item_id, "kind": kind}, user, context)
     db.commit()
-    return output(db, user, row, _clean_framework(framework))
+    return output(db, user, row, framework_parameter(framework))
 
 
 def save_layout(*, story_id, payload: LayoutPayload, framework, user, db, context):
@@ -830,7 +831,7 @@ def save_layout(*, story_id, payload: LayoutPayload, framework, user, db, contex
         context,
     )
     db.commit()
-    return output(db, user, row, _clean_framework(framework))
+    return output(db, user, row, framework_parameter(framework))
 
 
 # --- Comments -----------------------------------------------------------------

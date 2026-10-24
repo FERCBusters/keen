@@ -80,6 +80,10 @@ _PERMISSION_WRITES = {
         "/v1/stories",
         "/v1/stories/{story_id}/items",
         "/v1/stories/{story_id}/comments",
+        # A person sits only their own attempts; the operation checks the
+        # account's linked person and the round's participants.
+        "/v1/me/quizzes/rounds/{round_id}/attempt",
+        "/v1/me/quizzes/attempts/{attempt_id}/submit",
     ),
     "PATCH": (
         "/v1/pestle/items/{item_id}",
@@ -89,7 +93,10 @@ _PERMISSION_WRITES = {
         "/v1/stories/{story_id}",
         "/v1/stories/{story_id}/items/{item_id}",
     ),
-    "PUT": ("/v1/stories/{story_id}/layout",),
+    "PUT": (
+        "/v1/stories/{story_id}/layout",
+        "/v1/me/quizzes/attempts/{attempt_id}/pages/{page}",
+    ),
     "DELETE": (
         "/v1/questions/{thread_id}",
         "/v1/pestle/items/{item_id}",

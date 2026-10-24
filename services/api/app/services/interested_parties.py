@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import uuid
 from datetime import datetime
 from typing import Any
@@ -34,10 +33,12 @@ from app.services.entity_changelog import (
     record_entity_changelog,
 )
 from app.services.errors import DomainError
+from app.services.frameworks import framework_parameter
 from app.services.isms.link_diary import (
     remove_entity_link_diary,
     sync_entity_link_diary,
 )
+from app.services.text import clean_text
 
 INTERESTED_PARTIES_READ_PERMISSION = "interested_parties.read"
 INTERESTED_PARTIES_MANAGE_PERMISSION = "interested_parties.manage"
@@ -150,28 +151,8 @@ def _can_manage_interested_parties(db: Session, user: User | None) -> bool:
     )
 
 
-def _clean_text(
-    raw: str | None, *, max_len: int, required: bool = False, label: str = "value"
-) -> str:
-    value = (raw or "").strip()
-    if required and not value:
-        raise DomainError(status_code=400, detail=f"{label} is required")
-    if len(value) > max_len:
-        raise DomainError(status_code=400, detail=f"{label} is too long")
-    return value
-
-
-def _clean_framework(raw: str | None) -> str:
-    value = (raw or settings.default_framework_slug or "").strip()
-    if not value:
-        raise DomainError(status_code=400, detail="framework is required")
-    if len(value) > 64 or not re.match(r"^[A-Za-z0-9._:-]+$", value):
-        raise DomainError(status_code=400, detail="Invalid framework")
-    return value
-
-
 def _choice(raw: str | None, choices: list[str], label: str) -> str:
-    value = _clean_text(raw, max_len=128, required=True, label=label)
+    value = clean_text(raw, max_len=128, required=True, label=label)
     found = {x.lower(): x for x in choices}.get(value.lower())
     if not found:
         raise DomainError(status_code=400, detail=f"{label} is not valid")
@@ -507,7 +488,7 @@ def _lookup_by_id_or_name(
         if not row:
             raise DomainError(status_code=400, detail=f"Unknown {label}_id")
         return row
-    value = _clean_text(name, max_len=256, required=True, label=label)
+    value = clean_text(name, max_len=256, required=True, label=label)
     row = db.query(model).filter(func.lower(model.name) == value.lower()).one_or_none()
     if row:
         return row
@@ -639,7 +620,7 @@ def update_interested_party_name(
     )
     if not row:
         raise DomainError(status_code=404, detail="Name not found")
-    value = _clean_text(payload.name, max_len=256, required=True, label="name")
+    value = clean_text(payload.name, max_len=256, required=True, label="name")
     duplicate = (
         db.query(InterestedPartyName)
         .filter(
@@ -710,7 +691,7 @@ def update_interested_party_nature(
     )
     if not row:
         raise DomainError(status_code=404, detail="Nature not found")
-    value = _clean_text(payload.name, max_len=256, required=True, label="nature")
+    value = clean_text(payload.name, max_len=256, required=True, label="nature")
     duplicate = (
         db.query(InterestedPartyNature)
         .filter(
@@ -752,7 +733,7 @@ def delete_interested_party_nature(*, nature_id: str, user, db: Session):
 def interested_parties_visualisations(
     *, framework: str = settings.default_framework_slug, user, db: Session
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     rows = (
         db.query(InterestedParty)
         .join(InterestedPartyName, InterestedPartyName.id == InterestedParty.name_id)
@@ -864,7 +845,7 @@ def list_interested_parties(
     user,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     limit = max(1, min(int(limit or 200), 5000))
     offset = max(0, int(offset or 0))
     qry = (
@@ -919,7 +900,7 @@ def list_interested_parties(
 def create_interested_party(
     *, payload: InterestedPartyPayload, context: ChangeContext, user, db: Session
 ):
-    fw = _clean_framework(payload.framework)
+    fw = framework_parameter(payload.framework)
     name = _lookup_by_id_or_name(
         db,
         InterestedPartyName,
@@ -954,7 +935,7 @@ def create_interested_party(
         name_id=name.id,
         nature_id=nature.id,
         note=(
-            _clean_text(payload.note, max_len=4000, label="note")
+            clean_text(payload.note, max_len=4000, label="note")
             if payload.note is not None
             else ""
         ),
@@ -993,7 +974,7 @@ def get_interested_party(
     db: Session,
 ):
     return _party_out(
-        db, _party_or_404(db, party_id), framework=_clean_framework(framework)
+        db, _party_or_404(db, party_id), framework=framework_parameter(framework)
     )
 
 
@@ -1009,9 +990,9 @@ def update_interested_party(
     before = _party_changelog_state(db, row)
     # The party is organisation-wide; the framework says which control links
     # the payload describes and which the response shows.
-    fw = _clean_framework(payload.framework)
+    fw = framework_parameter(payload.framework)
     if payload.note is not None:
-        row.note = _clean_text(payload.note, max_len=4000, label="note")
+        row.note = clean_text(payload.note, max_len=4000, label="note")
     if payload.name_id or payload.name:
         row.name_id = _lookup_by_id_or_name(
             db,
@@ -1101,7 +1082,7 @@ def interested_party_controls(
     db: Session,
 ):
     row = _party_or_404(db, party_id)
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     return {
         "id": str(row.id),
         "framework": fw,
@@ -1119,7 +1100,7 @@ def update_interested_party_controls(
     db: Session,
 ):
     row = _party_or_404(db, party_id)
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     before = _party_changelog_state(db, row)
     _replace_control_links(
         db, row, fw, _controls_for_payload(db, payload.controls, fw), user
@@ -1199,7 +1180,7 @@ def control_interested_parties(
     user,
     db: Session,
 ):
-    fw = _clean_framework(framework)
+    fw = framework_parameter(framework)
     cid = _try_uuid(control_id)
     if not cid:
         raise DomainError(status_code=400, detail="control_id must be a UUID")
@@ -1243,7 +1224,7 @@ def control_interested_parties(
 
 def interested_parties_meta(*, framework: str, db: Session, user):
     return {
-        "framework": _clean_framework(framework),
+        "framework": framework_parameter(framework),
         "can_view": _can_read_interested_parties(db, user),
         "can_manage": _can_manage_interested_parties(db, user),
         "events": COMMUNICATION_EVENTS,
