@@ -1,5 +1,10 @@
 @import url('/vendor/mosp-design-system/styles.css');
 
+/* Keen uses a flat theme canvas, including pages taller than the viewport. */
+body {
+  background: var(--bs-body-bg);
+}
+
 /* Anchors resolve rgba(var(--bs-link-color-rgb)), which the shared design
    system binds only as --bs-link-color; without this the browser falls back to
    Bootstrap blue and breaks the One Voice Rule. Read the theme-bound variables

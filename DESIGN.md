@@ -88,7 +88,7 @@ components:
 
 **Creative North Star: "The Tinted Glass Console"**
 
-Keen's interface is a calm, airy, quietly confident stack of soft panels in a single accent colour. The page canvas is an airy tinted wash (`#f1f6fc` under the default palette) lightened by a radial highlight at the top of the page; on it sit glassy, gently lifted cards with large rounded corners (18px) and accent-tinted translucent borders. One accent — **Archival Ink** `#004987` in the shipped default — is the system's single voice: it tints card headers, badges, table rules, graph links, and the fixed navbar alike, always as a wash or rgba tint, never as heavy decoration. Depth comes from translucency (white surfaces at 0.70–0.95 opacity) and diffuse low shadows, not from crisp layer boundaries.
+Keen's interface is a calm, airy, quietly confident stack of soft panels in a single accent colour. The page canvas is a flat tinted wash (`#f1f6fc` under the default palette); on it sit glassy, gently lifted cards with large rounded corners (18px) and accent-tinted translucent borders. One accent — **Archival Ink** `#004987` in the shipped default — is the system's single voice: it tints card headers, badges, table rules, graph links, and the fixed navbar alike, always as a wash or rgba tint, never as heavy decoration. Depth comes from translucency (white surfaces at 0.70–0.95 opacity) and diffuse low shadows, not from crisp layer boundaries.
 
 The system is deliberately themable: the accent palette is swapped wholesale by `data-theme` on `<html>` (ink default; ocean, forest, sunset, rose, slate, teal), each with a `-dark` variant persisted as one account preference. Components never hard-code accent hex values — they reference `--keen-accent*` variables (with Bootstrap's `--bs-primary` bound to the same variables), so a theme change re-colours the entire console without layout changes.
 
@@ -113,7 +113,7 @@ The palette is one accent hue plus dark ink neutrals on a tinted off-white canva
 - **Ink Wash** (`#e4f2ff`, accent-100): selected-tab and active-state tint (e.g. light tabs background).
 
 ### Neutral
-- **Page Canvas** (`#f1f6fc`, `--bs-body-bg`): cool tinted white body background, washed with a radial `#fff` highlight at 22% 0%.
+- **Page Canvas** (`#f1f6fc`, `--bs-body-bg`): flat, theme-bound tinted body background.
 - **Ink** (`#1f1f2a`, `--keen-ink`): body text, chart-agnostic darks, chip text.
 - **Ink Muted** (`#5e5e75`, `--keen-muted`): helper labels, KPI labels, small-muted text (12px).
 - **Deep Accent (hover/links)** (`#003768`, accent-700) and **Link Hover** (`#002c57`): links and pressed/hover states.
