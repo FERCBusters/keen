@@ -5,6 +5,7 @@ import {
   apiPost,
   apiPatch,
   apiDelete,
+  confirmAction,
   esc,
   toast,
 } from '/app.js';
@@ -197,7 +198,15 @@ $('newAssurance').addEventListener('click', clearAssurance);
 $('peopleList').addEventListener('click', async (event) => {
   const deleting = event.target.closest('[data-delete-person]');
   if (deleting && manage) {
-    if (!confirm('Delete this person and their assurance records?')) return;
+    if (
+      !(await confirmAction({
+        title: 'Delete person',
+        message: 'Delete this person and their assurance records?',
+        confirmLabel: 'Delete',
+        danger: true,
+      }))
+    )
+      return;
     try {
       await apiDelete(`${base}/people/${deleting.dataset.deletePerson}`);
       clearPerson();
@@ -222,7 +231,16 @@ $('peopleList').addEventListener('click', async (event) => {
 $('vendorsList').addEventListener('click', async (event) => {
   const deleting = event.target.closest('[data-delete-vendor]');
   if (deleting && manage) {
-    if (!confirm('Delete this vendor? Assets will remain in the asset register.')) return;
+    if (
+      !(await confirmAction({
+        title: 'Delete vendor',
+        message:
+          'Delete this vendor from the assurance register? Assets will remain in the asset register.',
+        confirmLabel: 'Delete',
+        danger: true,
+      }))
+    )
+      return;
     try {
       await apiDelete(`${base}/vendors/${deleting.dataset.deleteVendor}`);
       clearVendor();
@@ -244,7 +262,14 @@ $('vendorsList').addEventListener('click', async (event) => {
 $('assuranceRows').addEventListener('click', async (event) => {
   const deleting = event.target.closest('[data-delete-assurance]');
   if (deleting && selectedPerson && manage) {
-    if (!confirm('Delete this assurance record?')) return;
+    if (
+      !(await confirmAction({
+        title: 'Delete assurance record',
+        message: 'Delete this assurance record?',
+        confirmLabel: 'Delete',
+      }))
+    )
+      return;
     try {
       await apiDelete(
         `${base}/people/${selectedPerson.id}/assurances/${deleting.dataset.deleteAssurance}`,

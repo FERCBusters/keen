@@ -199,11 +199,15 @@ async function editor(t, server = {}) {
     html,
     url: 'https://keen.example/admin.html' + (state.query || '') + '#evidence-config',
     setup: state.setup,
-    globals: {
-      confirm: (message) => {
-        confirmations.push(message);
-        return typeof state.confirm === 'function' ? state.confirm(message) : state.confirm;
+    modules: {
+      'pages/confirm-modal.js': {
+        confirmAction: async (asked) => {
+          confirmations.push(asked);
+          return typeof state.confirm === 'function' ? state.confirm(asked) : state.confirm;
+        },
       },
+    },
+    globals: {
       // Historical runs poll every five seconds; tests advance those polls.
       setTimeout: (fn, ms, ...args) => {
         if (ms < 5000) return setTimeout(fn, ms, ...args);
@@ -778,9 +782,10 @@ test('deleting a definition asks first and keeps its collection', async (t) => {
     );
   deleteButton().click();
   await ui.idle();
-  assert.deepEqual(ui.confirmations, [
-    'Delete evidence definition Definition 01? Collection and existing evidence are retained.',
-  ]);
+  assert.deepEqual(
+    ui.confirmations.map((c) => c.message),
+    ['Delete evidence definition Definition 01? Collection and existing evidence are retained.'],
+  );
   assert.deepEqual(ui.writes, []);
 
   ui.state.confirm = true;
@@ -819,9 +824,10 @@ test('the editor deletes only saved definitions', async (t) => {
   ui.$('rules').querySelector('button').click();
   await ui.idle();
   await ui.click('delete-rule');
-  assert.deepEqual(ui.confirmations, [
-    'Delete evidence definition rule-01? Collected evidence and existing mappings are retained.',
-  ]);
+  assert.deepEqual(
+    ui.confirmations.map((c) => c.message),
+    ['Delete evidence definition rule-01? Collected evidence and existing mappings are retained.'],
+  );
   assert.deepEqual(
     ui.writes.map((write) => [write.method, write.path]),
     [['DELETE', '/api/v1/admin/mapping-rules/rule-01?version=7']],
@@ -1073,9 +1079,12 @@ test('applying a saved rule to past evidence starts a run for that rule', async 
   ui.$('rules').querySelector('button').click();
   await ui.idle();
   await ui.click('backfill-start');
-  assert.deepEqual(ui.confirmations, [
-    'Evaluate all previous keen-agent evidence against saved rule rule-01? This runs in the background.',
-  ]);
+  assert.deepEqual(
+    ui.confirmations.map((c) => c.message),
+    [
+      'Evaluate all previous keen-agent evidence against saved rule rule-01? This runs in the background.',
+    ],
+  );
   assert.equal(ui.writes.at(-1).path, '/api/v1/admin/mapping-rules/rule-01/backfill');
   assert.equal(
     ui.$('backfill').textContent,
@@ -1360,9 +1369,10 @@ test('saving needs a preview of this version, and no evidence asks for confirmat
 
   await ui.click('preview');
   await ui.click('save-rule');
-  assert.deepEqual(ui.confirmations, [
-    'There is no recent evidence for this source. Save the rule without a sample match?',
-  ]);
+  assert.deepEqual(
+    ui.confirmations.map((c) => c.message),
+    ['There is no recent evidence for this source. Save the rule without a sample match?'],
+  );
   assert.deepEqual(
     ui.writes.map((w) => w.method),
     ['POST'],
@@ -1470,9 +1480,12 @@ test('a refused historical run is reported, and only enabled live integrations a
   ui.$('rules').querySelector('button').click();
   await ui.idle();
   await ui.click('backfill-start');
-  assert.deepEqual(ui.confirmations, [
-    'Evaluate all previous keen-agent evidence against saved rule rule-01? This runs in the background.',
-  ]);
+  assert.deepEqual(
+    ui.confirmations.map((c) => c.message),
+    [
+      'Evaluate all previous keen-agent evidence against saved rule rule-01? This runs in the background.',
+    ],
+  );
   assert.equal(ui.$('status').textContent, 'Backfill already running');
   assert.equal(ui.$('status').getAttribute('role'), 'alert');
 
@@ -1501,4 +1514,25 @@ test('a webhook definition names its provider and locks a saved one', async (t) 
   assert.equal(saved.field('provider_name').readOnly, true);
   assert.equal(saved.field('ui_name').value, 'Pager');
   assert.equal(saved.$('when-source').value, 'webhook:pager');
+});
+
+test('editing a mapping warns before leaving and clears on returning to the library', async (t) => {
+  const ui = await editor(t, { rules: rules(1) });
+  const leave = () => {
+    const event = new ui.window.Event('beforeunload', { cancelable: true });
+    ui.window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  await ui.click('new-rule');
+  assert.equal(leave(), false);
+  assert.equal(ui.$('unsaved').hidden, true);
+
+  ui.$('description').value = 'Half-finished mapping';
+  ui.$('description').dispatchEvent(new ui.window.Event('input', { bubbles: true }));
+  assert.equal(ui.$('unsaved').hidden, false);
+  assert.equal(leave(), true);
+
+  await ui.click('close-editor');
+  assert.equal(ui.$('unsaved').hidden, true);
+  assert.equal(leave(), false);
 });

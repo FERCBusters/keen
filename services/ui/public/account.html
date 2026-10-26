@@ -24,9 +24,11 @@
       </div>
     </div>
 
-    <div id="status" class="alert alert-info" style="display:none;"></div>
+    <div id="status" class="alert alert-info" style="display:none;" role="status"></div>
 
-    <ul class="nav nav-tabs mb-3" id="accountTabs" role="tablist">
+    <div class="admin-tab-layout d-flex flex-column flex-lg-row gap-3">
+      <button id="account-navigation-toggle" type="button" class="btn btn-outline-primary d-lg-none" aria-expanded="false" aria-controls="accountTabs">Account menu</button>
+      <ul class="nav nav-pills flex-column admin-tab-nav" id="accountTabs" role="tablist" aria-orientation="vertical">
       <li class="nav-item" role="presentation">
         <button class="nav-link active" id="preferences-tab" data-bs-toggle="tab" data-bs-target="#preferences-pane" type="button" role="tab" aria-controls="preferences-pane" aria-selected="true" data-tab-hash="#preferences">Preferences</button>
       </li>
@@ -47,20 +49,20 @@
         <button class="nav-link" id="my-meetings-tab" data-feature="meetings" data-bs-toggle="tab" data-bs-target="#my-meetings-pane" type="button" role="tab" aria-controls="my-meetings-pane" aria-selected="false" data-tab-hash="#my-meetings">My meetings</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-risks-tab" data-feature="risk_cia" data-bs-toggle="tab" data-bs-target="#my-risks-pane" type="button" role="tab" aria-controls="my-risks-pane" aria-selected="false" data-tab-hash="#my-risks">Risks I own</button>
+        <button class="nav-link" id="my-risks-tab" data-feature="risk_cia" data-bs-toggle="tab" data-bs-target="#my-risks-pane" type="button" role="tab" aria-controls="my-risks-pane" aria-selected="false" data-tab-hash="#my-risks">My risks</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-isms-objectives-tab" data-feature="objectives" data-bs-toggle="tab" data-bs-target="#my-isms-objectives-pane" type="button" role="tab" aria-controls="my-isms-objectives-pane" aria-selected="false" data-tab-hash="#my-isms-objectives">My ISMS objectives</button>
+        <button class="nav-link" id="my-isms-objectives-tab" data-feature="objectives" data-bs-toggle="tab" data-bs-target="#my-isms-objectives-pane" type="button" role="tab" aria-controls="my-isms-objectives-pane" aria-selected="false" data-tab-hash="#my-isms-objectives">My objectives</button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="my-isms-role-tab" data-feature="organisation" data-bs-toggle="tab" data-bs-target="#my-isms-role-pane" type="button" role="tab" aria-controls="my-isms-role-pane" aria-selected="false" data-tab-hash="#my-isms-role">My role</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-isms-assets-tab" data-feature="assets" data-bs-toggle="tab" data-bs-target="#my-isms-assets-pane" type="button" role="tab" aria-controls="my-isms-assets-pane" aria-selected="false" data-tab-hash="#my-isms-assets">Assets I manage</button>
+        <button class="nav-link" id="my-isms-assets-tab" data-feature="assets" data-bs-toggle="tab" data-bs-target="#my-isms-assets-pane" type="button" role="tab" aria-controls="my-isms-assets-pane" aria-selected="false" data-tab-hash="#my-isms-assets">My assets</button>
       </li>
     </ul>
 
-    <div class="tab-content" id="accountTabContent">
+    <div class="tab-content flex-grow-1" id="accountTabContent">
       <section class="tab-pane fade" id="security-pane" role="tabpanel" aria-labelledby="security-tab" tabindex="0">
         <div id="pwCard" class="card mb-3">
           <div class="card-body">
@@ -177,14 +179,14 @@
             <div class="small-muted">Quick links to your commonly used filters.</div>
           </div>
           <div class="card-body">
-            <div id="savedSearchesEmpty" class="small-muted">No saved searches yet.</div>
+            <div id="savedSearchesEmpty" class="small-muted" role="status">No saved searches yet.</div>
             <div class="list-group" id="savedSearchesList"></div>
           </div>
         </div>
       </section>
 
       <section class="tab-pane fade" id="my-questions-pane" role="tabpanel" aria-labelledby="my-questions-tab" tabindex="0">
-        <div id="myQuestionsStatus" class="alert alert-info" style="display:none;"></div>
+        <div id="myQuestionsStatus" class="alert alert-info" style="display:none;" role="status"></div>
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
@@ -213,7 +215,7 @@
       </section>
 
       <section class="tab-pane fade" id="my-audits-pane" role="tabpanel" aria-labelledby="my-audits-tab" tabindex="0">
-        <div id="myAuditsStatus" class="alert alert-info" style="display:none;"></div>
+        <div id="myAuditsStatus" class="alert alert-info" style="display:none;" role="status"></div>
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
@@ -244,7 +246,7 @@
       </section>
 
       <section class="tab-pane fade" id="my-quizzes-pane" role="tabpanel" aria-labelledby="my-quizzes-tab" tabindex="0">
-        <div id="myQuizzesStatus" class="alert alert-info" style="display:none;"></div>
+        <div id="myQuizzesStatus" class="alert alert-info" style="display:none;" role="status"></div>
         <div id="myQuizzesUnlinked" class="alert alert-warning" hidden>Your account is not linked to a People record yet, so no quizzes can be assigned to you. An ISMS manager can link it, or assign you a quiz, which links it for you.</div>
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
@@ -272,7 +274,7 @@
       </section>
 
       <section class="tab-pane fade" id="my-meetings-pane" role="tabpanel" aria-labelledby="my-meetings-tab" tabindex="0">
-        <div id="myMeetingsStatus" class="alert alert-info" style="display:none;"></div>
+        <div id="myMeetingsStatus" class="alert alert-info" style="display:none;" role="status"></div>
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
@@ -304,11 +306,11 @@
       </section>
 
       <section class="tab-pane fade" id="my-risks-pane" role="tabpanel" aria-labelledby="my-risks-tab" tabindex="0">
-        <div id="myRisksStatus" class="alert alert-info" style="display:none;"></div>
+        <div id="myRisksStatus" class="alert alert-info" style="display:none;" role="status"></div>
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
-              <div class="fw-semibold">Risks I own</div>
+              <div class="fw-semibold">My risks</div>
               <div class="small-muted">Risk entities where you are assigned as the owner.</div>
             </div>
             <button class="btn btn-sm btn-outline-primary" id="myRisksRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
@@ -337,11 +339,11 @@
       </section>
 
       <section class="tab-pane fade" id="my-isms-objectives-pane" role="tabpanel" aria-labelledby="my-isms-objectives-tab" tabindex="0">
-        <div id="myIsmsObjectivesStatus" class="alert alert-info" style="display:none;"></div>
+        <div id="myIsmsObjectivesStatus" class="alert alert-info" style="display:none;" role="status"></div>
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
-              <div class="fw-semibold">My ISMS objectives</div>
+              <div class="fw-semibold">My objectives</div>
               <div class="small-muted">Objectives where you are the owner or one of the named resource requirements.</div>
             </div>
             <button class="btn btn-sm btn-outline-primary" id="myIsmsObjectivesRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
@@ -368,7 +370,7 @@
       </section>
 
       <section class="tab-pane fade" id="my-isms-role-pane" role="tabpanel" aria-labelledby="my-isms-role-tab" tabindex="0">
-        <div id="myIsmsRoleStatus" class="alert alert-info" style="display:none;"></div>
+        <div id="myIsmsRoleStatus" class="alert alert-info" style="display:none;" role="status"></div>
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
@@ -398,11 +400,11 @@
       </section>
 
       <section class="tab-pane fade" id="my-isms-assets-pane" role="tabpanel" aria-labelledby="my-isms-assets-tab" tabindex="0">
-        <div id="myIsmsAssetsStatus" class="alert alert-info" style="display:none;"></div>
+        <div id="myIsmsAssetsStatus" class="alert alert-info" style="display:none;" role="status"></div>
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
-              <div class="fw-semibold">Assets I manage</div>
+              <div class="fw-semibold">My assets</div>
               <div class="small-muted">Assets where your ISMS organisation chart role is the owner or register holder.</div>
             </div>
             <button class="btn btn-sm btn-outline-primary" id="myIsmsAssetsRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
@@ -428,6 +430,7 @@
         </div>
       </section>
 
+    </div>
     </div>
   </main>
 

@@ -101,9 +101,9 @@ async function eventPage(t, options = {}) {
       can_delete_incidents: true,
     },
     globals: { bootstrap, ...options.globals },
+    confirm: options.confirm,
     setup(window) {
       window.bootstrap = bootstrap;
-      window.confirm = options.confirm ?? (() => true);
       options.setup?.(window);
     },
     get: async (u) => {
@@ -354,11 +354,11 @@ test('diary edits require a summary and keep invalid JSON details as text', asyn
   await settle(() => ui.el('editDiaryModal').dataset.shown === '1');
   ui.el('editDiarySummary').value = '  ';
   ui.el('editDiarySave').click();
-  await settle(() => ui.el('editDiaryStatus').textContent === 'Error: Missing summary');
+  await settle(() => ui.el('editDiaryStatus').textContent === 'Missing summary');
   ui.el('editDiarySummary').value = 'S';
   ui.el('editDiaryDetails').value = '{not json';
   ui.el('editDiarySave').click();
-  await settle(() => ui.el('editDiaryStatus').textContent === 'Error: Patch refused');
+  await settle(() => ui.el('editDiaryStatus').textContent === 'Patch refused');
   assert.equal(state.patched[0].body.details, '{not json');
 });
 
@@ -389,7 +389,7 @@ test('incident deletion respects permission, confirmation and failures', async (
   const failed = await eventPage(t, { deleteFail: true });
   failed.ui.el('incidents').querySelector('[data-incident-delete="i1"]').click();
   await settle(() =>
-    /Failed to delete incident: Error: Delete refused/.test(failed.ui.el('status').textContent),
+    /Failed to delete incident: Delete refused/.test(failed.ui.el('status').textContent),
   );
 });
 
@@ -454,17 +454,13 @@ test('sampling explains missing or unavailable audits', async (t) => {
   assert.equal(failed.ui.el('auditSamplesCard').style.display, 'none');
   failed.ui.el('btnSampleAudit').click();
   await settle(() =>
-    /Failed to load audits: Error: Audits offline/.test(
-      failed.ui.el('auditSampleStatus').textContent,
-    ),
+    /Failed to load audits: Audits offline/.test(failed.ui.el('auditSampleStatus').textContent),
   );
   const rejected = await eventPage(t, { postFail: true });
   rejected.ui.el('btnSampleAudit').click();
   await settle(() => rejected.ui.el('auditSampleSelect').value === 'a1');
   rejected.ui.el('auditSampleSubmit').click();
-  await settle(() =>
-    /Failed: Error: Post refused/.test(rejected.ui.el('auditSampleStatus').textContent),
-  );
+  await settle(() => /Failed: Post refused/.test(rejected.ui.el('auditSampleStatus').textContent));
   const noSamples = await eventPage(t, { samples: [] });
   assert.equal(noSamples.ui.el('auditSamplesCard').style.display, 'none');
 });
@@ -480,7 +476,7 @@ const submitAsk = (ui) =>
 test('event questions render attachments safely and support ask, reply, status and delete', async (t) => {
   const prompts = [];
   const { ui, state } = await eventPage(t, {
-    globals: { confirm: (message) => (prompts.push(message), true) },
+    confirm: (asked) => (prompts.push(asked), true),
   });
   const q = ui.el('questions');
   assert.equal(q.querySelector('img'), null);
@@ -536,7 +532,10 @@ test('event questions render attachments safely and support ask, reply, status a
   ui.el('thread-t2').querySelector('[data-question-action="delete"]').click();
   await settle(() => ui.el('status').textContent === 'Question deleted');
   assert.deepEqual(state.removed, ['/api/v1/questions/t2']);
-  assert.deepEqual(prompts, ['Delete this question thread and all replies?']);
+  assert.deepEqual(
+    prompts.map((p) => p.title),
+    ['Delete question thread'],
+  );
 });
 
 test('question authors reply, mark threads seen and focus a linked thread', async (t) => {
@@ -598,7 +597,7 @@ test('question failures are contained in the questions panel', async (t) => {
   assert.match(empty.ui.el('questions').textContent, /No questions yet\./);
   empty.ui.el('questionBody').value = 'Q';
   submitAsk(empty.ui);
-  await settle(() => empty.ui.el('status').textContent === 'Error: Post refused');
+  await settle(() => empty.ui.el('status').textContent === 'Post refused');
   // The form keeps the question for another try.
   assert.equal(empty.ui.el('questionBody').value, 'Q');
   const askButton = empty.ui.el('questions').querySelector('[data-question-ask] [type="submit"]');
@@ -608,16 +607,16 @@ test('question failures are contained in the questions panel', async (t) => {
   actions.ui.el('questionReply-t1').value = 'R';
   const reply = actions.ui.el('thread-t1').querySelector('[data-question-action="reply"]');
   reply.click();
-  await settle(() => actions.ui.el('status').textContent === 'Error: Post refused');
+  await settle(() => actions.ui.el('status').textContent === 'Post refused');
   assert.equal(reply.disabled, false);
   assert.equal(reply.textContent, 'Send reply');
   const sel = actions.ui.el('questions').querySelector('[data-question-action="status"]');
   sel.value = 'reviewing';
   sel.dispatchEvent(new actions.ui.window.Event('change', { bubbles: true }));
-  await settle(() => actions.ui.el('status').textContent === 'Error: Patch refused');
+  await settle(() => actions.ui.el('status').textContent === 'Patch refused');
   const remove = actions.ui.el('questions').querySelector('[data-question-action="delete"]');
   remove.click();
-  await settle(() => actions.ui.el('status').textContent === 'Error: Delete refused');
+  await settle(() => actions.ui.el('status').textContent === 'Delete refused');
   assert.equal(remove.disabled, false);
 });
 
@@ -657,14 +656,14 @@ test('incident creation requires a title and reports failures', async (t) => {
   ui.el('incidentTitle').value = 'Outage';
   ui.el('incidentSubmit').click();
   await settle(
-    () => ui.el('incidentStatus').textContent === 'Failed to create incident: Error: Post refused',
+    () => ui.el('incidentStatus').textContent === 'Failed to create incident: Post refused',
   );
   assert.equal(ui.el('incidentSubmit').disabled, false);
 });
 
 test('actions on an event that failed to load are refused with a warning', async (t) => {
   const { ui, state } = await eventPage(t, { eventFail: true });
-  assert.equal(ui.el('status').textContent, 'Failed to load event: Error: Event <b>offline</b>');
+  assert.equal(ui.el('status').textContent, 'Failed to load event: Event <b>offline</b>');
   assert.equal(ui.el('status').querySelector('b'), null);
   for (const [button, message] of [
     ['btnSampleAudit', 'Event not loaded yet'],

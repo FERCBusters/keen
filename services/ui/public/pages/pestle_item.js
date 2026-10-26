@@ -1,10 +1,12 @@
 import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
   apiPatch,
   apiDelete,
+  confirmAction,
   esc,
   fmtTs,
   toast,
@@ -408,7 +410,7 @@ async function saveCurrentItem(ev) {
     );
     toast(status, 'PESTLE(E) item saved', 'success');
   } catch (e) {
-    toast(status, `Failed to save PESTLE(E) item: ${String(e)}`, 'danger');
+    toast(status, `Failed to save PESTLE(E) item: ${errorText(e)}`, 'danger');
   } finally {
     if (savePestleItem) savePestleItem.disabled = false;
   }
@@ -459,7 +461,7 @@ saveBusinessProcessRelevance?.addEventListener('click', async () => {
     await Promise.all([loadItem(), loadPestleChangelog()]);
     toast(status, 'Business process relevance saved', 'success');
   } catch (e) {
-    toast(status, `Failed to save process relevance: ${String(e)}`, 'danger');
+    toast(status, `Failed to save process relevance: ${errorText(e)}`, 'danger');
   } finally {
     saveBusinessProcessRelevance.disabled = false;
   }
@@ -478,7 +480,7 @@ saveClauseRelevance?.addEventListener('click', async () => {
     await Promise.all([loadItem(), loadPestleChangelog()]);
     toast(status, 'Clause relevance saved', 'success');
   } catch (e) {
-    toast(status, `Failed to save clause relevance: ${String(e)}`, 'danger');
+    toast(status, `Failed to save clause relevance: ${errorText(e)}`, 'danger');
   } finally {
     saveClauseRelevance.disabled = false;
   }
@@ -497,14 +499,22 @@ samplePestleAudit?.addEventListener('click', () => {
 
 deletePestleItem?.addEventListener('click', async () => {
   if (!canManagePestle || !itemId) return;
-  if (!confirm('Delete this PESTLE(E) item and all of its relevance mappings?')) return;
+  if (
+    !(await confirmAction({
+      title: 'Delete PESTLE(E) item',
+      message: 'Delete this PESTLE(E) item and all of its relevance mappings?',
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
+  )
+    return;
   deletePestleItem.disabled = true;
   try {
     await apiDelete(`/api/v1/pestle/items/${encodeURIComponent(itemId)}`);
     toast(status, 'PESTLE(E) item deleted', 'success');
     location.assign(withFramework('/pestle.html', framework));
   } catch (e) {
-    toast(status, `Failed to delete PESTLE(E) item: ${String(e)}`, 'danger');
+    toast(status, `Failed to delete PESTLE(E) item: ${errorText(e)}`, 'danger');
     deletePestleItem.disabled = false;
   }
 });
@@ -527,5 +537,5 @@ try {
     if (itemId && requestedTab === 'changelog') await loadPestleChangelog();
   }
 } catch (e) {
-  toast(status, `Failed to load PESTLE(E) item: ${String(e)}`, 'danger');
+  toast(status, `Failed to load PESTLE(E) item: ${errorText(e)}`, 'danger');
 }

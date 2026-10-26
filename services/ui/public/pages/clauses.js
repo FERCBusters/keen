@@ -1,4 +1,5 @@
 import {
+  errorText,
   initNavbar,
   apiGet,
   esc,
@@ -93,7 +94,7 @@ async function load() {
     clauses = flatten(data?.tree || []);
     render();
   } catch (e) {
-    toast(status, `Failed to load clauses: ${String(e)}`, 'danger');
+    toast(status, `Failed to load clauses: ${errorText(e)}`, 'danger');
     rowsEl.innerHTML =
       '<tr><td colspan="5" class="small-muted p-4">Failed to load clauses.</td></tr>';
   }

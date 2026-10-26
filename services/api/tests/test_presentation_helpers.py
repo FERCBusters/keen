@@ -149,7 +149,7 @@ def test_timezones_and_themes_are_validated():
     assert presentation.validate_theme_id(None) is None
     assert presentation.validate_theme_id(" ") is None
     assert presentation.validate_theme_id("ocean-dark") == "ocean-dark"
-    assert {"purple", "teal-dark"} <= presentation.theme_ids()
+    assert {"ink", "teal-dark"} <= presentation.theme_ids()
     with pytest.raises(DomainError):
         presentation.validate_theme_id("dark")
 

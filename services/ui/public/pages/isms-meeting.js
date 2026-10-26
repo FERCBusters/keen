@@ -1,4 +1,5 @@
 import {
+  errorText,
   safeExternalHref,
   initNavbar,
   apiGet,
@@ -44,7 +45,7 @@ function badgeList(items, labelKey = 'ref', urlFn = null) {
 function controlBadges(items) {
   return badgeList(items, 'ref', (c) =>
     withFramework(
-      `/control.html?id=${encodeURIComponent(c.id)}&tab=isms`,
+      `/control.html?id=${encodeURIComponent(c.id)}&tab=governance`,
       c.framework || framework,
     ),
   );
@@ -130,7 +131,7 @@ async function load() {
     await loadChangelog();
     activateTabFromHashOrQuery();
   } catch (e) {
-    toast(status, `Failed to load meeting minutes: ${String(e)}`, 'danger');
+    toast(status, `Failed to load meeting minutes: ${errorText(e)}`, 'danger');
   }
 }
 

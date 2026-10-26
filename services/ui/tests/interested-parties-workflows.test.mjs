@@ -164,9 +164,9 @@ test('the register shows controls, up to three communications and notes as text'
   assert.deepEqual(
     controlLinks.map((a) => [a.textContent, a.getAttribute('href')]),
     [
-      ['A.5.1', '/control.html?id=c1&tab=interested-parties&framework=A'],
-      ['Untitled ref', '/control.html?id=c2&tab=interested-parties&framework=A'],
-      ['Control', '/control.html?id=c3&tab=interested-parties&framework=A'],
+      ['A.5.1', '/control.html?id=c1&tab=governance&framework=A'],
+      ['Untitled ref', '/control.html?id=c2&tab=governance&framework=A'],
+      ['Control', '/control.html?id=c3&tab=governance&framework=A'],
     ],
   );
   const comms = rows[0].querySelectorAll('td')[4];
@@ -216,11 +216,11 @@ test('natures can be added and deleted, and lookup failures are reported', async
   const failing = await partiesPage(t, { postFail: true, removeFail: true });
   failing.ui.el('newPartyName').value = 'Regulator';
   failing.ui.el('addPartyName').click();
-  await settle(() => failing.ui.el('status').textContent === 'Error: Duplicate name');
+  await settle(() => failing.ui.el('status').textContent === 'Duplicate name');
   assert.equal(failing.ui.el('newPartyName').value, 'Regulator');
   failing.ui.document.querySelector('[data-delete-nature="t1"]').click();
   await settle(
-    () => failing.ui.el('status').textContent === 'Error: Nature is used by an interested party',
+    () => failing.ui.el('status').textContent === 'Nature is used by an interested party',
   );
 });
 
@@ -307,7 +307,7 @@ test('the party/control matrix links both sides and filters by party or control'
   assert.equal(linked.getAttribute('title'), `${HOSTILE}Regulator × A.5.1 Policies`);
   assert.equal(
     linked.querySelector('a').getAttribute('href'),
-    '/control.html?id=c1&tab=interested-parties&framework=A',
+    '/control.html?id=c1&tab=governance&framework=A',
   );
   assert.equal(rows[0].querySelectorAll('.matrix-cell-empty').length, 1);
 
@@ -416,8 +416,7 @@ test('visualisations explain empty graphs, missing D3 and load failures', async 
     .el('interestedPartyVisualisationsTab')
     .dispatchEvent(new failed.ui.window.Event('shown.bs.tab'));
   await settle(
-    () =>
-      failed.ui.el('status').textContent === 'Failed to load visualisations: Error: Viz offline',
+    () => failed.ui.el('status').textContent === 'Failed to load visualisations: Viz offline',
   );
 });
 

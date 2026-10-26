@@ -327,7 +327,7 @@ test('failures and permissions are explained', async (t) => {
   await analyse(failed.ui, failed.state);
   assert.match(
     failed.ui.el('status').textContent,
-    /Failed to analyse mitigations: Error: Analyser offline/,
+    /Failed to analyse mitigations: Analyser offline/,
   );
   assert.equal(failed.ui.el('mitigatorAnalyse').disabled, false);
 

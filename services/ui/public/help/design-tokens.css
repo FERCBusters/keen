@@ -4,13 +4,13 @@
 /* Keen UI – themeable (Bootstrap-friendly) */
 
 :root {
-  /* Accent palette (defaults to Purple) */
-  --keen-accent: #7e57c2;
-  --keen-accent-700: #6a3fb2;
-  --keen-accent-100: #f2ecfb;
-  --keen-accent-rgb: 126, 87, 194;
+  /* Accent palette (defaults to Ink) */
+  --keen-accent: #004987;
+  --keen-accent-700: #003768;
+  --keen-accent-100: #e4f2ff;
+  --keen-accent-rgb: 0, 73, 135;
   --keen-accent-contrast: #fff;
-  --keen-link-hover: #55308f;
+  --keen-link-hover: #002c57;
 
   /* Chart palette (defaults to accent) */
   --keen-chart-rgb: var(--keen-accent-rgb);
@@ -18,11 +18,6 @@
   /* Neutral palette */
   --keen-ink: #1f1f2a;
   --keen-muted: #5e5e75;
-
-  /* Backwards-compatible aliases */
-  --keen-purple: var(--keen-accent);
-  --keen-purple-700: var(--keen-accent-700);
-  --keen-purple-100: var(--keen-accent-100);
 
   /* Additional aliases for legacy apps */
   --mosp-accent: var(--keen-accent);
@@ -34,20 +29,20 @@
   --bs-primary: var(--keen-accent);
   --bs-primary-rgb: var(--keen-accent-rgb);
   --bs-body-color: var(--keen-ink);
-  --bs-body-bg: #f7f4fb;
+  --bs-body-bg: #f1f6fc;
   --bs-link-color: var(--keen-accent-700);
   --bs-link-hover-color: var(--keen-link-hover);
 }
 
 /* Theme palettes (set on <html data-theme="...">) */
-:root[data-theme='purple'] {
-  --keen-accent: #7e57c2;
-  --keen-accent-700: #6a3fb2;
-  --keen-accent-100: #f2ecfb;
-  --keen-accent-rgb: 126, 87, 194;
+:root[data-theme='ink'] {
+  --keen-accent: #004987;
+  --keen-accent-700: #003768;
+  --keen-accent-100: #e4f2ff;
+  --keen-accent-rgb: 0, 73, 135;
   --keen-accent-contrast: #fff;
-  --keen-link-hover: #55308f;
-  --bs-body-bg: #f7f4fb;
+  --keen-link-hover: #002c57;
+  --bs-body-bg: #f1f6fc;
 }
 
 :root[data-theme='ocean'] {
@@ -108,6 +103,16 @@
   --keen-accent-contrast: #fff;
   --keen-link-hover: #134e4a;
   --bs-body-bg: #f3fbfa;
+}
+
+:root[data-theme='purple'] {
+  --keen-accent: #7e57c2;
+  --keen-accent-700: #6a3fb2;
+  --keen-accent-100: #f2ecfb;
+  --keen-accent-rgb: 126, 87, 194;
+  --keen-accent-contrast: #fff;
+  --keen-link-hover: #55308f;
+  --bs-body-bg: #f7f4fb;
 }
 
 :root[data-bs-theme='dark'] {

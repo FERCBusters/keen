@@ -3,6 +3,7 @@
 // that already covers it, a library template, or a new risk - and hands the
 // chosen draft to the risk wizard, where everything is reviewed before saving.
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -400,7 +401,7 @@ form.addEventListener('submit', async (ev) => {
     render(await apiPost('/api/v1/risks/mitigator/analyse', body));
     notify('Keen Mitigator analysis complete', 'success');
   } catch (e) {
-    notify(`Failed to analyse mitigations: ${String(e)}`);
+    notify(`Failed to analyse mitigations: ${errorText(e)}`);
   } finally {
     $('mitigatorAnalyse').disabled = false;
     $('mitigatorThinking').hidden = true;
@@ -449,7 +450,7 @@ if (!canViewRisks) {
   try {
     categories = (await apiGet('/api/v1/risks/categories'))?.items || [];
   } catch (e) {
-    notify(`Could not load asset categories: ${String(e)}`);
+    notify(`Could not load asset categories: ${errorText(e)}`);
   }
   reset();
   issueInput.focus();

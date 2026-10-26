@@ -99,15 +99,32 @@ test('date edits normalise reversed ranges and remove precise timestamps', async
 for (const empty of [true, false])
   test(
     empty
-      ? 'empty events show a useful message'
+      ? 'empty events show a useful message and explain the retention policy'
       : 'API failure clears stale results and reports the error',
     async (t) => {
       const ui = await fixture(t, { empty, fail: !empty, me: { is_admin: false } });
       assert.match(ui.el('rows').textContent, empty ? /No events match/ : /Failed to load events/);
+      if (empty)
+        assert.match(
+          ui.el('rows').textContent,
+          /Older records may have been removed by the evidence retention policy\./,
+        );
       assert.doesNotMatch(ui.el('eventsActions').textContent, /Add Diary/);
       if (!empty) assert.match(ui.el('status').textContent, /Unavailable/);
     },
   );
+test('a page size beyond the service cap is requested as the cap and the meta line says so', async (t) => {
+  const ui = await fixture(t, { query: '&limit=500' });
+  await settle(() => ui.el('resultMeta').textContent.includes('capped'));
+  const u = new URL(
+    ui.calls.find((c) => c.url.startsWith('/api/v1/events?')).url,
+    'https://keen.example',
+  );
+  assert.equal(u.searchParams.get('limit'), '200');
+  assert.match(ui.el('resultMeta').textContent, /1-101 of 101 · page size capped at 200/);
+  assert.equal(ui.el('limit').value, '200');
+});
+
 test('saved searches contain the applied filters without the current offset', async (t) => {
   const ui = await fixture(t, {
     query: '&offset=50&source=keen-agent',

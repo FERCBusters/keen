@@ -1,6 +1,6 @@
 // A story from a window of the histogram: the events between two instants,
 // under the page's filters, with the viewer's annotation as the first note.
-import { apiGet, apiPost, fmtTs, toast, withFramework } from '/app.js';
+import { errorText, apiGet, apiPost, fmtTs, toast, withFramework } from '/app.js';
 import { featureEnabled } from '/pages/feature-availability.js';
 
 export const WINDOW_STORY_LIMIT = 200;
@@ -92,7 +92,7 @@ export function createWindowStory({ me, framework, button, panel, statusEl, appl
       }
       location.assign(withFramework(`/story.html?id=${encodeURIComponent(story.id)}`, framework));
     } catch (error) {
-      toast(statusEl, `Failed to create the story: ${String(error)}`, 'danger');
+      toast(statusEl, `Failed to create the story: ${errorText(error)}`, 'danger');
     }
   }
 

@@ -197,19 +197,16 @@ test('document readers cannot edit and failures are reported', async (t) => {
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(state.posted.length + state.patched.length, 0);
   const failed = await documentsPage(t, { fail: true });
-  assert.match(
-    failed.ui.el('status').textContent,
-    /Could not load documents: Error: Folders offline/,
-  );
+  assert.match(failed.ui.el('status').textContent, /Could not load documents: Folders offline/);
   const rejected = await documentsPage(t, { postFail: true, revisionFail: true });
   rejected.ui
     .el('folderForm')
     .dispatchEvent(new rejected.ui.window.Event('submit', { cancelable: true }));
-  await settle(() => rejected.ui.el('status').textContent === 'Error: Rejected');
+  await settle(() => rejected.ui.el('status').textContent === 'Rejected');
   rejected.ui.el('documentList').querySelector('[data-document="d1"]').click();
   await settle(() => rejected.ui.el('revisionList').querySelector('button'));
   rejected.ui.el('revisionList').querySelector('button').click();
-  await settle(() => rejected.ui.el('status').textContent === 'Error: Revision gone');
+  await settle(() => rejected.ui.el('status').textContent === 'Revision gone');
 });
 
 // ---------------------------------------------------------- BookStack sections
@@ -372,7 +369,7 @@ test('BookStack readers only see captured versions; disabled or failing catalogu
     .el('sectionForm')
     .dispatchEvent(new empty.ui.window.Event('submit', { cancelable: true }));
   await settle(() =>
-    /Could not capture policy version: Error: Capture refused/.test(
+    /Could not capture policy version: Capture refused/.test(
       empty.ui.el('bookstackStatus').textContent,
     ),
   );
@@ -382,7 +379,7 @@ test('each BookStack lookup that fails is reported without hiding the rest of th
   const sections = await bookstack(t, { sectionsFail: true });
   assert.equal(
     sections.ui.el('bookstackStatus').textContent,
-    'Could not load policy evidence: Error: Sections down',
+    'Could not load policy evidence: Sections down',
   );
   assert.equal(sections.ui.el('bookstackStatus').dataset.alert, 'danger');
   // The capture form still works for the next attempt.
@@ -391,7 +388,7 @@ test('each BookStack lookup that fails is reported without hiding the rest of th
   const requirements = await bookstack(t, { requirementsFail: true });
   assert.equal(
     requirements.ui.el('bookstackStatus').textContent,
-    'Could not load framework requirements: Error: Framework down',
+    'Could not load framework requirements: Framework down',
   );
   assert.deepEqual(
     [...requirements.ui.el('targetRequirement').options].map((o) => o.value),
@@ -406,7 +403,7 @@ test('each BookStack lookup that fails is reported without hiding the rest of th
   );
   assert.equal(
     pages.ui.el('bookstackStatus').textContent,
-    'Could not load BookStack pages: Error: Pages down',
+    'Could not load BookStack pages: Pages down',
   );
 
   const archive = await bookstack(t, { patchFail: true });
@@ -416,7 +413,7 @@ test('each BookStack lookup that fails is reported without hiding the rest of th
   );
   assert.equal(
     archive.ui.el('bookstackStatus').textContent,
-    'Could not update policy evidence: Error: Archive refused',
+    'Could not update policy evidence: Archive refused',
   );
   assert.deepEqual(archive.state.patched, ['/api/v1/isms/bookstack-sections/s1?archived=true']);
   assert.equal(archive.ui.el('sectionRows').querySelectorAll('tr').length, 2);
@@ -482,9 +479,9 @@ async function agentsPage(t, options = {}) {
   // Keen Agents is a tab of the administration page.
   const ui = await page(t, 'agents', {
     htmlName: 'admin',
+    confirm: options.confirm ?? true,
     globals: {
       setInterval: () => 0,
-      confirm: () => options.confirm ?? true,
       navigator: options.navigator || { clipboard: { writeText: async () => {} } },
       ...options.globals,
     },

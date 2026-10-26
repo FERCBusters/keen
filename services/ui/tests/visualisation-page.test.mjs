@@ -166,7 +166,7 @@ test('the Events charts follow the list filters and say so', async (t) => {
   assert.equal(scope.hidden, false);
   assert.equal(
     scope.textContent,
-    'Scoped to the page filters: sources diary, ci; control A.1; mapping rule deploys; text filter any:contains:review; text filter actor:contains:alice; text filter outcome:equals:ok; unmapped only.',
+    'Scoped to the page filters: sources diary, ci; control A.1; mapping rule deploys; text filter any:contains:review; text filter actor:contains:alice; text filter outcome:equals:ok; Unmapped only.',
   );
   // The sunburst by source is offered here and carries the same scope.
   assert.deepEqual(

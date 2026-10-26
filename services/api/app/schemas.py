@@ -23,7 +23,7 @@ class ChangePasswordPayload(BaseModel):
 class PreferencesOut(BaseModel):
     use_local_timezone: bool = Field(default=False)
     timezone: str | None = Field(default=None)
-    theme: str = Field(default="purple")
+    theme: str = Field(default="sand")
     # Visible date input format: default, ymd, or dmy. API values remain YYYY-MM-DD.
     date_format: str = Field(default="default")
     auto_apply_filters: bool = Field(default=False)

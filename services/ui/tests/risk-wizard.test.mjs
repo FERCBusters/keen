@@ -658,7 +658,7 @@ test('save failures keep the wizard on the review step and say why', async (t) =
   next(ui);
   ui.el('skipStep').click();
   next(ui);
-  await settle(() => /Could not save: Error: Rejected/.test(ui.el('status').textContent));
+  await settle(() => /Could not save: Rejected/.test(ui.el('status').textContent));
   assert.equal(visibleStep(ui), 'review');
   assert.equal(ui.el('nextStep').disabled, false);
   assert.equal(state.posted[0].body.subcategory_id, 'sub1');
@@ -669,10 +669,7 @@ test('load problems and permissions are explained', async (t) => {
   assert.match(ui.el('status').textContent, /You need risk.manage permission/);
   assert.equal(ui.el('wizardForm').hidden, true);
   const gone = await wizard(t, { query: '&id=r1', riskFail: true });
-  assert.match(
-    gone.ui.el('status').textContent,
-    /Could not start the risk wizard: Error: Risk gone/,
-  );
+  assert.match(gone.ui.el('status').textContent, /Could not start the risk wizard: Risk gone/);
   // Without the PESTLE(E) feature the method is not offered and its data is not fetched.
   const noPestle = await wizard(t, {
     me: { is_admin: true, features: { enabled: { pestle: false, mitigator: false } } },

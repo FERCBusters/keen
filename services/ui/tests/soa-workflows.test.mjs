@@ -317,7 +317,7 @@ test('risks, PESTLE(E) and Interested Parties render scores, relevance and filte
   );
   assert.equal(
     ip1.querySelectorAll('td')[3].querySelector('a').getAttribute('href'),
-    '/control.html?id=c1&tab=interested-parties&framework=A',
+    '/control.html?id=c1&tab=governance&framework=A',
   );
   assert.match(
     ip1.querySelectorAll('td')[4].textContent,
@@ -343,7 +343,7 @@ test('ISMS objectives, documents, measures, organisation and assets are listed',
   assert.match(o1.textContent, /sam/);
   assert.equal(
     o1.querySelectorAll('td')[5].querySelector('a').getAttribute('href'),
-    '/control.html?id=c1&tab=isms&framework=A',
+    '/control.html?id=c1&tab=governance&framework=A',
   );
   assert.equal(
     o1.querySelectorAll('td')[6].querySelector('a').getAttribute('href'),
@@ -461,7 +461,7 @@ test('a load failure is reported in every section', async (t) => {
   const ui = await soaPage(t, { fail: true });
   assert.equal(
     ui.el('status').textContent,
-    'Failed to load Statement of Applicability: Error: SoA offline',
+    'Failed to load Statement of Applicability: SoA offline',
   );
   for (const [id, text] of [
     ['controlsRows', 'Failed to load controls.'],

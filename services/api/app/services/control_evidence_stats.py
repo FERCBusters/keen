@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import func, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.cache import cache_delete_prefix, cache_get_json, cache_set_json
@@ -196,6 +196,12 @@ def _compute_framework_event_counts(
 
     The result is cached for ``KEEN_AGGREGATE_CACHE_TTL_SECONDS`` and
     periodically warmed by Celery.
+
+    Mapped events are aggregated in one GROUP BY over the framework's
+    mappings, deduplicating multi-mapped events before the count. Grouping
+    reads only the (small) mappings side, never the wide events heap, so the
+    cold dashboard load stays near-linear in mapped evidence on both
+    supported databases.
     """
 
     total = (
@@ -203,13 +209,14 @@ def _compute_framework_event_counts(
         if total_events is not None
         else int(db.query(func.count(Event.id)).scalar() or 0)
     )
-    mapped = (
-        db.query(func.count(func.distinct(Mapping.event_id)))
+    mapped_events = (
+        select(Mapping.event_id)
         .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-        .filter(ControlItem.framework_slug == framework)
-        .scalar()
-        or 0
+        .where(ControlItem.framework_slug == framework)
+        .group_by(Mapping.event_id)
+        .subquery()
     )
+    mapped = db.query(func.count()).select_from(mapped_events).scalar() or 0
     return _normalise_event_counts(total, int(mapped or 0))
 
 

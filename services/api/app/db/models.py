@@ -850,10 +850,8 @@ class User(Base):
     # IANA timezone name (e.g. "Australia/Melbourne"). Optional.
     pref_timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    # UI theme id (e.g. "purple", "ocean", ...)
-    pref_theme: Mapped[str] = mapped_column(
-        String(32), default="purple", nullable=False
-    )
+    # UI theme id (e.g. "sand", "ink", ...)
+    pref_theme: Mapped[str] = mapped_column(String(32), default="sand", nullable=False)
 
     # Visible date input format preference. "default" means use KEEN_UI_DATE_FORMAT.
     pref_date_format: Mapped[str] = mapped_column(

@@ -422,3 +422,34 @@ test('readers cannot start audits, and lists follow features and ISMS access', a
   );
   assert.ok(!ui.calls.some((c) => c.url.startsWith('/api/v1/isms/')));
 });
+
+test('typing in the wizard warns before leaving and clears when the audit is created', async (t) => {
+  const { ui } = await wizard(t);
+  const leave = () => {
+    const event = new ui.window.Event('beforeunload', { cancelable: true });
+    ui.window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  assert.equal(leave(), false);
+  assert.equal(ui.el('unsaved').hidden, true);
+
+  ui.el('auditTitle').value = 'Half-finished audit';
+  ui.el('auditTitle').dispatchEvent(new ui.window.Event('input', { bubbles: true }));
+  assert.equal(ui.el('unsaved').hidden, false);
+  assert.equal(leave(), true);
+
+  next(ui);
+  await settle(() => visible(ui) === 'scope');
+  // Moving between steps keeps the unsaved warning until creation succeeds.
+  assert.equal(leave(), true);
+
+  next(ui);
+  await settle(() => ui.el('attendeeWho').options.length === 3);
+  next(ui);
+  next(ui);
+  await settle(() => visible(ui) === 'review');
+  next(ui);
+  await settle(() => visible(ui) === 'done');
+  assert.equal(ui.el('unsaved').hidden, true);
+  assert.equal(leave(), false);
+});

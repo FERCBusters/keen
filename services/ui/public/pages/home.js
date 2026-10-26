@@ -1,17 +1,5 @@
 import { featureEnabled } from '/pages/feature-availability.js';
-import {
-  initNavbar,
-  apiGet,
-  esc,
-  fmtTs,
-  getCurrentFramework,
-  getFrameworkCatalog,
-  withFramework,
-  toast,
-  offsetPaginationHtml,
-  wireOffsetPagerButtons,
-  collapseToggleButtonHtml,
-} from '/app.js';
+import { errorText, initNavbar, apiGet, esc, getCurrentFramework, withFramework } from '/app.js';
 
 // HTML and unversioned modules must come from the same UI release. A browser
 // can still hold HTML cached before the server's no-store policy was deployed.
@@ -21,14 +9,18 @@ function ensureHomeLayout() {
     'homeTasks',
     'homeKpis',
     'homeAttention',
+    'homeActivity',
+    'homeSpark',
+    'homeSparkNote',
+    'homeActivitySources',
+    'homeSources',
+    'homeSourcesMore',
     'homeOverview',
-    'homeExploreHeading',
-    'homeExplorer',
     'homeFrameworkName',
   ];
   if (required.every((id) => document.getElementById(id))) return true;
   const url = new URL(location.href);
-  const revision = '20261007-home-2';
+  const revision = '20261026-home-5';
   if (url.searchParams.get('__keen_home') !== revision) {
     // Preserve the chosen framework and other parameters. A different URL
     // bypasses a fresh cached document without creating a reload loop.
@@ -48,360 +40,45 @@ function ensureHomeLayout() {
 if (ensureHomeLayout()) {
   const me = await initNavbar();
 
-  const status = document.getElementById('status');
-  const entryCards = document.getElementById('entryCards');
-  const explorerTitle = document.getElementById('explorerTitle');
-  const explorerSubtitle = document.getElementById('explorerSubtitle');
-  const explorerCanvas = document.getElementById('explorerCanvas');
-  const crumbs = document.getElementById('crumbs');
-  const btnBack = document.getElementById('explorerBack');
-  const btnRoot = document.getElementById('explorerRoot');
-
   let framework = getCurrentFramework();
   let overview = null;
   let frameworkInfo = null;
-  let stack = [];
-  let current = null;
-  let clauseCache = null;
-  let transitionActive = false;
-  let latestEvidenceCursor = null;
-  let latestEvidenceTimer = null;
-  let latestEvidenceNextTimer = null;
-  let latestEvidenceAnimating = false;
-  const latestEvidenceQueue = [];
-  const latestEvidenceSeenIds = new Set();
-  const pageState = new Map();
-  let sectionDomCounter = 0;
-  const PAGE_SIZE = 100;
-  const LATEST_EVIDENCE_INITIAL_DELAY_MS = 5000;
-  const LATEST_EVIDENCE_POLL_MS = 30000;
-  const LATEST_EVIDENCE_LIMIT = 5;
-  const LATEST_EVIDENCE_BETWEEN_ITEMS_MS = 2200;
-  const LATEST_EVIDENCE_AFTER_SCROLL_PAUSE_MS = 900;
+  // 30-day activity overview, reused for the sparkline and the source list.
+  let activity = null;
 
-  const ROOT_NODE = {
-    kind: 'root',
-    id: '',
-    label: 'Home',
-    title: 'Explore connections',
-    subtitle:
-      'Choose a starting point above, then use Zoom in where available to open the next connected layer.',
-  };
-
-  const KINDS = {
-    controls: {
-      singular: 'control',
-      label: 'Controls',
-      icon: 'bi-shield-check',
-      href: '/controls.html',
-      tone: 'primary',
-    },
-    clauses: {
-      singular: 'clause',
-      label: 'Clauses',
-      icon: 'bi-diagram-3',
-      href: '/clauses.html',
-      tone: 'info',
-    },
-    risks: {
-      singular: 'risk',
-      label: 'Risk register',
-      icon: 'bi-exclamation-triangle',
-      href: '/risks.html',
-      tone: 'warning',
-    },
-    pestle: {
-      singular: 'pestle_item',
-      label: 'PESTLE(E)',
-      icon: 'bi-globe2',
-      href: '/pestle.html',
-      tone: 'info',
-    },
-    interested_parties: {
-      singular: 'interested_party',
-      label: 'Interested parties',
-      icon: 'bi-people',
-      href: '/interested_parties.html',
-      tone: 'primary',
-    },
-    audits: {
-      singular: 'audit',
-      label: 'Audits',
-      icon: 'bi-clipboard2-check',
-      href: '/audits.html',
-      tone: 'success',
-    },
-    effectiveness_measures: {
-      singular: 'effectiveness_measure',
-      label: 'Effectiveness measures',
-      icon: 'bi-speedometer2',
-      href: '/isms.html?tab=effectiveness',
-      tone: 'primary',
-    },
-    evidence: {
-      singular: 'evidence',
-      label: 'Evidence',
-      icon: 'bi-file-earmark-text',
-      href: '/events.html',
-      tone: 'secondary',
-    },
-    sources: {
-      singular: 'source',
-      label: 'Sources',
-      icon: 'bi-hdd-network',
-      href: '/sources.html',
-      tone: 'dark',
-    },
-  };
-
-  const LEAF_KIND_CONFIGS = {
-    business_process: {
-      singular: 'business_process',
-      label: 'Business process',
-      icon: 'bi-diagram-2',
-      tone: 'secondary',
-    },
-    communication: {
-      singular: 'communication',
-      label: 'Communication',
-      icon: 'bi-megaphone',
-      tone: 'secondary',
-    },
-    metric_entry: {
-      singular: 'metric_entry',
-      label: 'Metric entry',
-      icon: 'bi-activity',
-      tone: 'secondary',
-    },
-  };
-
-  const KIND_CONFIGS = { ...KINDS, ...LEAF_KIND_CONFIGS };
-
-  const ENTITY_TO_COLLECTION = {
-    control: 'controls',
-    clause: 'clauses',
-    risk: 'risks',
-    pestle_item: 'pestle',
-    interested_party: 'interested_parties',
-    audit: 'audits',
-    effectiveness_measure: 'effectiveness_measures',
-    evidence: 'evidence',
-    source: 'sources',
-  };
-
-  function pluralKind(kind) {
-    return ENTITY_TO_COLLECTION[kind] || kind;
-  }
-
-  function collectionConfig(kind) {
-    if (kind === 'control_section') return KINDS.controls;
-    return KIND_CONFIGS[kind] || KIND_CONFIGS[pluralKind(kind)] || KINDS.evidence;
-  }
-
-  function shortText(value, limit = 120) {
-    const s = String(value || '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!s) return '';
-    return s.length > limit ? `${s.slice(0, Math.max(0, limit - 1))}…` : s;
-  }
+  // Render sentinel: a failed load is reported, never dressed up as "no data".
+  const LOAD_FAILED = { failed: true };
 
   async function safeGet(url, fallback = null) {
     try {
       return await apiGet(url);
-    } catch {
+    } catch (err) {
+      if (fallback === null) {
+        // Permissions and missing records read like the not-found layer;
+        // transport and other failures get the load-failure reporting.
+        if (/\b(403|404)\b/.test(errorText(err))) return null;
+        console.debug(`Home load failed: ${url}`, err);
+        return LOAD_FAILED;
+      }
       return fallback;
     }
   }
 
-  function latestEvidenceTickerElements() {
-    return {
-      wrap: document.getElementById('latestEvidenceTicker'),
-      link: document.getElementById('latestEvidenceTickerLink'),
-      text: document.getElementById('latestEvidenceTickerText'),
-    };
-  }
+  // The catalog is fetched at most once per page load; the navbar also keeps
+  // its own copy.
+  let catalogData = null;
 
-  function sleep(ms) {
-    return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, ms || 0)));
-  }
-
-  function latestEvidenceText(event) {
-    const source = event?.source || 'unknown-source';
-    const summary = shortText(event?.summary || event?.identifier || 'New evidence received', 260);
-    const bits = [source];
-    if (event?.system) bits.push(event.system);
-    if (event?.action) bits.push(event.action);
-    bits.push(summary);
-    return bits.filter(Boolean).join(' :: ');
-  }
-
-  function latestEvidenceIdentity(event) {
-    return String(
-      event?.id ||
-        event?.event_id ||
-        `${event?.created_at || ''}:${event?.timestamp || ''}:${event?.summary || ''}`,
-    );
-  }
-
-  function latestEvidenceTimestampMs(event) {
-    const raw = event?.created_at || event?.timestamp || '';
-    const parsed = raw ? Date.parse(raw) : Number.NaN;
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  function latestEvidenceItemsFromResponse(data) {
-    return Array.isArray(data?.events) ? data.events.filter(Boolean) : [];
-  }
-
-  function setLatestEvidenceCursor(events) {
-    const newest = events.reduce((best, event) => {
-      if (!best) return event;
-      return latestEvidenceTimestampMs(event) > latestEvidenceTimestampMs(best) ? event : best;
-    }, null);
-    latestEvidenceCursor = newest?.created_at || newest?.timestamp || latestEvidenceCursor;
-  }
-
-  function rememberLatestEvidence(id) {
-    if (!id) return;
-    latestEvidenceSeenIds.add(id);
-    if (latestEvidenceSeenIds.size <= 100) return;
-    const oldest = latestEvidenceSeenIds.values().next().value;
-    latestEvidenceSeenIds.delete(oldest);
-  }
-
-  function enqueueLatestEvidence(events) {
-    for (const event of events) {
-      const id = latestEvidenceIdentity(event);
-      if (!id || latestEvidenceSeenIds.has(id)) continue;
-      rememberLatestEvidence(id);
-      latestEvidenceQueue.push(event);
-    }
-    scheduleLatestEvidenceNext(0);
-  }
-
-  function animateLatestEvidenceHorizontalScroll(link) {
-    if (prefersReducedMotion()) return sleep(1800);
-
-    link.scrollLeft = 0;
-    const overflow = Math.max(0, link.scrollWidth - link.clientWidth);
-    if (overflow < 8) return sleep(2600);
-
-    const duration = Math.min(8000, Math.max(3600, overflow * 26));
-    return new Promise((resolve) => {
-      const start = performance.now();
-      const step = (now) => {
-        const elapsed = now - start;
-        const progress = Math.min(1, elapsed / duration);
-        link.scrollLeft = Math.round(overflow * progress);
-        if (progress < 1) {
-          window.requestAnimationFrame(step);
-        } else {
-          resolve();
-        }
-      };
-      window.requestAnimationFrame(step);
-    });
-  }
-
-  async function renderLatestEvidenceTicker(event) {
-    const { wrap, link, text } = latestEvidenceTickerElements();
-    if (!wrap || !link || !text || !event) return;
-
-    const hadContent = !wrap.classList.contains('d-none') && text.textContent;
-    if (hadContent && !prefersReducedMotion()) {
-      wrap.classList.remove('keen-latest-evidence-ticker-slide-in');
-      wrap.classList.add('keen-latest-evidence-ticker-slide-out');
-      await sleep(240);
-    }
-
-    const id = event.id || event.event_id || '';
-    const href = event.url || (id ? `/event.html?id=${encodeURIComponent(id)}` : '/events.html');
-    link.href = withFramework(href, framework);
-    link.title = event.timestamp
-      ? `Open latest evidence from ${fmtTs(event.timestamp)}`
-      : 'Open latest evidence';
-    link.scrollLeft = 0;
-    text.textContent = latestEvidenceText(event);
-
-    wrap.classList.remove(
-      'd-none',
-      'keen-latest-evidence-ticker-pulse',
-      'keen-latest-evidence-ticker-slide-out',
-      'keen-latest-evidence-ticker-slide-in',
-    );
-    // Restart the slide-in animation for each item in the latest-evidence batch.
-    void wrap.offsetWidth;
-    wrap.classList.add('keen-latest-evidence-ticker-slide-in');
-
-    await sleep(220);
-    await animateLatestEvidenceHorizontalScroll(link);
-    await sleep(LATEST_EVIDENCE_AFTER_SCROLL_PAUSE_MS);
-  }
-
-  async function showNextLatestEvidence() {
-    latestEvidenceNextTimer = null;
-    if (latestEvidenceAnimating || !latestEvidenceQueue.length) return;
-
-    latestEvidenceAnimating = true;
-    const event = latestEvidenceQueue.shift();
-    try {
-      await renderLatestEvidenceTicker(event);
-    } finally {
-      latestEvidenceAnimating = false;
-      if (latestEvidenceQueue.length) {
-        scheduleLatestEvidenceNext(LATEST_EVIDENCE_BETWEEN_ITEMS_MS);
-      }
-    }
-  }
-
-  function scheduleLatestEvidenceNext(delayMs = LATEST_EVIDENCE_BETWEEN_ITEMS_MS) {
-    if (latestEvidenceNextTimer || latestEvidenceAnimating || !latestEvidenceQueue.length) {
-      return;
-    }
-    latestEvidenceNextTimer = window.setTimeout(showNextLatestEvidence, Math.max(0, delayMs));
-  }
-
-  async function refreshLatestEvidenceTicker() {
-    if (document.visibilityState === 'hidden') return;
-
-    const params = new URLSearchParams();
-    params.set('limit', String(LATEST_EVIDENCE_LIMIT));
-    if (latestEvidenceCursor) params.set('after', latestEvidenceCursor);
-    const query = params.toString();
-    const url = `/api/v1/evidence/latest${query ? `?${query}` : ''}`;
-
-    try {
-      const data = await apiGet(url);
-      const events = latestEvidenceItemsFromResponse(data);
-      if (!events.length) return;
-
-      setLatestEvidenceCursor(events);
-      enqueueLatestEvidence(events);
-    } catch (err) {
-      // Best-effort ambient UI; never interrupt the main homepage experience.
-      console.debug('Latest evidence ticker refresh failed', err);
-    }
-  }
-
-  function startLatestEvidenceTicker() {
-    const { wrap, link, text } = latestEvidenceTickerElements();
-    if (!wrap || !link || !text || latestEvidenceTimer) return;
-
-    window.setTimeout(async () => {
-      await refreshLatestEvidenceTicker();
-      latestEvidenceTimer = window.setInterval(
-        refreshLatestEvidenceTicker,
-        LATEST_EVIDENCE_POLL_MS,
-      );
-    }, LATEST_EVIDENCE_INITIAL_DELAY_MS);
+  async function loadCatalog() {
+    if (catalogData) return catalogData;
+    catalogData = await safeGet('/api/v1/frameworks', null);
+    return catalogData;
   }
 
   async function resolveFramework() {
     framework = getCurrentFramework();
     if (framework) return framework;
 
-    const catalog = await safeGet('/api/v1/frameworks', null);
+    const catalog = await loadCatalog();
     const items = Array.isArray(catalog?.items) ? catalog.items : [];
     const selected = String(
       catalog?.default ||
@@ -411,11 +88,6 @@ if (ensureHomeLayout()) {
         '',
     ).trim();
     framework = selected || getCurrentFramework(selected) || '';
-
-    // Prime the shared design-system cache for the navbar/framework picker when possible.
-    try {
-      await getFrameworkCatalog();
-    } catch {}
     return framework;
   }
 
@@ -429,1229 +101,15 @@ if (ensureHomeLayout()) {
     return `${u.pathname}${u.search}`;
   }
 
-  function prefersReducedMotion() {
-    return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
-  }
-
-  function activeLayerElements() {
-    return [entryCards, explorerCanvas].filter((el) => el && !el.classList.contains('d-none'));
-  }
-
-  function markCardsEntering(scope = document) {
-    if (prefersReducedMotion()) return;
-    const root = scope instanceof Element ? scope : document;
-    const cards = Array.from(root.querySelectorAll('.home-entry-card, .home-node-card'));
-    cards.forEach((card, index) => {
-      card.removeAttribute('data-entering');
-      card.style.setProperty('--card-index', String(Math.min(index, 12)));
-      // Restart the animation when moving back to a layer that already existed.
-      void card.offsetWidth;
-      card.setAttribute('data-entering', 'true');
-    });
-  }
-
-  async function animateLayerSwap(callback, direction = 'forward') {
-    if (prefersReducedMotion()) {
-      await callback();
-      markCardsEntering(document.querySelector('.keen-home') || document);
-      return;
-    }
-
-    const outgoingLayers = activeLayerElements();
-    outgoingLayers.forEach((el) => {
-      el.classList.remove('home-layer-swap-back');
-      if (direction === 'back') el.classList.add('home-layer-swap-back');
-      el.classList.add('home-layer-outgoing');
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 140));
-    // The layer loaders call setLoading() synchronously before awaiting API
-    // responses. Clear the outgoing opacity before invoking the loader so that
-    // the interim Bootstrap spinner is visible during slow relationship fetches.
-    outgoingLayers.forEach((el) =>
-      el.classList.remove('home-layer-outgoing', 'home-layer-swap-back'),
-    );
-
-    await callback();
-
-    const incomingLayers = activeLayerElements();
-    incomingLayers.forEach((el) => {
-      el.classList.remove('home-layer-outgoing', 'home-layer-swap-back');
-      if (direction === 'back') el.classList.add('home-layer-swap-back');
-      el.classList.add('home-layer-incoming');
-    });
-    markCardsEntering(document.querySelector('.keen-home') || document);
-
-    requestAnimationFrame(() => {
-      incomingLayers.forEach((el) => el.classList.add('is-visible'));
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 220));
-    incomingLayers.forEach((el) =>
-      el.classList.remove('home-layer-incoming', 'home-layer-swap-back', 'is-visible'),
-    );
-  }
-
-  async function zoomToWithAnimation(kind, id) {
-    if (transitionActive) return;
-    transitionActive = true;
-    try {
-      await animateLayerSwap(() => zoomTo(kind, id), 'forward');
-    } finally {
-      transitionActive = false;
-    }
-  }
-
-  function setLoading(message = 'Loading') {
-    explorerCanvas.innerHTML = `<div class="loading-state d-flex gap-2 align-items-center justify-content-center text-center small-muted p-4"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>${esc(message)}</span></div>`;
-  }
-
-  function setEmpty(message) {
-    explorerCanvas.innerHTML = `<div class="empty-state p-4 text-center small-muted">${esc(message)}</div>`;
-  }
-
-  function setEntryCardsVisible(visible) {
-    entryCards?.classList.toggle('d-none', !visible);
-    document.getElementById('homeOverview').hidden = !visible;
-    document.getElementById('homeExploreHeading').hidden = !visible;
-    document.getElementById('homeExplorer').hidden = visible;
-  }
-
-  function entityHref(kind, item) {
-    const id = item?.id || item?.event_id || '';
-    const fw = framework;
-    if (kind === 'control_section')
-      return withFramework('/controls.html?q=' + encodeURIComponent(item.id || ''), fw);
-    if (kind === 'control')
-      return id
-        ? withFramework(`/control.html?id=${encodeURIComponent(id)}`, fw)
-        : withFramework('/controls.html', fw);
-    if (kind === 'clause')
-      return id
-        ? withFramework(`/clause.html?id=${encodeURIComponent(id)}`, fw)
-        : withFramework('/clauses.html', fw);
-    if (kind === 'risk')
-      return id
-        ? withFramework(`/risk.html?id=${encodeURIComponent(id)}`, fw)
-        : withFramework('/risks.html', fw);
-    if (kind === 'pestle_item')
-      return id
-        ? withFramework(`/pestle_item.html?id=${encodeURIComponent(id)}`, fw)
-        : withFramework('/pestle.html', fw);
-    if (kind === 'interested_party')
-      return id
-        ? withFramework(`/interested_party.html?id=${encodeURIComponent(id)}`, fw)
-        : withFramework('/interested_parties.html', fw);
-    if (kind === 'audit')
-      return id
-        ? withFramework(`/audit.html?id=${encodeURIComponent(id)}`, fw)
-        : withFramework('/audits.html', fw);
-    if (kind === 'effectiveness_measure')
-      return withFramework(
-        id
-          ? `/isms-effectiveness-measure.html?id=${encodeURIComponent(id)}`
-          : '/isms.html?tab=effectiveness',
-        fw,
-      );
-    if (kind === 'metric_entry')
-      return id
-        ? withFramework(`/isms-effectiveness-metric.html?id=${encodeURIComponent(id)}`, fw)
-        : withFramework('/isms.html?tab=effectiveness', fw);
-    if (kind === 'evidence')
-      return id
-        ? withFramework(`/event.html?id=${encodeURIComponent(id)}`, fw)
-        : withFramework('/events.html', fw);
-    if (kind === 'source') {
-      const src = item?.id || item?.source || item?.label || '';
-      return withFramework(`/sources.html?source=${encodeURIComponent(src)}`, fw);
-    }
-    return withFramework('/', fw);
-  }
-
-  function primaryText(kind, item) {
-    if (kind === 'control_section') return 'Section ' + item.id;
-    if (kind === 'control') return `${item.ref || ''} ${item.title || ''}`.trim() || 'Control';
-    if (kind === 'clause') return `${item.ref || ''} ${item.title || ''}`.trim() || 'Clause';
-    if (kind === 'risk')
-      return (
-        item.title ||
-        [item.asset_name || item.asset, item.threat_summary].filter(Boolean).join(' - ') ||
-        'Risk'
-      );
-    if (kind === 'pestle_item')
-      return [item.type, item.lens, item.item].filter(Boolean).join(' / ') || 'PESTLE(E) item';
-    if (kind === 'business_process') return item.name || item.title || 'Business process';
-    if (kind === 'interested_party')
-      return (
-        item.title ||
-        [item.name?.name || item.name, item.nature?.name || item.nature]
-          .filter(Boolean)
-          .join(' - ') ||
-        'Interested party'
-      );
-    if (kind === 'communication')
-      return (
-        item.title || [item.event, item.with_whom].filter(Boolean).join(' / ') || 'Communication'
-      );
-    if (kind === 'audit') return item.title || 'Audit';
-    if (kind === 'effectiveness_measure') return item.summary || 'Effectiveness measure';
-    if (kind === 'metric_entry') return item.value_display || item.source_title || 'Metric entry';
-    if (kind === 'source') return item.label || item.source || item.id || 'Source';
-    return item.summary || item.title || item.identifier || 'Evidence';
-  }
-
-  function secondaryText(kind, item) {
-    if (kind === 'control_section') return `${item.count} controls · explore this section`;
-    if (kind === 'evidence')
-      return [item.timestamp ? fmtTs(item.timestamp) : '', item.source || '']
-        .filter(Boolean)
-        .join(' · ');
-    if (kind === 'audit') return item.status || '';
-    if (kind === 'effectiveness_measure')
-      return [
-        item.metric_key ? `key: ${item.metric_key}` : '',
-        item.target_display ? `target ${item.target_display}` : '',
-      ]
-        .filter(Boolean)
-        .join(' · ');
-    if (kind === 'metric_entry')
-      return [item.period || '', item.source_type || ''].filter(Boolean).join(' · ');
-    if (kind === 'risk') return Array.isArray(item.risk_types) ? item.risk_types.join(', ') : '';
-    if (kind === 'pestle_item')
-      return item.overall_relevance?.label || item.overall_relevance_label || '';
-    if (kind === 'business_process') return item.relevance?.label || item.relevance_label || '';
-    if (kind === 'interested_party') return item.nature?.name || item.nature || '';
-    if (kind === 'communication')
-      return [item.when, (item.methods || []).join(', ')].filter(Boolean).join(' · ');
-    if (kind === 'control')
-      return item.in_scope === true ? 'In scope' : item.in_scope === false ? 'Out of scope' : '';
-    if (kind === 'clause') return item.parent_ref ? `Under ${item.parent_ref}` : '';
-    return '';
-  }
-
-  function gridItem(html) {
-    return `<div class="col-12 col-lg-6 col-xxl-4">${html}</div>`;
-  }
-
-  function pageSlug(value) {
-    return (
-      String(value || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '') || 'section'
-    );
-  }
-
-  function homeSectionBodyId(sectionKey, title) {
-    sectionDomCounter += 1;
-    return [
-      'home-section',
-      pageSlug(currentPageScope()),
-      pageSlug(sectionKey || title),
-      String(sectionDomCounter),
-    ]
-      .filter(Boolean)
-      .join('-');
-  }
-
-  function homeSectionCollapseButton(bodyId, title) {
-    return collapseToggleButtonHtml({
-      targetId: bodyId,
-      expanded: true,
-      className: 'btn btn-sm btn-outline-secondary home-section-collapse-toggle',
-      controlsLabel: title,
-    });
-  }
-
-  function currentPageScope() {
-    const kind = current?.kind || 'root';
-    const id = current?.id || '';
-    return `${kind}:${id}`;
-  }
-
-  function paginationKey(sectionKey) {
-    return `${currentPageScope()}:${sectionKey}`;
-  }
-
-  function clampPage(sectionKey, total, pageSize) {
-    const maxPage = Math.max(0, Math.ceil(Number(total || 0) / pageSize) - 1);
-    const key = paginationKey(sectionKey);
-    const raw = Number(pageState.get(key) || 0);
-    const page = Math.min(Math.max(0, Number.isFinite(raw) ? raw : 0), maxPage);
-    if (page !== raw) pageState.set(key, page);
-    return page;
-  }
-
-  function paginationHtml(sectionKey, total, page, pageSize) {
-    if (Number(total || 0) <= pageSize) return '';
-    const maxPage = Math.max(0, Math.ceil(total / pageSize) - 1);
-    const start = page * pageSize + 1;
-    const end = Math.min(total, (page + 1) * pageSize);
-    return `<div class="home-pagination d-flex flex-wrap gap-2 align-items-center justify-content-between mt-3">
-    <div class="small-muted">Showing ${start.toLocaleString()}-${end.toLocaleString()} of ${Number(total).toLocaleString()}</div>
-    <div class="btn-group btn-group-sm" role="group" aria-label="Section pagination">
-      <button class="btn btn-outline-secondary js-section-page" type="button" data-section-key="${esc(sectionKey)}" data-page="${esc(String(page - 1))}" ${page <= 0 ? 'disabled' : ''}><i class="bi bi-chevron-left" aria-hidden="true"></i> Previous</button>
-      <button class="btn btn-outline-secondary js-section-page" type="button" data-section-key="${esc(sectionKey)}" data-page="${esc(String(page + 1))}" ${page >= maxPage ? 'disabled' : ''}>Next <i class="bi bi-chevron-right" aria-hidden="true"></i></button>
-    </div>
-  </div>`;
-  }
-
-  function paginatedSectionHtml(
-    title,
-    subtitle,
-    items,
-    renderItem,
-    { empty = 'No connected items found.', sectionKey = '', pageSize = PAGE_SIZE } = {},
-  ) {
-    const allItems = Array.isArray(items) ? items : [];
-    const key = sectionKey || pageSlug(title);
-    if (!allItems.length) return sectionHtml(title, subtitle, '', empty, { sectionKey: key });
-
-    const safePageSize = Math.max(1, Number(pageSize || PAGE_SIZE));
-    const page = clampPage(key, allItems.length, safePageSize);
-    const visibleItems = allItems.slice(page * safePageSize, (page + 1) * safePageSize);
-    const cardsHtml = visibleItems.map((item) => renderItem(item)).join('');
-    const pager = paginationHtml(key, allItems.length, page, safePageSize);
-    const bodyId = homeSectionBodyId(key, title);
-    const collapseButton = homeSectionCollapseButton(bodyId, title);
-
-    return `<section class="home-section mb-4" data-section-key="${esc(key)}">
-    <div class="home-section-header d-flex flex-wrap gap-2 align-items-start justify-content-between mb-2">
-      <div class="min-w-0">
-        <h2 class="h5 mb-0">${esc(title)}</h2>
-        ${subtitle ? `<div class="small-muted">${esc(subtitle)}</div>` : ''}
-      </div>
-      <div class="home-section-actions d-flex flex-wrap gap-2 align-items-center justify-content-end">
-        ${pager ? `<div class="d-none d-md-block">${pager}</div>` : ''}
-        ${collapseButton}
-      </div>
-    </div>
-    <div id="${esc(bodyId)}" class="collapse show home-section-body">
-      <div class="row g-3 home-layer-grid">${cardsHtml}</div>
-      ${pager ? `<div class="d-md-none">${pager}</div>` : ''}
-    </div>
-  </section>`;
-  }
-
-  function collectionPaginationHtml(kind, total, offset, limit) {
-    return offsetPaginationHtml({
-      kind,
-      total,
-      offset,
-      limit,
-      wrapperClass:
-        'home-pagination d-flex flex-wrap gap-2 align-items-center justify-content-between mt-3',
-      summaryPrefix: 'Showing ',
-      formatNumber: true,
-      buttonClass: 'btn btn-outline-secondary',
-      pageClass: 'js-collection-page js-offset-page',
-    });
-  }
-
-  function serverPaginatedSectionHtml(
-    title,
-    subtitle,
-    cardsHtml,
-    { kind, total = 0, offset = 0, limit = PAGE_SIZE } = {},
-  ) {
-    const pager = collectionPaginationHtml(kind, total, offset, limit);
-    const key = kind || pageSlug(title);
-    const bodyId = homeSectionBodyId(key, title);
-    const collapseButton = homeSectionCollapseButton(bodyId, title);
-    return `<section class="home-section mb-4" data-section-key="${esc(key)}">
-    <div class="home-section-header d-flex flex-wrap gap-2 align-items-start justify-content-between mb-2">
-      <div class="min-w-0">
-        <h2 class="h5 mb-0">${esc(title)}</h2>
-        ${subtitle ? `<div class="small-muted">${esc(subtitle)}</div>` : ''}
-      </div>
-      <div class="home-section-actions d-flex flex-wrap gap-2 align-items-center justify-content-end">
-        ${pager ? `<div class="d-none d-md-block">${pager}</div>` : ''}
-        ${collapseButton}
-      </div>
-    </div>
-    <div id="${esc(bodyId)}" class="collapse show home-section-body">
-      ${cardsHtml ? `<div class="row g-3 home-layer-grid">${cardsHtml}</div>` : `<div class="small-muted border rounded p-3 bg-light">No connected items found.</div>`}
-      ${pager ? `<div class="d-md-none">${pager}</div>` : ''}
-    </div>
-  </section>`;
-  }
-
-  function hasDeeperLayer(kind, item = {}) {
-    // Evidence/event cards are terminal in this explorer for now: open the
-    // event detail page instead, where source, controls, audits, artifacts,
-    // incidents and questions can be viewed reliably. This must be checked
-    // before collection kinds because `evidence` is both the collection name
-    // and the entity card kind.
-    if (kind === 'evidence') return false;
-
-    if (kind === 'control_section') return true;
-    if (KINDS[kind]) return true;
-
-    const id = item?.id || item?.event_id || item?.source || item?.label || '';
-    if (
-      [
-        'control',
-        'clause',
-        'risk',
-        'pestle_item',
-        'interested_party',
-        'audit',
-        'source',
-        'effectiveness_measure',
-      ].includes(kind)
-    )
-      return Boolean(id);
-
-    // These are leaf cards on the homepage: they open on their owning page and
-    // leave the current layer in place.
-    if (['business_process', 'communication', 'metric_entry'].includes(kind)) return false;
-
-    return false;
-  }
-
-  function openAttrs() {
-    return ' target="_blank" rel="noopener noreferrer"';
-  }
-
-  function cardHtml(kind, item, { zoom = null, open = true } = {}) {
-    const cfg = collectionConfig(kind);
-    const label = primaryText(kind, item);
-    const meta = secondaryText(kind, item);
-    const id = item.id || item.event_id || item.source || item.label || '';
-    const canZoom = zoom === null ? hasDeeperLayer(kind, item) : Boolean(zoom);
-    const body =
-      kind === 'risk'
-        ? item.threat_summary
-        : kind === 'pestle_item'
-          ? item.rationale
-          : kind === 'interested_party'
-            ? item.description
-            : kind === 'metric_entry'
-              ? item.notes
-              : item.description;
-    return `<div class="home-node-card card h-100" data-kind="${esc(kind)}" data-id="${esc(id)}">
-    <div class="card-body d-flex flex-column gap-2">
-      <div class="d-flex align-items-start gap-2 min-w-0">
-        <div class="home-node-icon text-bg-${esc(cfg.tone)}"><i class="bi ${esc(cfg.icon)}" aria-hidden="true"></i></div>
-        <div class="min-w-0 flex-grow-1">
-          <div class="home-node-title" title="${esc(label)}">${esc(label)}</div>
-          ${meta ? `<div class="home-node-meta small-muted">${esc(meta)}</div>` : ''}
-        </div>
-      </div>
-      ${body ? `<div class="home-node-description small text-secondary">${esc(shortText(body, 180))}</div>` : ''}
-      <div class="d-flex flex-wrap gap-2 mt-auto pt-2">
-        ${canZoom ? `<button class="btn btn-sm btn-outline-primary js-zoom" type="button"><i class="bi bi-zoom-in" aria-hidden="true"></i> Zoom in</button>` : ''}
-        ${open ? `<a class="btn btn-sm btn-outline-secondary" href="${esc(entityHref(kind, item))}"${openAttrs()}><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> Open this</a>` : ''}
-      </div>
-    </div>
-  </div>`;
-  }
-
-  function sectionHtml(
-    title,
-    subtitle,
-    cardsHtml,
-    empty = 'No connected items found.',
-    { sectionKey = '' } = {},
-  ) {
-    const key = sectionKey || pageSlug(title);
-    const bodyId = homeSectionBodyId(key, title);
-    const collapseButton = homeSectionCollapseButton(bodyId, title);
-    return `<section class="home-section mb-4" data-section-key="${esc(key)}">
-    <div class="home-section-header d-flex flex-wrap gap-2 align-items-start justify-content-between mb-2">
-      <div class="min-w-0">
-        <h2 class="h5 mb-0">${esc(title)}</h2>
-        ${subtitle ? `<div class="small-muted">${esc(subtitle)}</div>` : ''}
-      </div>
-      <div class="home-section-actions d-flex flex-wrap gap-2 align-items-center justify-content-end">
-        ${collapseButton}
-      </div>
-    </div>
-    <div id="${esc(bodyId)}" class="collapse show home-section-body">
-      ${cardsHtml ? `<div class="row g-3 home-layer-grid">${cardsHtml}</div>` : `<div class="small-muted border rounded p-3 bg-light">${esc(empty)}</div>`}
-    </div>
-  </section>`;
-  }
-
-  function renderCrumbs() {
-    const parts = [...stack, current]
-      .filter((x) => x && x.kind !== 'root')
-      .map((x) => esc(x.label || collectionConfig(x.kind).label));
-    crumbs.innerHTML =
-      `<span>${esc(frameworkInfo?.name || framework)}</span>` +
-      (parts.length ? ' / ' + parts.join(' <span class="mx-1">/</span> ') : '');
-    btnBack.disabled = stack.length === 0;
-  }
-
-  function showRoot() {
-    current = { ...ROOT_NODE };
-    setEntryCardsVisible(true);
-    explorerTitle.textContent = ROOT_NODE.title;
-    explorerSubtitle.textContent = ROOT_NODE.subtitle;
-    renderCrumbs();
-    setEmpty('Pick one of the widgets above to start exploring Keen as a connected graph.');
-    markCardsEntering(entryCards);
-  }
-
-  function wireHomeControls(scope = explorerCanvas) {
-    for (const btn of Array.from(scope.querySelectorAll('.js-zoom'))) {
-      btn.addEventListener('click', () => {
-        const card = btn.closest('[data-kind]');
-        if (!card) return;
-        const kind = card.dataset.kind || '';
-        const id = card.dataset.id || '';
-        if (!kind) return;
-        zoomToWithAnimation(kind, id);
-      });
-    }
-
-    wireOffsetPagerButtons(
-      {
-        prev: Array.from(
-          scope.querySelectorAll(
-            '.js-offset-page[data-direction="prev"], .js-collection-page[data-pager="prev"]',
-          ),
-        ),
-        next: Array.from(
-          scope.querySelectorAll(
-            '.js-offset-page[data-direction="next"], .js-collection-page[data-pager="next"]',
-          ),
-        ),
-      },
-      (_direction, btn) => {
-        if (transitionActive || btn.disabled) return;
-        const kind = btn.dataset.kind || current?.kind || '';
-        const nextOffset = Math.max(0, Number(btn.dataset.offset || 0));
-        const oldOffset = Math.max(0, Number(current?.offset || 0));
-        if (!kind) return;
-        transitionActive = true;
-        animateLayerSwap(
-          () => loadCollection(kind, false, nextOffset),
-          nextOffset >= oldOffset ? 'forward' : 'back',
-        ).finally(() => {
-          transitionActive = false;
-        });
-      },
-    );
-
-    for (const btn of Array.from(scope.querySelectorAll('.js-section-page'))) {
-      btn.addEventListener('click', () => {
-        if (transitionActive || btn.disabled) return;
-        const sectionKey = btn.dataset.sectionKey || '';
-        const nextPage = Math.max(0, Number(btn.dataset.page || 0));
-        if (!sectionKey || !current) return;
-        const key = paginationKey(sectionKey);
-        const oldPage = Math.max(0, Number(pageState.get(key) || 0));
-        pageState.set(key, nextPage);
-        transitionActive = true;
-        animateLayerSwap(
-          () => zoomTo(current.kind, current.id || '', false, { offset: current.offset || 0 }),
-          nextPage >= oldPage ? 'forward' : 'back',
-        ).finally(() => {
-          transitionActive = false;
-        });
-      });
-    }
-  }
-
-  function enter(node, push = true) {
-    if (push && current) stack.push(current);
-    current = node;
-    setEntryCardsVisible(false);
-    explorerTitle.textContent = node.title || node.label || 'Explore connections';
-    explorerSubtitle.textContent =
-      node.subtitle || 'Use Zoom in where available to open the next connected layer.';
-    renderCrumbs();
-  }
-
-  async function loadEntryCards() {
-    const defs = [
-      {
-        kind: 'controls',
-        title: 'Controls',
-        description: 'Explore framework sections, controls and their supporting evidence.',
-      },
-      {
-        kind: 'clauses',
-        title: 'Clauses',
-        description: "Follow this framework's clause hierarchy and its linked evidence.",
-      },
-      {
-        kind: 'risks',
-        title: 'Risk register',
-        description:
-          'Explore risk scenarios, affected assets and the requirements that mitigate them.',
-      },
-      {
-        kind: 'pestle',
-        title: 'PESTLE(E)',
-        description:
-          'Start from strategic/contextual impact items and move to relevant clauses, controls and business processes.',
-      },
-      {
-        kind: 'interested_parties',
-        title: 'Interested parties',
-        description:
-          'Start from interested parties and move to linked controls or communication audiences.',
-      },
-      {
-        kind: 'audits',
-        title: 'Audits',
-        description: 'Start from an engagement and move through scope and sampled evidence.',
-      },
-      {
-        kind: 'effectiveness_measures',
-        title: 'Effectiveness measures',
-        description:
-          'Start from ISMS effectiveness measures and move to linked controls, sources and metric entries.',
-      },
-      {
-        kind: 'evidence',
-        title: 'Evidence',
-        description: 'Start with events and move backwards to sources, controls and audits.',
-      },
-      {
-        kind: 'sources',
-        title: 'Sources',
-        description: 'Start from a source and inspect the evidence it produced.',
-      },
-    ];
-
-    const allowed = {
-      controls: overview ? overview.control_count > 0 : frameworkInfo?.control_count > 0,
-      clauses: overview ? overview.clause_count > 0 : frameworkInfo?.has_clauses === true,
-      risks: me?.can_view_risks,
-      pestle: me?.can_view_pestle,
-      interested_parties: me?.can_view_interested_parties,
-      audits: me?.can_view_audits,
-      effectiveness_measures: me?.can_view_isms,
-      evidence: me?.can_view_events,
-      sources: me?.can_view_events,
-    };
-    entryCards.innerHTML = defs
-      .filter(
-        (d) =>
-          featureEnabled(
-            me,
-            { risks: 'risk_cia', effectiveness_measures: 'effectiveness' }[d.kind] || d.kind,
-          ) &&
-          (allowed[d.kind] || (me?.is_admin && !['controls', 'clauses'].includes(d.kind))),
-      )
-      .map((d) => {
-        const cfg = collectionConfig(d.kind);
-        return `<div class="col-12 col-md-6 col-xl-4">
-      <div class="card h-100 home-entry-card" data-kind="${esc(d.kind)}">
-        <div class="card-body d-flex flex-column gap-2">
-          <div class="d-flex align-items-start gap-3 min-w-0">
-            <div class="home-entry-icon text-bg-${esc(cfg.tone)}"><i class="bi ${esc(cfg.icon)}" aria-hidden="true"></i></div>
-            <div class="flex-grow-1 min-w-0">
-              <h2 class="h5 mb-0">${esc(d.title)}</h2>
-            </div>
-          </div>
-          <p class="mb-0 text-secondary">${esc(d.description)}</p>
-          <div class="d-flex flex-wrap gap-2 mt-auto">
-            <button class="btn btn-sm btn-primary js-entry-zoom" type="button"><i class="bi bi-zoom-in" aria-hidden="true"></i> Zoom in</button>
-            <a class="btn btn-sm btn-outline-secondary" href="${esc(withFramework(cfg.href, framework))}"${openAttrs()}><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> Open this</a>
-          </div>
-        </div>
-      </div>
-    </div>`;
-      })
-      .join('');
-
-    markCardsEntering(entryCards);
-
-    for (const btn of Array.from(entryCards.querySelectorAll('.js-entry-zoom'))) {
-      btn.addEventListener('click', () => {
-        const card = btn.closest('[data-kind]');
-        const kind = card?.dataset?.kind || '';
-        if (kind) zoomToWithAnimation(kind, '');
-      });
-    }
-  }
-
-  async function loadCollection(kind, push = true, offset = 0) {
-    const cfg = collectionConfig(kind);
-    const safeOffset = Math.max(0, Number(offset || 0));
-    enter(
-      {
-        kind,
-        id: '',
-        label: cfg.label,
-        title: cfg.label,
-        subtitle: `Pick a ${cfg.singular} to zoom into its connected layer.`,
-        offset: safeOffset,
-      },
-      push,
-    );
-    setLoading(`Loading ${cfg.label.toLowerCase()}`);
-
-    let data = { items: [], total: 0, limit: PAGE_SIZE, offset: safeOffset };
-    let renderKind = cfg.singular;
-
-    if (kind === 'controls') {
-      data = await safeGet(
-        apiUrl('/api/v1/controls', { limit: PAGE_SIZE, offset: safeOffset }),
-        data,
-      );
-    } else if (kind === 'clauses') {
-      data = await safeGet(
-        apiUrl('/api/v1/clauses', { limit: PAGE_SIZE, offset: safeOffset }),
-        data,
-      );
-    } else if (kind === 'risks') {
-      data = await safeGet(apiUrl('/api/v1/risks', { limit: PAGE_SIZE, offset: safeOffset }), data);
-    } else if (kind === 'pestle') {
-      data = await safeGet(
-        apiUrl('/api/v1/pestle/items', { limit: PAGE_SIZE, offset: safeOffset }),
-        data,
-      );
-      renderKind = 'pestle_item';
-    } else if (kind === 'interested_parties') {
-      data = await safeGet(
-        apiUrl('/api/v1/interested-parties', { limit: PAGE_SIZE, offset: safeOffset }),
-        data,
-      );
-      renderKind = 'interested_party';
-    } else if (kind === 'audits') {
-      data = await safeGet(
-        apiUrl('/api/v1/audits', { limit: PAGE_SIZE, offset: safeOffset }),
-        data,
-      );
-    } else if (kind === 'effectiveness_measures') {
-      data = await safeGet(
-        apiUrl('/api/v1/isms/effectiveness-measures', { limit: PAGE_SIZE, offset: safeOffset }),
-        data,
-      );
-      renderKind = 'effectiveness_measure';
-    } else if (kind === 'evidence') {
-      data = await safeGet(
-        apiUrl('/api/v1/events', { limit: PAGE_SIZE, offset: safeOffset }),
-        data,
-      );
-      renderKind = 'evidence';
-    } else if (kind === 'sources') {
-      data = await safeGet(
-        apiUrl(
-          '/api/v1/sources',
-          { limit: PAGE_SIZE, offset: safeOffset },
-          { includeFramework: false },
-        ),
-        data,
-      );
-      renderKind = 'source';
-    }
-
-    const items = Array.isArray(data.items) ? data.items : [];
-    const total = Number(data.total ?? items.length ?? 0);
-    if (!items.length && safeOffset > 0) {
-      const prevOffset = Math.max(0, safeOffset - PAGE_SIZE);
-      return loadCollection(kind, false, prevOffset);
-    }
-    if (!items.length) {
-      setEmpty(`No ${cfg.label.toLowerCase()} found, or you do not have permission to view them.`);
-      return;
-    }
-
-    explorerCanvas.innerHTML = serverPaginatedSectionHtml(
-      cfg.label,
-      'Use these starting points to move into a connected layer. Use the pager to move through everything available at this level.',
-      items.map((it) => gridItem(cardHtml(renderKind, normaliseItem(renderKind, it)))).join(''),
-      { kind, total, offset: safeOffset, limit: PAGE_SIZE },
-    );
-    wireHomeControls();
-  }
-
-  function normaliseItem(kind, it) {
-    const out = { ...(it || {}) };
-    if (kind === 'source' && !out.id) out.id = out.source;
-    if (kind === 'evidence' && !out.id && out.event_id) out.id = out.event_id;
-    if (kind === 'risk') {
-      out.title =
-        out.title ||
-        [out.asset_name || out.asset, shortText(out.threat_summary, 70)]
-          .filter(Boolean)
-          .join(' - ');
-    }
-    if (kind === 'pestle_item') {
-      out.title =
-        out.title || [out.type, out.lens, shortText(out.item, 90)].filter(Boolean).join(' / ');
-      out.description = out.description || out.rationale || '';
-    }
-    if (kind === 'effectiveness_measure') {
-      out.title = out.title || out.summary || 'Effectiveness measure';
-      out.description = out.description || '';
-    }
-    if (kind === 'metric_entry') {
-      out.title = out.title || out.value_display || out.source_title || 'Metric entry';
-      out.description = out.description || out.qualitative_value || out.notes || '';
-    }
-    if (kind === 'interested_party') {
-      out.title =
-        out.title ||
-        [out.name?.name || out.name, out.nature?.name || out.nature].filter(Boolean).join(' - ');
-      out.description =
-        out.description ||
-        `${Number(out.control_count || (out.controls || []).length || 0)} linked controls · ${Number(out.communication_count || (out.communications || []).length || 0)} communications`;
-    }
-    return out;
-  }
-
-  async function getClauses() {
-    if (!clauseCache)
-      clauseCache = await safeGet(apiUrl('/api/v1/clauses', { limit: 5000, offset: 0 }), {
-        items: [],
-      });
-    return clauseCache;
-  }
-
-  async function loadControl(id, push = true) {
-    enter(
-      {
-        kind: 'control',
-        id,
-        label: 'Control',
-        title: 'Control connections',
-        subtitle: 'Controls connect clauses, risks, interested parties and evidence.',
-      },
-      push,
-    );
-    setLoading('Loading control connections');
-    const [control, evidence, risks, interestedParties, effectiveness] = await Promise.all([
-      safeGet(`/api/v1/controls/${encodeURIComponent(id)}`, null),
-      safeGet(`/api/v1/controls/${encodeURIComponent(id)}/evidence?limit=${PAGE_SIZE}`, {
-        items: [],
-      }),
-      safeGet(apiUrl(`/api/v1/controls/${encodeURIComponent(id)}/risks`), { items: [] }),
-      safeGet(apiUrl(`/api/v1/controls/${encodeURIComponent(id)}/interested-parties`), {
-        items: [],
-      }),
-      safeGet(apiUrl(`/api/v1/controls/${encodeURIComponent(id)}/effectiveness-measures`), {
-        items: [],
-      }),
-    ]);
-    if (!control) return setEmpty('Control not found.');
-    current.label = `${control.ref || ''} ${control.title || ''}`.trim() || 'Control';
-    renderCrumbs();
-
-    const clauses = control.clauses || [];
-    const evItems = (evidence.items || []).map((x) => ({
-      ...x,
-      id: x.event_id,
-      summary: x.summary,
-      source: x.source,
-      timestamp: x.timestamp,
-    }));
-    const riskItems = (risks.items || []).map((x) => normaliseItem('risk', x));
-    const interestedPartyItems = (interestedParties.items || []).map((x) =>
-      normaliseItem('interested_party', x),
-    );
-    const effectivenessItems = (effectiveness.items || []).map((x) =>
-      normaliseItem('effectiveness_measure', x),
-    );
-
-    explorerCanvas.innerHTML = `
-    ${nodeHeader('control', control, control.in_scope ? 'In scope' : 'Out of scope')}
-    ${clauses.length ? paginatedSectionHtml('Linked clauses', 'Explore linked clauses in this framework.', clauses, (c) => gridItem(cardHtml('clause', { id: c.clause_id, ref: c.ref, title: c.title })), { sectionKey: 'control-clauses' }) : ''}
-    ${paginatedSectionHtml('Recent evidence', 'Events mapped to this control.', evItems, (e) => gridItem(cardHtml('evidence', e)), { sectionKey: 'control-evidence' })}
-    ${paginatedSectionHtml('Related risks', 'Risk scenarios mapped to this control.', riskItems, (r) => gridItem(cardHtml('risk', r)), { sectionKey: 'control-risks' })}
-    ${paginatedSectionHtml('Effectiveness measures', 'Measures that use this control as part of the ISMS effectiveness ledger.', effectivenessItems, (m) => gridItem(cardHtml('effectiveness_measure', m)), { sectionKey: 'control-effectiveness-measures' })}
-    ${paginatedSectionHtml('Interested parties', 'Interested parties mapped to this control.', interestedPartyItems, (p) => gridItem(cardHtml('interested_party', p)), { sectionKey: 'control-interested-parties' })}
-  `;
-    wireHomeControls();
-  }
-
-  async function loadClause(id, push = true) {
-    enter(
-      {
-        kind: 'clause',
-        id,
-        label: 'Clause',
-        title: 'Clause connections',
-        subtitle: 'Clauses connect framework structure to controls and evidence.',
-      },
-      push,
-    );
-    setLoading('Loading clause connections');
-    const [clause, controls, events, allClauses] = await Promise.all([
-      safeGet(`/api/v1/clauses/${encodeURIComponent(id)}`, null),
-      safeGet(`/api/v1/clauses/${encodeURIComponent(id)}/controls?limit=${PAGE_SIZE}`, {
-        items: [],
-      }),
-      safeGet(apiUrl('/api/v1/events', { clause: id, limit: PAGE_SIZE }), { items: [] }),
-      getClauses(),
-    ]);
-    if (!clause) return setEmpty('Clause not found.');
-    current.label = `${clause.ref || ''} ${clause.title || ''}`.trim() || 'Clause';
-    renderCrumbs();
-
-    const children = (allClauses.items || []).filter(
-      (c) => String(c.parent_id || '') === String(clause.id),
-    );
-    const parent = clause.parent_id
-      ? (allClauses.items || []).find((c) => String(c.id) === String(clause.parent_id))
-      : null;
-    const ctrlItems = controls.items || [];
-    const evItems = events.items || [];
-
-    explorerCanvas.innerHTML = `
-    ${nodeHeader('clause', clause, 'Explore this clause through its framework hierarchy, linked controls and evidence.')}
-    ${parent ? sectionHtml('Parent clause', 'Move back up the framework hierarchy.', gridItem(cardHtml('clause', parent))) : ''}
-    ${paginatedSectionHtml('Child clauses', 'Move deeper into the clause hierarchy.', children, (c) => gridItem(cardHtml('clause', c)), { sectionKey: 'clause-children' })}
-    ${paginatedSectionHtml('Applicable controls', 'Controls connected to this clause.', ctrlItems, (c) => gridItem(cardHtml('control', c)), { sectionKey: 'clause-controls' })}
-    ${paginatedSectionHtml('Recent evidence', 'Events connected through linked controls.', evItems, (e) => gridItem(cardHtml('evidence', e)), { sectionKey: 'clause-evidence' })}
-  `;
-    wireHomeControls();
-  }
-
-  async function loadRisk(id, push = true) {
-    enter(
-      {
-        kind: 'risk',
-        id,
-        label: 'Risk',
-        title: 'Risk connections',
-        subtitle: 'Risks connect assets and threats back to mitigating controls.',
-      },
-      push,
-    );
-    setLoading('Loading risk connections');
-    const [risk, controls] = await Promise.all([
-      safeGet(apiUrl(`/api/v1/risks/${encodeURIComponent(id)}`), null),
-      safeGet(apiUrl(`/api/v1/risks/${encodeURIComponent(id)}/controls`), { items: [] }),
-    ]);
-    if (!risk) return setEmpty('Risk not found, or you do not have permission to view it.');
-    const r = normaliseItem('risk', risk);
-    current.label = primaryText('risk', r);
-    renderCrumbs();
-    explorerCanvas.innerHTML = `
-    ${nodeHeader('risk', r, (r.risk_types || []).join(', ') || 'Risk scenario')}
-    ${paginatedSectionHtml('Mapped controls', 'Controls currently linked to this risk scenario.', controls.items || [], (c) => gridItem(cardHtml('control', c)), { sectionKey: 'risk-controls' })}
-  `;
-    wireHomeControls();
-  }
-
-  async function loadPestleItem(id, push = true) {
-    enter(
-      {
-        kind: 'pestle_item',
-        id,
-        label: 'PESTLE(E)',
-        title: 'PESTLE(E) connections',
-        subtitle:
-          'PESTLE(E) items connect context and impact assessment to relevant clauses, controls and business processes.',
-      },
-      push,
-    );
-    setLoading('Loading PESTLE(E) connections');
-    const item = await safeGet(apiUrl(`/api/v1/pestle/items/${encodeURIComponent(id)}`), null);
-    if (!item)
-      return setEmpty('PESTLE(E) item not found, or you do not have permission to view it.');
-    const p = normaliseItem('pestle_item', item);
-    current.label = primaryText('pestle_item', p);
-    renderCrumbs();
-
-    const processes = (item.business_processes || []).map((link) => ({
-      ...(link.business_process || {}),
-      relevance: link.relevance || null,
-      relevance_label: link.relevance?.label || '-',
-      description: `Relevance: ${link.relevance?.label || '-'}`,
-    }));
-    const clauses = (item.clauses || []).map((link) => ({
-      ...(link.clause || {}),
-      relevance: link.relevance || null,
-      relevance_label: link.relevance?.label || '-',
-      description: `PESTLE(E) relevance: ${link.relevance?.label || '-'}`,
-    }));
-    const controls = item.related_controls || [];
-
-    explorerCanvas.innerHTML = `
-    ${nodeHeader('pestle_item', p, [p.type, p.lens, p.overall_relevance?.label].filter(Boolean).join(' · '))}
-    ${paginatedSectionHtml('Business process relevance', 'Business processes scored against this PESTLE(E) item.', processes, (bp) => gridItem(cardHtml('business_process', bp, { zoom: false, open: false })), { sectionKey: 'pestle-processes' })}
-    ${paginatedSectionHtml('Relevant clauses', 'Framework clauses scored against this PESTLE(E) item.', clauses, (c) => gridItem(cardHtml('clause', c)), { sectionKey: 'pestle-clauses' })}
-    ${paginatedSectionHtml('Related controls', 'Controls linked to those relevant clauses.', controls, (c) => gridItem(cardHtml('control', c)), { sectionKey: 'pestle-controls' })}
-  `;
-    wireHomeControls();
-  }
-
-  async function loadInterestedParty(id, push = true) {
-    enter(
-      {
-        kind: 'interested_party',
-        id,
-        label: 'Interested party',
-        title: 'Interested party connections',
-        subtitle: 'Interested parties connect nature of interest, communications and controls.',
-      },
-      push,
-    );
-    setLoading('Loading interested party connections');
-    const item = await safeGet(
-      apiUrl(`/api/v1/interested-parties/${encodeURIComponent(id)}`),
-      null,
-    );
-    if (!item)
-      return setEmpty('Interested party not found, or you do not have permission to view it.');
-    const party = normaliseItem('interested_party', item);
-    current.label = primaryText('interested_party', party);
-    renderCrumbs();
-    const controls = item.controls || [];
-    const communications = (item.communications || []).map((c) =>
-      normaliseItem('communication', c),
-    );
-    explorerCanvas.innerHTML = `
-    ${nodeHeader('interested_party', party, item.nature?.name || '')}
-    ${paginatedSectionHtml('Mapped controls', 'Controls currently linked to this interested party.', controls, (c) => gridItem(cardHtml('control', c)), { sectionKey: 'interested-party-controls' })}
-    ${paginatedSectionHtml('Communications', 'Communication events, audiences, timing and methods for this interested party.', communications, (c) => gridItem(cardHtml('communication', c, { zoom: false, open: false })), { sectionKey: 'interested-party-communications' })}
-  `;
-    wireHomeControls();
-  }
-
-  async function loadAudit(id, push = true) {
-    enter(
-      {
-        kind: 'audit',
-        id,
-        label: 'Audit',
-        title: 'Audit connections',
-        subtitle: 'Audits connect scope, sampled evidence, findings and reports.',
-      },
-      push,
-    );
-    setLoading('Loading audit connections');
-    const audit = await safeGet(`/api/v1/audits/${encodeURIComponent(id)}`, null);
-    if (!audit) return setEmpty('Audit not found, or you do not have permission to view it.');
-    current.label = audit.title || 'Audit';
-    renderCrumbs();
-
-    const controls = audit.scoped_controls || [];
-    const clauses = audit.scoped_clauses || [];
-    const evidence = (audit.evidence || []).map((x) => ({
-      ...x,
-      id: x.event_id || x.id,
-      summary: x.title || x.notes || x.evidence_url || 'Audit evidence',
-      timestamp: x.added_at,
-    }));
-
-    explorerCanvas.innerHTML = `
-    ${nodeHeader('audit', audit, audit.status || 'open')}
-    ${paginatedSectionHtml('Scoped clauses', 'Clauses in this audit engagement.', clauses, (c) => gridItem(cardHtml('clause', c)), { sectionKey: 'audit-clauses' })}
-    ${paginatedSectionHtml('Scoped controls', 'Controls in this audit engagement.', controls, (c) => gridItem(cardHtml('control', c)), { sectionKey: 'audit-controls' })}
-    ${paginatedSectionHtml('Sampled evidence', 'Evidence attached to this audit.', evidence, (e) => gridItem(cardHtml('evidence', e, { zoom: false, open: !!e.event_id })), { sectionKey: 'audit-evidence' })}
-  `;
-    wireHomeControls();
-  }
-
-  async function loadEffectivenessMeasure(id, push = true) {
-    enter(
-      {
-        kind: 'effectiveness_measure',
-        id,
-        label: 'Effectiveness measure',
-        title: 'Effectiveness measure connections',
-        subtitle:
-          'Effectiveness measures connect ISMS controls to recorded metrics and their sources.',
-      },
-      push,
-    );
-    setLoading('Loading effectiveness measure connections');
-    const item = await safeGet(
-      apiUrl(`/api/v1/isms/effectiveness-measures/${encodeURIComponent(id)}`),
-      null,
-    );
-    if (!item)
-      return setEmpty('Effectiveness measure not found, or you do not have permission to view it.');
-    const measure = normaliseItem('effectiveness_measure', item);
-    current.label = primaryText('effectiveness_measure', measure);
-    renderCrumbs();
-
-    const controls = Array.isArray(item.controls) ? item.controls : [];
-    const entries = (Array.isArray(item.metric_entries) ? item.metric_entries : []).map((entry) =>
-      normaliseItem('metric_entry', entry),
-    );
-    const sourceMap = new Map();
-    for (const entry of entries) {
-      const src = String(entry.source_type || '').trim();
-      if (!src || src === 'other' || sourceMap.has(src)) continue;
-      sourceMap.set(src, { id: src, source: src, label: src });
-    }
-    const sources = Array.from(sourceMap.values());
-
-    explorerCanvas.innerHTML = `
-    ${nodeHeader('effectiveness_measure', measure, measure.target_display ? `Target ${measure.target_display}` : 'ISMS effectiveness metric')}
-    ${paginatedSectionHtml('Linked controls', 'Controls this effectiveness measure is used to assess.', controls, (c) => gridItem(cardHtml('control', c)), { sectionKey: 'effectiveness-controls' })}
-    ${paginatedSectionHtml('Metric sources', 'Keen sources that have reported metric entries against this measure.', sources, (src) => gridItem(cardHtml('source', src)), { sectionKey: 'effectiveness-sources' })}
-    ${paginatedSectionHtml('Recent metric entries', 'Recorded numeric or qualitative results for this measure.', entries, (entry) => gridItem(cardHtml('metric_entry', entry, { zoom: false, open: Boolean(entry.source_event_id) })), { sectionKey: 'effectiveness-metric-entries' })}
-  `;
-    wireHomeControls();
-  }
-
-  async function loadSource(sourceName, push = true) {
-    enter(
-      {
-        kind: 'source',
-        id: sourceName,
-        label: sourceName || 'Source',
-        title: 'Source connections',
-        subtitle: 'Sources connect inbound systems to evidence and mapped controls.',
-      },
-      push,
-    );
-    setLoading('Loading source connections');
-    const [sources, events, effectiveness] = await Promise.all([
-      safeGet(apiUrl('/api/v1/sources', {}, { includeFramework: false }), { items: [] }),
-      safeGet(apiUrl('/api/v1/events', { source: sourceName, limit: PAGE_SIZE }), { items: [] }),
-      safeGet(apiUrl(`/api/v1/sources/${encodeURIComponent(sourceName)}/effectiveness-measures`), {
-        items: [],
-      }),
-    ]);
-    const src = (sources.items || []).find((x) => String(x.source) === String(sourceName)) || {
-      id: sourceName,
-      source: sourceName,
-      label: sourceName,
-    };
-    current.label = src.label || src.source || 'Source';
-    renderCrumbs();
-    const effectivenessItems = (effectiveness.items || []).map((x) =>
-      normaliseItem('effectiveness_measure', x),
-    );
-    explorerCanvas.innerHTML = `
-    ${nodeHeader('source', src, 'Explore evidence ingested from this source.')}
-    ${paginatedSectionHtml('Related effectiveness measures', 'Measures with metric entries recorded against this source.', effectivenessItems, (m) => gridItem(cardHtml('effectiveness_measure', m)), { sectionKey: 'source-effectiveness-measures' })}
-    ${paginatedSectionHtml('Recent evidence', 'Events ingested from this source.', events.items || [], (e) => gridItem(cardHtml('evidence', e)), { sectionKey: 'source-evidence' })}
-  `;
-    wireHomeControls();
-  }
-
-  function nodeHeader(kind, item, meta = '') {
-    const cfg = collectionConfig(kind);
-    const title = primaryText(kind, item);
-    const href = entityHref(kind, item);
-    const body = item.threat_summary || item.summary || item.notes || item.description || '';
-    return `<div class="home-node-header border rounded p-3 mb-4 bg-light">
-    <div class="d-flex flex-wrap gap-3 align-items-start justify-content-between">
-      <div class="d-flex gap-3 align-items-start min-w-0 flex-grow-1">
-        <div class="home-entry-icon text-bg-${esc(cfg.tone)}"><i class="bi ${esc(cfg.icon)}" aria-hidden="true"></i></div>
-        <div class="min-w-0 flex-grow-1">
-          <div class="small-muted text-uppercase fw-semibold">${esc(cfg.singular)}</div>
-          <h2 class="h4 mb-1 home-node-heading">${esc(title)}</h2>
-          ${meta ? `<div class="small-muted">${esc(meta)}</div>` : ''}
-          ${body ? `<p class="mb-0 mt-2 text-secondary">${esc(shortText(body, 260))}</p>` : ''}
-        </div>
-      </div>
-      <a class="btn btn-outline-primary flex-shrink-0" href="${esc(href)}"${openAttrs()}><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> Open this</a>
-    </div>
-  </div>`;
-  }
-
-  async function zoomTo(kind, id, push = true, options = {}) {
-    const k = String(kind || '');
-    try {
-      if (k === 'root') return showRoot();
-      if (k === 'controls' || k === 'control_section')
-        return await loadControlTree(k === 'control_section' ? id : '', push);
-      if (KINDS[k]) return await loadCollection(k, push, options.offset || 0);
-      if (k === 'control') return await loadControl(id, push);
-      if (k === 'clause') return await loadClause(id, push);
-      if (k === 'risk') return await loadRisk(id, push);
-      if (k === 'pestle_item') return await loadPestleItem(id, push);
-      if (k === 'interested_party') return await loadInterestedParty(id, push);
-      if (k === 'audit') return await loadAudit(id, push);
-      if (k === 'effectiveness_measure') return await loadEffectivenessMeasure(id, push);
-      if (k === 'source') return await loadSource(id, push);
-    } catch (e) {
-      toast(status, `Could not load connection layer: ${String(e)}`, 'danger');
-      setEmpty('Could not load this connection layer.');
-    }
-  }
-
-  btnBack?.addEventListener('click', () => {
-    if (transitionActive) return;
-    const prev = stack.pop();
-    if (!prev) return;
-    transitionActive = true;
-    animateLayerSwap(async () => {
-      if (prev.kind === 'root') {
-        showRoot();
-        return;
-      }
-      current = null;
-      await zoomTo(prev.kind, prev.id || '', false, { offset: prev.offset || 0 });
-    }, 'back').finally(() => {
-      transitionActive = false;
-    });
-  });
-
-  btnRoot?.addEventListener('click', () => {
-    if (transitionActive) return;
-    transitionActive = true;
-    animateLayerSwap(async () => {
-      stack = [];
-      showRoot();
-    }, 'back').finally(() => {
-      transitionActive = false;
-    });
-  });
-
-  document.getElementById('homeSearch')?.addEventListener('submit', (ev) => {
-    ev.preventDefault();
-    const q = String(document.getElementById('homeQ')?.value || '').trim();
-    const url = new URL('/events.html', location.origin);
-    if (q) url.searchParams.set('q', q);
-    if (framework) url.searchParams.set('framework', framework);
-    location.href = url.pathname + url.search;
-  });
-
-  await resolveFramework();
-  await loadOverview();
-  await loadEntryCards();
-  showRoot();
-  if (me?.can_view_events || me?.is_admin) startLatestEvidenceTicker();
-
-  async function loadControlTree(prefix = '', push = true) {
-    enter(
-      {
-        kind: prefix ? 'control_section' : 'controls',
-        id: prefix,
-        label: prefix ? `Section ${prefix}` : 'Controls',
-        title: prefix ? `Section ${prefix}` : 'Framework controls',
-        subtitle: 'Explore the reference hierarchy, then open a control and its evidence.',
-      },
-      push,
-    );
-    setLoading('Loading framework structure');
-    const data = await apiGet(apiUrl('/api/v1/home/controls', { prefix }));
-    const groups = data.groups || [],
-      items = data.items || [];
-    if (!groups.length && !items.length) return setEmpty('No controls in this section.');
-    explorerCanvas.innerHTML =
-      (groups.length
-        ? paginatedSectionHtml(
-            'Sections',
-            'Zoom into a branch of this framework.',
-            groups,
-            (item) => gridItem(cardHtml('control_section', item)),
-            { sectionKey: 'control-sections' },
-          )
-        : '') +
-      (items.length
-        ? paginatedSectionHtml(
-            'Controls',
-            'Follow a control to its evidence and related records.',
-            items,
-            (item) => gridItem(cardHtml('control', item)),
-            { sectionKey: 'section-controls' },
-          )
-        : '');
-    wireHomeControls();
-  }
-
   function homeLink(href) {
     return esc(withFramework(href, framework));
   }
   function homeNumber(value) {
     return Number.isFinite(value) ? value.toLocaleString() : '-';
   }
+
+  // Every role-permitted shortcut renders in a compact grid: the navigation is
+  // the point of this card, so nothing is graduated behind a discloser.
   function renderHomeTasks() {
     const admin = me?.is_admin;
     const tasks = [
@@ -1696,16 +154,35 @@ if (ensureHomeLayout()) {
         '/isms.html',
       ],
     ];
+    const item = ([, icon, label, href]) =>
+      `<a class="home-task" href="${homeLink(href)}"><i class="bi ${icon}" aria-hidden="true"></i><span>${esc(label)}</span><i class="bi bi-arrow-right ms-auto" aria-hidden="true"></i></a>`;
     document.getElementById('homeTasks').innerHTML =
       tasks
         .filter((t) => t[0])
-        .map(
-          ([, icon, label, href]) =>
-            `<a class="home-task" href="${homeLink(href)}"><i class="bi ${icon}" aria-hidden="true"></i><span>${esc(label)}</span><i class="bi bi-arrow-right ms-auto" aria-hidden="true"></i></a>`,
-        )
-        .join('') || '<p class="small-muted">Explore the framework cards below.</p>';
+        .map(item)
+        .join('') || '<p class="small-muted mb-0">No shortcuts are available for your role.</p>';
     document.getElementById('homeSearch').hidden = !(admin || me?.can_view_events);
   }
+
+  // Coverage ring: an SVG progress ring using the theme accent; described for
+  // screen readers with role="img" and an explicit label.
+  function coverageRing(percent) {
+    const clamped = Math.min(Math.max(percent, 0), 100);
+    const radius = 18;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference * (1 - clamped / 100);
+    return (
+      `<svg class="home-kpi-ring" viewBox="0 0 44 44" role="img" aria-label="${esc(percent)}% of in-scope controls covered by evidence">` +
+      `<circle class="home-kpi-ring-track" cx="22" cy="22" r="${radius}" fill="none"/>` +
+      `<circle class="home-kpi-ring-value" cx="22" cy="22" r="${radius}" fill="none" stroke-linecap="round" stroke-dasharray="${circumference.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" transform="rotate(-90 22 22)"/></svg>`
+    );
+  }
+
+  function kpi(label, value, detail, href, ringPercent = null) {
+    const ring = ringPercent === null ? '' : coverageRing(ringPercent);
+    return `<a class="home-kpi text-decoration-none" href="${homeLink(href)}"><span class="small">${esc(label)}</span><div class="home-kpi-main"><strong>${esc(value)}</strong>${ring}</div><span class="small text-secondary">${esc(detail)}</span></a>`;
+  }
+
   function renderOverview() {
     const kpis = document.getElementById('homeKpis'),
       attention = document.getElementById('homeAttention');
@@ -1718,9 +195,6 @@ if (ensureHomeLayout()) {
       return;
     }
     const cards = [];
-    function kpi(label, value, detail, href, progress = null) {
-      return `<a class="home-kpi text-decoration-none" href="${homeLink(href)}"><span class="small">${esc(label)}</span><strong>${esc(value)}</strong><span class="small text-secondary">${esc(detail)}</span>${progress === null ? '' : `<div class="home-progress" role="progressbar" aria-label="In-scope control evidence coverage" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress}%"></span></div>`}</a>`;
-    }
     const coverage = overview.coverage;
     if (overview.control_count > 0) {
       const percent = coverage?.in_scope
@@ -1758,7 +232,7 @@ if (ensureHomeLayout()) {
       );
       cards.push(
         kpi(
-          'Events awaiting mapping',
+          'Unmapped events',
           homeNumber(overview.events.unmapped),
           'Not mapped to this framework',
           '/events.html?unmapped=true',
@@ -1775,57 +249,173 @@ if (ensureHomeLayout()) {
         ),
       );
     kpis.innerHTML = cards.join('');
+    // Attention pills only carry live findings; a zero count is absence, not work.
     const counts = [
-      [coverage?.without_evidence, 'control gaps', '/controls.html?gaps=1'],
-      [overview.overdue_audits, 'overdue audits', '/audits.html'],
+      [coverage?.without_evidence, 'control gap', 'control gaps', '/controls.html?gaps=1'],
+      [overview.overdue_audits, 'overdue audit', 'overdue audits', '/audits.html'],
       [
         overview.measures_outside_threshold,
+        'measure outside threshold',
         'measures outside threshold',
         '/isms.html?tab=effectiveness',
       ],
       [
         overview.collectors_with_failures,
+        'API collector with failures · all frameworks',
         'API collectors with failures · all frameworks',
         '/admin.html#integrations',
       ],
-    ].filter(([count]) => Number.isFinite(count));
+    ].filter(([count]) => Number.isFinite(count) && count > 0);
     const highlights = counts
       .map(
-        ([count, label, href]) =>
-          `<a class="badge rounded-pill ${count ? 'text-bg-warning' : 'text-bg-secondary'} text-decoration-none me-1 mb-2 p-2" href="${homeLink(href)}">${homeNumber(count)} ${esc(label)}</a>`,
+        ([count, singular, plural, href]) =>
+          `<a class="badge rounded-pill text-bg-warning text-decoration-none me-1 mb-2 p-2" href="${homeLink(href)}">${homeNumber(count)} ${esc(count === 1 ? singular : plural)}</a>`,
       )
       .join('');
     const items = overview.attention || [];
     const unmapped =
       overview.events?.unmapped > 0
-        ? `<a class="home-attention-item" href="${homeLink('/events.html?unmapped=true')}"><strong>${homeNumber(overview.events.unmapped)} events awaiting mapping</strong><div class="small text-secondary">Review events and create rules for the evidence you need.</div></a>`
+        ? `<a class="home-attention-item" href="${homeLink('/events.html?unmapped=true')}"><strong>${homeNumber(overview.events.unmapped)} unmapped event${overview.events.unmapped === 1 ? '' : 's'}</strong><div class="small text-secondary">Review unmapped events and create rules for the evidence you need.</div></a>`
         : '';
     attention.innerHTML =
       highlights +
       `<div class="home-attention-items">${unmapped}${items.map((item) => `<a class="home-attention-item" href="${homeLink(item.href)}"><strong>${esc(item.label)}</strong><div class="small text-secondary">${esc(item.detail)}</div></a>`).join('')}</div>` +
       (!items.length && !unmapped
         ? '<p class="small text-secondary mb-2">No attention items found in the checks available to your account.</p>'
-        : '<p class="small text-secondary mt-2 mb-1">Showing up to five items per category. Open an item to review it.</p>') +
-      '<p class="small text-secondary mb-0">Coverage shows evidence presence; assess its relevance and quality during review.</p>';
+        : '<p class="small text-secondary mt-2 mb-1">Showing up to five items per category. Open an item to review it.</p>');
   }
+  // The overview band fetches the 30-day activity overview in the same
+  // request round as the framework overview; the chart endpoint enforces the
+  // same server-side boundary the client gate reflects.
+  const maySeeEvents = () =>
+    Boolean(me?.is_admin || me?.can_view_events) && featureEnabled(me, 'evidence');
+
   async function loadOverview() {
     const button = document.getElementById('homeRefresh');
     button.disabled = true;
     try {
-      const [catalog, data] = await Promise.all([
-        safeGet('/api/v1/frameworks'),
+      const [catalog, data, timeline] = await Promise.all([
+        loadCatalog(),
         safeGet(apiUrl('/api/v1/home')),
+        maySeeEvents()
+          ? safeGet(
+              apiUrl('/api/v1/charts/event_volume_timeseries', {
+                days: 30,
+                breakdown: 'source',
+              }),
+            )
+          : Promise.resolve(null),
       ]);
+      if (data?.failed) {
+        // renderOverview shows its own load-failure text; workspace links and
+        // tasks stay available.
+        overview = null;
+        activity = null;
+        renderPage();
+        return;
+      }
       frameworkInfo = catalog?.items?.find((item) => item.slug === framework) || frameworkInfo;
       overview = data;
-      renderHomeTasks();
-      renderOverview();
+      activity = timeline?.failed ? { failed: true } : timeline;
+      renderPage();
     } finally {
       button.disabled = false;
     }
   }
-  document.getElementById('homeRefresh').addEventListener('click', async () => {
-    await loadOverview();
-    await loadEntryCards();
+
+  function renderActivity() {
+    const section = document.getElementById('homeActivity');
+    const sparkHolder = document.getElementById('homeSpark');
+    const note = document.getElementById('homeSparkNote');
+    const sourcesPanel = document.getElementById('homeActivitySources');
+    const list = document.getElementById('homeSources');
+    const moreHolder = document.getElementById('homeSourcesMore');
+    if (!overview?.events || !activity) {
+      section.hidden = true;
+      return;
+    }
+    if (activity.failed) {
+      section.hidden = false;
+      sourcesPanel.hidden = true;
+      sparkHolder.removeAttribute('aria-label');
+      sparkHolder.innerHTML = '';
+      note.textContent = 'The evidence activity summary could not be loaded.';
+      return;
+    }
+    section.hidden = false;
+    const items = Array.isArray(activity.items) ? activity.items : [];
+    const totals = items.map((item) => Number(item?.total) || 0);
+    const collected = totals.reduce((sum, value) => sum + value, 0);
+    const mapped = items.reduce((sum, item) => sum + (Number(item?.mapped) || 0), 0);
+    const peak = Math.max(0, ...totals);
+    const peakDay = peak > 0 ? String(items[totals.indexOf(peak)]?.bucket || '') : '';
+    if (collected > 0 && items.length >= 2) {
+      const width = 320;
+      const height = 64;
+      const pad = 4;
+      const max = Math.max(peak, 1);
+      const points = totals.map((value, i) => [
+        pad + (i * (width - 2 * pad)) / (items.length - 1),
+        pad + (1 - value / max) * (height - 2 * pad),
+      ]);
+      const line = points
+        .map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(2)} ${p[1].toFixed(2)}`)
+        .join(' ');
+      const area = `${line} L${width - pad} ${height - pad} L${pad} ${height - pad} Z`;
+      sparkHolder.innerHTML =
+        `<svg class="home-spark-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">` +
+        `<path class="home-spark-area" d="${area}"/><path class="home-spark-line" d="${line}" vector-effect="non-scaling-stroke"/></svg>`;
+      sparkHolder.setAttribute(
+        'aria-label',
+        `Evidence collected per day over the last 30 days, peaking at ${homeNumber(peak)} on ${esc(peakDay)}; ${homeNumber(collected)} collected and ${homeNumber(mapped)} mapped`,
+      );
+      note.textContent = `${homeNumber(collected)} events collected · ${homeNumber(mapped)} mapped to this framework in the last 30 days`;
+    } else {
+      sparkHolder.removeAttribute('aria-label');
+      sparkHolder.innerHTML = '';
+      note.textContent = 'No events collected in the last 30 days.';
+    }
+    const metas = Array.isArray(activity.sources) ? activity.sources : [];
+    const top = metas.filter((m) => Number.isFinite(Number(m?.total))).slice(0, 4);
+    if (top.length) {
+      sourcesPanel.hidden = false;
+      list.innerHTML = top
+        .map((m) => {
+          const name = String(m.label || m.source || '').trim() || 'Unknown source';
+          // Source tints are the account's own palette; only a plain sRGB hex
+          // may reach an inline style.
+          const validColor = /^#[0-9a-fA-F]{6}$/.test(String(m.color || ''));
+          const dot = validColor ? ` style="background:${esc(String(m.color))}"` : '';
+          return `<li><a href="${homeLink(`/events.html?source=${encodeURIComponent(String(m.source || ''))}`)}"><span class="home-source-dot"${dot} aria-hidden="true"></span><span class="home-source-name">${esc(name)}</span><span class="home-source-count">${homeNumber(Number(m.total))}</span></a></li>`;
+        })
+        .join('');
+      moreHolder.innerHTML = `<a class="link-subtle" href="${homeLink('/sources.html')}">All sources</a>`;
+    } else {
+      sourcesPanel.hidden = true;
+      list.innerHTML = '';
+      moreHolder.innerHTML = '';
+    }
+  }
+
+  function renderPage() {
+    renderHomeTasks();
+    renderOverview();
+    renderActivity();
+  }
+
+  document.getElementById('homeSearch')?.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const q = String(document.getElementById('homeQ')?.value || '').trim();
+    const url = new URL('/events.html', location.origin);
+    if (q) url.searchParams.set('q', q);
+    if (framework) url.searchParams.set('framework', framework);
+    location.href = url.pathname + url.search;
   });
+
+  document.getElementById('homeRefresh')?.addEventListener('click', async () => {
+    await loadOverview();
+  });
+
+  await resolveFramework();
+  await loadOverview();
 }

@@ -1,12 +1,14 @@
 // One story: its timeline, flow chart, comments, questions and changelog.
 import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
   apiPatch,
   apiPut,
   apiDelete,
+  confirmAction,
   esc,
   fmtTs,
   toast,
@@ -43,7 +45,7 @@ const flow = createFlowCanvas({
 });
 
 function fail(error) {
-  toast($('status'), String(error?.message || error), 'danger');
+  toast($('status'), errorText(error), 'danger');
 }
 
 // Items in time order; items without a time keep their story order at the end.
@@ -176,9 +178,13 @@ $('storyForm').addEventListener('submit', async (ev) => {
 });
 $('deleteStory').addEventListener('click', async () => {
   if (
-    !confirm(
-      'Delete this story? Its items stay where they came from; the story and its comments are removed.',
-    )
+    !(await confirmAction({
+      title: 'Delete this story',
+      message:
+        'Delete this story? Its items stay where they came from; the story and its comments are removed.',
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
   )
     return;
   try {
@@ -259,7 +265,7 @@ async function findCandidates() {
       ? candidates.map(candidateHtml).join('')
       : '<li class="list-group-item small-muted">Nothing new matches.</li>';
   } catch (error) {
-    list.innerHTML = `<li class="list-group-item text-danger">Search failed: ${esc(String(error))}</li>`;
+    list.innerHTML = `<li class="list-group-item text-danger">Search failed: ${esc(errorText(error))}</li>`;
   }
 }
 $('findItems').addEventListener('click', findCandidates);
@@ -309,7 +315,14 @@ $('timeline').addEventListener('click', async (ev) => {
   }
   const remove = ev.target.closest('[data-remove-item]');
   if (!remove) return;
-  if (!confirm('Remove this item from the story?')) return;
+  if (
+    !(await confirmAction({
+      title: 'Remove item from story',
+      message: 'Remove this item from the story? It stays in the register it came from.',
+      confirmLabel: 'Remove',
+    }))
+  )
+    return;
   try {
     applyStory(
       await apiDelete(
@@ -397,7 +410,15 @@ $('commentForm').addEventListener('submit', async (ev) => {
 });
 $('comments').addEventListener('click', async (ev) => {
   const button = ev.target.closest('[data-delete-comment]');
-  if (!button || !confirm('Delete this comment?')) return;
+  if (!button) return;
+  if (
+    !(await confirmAction({
+      title: 'Delete comment',
+      message: 'Delete this comment?',
+      confirmLabel: 'Delete',
+    }))
+  )
+    return;
   try {
     await apiDelete(`${base}/comments/${encodeURIComponent(button.dataset.deleteComment)}`);
     await loadComments();

@@ -105,7 +105,8 @@ async function pestlePage(t, options = {}) {
     query: options.query || '',
     me: options.me || { is_admin: true },
     scripts: options.noD3 ? [] : [d3src, 'window.d3 = d3;'],
-    globals: { confirm: options.confirm ?? (() => true), ...options.globals },
+    confirm: options.confirm,
+    globals: { ...options.globals },
     setup(window) {
       if (options.tabs) window.bootstrap = options.tabs;
     },
@@ -218,7 +219,7 @@ test('filters and search send CSV parameters, and reload reports failures', asyn
   offline = true;
   ui.el('reloadPestle').click();
   await settle(
-    () => ui.el('status').textContent === 'Failed to load PESTLE(E) items: Error: Items offline',
+    () => ui.el('status').textContent === 'Failed to load PESTLE(E) items: Items offline',
   );
   assert.equal(ui.el('status').dataset.alert, 'danger');
 });
@@ -254,7 +255,7 @@ test('users without PESTLE(E) access see an explanation and no register requests
 
 test('a metadata failure is reported', async (t) => {
   const { ui } = await pestlePage(t, { metaFail: true });
-  assert.equal(ui.el('status').textContent, 'Failed to load PESTLE(E): Error: Meta offline');
+  assert.equal(ui.el('status').textContent, 'Failed to load PESTLE(E): Meta offline');
 });
 
 test('business processes are deleted only after confirmation and failures are reported', async (t) => {
@@ -268,10 +269,7 @@ test('business processes are deleted only after confirmation and failures are re
   });
   const del = (id) => ui.el('businessProcessList').querySelector(`[data-delete-process="${id}"]`);
   del('b1').click();
-  assert.match(
-    prompts[0],
-    /Delete business process “Payroll”\? Relevance links for it will also be removed\./,
-  );
+  assert.equal(prompts[0].title, 'Delete business process');
   assert.deepEqual(state.removed, []);
   del('b/2').click();
   await settle(() => ui.el('status').textContent === 'Business process deleted');
@@ -283,8 +281,7 @@ test('business processes are deleted only after confirmation and failures are re
   const failing = await pestlePage(t, { removeFail: true });
   failing.ui.el('businessProcessList').querySelector('[data-delete-process="b1"]').click();
   await settle(
-    () =>
-      failing.ui.el('status').textContent === 'Failed to delete business process: Error: In use',
+    () => failing.ui.el('status').textContent === 'Failed to delete business process: In use',
   );
 });
 
@@ -307,8 +304,7 @@ test('adding a business process trims the name and reports failures', async (t) 
   failing.ui.el('businessProcessName').value = 'Payroll';
   failing.ui.el('addBusinessProcess').click();
   await settle(
-    () =>
-      failing.ui.el('status').textContent === 'Failed to add business process: Error: Name taken',
+    () => failing.ui.el('status').textContent === 'Failed to add business process: Name taken',
   );
   assert.equal(failing.ui.el('addBusinessProcess').disabled, false);
   assert.equal(failing.ui.el('businessProcessName').value, 'Payroll');
@@ -462,8 +458,7 @@ test('visualisations explain empty data, missing D3 and load failures', async (t
   const failed = await pestlePage(t, { vizFail: true });
   failed.ui.el('pestleVisualisationsTab').dispatchEvent(new failed.ui.window.Event('shown.bs.tab'));
   await settle(
-    () =>
-      failed.ui.el('status').textContent === 'Failed to load visualisations: Error: Viz offline',
+    () => failed.ui.el('status').textContent === 'Failed to load visualisations: Viz offline',
   );
 });
 

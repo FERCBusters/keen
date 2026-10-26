@@ -1,5 +1,6 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPatch,
@@ -456,7 +457,7 @@ async function load() {
     await loadClauseChangelog();
     await loadAdminControls();
   } catch (e) {
-    toast(status, `Failed to load clause: ${String(e)}`, 'danger');
+    toast(status, `Failed to load clause: ${errorText(e)}`, 'danger');
     rowsEl.innerHTML =
       '<tr><td colspan="4" class="small-muted p-4">Failed to load linked controls.</td></tr>';
   }
@@ -503,7 +504,7 @@ saveClauseEvidenceUrls?.addEventListener('click', async () => {
     await loadClauseChangelog();
     toast(status, 'Clause evidence mapping saved', 'success');
   } catch (e) {
-    toast(status, `Failed to save clause evidence mapping: ${String(e)}`, 'danger');
+    toast(status, `Failed to save clause evidence mapping: ${errorText(e)}`, 'danger');
   } finally {
     saveClauseEvidenceUrls.disabled = false;
   }
@@ -517,7 +518,7 @@ editLinkedControls?.addEventListener('click', async () => {
     try {
       await loadAdminControls();
     } catch (e) {
-      toast(status, `Failed to load controls: ${String(e)}`, 'danger');
+      toast(status, `Failed to load controls: ${errorText(e)}`, 'danger');
     }
   } else if (linkedControlsEditMode) {
     renderAdminControls();
@@ -542,7 +543,7 @@ saveClauseUpstreamUrl?.addEventListener('click', async () => {
     await loadClauseChangelog();
     toast(status, 'Clause URL saved', 'success');
   } catch (e) {
-    toast(status, `Failed to save clause URL: ${String(e)}`, 'danger');
+    toast(status, `Failed to save clause URL: ${errorText(e)}`, 'danger');
   } finally {
     saveClauseUpstreamUrl.disabled = false;
   }
@@ -570,7 +571,7 @@ saveClauseControls?.addEventListener('click', async () => {
     if (qs('tab') === 'changelog') await loadClauseChangelog();
     if (qs('tab') === 'isms') await loadClauseIsms({ force: true });
   } catch (e) {
-    toast(status, `Failed to save linked controls: ${String(e)}`, 'danger');
+    toast(status, `Failed to save linked controls: ${errorText(e)}`, 'danger');
   } finally {
     saveClauseControls.disabled = false;
   }

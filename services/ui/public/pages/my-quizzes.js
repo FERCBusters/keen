@@ -1,6 +1,6 @@
 // The My quizzes tab on the account page: the rounds assigned to the signed-in
 // person, what to do next, their results and their level, streak and badges.
-import { apiGet, esc } from '/app.js';
+import { errorText, apiGet, esc } from '/app.js';
 import { dateText, progressHtml, resultHtml, stateBadge } from '/pages/quiz-common.js';
 
 const sittingHref = (item) =>
@@ -72,7 +72,7 @@ export function mountMyQuizzes(root) {
     } catch (error) {
       el('myQuizzesStatus').className = 'alert alert-danger';
       el('myQuizzesStatus').style.display = '';
-      el('myQuizzesStatus').textContent = `Failed to load your quizzes: ${String(error)}`;
+      el('myQuizzesStatus').textContent = `Failed to load your quizzes: ${errorText(error)}`;
     }
   }
   el('myQuizzesRefresh').addEventListener('click', load);

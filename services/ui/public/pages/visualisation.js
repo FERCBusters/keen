@@ -16,6 +16,7 @@ import {
 } from './visualisation/dates.js';
 import { truncateMiddleText, renderWrappedNodeLabel } from './visualisation/labels.js';
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPatch,
@@ -83,7 +84,7 @@ const SCOPE_LABELS = {
   clause: 'clause',
   rule: 'mapping rule',
   f: 'text filter',
-  unmapped: 'unmapped only',
+  unmapped: 'Unmapped only',
 };
 
 function describeScope() {
@@ -352,7 +353,7 @@ function _heatColorForBase(baseHex) {
       .toLowerCase() || '__fallback';
   if (_heatmapColorCache.has(key)) return _heatmapColorCache.get(key);
 
-  const fallback = d3.color('#7c3aed'); // matches default accent in most themes
+  const fallback = d3.color('#004987'); // matches the default Ink accent
   const base = d3.color(key) || fallback;
   const baseRgb = d3.rgb(base);
 
@@ -758,7 +759,7 @@ function setViz(mode, opts = {}) {
       ensureGraphDatasetForMode(vizMode)
         .then(() => drawActive())
         .catch((err) =>
-          toast(status, `Failed to load visualisation data: ${String(err)}`, 'danger'),
+          toast(status, `Failed to load visualisation data: ${errorText(err)}`, 'danger'),
         );
     } else {
       drawActive();
@@ -1938,7 +1939,7 @@ function drawHeatmap() {
     .attr('height', ROW_SWATCH)
     .attr('rx', 2)
     .attr('ry', 2)
-    .attr('fill', (d) => d?.color || '#7c3aed')
+    .attr('fill', (d) => d?.color || '#004987')
     .attr('stroke', 'rgba(0,0,0,0.25)')
     .attr('stroke-width', 1)
     .style('cursor', 'pointer')
@@ -3242,7 +3243,7 @@ async function drawHistogram() {
   if (showOther) stackKeys.push(OTHER_KEY);
 
   const labelByKey = new Map(primary.map((s) => [String(s.source), String(s.label || s.source)]));
-  const colorByKey = new Map(primary.map((s) => [String(s.source), String(s.color || '#7c3aed')]));
+  const colorByKey = new Map(primary.map((s) => [String(s.source), String(s.color || '#004987')]));
   if (showOther) {
     labelByKey.set(OTHER_KEY, 'Other');
     colorByKey.set(OTHER_KEY, 'rgba(31,31,42,0.18)');
@@ -3535,7 +3536,7 @@ async function drawHistogram() {
 
         // Re-render histogram for the zoomed range.
         drawHistogram().catch((err) => {
-          toast(status, `Failed to load histogram zoom: ${String(err)}`, 'danger');
+          toast(status, `Failed to load histogram zoom: ${errorText(err)}`, 'danger');
         });
       });
 
@@ -3596,18 +3597,18 @@ function drawActive() {
     if (vizMode === 'histogram') {
       // async: fire-and-forget; errors are shown via toast below
       drawHistogram().catch((err) => {
-        toast(status, `Failed to load histogram data: ${String(err)}`, 'danger');
+        toast(status, `Failed to load histogram data: ${errorText(err)}`, 'danger');
       });
     }
   } catch (err) {
-    toast(status, `Failed to render visualisation: ${String(err)}`, 'danger');
+    toast(status, `Failed to render visualisation: ${errorText(err)}`, 'danger');
   }
 }
 
 gapQ?.addEventListener('input', () => {
   if (!controlStats && coverageGapsOpen()) {
     loadControlStatsForGaps().catch((err) =>
-      toast(status, `Failed to load controls: ${String(err)}`, 'danger'),
+      toast(status, `Failed to load controls: ${errorText(err)}`, 'danger'),
     );
     return;
   }
@@ -3617,14 +3618,14 @@ gapQ?.addEventListener('input', () => {
   'click',
   () => {
     loadControlStatsForGaps({ force: true }).catch((err) =>
-      toast(status, `Failed to load controls: ${String(err)}`, 'danger'),
+      toast(status, `Failed to load controls: ${errorText(err)}`, 'danger'),
     );
   },
 );
 coverageGapsPanel?.addEventListener('shown.bs.collapse', () => {
   if (!controlStats)
     loadControlStatsForGaps().catch((err) =>
-      toast(status, `Failed to load controls: ${String(err)}`, 'danger'),
+      toast(status, `Failed to load controls: ${errorText(err)}`, 'danger'),
     );
 });
 
@@ -3749,7 +3750,7 @@ saveDefaultViz?.addEventListener('click', async () => {
     // Success feedback should be transient.
     toast(status, 'Saved as your default visualisation.', 'success', 2800);
   } catch (err) {
-    toast(status, `Could not save default visualisation: ${String(err)}`, 'danger');
+    toast(status, `Could not save default visualisation: ${errorText(err)}`, 'danger');
   }
 });
 
@@ -3827,7 +3828,7 @@ exportCsvBtn?.addEventListener('click', () => {
     const rows = lastView?.payload?.cells || lastView?.payload?.edges || [];
     downloadCsv(`keen_${mode}_${stamp}.csv`, rows);
   } catch (err) {
-    toast(status, `Export failed: ${String(err)}`, 'danger');
+    toast(status, `Export failed: ${errorText(err)}`, 'danger');
   }
 });
 
@@ -3843,7 +3844,7 @@ exportJsonBtn?.addEventListener('click', () => {
       last_view: lastView,
     });
   } catch (err) {
-    toast(status, `Export failed: ${String(err)}`, 'danger');
+    toast(status, `Export failed: ${errorText(err)}`, 'danger');
   }
 });
 
@@ -3854,7 +3855,7 @@ exportSvgBtn?.addEventListener('click', () => {
     const stamp = r ? `${r.from}_to_${r.to}` : isoTodayUtc();
     downloadCurrentSvg(`keen_${mode}_${stamp}.svg`);
   } catch (err) {
-    toast(status, `Export failed: ${String(err)}`, 'danger');
+    toast(status, `Export failed: ${errorText(err)}`, 'danger');
   }
 });
 
@@ -3913,7 +3914,7 @@ histBack?.addEventListener('click', () => {
   syncAddressBarToShareState();
   if (vizMode === 'histogram') {
     drawHistogram().catch((err) =>
-      toast(status, `Failed to render histogram: ${String(err)}`, 'danger'),
+      toast(status, `Failed to render histogram: ${errorText(err)}`, 'danger'),
     );
   }
 });
@@ -3925,7 +3926,7 @@ histResetZoom?.addEventListener('click', () => {
   syncAddressBarToShareState();
   if (vizMode === 'histogram') {
     drawHistogram().catch((err) =>
-      toast(status, `Failed to render histogram: ${String(err)}`, 'danger'),
+      toast(status, `Failed to render histogram: ${errorText(err)}`, 'danger'),
     );
   }
 });
@@ -4026,7 +4027,7 @@ async function load() {
       if (status) status.style.display = 'none';
     }, 1800);
   } catch (err) {
-    toast(status, `Failed to load visualisation: ${String(err)}`, 'danger');
+    toast(status, `Failed to load visualisation: ${errorText(err)}`, 'danger');
     if (gapsEl && coverageGapsOpen()) gapsEl.textContent = 'Failed to load controls.';
     if (topSourcesEl)
       topSourcesEl.innerHTML = `<tr><td colspan="2" class="small-muted p-3">Failed to load ${esc(vizRelationshipLabels(vizMode).leftPlural)}.</td></tr>`;

@@ -1,12 +1,14 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
+  errorText,
   initNavbar,
   initCollapsibleFilterSections,
   apiGet,
   apiPost,
   apiPatch,
   apiDelete,
+  confirmAction,
   esc,
   toast,
   getCurrentFramework,
@@ -78,7 +80,7 @@ let draftDirty = false;
 let mappingCatalog = { controls: [], clauses: [] };
 const choiceRecords = new Map();
 function fail(error) {
-  toast($('status'), String(error), 'danger');
+  toast($('status'), errorText(error), 'danger');
 }
 const choiceRequests = new Map();
 async function choices(typeId, itemSelect, query = '') {
@@ -419,7 +421,15 @@ $('relatedList').addEventListener('click', async (e) => {
   }
 });
 $('deleteItem').addEventListener('click', async () => {
-  if (!confirm('Delete this SWOT item? Its changelog remains.')) return;
+  if (
+    !(await confirmAction({
+      title: 'Delete SWOT item',
+      message: 'Delete this SWOT item from the board? Its changelog remains.',
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
+  )
+    return;
   try {
     await apiDelete(`${base}/${encodeURIComponent(itemId)}?expected_version=${row.version}`);
     location.assign(withFramework('/swot.html', framework));

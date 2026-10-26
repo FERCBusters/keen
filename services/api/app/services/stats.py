@@ -76,7 +76,17 @@ def stats_summary(
     context: ChangeContext,
     framework: str = settings.default_framework_slug,
     db: Session,
+    inherited: bool | None = None,
+    evidence_stats: dict | None = None,
 ):
+    """Framework dashboard summary.
+
+    Callers that have already resolved the framework's inheritance state or
+    per-control evidence aggregates in this request may pass them as
+    ``inherited`` and ``evidence_stats`` so the summary does not repeat those
+    reads. The values must come from the same database session.
+    """
+
     user = context.actor
     if not can_read_events(db, user):
         return _summary_without_evidence(framework=framework, db=db)
@@ -129,7 +139,9 @@ def stats_summary(
         # Fast path for authenticated users: diary events are visible to every
         # active user, so these dashboard counters use the global framework
         # event-count cache.
-        has_inheritance = has_inherited_evidence(db, framework)
+        has_inheritance = (
+            has_inherited_evidence(db, framework) if inherited is None else inherited
+        )
         if (
             not has_inheritance
             and isinstance(user, User)
@@ -140,7 +152,11 @@ def stats_summary(
                 .filter(ControlItem.framework_slug == framework)
                 .all()
             )
-            stats_by_id = get_control_evidence_stats_by_id(db, framework)
+            stats_by_id = (
+                evidence_stats
+                if evidence_stats is not None
+                else get_control_evidence_stats_by_id(db, framework)
+            )
             controls_with_evidence_all = 0
             controls_with_evidence_in_scope = 0
             in_scope_controls = 0
@@ -596,41 +612,13 @@ def _stats_events_timeseries(
 
     bucket_expr = func.date_trunc(interval_eff, Event.timestamp).label("b")
 
-    total_q = (
-        db.query(bucket_expr, func.count(Event.id).label("n"))
-        .filter(Event.timestamp >= start)
-        .filter(diary_filter_condition(db, user))
-    )
-    total_q = total_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
-    total_rows = total_q.group_by("b").order_by("b").all()
-    total_by_bucket: dict[datetime, int] = {}
-    for b, n in total_rows:
-        if b is None:
-            continue
-        total_by_bucket[b] = int(n or 0)
-
-    mapped_q = (
-        db.query(
-            bucket_expr,
-            func.count(func.distinct(Event.id)).label("n"),
-        )
-        .join(Mapping, Mapping.event_id == Event.id)
-        .filter(Event.timestamp >= start)
-        .filter(Mapping.control_item_id.in_(effective_framework_ids(framework, db)))
-        .filter(diary_filter_condition(db, user))
-    )
-    mapped_q = mapped_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
-    mapped_rows = mapped_q.group_by("b").order_by("b").all()
-    mapped_by_bucket: dict[datetime, int] = {}
-    for b, n in mapped_rows:
-        if b is None:
-            continue
-        mapped_by_bucket[b] = int(n or 0)
-
-    # Optional per-source breakdown (used by the stacked histogram).
+    # Optional per-source breakdown (used by the stacked histogram). When it
+    # is on, its grouped rows already partition every event in the window, so
+    # they also answer the per-bucket totals without a second full-range scan.
     bd = (breakdown or "").strip().lower()
     want_source_breakdown = bd in {"source", "sources", "by_source"}
 
+    total_by_bucket: dict[datetime, int] = {}
     by_bucket_source: dict[datetime, dict[str, int]] = {}
     totals_by_source: dict[str, int] = {}
     sources_meta = None
@@ -655,6 +643,7 @@ def _stats_events_timeseries(
                 by_bucket_source[b] = {}
             by_bucket_source[b][s] = v
             totals_by_source[s] = totals_by_source.get(s, 0) + v
+            total_by_bucket[b] = total_by_bucket.get(b, 0) + v
 
         # Attach label/colour, respecting user overrides.
         overrides = (
@@ -676,6 +665,35 @@ def _stats_events_timeseries(
                     "total": int(total),
                 }
             )
+    else:
+        total_q = (
+            db.query(bucket_expr, func.count(Event.id).label("n"))
+            .filter(Event.timestamp >= start)
+            .filter(diary_filter_condition(db, user))
+        )
+        total_q = total_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
+        for b, n in total_q.group_by("b").order_by("b").all():
+            if b is None:
+                continue
+            total_by_bucket[b] = int(n or 0)
+
+    mapped_q = (
+        db.query(
+            bucket_expr,
+            func.count(func.distinct(Event.id)).label("n"),
+        )
+        .join(Mapping, Mapping.event_id == Event.id)
+        .filter(Event.timestamp >= start)
+        .filter(Mapping.control_item_id.in_(effective_framework_ids(framework, db)))
+        .filter(diary_filter_condition(db, user))
+    )
+    mapped_q = mapped_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
+    mapped_rows = mapped_q.group_by("b").order_by("b").all()
+    mapped_by_bucket: dict[datetime, int] = {}
+    for b, n in mapped_rows:
+        if b is None:
+            continue
+        mapped_by_bucket[b] = int(n or 0)
 
     # Generate a dense sequence of buckets so the chart doesn't have gaps.
     step = _step_for(interval_eff)

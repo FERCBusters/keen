@@ -181,6 +181,7 @@ async function dashboard(t, options = {}) {
     scripts: [d3],
     me: options.me || { is_admin: true },
     globals: options.globals,
+    confirm: options.confirm,
     setup(window) {
       window.d3 = {};
     },
@@ -352,7 +353,7 @@ test('an empty register explains itself and a failed load is reported', async (t
   assert.match(ui.el('rows').textContent, /No risks match\. Use “Add a risk”/);
   const failed = await dashboard(t, { listFail: true });
   assert.match(failed.ui.el('rows').textContent, /Failed to load risks/);
-  assert.match(failed.ui.el('status').textContent, /Failed to load risks: Error: List offline/);
+  assert.match(failed.ui.el('status').textContent, /Failed to load risks: List offline/);
 });
 
 // --- Heatmap, thresholds and the rating card ----------------------------------------------
@@ -545,18 +546,14 @@ test('rating, threshold, template and heatmap failures are reported', async (t) 
   await settle(() => cell(ui, 3, 3));
   ui.el('rows').querySelector('[data-rate="r1"]').click();
   ui.el('ratingForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => /Could not save the rating: Error: Refused/.test(ui.el('status').textContent));
+  await settle(() => /Could not save the rating: Refused/.test(ui.el('status').textContent));
   ui.el('thresholdForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => /Could not save thresholds: Error: Refused/.test(ui.el('status').textContent));
+  await settle(() => /Could not save thresholds: Refused/.test(ui.el('status').textContent));
   ui.el('addToLibrary').click();
-  await settle(() =>
-    /Could not save the template: Error: Rejected/.test(ui.el('status').textContent),
-  );
+  await settle(() => /Could not save the template: Rejected/.test(ui.el('status').textContent));
   const failed = await dashboard(t, { heatmapFail: true });
   await settle(() =>
-    /Could not load the risk heatmap: Error: Heatmap offline/.test(
-      failed.ui.el('status').textContent,
-    ),
+    /Could not load the risk heatmap: Heatmap offline/.test(failed.ui.el('status').textContent),
   );
 });
 
@@ -606,7 +603,7 @@ test('the library serves every kind of template, filters by kind and deletes aft
   const confirms = [];
   const { ui, state } = await dashboard(t, {
     query: '&tab=library',
-    globals: { confirm: (m) => (confirms.push(m), true) },
+    confirm: (options) => (confirms.push(options), true),
   });
   await settle(() => ui.el('libraryList').querySelectorAll('.list-group-item').length === 2);
   const items = ui.el('libraryList').querySelectorAll('.list-group-item');
@@ -630,7 +627,7 @@ test('the library serves every kind of template, filters by kind and deletes aft
   ui.el('libraryList').querySelector('[data-delete-library="tpl1"]').click();
   await settle(() => state.removed.length === 1);
   assert.deepEqual(state.removed, ['/api/v1/risks/library/tpl1']);
-  assert.equal(confirms[0], 'Delete this reusable template?');
+  assert.equal(confirms[0].title, 'Delete reusable template');
   await settle(() => ui.el('status').textContent === 'Template deleted.');
   ui.el('librarySearch').value = 'zzz';
   ui.el('librarySearch').dispatchEvent(new ui.window.Event('input'));
@@ -788,7 +785,7 @@ test('CIA, PESTLE(E), library and category load failures are reported on their t
   const cia = await dashboard(t, { query: '&tab=cia', listFail: true, categoriesFail: true });
   await settle(() => /Failed to load CIA risks\./.test(cia.ui.el('ciaRows').textContent));
   assert.equal(cia.ui.el('ciaRows').querySelector('td').getAttribute('colspan'), '8');
-  assert.match(cia.ui.el('status').textContent, /Failed to load CIA risks: Error: List offline/);
+  assert.match(cia.ui.el('status').textContent, /Failed to load CIA risks: List offline/);
   // The category filter could not load either; the register still answers.
   assert.equal(
     cia.ui.calls.some((c) => c.url.startsWith('/api/v1/risks/categories')),
@@ -802,14 +799,14 @@ test('CIA, PESTLE(E), library and category load failures are reported on their t
   assert.equal(pestle.ui.el('pestleRows').querySelector('td').getAttribute('colspan'), '7');
   assert.equal(
     pestle.ui.el('status').textContent,
-    'Failed to load PESTLE(E) factors: Error: Factors offline',
+    'Failed to load PESTLE(E) factors: Factors offline',
   );
 
   const library = await dashboard(t, { query: '&tab=library', libraryFail: true });
   await settle(() => /Could not load the risk library/.test(library.ui.el('status').textContent));
   assert.equal(
     library.ui.el('status').textContent,
-    'Could not load the risk library: Error: Library offline',
+    'Could not load the risk library: Library offline',
   );
 });
 
@@ -823,7 +820,7 @@ test('a refused template deletion and a refused CSV import are reported', async 
   await settle(() => ui.el('libraryList').querySelector('[data-delete-library="tpl1"]'));
   ui.el('libraryList').querySelector('[data-delete-library="tpl1"]').click();
   await settle(() => /Could not delete the template/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Could not delete the template: Error: Delete refused');
+  assert.equal(ui.el('status').textContent, 'Could not delete the template: Delete refused');
   assert.deepEqual(state.removed, ['/api/v1/risks/library/tpl1']);
   assert.ok(ui.el('libraryList').querySelector('[data-delete-library="tpl1"]'));
 
@@ -833,7 +830,7 @@ test('a refused template deletion and a refused CSV import are reported', async 
   });
   ui.el('importForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => /Could not import the CSV/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Could not import the CSV: Error: Rejected');
+  assert.equal(ui.el('status').textContent, 'Could not import the CSV: Rejected');
   assert.equal(state.posted.at(-1).path, '/api/v1/risks/register/import.csv');
 });
 

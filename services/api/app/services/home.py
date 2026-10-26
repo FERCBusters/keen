@@ -77,16 +77,17 @@ def home_overview(
     }
     if events:
         inherited = has_inherited_evidence(db, framework)
+        evidence_stats = None
         if inherited:
             pairs = evidence_pairs(framework, db)
             supported = {
                 row[0] for row in db.query(pairs.c.control_id).distinct().all()
             }
         else:
-            stats = get_control_evidence_stats_by_id(db, framework)
+            evidence_stats = get_control_evidence_stats_by_id(db, framework)
             supported = {
                 key
-                for key, value in stats.items()
+                for key, value in evidence_stats.items()
                 if value.get("evidence_count", 0) > 0
             }
         scoped = [c for c in controls if c.in_scope]
@@ -96,9 +97,13 @@ def home_overview(
             "with_evidence": covered,
             "without_evidence": len(scoped) - covered,
         }
-        result["events"] = stats_summary(context=context, framework=framework, db=db)[
-            "events"
-        ]
+        result["events"] = stats_summary(
+            context=context,
+            framework=framework,
+            db=db,
+            inherited=inherited,
+            evidence_stats=evidence_stats,
+        )["events"]
         for c in sorted(
             (c for c in scoped if c.id not in supported), key=lambda c: c.ref
         )[:5]:

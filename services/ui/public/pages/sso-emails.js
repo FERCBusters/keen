@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from '/app.js';
+import { apiGet, apiPost, confirmAction } from '/app.js';
 const status = document.getElementById('ssoEmailStatus');
 const form = document.getElementById('ssoEmailForm');
 const list = document.getElementById('ssoEmailList');
@@ -20,9 +20,12 @@ async function load() {
     button.textContent = 'Remove';
     button.addEventListener('click', async () => {
       if (
-        !confirm(
-          'Remove this address from future SSO linking? Existing linked sign-in identities will remain active.',
-        )
+        !(await confirmAction({
+          title: 'Remove SSO email address',
+          message:
+            'Remove this address from future SSO linking? Existing linked sign-in identities will remain active.',
+          confirmLabel: 'Remove',
+        }))
       )
         return;
       button.disabled = true;

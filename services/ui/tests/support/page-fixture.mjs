@@ -31,10 +31,15 @@ export async function page(
     // Replacements for individual design-system functions, such as a
     // controllable debounce or saved-search lookup.
     vendor = {},
+    // What the shared confirm dialog answers: true, false, or a function of
+    // the confirmAction options. Every call is recorded in `confirmations`.
+    confirm = true,
+    modules = {},
   } = {},
 ) {
   const calls = [],
-    unexpected = [];
+    unexpected = [],
+    confirmations = [];
   // Requests the page has started and not yet seen answered, so a test can
   // wait for pages that load their sections in parallel.
   let inflight = 0;
@@ -63,6 +68,15 @@ export async function page(
   const ui = await loadUi('pages/' + name + '.js', {
     html,
     scripts,
+    modules: {
+      'pages/confirm-modal.js': {
+        confirmAction: async (options) => {
+          confirmations.push(options);
+          return typeof confirm === 'function' ? !!confirm(options) : !!confirm;
+        },
+      },
+      ...modules,
+    },
     url: 'https://keen.example/' + name + '.html?framework=A' + query,
     setup(window) {
       win = window;
@@ -101,7 +115,7 @@ export async function page(
       fmtTsFilename: (s) => s,
       getSourceMeta: async () => ({}),
       applyTheme: () => {},
-      THEMES: ['purple', 'dark'],
+      THEMES: ['ink', 'dark'],
       getCurrentFramework: () => 'A',
       getFrameworkCatalog: async () => ({ items: [{ slug: 'A', name: 'Framework A' }] }),
       debounce: (fn) => fn,
@@ -157,6 +171,7 @@ export async function page(
   return {
     ...ui,
     calls,
+    confirmations,
     idle: () => inflight === 0,
     el: (id) => ui.document.getElementById(id),
   };

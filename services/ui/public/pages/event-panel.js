@@ -1,7 +1,15 @@
 // A side panel with the essentials of one event: what happened, which controls
 // it maps to and why, and the structured fields that identify it. The full
 // event page remains one link away.
-import { apiGet, esc, fmtTs, sourceBadgeHtml, upstreamLinkHtml, withFramework } from '/app.js';
+import {
+  errorText,
+  apiGet,
+  esc,
+  fmtTs,
+  sourceBadgeHtml,
+  upstreamLinkHtml,
+  withFramework,
+} from '/app.js';
 import { observedPayloadFields } from '/pages/evidence-fields.js';
 
 export const PANEL_FIELD_LIMIT = 12;
@@ -120,7 +128,7 @@ export function createEventPanel({ framework, getSourceMeta = () => ({}) }) {
     } catch (error) {
       if (current !== eventId) return;
       title.textContent = 'Event unavailable';
-      body.innerHTML = `<p class="text-danger">Failed to load the event: ${esc(String(error))}</p>`;
+      body.innerHTML = `<p class="text-danger">Failed to load the event: ${esc(errorText(error))}</p>`;
     }
   }
 

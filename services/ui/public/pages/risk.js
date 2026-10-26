@@ -1,5 +1,6 @@
 import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
+  errorText,
   initNavbar,
   apiGet,
   esc,
@@ -266,7 +267,7 @@ sampleRiskAudit?.addEventListener('click', () => {
 
 async function loadRisk() {
   // Try the API even when the user lacks global risk.read: risk owners can
-  // view their own risks from Account → Risks I own. The backend still
+  // view their own risks from Account → My Risks. The backend still
   // enforces risk.read/ownership.
   if (!id) {
     toast(status, 'Missing risk id.', 'danger');
@@ -280,7 +281,7 @@ async function loadRisk() {
     if (qs('tab') === 'changelog') await loadRiskChangelog();
     if (qs('tab') === 'questions') await riskQuestions.refresh();
   } catch (e) {
-    toast(status, `Failed to load risk: ${String(e)}`, 'danger');
+    toast(status, `Failed to load risk: ${errorText(e)}`, 'danger');
     if (linkedControls)
       linkedControls.innerHTML = '<span class="text-danger">Failed to load linked controls.</span>';
   }

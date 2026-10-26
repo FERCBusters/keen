@@ -1,4 +1,5 @@
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -132,7 +133,7 @@ async function loadSummary() {
     applySummary(summary);
   } catch (e) {
     applySummary(null);
-    toast(status, `Loaded controls, but failed to load counters: ${String(e)}`, 'warning');
+    toast(status, `Loaded controls, but failed to load counters: ${errorText(e)}`, 'warning');
   }
 }
 
@@ -158,7 +159,7 @@ async function load() {
     render();
     await loadSummary();
   } catch (e) {
-    toast(status, `Failed to load controls: ${String(e)}`, 'danger');
+    toast(status, `Failed to load controls: ${errorText(e)}`, 'danger');
     tbody.innerHTML =
       '<tr><td colspan="6" class="small-muted p-4">Failed to load controls.</td></tr>';
     applySummary(null);
@@ -196,7 +197,7 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
     await apiPost('/api/v1/me/saved-searches', { name, url });
     toast(status, 'Saved', 'success');
   } catch (e) {
-    toast(status, `Failed to save: ${String(e)}`, 'danger');
+    toast(status, `Failed to save: ${errorText(e)}`, 'danger');
   }
 });
 inpFilter?.addEventListener('input', render);

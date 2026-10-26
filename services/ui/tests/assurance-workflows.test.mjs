@@ -78,7 +78,7 @@ async function assurancePage(t, options = {}) {
   const ui = await page(t, 'assurance', {
     me: options.me || { is_admin: true },
     query: options.query || '',
-    globals: { confirm: (m) => (state.prompts.push(m), options.confirm ?? true) },
+    confirm: (asked) => (state.prompts.push(asked), options.confirm ?? true),
     setup(window) {
       if (options.tabs) window.bootstrap = options.tabs;
     },
@@ -304,7 +304,7 @@ test('assurance records are added, edited and deleted for the selected person', 
   ui.el('assuranceRows').querySelector('[data-delete-assurance="as-2"]').click();
   await settle(() => ui.el('status').textContent === 'Assurance record deleted.');
   assert.deepEqual(state.removed, ['/api/v1/isms/people/pe1/assurances/as-2']);
-  assert.equal(state.prompts.at(-1), 'Delete this assurance record?');
+  assert.equal(state.prompts.at(-1).title, 'Delete assurance record');
   assert.doesNotMatch(ui.el('assuranceRows').textContent, /Security awareness/);
 });
 
@@ -316,11 +316,10 @@ test('people and vendors are deleted only after confirmation', async (t) => {
   declined.ui.el('assuranceRows').querySelector('[data-delete-assurance="as-1"]').click();
   await new Promise((r) => setTimeout(r, 10));
   assert.deepEqual(declined.state.removed, []);
-  assert.deepEqual(declined.state.prompts, [
-    'Delete this person and their assurance records?',
-    'Delete this vendor? Assets will remain in the asset register.',
-    'Delete this assurance record?',
-  ]);
+  assert.deepEqual(
+    declined.state.prompts.map((p) => p.title),
+    ['Delete person', 'Delete vendor', 'Delete assurance record'],
+  );
 
   const { ui, state } = await assurancePage(t);
   ui.el('peopleList').querySelector('[data-view-person="pe1"]').click();

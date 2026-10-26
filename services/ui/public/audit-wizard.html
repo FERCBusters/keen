@@ -16,11 +16,11 @@
   <main class="container container-tight py-4">
     <div class="mb-3">
       <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/audits.html">← Audits</a></div>
-      <h1 class="h3 mb-1">Start an audit</h1>
+      <h1 class="h3 mb-1">Start an audit <span id="unsaved" class="badge text-bg-warning align-middle" hidden>Unsaved changes</span></h1>
       <div class="small-muted">Say what the audit covers and who takes part. Findings, notes and the executive summary come later, on the audit's own page.</div>
     </div>
 
-    <div id="status" class="alert alert-info" style="display:none;"></div>
+    <div id="status" class="alert alert-info" style="display:none;" role="status"></div>
 
     <ol class="risk-wizard-steps list-unstyled d-flex flex-wrap gap-2 mb-3 no-print" id="wizardSteps" aria-label="Steps"></ol>
 

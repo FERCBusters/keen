@@ -1,5 +1,5 @@
 import { applyFeatures } from '/pages/feature-availability.js';
-import { apiGet, apiPut, toast } from '/app.js';
+import { errorText, apiGet, apiPut, toast } from '/app.js';
 
 export function mountFeatures(me) {
   const root = document.getElementById('feature-settings');
@@ -65,7 +65,10 @@ export function mountFeatures(me) {
             'success',
           );
         } catch (error) {
-          show(`Could not save: ${String(error)}. Reload settings before trying again.`, 'danger');
+          show(
+            `Could not save: ${errorText(error)}. Reload settings before trying again.`,
+            'danger',
+          );
           try {
             config = await apiGet('/api/v1/admin/features');
           } catch {
@@ -94,7 +97,7 @@ export function mountFeatures(me) {
       config = await apiGet('/api/v1/admin/features');
       status.hidden = true;
     } catch (error) {
-      show(`Could not load features: ${String(error)}. Use Reload settings to retry.`, 'danger');
+      show(`Could not load features: ${errorText(error)}. Use Reload settings to retry.`, 'danger');
     } finally {
       busy = false;
       root.setAttribute('aria-busy', 'false');

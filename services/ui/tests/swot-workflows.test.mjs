@@ -106,7 +106,7 @@ test('a relationship the server refuses is reported', async (t) => {
 
   submit(ui, 'linkForm');
 
-  await settle(() => ui.el('status').textContent === 'Error: Item changed; reload');
+  await settle(() => ui.el('status').textContent === 'Item changed; reload');
   assert.equal(ui.el('status').dataset.alert, 'danger');
 });
 
@@ -137,7 +137,8 @@ test('deleting an item asks first and returns to the workspace', async (t) => {
   };
   let answer = false;
   const ui = await detail(t, {
-    globals: { location, confirm: () => answer },
+    globals: { location },
+    confirm: () => answer,
     remove: async () => ({}),
   });
 
@@ -372,7 +373,7 @@ for (const [how, stage] of [
     else ui.window.dispatchEvent(new ui.window.Event('pagehide'));
     release();
 
-    await settle(() => ui.el('status').textContent === 'Error: Export cancelled.');
+    await settle(() => ui.el('status').textContent === 'Export cancelled.');
     assert.equal(ui.el('status').dataset.alert, 'danger');
     assert.deepEqual(downloads, []);
     assert.equal(ui.el('exportExcel').disabled, false);
@@ -427,11 +428,10 @@ test('refused unlinking, questions, replies and deletion are reported and leave 
             ],
           }
         : undefined,
-    globals: { confirm: () => true },
     post: refuse,
     remove: refuse,
   });
-  const reported = () => ui.el('status').textContent === 'Error: Item changed; reload';
+  const reported = () => ui.el('status').textContent === 'Item changed; reload';
   const reset = () => (ui.el('status').textContent = '');
 
   ui.el('relatedList').querySelector('[data-unlink-id="d1"]').click();
@@ -505,7 +505,7 @@ test('an item that cannot be loaded is reported, and an invalid field returns to
       throw new Error('Unexpected GET ' + u);
     },
   });
-  await settle(() => ui.el('status').textContent === 'Error: 404 Not found');
+  await settle(() => ui.el('status').textContent === '404 Not found');
   assert.equal(ui.el('status').dataset.alert, 'danger');
   assert.deepEqual(shown, []);
 

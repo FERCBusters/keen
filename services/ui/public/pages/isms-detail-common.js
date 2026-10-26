@@ -17,8 +17,8 @@ export function badgeList(items, labelKey = 'ref', urlFn = null) {
 
 // Control links open the tab that lists the record: Requirements (the
 // control's default tab, `tab: ''`) for policies, processes and measures, and
-// the ISMS tab for other records.
-export function controlBadges(items, framework, { tab = 'isms' } = {}) {
+// the Governance tab for other records.
+export function controlBadges(items, framework, { tab = 'governance' } = {}) {
   return badgeList(items, 'ref', (c) =>
     withFramework(
       `/control.html?id=${encodeURIComponent(c.id)}${tab ? `&tab=${tab}` : ''}`,

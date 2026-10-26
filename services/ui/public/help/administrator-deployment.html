@@ -34,7 +34,7 @@ docker compose up -d
 docker compose ps
 docker compose logs --tail=100 keen-api keen-worker keen-beat</pre>
 <p>The API startup script applies migrations as well; the explicit step makes a failure visible before the rest of an upgrade proceeds. Never run two migration processes against the same database.</p>
-<h4 id="first-administrator">Create the first administrator</h4>
+<h3 id="first-administrator">Create the first administrator</h3>
 <p>Set <code>KEEN_BOOTSTRAP_ADMIN_USERNAME</code> and <code>KEEN_BOOTSTRAP_ADMIN_PASSWORD</code> before the first start. Once that administrator can sign in, remove both variables and recreate the containers; the database keeps the account and its current password. Migrations, workers and later API starts do not need them.</p>
 <details class="more"><summary>Going deeper: building locally and hosted mode</summary>
 <p>To build from source, run <code>docker compose -f docker-compose.yml -f docker-compose.build.yml build</code> before starting the backing services and applying migrations, and start the application with the same two files: <code>docker compose -f docker-compose.yml -f docker-compose.build.yml up -d</code>. The UI installs its pinned design-system dependency during the image build, and both Dockerfiles pin their base images by digest.</p>

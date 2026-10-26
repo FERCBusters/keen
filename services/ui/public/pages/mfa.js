@@ -1,4 +1,5 @@
 import { safeNext } from './navigation-security.js';
+import { confirmAction } from '/app.js';
 const $ = (id) => document.getElementById(id);
 let state,
   codesPending = false,
@@ -114,7 +115,15 @@ async function refresh() {
     remove.textContent = 'Remove';
     remove.addEventListener('click', () =>
       run(async () => {
-        if (!confirm(`Remove ${factor.name}?`)) return;
+        if (
+          !(await confirmAction({
+            title: 'Remove authentication factor',
+            message: `Remove ${factor.name}? You sign in without it from now on; set up another factor to keep a second step.`,
+            confirmLabel: 'Remove',
+            danger: true,
+          }))
+        )
+          return;
         await post('remove', { id: factor.id });
         await refresh();
       }),
@@ -246,7 +255,10 @@ $('addKey').addEventListener('click', () =>
 $('addTotp').addEventListener('click', () =>
   run(async () => {
     const result = await post('totp/start');
-    $('qr').src = result.qr;
+    const qr = $('qr');
+    qr.hidden = true;
+    qr.src = result.qr;
+    qr.addEventListener('load', () => (qr.hidden = false), { once: true });
     $('secret').textContent = result.secret;
     $('totpSetup').hidden = false;
   }),
@@ -257,6 +269,7 @@ $('confirmForm').addEventListener('submit', (event) => {
     showCodes(await post('totp/confirm', { code: $('confirmCode').value }));
     $('confirmCode').value = '';
     $('secret').textContent = '';
+    $('qr').hidden = true;
     $('qr').removeAttribute('src');
     $('totpSetup').hidden = true;
     await refresh();
@@ -264,7 +277,14 @@ $('confirmForm').addEventListener('submit', (event) => {
 });
 $('regenerate').addEventListener('click', () =>
   run(async () => {
-    if (!confirm('Replace all unused recovery codes? Save the replacement codes before leaving.'))
+    if (
+      !(await confirmAction({
+        title: 'Replace recovery codes',
+        message: 'Replace all unused recovery codes? Save the replacement codes before leaving.',
+        confirmLabel: 'Replace',
+        typed: 'Replace',
+      }))
+    )
       return;
     showCodes(await post('recovery/regenerate'));
     await refresh();

@@ -2,13 +2,13 @@
 name: Keen (Key Evidence ENgine)
 description: Evidence-first ISMS workspace in soft tinted glass, themed by a single accent palette
 colors:
-  accent: "#7e57c2"
-  accent-deep: "#6a3fb2"
-  accent-wash: "#f2ecfb"
-  accent-rgb: "126,87,194"
+  accent: "#004987"
+  accent-deep: "#003768"
+  accent-wash: "#e4f2ff"
+  accent-rgb: "0,73,135"
   accent-contrast: "#fff"
-  link-hover: "#55308f"
-  canvas: "#f7f4fb"
+  link-hover: "#002c57"
+  canvas: "#f1f6fc"
   ink: "#1f1f2a"
   muted: "#5e5e75"
   chart-tint: "var(--keen-accent-rgb)"
@@ -61,7 +61,7 @@ components:
     textColor: "{colors.ink}"
     rounded: "{rounded.card}"
   card-header:
-    backgroundColor: "linear gradient rgba(126,87,194,0.10) → rgba(126,87,194,0.02)"
+    backgroundColor: "linear gradient rgba(0,73,135,0.10) → rgba(0,73,135,0.02)"
     textColor: "{colors.ink}"
   kpi:
     backgroundColor: "rgba(255,255,255,0.78)"
@@ -69,14 +69,14 @@ components:
     rounded: "{rounded.card}"
     padding: "{spacing.kpi-padding}"
   badge-soft:
-    backgroundColor: "rgba(126,87,194,0.10)"
+    backgroundColor: "rgba(0,73,135,0.10)"
     textColor: "{colors.accent-deep}"
     rounded: "Bootstrap .badge"
   badge-chip:
     backgroundColor: "rgba(31,31,42,0.04)"
     textColor: "{colors.ink}"
   tag-pill:
-    backgroundColor: "rgba(126,87,194,0.14)"
+    backgroundColor: "rgba(0,73,135,0.14)"
     textColor: "{colors.accent-deep}"
     rounded: "{rounded.pill}"
     padding: "3px 10px"
@@ -88,9 +88,9 @@ components:
 
 **Creative North Star: "The Tinted Glass Console"**
 
-Keen's interface is a calm, airy, quietly confident stack of soft panels in a single accent colour. The page canvas is an airy tinted wash (`#f7f4fb` under the default palette) lightened by a radial highlight at the top of the page; on it sit glassy, gently lifted cards with large rounded corners (18px) and accent-tinted translucent borders. One accent — **Muted Amethyst** `#7e57c2` in the shipped default — is the system's single voice: it tints card headers, badges, table rules, graph links, and the fixed navbar alike, always as a wash or rgba tint, never as heavy decoration. Depth comes from translucency (white surfaces at 0.70–0.95 opacity) and diffuse low shadows, not from crisp layer boundaries.
+Keen's interface is a calm, airy, quietly confident stack of soft panels in a single accent colour. The page canvas is an airy tinted wash (`#f1f6fc` under the default palette) lightened by a radial highlight at the top of the page; on it sit glassy, gently lifted cards with large rounded corners (18px) and accent-tinted translucent borders. One accent — **Archival Ink** `#004987` in the shipped default — is the system's single voice: it tints card headers, badges, table rules, graph links, and the fixed navbar alike, always as a wash or rgba tint, never as heavy decoration. Depth comes from translucency (white surfaces at 0.70–0.95 opacity) and diffuse low shadows, not from crisp layer boundaries.
 
-The system is deliberately themable: the accent palette is swapped wholesale by `data-theme` on `<html>` (purple default; ocean, forest, sunset, rose, slate, teal), each with a `-dark` variant persisted as one account preference. Components never hard-code accent hex values — they reference `--keen-accent*` variables (with Bootstrap's `--bs-primary` bound to the same variables), so a theme change re-colours the entire console without layout changes.
+The system is deliberately themable: the accent palette is swapped wholesale by `data-theme` on `<html>` (ink default; ocean, forest, sunset, rose, slate, teal), each with a `-dark` variant persisted as one account preference. Components never hard-code accent hex values — they reference `--keen-accent*` variables (with Bootstrap's `--bs-primary` bound to the same variables), so a theme change re-colours the entire console without layout changes.
 
 Typography is the platform's own voice — a system sans stack and Bootstrap's hierarchy — with numbers, identifiers and evidence text set in a compact monospace face. Density is mild: generous card padding but compact table type (12px helper labels, 12.5px mono).
 
@@ -109,18 +109,18 @@ Typography is the platform's own voice — a system sans stack and Bootstrap's h
 The palette is one accent hue plus dark ink neutrals on a tinted off-white canvas; every other role is derived by alpha-tinting the accent or the ink.
 
 ### Primary
-- **Muted Amethyst** (`#7e57c2`, accent; rgb `126,87,194`): the system's single colour voice. Navbar background, primary buttons, card-header gradients, badge and chip washes, table header rules, graph links and brushes, focus rings. Used as a solid only on the navbar and primary buttons — everywhere else at 0.06–0.24 alpha over white.
-- **Amethyst Dawn** (`#f2ecfb`, accent-100): selected-tab and active-state tint (e.g. light tabs background).
+- **Archival Ink** (`#004987`, accent; rgb `0,73,135`): the system's single colour voice. Navbar background, primary buttons, card-header gradients, badge and chip washes, table header rules, graph links and brushes, focus rings. Used as a solid only on the navbar and primary buttons — everywhere else at 0.06–0.24 alpha over white.
+- **Ink Wash** (`#e4f2ff`, accent-100): selected-tab and active-state tint (e.g. light tabs background).
 
 ### Neutral
-- **Page Canvas** (`#f7f4fb`, `--bs-body-bg`): warm tinted white body background, washed with a radial `#fff` highlight at 22% 0%.
+- **Page Canvas** (`#f1f6fc`, `--bs-body-bg`): cool tinted white body background, washed with a radial `#fff` highlight at 22% 0%.
 - **Ink** (`#1f1f2a`, `--keen-ink`): body text, chart-agnostic darks, chip text.
 - **Ink Muted** (`#5e5e75`, `--keen-muted`): helper labels, KPI labels, small-muted text (12px).
-- **Deep Accent (hover/links)** (`#6a3fb2`, accent-700) and **Link Hover** (`#55308f`): links and pressed/hover states.
+- **Deep Accent (hover/links)** (`#003768`, accent-700) and **Link Hover** (`#002c57`): links and pressed/hover states.
 - **White surfaces**: cards, KPI blocks and question threads at 0.70–0.92 opacity for the glass feel.
 
 ### Other palette themes
-Each `data-theme` replaces the accent family and canvas tint in one move (ocean `#2563eb`, forest `#16a34a`, sunset `#f97316`, rose `#db2777`, slate `#475569`, teal `#0f766e`, each with matching `-700`/`-100`/`-rgb`/hover/canvas values and white-on-accent contrast, except sunset's contrast, which is `#111827`).
+Each `data-theme` replaces the accent family and canvas tint in one move (ocean `#2563eb`, forest `#16a34a`, sunset `#f97316`, rose `#db2777`, slate `#475569`, teal `#0f766e`, purple `#7e57c2`, each with matching `-700`/`-100`/`-rgb`/hover/canvas values and white-on-accent contrast, except sunset's contrast, which is `#111827`).
 
 ### Dark appearance
 `data-bs-theme="dark"` retains the accent hue but replaces light surfaces: canvas `#141820`, panels `#202631`, tertiary `#29313e`, border `#465061`, ink `#edf0f6`, muted `#b7bfce`; accent-100 becomes a `color-mix` of accent and panel. Cards, modals, dropdowns, tables, inputs and KPIs are remapped centrally in `90-taxonomy-and-utilities.css`.
@@ -153,7 +153,7 @@ Bootstrap 5 grid and utilities on mostly-static HTML pages (no SPA framework; ea
 
 ## Elevation & Depth
 
-Gently lifted, ambient. Depth is the glass model: translucent white surfaces (0.70–0.95) over the tinted canvas, defined by accent-tinted translucent borders, with diffuse, low-opacity shadows (near-black violet anchors, opacity 0.04–0.22) providing soft presence rather than structure. Nothing flies high; the one intentional exception is the fixed accent navbar with its visible glow.
+Gently lifted, ambient. Depth is the glass model: translucent white surfaces (0.70–0.95) over the tinted canvas, defined by accent-tinted translucent borders, with diffuse, low-opacity shadows (near-black cool-neutral anchors, opacity 0.04–0.22) providing soft presence rather than structure. Nothing flies high; the one intentional exception is the fixed accent navbar with its visible glow.
 
 ### Shadow Vocabulary
 - **Surface presence** (`0 10px 30px rgba(20, 20, 40, 0.06)`): resting cards.

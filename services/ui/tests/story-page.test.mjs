@@ -105,6 +105,7 @@ async function open(
     put,
     remove,
     globals,
+    confirm,
     get,
   } = {},
 ) {
@@ -112,6 +113,7 @@ async function open(
     query: '&id=s1',
     me: { user_id: 'u1', can_view_stories: true, can_create_questions: true, ...me },
     globals,
+    confirm,
     get:
       get ||
       (async (url) => {
@@ -541,7 +543,7 @@ test('every refused change is reported and leaves the page as it was', async (t)
         can_delete: true,
       },
     ],
-    globals: { confirm: () => true },
+    confirm: () => true,
     get: async (url) => {
       if (url.pathname === '/api/v1/stories/s1') return detail;
       if (url.pathname === '/api/v1/stories/s1/comments')
@@ -589,10 +591,7 @@ test('every refused change is reported and leaves the page as it was', async (t)
   ui.el('addSearch').value = 'alert';
   ui.el('findItems').click();
   await settle(() => /Search failed/.test(ui.el('candidates').textContent));
-  assert.equal(
-    ui.el('candidates').textContent.trim(),
-    'Search failed: Error: Search index offline',
-  );
+  assert.equal(ui.el('candidates').textContent.trim(), 'Search failed: Search index offline');
   // A candidate the API refuses stays in the list.
   ui.el('candidates').innerHTML =
     '<li class="list-group-item"><button type="button" data-add-kind="event" data-add-id="e9">Add</button></li>';
@@ -626,7 +625,7 @@ test('every refused change is reported and leaves the page as it was', async (t)
   ui.el('questionBody').value = 'Why?';
   askForm(ui).dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(
-    () => ui.el('status').textContent === 'Error: 409 This story changed. Reload before saving.',
+    () => ui.el('status').textContent === '409 This story changed. Reload before saving.',
   );
   assert.equal(ui.el('questionBody').value, 'Why?');
   reset();

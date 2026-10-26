@@ -1,4 +1,5 @@
 import {
+  errorText,
   safeExternalHref,
   initNavbar,
   apiGet,
@@ -140,7 +141,7 @@ async function load() {
     );
     renderMetric(row);
   } catch (e) {
-    toast(status, `Failed to load effectiveness metric: ${String(e)}`, 'danger');
+    toast(status, `Failed to load effectiveness metric: ${errorText(e)}`, 'danger');
   }
 }
 

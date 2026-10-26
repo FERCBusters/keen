@@ -173,7 +173,7 @@ test('audits that cannot be listed are reported in the dialog', async (t) => {
   assert.equal(ui.el('entityAuditSampleNotes').disabled, true);
   assert.deepEqual(ui.toasts.at(-1), {
     el: 'entityAuditSampleStatus',
-    message: 'Failed to load audits: Error: Service unavailable',
+    message: 'Failed to load audits: Service unavailable',
     type: 'danger',
   });
 });
@@ -190,7 +190,7 @@ test('a refused sample is reported and the dialog stays open', async (t) => {
 
   assert.deepEqual(ui.toasts.at(-1), {
     el: 'entityAuditSampleStatus',
-    message: 'Failed: Error: Audit is locked',
+    message: 'Failed: Audit is locked',
     type: 'danger',
   });
   assert.equal(ui.modal.hidden, 0);

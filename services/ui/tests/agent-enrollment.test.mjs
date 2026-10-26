@@ -44,6 +44,7 @@ test('enrollment profile creation displays a one-time key and clears it on navig
 
 test('profile revocation is explicit and revoked profiles have no reactivation controls', async (t) => {
   const calls = [];
+  const confirms = [];
   let p = {
     id: 'profile',
     name: 'Fleet <x>',
@@ -54,6 +55,14 @@ test('profile revocation is explicit and revoked profiles have no reactivation c
   };
   const ui = await loadUi('pages/agent-enrollment.js', {
     html: '<section id="host"></section>',
+    modules: {
+      'pages/confirm-modal.js': {
+        confirmAction: async (options) => {
+          confirms.push(options);
+          return true;
+        },
+      },
+    },
     vendor: {
       apiGet: async () => ({ profiles: [p] }),
       apiPost: async (url) => {
@@ -72,6 +81,8 @@ test('profile revocation is explicit and revoked profiles have no reactivation c
     .find((b) => b.textContent === 'Revoke profile and agents')
     .onclick();
   assert.equal(calls[0], '/api/v1/admin/agent-enrollment-profiles/profile/revoke');
+  assert.equal(confirms[0].danger, true, 'revocation asks through the danger confirm dialog');
+  assert.equal(confirms[0].typed, undefined, 'revocation does not ask for typed confirmation');
   assert.equal(host.querySelectorAll('[data-actions] button').length, 0);
   await controller.refresh(true);
   assert.equal(host.querySelector('[data-create]').disabled, true);

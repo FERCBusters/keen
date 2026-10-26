@@ -52,9 +52,7 @@ test('a saved search that cannot be stored reports why', async (t) => {
   });
   ui.el('saveSearch').click();
   await settle(() => posted.length === 1);
-  await settle(
-    () => ui.el('status').textContent === 'Failed to save: Error: Saved searches offline',
-  );
+  await settle(() => ui.el('status').textContent === 'Failed to save: Saved searches offline');
   assert.equal(ui.el('status').dataset.alert, 'danger');
 });
 
@@ -160,7 +158,7 @@ test('controls handle empty catalogues, counter failures and load failures', asy
   const withheld = await controlsPage(t, { summary: { events: null } });
   assert.equal(withheld.ui.el('kpiControlsWith').textContent, '-');
   const failed = await controlsPage(t, { fail: true });
-  assert.match(failed.ui.el('status').textContent, /Failed to load controls: Error: Stats offline/);
+  assert.match(failed.ui.el('status').textContent, /Failed to load controls: Stats offline/);
   failed.ui.el('reload').click();
   await settle(
     () => failed.ui.calls.filter((c) => c.url.startsWith('/api/v1/stats/controls')).length === 2,
@@ -257,6 +255,6 @@ test('clause search filters, persists and clears', async (t) => {
 
 test('clause load failures are reported', async (t) => {
   const ui = await clausesPage(t, { fail: true });
-  assert.match(ui.el('status').textContent, /Failed to load clauses: Error: Clauses offline/);
+  assert.match(ui.el('status').textContent, /Failed to load clauses: Clauses offline/);
   assert.match(ui.el('rows').textContent, /Failed to load clauses/);
 });

@@ -24,7 +24,7 @@
       </div>
     </div>
 
-    <div id="status" class="alert alert-info" style="display:none;"></div>
+    <div id="status" class="alert alert-info" style="display:none;" role="status"></div>
 
     <ul class="nav nav-tabs mb-3" id="eventsTabs" role="tablist">
       <li class="nav-item" role="presentation"><button class="nav-link active" id="eventsRegisterTab" data-bs-toggle="tab" data-bs-target="#eventsRegisterPane" type="button" role="tab" aria-controls="eventsRegisterPane" aria-selected="true">Events</button></li>
@@ -105,7 +105,7 @@
       </div>
     </div>
 
-    <div id="selectionBar" class="alert alert-primary d-flex flex-wrap gap-2 align-items-center py-2 no-print" role="region" aria-label="Selected events" hidden>
+    <div id="selectionBar" class="alert alert-primary d-flex flex-wrap gap-2 align-items-center py-2 no-print" role="region" aria-label="Selected events" aria-live="polite" hidden>
       <strong data-selection-count>0 selected</strong>
       <input class="form-control form-control-sm" data-story-title aria-label="Story title" maxlength="256" placeholder="Story title" style="width:16rem;">
       <button class="btn btn-sm btn-primary" type="button" data-create-story><i class="bi bi-journal-plus me-1" aria-hidden="true"></i>Create story</button>

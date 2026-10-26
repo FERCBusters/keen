@@ -25,7 +25,7 @@
       </div>
     </div>
 
-    <div id="status" class="alert alert-info" style="display:none;"></div>
+    <div id="status" class="alert alert-info" style="display:none;" role="status"></div>
     <!-- Tabs -->
     <div class="admin-tab-layout d-flex flex-column flex-lg-row gap-3">
       <button id="admin-navigation-toggle" type="button" class="btn btn-outline-primary d-lg-none" aria-expanded="false" aria-controls="adminTabs">Administration menu</button>
@@ -100,10 +100,10 @@
   <div class="card mt-3"><div class="card-body"><h3 class="h5">Shortcuts</h3><div class="admin-quicklinks"><a href="#framework-editor">Review frameworks <i class="bi bi-arrow-up-right"></i></a><a href="#diary">Record manual evidence <i class="bi bi-arrow-up-right"></i></a><a href="#users">Manage people's access <i class="bi bi-arrow-up-right"></i></a><a href="/help/administrator.html">Read the administrator guide <i class="bi bi-arrow-up-right"></i></a></div></div></div>
 </section>
 <section class="tab-pane fade" id="pane-agents" role="tabpanel" aria-labelledby="tab-agents" tabindex="0">
-<div class="d-flex justify-content-between flex-wrap gap-3"><div><h1 class="h3">Keen Agents</h1><p class="small-muted">Collect server activity as traceable evidence. Manage one identity per server or collector.</p></div><button id="ka-refresh" class="btn btn-outline-primary align-self-start">Refresh</button></div>
+<div class="d-flex justify-content-between flex-wrap gap-3"><div><h2 class="h3">Keen Agents</h2><p class="small-muted">Collect server activity as traceable evidence. Manage one identity per server or collector.</p></div><button id="ka-refresh" class="btn btn-outline-primary align-self-start">Refresh</button></div>
 <div id="ka-status" role="status" aria-live="polite" hidden></div>
-<div class="card mb-3"><div class="card-body"><h2 class="h5">Register a collector</h2><p>Use Keen Agent or an OTLP/HTTP JSON collector. Each credential can submit evidence and health reports for its registered identity. New registrations expire after the selected lifetime.</p><form id="ka-register" class="row g-3 align-items-end"><div class="col-md-6"><label class="form-label" for="ka-agent-name">Server / collector name</label><input id="ka-agent-name" class="form-control" required maxlength="128" pattern="[a-zA-Z0-9][a-zA-Z0-9_.:\-]*" placeholder="web-prod-01" autocomplete="off"></div><div class="col-md-3"><label class="form-label" for="ka-expiry">Credential lifetime (days)</label><input id="ka-expiry" type="number" min="1" max="365" value="90" class="form-control" required></div><div class="col-md-3"><button id="ka-register-button" class="btn btn-primary" disabled>Register agent</button></div></form></div></div>
-<section id="ka-credential" class="card border-warning mb-3" hidden aria-labelledby="ka-credential-title"><div class="card-body"><h2 id="ka-credential-title" class="h5">Save this credential now</h2><p>Keen displays it once. Save it to the agent's protected token file. Rotating a credential immediately invalidates the previous one.</p><label for="ka-token" class="form-label">Agent credential</label><input id="ka-token" type="password" class="form-control font-monospace" readonly autocomplete="off" spellcheck="false"><div class="d-flex flex-wrap gap-2 my-3"><button id="ka-copy" class="btn btn-primary">Copy credential</button><button id="ka-reveal" class="btn btn-outline-primary">Show credential</button><button id="ka-dismiss" class="btn btn-outline-secondary">Saved - dismiss</button></div></div></section>
+<div class="card mb-3"><div class="card-body"><h3 class="h5">Register a collector</h3><p>Use Keen Agent or an OTLP/HTTP JSON collector. Each credential can submit evidence and health reports for its registered identity. New registrations expire after the selected lifetime.</p><form id="ka-register" class="row g-3 align-items-end"><div class="col-md-6"><label class="form-label" for="ka-agent-name">Server / collector name</label><input id="ka-agent-name" class="form-control" required maxlength="128" pattern="[a-zA-Z0-9][a-zA-Z0-9_.:\-]*" placeholder="web-prod-01" autocomplete="off"></div><div class="col-md-3"><label class="form-label" for="ka-expiry">Credential lifetime (days)</label><input id="ka-expiry" type="number" min="1" max="365" value="90" class="form-control" required></div><div class="col-md-3"><button id="ka-register-button" class="btn btn-primary" disabled>Register agent</button></div></form></div></div>
+<section id="ka-credential" class="card border-warning mb-3" hidden aria-labelledby="ka-credential-title"><div class="card-body"><h3 id="ka-credential-title" class="h5">Save this credential now</h3><p>Keen displays it once. Save it to the agent's protected token file. Rotating a credential immediately invalidates the previous one.</p><label for="ka-token" class="form-label">Agent credential</label><input id="ka-token" type="password" class="form-control font-monospace" readonly autocomplete="off" spellcheck="false"><div class="d-flex flex-wrap gap-2 my-3"><button id="ka-copy" class="btn btn-primary">Copy credential</button><button id="ka-reveal" class="btn btn-outline-primary">Show credential</button><button id="ka-dismiss" class="btn btn-outline-secondary">Saved - dismiss</button></div></div></section>
 <details class="card mb-3"><summary class="card-header">Installation, configuration and evidence mapping</summary><div class="card-body"><p>Build the standalone Go agent from the <code>keen-agent</code> directory and follow its README and systemd installation instructions. The supplied service runs as a dedicated user. Grant read access to the selected logs and their rotated successors.</p><p>OTLP logs endpoint: <code id="ka-endpoint"></code></p><p>Save the credential in <code>/etc/keen-agent/token</code> with mode <code>0640</code>, owned by <code>root:keen-agent</code>. It is omitted from the configuration download.</p><button id="ka-yaml" class="btn btn-outline-primary mb-3">Download starter YAML</button><p>Events appear with source <strong>Keen Agent</strong> and the registered name as their system. In Sources &amp; evidence mapping, match <code>source = keen-agent</code> and the required action, outcome or normalized payload fields, then select the relevant framework controls.</p><p class="mb-0">Review the meaning and scope of each rule: a package transaction can demonstrate maintenance activity; the organization's patching threshold still requires an appropriate measurement and review.</p></div></details>
 <div id="ka-agents" class="d-grid gap-3" aria-live="polite"></div>
 
@@ -130,7 +130,7 @@
     <p class="mt-3 small-muted">Existing specialist adapters remain available under <a href="#ingest">Ingest runners</a>.</p>
   </div>
   <div id="ig-editor" hidden class="card"><div class="card-body">
-    <div class="d-flex justify-content-between gap-2"><h3 id="ig-heading" class="h5">Build an integration</h3><button id="ig-close" class="btn btn-outline-secondary btn-sm">Back to integrations</button></div>
+    <div class="d-flex justify-content-between gap-2"><h3 id="ig-heading" class="h5">Build an integration</h3><span id="ig-unsaved" class="badge text-bg-warning" hidden>Unsaved changes</span><button id="ig-close" class="btn btn-outline-secondary btn-sm">Back to integrations</button></div>
     <nav id="ig-steps" class="ig-steps my-3" aria-label="Integration setup"></nav>
     <form id="ig-builder">
       <section data-ig-step="0"><h4 class="h6">1. Connect a system</h4><label for="ig-template" class="form-label">Start from a template</label><select id="ig-template" class="form-select mb-2"></select><p id="ig-template-description" class="small-muted"></p><button type="button" id="ig-apply-template" class="btn btn-outline-primary btn-sm mb-3">Use this template</button>
@@ -167,7 +167,7 @@
             </div>
           </div>
           <div class="card-body">
-            <div id="usersStatus" class="alert alert-info" style="display:none;"></div>
+            <div id="usersStatus" class="alert alert-info" style="display:none;" role="status"></div>
 
             <form id="userCreateForm" class="row g-2 align-items-end mb-3">
               <div class="col-12 col-lg">
@@ -224,7 +224,7 @@
             </div>
           </div>
           <div class="card-body">
-            <div id="groupsStatus" class="alert alert-info" style="display:none;"></div>
+            <div id="groupsStatus" class="alert alert-info" style="display:none;" role="status"></div>
 
             <div class="row g-3 admin-groups-layout">
               <div class="col-12 col-lg-5 admin-groups-list-col">
@@ -373,6 +373,7 @@
             <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between mb-3">
               <div>
                 <h3 id="ec-editor-heading" class="h4 mb-1">Create a mapping</h3>
+                <span id="ec-unsaved" class="badge text-bg-warning" hidden>Unsaved changes</span>
                 <p class="small-muted mb-0">A mapping turns matching events into evidence for the controls you choose. Pick the events, say what they show, then check the matches before you publish.</p>
               </div>
               <button id="ec-close-editor" type="button" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to mappings</button>
@@ -796,7 +797,7 @@
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="userAccessModalLabel">User access</h5>
+          <h2 class="modal-title h5" id="userAccessModalLabel">User access</h2>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
@@ -821,7 +822,7 @@
             <div id="userAccessEffective" class="mono small"></div>
           </div>
 
-          <div id="userAccessStatus" class="alert alert-info mt-3" style="display:none;"></div>
+          <div id="userAccessStatus" class="alert alert-info mt-3" style="display:none;" role="status"></div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>

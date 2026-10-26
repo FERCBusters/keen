@@ -295,7 +295,7 @@ test('risks can be sampled into audits with a descriptive title', async (t) => {
 
 test('load failures and a missing id are reported', async (t) => {
   const failed = await riskPage(t, { fail: { risk: true } });
-  assert.match(failed.ui.el('status').textContent, /Failed to load risk: Error: Risk offline/);
+  assert.match(failed.ui.el('status').textContent, /Failed to load risk: Risk offline/);
   assert.match(failed.ui.el('linkedControls').textContent, /Failed to load linked controls/);
   const missing = await page(t, 'risk', {
     get: async (u) => {

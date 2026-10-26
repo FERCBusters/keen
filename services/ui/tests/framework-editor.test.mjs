@@ -59,6 +59,7 @@ async function editor(t, options = {}) {
   const ui = await page(t, 'framework-editor', {
     htmlName: 'admin',
     globals: options.globals,
+    confirm: options.confirm,
     get: async (u) => {
       if (u.pathname === '/api/v1/admin/framework-selection') {
         if (options.fail) throw new Error('Selection offline');
@@ -305,7 +306,7 @@ test('node references are stable and required fields are validated', async (t) =
 test('node deletion confirms and reports server refusals', async (t) => {
   const prompts = [];
   const { ui, state, $ } = await editor(t, {
-    globals: { confirm: (m) => (prompts.push(m), true) },
+    confirm: (options) => (prompts.push(options), true),
   });
   $('delete-node').click();
   assert.equal(prompts.length, 0);
@@ -313,9 +314,9 @@ test('node deletion confirms and reports server refusals', async (t) => {
   $('delete-node').click();
   await settle(() => $('message').textContent === 'Node deleted');
   assert.deepEqual(state.removed, ['/api/v1/admin/frameworks/A/nodes/annex_control/A.5.1']);
-  assert.equal(prompts[0], 'Delete annex_control A.5.1?');
+  assert.equal(prompts[0].title, 'Delete annex_control A.5.1');
 
-  const refused = await editor(t, { deleteFail: true, globals: { confirm: () => true } });
+  const refused = await editor(t, { deleteFail: true });
   [...refused.$('tree').children][0].click();
   refused.$('delete-node').click();
   await settle(() => refused.$('message').textContent === 'Node has children');

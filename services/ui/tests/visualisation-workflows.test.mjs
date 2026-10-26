@@ -571,7 +571,7 @@ test('a default needs a whole date range, and a refused save is reported', async
   await settle(() => /Could not save/.test(ui.el('status').textContent));
   assert.equal(
     ui.el('status').textContent,
-    'Could not save default visualisation: Error: Preferences offline',
+    'Could not save default visualisation: Preferences offline',
   );
   assert.equal(ui.el('status').dataset.alert, 'danger');
 
@@ -1322,7 +1322,7 @@ test('a window with no events and no note is refused, and a failed save is repor
   panel.querySelector('[data-window-title]').value = '';
   panel.querySelector('[data-window-create]').click();
   await settle(() => /Failed to create the story/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Failed to create the story: Error: Stories offline');
+  assert.equal(ui.el('status').textContent, 'Failed to create the story: Stories offline');
   assert.equal(posted.length, 1);
   assert.equal(posted[0].items[0].kind, 'note');
   assert.match(posted[0].title, /^Events from /);
@@ -1626,7 +1626,7 @@ test('a failed download is reported for each export format', async (t) => {
   for (const id of ['vizExportCsv', 'vizExportJson', 'vizExportSvg']) {
     ui.el('status').textContent = '';
     ui.el(id).click();
-    assert.equal(ui.el('status').textContent, 'Export failed: Error: No blob URLs here', id);
+    assert.equal(ui.el('status').textContent, 'Export failed: No blob URLs here', id);
     assert.equal(ui.el('status').dataset.alert, 'danger');
   }
   assert.deepEqual(ui.files, []);
@@ -1734,7 +1734,7 @@ test('a drag that fails to load reports the zoom failure', async (t) => {
   dragBrush(ui, 80, 180);
   await settle(() => hourRequests === 1);
   await settle(() => /Failed to load histogram zoom/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Failed to load histogram zoom: Error: Zoom offline');
+  assert.equal(ui.el('status').textContent, 'Failed to load histogram zoom: Zoom offline');
   assert.equal(ui.el('status').dataset.alert, 'danger');
 });
 

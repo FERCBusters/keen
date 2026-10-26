@@ -114,6 +114,7 @@ async function auditPage(t, options = {}) {
     scripts: [d3],
     me: options.me || { is_admin: true, user_id: 'u1' },
     globals: { NodeFilter, ...(options.globals || {}) },
+    confirm: options.confirm,
     setup: options.setup,
     vendor: options.vendor,
     get: async (u) => {
@@ -435,7 +436,7 @@ test('audit scope graph shows guidance for empty scope and escapes load failures
   const failed = await auditPage(t, { fail: { scopeMap: true } });
   assert.match(
     failed.ui.el('scopeHeatmap').textContent,
-    /Failed to load scope visualisation: Error: <b>Map offline<\/b>/,
+    /Failed to load scope visualisation: <b>Map offline<\/b>/,
   );
   assert.equal(failed.ui.el('scopeHeatmap').querySelector('b'), null);
 });
@@ -516,6 +517,77 @@ test('report notes, URL evidence and evidence notes are saved through their endp
   ui.document.querySelector('[data-del-evidence="e2"]').click();
   await settle(() => state.removed?.includes('/api/v1/audits/a1/evidence/e2'));
   await idle(ui);
+});
+
+test('sampled evidence offers keyboard-accessible bulk selection and removal', async (t) => {
+  const { ui, state } = await auditPage(t);
+  const boxes = () => [...ui.document.querySelectorAll('[data-select-evidence]')];
+  assert.equal(boxes().length, 3);
+  assert.equal(ui.el('evidenceSelectAllWrap').hidden, false);
+  assert.equal(ui.el('evidenceSelectionBar').hidden, true);
+  for (const box of boxes()) {
+    assert.equal(box.getAttribute('aria-label'), 'Select this sampled evidence');
+    assert.notEqual(box.tabIndex, -1);
+  }
+  const click = (index, extra = {}) => {
+    // jsdom toggles the checkbox itself, matching a real activation click.
+    boxes()[index].dispatchEvent(
+      new ui.window.MouseEvent('click', { bubbles: true, shiftKey: !!extra.shiftKey }),
+    );
+  };
+  click(0);
+  assert.equal(boxes()[0].checked, true);
+  assert.equal(ui.el('evidenceSelectionBar').hidden, false);
+  assert.equal(
+    ui.el('evidenceSelectionBar').querySelector('[data-evidence-selection-count]').textContent,
+    '1 selected',
+  );
+  // Shift-select extends to the clicked row.
+  click(2, { shiftKey: true });
+  assert.deepEqual(
+    boxes().map((box) => box.checked),
+    [true, true, true],
+  );
+  assert.equal(
+    ui.el('evidenceSelectionBar').querySelector('[data-evidence-selection-count]').textContent,
+    '3 selected',
+  );
+  ui.el('selectAllEvidence').checked = false;
+  ui.el('selectAllEvidence').dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  assert.deepEqual(
+    boxes().map((box) => box.checked),
+    [false, false, false],
+  );
+  ui.el('selectAllEvidence').checked = true;
+  ui.el('selectAllEvidence').dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  assert.deepEqual(
+    boxes().map((box) => box.checked),
+    [true, true, true],
+  );
+  state.removed = [];
+  const bar = ui.el('evidenceSelectionBar');
+  bar.querySelector('[data-remove-selected-evidence]').click();
+  await settle(() => (state.removed || []).length === 3);
+  assert.deepEqual(state.removed, [
+    '/api/v1/audits/a1/evidence/e1',
+    '/api/v1/audits/a1/evidence/e2',
+    '/api/v1/audits/a1/evidence/e3',
+  ]);
+  await settle(
+    () =>
+      ui.el('evidenceSelectionBar').querySelector('[data-evidence-selection-count]').textContent ===
+      '0 selected',
+  );
+  assert.equal(ui.el('evidenceSelectionBar').hidden, true);
+});
+
+test('read-only auditors get no bulk evidence selection', async (t) => {
+  const { ui } = await auditPage(t, {
+    me: { is_admin: false, can_view_audits: true, user_id: 'u9' },
+  });
+  assert.equal(ui.document.querySelectorAll('[data-select-evidence]').length, 0);
+  assert.equal(ui.el('evidenceSelectAllWrap').hidden, true);
+  assert.equal(ui.el('evidenceSelectionBar').hidden, true);
 });
 
 test('findings can be added, edited and removed', async (t) => {
@@ -720,16 +792,16 @@ test('audit creators who are managers can edit their own audit but cannot delete
 });
 
 test('audit deletion requires confirmation and returns to the audit list', async (t) => {
-  const cancelled = await auditPage(t, { globals: { confirm: () => false } });
+  const cancelled = await auditPage(t, { confirm: false });
   cancelled.ui.el('deleteAudit').click();
   assert.equal(cancelled.state.removed, undefined);
 
-  let prompt = '';
-  const { ui, state } = await auditPage(t, { globals: { confirm: (m) => ((prompt = m), true) } });
+  let prompt = null;
+  const { ui, state } = await auditPage(t, { confirm: (asked) => ((prompt = asked), true) });
   ui.el('deleteAudit').click();
   await settle(() => ui.el('status').textContent === 'Audit deleted');
   assert.deepEqual(state.removed, ['/api/v1/audits/a1']);
-  assert.match(prompt, /Delete audit "<img src=x onerror=alert\(1\)> Annual audit"\?/);
+  assert.match(prompt.title, /Delete audit <img src=x onerror=alert\(1\)> Annual audit$/);
 });
 
 test('final report upload requires a file and posts multipart form data', async (t) => {
@@ -751,9 +823,9 @@ test('final report upload requires a file and posts multipart form data', async 
 test('failed mutations surface the error and keep the page usable', async (t) => {
   const { ui } = await auditPage(t, { patchFail: true });
   ui.el('detailsForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => /Failed: Error: Patch rejected/.test(ui.el('status').textContent));
+  await settle(() => /Failed: Patch rejected/.test(ui.el('status').textContent));
   ui.el('reportNotesForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => /Failed: Error: Patch rejected/.test(ui.el('status').textContent));
+  await settle(() => /Failed: Patch rejected/.test(ui.el('status').textContent));
 });
 
 test('scheduled audit templates edit their schedule and hide sampling/export actions', async (t) => {
@@ -1109,9 +1181,9 @@ test('refused findings, evidence links, people and deletion are reported in plac
   const { ui, state } = await auditPage(t, {
     postFail: true,
     removeFail: true,
-    globals: { confirm: () => true },
+    confirm: () => true,
   });
-  const failed = () => /^Failed: Error: (Post|Delete) rejected$/.test(ui.el('status').textContent);
+  const failed = () => /^Failed: (Post|Delete) rejected$/.test(ui.el('status').textContent);
   const reset = () => (ui.el('status').textContent = '');
 
   ui.el('findingTitle').value = 'Improve logging';
@@ -1131,7 +1203,7 @@ test('refused findings, evidence links, people and deletion are reported in plac
   ui.el('attendeeEmail').dispatchEvent(new ui.window.Event('input'));
   ui.el('attendeeCreatePerson').click();
   await settle(() => /Could not add Person/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Could not add Person: Error: Post rejected');
+  assert.equal(ui.el('status').textContent, 'Could not add Person: Post rejected');
   assert.equal(ui.el('attendeePersonId').value, '');
   reset();
 
@@ -1166,7 +1238,7 @@ test('a template schedule with a malformed date is not saved, and a refused one 
 
   valid = true;
   ui.el('templateScheduleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => ui.el('status').textContent === 'Failed: Error: Patch rejected');
+  await settle(() => ui.el('status').textContent === 'Failed: Patch rejected');
   assert.equal(state.patched.length, 1);
   assert.equal(state.patched[0].path, '/api/v1/audits/scheduled/a1');
 });

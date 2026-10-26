@@ -1,4 +1,5 @@
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -116,7 +117,7 @@ $('newDocument').addEventListener('click', () => {
 });
 $('documentList').addEventListener('click', (e) => {
   const row = e.target.closest('[data-document]');
-  if (row) openDocument(row.dataset.document).catch((err) => status(String(err), 'danger'));
+  if (row) openDocument(row.dataset.document).catch((err) => status(errorText(err), 'danger'));
 });
 $('folderList').addEventListener('click', (e) => {
   const row = e.target.closest('[data-folder]');
@@ -138,7 +139,7 @@ $('folderForm').addEventListener('submit', async (e) => {
     await reload();
     status('Folder added.');
   } catch (err) {
-    status(String(err), 'danger');
+    status(errorText(err), 'danger');
   }
 });
 $('documentForm').addEventListener('submit', async (e) => {
@@ -166,7 +167,7 @@ $('documentForm').addEventListener('submit', async (e) => {
     await openDocument(row.id);
     status('Document saved.');
   } catch (err) {
-    status(String(err), 'danger');
+    status(errorText(err), 'danger');
   }
 });
 $('revisionList').addEventListener('click', async (e) => {
@@ -180,7 +181,7 @@ $('revisionList').addEventListener('click', async (e) => {
       `<div class="alert alert-secondary"><strong>Version ${revision.version}</strong> · SHA-256 ${esc(revision.sha256)}<div id="revisionContent" class="mt-2"></div></div>`;
     $('revisionContent').innerHTML = renderRichTextContent(revision.content_html);
   } catch (err) {
-    status(String(err), 'danger');
+    status(errorText(err), 'danger');
   }
 });
 $('commentForm').addEventListener('submit', async (e) => {
@@ -192,7 +193,7 @@ $('commentForm').addEventListener('submit', async (e) => {
     await loadHistory();
     status('Comment added.');
   } catch (err) {
-    status(String(err), 'danger');
+    status(errorText(err), 'danger');
   }
 });
 if (!manage) {
@@ -207,5 +208,5 @@ initRichTextEditors(document);
 try {
   await reload();
 } catch (err) {
-  status(`Could not load documents: ${String(err)}`, 'danger');
+  status(`Could not load documents: ${errorText(err)}`, 'danger');
 }

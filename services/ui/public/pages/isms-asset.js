@@ -1,4 +1,5 @@
 import {
+  errorText,
   initNavbar,
   apiGet,
   esc,
@@ -87,7 +88,7 @@ async function load() {
     await loadChangelog();
     activateTabFromHashOrQuery(params, { changelog: $('assetChangelogTab') });
   } catch (e) {
-    toast(status, `Failed to load asset: ${String(e)}`, 'danger');
+    toast(status, `Failed to load asset: ${errorText(e)}`, 'danger');
   }
 }
 

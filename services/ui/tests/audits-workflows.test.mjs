@@ -431,13 +431,13 @@ test('a refused audit or template deletion is reported and the row stays', async
     globals: { confirm: () => true },
   });
   ui.document.querySelector('[data-delete-audit="a2"]').click();
-  await settle(() => ui.el('status').textContent === 'Failed: Error: Delete refused');
+  await settle(() => ui.el('status').textContent === 'Failed: Delete refused');
   assert.equal(ui.el('status').dataset.alert, 'danger');
   assert.match(ui.el('rows').textContent, /Spring/);
   ui.el('status').textContent = '';
 
   ui.document.querySelector('[data-delete-schedule="s1"]').click();
-  await settle(() => ui.el('status').textContent === 'Failed: Error: Delete refused');
+  await settle(() => ui.el('status').textContent === 'Failed: Delete refused');
   assert.match(ui.el('scheduledRows').textContent, /Quarterly/);
   assert.deepEqual(state.removed, ['/api/v1/audits/a2', '/api/v1/audits/scheduled/s1']);
 });
@@ -464,9 +464,78 @@ test('a schedule with a malformed end or until date is not sent, and a refused o
 
   invalid.clear();
   ui.el('scheduleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => ui.el('status').textContent === 'Failed: Error: Rejected');
+  await settle(() => ui.el('status').textContent === 'Failed: Rejected');
   assert.equal(state.posted[0].path, '/api/v1/audits/scheduled');
   assert.equal(ui.el('schedTitle').value, 'Supplier review');
+});
+
+test('schedule sections start collapsed and reveal progress through counts', async (t) => {
+  const { ui } = await auditsPage(t);
+  await settle(() => ui.el('schedDocuments').options.length === 2);
+  const docsSection = ui.document.getElementById('schedDocumentsSection');
+  const attSection = ui.document.getElementById('schedAttendeesSection');
+  assert.equal(docsSection.open, false);
+  assert.equal(attSection.open, false);
+  assert.deepEqual(ui.el('schedDocumentsBadge').textContent, 'Not set');
+  assert.deepEqual(ui.el('schedAttendeesBadge').textContent, 'Not set');
+  assert.equal(ui.el('schedDocumentsBadge').classList.contains('text-bg-warning'), false);
+  // The core schedule alone does not turn the empty sections into warnings.
+  ui.el('schedTitle').value = 'Q2 supply audit';
+  ui.el('schedTitle').dispatchEvent(new ui.window.Event('input'));
+  // A start date completes the core schedule and empty sections need attention.
+  ui.el('schedStart').value = '2026-05-01';
+  ui.el('schedStart').dispatchEvent(new ui.window.Event('change'));
+  assert.match(ui.el('schedDocumentsBadge').textContent, /Needs attention/);
+  assert.match(ui.el('schedAttendeesBadge').textContent, /Needs attention/);
+  assert.equal(ui.el('schedDocumentsBadge').classList.contains('text-bg-warning'), true);
+  assert.equal(ui.el('schedAttendeesBadge').classList.contains('text-bg-warning'), true);
+  // Counts appear once each section holds something.
+  ui.el('schedDocuments').options[0].selected = true;
+  ui.el('schedDocuments').dispatchEvent(new ui.window.Event('change'));
+  assert.deepEqual(ui.el('schedDocumentsBadge').textContent, '1 document');
+  ui.el('schedAttendeeName').value = 'Bea';
+  ui.el('schedAddAttendee').click();
+  assert.deepEqual(ui.el('schedAttendeesBadge').textContent, '1 attendee');
+  ui.el('schedAttendeeName').value = 'Cal';
+  ui.el('schedAddAttendee').click();
+  assert.deepEqual(ui.el('schedAttendeesBadge').textContent, '2 attendees');
+  ui.el('schedDocuments').options[0].selected = false;
+  ui.el('schedDocuments').options[1].selected = true;
+  ui.el('schedDocuments').dispatchEvent(new ui.window.Event('change'));
+  // Revealing the sections stays available at any time.
+  docsSection.open = true;
+  assert.match(ui.el('schedDocuments').options[1].textContent, /Plan/);
+  // Reset clears selection, collapses the sections and restores the defaults.
+  ui.el('scheduleReset').click();
+  assert.equal(docsSection.open, false);
+  assert.equal(attSection.open, false);
+  assert.deepEqual(ui.el('schedDocumentsBadge').textContent, 'Not set');
+  assert.deepEqual(ui.el('schedAttendeesBadge').textContent, 'Not set');
+  assert.equal(ui.el('schedDocumentsBadge').classList.contains('text-bg-warning'), false);
+});
+
+test('a collapsed schedule section still submits attendees and documents', async (t) => {
+  const { ui, state } = await auditsPage(t);
+  await settle(() => ui.el('schedDocuments').options.length === 2);
+  ui.el('schedTitle').value = 'Collapsed plan';
+  ui.el('schedDocuments').options[1].selected = true;
+  ui.el('schedAttendeeUserId').value = 'u2';
+  ui.el('schedAttendeeUserId').dispatchEvent(new ui.window.Event('change'));
+  ui.el('schedAddAttendee').click();
+  assert.deepEqual(ui.el('schedAttendeesBadge').textContent, '1 attendee');
+  ui.document.getElementById('schedDocumentsSection').open = false;
+  ui.document.getElementById('schedAttendeesSection').open = false;
+  ui.el('scheduleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => state.posted.length === 1);
+  assert.deepEqual(state.posted[0].body.documents, ['d2']);
+  assert.deepEqual(state.posted[0].body.attendees, [
+    { user_id: 'u2', name: 'zed', email: 'zed@example.test', role: null },
+  ]);
+  // A successful submit collapses the sections again for the next schedule.
+  await settle(() => ui.el('schedAttendeesBadge').textContent === 'Not set');
+  assert.equal(ui.document.getElementById('schedDocumentsSection').open, false);
+  assert.equal(ui.document.getElementById('schedAttendeesSection').open, false);
+  assert.deepEqual(ui.el('schedAttendeesBadge').textContent, 'Not set');
 });
 
 test('starting an audit opens the wizard', async (t) => {

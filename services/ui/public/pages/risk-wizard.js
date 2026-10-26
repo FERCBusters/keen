@@ -4,6 +4,7 @@
 // fields that method needs.
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -904,7 +905,7 @@ async function finish() {
     const result = isPestle() ? await savePestle() : await saveRisk();
     showDone(result);
   } catch (e) {
-    notify(`Could not save: ${String(e)}`);
+    notify(`Could not save: ${errorText(e)}`);
   } finally {
     next.disabled = false;
   }
@@ -1297,6 +1298,6 @@ if (!canManageRisks) {
     }
     showStep(first);
   } catch (e) {
-    notify(`Could not start the risk wizard: ${String(e)}`);
+    notify(`Could not start the risk wizard: ${errorText(e)}`);
   }
 }

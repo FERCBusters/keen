@@ -317,7 +317,7 @@ test('a saved search that cannot be stored reports why', async (t) => {
   ui.el('saveSearch').click();
 
   await settle(() => /Failed to save/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Failed to save: Error: Name already used');
+  assert.equal(ui.el('status').textContent, 'Failed to save: Name already used');
   assert.equal(ui.el('status').dataset.alert, 'danger');
 });
 

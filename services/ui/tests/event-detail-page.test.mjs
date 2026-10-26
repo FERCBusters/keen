@@ -70,7 +70,7 @@ test('event detail renders structured payload and an event-scoped mapping shortc
   const ui = await fixture(t);
   assert.equal(ui.el('summary').querySelector('img'), null);
   assert.match(ui.el('summary').textContent, /<img src=x>/);
-  assert.match(ui.el('controls').textContent, /unmapped/);
+  assert.match(ui.el('controls').textContent, /Unmapped/);
   assert.equal(ui.el('btnCreateMapping').hidden, false);
   assert.match(ui.el('btnCreateMapping').href, /framework=A&from_event=e1#evidence-config/);
   assert.match(ui.el('normalized').textContent, /31101/);

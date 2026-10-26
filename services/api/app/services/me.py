@@ -260,7 +260,7 @@ def me(*, context: ChangeContext, db: Session) -> dict:
     prefs = PreferencesOut(
         use_local_timezone=bool(getattr(user, "pref_use_local_timezone", False)),
         timezone=getattr(user, "pref_timezone", None),
-        theme=(getattr(user, "pref_theme", None) or "purple"),
+        theme=(getattr(user, "pref_theme", None) or "ink"),
         date_format=_validate_date_format(getattr(user, "pref_date_format", None)),
         auto_apply_filters=bool(getattr(user, "pref_auto_apply_filters", False)),
         source_colors=(getattr(user, "pref_source_colors", None) or {}),
@@ -432,7 +432,7 @@ def get_my_preferences(*, context: ChangeContext) -> PreferencesOut:
     return PreferencesOut(
         use_local_timezone=bool(getattr(user, "pref_use_local_timezone", False)),
         timezone=getattr(user, "pref_timezone", None),
-        theme=(getattr(user, "pref_theme", None) or "purple"),
+        theme=(getattr(user, "pref_theme", None) or "ink"),
         date_format=_validate_date_format(getattr(user, "pref_date_format", None)),
         auto_apply_filters=bool(getattr(user, "pref_auto_apply_filters", False)),
         source_colors=(getattr(user, "pref_source_colors", None) or {}),
@@ -462,7 +462,7 @@ def update_my_preferences(
 
     if "theme" in fields:
         theme = _validate_theme_id(payload.theme)
-        # Blank/None is treated as "no change"; caller can always set "purple" explicitly.
+        # Blank/None is treated as "no change"; caller can always set "ink" explicitly.
         if theme:
             user.pref_theme = theme
 
@@ -508,7 +508,7 @@ def update_my_preferences(
     return PreferencesOut(
         use_local_timezone=bool(user.pref_use_local_timezone),
         timezone=user.pref_timezone,
-        theme=(user.pref_theme or "purple"),
+        theme=(user.pref_theme or "ink"),
         date_format=_validate_date_format(getattr(user, "pref_date_format", None)),
         auto_apply_filters=bool(getattr(user, "pref_auto_apply_filters", False)),
         source_colors=(getattr(user, "pref_source_colors", None) or {}),

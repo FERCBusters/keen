@@ -763,7 +763,7 @@ test('a second status change while one is saving is ignored, and a failed refres
 
   listFails = true;
   release(new Error('Status refused'));
-  await settle(() => ui.el('status').textContent === 'Error: List offline');
+  await settle(() => ui.el('status').textContent === 'List offline');
   assert.equal(ui.el('status').dataset.alert, 'danger');
   assert.equal(doc.getElementById('planningView').hasAttribute('aria-busy'), false);
   assert.equal(doc.querySelector('[data-status-id="s1"]').value, 'defined');

@@ -1,4 +1,5 @@
 import {
+  errorText,
   safeExternalHref,
   initNavbar,
   apiGet,
@@ -396,7 +397,7 @@ function renderInterestedParties() {
         (item.controls || [])
           .map(
             (c) =>
-              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=interested-parties`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`,
+              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=governance`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`,
           )
           .join('') || '<span class="small-muted">-</span>';
       const comms =
@@ -575,7 +576,7 @@ async function load() {
     );
     renderAll();
   } catch (e) {
-    toast(status, `Failed to load Statement of Applicability: ${String(e)}`, 'danger');
+    toast(status, `Failed to load Statement of Applicability: ${errorText(e)}`, 'danger');
     controlsRows.innerHTML = '<tr><td class="p-4 small-muted">Failed to load controls.</td></tr>';
     clausesRows.innerHTML = '<tr><td class="p-4 small-muted">Failed to load clauses.</td></tr>';
     risksRows.innerHTML =

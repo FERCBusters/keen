@@ -1,4 +1,11 @@
-import { apiGet, apiPost, apiPut, apiDelete, refreshFrameworkNavigation } from '/app.js';
+import {
+  apiGet,
+  apiPost,
+  apiPut,
+  apiDelete,
+  confirmAction,
+  refreshFrameworkNavigation,
+} from '/app.js';
 
 const $ = (id) => document.getElementById(`fe-${id}`);
 let frameworks = [];
@@ -235,7 +242,16 @@ $('save-node').addEventListener('click', async () => {
   }
 });
 $('delete-node').addEventListener('click', async () => {
-  if (!selected || !confirm(`Delete ${selected.kind} ${selected.ref}?`)) return;
+  if (!selected) return;
+  if (
+    !(await confirmAction({
+      title: `Delete ${selected.kind} ${selected.ref}`,
+      message: 'Remove this node from the framework catalogue?',
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
+  )
+    return;
   try {
     await apiDelete(url(selected.kind, selected.ref));
     await selectFramework();

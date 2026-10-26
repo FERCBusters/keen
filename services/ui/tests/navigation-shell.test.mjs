@@ -183,8 +183,13 @@ test('the account shell turns off account caching and asks the bell for the righ
   const ui = await shell(t);
   const config = ui.seen.config;
   assert.equal(config.auth.meCacheMs, 0);
-  assert.equal(config.brandIcon, '/keen-mitigator.png');
+  assert.equal(config.brandIcon, '/keen-mitigator-64.png');
   assert.equal(config.nav.expandClass, 'navbar-expand-lg');
+  // The one accent owns the navbar: the start-audit call to action is the
+  // on-accent inverted button, never a second hue.
+  assert.match(config.nav.extraHtml({ is_admin: true }), /btn-light/);
+  assert.doesNotMatch(config.nav.extraHtml({ is_admin: true }), /btn-success/);
+  assert.equal(config.nav.extraHtml({}), '');
   assert.deepEqual([config.framework.selectMinChars, config.framework.selectMaxChars], [14, 19]);
   const summary = config.bell.summaryEndpoint;
   assert.equal(summary({ is_admin: true }), '/api/v1/admin/questions/summary');

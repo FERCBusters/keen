@@ -2,7 +2,15 @@
 // authors can add the record to one of their open stories or start a new one
 // from here. The list loads when its tab is first shown.
 import { featureEnabled } from '/pages/feature-availability.js';
-import { apiGet, apiPost, esc, fmtTs, getCurrentFramework, withFramework } from '/app.js';
+import {
+  errorText,
+  apiGet,
+  apiPost,
+  esc,
+  fmtTs,
+  getCurrentFramework,
+  withFramework,
+} from '/app.js';
 
 export const KIND_NAMES = {
   event: 'event',
@@ -143,7 +151,7 @@ export function mountStoryRelated({
         : '<option value="">No other open stories you can edit</option>';
     } catch (error) {
       select.innerHTML = '<option value="">Your stories could not be listed</option>';
-      say(`Could not list your stories: ${String(error?.message || error)}`, 'danger');
+      say(`Could not list your stories: ${errorText(error)}`, 'danger');
     }
   }
 
@@ -178,7 +186,7 @@ export function mountStoryRelated({
         { items: [{ kind, entity_id: id }], expected_version: Number(option.dataset.version) },
       );
     } catch (error) {
-      say(`Could not add it to the story: ${String(error?.message || error)}`, 'danger');
+      say(`Could not add it to the story: ${errorText(error)}`, 'danger');
       await loadChoices();
       return;
     }
@@ -196,7 +204,7 @@ export function mountStoryRelated({
         items: [{ kind, entity_id: id }],
       });
     } catch (error) {
-      say(`Could not start the story: ${String(error?.message || error)}`, 'danger');
+      say(`Could not start the story: ${errorText(error)}`, 'danger');
       return;
     }
     title.value = '';

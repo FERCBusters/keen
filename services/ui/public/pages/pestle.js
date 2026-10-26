@@ -1,9 +1,11 @@
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
   apiPatch,
   apiDelete,
+  confirmAction,
   esc,
   toast,
   debounce,
@@ -146,7 +148,7 @@ function wireTabs() {
   pestleVisualisationsTab?.addEventListener('shown.bs.tab', () => {
     setTabQuery('visualisations');
     renderPestleVisualisations().catch((e) =>
-      toast(status, `Failed to load visualisations: ${String(e)}`, 'danger'),
+      toast(status, `Failed to load visualisations: ${errorText(e)}`, 'danger'),
     );
   });
   activateTab(requestedTab);
@@ -267,9 +269,12 @@ function renderBusinessProcesses() {
       const id = btn.dataset.deleteProcess || '';
       const bp = businessProcesses.find((x) => String(x.id) === String(id));
       if (
-        !confirm(
-          `Delete business process “${bp?.name || 'this process'}”? Relevance links for it will also be removed.`,
-        )
+        !(await confirmAction({
+          title: 'Delete business process',
+          message: `Delete ${bp?.name || 'this process'}? Its relevance links are removed with it.`,
+          confirmLabel: 'Delete',
+          danger: true,
+        }))
       )
         return;
       try {
@@ -278,7 +283,7 @@ function renderBusinessProcesses() {
         visualisationsLoaded = false;
         toast(status, 'Business process deleted', 'success');
       } catch (e) {
-        toast(status, `Failed to delete business process: ${String(e)}`, 'danger');
+        toast(status, `Failed to delete business process: ${errorText(e)}`, 'danger');
       }
     }),
   );
@@ -808,14 +813,16 @@ addBusinessProcess?.addEventListener('click', async () => {
     visualisationsLoaded = false;
     toast(status, 'Business process added', 'success');
   } catch (e) {
-    toast(status, `Failed to add business process: ${String(e)}`, 'danger');
+    toast(status, `Failed to add business process: ${errorText(e)}`, 'danger');
   } finally {
     addBusinessProcess.disabled = false;
   }
 });
 
 reloadPestle?.addEventListener('click', () =>
-  loadItems().catch((e) => toast(status, `Failed to load PESTLE(E) items: ${String(e)}`, 'danger')),
+  loadItems().catch((e) =>
+    toast(status, `Failed to load PESTLE(E) items: ${errorText(e)}`, 'danger'),
+  ),
 );
 pestleQ?.addEventListener(
   'input',
@@ -842,5 +849,5 @@ try {
     if (requestedTab === 'visualisations') await renderPestleVisualisations(true);
   }
 } catch (e) {
-  toast(status, `Failed to load PESTLE(E): ${String(e)}`, 'danger');
+  toast(status, `Failed to load PESTLE(E): ${errorText(e)}`, 'danger');
 }

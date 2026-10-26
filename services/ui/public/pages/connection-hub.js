@@ -1,7 +1,7 @@
 import { sourceSetupProfile } from './source-setup-profile.js';
 import { editSourceConnection } from './source-connection-editor.js';
 import { confirmEvidenceRemoval } from './evidence-removal.js';
-import { apiGet, apiPut, apiPost, apiDelete } from '/app.js';
+import { errorText, apiGet, apiPut, apiPost, apiDelete, confirmAction } from '/app.js';
 const root = '/api/v1/admin',
   byId = (id) => document.getElementById('hub-' + id);
 let connectionTypes = [];
@@ -30,7 +30,7 @@ function showError(e) {
   const el = byId('status');
   el.hidden = false;
   el.className = 'alert alert-danger';
-  let text = e.message || String(e);
+  let text = errorText(e);
   try {
     text = JSON.parse(text).detail || text;
   } catch {}
@@ -218,11 +218,12 @@ function render() {
 async function removeConnection(item) {
   if (item.connection) {
     if (
-      confirm(
-        'Delete ' +
-          item.name +
-          '? Collected evidence and its connection identity will be retained.',
-      )
+      await confirmAction({
+        title: 'Delete connection',
+        message: `Delete ${item.name}? Collected evidence and its connection identity will be retained.`,
+        confirmLabel: 'Delete',
+        danger: true,
+      })
     ) {
       await apiDelete(
         root + '/source-connections/' + item.connection.id + '?version=' + item.connection.version,
@@ -385,7 +386,7 @@ async function editCollection(adapter, existing = null, connection = null) {
       window.dispatchEvent(new Event('keen-connections-changed'));
       showSavedInput(connection, adapter);
     } catch (e) {
-      byId('collection-error').textContent = e.message || String(e);
+      byId('collection-error').textContent = errorText(e);
     } finally {
       save.disabled = false;
     }
@@ -471,7 +472,14 @@ async function editConnection(connection = null) {
 }
 
 async function removeInput(connection, input) {
-  if (!confirm('Remove this input? Existing evidence and mapping rules are retained.')) return;
+  if (
+    !(await confirmAction({
+      title: 'Remove input',
+      message: 'Remove this input? Existing evidence and mapping rules are retained.',
+      confirmLabel: 'Remove',
+    }))
+  )
+    return;
   const inputs = structuredClone(connection.inputs);
   inputs[input.section] = (inputs[input.section] || []).filter(
     (row) => JSON.stringify(row) !== JSON.stringify(input.entry),

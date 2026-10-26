@@ -1,4 +1,5 @@
 import {
+  errorText,
   initNavbar,
   apiGet,
   esc,
@@ -206,7 +207,7 @@ async function load() {
     renderFilterSummary();
     render(allItems.filter(matches));
   } catch (e) {
-    toast(status, `Failed to load sources: ${String(e)}`, 'danger');
+    toast(status, `Failed to load sources: ${errorText(e)}`, 'danger');
     tbody.innerHTML =
       '<tr><td colspan="6" class="small-muted p-4">Failed to load sources.</td></tr>';
   }

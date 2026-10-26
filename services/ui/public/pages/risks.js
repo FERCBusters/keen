@@ -4,12 +4,14 @@
 // the risk wizard; rating and treatment can also be adjusted in place.
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
   apiPatch,
   apiPostForm,
   apiDelete,
+  confirmAction,
   esc,
   toast,
   debounce,
@@ -281,7 +283,7 @@ async function loadRisks() {
   } catch (e) {
     $('rows').innerHTML =
       '<tr><td colspan="10" class="p-4 text-center text-danger">Failed to load risks.</td></tr>';
-    notify(`Failed to load risks: ${String(e)}`);
+    notify(`Failed to load risks: ${errorText(e)}`);
   }
 }
 
@@ -322,7 +324,7 @@ async function loadCiaRisks() {
   } catch (e) {
     $('ciaRows').innerHTML =
       '<tr><td colspan="8" class="p-4 text-center text-danger">Failed to load CIA risks.</td></tr>';
-    notify(`Failed to load CIA risks: ${String(e)}`);
+    notify(`Failed to load CIA risks: ${errorText(e)}`);
   }
 }
 
@@ -381,7 +383,7 @@ async function loadHeatmap() {
     renderHeatmap();
     loaded.heatmap = true;
   } catch (e) {
-    notify(`Could not load the risk heatmap: ${String(e)}`);
+    notify(`Could not load the risk heatmap: ${errorText(e)}`);
   }
 }
 
@@ -474,7 +476,7 @@ async function loadPestle() {
   } catch (e) {
     $('pestleRows').innerHTML =
       '<tr><td colspan="7" class="p-4 text-center text-danger">Failed to load PESTLE(E) factors.</td></tr>';
-    notify(`Failed to load PESTLE(E) factors: ${String(e)}`);
+    notify(`Failed to load PESTLE(E) factors: ${errorText(e)}`);
   }
 }
 
@@ -522,7 +524,7 @@ async function loadLibrary() {
     renderLibrary();
     loaded.library = true;
   } catch (e) {
-    notify(`Could not load the risk library: ${String(e)}`);
+    notify(`Could not load the risk library: ${errorText(e)}`);
   }
 }
 
@@ -558,7 +560,7 @@ async function loadControlsWithoutRisks() {
   } catch (e) {
     $('controlsWithoutRisksRows').innerHTML =
       '<tr><td colspan="4" class="p-4 text-center text-danger">Failed to load controls without risks.</td></tr>';
-    notify(`Failed to load controls without risks: ${String(e)}`);
+    notify(`Failed to load controls without risks: ${errorText(e)}`);
   }
 }
 
@@ -591,7 +593,7 @@ const TAB_LOADERS = new Map([
       riskVisualisationsAreLoaded()
         ? null
         : loadRiskVisualisations().catch((e) =>
-            notify(`Failed to load risk visualisations: ${String(e)}`),
+            notify(`Failed to load risk visualisations: ${errorText(e)}`),
           ),
   ],
   ['controls-without-risks', () => (loaded.controlsWithout ? null : loadControlsWithoutRisks())],
@@ -672,7 +674,7 @@ $('ratingForm').addEventListener('submit', async (e) => {
     await Promise.all([loadRisks(), loadHeatmap()]);
     notify('Rating and treatment saved.', 'success');
   } catch (err) {
-    notify(`Could not save the rating: ${String(err)}`);
+    notify(`Could not save the rating: ${errorText(err)}`);
   }
 });
 $('thresholdForm').addEventListener('submit', async (e) => {
@@ -689,7 +691,7 @@ $('thresholdForm').addEventListener('submit', async (e) => {
     wireSampleButtons($('rows'), (id) => currentItems.find((x) => String(x.id) === String(id)));
     notify('Risk thresholds saved.', 'success');
   } catch (err) {
-    notify(`Could not save thresholds: ${String(err)}`);
+    notify(`Could not save thresholds: ${errorText(err)}`);
   }
 });
 $('addToLibrary').addEventListener('click', async () => {
@@ -716,18 +718,26 @@ $('addToLibrary').addEventListener('click', async () => {
     await loadLibrary();
     notify('Template saved to the risk library.', 'success');
   } catch (err) {
-    notify(`Could not save the template: ${String(err)}`);
+    notify(`Could not save the template: ${errorText(err)}`);
   }
 });
 $('libraryList').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-delete-library]');
-  if (!btn || !canManageRisks || !confirm('Delete this reusable template?')) return;
+  if (!btn || !canManageRisks) return;
+  if (
+    !(await confirmAction({
+      title: 'Delete reusable template',
+      message: 'Delete this reusable template from the risk library?',
+      confirmLabel: 'Delete',
+    }))
+  )
+    return;
   try {
     await apiDelete(`${base}/library/${encodeURIComponent(btn.dataset.deleteLibrary)}`);
     await loadLibrary();
     notify('Template deleted.', 'success');
   } catch (err) {
-    notify(`Could not delete the template: ${String(err)}`);
+    notify(`Could not delete the template: ${errorText(err)}`);
   }
 });
 // --- Sidebar -----------------------------------------------------------------------------------
@@ -783,7 +793,7 @@ $('importForm').addEventListener('submit', async (e) => {
     await Promise.all([loadRisks(), loadHeatmap()]);
     notify(`${response.created} risks imported.`, 'success');
   } catch (err) {
-    notify(`Could not import the CSV: ${String(err)}`);
+    notify(`Could not import the CSV: ${errorText(err)}`);
   }
 });
 
@@ -798,13 +808,13 @@ initRiskVisualisations({
   scoreMode: document.querySelector('input[name="riskVizScoreMode"]:checked')?.value || 'residual',
 });
 $('reloadRiskVisualisations').addEventListener('click', () =>
-  loadRiskVisualisations({ force: true }).catch((e) => notify(String(e))),
+  loadRiskVisualisations({ force: true }).catch((e) => notify(errorText(e))),
 );
 $('riskVizTopRisks').addEventListener('change', () =>
-  loadRiskVisualisations().catch((e) => notify(String(e))),
+  loadRiskVisualisations().catch((e) => notify(errorText(e))),
 );
 $('riskVizTopControls').addEventListener('change', () =>
-  loadRiskVisualisations().catch((e) => notify(String(e))),
+  loadRiskVisualisations().catch((e) => notify(errorText(e))),
 );
 for (const input of document.querySelectorAll('input[name="riskVizScoreMode"]')) {
   input.addEventListener('change', () => {
@@ -837,7 +847,7 @@ if (!canViewRisks) {
     categories = (await apiGet(`${base}/categories`))?.items || [];
     renderCategoryFilters();
   } catch (e) {
-    notify(`Could not load asset categories: ${String(e)}`);
+    notify(`Could not load asset categories: ${errorText(e)}`);
   }
   await Promise.all([loadRisks(), loadHeatmap()]);
   if (requestedTab === 'register') setTabQuery('risks');

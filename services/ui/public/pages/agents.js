@@ -1,5 +1,5 @@
 import { enrollmentProfiles } from './agent-enrollment.js';
-import { apiGet, apiPost, initNavbar, esc } from '/app.js';
+import { apiGet, apiPost, initNavbar, confirmAction, esc } from '/app.js';
 const root = '/api/v1/admin/agents',
   $ = (id) => document.getElementById('ka-' + id);
 let demo = true,
@@ -110,9 +110,15 @@ async function load() {
         card.querySelector('.agent-actions').append(
           button('Rotate credential', async () => {
             if (
-              !confirm(
-                'Invalidate the current credential and issue a replacement for ' + a.name + '?',
-              )
+              !(await confirmAction({
+                title: 'Rotate agent credential',
+                message:
+                  'Invalidate the current credential and issue a replacement for ' +
+                  a.name +
+                  '? Agents using the current credential stop reporting until they are re-issued it.',
+                confirmLabel: 'Rotate',
+                typed: 'Rotate',
+              }))
             )
               return;
             const r = await apiPost(root + '/' + a.id + '/rotate', {
@@ -122,7 +128,17 @@ async function load() {
             await load();
           }),
           button('Revoke', async () => {
-            if (!confirm('Permanently revoke ' + a.name + '? Existing evidence remains available.'))
+            if (
+              !(await confirmAction({
+                title: 'Revoke agent',
+                message:
+                  'Permanently revoke ' +
+                  a.name +
+                  '? The agent loses access for good; existing evidence remains available.',
+                confirmLabel: 'Revoke',
+                danger: true,
+              }))
+            )
               return;
             await apiPost(root + '/' + a.id + '/revoke', {});
             dismiss();

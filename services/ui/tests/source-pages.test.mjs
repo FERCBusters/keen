@@ -298,7 +298,7 @@ test('source summary and event failures are reported', async (t) => {
   const ui = await sourcePage(t, { fail: { sources: true, events: true } });
   assert.equal(ui.el('sourceMeta').textContent, 'Source summary unavailable.');
   await settle(() =>
-    /Failed to load source events: Error: Events offline/.test(ui.el('status').textContent),
+    /Failed to load source events: Events offline/.test(ui.el('status').textContent),
   );
   assert.match(ui.el('eventRows').textContent, /Failed to load source events/);
   const empty = await sourcePage(t, { events: [] });
@@ -439,7 +439,7 @@ test('filters set in the address narrow the register when it loads', async (t) =
 
 test('source list failures are reported', async (t) => {
   const ui = await sourcesPage(t, { fail: true });
-  assert.match(ui.el('status').textContent, /Failed to load sources: Error: Offline/);
+  assert.match(ui.el('status').textContent, /Failed to load sources: Offline/);
 });
 
 test('metric source links on the source page only allow web or Keen URLs', async (t) => {

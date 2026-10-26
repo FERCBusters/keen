@@ -1,4 +1,5 @@
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -38,6 +39,19 @@ import { createEventSelection } from '/pages/event-selection.js';
 const me = await initNavbar();
 const framework = getCurrentFramework();
 enableTableSorting();
+
+// The events service keeps every event list page size in 1..200, coercing
+// larger requests to 200. Match the service values here so the meta line can
+// say when a requested page size was not honoured.
+const EVENT_LIMIT_MAX = 200;
+
+function coerceLimit(requested) {
+  const n = Number(requested);
+  if (!Number.isInteger(n)) return { limit: 50, capped: false };
+  if (n > EVENT_LIMIT_MAX) return { limit: EVENT_LIMIT_MAX, capped: true };
+  if (n <= 0) return { limit: n === 0 ? 50 : 1, capped: true };
+  return { limit: n, capped: false };
+}
 
 // Admin-only shortcut: jump straight to the Diary section.
 // Kept out of the HTML so non-admin users never see it.
@@ -172,6 +186,9 @@ let state = {
   total: 0,
   framework,
 };
+const initialLimit = coerceLimit(state.limit);
+state.limit = initialLimit.limit;
+state.limitCapped = initialLimit.capped;
 
 let sourceMeta = {};
 let controlsIndex = {};
@@ -531,7 +548,8 @@ function renderRows(items) {
 
   if ((items || []).length === 0) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="${columnCount}" class="small-muted p-4">No events match the current filters.</td>`;
+    tr.id = 'emptyState';
+    tr.innerHTML = `<td colspan="${columnCount}" class="small-muted p-4">No events match the current filters.<div>Older records may have been removed by the evidence retention policy.</div></td>`;
     tbody.appendChild(tr);
   }
 }
@@ -566,13 +584,14 @@ async function loadEvents() {
       state.start_ts && state.end_ts
         ? ` · window ${fmtTs(state.start_ts)}-${fmtTs(state.end_ts)}`
         : '';
-    meta.textContent = `${page.start}-${page.end} of ${page.total}${timeNote}`;
+    const limitNote = state.limitCapped ? ` · page size capped at ${state.limit}` : '';
+    meta.textContent = `${page.start}-${page.end} of ${page.total}${timeNote}${limitNote}`;
 
     renderRows(data.items || []);
 
     setOffsetPagerDisabled(pagerButtons, state);
   } catch (e) {
-    toast(status, `Failed to load events: ${String(e)}`, 'danger');
+    toast(status, `Failed to load events: ${errorText(e)}`, 'danger');
     meta.textContent = '-';
     tbody.innerHTML = `<tr><td colspan="${columnCount}" class="small-muted p-4">Failed to load events.</td></tr>`;
   }
@@ -655,6 +674,7 @@ function applyFromInputs(resetOffset = true) {
   if (endDateDmy) endDateDmy.value = isoDateToDmy(state.end_date || '');
 
   state.limit = parseInt(selLimit.value || '50', 10);
+  state.limitCapped = false;
   if (resetOffset) state.offset = 0;
 
   setQuery({
@@ -809,7 +829,7 @@ document.getElementById('saveSearch').addEventListener('click', async () => {
     await apiPost('/api/v1/me/saved-searches', { name, url });
     toast(status, 'Saved', 'success');
   } catch (e) {
-    toast(status, `Failed to save: ${String(e)}`, 'danger');
+    toast(status, `Failed to save: ${errorText(e)}`, 'danger');
   }
 });
 

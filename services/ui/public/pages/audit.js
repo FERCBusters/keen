@@ -1,9 +1,11 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { maskDomText, maskEventDataString } from '/pages/evidence-export/masking.js';
 import { isoYearMonth, scheduleDateFields } from '/pages/schedule-fields.js';
+import { createEvidenceSelection } from '/pages/evidence-selection.js';
 let selectedSwotIds = new Set(),
   swotScopeLoaded = false;
 import {
+  errorText,
   initNavbar,
   canEditAuditForUser,
   canSampleIntoAudit,
@@ -13,6 +15,7 @@ import {
   apiPut,
   apiDelete,
   apiPostForm,
+  confirmAction,
   esc,
   fmtTs,
   fmtTsFilename,
@@ -58,6 +61,40 @@ function _sampleMaskedFilename(value) {
 
 const auditId = qs('id');
 const status = document.getElementById('status');
+
+const evidenceSelection = createEvidenceSelection({
+  container: document.getElementById('evidence'),
+  bar: document.getElementById('evidenceSelectionBar'),
+  selectAllWrap: document.getElementById('evidenceSelectAllWrap'),
+  statusEl: status,
+});
+document
+  .querySelector('[data-remove-selected-evidence]')
+  ?.addEventListener('click', () => removeSelectedEvidence());
+
+async function removeSelectedEvidence() {
+  const ids = evidenceSelection.ids();
+  if (!ids.length) return;
+  if (!ensureAuditEditable()) return;
+  if (
+    !(await confirmAction({
+      title: 'Remove sampled evidence',
+      message: `Remove ${ids.length} sampled evidence ${ids.length === 1 ? 'item' : 'items'} from this audit? The evidence itself stays in Keen.`,
+      confirmLabel: 'Remove',
+    }))
+  )
+    return;
+  try {
+    for (const id of ids)
+      await apiDelete(
+        `/api/v1/audits/${encodeURIComponent(auditId)}/evidence/${encodeURIComponent(id)}`,
+      );
+    evidenceSelection.clear();
+  } catch (e) {
+    toast(status, `Failed to remove sampled evidence: ${errorText(e)}`, 'danger');
+  }
+  await loadAudit({ preserveUnsaved: true });
+}
 
 const auditStart = document.getElementById('auditStart');
 const auditEnd = document.getElementById('auditEnd');
@@ -1192,7 +1229,7 @@ async function exportAuditZip() {
       } catch {}
     }, 3300);
   } catch (err) {
-    toast(status, String(err), 'danger');
+    toast(status, errorText(err), 'danger');
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -1987,7 +2024,7 @@ async function loadScopeVisualisation() {
     renderScopeBipartiteGraph(data);
   } catch (e) {
     if (wrap)
-      wrap.innerHTML = `<div class="text-danger small p-3">Failed to load scope visualisation: ${esc(String(e))}</div>`;
+      wrap.innerHTML = `<div class="text-danger small p-3">Failed to load scope visualisation: ${esc(errorText(e))}</div>`;
   }
 }
 
@@ -2059,7 +2096,7 @@ async function loadAttendeeUsers() {
   } catch (e) {
     attendeeUsers = [];
     renderAttendeeUserOptions();
-    toast(status, `Failed to load Keen users for attendees: ${String(e)}`, 'warning');
+    toast(status, `Failed to load Keen users for attendees: ${errorText(e)}`, 'warning');
   }
 }
 
@@ -2103,7 +2140,7 @@ document.getElementById('attendeeCreatePerson')?.addEventListener('click', async
     suggestPersonCreation();
     toast(status, 'Person saved to the directory. Add them to the audit below.', 'success');
   } catch (err) {
-    toast(status, `Could not add Person: ${String(err)}`, 'danger');
+    toast(status, `Could not add Person: ${errorText(err)}`, 'danger');
   }
 });
 
@@ -2241,6 +2278,9 @@ function renderFindings(items) {
 function renderEvidence(items) {
   const el = document.getElementById('evidence');
   const arr = items || [];
+  const bulk = canEditAudit();
+  const selectAllWrap = document.getElementById('evidenceSelectAllWrap');
+  if (selectAllWrap) selectAllWrap.hidden = !bulk || !arr.length;
   if (!arr.length) {
     el.innerHTML =
       '<span class="small-muted">No evidence sampled yet. Use the “Sample into audit” button on an event, risk or ISMS page, or paste a URL above.</span>';
@@ -2264,11 +2304,14 @@ function renderEvidence(items) {
       const subtitle = entity?.subtitle ? ` · ${entity.subtitle}` : '';
       return `<div class="border rounded p-3 mb-3" data-evidence-card="${esc(x.id)}">
       <div class="d-flex flex-wrap gap-2 justify-content-between">
-        <div>
+        <div class="d-flex flex-wrap align-items-start gap-2">
+          ${bulk ? evidenceSelection.cellHtml(x.id) : ''}
+          <div>
           <div class="mb-1"><span class="badge text-bg-light">${esc(kind)}</span></div>
           <a class="fw-semibold" href="${esc(href || '#')}">${esc(title)}</a>
           <div class="small-muted">Added ${esc(fmtTs(x.added_at))} by ${userPillHtml(x.added_by_username)}${ev?.timestamp ? ` · Event time ${esc(fmtTs(ev.timestamp))}` : ''}${esc(subtitle)}</div>
           <div class="mt-1">${controls}</div>
+          </div>
         </div>
         ${canEditAudit() ? `<button class="btn btn-sm btn-outline-danger" data-del-evidence="${esc(x.id)}">Remove</button>` : ''}
       </div>
@@ -2294,6 +2337,7 @@ function renderEvidence(items) {
       await loadAudit({ preserveUnsaved: true });
     }),
   );
+  evidenceSelection.rendered();
   el.querySelectorAll('[data-del-evidence]').forEach((btn) =>
     btn.addEventListener('click', async () => {
       if (!ensureAuditEditable()) return;
@@ -2388,7 +2432,7 @@ document.getElementById('detailsForm')?.addEventListener('submit', async (ev) =>
     toast(status, auditLocked() ? 'Audit reopened' : 'Audit details saved', 'success');
     await loadAudit({ preserveUnsaved: !auditLocked() });
   } catch (e) {
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -2413,7 +2457,7 @@ document.getElementById('templateScheduleForm')?.addEventListener('submit', asyn
     toast(status, 'Template schedule saved', 'success');
     await loadAudit({ preserveUnsaved: false });
   } catch (e) {
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -2428,7 +2472,7 @@ document.getElementById('reportNotesForm')?.addEventListener('submit', async (ev
     toast(status, 'Report notes saved', 'success');
     await loadAudit({ preserveUnsaved: true });
   } catch (e) {
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -2445,7 +2489,7 @@ document.getElementById('reportForm')?.addEventListener('submit', async (ev) => 
     toast(status, 'Final report uploaded', 'success');
     await loadAudit({ preserveUnsaved: true });
   } catch (e) {
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -2488,7 +2532,7 @@ document.getElementById('saveScope')?.addEventListener('click', async () => {
     );
     await loadAudit({ preserveUnsaved: true });
   } catch (e) {
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -2520,7 +2564,7 @@ document.getElementById('attendeeForm')?.addEventListener('submit', async (ev) =
     toast(status, 'Person added', 'success');
     await loadAudit({ preserveUnsaved: true });
   } catch (e) {
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -2543,7 +2587,7 @@ document.getElementById('findingForm')?.addEventListener('submit', async (ev) =>
     toast(status, 'Finding added', 'success');
     await loadAudit({ preserveUnsaved: true });
   } catch (e) {
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -2585,7 +2629,7 @@ document.getElementById('urlEvidenceForm')?.addEventListener('submit', async (ev
     toast(status, 'Evidence URL added', 'success');
     await loadAudit({ preserveUnsaved: true });
   } catch (e) {
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -2597,9 +2641,13 @@ document.getElementById('deleteAudit')?.addEventListener('click', async () => {
   }
   const title = audit?.title || 'this audit';
   if (
-    !confirm(
-      `Delete audit "${title}"? This permanently removes the audit, its scope, attendees, sample links and findings. Events protected only by this audit become eligible for evidence retention or purge.`,
-    )
+    !(await confirmAction({
+      title: `Delete audit ${title}`,
+      message:
+        'This permanently removes the audit, its scope, attendees, sample links and findings. Events protected only by this audit become eligible for evidence retention or purge.',
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
   )
     return;
   try {
@@ -2607,7 +2655,7 @@ document.getElementById('deleteAudit')?.addEventListener('click', async () => {
     toast(status, 'Audit deleted', 'success');
     location.href = withFramework('/audits.html', audit?.framework_slug || getCurrentFramework());
   } catch (e) {
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 

@@ -9,6 +9,26 @@ const overview = {
   attention: [{ href: '/audits.html', label: 'Audit due', detail: 'Review soon' }],
   counts: { risks: 1 },
 };
+const timeline = {
+  days: 30,
+  interval: 'day',
+  items: [
+    { bucket: '2026-10-01', total: 4, mapped: 3, unmapped: 1 },
+    { bucket: '2026-10-02', total: 0, mapped: 0, unmapped: 0 },
+    { bucket: '2026-10-03', total: 9, mapped: 9, unmapped: 0 },
+  ],
+  sources: [
+    { source: 'forgejo', label: 'Forgejo', color: '#c73e1d', total: 40 },
+    { source: HOSTILE_KEY(), label: HOSTILE(), color: 'not-a-hex', total: 12 },
+    { source: 'legacy', label: 'Legacy collector', color: '#5b8def', total: 7 },
+  ],
+};
+function HOSTILE() {
+  return '<img src=x onerror="globalThis.pwned=1">';
+}
+function HOSTILE_KEY() {
+  return 'file:"src';
+}
 async function fixture(t, options = {}) {
   return page(t, 'home', {
     htmlName: 'index',
@@ -24,31 +44,15 @@ async function fixture(t, options = {}) {
       if (u.pathname === '/api/v1/frameworks')
         return { items: [{ slug: 'A', name: 'Framework A', control_count: 2, has_clauses: true }] };
       if (u.pathname === '/api/v1/home') {
-        if (options.fail) throw new Error('Offline');
+        if (options.homeFail) throw new Error('Offline');
         return overview;
       }
+      if (u.pathname === '/api/v1/charts/event_volume_timeseries') {
+        if (options.timelineFail === '403') throw new Error('403 events.read permission required');
+        if (options.timelineFail) throw new Error('Offline');
+        return options.timeline || timeline;
+      }
       if (u.pathname === '/api/v1/home/controls') return { items: [], sections: [], total: 0 };
-      const routes = {
-        '/api/v1/risks': {
-          id: 'r1',
-          asset: 'Database',
-          threat_summary: 'Disclosure',
-          risk_score: 20,
-        },
-        '/api/v1/events': { id: 'e1', summary: 'Agent alert', source: 'keen-agent' },
-        '/api/v1/audits': { id: 'a1', title: 'Annual audit', status: 'open' },
-        '/api/v1/pestle/items': { id: 'p1', item: 'Regulation', type: 'Legal', lens: 'External' },
-        '/api/v1/interested-parties': {
-          id: 'i1',
-          name: { name: 'Customers' },
-          nature: { name: 'External' },
-        },
-        '/api/v1/isms/effectiveness-measures': { id: 'm1', summary: 'Coverage' },
-        '/api/v1/sources': { source: 'keen-agent', label: 'Agents', event_count: 8 },
-        '/api/v1/clauses': { id: 'cl1', ref: '4.1', title: 'Context' },
-      };
-      if (routes[u.pathname])
-        return { items: options.empty ? [] : [routes[u.pathname]], total: options.empty ? 0 : 1 };
       throw new Error('Unexpected GET ' + u);
     },
   });
@@ -56,28 +60,90 @@ async function fixture(t, options = {}) {
 test('home overview renders evidence counts and attention links', async (t) => {
   const ui = await fixture(t);
   assert.match(ui.el('homeKpis').textContent, /8/);
-  assert.match(ui.el('homeAttention').textContent, /3 events awaiting mapping/);
+  assert.match(ui.el('homeKpis').textContent, /Unmapped events/);
+  assert.match(ui.el('homeAttention').textContent, /3 unmapped events/);
   assert.match(ui.el('homeAttention').textContent, /Audit due/);
-  assert.ok(ui.document.querySelector('[data-kind="risks"]'));
+  assert.ok(ui.document.querySelector('.home-task'));
 });
-for (const [kind, text] of [
-  ['risks', 'Database'],
-  ['evidence', 'Agent alert'],
-  ['audits', 'Annual audit'],
-  ['pestle', 'Regulation'],
-  ['interested_parties', 'Customers'],
-  ['effectiveness_measures', 'Coverage'],
-  ['sources', 'Agents'],
-  ['clauses', 'Context'],
-])
-  test('home explorer opens ' + kind + ' collection', async (t) => {
-    const ui = await fixture(t);
-    ui.document.querySelector(`[data-kind="${kind}"] .js-entry-zoom`).click();
-    await settle(() => ui.el('explorerCanvas').textContent.includes(text));
-    assert.ok(ui.el('explorerCanvas').querySelector('a'));
+test('the activity band charts the 30-day overview and the busiest sources', async (t) => {
+  const ui = await fixture(t);
+  assert.equal(ui.el('homeActivity').hidden, false);
+  // The sparkline is an SVG over the existing event volume endpoint's buckets.
+  assert.ok(ui.document.querySelector('#homeSpark .home-spark-svg'));
+  assert.match(
+    ui.el('homeSpark').getAttribute('aria-label'),
+    /peaking at 9 on 2026-10-03; 13 collected and 12 mapped/,
+  );
+  assert.match(
+    ui.el('homeSparkNote').textContent,
+    /13 events collected · 12 mapped to this framework/,
+  );
+  // Busiest sources reuse the chart payload's own labels, tints and totals.
+  const rows = [...ui.el('homeSources').querySelectorAll('a')];
+  assert.deepEqual(
+    rows.map((a) => [a.getAttribute('href'), a.textContent]),
+    [
+      ['/events.html?source=forgejo&framework=A', 'Forgejo40'],
+      ['/events.html?source=file%3A%22src&framework=A', HOSTILE() + '12'],
+      ['/events.html?source=legacy&framework=A', 'Legacy collector7'],
+    ],
+  );
+  // A tint is only inlined when it is a plain sRGB hex colour.
+  assert.equal(rows[1].querySelector('.home-source-dot').getAttribute('style'), null);
+  assert.equal(
+    rows[0].querySelector('.home-source-dot').getAttribute('style'),
+    'background:#c73e1d',
+  );
+  // No markup from hostile label text reaches the document.
+  assert.equal(ui.el('homeSources').querySelector('img'), null);
+  assert.equal(ui.window.pwned, undefined);
+  assert.equal(
+    ui.el('homeSourcesMore').querySelector('a').getAttribute('href'),
+    '/sources.html?framework=A',
+  );
+});
+test('the activity band is absent without evidence access and quiet when empty', async (t) => {
+  const reader = await fixture(t, { me: { can_view_audits: true } });
+  assert.equal(reader.el('homeActivity').hidden, true);
+  // No activity request is made for an account that cannot read events.
+  assert.equal(
+    reader.calls.filter((c) => new URL(c.url, 'https://keen.example').pathname.includes('charts'))
+      .length,
+    0,
+  );
+  const empty = await fixture(t, {
+    timeline: { interval: 'day', items: [], sources: [] },
   });
-test('home limits explorer entry points to user permissions', async (t) => {
-  const ui = await fixture(t, { me: { can_view_events: true } });
-  assert.equal(ui.document.querySelector('[data-kind="risks"]'), null);
-  assert.ok(ui.document.querySelector('[data-kind="evidence"]'));
+  assert.equal(empty.el('homeActivity').hidden, false);
+  assert.match(empty.el('homeSparkNote').textContent, /No events collected in the last 30 days/);
+  assert.equal(empty.el('homeSpark').childElementCount, 0);
+  assert.equal(empty.el('homeActivitySources').hidden, true);
+});
+test('the activity band fails quietly without hiding the workspace', async (t) => {
+  const offline = await fixture(t, { timelineFail: true });
+  assert.equal(offline.el('homeActivity').hidden, false);
+  assert.match(offline.el('homeSparkNote').textContent, /could not be loaded/);
+  assert.equal(offline.el('homeSpark').childElementCount, 0);
+  assert.ok(offline.el('homeTasks').querySelector('a'));
+  assert.match(offline.el('homeAttention').textContent, /Audit due/);
+
+  const forbidden = await fixture(t, { timelineFail: '403' });
+  assert.equal(forbidden.el('homeActivity').hidden, true);
+});
+test('shortcuts render every role-gated destination in the compact grid', async (t) => {
+  const ui = await fixture(t);
+  const list = ui.el('homeTasks');
+  const labels = [...list.querySelectorAll(':scope > .home-task span')].map((s) => s.textContent);
+  assert.deepEqual(labels, [
+    'Review evidence',
+    'Create an evidence mapping',
+    'Plan or run an audit',
+    'Review the risk register',
+    'Record an effectiveness measurement',
+    'Manage documents and assets',
+  ]);
+  // No gradation, no discloser: the card exposes the full advertised list.
+  assert.equal(list.querySelector('details.home-task-more'), null);
+  for (const link of list.querySelectorAll('a.home-task'))
+    assert.match(link.getAttribute('href'), /\bframework=A\b/);
 });

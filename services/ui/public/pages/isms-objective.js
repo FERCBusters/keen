@@ -1,4 +1,5 @@
 import {
+  errorText,
   initNavbar,
   apiGet,
   fmtTs,
@@ -102,7 +103,7 @@ async function load() {
     await loadChangelog();
     activateTabFromHashOrQuery(params, { changelog: $('objectiveChangelogTab') });
   } catch (e) {
-    toast(status, `Failed to load objective: ${String(e)}`, 'danger');
+    toast(status, `Failed to load objective: ${errorText(e)}`, 'danger');
   }
 }
 

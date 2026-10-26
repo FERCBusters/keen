@@ -1875,7 +1875,7 @@ CREATE TABLE public.users (
     is_active boolean DEFAULT true NOT NULL,
     pref_use_local_timezone boolean DEFAULT false NOT NULL,
     pref_timezone character varying(64),
-    pref_theme character varying(32) DEFAULT 'purple'::character varying NOT NULL,
+    pref_theme character varying(32) DEFAULT 'sand'::character varying NOT NULL,
     created_at timestamp without time zone NOT NULL,
     updated_at timestamp without time zone NOT NULL,
     last_login_at timestamp without time zone,

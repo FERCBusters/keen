@@ -1,4 +1,5 @@
 import {
+  errorText,
   initNavbar,
   apiGet,
   esc,
@@ -246,7 +247,7 @@ async function loadEvents() {
     renderEvents(data.items || []);
     setOffsetPagerDisabled(pagerButtons, state);
   } catch (e) {
-    toast(status, `Failed to load source events: ${String(e)}`, 'danger');
+    toast(status, `Failed to load source events: ${errorText(e)}`, 'danger');
     eventResultMeta.textContent = '-';
     eventRows.innerHTML =
       '<tr><td colspan="7" class="p-4 text-danger">Failed to load source events.</td></tr>';

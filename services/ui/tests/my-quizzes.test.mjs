@@ -149,10 +149,7 @@ test('an unlinked account sees why, and a failure is reported', async (t) => {
 
   const broken = await account(t, { fail: true });
   await settle(() => broken.ui.el('myQuizzesStatus').style.display === '');
-  assert.equal(
-    broken.ui.el('myQuizzesStatus').textContent,
-    'Failed to load your quizzes: Error: Offline',
-  );
+  assert.equal(broken.ui.el('myQuizzesStatus').textContent, 'Failed to load your quizzes: Offline');
 });
 
 test('with quizzes switched off the tab loads nothing', async (t) => {
