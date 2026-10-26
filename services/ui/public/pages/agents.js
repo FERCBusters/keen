@@ -226,7 +226,10 @@ async function load() {
           });
           await load();
         });
-        controls.append(save);
+        const actions = document.createElement('div');
+        actions.className = 'col-12 col-md-auto';
+        actions.append(save);
+        controls.append(actions);
         association.append(controls);
       }
       card.querySelector('.card-body').append(association);
