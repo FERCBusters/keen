@@ -8,7 +8,7 @@
     "d3": "7.9.0",
     "html2canvas": "1.4.1",
     "wysi": "github:mdbassit/Wysi#v0.5.1",
-    "@fercbusters/mosp-design-system": "git+https://github.com/FERCBusters/mosp-design-system.git#989acc9d827a0b73a521471cd9ef2635e9070f0b"
+    "@fercbusters/mosp-design-system": "git+https://github.com/FERCBusters/mosp-design-system.git#dcb93b092829350cc5df19a6af548d4aaa9f708c"
   },
   "devDependencies": {
     "esbuild": "^0.28.0"
