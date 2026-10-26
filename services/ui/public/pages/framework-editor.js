@@ -7,6 +7,8 @@ import {
   refreshFrameworkNavigation,
 } from '/app.js';
 
+import { frameworkRegions } from './framework-regions.js';
+
 import { frameworkComparison } from './framework-compare.js';
 
 const comparison = frameworkComparison(document.getElementById('frameworkComparison'));
@@ -14,6 +16,67 @@ const $ = (id) => document.getElementById(`fe-${id}`);
 let frameworks = [];
 let nodes = [];
 let selected = null;
+let cataloguePage = 0,
+  catalogueCategory = 'All';
+const catalogueSize = 8;
+const regionsFor = (slug) =>
+  Object.hasOwn(frameworkRegions, slug) ? frameworkRegions[slug] : ['Other'];
+function filterCatalogue() {
+  const term = $('catalogue-search').value.trim().toLocaleLowerCase();
+  const cards = [...$('organisation-frameworks').children];
+  const matches = cards.filter(
+    (card) =>
+      (catalogueCategory === 'All' || card._regions.includes(catalogueCategory)) &&
+      (!$('enabled-only').checked || card.querySelector('input').checked) &&
+      card._search.includes(term),
+  );
+  cataloguePage = Math.min(
+    cataloguePage,
+    Math.max(0, Math.ceil(matches.length / catalogueSize) - 1),
+  );
+  const visible = new Set(
+    matches.slice(cataloguePage * catalogueSize, (cataloguePage + 1) * catalogueSize),
+  );
+  for (const card of cards) card.hidden = !visible.has(card);
+  $('page-status').textContent = matches.length
+    ? `Page ${cataloguePage + 1} of ${Math.ceil(matches.length / catalogueSize)} · ${matches.length} frameworks`
+    : 'No frameworks match these filters.';
+  $('page-prev').disabled = cataloguePage === 0;
+  $('page-next').disabled = (cataloguePage + 1) * catalogueSize >= matches.length;
+  for (const button of $('categories').children) {
+    const active = button.dataset.category === catalogueCategory;
+    button.setAttribute('aria-pressed', String(active));
+    button.className = `btn btn-sm rounded-pill ${active ? 'btn-primary' : 'btn-outline-secondary'}`;
+  }
+}
+function openEditor() {
+  $('catalogue').hidden = true;
+  document.getElementById('frameworkComparison').hidden = true;
+  $('editor').hidden = false;
+  $('editor-heading').focus();
+}
+$('back').onclick = () => {
+  $('editor').hidden = true;
+  $('catalogue').hidden = false;
+  $('catalogue-search').focus();
+};
+$('create').onclick = () => {
+  openEditor();
+  $('new-framework').click();
+};
+for (const id of ['catalogue-search', 'enabled-only'])
+  $(id).addEventListener('input', () => {
+    cataloguePage = 0;
+    filterCatalogue();
+  });
+$('page-prev').onclick = () => {
+  cataloguePage--;
+  filterCatalogue();
+};
+$('page-next').onclick = () => {
+  cataloguePage++;
+  filterCatalogue();
+};
 const message = (value) => {
   $('message').textContent = value;
 };
@@ -34,6 +97,7 @@ async function refreshFrameworks(preferred) {
 async function selectFramework() {
   const fw = frameworks.find((item) => item.slug === $('frameworks').value);
   if (!fw) return;
+  $('node-editor').hidden = false;
   $('slug').dataset.original = fw.slug;
   for (const [field, value] of Object.entries({
     slug: fw.slug,
@@ -191,6 +255,7 @@ $('prev-node').addEventListener('click', () => step(-1));
 $('next-node').addEventListener('click', () => step(1));
 $('kind').addEventListener('change', updateChoices);
 $('new-framework').addEventListener('click', () => {
+  $('node-editor').hidden = true;
   for (const id of ['slug', 'name', 'version', 'description', 'url']) $(id).value = '';
   $('slug').dataset.original = '';
   message('Enter a new slug and save the framework before adding nodes');
@@ -263,7 +328,10 @@ $('delete-node').addEventListener('click', async () => {
     message(error.message);
   }
 });
-refreshFrameworks().catch((error) => message(error.message));
+refreshFrameworks().catch((error) => {
+  message(error.message);
+  $('organisation-note').textContent = error.message;
+});
 
 let selectionVersion = 0;
 function renderOrganisationFrameworks(data) {
@@ -272,12 +340,13 @@ function renderOrganisationFrameworks(data) {
   container.replaceChildren();
   for (const framework of data.items || []) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'col-md-6 col-xl-4';
+    wrapper.className = 'col-sm-6 col-xl-3 framework-catalogue-column';
+    wrapper._regions = regionsFor(framework.slug);
+    wrapper._search = [framework.name, framework.slug, framework.description, ...wrapper._regions]
+      .join(' ')
+      .toLocaleLowerCase();
     const label = document.createElement('label');
-    label.className = 'd-flex align-items-start gap-2 border rounded p-2 framework-colour-card';
-    let hash = 2166136261;
-    for (const c of framework.slug) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
-    label.style.setProperty('--framework-hue', String((hash >>> 0) % 360));
+    label.className = 'd-flex align-items-start gap-2 mb-2';
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.className = 'form-check-input flex-shrink-0';
@@ -285,9 +354,35 @@ function renderOrganisationFrameworks(data) {
     checkbox.checked = framework.enabled;
     checkbox.disabled = !framework.allowed;
     const text = document.createElement('span');
-    text.textContent = `${framework.name} (${framework.slug})${framework.allowed ? '' : ' · excluded by environment'}`;
+    text.textContent = `${framework.name}${framework.allowed ? '' : ' · excluded by environment'}`;
     label.append(checkbox, text);
-    wrapper.append(label);
+    const card = document.createElement('article');
+    card.className = 'card h-100 framework-catalogue-card';
+    const body = document.createElement('div');
+    body.className = 'card-body d-flex flex-column p-3';
+    body.append(label);
+    const description = document.createElement('p');
+    description.className = 'small-muted framework-catalogue-description mb-3';
+    description.textContent = framework.description || 'No description provided.';
+    body.append(description);
+    const actions = document.createElement('div');
+    actions.className = 'd-flex gap-2 mt-auto';
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'btn btn-sm btn-outline-primary';
+    edit.textContent = 'Edit';
+    edit.setAttribute('aria-label', `Edit ${framework.name}`);
+    edit.dataset.editFramework = framework.slug;
+    edit.onclick = async () => {
+      openEditor();
+      $('frameworks').value = framework.slug;
+      try {
+        await selectFramework();
+      } catch (error) {
+        message(error.message);
+      }
+    };
+    actions.append(edit);
     const compare = document.createElement('button');
     compare.type = 'button';
     compare.className = 'btn btn-sm btn-outline-secondary mt-1';
@@ -295,7 +390,10 @@ function renderOrganisationFrameworks(data) {
     compare.setAttribute('aria-label', `Compare ${framework.name}`);
     compare.dataset.compareFramework = framework.slug;
     compare.onclick = () => comparison.open(framework.slug, frameworks);
-    wrapper.append(compare);
+    actions.append(compare);
+    body.append(actions);
+    card.append(body);
+    wrapper.append(card);
     container.append(wrapper);
   }
   const refreshDefaults = () => {
@@ -309,16 +407,47 @@ function renderOrganisationFrameworks(data) {
     if ([...$('organisation-default').options].some((option) => option.value === previous))
       $('organisation-default').value = previous;
   };
-  container.onchange = refreshDefaults;
+  container.onchange = () => {
+    refreshDefaults();
+    filterCatalogue();
+  };
   refreshDefaults();
   const selectAll = (checked) => {
     for (const checkbox of container.querySelectorAll('input:not(:disabled)'))
       checkbox.checked = checked;
     refreshDefaults();
+    filterCatalogue();
     $('organisation-note').textContent = checked
       ? 'All available frameworks selected. Save to apply.'
       : 'All frameworks deselected. Choose at least one framework before saving.';
   };
+  $('categories').replaceChildren();
+  for (const category of [
+    'All',
+    'Global',
+    'EU',
+    'Europe',
+    'Americas',
+    'Middle East',
+    'Africa',
+    'Asia-Pacific',
+    'Other',
+  ]) {
+    const count = (data.items || []).filter(
+      (f) => category === 'All' || regionsFor(f.slug).includes(category),
+    ).length;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.category = category;
+    button.textContent = `${category} (${count})`;
+    button.onclick = () => {
+      catalogueCategory = category;
+      cataloguePage = 0;
+      filterCatalogue();
+    };
+    $('categories').append(button);
+  }
+  filterCatalogue();
   $('select-all').onclick = () => selectAll(true);
   $('deselect-all').onclick = () => selectAll(false);
   $('organisation-note').textContent =

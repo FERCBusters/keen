@@ -2422,3 +2422,21 @@ dialog.keen-confirm [data-message] {
   overflow-wrap: break-word;
   white-space: pre-line;
 }
+
+/* Framework catalogue: compact, theme-aware cards with stable page height. */
+.framework-catalogue-card {
+  border-color: rgba(var(--keen-accent-rgb), 0.22);
+}
+.framework-catalogue-card label {
+  font-weight: 600;
+}
+.framework-catalogue-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 4.5em;
+}
+.framework-catalogue-column[hidden] {
+  display: none !important;
+}

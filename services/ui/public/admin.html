@@ -314,20 +314,20 @@
 
       <!-- Framework editor -->
       <div class="tab-pane fade" id="pane-framework-editor" role="tabpanel" aria-labelledby="tab-framework-editor" tabindex="0">
-        <div class="card mb-3"><div class="card-header fw-bold">Frameworks used by your organisation</div><div class="card-body">
+        <div id="fe-catalogue"><div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-center"><span class="fw-bold">Framework catalogue</span><button id="fe-create" type="button" class="btn btn-sm btn-outline-primary">New framework</button></div><div class="card-body">
           <p class="small-muted">Choose the frameworks offered in workspace selectors. Existing controls, evidence, audits and mapping rules are retained. This selection is independent of access permissions.</p>
-          <p class="small-muted">Framework data and crosswalks: <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Keen derives related-control links through shared NIST controls. Coverage notes identify gaps; linked evidence needs review. Imported frameworks and nodes remain editable.</p>
-<div class="d-flex gap-2 mb-3" role="group" aria-label="Select organisation frameworks">
-            <button id="fe-select-all" type="button" class="btn btn-outline-secondary btn-sm">Select all</button>
-            <button id="fe-deselect-all" type="button" class="btn btn-outline-secondary btn-sm">Deselect all</button>
-          </div>
+          <div class="row g-2 align-items-end mb-3"><div class="col-sm-8"><label class="form-label" for="fe-catalogue-search">Find a framework</label><input id="fe-catalogue-search" type="search" class="form-control" placeholder="Search titles and descriptions"></div><div class="col-sm-4"><label class="form-check mb-2"><input id="fe-enabled-only" class="form-check-input" type="checkbox"> Enabled only</label></div></div>
+          <div id="fe-categories" class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Framework regions"></div>
 <div id="fe-organisation-frameworks" class="row g-2"></div>
+          <div class="d-flex align-items-center justify-content-between gap-2 mt-3"><span id="fe-page-status" class="small-muted" role="status"></span><nav class="d-flex gap-2" aria-label="Framework catalogue pages"><button id="fe-page-prev" type="button" class="btn btn-sm btn-outline-secondary">Previous</button><button id="fe-page-next" type="button" class="btn btn-sm btn-outline-secondary">Next</button></nav></div>
+          <details class="mt-3"><summary class="small-muted">Catalogue sources and bulk selection</summary><p class="small-muted mt-2">Framework data and crosswalks from <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener noreferrer">Open Security Architecture</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>. Regional categories use the bundled OSA jurisdictions; other catalogues and custom frameworks appear under Other. Keen derives related-control links through shared NIST controls. Linked evidence needs review.</p><div class="d-flex gap-2"><button id="fe-select-all" type="button" class="btn btn-outline-secondary btn-sm">Select all available frameworks</button><button id="fe-deselect-all" type="button" class="btn btn-outline-secondary btn-sm">Deselect all frameworks</button></div><p class="small-muted mt-2">These actions apply across all pages and filters.</p></details>
           <label class="form-label mt-3" for="fe-organisation-default">Organisation default</label><select id="fe-organisation-default" class="form-select" style="max-width:30rem"></select>
           <p id="fe-organisation-note" class="small-muted mt-2" role="status"></p>
           <button id="fe-save-selection" type="button" class="btn btn-primary">Save organisation selection</button>
         </div></div>
+        </div>
         <section id="frameworkComparison" aria-label="Framework comparison" hidden></section>
-        <div class="card mb-3"><div class="card-header fw-bold">Framework details</div><div class="card-body">
+        <section id="fe-editor" hidden aria-label="Framework editor"><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0" id="fe-editor-heading" tabindex="-1">Edit framework</h2><button id="fe-back" type="button" class="btn btn-outline-secondary btn-sm">Back to catalogue</button></div><div id="fe-message" class="small mb-2" role="status"></div><div class="card mb-3"><div class="card-header fw-bold">Framework details</div><div class="card-body">
           <div class="row g-2"><div class="col-md-4"><label class="form-label">Slug</label><input id="fe-slug" class="form-control" maxlength="64"></div>
           <div class="col-md-5"><label class="form-label">Name</label><input id="fe-name" class="form-control"></div>
           <div class="col-md-3"><label class="form-label">Version</label><input id="fe-version" class="form-control"></div></div>
@@ -335,7 +335,7 @@
           <label class="form-label mt-2">Upstream URL</label><input id="fe-url" type="url" class="form-control">
           <button id="fe-save-framework" class="btn btn-primary mt-2">Save framework</button> <button id="fe-new-framework" class="btn btn-outline-primary mt-2">New framework</button>
         </div></div>
-        <div class="row g-3"><div class="col-lg-5"><div class="card"><div class="card-header d-flex justify-content-between">Nodes <button id="fe-new" class="btn btn-sm btn-outline-primary">New node</button></div><div class="card-body">
+        <div id="fe-node-editor" class="row g-3"><div class="col-lg-5"><div class="card"><div class="card-header d-flex justify-content-between">Nodes <button id="fe-new" class="btn btn-sm btn-outline-primary">New node</button></div><div class="card-body">
           <label class="form-label">Select framework</label><select id="fe-frameworks" class="form-select mb-2"></select><button id="fe-compare" class="btn btn-sm btn-outline-secondary mb-2" type="button">Compare selected framework</button>
           <input id="fe-search" class="form-control mb-2" placeholder="Search references and titles">
           <div id="fe-tree" class="list-group"></div></div></div></div>
@@ -350,8 +350,7 @@
           <label class="form-label mt-2">Sort order</label><input id="fe-sort" type="number" class="form-control" value="0">
           <label class="form-check mt-2"><input id="fe-scope" type="checkbox" class="form-check-input" checked> In scope</label>
           <div class="d-flex gap-2 mt-3"><button id="fe-save-node" class="btn btn-primary">Save node</button><button id="fe-delete-node" class="btn btn-outline-danger">Delete node</button></div>
-          <div id="fe-message" class="small mt-2" role="status"></div>
-        </div></div></div></div>
+        </div></div></div></div></section>
       </div>
 
       <div class="tab-pane fade" id="pane-evidence-config" role="tabpanel" aria-labelledby="tab-evidence-config" tabindex="0">
