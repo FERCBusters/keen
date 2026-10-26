@@ -168,3 +168,35 @@ test("creation errors are shown as the server's detail, and the key can be revea
   await host.querySelector('[data-copy]').onclick();
   assert.equal(status(), 'Use Show key to copy it manually.');
 });
+
+test('profile badges use sentence-case labels without changing state-driven actions', async (t) => {
+  const states = ['active', 'paused', 'revoked', 'expired', 'limit_reached', '<img src=x>', null];
+  const ui = await loadUi('pages/agent-enrollment.js', {
+    html: '<section id="host"></section>',
+    vendor: {
+      apiGet: async () => ({
+        profiles: states.map((state, i) => ({
+          id: `profile-${i}`,
+          name: `Profile ${i}`,
+          state,
+          token_days: 30,
+          enrollment_count: 0,
+          allowed_cidrs: [],
+        })),
+      }),
+    },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  await ui.api.enrollmentProfiles(host, async () => {}).refresh(false);
+  const cards = [...host.querySelectorAll('[data-profiles] article')];
+  assert.deepEqual(
+    cards.map((c) => c.querySelector('.badge').textContent),
+    ['Active', 'Paused', 'Revoked', 'Expired', 'Limit reached', '<img src=x>', 'Unknown'],
+  );
+  assert.equal(host.querySelector('img'), null);
+  assert.ok(cards[0].querySelector('.badge').classList.contains('text-bg-success'));
+  assert.match(cards[0].querySelector('[data-actions]').textContent, /Pause enrollment/);
+  assert.match(cards[1].querySelector('[data-actions]').textContent, /Resume enrollment/);
+  assert.equal(cards[2].querySelector('[data-actions]').children.length, 0);
+});
