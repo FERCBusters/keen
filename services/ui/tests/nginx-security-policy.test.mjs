@@ -23,3 +23,10 @@ test('cache policies preserve inherited security headers on every location and e
   assert.match(conf, /~\^\/vendor\/ \$keen_vendor_cache_control;/);
   assert.match(conf, /~\^\/pages\/ "no-store";/);
 });
+
+test('the login brand image is an exact public static resource', async () => {
+  const conf = await readFile(new URL('../nginx/default.conf', import.meta.url), 'utf8');
+  assert.match(conf, /location = \/keen-mitigator-64\.png\s*\{\s*try_files \$uri =404;\s*\}/);
+  const image = await readFile(new URL('../public/keen-mitigator-64.png', import.meta.url));
+  assert.equal(image.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+});

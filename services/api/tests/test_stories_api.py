@@ -727,14 +727,14 @@ NEW_KINDS = (
         "person",
         "Person",
         "Riley Example",
-        "/assurance.html?tab=persons&edit={}",
+        "/person.html?id={}",
     ),
     (
         "vendor",
         "vendor",
         "Vendor",
         "Example Hosting",
-        "/assurance.html?tab=vendors&edit={}",
+        "/vendor.html?id={}",
     ),
     (
         "effectiveness_measure",

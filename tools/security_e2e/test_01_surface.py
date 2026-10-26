@@ -174,3 +174,12 @@ def test_server_identity_is_not_advertised(anonymous):
     server = response.headers.get("server", "")
     assert not any(ch.isdigit() for ch in server), server
     assert "x-powered-by" not in response.headers
+
+
+def test_login_brand_image_is_public_png_without_redirect(anonymous):
+    response = anonymous.get("/keen-mitigator-64.png")
+    assert response.status_code == 200
+    assert response.headers.get("content-type", "").split(";")[0] == "image/png"
+    assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert not response.history
+    assert "content-security-policy" in response.headers

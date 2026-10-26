@@ -1,5 +1,23 @@
 window.KEEN_DOC_INDEX = [
   {
+    title: 'Person and Vendor pages',
+    book: 'Using Keen',
+    url: 'using-people-assets.html#person-vendor-pages',
+    text: 'Open a person or vendor from the register. Edit details, save back to the register, or review tabs for workstation posture, personnel assurance, assets and related SWOT items and Stories. Named quiz assignments and completed results require quiz.manage and ISMS read access.',
+  },
+  {
+    title: 'Compare framework editions',
+    book: 'Administering Keen',
+    url: 'administrator-frameworks.html#compare-frameworks',
+    text: 'Compare two saved frameworks. Before and After show added green, removed red and changed amber entries. Match by category and exact reference; renumbered clauses appear as removals and additions. Compare descriptions, hierarchy, links, scope and ordering. Filter, show unchanged and page through large comparisons.',
+  },
+  {
+    title: 'Source activity rates and Stories',
+    book: 'Using Keen',
+    url: 'using-events.html#source-insights',
+    text: 'Average events per day includes days with no events. Median event gaps can be small for batched RSS collection. Select a daily bar, then select events or right-click to create a Story or add to a Story.',
+  },
+  {
     title: 'Follow the evidence through Keen',
     book: 'Using Keen',
     url: 'using-start.html#evidence-to-assurance',

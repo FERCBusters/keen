@@ -529,6 +529,11 @@ POLICY = {
     "DELETE /v1/isms/org-nodes/{node_id}": RISK_MANAGE,
     "PATCH /v1/isms/org-nodes/{node_id}": ISMS_MANAGE,
     "GET /v1/isms/people": ISMS_READ,
+    "GET /v1/isms/people/{person_id}": ISMS_READ,
+    "GET /v1/isms/vendors/{vendor_id}": ISMS_READ,
+    "GET /v1/isms/people/{person_id}/quizzes": Rule(
+        "permissions", tuple(p | {"quiz.manage"} for p in ISMS_READ.alternatives)
+    ),
     "GET /v1/isms/people/{person_id}/workstation-posture": Rule(
         "permissions", tuple(p | {"events.read"} for p in ISMS_READ.alternatives)
     ),

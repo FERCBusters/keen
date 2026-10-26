@@ -326,6 +326,7 @@
           <p id="fe-organisation-note" class="small-muted mt-2" role="status"></p>
           <button id="fe-save-selection" type="button" class="btn btn-primary">Save organisation selection</button>
         </div></div>
+        <section id="frameworkComparison" aria-label="Framework comparison" hidden></section>
         <div class="card mb-3"><div class="card-header fw-bold">Framework details</div><div class="card-body">
           <div class="row g-2"><div class="col-md-4"><label class="form-label">Slug</label><input id="fe-slug" class="form-control" maxlength="64"></div>
           <div class="col-md-5"><label class="form-label">Name</label><input id="fe-name" class="form-control"></div>
@@ -335,7 +336,7 @@
           <button id="fe-save-framework" class="btn btn-primary mt-2">Save framework</button> <button id="fe-new-framework" class="btn btn-outline-primary mt-2">New framework</button>
         </div></div>
         <div class="row g-3"><div class="col-lg-5"><div class="card"><div class="card-header d-flex justify-content-between">Nodes <button id="fe-new" class="btn btn-sm btn-outline-primary">New node</button></div><div class="card-body">
-          <label class="form-label">Select framework</label><select id="fe-frameworks" class="form-select mb-2"></select>
+          <label class="form-label">Select framework</label><select id="fe-frameworks" class="form-select mb-2"></select><button id="fe-compare" class="btn btn-sm btn-outline-secondary mb-2" type="button">Compare selected framework</button>
           <input id="fe-search" class="form-control mb-2" placeholder="Search references and titles">
           <div id="fe-tree" class="list-group"></div></div></div></div>
         <div class="col-lg-7"><div class="card"><div class="card-header d-flex justify-content-between align-items-center"><span class="fw-bold">Node details</span><span class="btn-group btn-group-sm" role="group" aria-label="Move through the node tree"><button id="fe-prev-node" class="btn btn-outline-secondary" type="button" disabled title="Edit the previous node in the tree"><i class="bi bi-chevron-up" aria-hidden="true"></i> Previous</button><button id="fe-next-node" class="btn btn-outline-secondary" type="button" disabled title="Edit the next node in the tree">Next <i class="bi bi-chevron-down" aria-hidden="true"></i></button></span></div><div class="card-body">

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Keen - Vendor</title>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/demo-notice.js" defer></script>
+</head>
+<body data-page="isms"><div id="navbar"></div>
+<main class="container container-tight py-4" data-record-kind="vendor">
+<nav aria-label="Breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a id="registerLink" href="/assurance.html?tab=vendors">People &amp; vendors</a></li><li class="breadcrumb-item active" aria-current="page">Vendor</li></ol></nav>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3"><div><h1 class="h3 mb-1" id="recordTitle">Vendor</h1><p class="small-muted mb-0" id="recordSubtitle">Loading…</p></div><div class="d-flex gap-2"><button id="editRecord" class="btn btn-primary" type="button" hidden>Edit vendor</button><button id="deleteRecord" class="btn btn-outline-danger" type="button" hidden>Delete</button></div></div>
+<div id="status" class="alert alert-info" role="status" style="display:none"></div><button id="retryRecord" class="btn btn-outline-primary mb-3" type="button" hidden>Retry</button>
+<ul class="nav nav-tabs mb-3" id="recordTabs" role="tablist" aria-label="Vendor information" hidden><li class="nav-item" role="presentation"><button id="tab-details" class="nav-link" type="button" role="tab" aria-controls="pane-details" aria-selected="false" tabindex="-1" data-record-tab="details">Details</button></li><li class="nav-item" role="presentation"><button id="tab-assets" class="nav-link" type="button" role="tab" aria-controls="pane-assets" aria-selected="false" tabindex="-1" data-record-tab="assets">Assets</button></li><li class="nav-item" role="presentation"><button id="tab-related" class="nav-link" type="button" role="tab" aria-controls="pane-related" aria-selected="false" tabindex="-1" data-record-tab="related">Related items</button></li></ul>
+<div class="tab-content">
+<section class="tab-pane" id="pane-details" role="tabpanel" aria-labelledby="tab-details" tabindex="0"><div class="card"><div class="card-body"><div id="recordFacts"></div><div id="recordEditor" hidden><h2 class="h5" id="vendorFormTitle">Edit vendor</h2><form method="post" id="vendorForm" class="row g-3">
+      <div class="col-12 col-md-6"><label class="form-label" for="vendorName">Vendor name</label><input class="form-control" id="vendorName" maxlength="256" required></div>
+      <div class="col-12 col-md-6"><label class="form-label" for="vendorDescription">Description</label><textarea class="form-control" id="vendorDescription" rows="2"></textarea></div>
+      <div class="col-12 col-md-6"><label class="form-label" for="vendorWebsite">Website</label><input class="form-control" id="vendorWebsite" type="url" maxlength="2048"></div>
+      <div class="col-12 col-md-6"><label class="form-label" for="vendorContact">Contact</label><input class="form-control" id="vendorContact" maxlength="256"></div>
+      <div class="col-12 col-md-6"><label class="form-label" for="vendorAssets">Assets supplied</label><select class="form-select" id="vendorAssets" multiple size="6"></select><div class="form-text">An asset has one supplying vendor; choosing one already linked elsewhere will move the link.</div></div>
+      <div class="col-12 col-md-6"><button class="btn btn-primary" type="submit">Save vendor</button> <button id="newVendor" class="btn btn-outline-secondary" type="button">Cancel</button></div>
+    </form><p id="recordDirty" class="small-muted mt-2" hidden>Unsaved changes</p></div></div></div></section>
+<section class="tab-pane" id="pane-assets" role="tabpanel" aria-labelledby="tab-assets" tabindex="0"><div class="card"><div class="card-header"><h2 class="h5 mb-0">Assets supplied</h2></div><div class="card-body" id="recordAssets"></div></div></section>
+<section class="tab-pane" id="pane-related" role="tabpanel" aria-labelledby="tab-related" tabindex="0"><div class="card"><div class="card-body"><section id="recordSwot" class="mb-4" hidden></section><section id="recordStories" class="mb-4" hidden></section><p id="noRelated" class="small-muted" hidden>No related-item sections are available with your current access.</p></div></div></section>
+</div></main><script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script><script type="module" src="/pages/vendor.js"></script></body></html>

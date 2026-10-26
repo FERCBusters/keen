@@ -23,6 +23,8 @@ import {
   wireOffsetPagerButtons,
 } from '/app.js';
 
+import { createEventSelection } from '/pages/event-selection.js';
+
 const me = await initNavbar();
 enableTableSorting();
 
@@ -51,6 +53,15 @@ const openEventsLink = document.getElementById('openEventsLink');
 const openUnmappedLink = document.getElementById('openUnmappedLink');
 const eventRows = document.getElementById('eventRows');
 const eventResultMeta = document.getElementById('eventResultMeta');
+const selection = createEventSelection({
+  me,
+  framework,
+  tbody: eventRows,
+  bar: document.getElementById('selectionBar'),
+  menu: document.getElementById('rowMenu'),
+  statusEl: status,
+});
+const eventColumns = 7 + selection.columns;
 const eventQ = document.getElementById('eventQ');
 const eventStartDate = document.getElementById('eventStartDate');
 const eventEndDate = document.getElementById('eventEndDate');
@@ -212,23 +223,24 @@ function renderEvents(items) {
           ? `<span class="badge badge-soft">${esc(e.artifact_count)}</span>`
           : '<span class="badge text-bg-light">0</span>';
         const context = e.identifier ?? e.system ?? '';
-        return `<tr>
+        return `<tr data-event-id="${esc(e.id)}">${selection.cellHtml(e)}
       <td class="small-muted" data-sort="${esc(tsSortKey(e.timestamp))}">${esc(fmtTs(e.timestamp) || '-')}</td>
       <td data-sort="${esc(e.id || '')}">${eventUuidLink(e)}</td>
       <td class="small-muted" data-sort="${esc(context)}">${context ? esc(shorten(context, 90)) : '-'}</td>
-      <td class="wrap"><a class="fw-semibold" href="${esc(eventHref)}">${esc(shorten(e.summary || '(no summary)', 180))}</a></td>
+      <td class="wrap"><a class="fw-semibold" data-event-summary href="${esc(eventHref)}">${esc(shorten(e.summary || '(no summary)', 180))}</a></td>
       <td class="wrap">${controlBadges(e.controls)}</td>
       <td class="text-center">${linksHtml}</td>
       <td data-sort="${esc(e.artifact_count || 0)}">${artifacts}</td>
     </tr>`;
       })
       .join('') ||
-    '<tr><td colspan="7" class="p-4 small-muted">No events match this source and filter set.</td></tr>';
+    `<tr><td colspan="${eventColumns}" class="p-4 small-muted">No events match this source and filter set.</td></tr>`;
+  selection.rendered();
 }
 
 async function loadEvents() {
   if (!sourceName) return;
-  showTableLoading(eventRows, 7, 'Loading source events');
+  showTableLoading(eventRows, eventColumns, 'Loading source events');
   eventResultMeta.textContent = 'Loading';
   try {
     const p = new URLSearchParams();
@@ -249,8 +261,7 @@ async function loadEvents() {
   } catch (e) {
     toast(status, `Failed to load source events: ${errorText(e)}`, 'danger');
     eventResultMeta.textContent = '-';
-    eventRows.innerHTML =
-      '<tr><td colspan="7" class="p-4 text-danger">Failed to load source events.</td></tr>';
+    eventRows.innerHTML = `<tr><td colspan="${eventColumns}" class="p-4 text-danger">Failed to load source events.</td></tr>`;
   }
 }
 
@@ -412,10 +423,14 @@ function renderInsights(data) {
         : '-',
     ],
     [
-      'Usual rhythm',
+      'Event spacing',
       data?.typical_gap_seconds !== null && data?.typical_gap_seconds !== undefined
-        ? `one every ${fmtDuration(data.typical_gap_seconds)}; gaps beyond ${fmtDuration(data.usual_longest_gap_seconds)} are unusual`
+        ? `Median gap: ${fmtDuration(data.typical_gap_seconds)}; 90% of sampled gaps are at most ${fmtDuration(data.usual_longest_gap_seconds)}. Events may arrive in batches.`
         : 'needs at least 3 events in the window',
+    ],
+    [
+      'Average activity',
+      `${Number(data?.average_events_per_day ?? Number(data?.window_events || 0) / Math.max(1, Number(data?.days || 1))).toLocaleString(undefined, { maximumFractionDigits: 2 })} events per day over this ${Number(data?.days || 0)}-day window, including days with no events`,
     ],
     ['Trend', trendText],
   ];

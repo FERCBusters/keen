@@ -353,3 +353,17 @@ def delete_assurance(
         raise DomainError(404, "Assurance record not found")
     db.delete(row)
     db.commit()
+
+
+def record_detail(*, db, user, record_id, kind):
+    from app.services.features import state as feature_state
+    from app.services.isms.access import _can_read_isms
+
+    if not _can_read_isms(db, user):
+        raise DomainError(403, "ISMS read access required")
+    feature_state(db).require("people" if kind == "person" else "vendors")
+    row = _row(db, IsmsPerson if kind == "person" else IsmsVendor, record_id)
+    result = _person_out(row) if kind == "person" else _vendor_out(row)
+    assets = [link.asset for link in row.assets] if kind == "person" else row.assets
+    result["assets"] = [{"id": str(asset.id), "name": asset.name} for asset in assets]
+    return result

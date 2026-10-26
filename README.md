@@ -18,7 +18,7 @@ Keen brings operational evidence, assurance frameworks, risk management and ISMS
 - **Check what people know:** write quizzes of multiple-choice and written questions on your policies, assign them to people, accounts or organisation roles, and run them once or in scheduled rounds with invitations and reminders. Questions and options are shuffled for every sitting, written answers are graded blind, and progress is saved page by page. Each round's average is recorded on the quiz's effectiveness measure for the controls it tests, people see their own score with a trophy when the quiz allows, and results stay anonymous until three people have finished.
 - **Tell the story of an episode:** gather the events, risks, records and notes of one incident or change into a story with a timeline and a drag-and-drop flow chart, start it from selected events or a histogram window, comment on it, question it and sample it into an audit.
 
-The catalogue includes 94 frameworks, including 88 from Open Security Architecture. Administrators choose which frameworks to enable and can edit their controls and definitions. Evidence coverage indicates that evidence is present; reviewers assess its relevance, quality and sufficiency.
+The catalogue includes 94 frameworks, including 88 from Open Security Architecture. Administrators choose which frameworks to enable, edit their controls and definitions, and compare two saved frameworks side by side with added, removed and changed entries. Evidence coverage indicates that evidence is present; reviewers assess its relevance, quality and sufficiency.
 
 ## Run with Docker Compose
 
@@ -89,6 +89,8 @@ Custom API destinations require `KEEN_INTEGRATION_ALLOWED_HOSTS` (`host` for HTT
 [Keen Agent](https://github.com/FERCBusters/keen-agent) collects evidence from hosts and sends it over authenticated HTTPS. Create an individual agent credential for a persistent host, or an enrollment profile for a fleet. A profile has a shared enrollment key; each enrolled agent receives its own expiring credential. Revoking a profile revokes its associated agent credentials.
 
 Workstation credentials link each device to a Person. People & vendors shows current posture checks per registered hostname, with completion counts and links to the underlying evidence. Each new Keen account receives a linked Person record; people can also exist without accounts.
+
+People and Vendors have dedicated detail pages with editing, assets and related-item tabs. Person pages also show workstation posture, personnel assurance and, for quiz managers with ISMS read access, named quiz assignments and round results.
 
 The agent setup and enrollment instructions are in **Help**. Install and configure the agent from its own repository.
 

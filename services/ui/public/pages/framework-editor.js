@@ -7,6 +7,9 @@ import {
   refreshFrameworkNavigation,
 } from '/app.js';
 
+import { frameworkComparison } from './framework-compare.js';
+
+const comparison = frameworkComparison(document.getElementById('frameworkComparison'));
 const $ = (id) => document.getElementById(`fe-${id}`);
 let frameworks = [];
 let nodes = [];
@@ -271,8 +274,7 @@ function renderOrganisationFrameworks(data) {
     const wrapper = document.createElement('div');
     wrapper.className = 'col-md-6 col-xl-4';
     const label = document.createElement('label');
-    label.className =
-      'd-flex align-items-start gap-2 border rounded p-2 h-100 framework-colour-card';
+    label.className = 'd-flex align-items-start gap-2 border rounded p-2 framework-colour-card';
     let hash = 2166136261;
     for (const c of framework.slug) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
     label.style.setProperty('--framework-hue', String((hash >>> 0) % 360));
@@ -286,6 +288,14 @@ function renderOrganisationFrameworks(data) {
     text.textContent = `${framework.name} (${framework.slug})${framework.allowed ? '' : ' · excluded by environment'}`;
     label.append(checkbox, text);
     wrapper.append(label);
+    const compare = document.createElement('button');
+    compare.type = 'button';
+    compare.className = 'btn btn-sm btn-outline-secondary mt-1';
+    compare.textContent = 'Compare';
+    compare.setAttribute('aria-label', `Compare ${framework.name}`);
+    compare.dataset.compareFramework = framework.slug;
+    compare.onclick = () => comparison.open(framework.slug, frameworks);
+    wrapper.append(compare);
     container.append(wrapper);
   }
   const refreshDefaults = () => {
@@ -339,3 +349,5 @@ $('save-selection').addEventListener('click', async () => {
     button.disabled = false;
   }
 });
+
+$('compare').addEventListener('click', () => comparison.open($('frameworks').value, frameworks));

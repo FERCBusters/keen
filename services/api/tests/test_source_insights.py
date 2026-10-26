@@ -130,7 +130,7 @@ def test_a_regular_source_is_active_when_its_last_event_is_recent(db, user):
     assert result["typical_gap_seconds"] == 3600
     assert result["quiet_threshold_seconds"] == 7200
     assert result["quiet_periods"] == []
-    assert "every 1 hour" in result["message"]
+    assert "0.53 events per day over this 90-day window" in result["message"]
 
 
 def test_a_regular_source_that_stops_is_quiet_relative_to_its_own_rhythm(db, user):
@@ -139,7 +139,7 @@ def test_a_regular_source_that_stops_is_quiet_relative_to_its_own_rhythm(db, use
     assert result["status"] == "quiet"
     assert result["since_last_seconds"] == 3 * 86400
     assert result["message"].startswith("No events for 3 days;")
-    assert "longer than 1 hour are unusual" in result["message"]
+    assert "90% of sampled gaps are at most 1 hour" in result["message"]
 
 
 def test_a_daily_report_three_days_late_is_quiet_but_one_day_late_is_fine(db, user):
@@ -315,3 +315,26 @@ def test_insight_routes_need_events_read(keen):  # noqa: F811 - fixture imported
     suggestions = reader.get(paths[1])
     assert suggestions.status_code == 200, suggestions.text
     assert suggestions.json()["event_id"] == event_id
+
+
+def test_daily_batches_describe_rate_without_claiming_continuous_arrivals(db, user):
+    # Five articles collected together each day have a zero median gap.
+    add_events(
+        db, [NOW - timedelta(days=day, hours=1) for day in range(7) for _ in range(5)]
+    )
+    result = run(db, user, days=7)
+    assert result["window_events"] == 35
+    assert result["average_events_per_day"] == 5
+    assert result["typical_gap_seconds"] == 0
+    assert result["usual_longest_gap_seconds"] == 86400
+    assert "5 events per day over this 7-day window" in result["message"]
+    assert "several a minute" not in result["message"]
+    assert "one every" not in result["message"]
+
+
+def test_activity_rate_includes_empty_days_and_excludes_future_events(db, user):
+    add_events(db, [NOW - timedelta(days=2)] * 7 + [NOW + timedelta(days=1)] * 100)
+    result = run(db, user, days=7)
+    assert result["window_events"] == 7
+    assert result["average_events_per_day"] == 1
+    assert result["last_seen"] == (NOW - timedelta(days=2)).isoformat()

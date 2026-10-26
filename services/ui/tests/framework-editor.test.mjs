@@ -446,3 +446,22 @@ test('Previous and Next move through the tree in its displayed order', async (t)
   $('next-node').click();
   assert.equal($('ref').value, rows().at(-1).textContent.split('  ')[0]);
 });
+
+test('framework cards and the selected framework open comparison without changing organisation selection', async (t) => {
+  const { ui, $, state } = await editor(t);
+  const checked = [...$('organisation-frameworks').querySelectorAll('input:checked')].map(
+    (el) => el.value,
+  );
+  ui.document.querySelector('[data-compare-framework="B"]').click();
+  const host = ui.el('frameworkComparison');
+  assert.equal(host.hidden, false);
+  assert.equal(host.querySelector('[data-before]').value, 'B');
+  assert.deepEqual(
+    [...$('organisation-frameworks').querySelectorAll('input:checked')].map((el) => el.value),
+    checked,
+  );
+  host.querySelector('[data-close]').click();
+  $('compare').click();
+  assert.equal(host.querySelector('[data-before]').value, 'A');
+  assert.equal(state.put.length, 0);
+});
