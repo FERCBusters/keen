@@ -205,3 +205,40 @@ def test_framework_event_counts_recover_from_an_unreadable_cache(evidence):
 
     assert stats.get_framework_event_counts(evidence.db, FW)["total_events"] == 2
     assert json.loads(evidence.redis.get(key))["total_events"] == 2
+
+
+def test_the_periodic_refresh_covers_enabled_frameworks_and_counts_others_on_demand(
+    evidence, monkeypatch
+):
+    from app.db.models import ManagedConfiguration
+
+    db = evidence.db
+    monkeypatch.setattr(settings, "enabled_frameworks", "")
+    db.add(Framework(slug="fw-unused"))
+    unused = ControlItem(framework_slug="fw-unused", ref="U.1", type="control")
+    db.add(unused)
+    db.flush()
+    db.add(
+        Mapping(
+            event_id=evidence.events[0].id, control_item_id=unused.id, method="rule"
+        )
+    )
+    db.add(
+        ManagedConfiguration(
+            name="organisation-frameworks",
+            version=1,
+            document={"enabled": [FW], "default": FW},
+        )
+    )
+    db.commit()
+
+    refreshed = stats.refresh_framework_event_counts_cache(db)
+    assert set(refreshed) == {FW, settings.default_framework_slug}
+    assert refreshed[FW]["mapped_events"] == 2
+
+    # A framework outside the selection is counted on its first request.
+    assert stats.get_framework_event_counts(db, "fw-unused") == {
+        "total_events": 2,
+        "mapped_events": 1,
+        "unmapped_events": 1,
+    }

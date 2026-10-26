@@ -4,6 +4,7 @@ import os
 import threading
 import time
 import uuid
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -145,3 +146,118 @@ def test_cancellation_also_cools_down(database):
         )
         db.commit()
         assert is_paused(db, "webhooks")
+
+
+def _run_beside_a_transaction(factory, function, settle=0.15):
+    """Run ``function`` while another session holds the shared ingestion lease.
+
+    Returns whether it finished before that transaction ended, and its result.
+    """
+    held = factory()
+    held.execute(text("SELECT 1"))
+    finished = threading.Event()
+    outcome = {}
+
+    def run():
+        try:
+            outcome["value"] = function()
+        except Exception as error:
+            outcome["error"] = error
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    try:
+        early = finished.wait(2)
+        time.sleep(settle)
+    finally:
+        held.rollback()
+        held.close()
+        worker.join(8)
+    assert finished.is_set() and "error" not in outcome, outcome
+    return early, outcome["value"]
+
+
+def _automatic_age_policy(factory, days):
+    with factory() as db:
+        db.execute(
+            text("UPDATE evidence_retention_policy SET mode='age', value=:days"),
+            {"days": days},
+        )
+        db.commit()
+
+
+def test_disabled_retention_never_waits_for_the_exclusive_lease(database):
+    _, factory = database
+    early, more = _run_beside_a_transaction(factory, retention.database_batch)
+    assert early, "Disabled retention must not queue behind open transactions"
+    assert more is False
+    with factory() as db:
+        assert (
+            db.execute(text("SELECT count(*) FROM evidence_purge_jobs")).scalar() == 0
+        )
+
+
+def test_automatic_retention_with_nothing_eligible_completes_beside_transactions(
+    database,
+):
+    _, factory = database
+    _automatic_age_policy(factory, 30)
+    with factory() as db:
+        db.add(
+            Event(
+                source="test",
+                external_id="recent",
+                timestamp=utc_now_naive(),
+                summary="Inside the retention period",
+            )
+        )
+        db.commit()
+    early, more = _run_beside_a_transaction(factory, retention.database_batch)
+    assert early, "An automatic job with nothing to delete must not drain requests"
+    assert more is False
+    with factory() as db:
+        job = db.execute(
+            text("SELECT automatic, status, deleted FROM evidence_purge_jobs")
+        ).one()
+        assert tuple(job) == (True, "complete", 0)
+        assert db.query(Event).count() == 1
+        # Automatic retention never pauses ingestion.
+        assert not is_paused(db, "keen-agent")
+
+
+def test_automatic_retention_with_eligible_events_still_drains_and_deletes(database):
+    _, factory = database
+    _automatic_age_policy(factory, 30)
+    with factory() as db:
+        db.add_all(
+            [
+                Event(
+                    source="test",
+                    external_id="expired",
+                    timestamp=utc_now_naive() - timedelta(days=40),
+                    summary="Beyond the retention period",
+                ),
+                Event(
+                    source="test",
+                    external_id="recent",
+                    timestamp=utc_now_naive(),
+                    summary="Inside the retention period",
+                ),
+            ]
+        )
+        db.commit()
+    early, more = _run_beside_a_transaction(factory, retention.database_batch)
+    assert not early, "Deletion must wait for open transactions to finish"
+    assert more is True
+    with factory() as db:
+        assert [e.external_id for e in db.query(Event)] == ["recent"]
+        assert db.execute(text("SELECT status FROM evidence_purge_jobs")).scalar() == (
+            "running"
+        )
+    # The running job finishes on the next batch.
+    assert retention.database_batch() is False
+    with factory() as db:
+        job = db.execute(text("SELECT status, deleted FROM evidence_purge_jobs")).one()
+        assert tuple(job) == ("complete", 1)

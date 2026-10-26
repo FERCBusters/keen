@@ -159,8 +159,8 @@ class HomeDatabaseTests(unittest.TestCase):
         self.user = SimpleNamespace()
         self.stats = patch.object(
             home_operations,
-            "stats_summary",
-            return_value={"events": {"total": 3, "mapped": 1, "unmapped": 2}},
+            "stats_event_counts",
+            return_value={"total": 3, "mapped": 1, "unmapped": 2},
         ).start()
         self.coverage = patch.object(
             home_operations, "get_control_evidence_stats_by_id", return_value={}

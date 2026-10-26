@@ -24,19 +24,75 @@ from app.services.control_evidence_stats import (
     get_framework_event_counts,
 )
 from app.services.control_inheritance import (
-    effective_framework_ids,
     evidence_pairs,
+    evidenced_control_ids,
+    framework_event_ids,
     has_inherited_evidence,
+    mapped_event_count,
 )
 from app.services.errors import DomainError
 from app.services.event_filters import EventFilters, event_predicates
 
 
+def _active_user(user) -> bool:
+    return isinstance(user, User) and bool(getattr(user, "is_active", False))
+
+
 def _event_visibility_cache_scope(user) -> str:
     """Cache scope for event/count endpoints after global diary visibility."""
-    if isinstance(user, User) and getattr(user, "is_active", False):
+    if _active_user(user):
         return "authenticated"
     return "anonymous"
+
+
+def _live_event_counts(*, db: Session, framework: str, visibility) -> tuple[int, int]:
+    """Visible events, and those evidencing the framework (with inheritance)."""
+    total = db.query(func.count(Event.id)).filter(visibility).scalar() or 0
+    return int(total), mapped_event_count(db, framework, visibility)
+
+
+def stats_event_counts(
+    *,
+    context: ChangeContext,
+    framework: str = settings.default_framework_slug,
+    db: Session,
+    inherited: bool | None = None,
+) -> dict | None:
+    """Framework event counters alone, for callers that need no control coverage.
+
+    Returns None when the caller may not read events. ``inherited`` may carry
+    the framework's inheritance state already resolved in this request.
+    """
+    user = context.actor
+    if not can_read_events(db, user):
+        return None
+    cache_parts = {
+        "framework": framework,
+        "visibility": _event_visibility_cache_scope(user),
+    }
+
+    def _load() -> dict:
+        has_inheritance = (
+            has_inherited_evidence(db, framework) if inherited is None else inherited
+        )
+        # The same paths as stats_summary: without inheritance, active users
+        # read the global framework event-count cache.
+        if not has_inheritance and _active_user(user):
+            counts = get_framework_event_counts(db, framework)
+            total, mapped = counts["total_events"], counts["mapped_events"]
+        else:
+            total, mapped = _live_event_counts(
+                db=db,
+                framework=framework,
+                visibility=diary_filter_condition(db, user),
+            )
+        return {
+            "total": int(total),
+            "mapped": int(mapped),
+            "unmapped": max(0, int(total) - int(mapped)),
+        }
+
+    return cached_json("stats:event-counts", cache_parts, _load)
 
 
 _EVIDENCE_COVERAGE_KEYS = (
@@ -76,16 +132,8 @@ def stats_summary(
     context: ChangeContext,
     framework: str = settings.default_framework_slug,
     db: Session,
-    inherited: bool | None = None,
-    evidence_stats: dict | None = None,
 ):
-    """Framework dashboard summary.
-
-    Callers that have already resolved the framework's inheritance state or
-    per-control evidence aggregates in this request may pass them as
-    ``inherited`` and ``evidence_stats`` so the summary does not repeat those
-    reads. The values must come from the same database session.
-    """
+    """Framework dashboard summary."""
 
     user = context.actor
     if not can_read_events(db, user):
@@ -139,24 +187,13 @@ def stats_summary(
         # Fast path for authenticated users: diary events are visible to every
         # active user, so these dashboard counters use the global framework
         # event-count cache.
-        has_inheritance = (
-            has_inherited_evidence(db, framework) if inherited is None else inherited
-        )
-        if (
-            not has_inheritance
-            and isinstance(user, User)
-            and getattr(user, "is_active", False)
-        ):
+        if not has_inherited_evidence(db, framework) and _active_user(user):
             controls = (
                 db.query(ControlItem.id, ControlItem.in_scope)
                 .filter(ControlItem.framework_slug == framework)
                 .all()
             )
-            stats_by_id = (
-                evidence_stats
-                if evidence_stats is not None
-                else get_control_evidence_stats_by_id(db, framework)
-            )
+            stats_by_id = get_control_evidence_stats_by_id(db, framework)
             controls_with_evidence_all = 0
             controls_with_evidence_in_scope = 0
             in_scope_controls = 0
@@ -183,64 +220,27 @@ def stats_summary(
             )
 
         visibility = diary_filter_condition(db, user)
-
-        total_events = db.query(func.count(Event.id)).filter(visibility).scalar() or 0
-
-        pairs = evidence_pairs(framework, db)
-        mapped_events = (
-            db.query(func.count(func.distinct(pairs.c.event_id)))
-            .join(Event, Event.id == pairs.c.event_id)
-            .filter(visibility)
-            .scalar()
-            or 0
+        total_events, mapped_events = _live_event_counts(
+            db=db, framework=framework, visibility=visibility
         )
-
-        total_controls = (
-            db.query(func.count(ControlItem.id))
+        controls = (
+            db.query(ControlItem.id, ControlItem.in_scope)
             .filter(ControlItem.framework_slug == framework)
-            .scalar()
-            or 0
+            .all()
         )
-        in_scope_controls = (
-            db.query(func.count(ControlItem.id))
-            .filter(
-                ControlItem.framework_slug == framework, ControlItem.in_scope == True
-            )  # noqa: E712
-            .scalar()
-            or 0
-        )
-
-        # Evidence coverage should be reported for IN-SCOPE controls by default.
-        controls_with_evidence_in_scope = (
-            db.query(func.count(func.distinct(pairs.c.control_id)))
-            .join(ControlItem, ControlItem.id == pairs.c.control_id)
-            .join(Event, Event.id == pairs.c.event_id)
-            .filter(
-                ControlItem.framework_slug == framework, ControlItem.in_scope == True
-            )  # noqa: E712
-            .filter(visibility)
-            .scalar()
-            or 0
-        )
-
-        # Also expose "all controls" coverage for completeness.
-        controls_with_evidence_all = (
-            db.query(func.count(func.distinct(pairs.c.control_id)))
-            .join(ControlItem, ControlItem.id == pairs.c.control_id)
-            .join(Event, Event.id == pairs.c.event_id)
-            .filter(ControlItem.framework_slug == framework)
-            .filter(visibility)
-            .scalar()
-            or 0
-        )
+        # Coverage is resolved per control (evidenced sources, then their
+        # crosswalk targets), never per event, and counts only visible events.
+        supported = evidenced_control_ids(db, framework, visibility)
+        in_scope_ids = {control_id for control_id, in_scope in controls if in_scope}
+        framework_ids = {control_id for control_id, _ in controls}
 
         return _summary_payload(
-            total_events=int(total_events),
-            mapped_events=int(mapped_events),
-            total_controls=int(total_controls),
-            in_scope_controls=int(in_scope_controls),
-            controls_with_evidence_in_scope=int(controls_with_evidence_in_scope),
-            controls_with_evidence_all=int(controls_with_evidence_all),
+            total_events=total_events,
+            mapped_events=mapped_events,
+            total_controls=len(controls),
+            in_scope_controls=len(in_scope_ids),
+            controls_with_evidence_in_scope=len(supported & in_scope_ids),
+            controls_with_evidence_all=len(supported & framework_ids),
             stats_source="live_query",
         )
 
@@ -677,18 +677,19 @@ def _stats_events_timeseries(
                 continue
             total_by_bucket[b] = int(n or 0)
 
-    mapped_q = (
-        db.query(
-            bucket_expr,
-            func.count(func.distinct(Event.id)).label("n"),
+    # A semi-join counts each mapped event once, so the buckets need no
+    # DISTINCT over every (event, mapping) row in the window.
+    framework_events = framework_event_ids(db, framework)
+    mapped_rows = []
+    if framework_events is not None:
+        mapped_q = (
+            db.query(bucket_expr, func.count(Event.id).label("n"))
+            .filter(Event.timestamp >= start)
+            .filter(Event.id.in_(framework_events))
+            .filter(diary_filter_condition(db, user))
         )
-        .join(Mapping, Mapping.event_id == Event.id)
-        .filter(Event.timestamp >= start)
-        .filter(Mapping.control_item_id.in_(effective_framework_ids(framework, db)))
-        .filter(diary_filter_condition(db, user))
-    )
-    mapped_q = mapped_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
-    mapped_rows = mapped_q.group_by("b").order_by("b").all()
+        mapped_q = mapped_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
+        mapped_rows = mapped_q.group_by("b").order_by("b").all()
     mapped_by_bucket: dict[datetime, int] = {}
     for b, n in mapped_rows:
         if b is None:

@@ -261,16 +261,23 @@ def get_framework_event_counts(db: Session, framework: str) -> dict[str, int]:
 def refresh_framework_event_counts_cache(
     db: Session, framework: str | None = None
 ) -> dict[str, dict[str, int]]:
-    """Refresh cached global mapped/unmapped counters for one or all frameworks."""
+    """Refresh cached global mapped/unmapped counters for one or all frameworks.
+
+    Without a framework, the organisation's enabled frameworks and the default
+    are refreshed. Other catalogue frameworks are counted on their first
+    request and cached as usual, so the periodic refresh does not scan the
+    mappings once for every framework in the catalogue.
+    """
+    from app.services.framework_catalogue import _framework_selection
 
     total_events = int(db.query(func.count(Event.id)).scalar() or 0)
     frameworks: list[str]
     if framework:
         frameworks = [framework]
     else:
-        rows = db.query(ControlItem.framework_slug).distinct().all()
+        enabled = _framework_selection(db)[3]
         frameworks = sorted(
-            {str(slug) for (slug,) in rows if slug}
+            {str(slug) for slug in enabled if slug}
             | {settings.default_framework_slug or "default"}
         )
 

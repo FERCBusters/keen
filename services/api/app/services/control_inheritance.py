@@ -1,6 +1,6 @@
 """One-hop evidence inheritance, starting from evidence before joining OSA memberships."""
 
-from sqlalchemy import false, select
+from sqlalchemy import exists, false, func, select
 from sqlalchemy.orm import aliased
 
 from app.db.models import (
@@ -98,6 +98,82 @@ def effective_framework_ids(framework, db=None):
         )
         osa = osa.where(sc.c.id.in_(enabled), tc.c.id.in_(enabled))
     return direct.union(explicit, osa)
+
+
+def _visible_events_only(visibility):
+    """A diary visibility condition that restricts something, or None."""
+    return None if visibility is None or visibility is True else visibility
+
+
+def framework_event_ids(db, framework):
+    """Events mapped to the framework, directly or by one crosswalk hop.
+
+    The events of ``evidence_pairs``: those mapped to a framework control or to
+    an enabled control whose evidence a framework control inherits. The short
+    control list is resolved first, so callers filter events with a semi-join
+    against those controls' mappings, each event once, and never expand events
+    over every inheriting target. Returns None when the framework has no
+    controls.
+    """
+    control_ids = db.execute(effective_framework_ids(framework, db)).scalars().all()
+    if not control_ids:
+        return None
+    return select(Mapping.event_id).where(
+        Mapping.control_item_id.in_(sorted(control_ids, key=str))
+    )
+
+
+def mapped_event_count(db, framework, visibility=None):
+    """Distinct events evidencing the framework, directly or by one crosswalk hop.
+
+    Equals the distinct events of ``evidence_pairs``. ``visibility`` restricts
+    the events counted.
+    """
+    mapped = framework_event_ids(db, framework)
+    if mapped is None:
+        return 0
+    query = select(func.count(Event.id)).where(Event.id.in_(mapped))
+    restriction = _visible_events_only(visibility)
+    if restriction is not None:
+        query = query.where(restriction)
+    return int(db.execute(query).scalar() or 0)
+
+
+def evidenced_control_ids(db, framework, visibility=None):
+    """Framework controls with evidence, directly or by one crosswalk hop.
+
+    Equals the distinct controls of ``evidence_pairs``. Each candidate control
+    is probed once for a single mapped event, then crosswalks resolve from the
+    evidenced sources to their targets, so the cost follows the number of
+    controls and never the volume of evidence. ``visibility`` restricts the
+    events that count as evidence.
+    """
+    from app.db.models import effective_cross_framework_links
+    from app.services.framework_catalogue import _framework_selection
+
+    candidates = db.execute(effective_framework_ids(framework, db)).scalars().all()
+    if not candidates:
+        return set()
+    mapping = aliased(Mapping)
+    evidence = select(mapping.id).where(mapping.control_item_id == ControlItem.id)
+    restriction = _visible_events_only(visibility)
+    if restriction is not None:
+        evidence = evidence.join(Event, Event.id == mapping.event_id).where(restriction)
+    evidenced = db.execute(
+        select(ControlItem.id, ControlItem.framework_slug).where(
+            ControlItem.id.in_(sorted(candidates, key=str)), exists(evidence)
+        )
+    ).all()
+    if not evidenced:
+        return set()
+    supported = {control_id for control_id, slug in evidenced if slug == framework}
+    links = effective_cross_framework_links(
+        source_ids=sorted((control_id for control_id, _ in evidenced), key=str),
+        target_framework=framework,
+        enabled=_framework_selection(db)[3],
+    )
+    supported.update(db.execute(select(links.c.target_control_id).distinct()).scalars())
+    return supported
 
 
 # The starter crosswalk stores this text on each of its same-topic links. It

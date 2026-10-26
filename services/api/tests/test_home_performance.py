@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.db.models import (
     ControlEvidenceStats,
     ControlItem,
+    CrossFrameworkControlLink,
     Event,
     Framework,
     ManagedConfiguration,
@@ -342,3 +343,130 @@ def test_scale_overview_counters_and_budget(scale_db, cache_off):
     # only fails when the request path regresses to unbounded aggregation.
     assert elapsed < 2.5, f"home overview took {elapsed:.2f}s at {SCALE_EVENTS} events"
     assert len(statements) <= 26, [sql[:120] for sql in statements]
+
+
+TARGET, SOURCE = "home-target", "home-source"
+INHERITED_EVENTS = 150_000
+LINKED = 25
+
+
+@pytest.fixture(scope="module")
+def inherited_scale_db():
+    """150k events whose evidence a target framework inherits by crosswalk.
+
+    Every mapped event reaches one of 25 source controls, each linked to three
+    target controls, and every tenth also maps directly to one of ten target
+    controls. Counting by (target, event) pairs would expand the evidence more
+    than threefold before deduplicating it.
+    """
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
+    create_sqlite_schema(engine)
+    with Session(engine) as db:
+        db.add_all([Framework(slug=TARGET), Framework(slug=SOURCE)])
+        db.add(
+            ManagedConfiguration(
+                name="organisation-frameworks",
+                version=1,
+                document={"enabled": [TARGET, SOURCE], "default": TARGET},
+            )
+        )
+        targets = [
+            ControlItem(
+                id=uuid.uuid4(), framework_slug=TARGET, ref=f"T.{n}", type="control"
+            )
+            for n in range(SCALE_CONTROLS)
+        ]
+        sources = [
+            ControlItem(
+                id=uuid.uuid4(), framework_slug=SOURCE, ref=f"S.{n}", type="control"
+            )
+            for n in range(SCALE_CONTROLS)
+        ]
+        db.add_all([*targets, *sources])
+        db.flush()
+        db.add_all(
+            CrossFrameworkControlLink(
+                source_control_id=sources[n].id,
+                target_control_id=targets[n + LINKED * hop].id,
+            )
+            for n in range(LINKED)
+            for hop in range(3)
+        )
+        events = [
+            {
+                "id": uuid.uuid4(),
+                "source": "loki",
+                "external_id": f"i{n}",
+                "timestamp": TS,
+                "summary": f"inherited evidence {n}",
+            }
+            for n in range(INHERITED_EVENTS)
+        ]
+        mapped_count = INHERITED_EVENTS - 5_000
+        mappings = [
+            {
+                "event_id": events[n]["id"],
+                "control_item_id": sources[n % LINKED].id,
+                "confidence": 1.0,
+                "method": "rule",
+            }
+            for n in range(mapped_count)
+        ] + [
+            {
+                "event_id": events[n]["id"],
+                "control_item_id": targets[n % 10].id,
+                "confidence": 1.0,
+                "method": "manual",
+            }
+            for n in range(0, mapped_count, 10)
+        ]
+        db.execute(insert(Event), events)
+        db.execute(insert(Mapping), mappings)
+        db.add(
+            User(
+                id=uuid.uuid4(),
+                username="reader",
+                password_hash="unused",
+                role="admin",
+                is_active=True,
+            )
+        )
+        db.commit()
+        yield db
+    engine.dispose()
+
+
+def test_scale_inherited_overview_and_summary_stay_per_control(
+    inherited_scale_db, cache_off
+):
+    db = inherited_scale_db
+    user = db.query(User).one()
+    start = time.perf_counter()
+    result = overview(db, user, framework=TARGET)
+    overview_elapsed = time.perf_counter() - start
+    start = time.perf_counter()
+    summary = stats_service.stats_summary(
+        context=ChangeContext(method="GET", path="/v1/stats/summary", actor=user),
+        framework=TARGET,
+        db=db,
+    )
+    summary_elapsed = time.perf_counter() - start
+
+    events = {
+        "total": INHERITED_EVENTS,
+        "mapped": INHERITED_EVENTS - 5_000,
+        "unmapped": 5_000,
+    }
+    assert result["events"] == events
+    assert summary["events"] == events
+    assert result["coverage"] == {
+        "in_scope": SCALE_CONTROLS,
+        "with_evidence": 3 * LINKED,
+        "without_evidence": SCALE_CONTROLS - 3 * LINKED,
+    }
+    assert summary["controls"]["with_evidence_all"] == 3 * LINKED
+    # Each counter resolves controls first and semi-joins events once:
+    # measured ~0.5s on in-memory SQLite. Expanding (target, event) pairs
+    # first took several times longer.
+    assert overview_elapsed < 2.0, f"overview took {overview_elapsed:.2f}s"
+    assert summary_elapsed < 2.0, f"summary took {summary_elapsed:.2f}s"

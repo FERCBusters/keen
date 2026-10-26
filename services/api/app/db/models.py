@@ -3255,6 +3255,13 @@ Index(
     postgresql_where=sql_text("status IN ('queued','running')"),
     _table=_evidence_purge_jobs,
 )
+# Evidence writers check for manual purge jobs; automatic history stays out.
+Index(
+    "ix_evidence_purge_jobs_manual_status",
+    _evidence_purge_jobs.c.status,
+    _evidence_purge_jobs.c.updated_at,
+    postgresql_where=sql_text("NOT automatic"),
+)
 _evidence_object_cleanup = Table(
     "evidence_object_cleanup",
     Base.metadata,

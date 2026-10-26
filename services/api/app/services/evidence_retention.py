@@ -185,40 +185,100 @@ def queue_object(db, uri):
         )
 
 
+def _active_job(db):
+    """The queued or running purge job, enqueuing automatic retention when due.
+
+    Called holding the retention lock. Returns None when no job is active and
+    retention is disabled.
+    """
+    job = (
+        db.execute(
+            text(
+                "SELECT * FROM evidence_purge_jobs WHERE status IN ('queued','running')"
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if job:
+        return dict(job)
+    p = policy(db)
+    if (
+        p["mode"] == "disabled"
+        and not db.execute(
+            text(
+                "SELECT 1 FROM evidence_retention_overrides WHERE mode <> 'disabled' LIMIT 1"
+            )
+        ).scalar()
+    ):
+        return None
+    enqueue(db, p["mode"], p["value"], True, "automatic retention")
+    return dict(
+        db.execute(text("SELECT * FROM evidence_purge_jobs WHERE status='queued'"))
+        .mappings()
+        .one()
+    )
+
+
+def _settled_without_purge(db):
+    """Settle retention that needs no purge batch, under the ordinary lease.
+
+    Called holding the retention lock. Returns True when no job is active or the
+    automatic job had nothing to delete (and is now complete), and False when a
+    purge batch must run. Manual jobs pause ingestion and always run under the
+    exclusive lease, as does an automatic job whose last batch found events.
+    """
+    job = _active_job(db)
+    if job is None:
+        return True
+    if not job["automatic"] or job["status"] == "running":
+        return False
+    where, params = candidates(
+        job["mode"], job["value"], job["cutoff"], job["policy_overrides"]
+    )
+    if db.execute(
+        text(f"SELECT EXISTS (SELECT 1 FROM events e WHERE {where})"), params
+    ).scalar():
+        return False
+    db.execute(
+        text("""UPDATE evidence_purge_jobs SET status='complete', updated_at=:now,
+        last_error=NULL WHERE id=:id"""),
+        {"now": now(), "id": job["id"]},
+    )
+    _prune_automatic_history(db)
+    return True
+
+
+def _prune_automatic_history(db):
+    # Keep bounded history for automatic jobs; manual purge history is retained.
+    db.execute(
+        text("""DELETE FROM evidence_purge_jobs WHERE automatic AND status IN ('complete','cancelled')
+        AND updated_at < :before"""),
+        {"before": now() - timedelta(days=30)},
+    )
+
+
 def database_batch():
-    """Delete a bounded batch; FK holds arbitrate concurrent audit sampling."""
+    """Delete a bounded batch; FK holds arbitrate concurrent audit sampling.
+
+    Every transaction holds the shared ingestion lease, and while a batch waits
+    for the exclusive lease new transactions queue behind it. Retention is
+    therefore first settled under the ordinary lease: disabled retention, and an
+    automatic job with nothing to delete, finish without the exclusive lease. A
+    batch that proceeds selects and locks its candidates again under that lease.
+    """
+    with SessionLocal() as db:
+        lock(db)
+        settled = _settled_without_purge(db)
+        db.commit()
+    if settled:
+        return False
     with SessionLocal() as db:
         db.info["evidence_purge_batch"] = True
         lock(db)
-        job = (
-            db.execute(
-                text(
-                    "SELECT * FROM evidence_purge_jobs WHERE status IN ('queued','running')"
-                )
-            )
-            .mappings()
-            .first()
-        )
-        if not job:
-            p = policy(db)
-            if (
-                p["mode"] == "disabled"
-                and not db.execute(
-                    text(
-                        "SELECT 1 FROM evidence_retention_overrides WHERE mode <> 'disabled' LIMIT 1"
-                    )
-                ).scalar()
-            ):
-                return False
-            enqueue(db, p["mode"], p["value"], True, "automatic retention")
-            job = (
-                db.execute(
-                    text("SELECT * FROM evidence_purge_jobs WHERE status='queued'")
-                )
-                .mappings()
-                .one()
-            )
-        job = dict(job)
+        job = _active_job(db)
+        if job is None:
+            return False
         where, params = candidates(
             job["mode"], job["value"], job["cutoff"], job["policy_overrides"]
         )
@@ -267,12 +327,7 @@ def database_batch():
                 "id": job["id"],
             },
         )
-        # Keep bounded history for automatic jobs; manual purge history is retained.
-        db.execute(
-            text("""DELETE FROM evidence_purge_jobs WHERE automatic AND status IN ('complete','cancelled')
-            AND updated_at < :before"""),
-            {"before": now() - timedelta(days=30)},
-        )
+        _prune_automatic_history(db)
         db.commit()
     if deleted:
         clear_stats_caches()  # DB aggregate counters are maintained by existing triggers.
