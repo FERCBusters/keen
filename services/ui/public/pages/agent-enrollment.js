@@ -79,7 +79,7 @@ export function enrollmentProfiles(host, onChanged) {
     for (const p of data.profiles) {
       const card = document.createElement('article');
       card.className = 'border rounded p-3';
-      card.innerHTML = `<h3 class="h6">${esc(p.name)} <span class="badge text-bg-secondary">${esc(p.state)}</span></h3><p class="small-muted text-break">Profile: ${esc(p.id)}</p><p>${Number(p.enrollment_count)} enrolled${p.max_enrollments ? ' / ' + Number(p.max_enrollments) + ' maximum' : ''} · Credentials last ${Number(p.token_days)} days</p><p class="small-muted">Enrollment expires: ${esc(p.expires_at ? new Date(p.expires_at + 'Z').toLocaleString() : 'No expiry')} · Networks: ${esc(p.allowed_cidrs.join(', ') || 'Any address with a valid key')}</p><div class="d-flex flex-wrap gap-2" data-actions></div>`;
+      card.innerHTML = `<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2"><h3 class="h6 mb-0">${esc(p.name)}</h3><span class="badge d-inline-flex align-items-center justify-content-center py-2 px-3 lh-sm ${p.state === 'active' ? 'text-bg-success' : 'text-bg-secondary'}">${esc(p.state)}</span></div><p class="small-muted text-break">Profile: ${esc(p.id)}</p><p>${Number(p.enrollment_count)} enrolled${p.max_enrollments ? ' / ' + Number(p.max_enrollments) + ' maximum' : ''} · Credentials last ${Number(p.token_days)} days</p><p class="small-muted">Enrollment expires: ${esc(p.expires_at ? new Date(p.expires_at + 'Z').toLocaleString() : 'No expiry')} · Networks: ${esc(p.allowed_cidrs.join(', ') || 'Any address with a valid key')}</p><div class="d-flex flex-wrap gap-2" data-actions></div>`;
       if (p.state !== 'revoked')
         card.querySelector('[data-actions]').append(
           action(p, 'Rotate bootstrap key', 'rotate', {

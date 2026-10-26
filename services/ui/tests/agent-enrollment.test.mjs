@@ -28,6 +28,12 @@ test('enrollment profile creation displays a one-time key and clears it on navig
   const host = ui.document.getElementById('host'),
     controller = ui.api.enrollmentProfiles(host, async () => {});
   await controller.refresh(false);
+  const badge = host.querySelector('[data-profiles] .badge');
+  assert.equal(
+    badge.className,
+    'badge d-inline-flex align-items-center justify-content-center py-2 px-3 lh-sm text-bg-success',
+  );
+  assert.equal(badge.closest('h3'), null);
   host.querySelector('#ep-name').value = 'Web fleet';
   host.querySelector('#ep-days').value = '30';
   host.querySelector('#ep-limit').value = '5';
