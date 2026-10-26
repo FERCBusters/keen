@@ -385,7 +385,7 @@ function renderOrganisationFrameworks(data) {
     actions.append(edit);
     const compare = document.createElement('button');
     compare.type = 'button';
-    compare.className = 'btn btn-sm btn-outline-secondary mt-1';
+    compare.className = 'btn btn-sm btn-outline-secondary';
     compare.textContent = 'Compare';
     compare.setAttribute('aria-label', `Compare ${framework.name}`);
     compare.dataset.compareFramework = framework.slug;
