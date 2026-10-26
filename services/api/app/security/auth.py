@@ -238,6 +238,10 @@ def create_user(
         is_active=True,
     )
     db.add(user)
+    db.flush()
+    from app.services.people import ensure_person_for_user
+
+    ensure_person_for_user(db, user)
     db.commit()
     db.refresh(user)
     return user

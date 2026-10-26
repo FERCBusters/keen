@@ -26,6 +26,18 @@ def list_people(user=Depends(require_isms_read), db: Session = Depends(get_db)):
     return service.list_people(user=user, db=db)
 
 
+@router.get("/v1/isms/people/{person_id}/workstation-posture")
+def workstation_posture(
+    person_id: uuid.UUID,
+    offset: int = 0,
+    user=Depends(require_isms_read),
+    db: Session = Depends(get_db),
+):
+    from app.services.workstation_posture import person_posture
+
+    return person_posture(db=db, user=user, person_id=person_id, offset=offset)
+
+
 @router.post("/v1/isms/people", status_code=201)
 def create_person(
     payload: PersonInput,

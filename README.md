@@ -88,6 +88,8 @@ Custom API destinations require `KEEN_INTEGRATION_ALLOWED_HOSTS` (`host` for HTT
 
 [Keen Agent](https://github.com/FERCBusters/keen-agent) collects evidence from hosts and sends it over authenticated HTTPS. Create an individual agent credential for a persistent host, or an enrollment profile for a fleet. A profile has a shared enrollment key; each enrolled agent receives its own expiring credential. Revoking a profile revokes its associated agent credentials.
 
+Workstation credentials link each device to a Person. People & vendors shows current posture checks per registered hostname, with completion counts and links to the underlying evidence. Each new Keen account receives a linked Person record; people can also exist without accounts.
+
 The agent setup and enrollment instructions are in **Help**. Install and configure the agent from its own repository.
 
 ## Access and authentication

@@ -9,6 +9,7 @@ import {
   esc,
   toast,
 } from '/app.js';
+import { workstationPosture } from './workstation-posture.js';
 import { featureEnabled } from '/pages/feature-availability.js';
 
 const me = await initNavbar();
@@ -16,6 +17,12 @@ if (!featureEnabled(me, 'people') && featureEnabled(me, 'vendors')) {
   document.getElementById('peoplePane')?.classList.remove('show', 'active');
   document.getElementById('vendorsPane')?.classList.add('show', 'active');
 }
+const posture = workstationPosture(
+  document.getElementById('workstationPosture'),
+  featureEnabled(me, 'people') &&
+    featureEnabled(me, 'evidence') &&
+    !!(me?.is_admin || me?.can_view_events),
+);
 const manage = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);
 const $ = (id) => document.getElementById(id);
 const base = '/api/v1/isms';
@@ -101,7 +108,7 @@ function render() {
       <div><strong>${esc(p.name)}</strong> ${p.username ? `<span class="badge text-bg-light">${esc(p.username)}</span>` : ''}
         <div class="small-muted">${esc(p.position || p.org_node || 'No role recorded')} · ${esc(assetNames(p.asset_ids))} · ${p.assurances.length} assurance records</div></div>
       <div class="d-flex gap-1">${manage ? `<button type="button" class="btn btn-sm btn-outline-primary" data-edit-person="${esc(p.id)}">Edit</button><button type="button" class="btn btn-sm btn-outline-danger" data-delete-person="${esc(p.id)}">Delete</button>` : ''}
-        <a class="btn btn-sm btn-outline-secondary" href="/swot.html?target_type=person&target_id=${encodeURIComponent(p.id)}">SWOT</a><button type="button" class="btn btn-sm btn-outline-secondary" data-view-person="${esc(p.id)}">Assurance</button></div>
+        <a class="btn btn-sm btn-outline-secondary" href="/swot.html?target_type=person&target_id=${encodeURIComponent(p.id)}">SWOT</a><button type="button" class="btn btn-sm btn-outline-secondary" data-view-person="${esc(p.id)}">Assurance &amp; devices</button></div>
     </div>`,
         )
         .join('')
@@ -120,6 +127,7 @@ function render() {
 }
 
 function renderAssurances() {
+  posture.select(selectedPerson);
   $('assuranceCard').style.display = selectedPerson ? '' : 'none';
   if (!selectedPerson) return;
   $('assuranceTitle').textContent = `Personnel assurance · ${selectedPerson.name}`;

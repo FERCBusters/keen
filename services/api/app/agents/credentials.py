@@ -68,6 +68,8 @@ def view(agent):
         for key in (
             "id",
             "name",
+            "agent_type",
+            "person_id",
             "enabled",
             "created_at",
             "expires_at",

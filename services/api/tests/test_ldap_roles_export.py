@@ -262,8 +262,13 @@ def test_a_new_directory_user_never_takes_an_existing_account_name(db, directory
     assert user.id != taken.id
     assert user.username.startswith("ldap:") and len(user.username) == 37
     assert (user.role, user.auth_backend) == ("normal", "ldap")
+    from app.db.models import IsmsPerson
+
+    person = db.query(IsmsPerson).filter_by(user_id=user.id).one()
+    assert person.name == user.username
     # The same directory identity returns to the same account afterwards.
     assert ldap.authenticate_ldap(db, "alice", "password").id == user.id
+    assert db.query(IsmsPerson).filter_by(user_id=user.id).count() == 1
     assert ldap.verify_ldap_user(db, taken, "password") is False
 
 

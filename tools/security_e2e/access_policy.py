@@ -229,6 +229,7 @@ POLICY = {
     "POST /v1/admin/agent-enrollment-profiles/{ident}/{action}": ADMIN,
     "GET /v1/admin/agents": ADMIN,
     "POST /v1/admin/agents": ADMIN,
+    "PATCH /v1/admin/agents/{agent_id}": ADMIN,
     "POST /v1/admin/agents/{agent_id}/revoke": ADMIN,
     "POST /v1/admin/agents/{agent_id}/rotate": ADMIN,
     "GET /v1/admin/audit": AUDIT_TRAIL,
@@ -528,6 +529,9 @@ POLICY = {
     "DELETE /v1/isms/org-nodes/{node_id}": RISK_MANAGE,
     "PATCH /v1/isms/org-nodes/{node_id}": ISMS_MANAGE,
     "GET /v1/isms/people": ISMS_READ,
+    "GET /v1/isms/people/{person_id}/workstation-posture": Rule(
+        "permissions", tuple(p | {"events.read"} for p in ISMS_READ.alternatives)
+    ),
     "POST /v1/isms/people": ISMS_MANAGE,
     "DELETE /v1/isms/people/{person_id}": ISMS_MANAGE,
     "PATCH /v1/isms/people/{person_id}": ISMS_MANAGE,

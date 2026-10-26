@@ -83,6 +83,8 @@ async function assurancePage(t, options = {}) {
       if (options.tabs) window.bootstrap = options.tabs;
     },
     get: async (u) => {
+      if (u.pathname.endsWith('/workstation-posture'))
+        return { devices: [], total: 0, next_offset: null, freshness_hours: 24 };
       if (u.pathname === '/api/v1/isms/assurance/meta') {
         if (fail.load) throw new Error('Register offline');
         return structuredClone(meta);

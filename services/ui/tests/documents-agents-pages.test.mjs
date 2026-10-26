@@ -475,7 +475,7 @@ function agentsFixture(overrides = {}) {
 }
 
 async function agentsPage(t, options = {}) {
-  const state = { posted: [], data: options.data || agentsFixture() };
+  const state = { posted: [], patched: [], data: options.data || agentsFixture() };
   // Keen Agents is a tab of the administration page.
   const ui = await page(t, 'agents', {
     htmlName: 'admin',
@@ -504,6 +504,10 @@ async function agentsPage(t, options = {}) {
           ],
         };
       throw new Error('Unexpected GET ' + u);
+    },
+    patch: async (u, b) => {
+      state.patched.push({ path: u.pathname, body: plain(b) });
+      return { agent: {} };
     },
     post: async (u, b) => {
       state.posted.push({ path: u.pathname, body: plain(b) });
@@ -545,7 +549,7 @@ test('registering an agent reveals its credential once and dismissal clears it',
   await settle(() => $('credential').hidden === false);
   assert.deepEqual(state.posted[0], {
     path: '/api/v1/admin/agents',
-    body: { name: 'db-1', expires_days: 30 },
+    body: { name: 'db-1', expires_days: 30, agent_type: 'server', person_id: null },
   });
   assert.equal($('token').value, 'keen-agent-secret-1');
   assert.equal($('token').type, 'password');
@@ -633,4 +637,48 @@ test('the agent YAML template downloads with the server endpoint', async (t) => 
     /^endpoint: "https:\/\/keen\.example\/api\/v1\/otlp\/logs"\ntoken_file: \/etc\/keen-agent\/token/,
   );
   assert.equal(blob.type, 'application/yaml');
+});
+
+test('workstation registration requires a person and sends the explicit association', async (t) => {
+  const { ui, state, $ } = await agentsPage(t, {
+    data: agentsFixture({
+      people_enabled: true,
+      people: [{ id: 'p1', name: '<img src=x onerror=alert(1)>' }],
+    }),
+  });
+  assert.equal($('person-field').hidden, true);
+  $('type').value = 'workstation';
+  $('type').dispatchEvent(new ui.window.Event('change'));
+  assert.equal($('person-field').hidden, false);
+  assert.equal($('person').required, true);
+  assert.equal($('person').querySelector('img'), null);
+  $('person').value = 'p1';
+  $('agent-name').value = 'laptop';
+  $('register').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => state.posted.length === 1 && !$('register-button').disabled);
+  assert.equal(state.posted[0].body.person_id, 'p1');
+  assert.equal(state.posted[0].body.agent_type, 'workstation');
+  $('type').value = 'server';
+  $('type').dispatchEvent(new ui.window.Event('change'));
+  assert.equal($('person').disabled, true);
+  assert.equal($('person').value, '');
+});
+
+test('existing agents can be assigned to a person after confirmation', async (t) => {
+  const { ui, state, $ } = await agentsPage(t, {
+    data: agentsFixture({ people: [{ id: 'p1', name: 'Person' }] }),
+  });
+  const type = ui.document.getElementById('agent-type-a1'),
+    person = ui.document.getElementById('agent-person-a1');
+  type.value = 'workstation';
+  type.dispatchEvent(new ui.window.Event('change'));
+  person.value = 'p1';
+  [...$('agents').querySelector('article').querySelectorAll('button')]
+    .find((b) => b.textContent === 'Save assignment')
+    .click();
+  await settle(() => state.patched.length === 1);
+  assert.deepEqual(state.patched[0], {
+    path: '/api/v1/admin/agents/a1',
+    body: { agent_type: 'workstation', person_id: 'p1' },
+  });
 });

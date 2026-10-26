@@ -1,7 +1,27 @@
 import { enrollmentProfiles } from './agent-enrollment.js';
-import { apiGet, apiPost, initNavbar, confirmAction, esc } from '/app.js';
+import { apiGet, apiPost, apiPatch, initNavbar, confirmAction, esc } from '/app.js';
 const root = '/api/v1/admin/agents',
   $ = (id) => document.getElementById('ka-' + id);
+let people = [];
+function personOptions(selected = '') {
+  return (
+    '<option value="">Choose a person</option>' +
+    people
+      .map(
+        (p) =>
+          `<option value="${esc(p.id)}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`,
+      )
+      .join('')
+  );
+}
+function registrationType() {
+  const workstation = $('type').value === 'workstation';
+  $('person-field').hidden = !workstation;
+  $('person').disabled = !workstation;
+  $('person').required = workstation;
+  if (!workstation) $('person').value = '';
+}
+$('type').addEventListener('change', registrationType);
 let demo = true,
   loading = false;
 const profileHost = document.createElement('section');
@@ -63,6 +83,12 @@ async function load() {
   try {
     const data = await apiGet(root);
     demo = data.demo_mode;
+    people = data.people || [];
+    const selected = $('person').value;
+    $('person').innerHTML = personOptions(selected);
+    $('type').querySelector('[value="workstation"]').disabled = data.people_enabled === false;
+    if (data.people_enabled === false) $('type').value = 'server';
+    registrationType();
     $('register-button').disabled = demo;
     if (demo)
       msg(
@@ -154,6 +180,56 @@ async function load() {
           .join(' · ');
       if (Object.keys(h.filtered_by_source || {}).length)
         card.querySelector('.card-body').append(filtered);
+      const association = document.createElement('div');
+      association.className = 'border-top pt-3 mt-3';
+      const owner = people.find((p) => p.id === a.person_id);
+      const label = document.createElement('p');
+      label.textContent =
+        a.agent_type === 'workstation'
+          ? `Workstation · ${owner?.name || 'Person unassigned'}`
+          : 'Server';
+      association.append(label);
+      if (!demo) {
+        const typeId = `agent-type-${a.id}`,
+          personId = `agent-person-${a.id}`;
+        const controls = document.createElement('div');
+        controls.className = 'row g-2 align-items-end';
+        controls.innerHTML = `<div class="col-md-4"><label class="form-label" for="${esc(typeId)}">Device type</label><select class="form-select" id="${esc(typeId)}"><option value="server">Server</option><option value="workstation" ${data.people_enabled === false ? 'disabled' : ''}>Workstation</option></select></div><div class="col-md-5 agent-person-field"><label class="form-label" for="${esc(personId)}">Person</label><select class="form-select" id="${esc(personId)}">${personOptions(a.person_id)}</select></div>`;
+        const type = controls.querySelector(`#${CSS.escape(typeId)}`),
+          person = controls.querySelector(`#${CSS.escape(personId)}`);
+        type.value = a.agent_type || 'server';
+        const change = () => {
+          person.disabled = type.value !== 'workstation';
+          controls.querySelector('.agent-person-field').hidden = person.disabled;
+        };
+        type.addEventListener('change', change);
+        change();
+        const save = button('Save assignment', async () => {
+          if (type.value === 'workstation' && !person.value) throw new Error('Choose a person.');
+          if (
+            type.value === a.agent_type &&
+            (person.disabled ? null : person.value) === a.person_id
+          )
+            return;
+          if (
+            !(await confirmAction({
+              title: 'Change device assignment',
+              message:
+                'The workstation overview will start with new reports. Existing evidence remains available.',
+              confirmLabel: 'Save assignment',
+            }))
+          )
+            return;
+          await apiPatch(root + '/' + a.id, {
+            agent_type: type.value,
+            person_id: person.disabled ? null : person.value,
+          });
+          await load();
+        });
+        controls.append(save);
+        association.append(controls);
+      }
+      card.querySelector('.card-body').append(association);
       $('agents').append(card);
     }
   } finally {
@@ -165,6 +241,8 @@ $('register').onsubmit = (e) => {
   guard($('register-button'), async () => {
     const r = await apiPost(root, {
       name: $('agent-name').value,
+      agent_type: $('type').value,
+      person_id: $('type').value === 'workstation' ? $('person').value : null,
       expires_days: Number($('expiry').value),
     });
     $('agent-name').value = '';
