@@ -288,11 +288,9 @@ async function initialiseNavbar(...args) {
     nav: {
       ...cfg.nav,
       expandClass: 'navbar-expand-lg',
-      // The one accent owns the navbar; the start-audit call to action uses
-      // the design system's on-accent inverted button instead of a green one.
       extraHtml: (me) =>
         me?.can_manage_audits || me?.is_admin
-          ? '<a class="btn btn-sm btn-light me-2" data-nav-fw="1" data-base-href="/audits.html?new=1" href="/audits.html?new=1"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i><span class="nav-label-optional">Start audit</span></a>'
+          ? '<a class="btn btn-sm btn-light me-2" data-nav-fw="1" data-base-href="/audit-wizard.html" href="/audit-wizard.html"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i><span class="nav-label-optional">Start audit</span></a>'
           : '',
     },
     framework: { ...cfg.framework, selectMaxChars: 19, selectMinChars: 14 },
