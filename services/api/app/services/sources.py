@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy import exists, func, select
+from sqlalchemy.orm import Session, aliased
 
 from app.core.cache import cached_json, user_cache_scope
 from app.core.config import settings
@@ -133,6 +133,33 @@ def list_sources(*, framework: str, limit: int, offset: int, db: Session, user):
     return cached_json("sources:list", cache_parts, _load)
 
 
+def _visible_sources(db: Session, user) -> list[str]:
+    """Distinct sources of the events the caller can see, in order.
+
+    A recursive skip scan reads one index entry per source, so the cost follows
+    the number of sources and never the number of events. A source is listed
+    when at least one of its events passes the caller's diary visibility.
+    """
+    step = aliased(Event)
+    sources = select(func.min(Event.source).label("source")).cte(
+        "event_sources", recursive=True
+    )
+    sources = sources.union_all(
+        select(
+            select(func.min(step.source))
+            .where(step.source > sources.c.source)
+            .scalar_subquery()
+        ).where(sources.c.source.is_not(None))
+    )
+    query = select(sources.c.source).where(sources.c.source.is_not(None))
+    visibility = diary_filter_condition(db, user)
+    if visibility is not True:
+        query = query.where(
+            exists().where(Event.source == sources.c.source, visibility)
+        )
+    return list(db.execute(query.order_by(sources.c.source)).scalars())
+
+
 def list_source_meta(*, db: Session, user):
     """Return per-source UI display metadata.
 
@@ -145,16 +172,9 @@ def list_source_meta(*, db: Session, user):
     }
 
     def _load() -> dict:
-        rows = (
-            db.query(Event.source)
-            .filter(diary_filter_condition(db, user))
-            .group_by(Event.source)
-            .order_by(Event.source.asc())
-            .all()
-        )
         items = []
         overrides = _source_overrides(user)
-        for (src,) in rows:
+        for src in _visible_sources(db, user):
             default_meta = get_source_meta(src)
             meta = apply_user_source_overrides(default_meta, overrides)
             items.append(

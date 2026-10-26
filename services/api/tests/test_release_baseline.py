@@ -137,6 +137,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0022_insert_vacuum_upkeep",
         "0021_dashboard_query_support",
         "0020_theme_ink",
         "0019_quizzes",
@@ -727,7 +728,7 @@ def test_seeded_text_names_keen_and_downgrade_restores_it(monkeypatch):
         engine.dispose()
 
 
-def test_dashboard_query_support_installs_and_removes_cleanly():
+def test_dashboard_query_migrations_install_and_remove_cleanly():
     url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
     if not url:
         pytest.skip("Requires PostgreSQL integration database")
@@ -756,7 +757,18 @@ def test_dashboard_query_support_installs_and_removes_cleanly():
                 {"schema": schema},
             )
         )
-        return index, statistics
+        options = set(
+            conn.scalars(
+                text(
+                    "SELECT c.relname || ':' || o FROM pg_class c "
+                    "JOIN pg_namespace n ON n.oid=c.relnamespace "
+                    "CROSS JOIN unnest(c.reloptions) o "
+                    "WHERE n.nspname=:schema AND c.relname IN ('events','mappings')"
+                ),
+                {"schema": schema},
+            )
+        )
+        return index, statistics, options
 
     try:
         with engine.connect() as conn:
@@ -767,13 +779,17 @@ def test_dashboard_query_support_installs_and_removes_cleanly():
             # The catalogue seed is exercised by the release-baseline test.
             command.stamp(config, "0002_release_seed")
             command.upgrade(config, "head")
-            index, statistics = installed(conn)
+            index, statistics, options = installed(conn)
             assert index is not None and "WHERE (NOT automatic)" in index
             assert statistics == {"st_events_day_bucket", "st_events_hour_bucket"}
+            assert options == {
+                "events:autovacuum_vacuum_insert_scale_factor=0.02",
+                "mappings:autovacuum_vacuum_insert_scale_factor=0.02",
+            }
             command.downgrade(config, "0020_theme_ink")
-            assert installed(conn) == (None, set())
+            assert installed(conn) == (None, set(), set())
             command.upgrade(config, "head")
-            assert installed(conn)[1] == statistics
+            assert installed(conn)[1:] == (statistics, options)
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

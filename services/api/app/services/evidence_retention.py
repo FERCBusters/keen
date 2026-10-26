@@ -17,6 +17,9 @@ from app.storage.s3 import delete_stored_object
 
 LOCK_ID = 836210083
 BATCH_SIZE = 200
+# Automatic retention runs every minute. Once an automatic job completes, the
+# next check waits this long unless the retention policy changes first.
+RECHECK_AFTER_COMPLETION = timedelta(minutes=10)
 
 # Audit holds keep sampled events. Additional references keep lineage and
 # question attachments belonging to other records; those events can become
@@ -185,11 +188,27 @@ def queue_object(db, uri):
         )
 
 
+def _checked_since_policy_change(db, p):
+    """Whether an automatic job completed recently under the current policy."""
+    last = db.execute(
+        text(
+            "SELECT max(updated_at) FROM evidence_purge_jobs "
+            "WHERE automatic AND status='complete'"
+        )
+    ).scalar()
+    return (
+        last is not None
+        and last >= p["updated_at"]
+        and last > now() - RECHECK_AFTER_COMPLETION
+    )
+
+
 def _active_job(db):
     """The queued or running purge job, enqueuing automatic retention when due.
 
     Called holding the retention lock. Returns None when no job is active and
-    retention is disabled.
+    retention is disabled, or when automatic retention completed within
+    ``RECHECK_AFTER_COMPLETION`` and the policy has not changed since.
     """
     job = (
         db.execute(
@@ -211,6 +230,8 @@ def _active_job(db):
             )
         ).scalar()
     ):
+        return None
+    if _checked_since_policy_change(db, p):
         return None
     enqueue(db, p["mode"], p["value"], True, "automatic retention")
     return dict(

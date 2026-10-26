@@ -261,3 +261,57 @@ def test_automatic_retention_with_eligible_events_still_drains_and_deletes(datab
     with factory() as db:
         job = db.execute(text("SELECT status, deleted FROM evidence_purge_jobs")).one()
         assert tuple(job) == ("complete", 1)
+
+
+def test_automatic_retention_rechecks_after_an_interval_or_a_policy_change(database):
+    _, factory = database
+    _automatic_age_policy(factory, 30)
+    with factory() as db:
+        db.add(
+            Event(
+                source="test",
+                external_id="recent",
+                timestamp=utc_now_naive(),
+                summary="Inside the retention period",
+            )
+        )
+        db.commit()
+
+    def jobs():
+        with factory() as db:
+            return db.execute(
+                text("SELECT count(*) FROM evidence_purge_jobs WHERE automatic")
+            ).scalar()
+
+    assert retention.database_batch() is False
+    assert jobs() == 1
+    # A completed check is not repeated every minute.
+    assert retention.database_batch() is False
+    assert jobs() == 1
+    # Saving the policy brings the next check forward.
+    with factory() as db:
+        db.execute(
+            text(
+                "UPDATE evidence_retention_policy SET updated_at=:now",
+            ),
+            {"now": retention.now()},
+        )
+        db.commit()
+    assert retention.database_batch() is False
+    assert jobs() == 2
+    # Once the interval passes, automatic retention checks again.
+    with factory() as db:
+        db.execute(
+            text("UPDATE evidence_purge_jobs SET updated_at=updated_at - :gap"),
+            {"gap": retention.RECHECK_AFTER_COMPLETION + timedelta(minutes=1)},
+        )
+        db.commit()
+    assert retention.database_batch() is False
+    assert jobs() == 3
+    # A manual purge runs at once, whatever the automatic interval.
+    with factory() as db:
+        retention.enqueue(db, "all", None, False, "test")
+        db.commit()
+    assert retention.database_batch() is True
+    with factory() as db:
+        assert db.query(Event).count() == 0

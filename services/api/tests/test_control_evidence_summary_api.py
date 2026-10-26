@@ -190,3 +190,38 @@ def test_the_summary_needs_events_read(summary):
     )
     # Writes are not part of the route.
     assert reader.post(path, json={}).status_code in (403, 405)
+
+
+@pytest.mark.parametrize("listed", [5000, 0])
+def test_an_event_mapped_directly_and_by_inheritance_counts_once(
+    summary, monkeypatch, listed
+):
+    # With few matching mappings the evidence events are named by id; beyond
+    # the listed limit the mappings remain a subquery. Both count events once.
+    from app.services import control_inheritance
+
+    monkeypatch.setattr(control_inheritance, "LISTED_MAPPINGS", listed)
+    db = summary.db
+    upstream = db.query(ControlItem).filter_by(framework_slug=OTHER_FW, ref="S.1").one()
+    both = Event(
+        source="okta",
+        summary="Sign-in reviewed",
+        external_id=uuid.uuid4().hex,
+        timestamp=datetime(2026, 3, 4, 9, 0),
+    )
+    db.add(both)
+    db.flush()
+    for control in (summary.access, upstream):
+        db.add(Mapping(event_id=both.id, control_item_id=control.id, method="manual"))
+    db.commit()
+
+    reader = summary.keen.client(summary.keen.user("events.read"))
+    response = summary.read(reader)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["total"] == 5
+    assert {row["source"]: row["count"] for row in body["sources"]} == {
+        "jenkins": 2,
+        "okta": 2,
+        "diary": 1,
+    }

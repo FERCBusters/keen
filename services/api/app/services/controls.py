@@ -256,18 +256,14 @@ def control_evidence_summary(*, control_id: str, db: Session, user) -> dict:
 
     def _load() -> dict:
         filters = parse_event_filters(framework=framework, control=str(cid))
-        event_ids = (
-            db.query(Event.id)
-            .filter(diary_filter_condition(db, user))
-            .filter(*event_predicates(filters, db))
-            .distinct()
-            .subquery()
-        )
         link_entry = and_(
             Event.source == DIARY_SOURCE,
             Event.system == LINK_ENTRY_SYSTEM,
             Event.external_id.startswith(LINK_ENTRY_PREFIX, autoescape=True),
         )
+        # The evidence predicates are semi-joins on events, so each event is
+        # counted once without joining the events table to itself; the planner
+        # then reads only the control's events instead of the whole table.
         source_rows = (
             db.query(
                 Event.source,
@@ -275,7 +271,8 @@ def control_evidence_summary(*, control_id: str, db: Session, user) -> dict:
                 func.max(Event.timestamp),
                 func.sum(case((link_entry, 1), else_=0)),
             )
-            .join(event_ids, event_ids.c.id == Event.id)
+            .filter(diary_filter_condition(db, user))
+            .filter(*event_predicates(filters, db))
             .group_by(Event.source)
             .all()
         )
