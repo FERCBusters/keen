@@ -144,3 +144,37 @@ test('late responses cannot fill a closed or reselected comparison', async (t) =
   assert.equal(ui.host.hidden, true);
   assert.equal(ui.host.textContent, '');
 });
+
+test('opening comparison finishes scrolling before focusing the native selector', async (t) => {
+  const calls = [];
+  const ui = await loadUi('pages/framework-compare.js', {
+    html: '<section id="compare"></section>',
+    setup: (window) => {
+      window.HTMLElement.prototype.scrollIntoView = function (options) {
+        calls.push(['scroll', options.block, options.behavior]);
+      };
+      const focus = window.HTMLElement.prototype.focus;
+      window.HTMLElement.prototype.focus = function (options) {
+        calls.push(['focus', this.id, options?.preventScroll]);
+        focus.call(this, options);
+      };
+    },
+  });
+  t.after(() => ui.close());
+  const host = ui.document.getElementById('compare');
+  ui.api.frameworkComparison(host).open('old', [
+    { slug: 'old', name: 'Earlier' },
+    { slug: 'new', name: 'Later' },
+  ]);
+  assert.deepEqual(calls, [
+    ['scroll', 'start', 'instant'],
+    ['focus', 'fc-after', true],
+  ]);
+  const after = host.querySelector('[data-after]');
+  assert.equal(ui.document.activeElement, after);
+  after.dispatchEvent(new ui.window.MouseEvent('mousedown', { bubbles: true }));
+  after.dispatchEvent(new ui.window.MouseEvent('mouseup', { bubbles: true }));
+  after.click();
+  assert.equal(host.querySelector('[data-after]'), after);
+  assert.equal(calls.length, 2);
+});

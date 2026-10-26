@@ -233,8 +233,10 @@ export function frameworkComparison(host) {
         host.hidden = true;
         host.replaceChildren();
       };
-      host.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      find('[data-after]').focus();
+      // Finish positioning before a native select popup can open. Animated
+      // scrolling can dismiss the popup as its anchor moves.
+      host.scrollIntoView({ block: 'start', behavior: 'instant' });
+      find('[data-after]').focus({ preventScroll: true });
     },
   };
 }
