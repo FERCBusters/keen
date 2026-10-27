@@ -25,6 +25,7 @@ import ipaddress
 import json
 import os
 import re
+from contextvars import ContextVar
 from functools import lru_cache
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -93,6 +94,50 @@ DEFAULT_SENSITIVE_KEYS: set[str] = {
 
 _URL_RE = re.compile(r'https?://[^\s"\'<>]+', re.IGNORECASE)
 
+# Measured workstation-posture facts whose names contain a sensitive-key
+# substring ("password", "signature") but which hold a boolean, a count or a
+# timestamp rather than a secret. A name keeps its value only while the value
+# has exactly that shape; any other value is redacted as usual. Naming one of
+# these keys explicitly in KEEN_SENSITIVE_KEYS redacts it unconditionally.
+_MEASURED_VALUE_SHAPES = {
+    "boolean": re.compile(r"true|false"),
+    "count": re.compile(r"[0-9]{1,10}"),
+    "timestamp": re.compile(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+        r"(?:\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})?"
+    ),
+}
+MEASURED_FIELDS: dict[str, str] = {
+    "posture.password_required": "boolean",
+    "posture.password_required_configured": "boolean",
+    "posture.password_delay_seconds": "count",
+    "posture.signatures_age_days": "count",
+    "posture.signatures_updated": "timestamp",
+}
+
+# Strings that hold a whole JSON document (an agent log body, a JSON log line
+# kept beside its parsed form) receive the same key-aware redaction as parsed
+# payloads. Larger or deeper documents fall back to text redaction.
+_EMBEDDED_JSON_MAX_CHARS = 1024 * 1024
+# Redacting a parsed document takes about one stack frame per nesting level, and
+# a document can hold further JSON documents in its strings. All documents
+# parsed within one value share this frame budget, so ordinary nested JSON is
+# parsed while deeply nested or deeply embedded input falls back to text
+# redaction instead of exhausting the interpreter's recursion limit.
+_EMBEDDED_JSON_FRAME_BUDGET = 256
+_EMBEDDED_JSON_FRAMES_PER_DOCUMENT = 4
+_embedded_json_budget: ContextVar[int] = ContextVar(
+    "embedded_json_budget", default=_EMBEDDED_JSON_FRAME_BUDGET
+)
+
+# A quoted key and its scalar value in JSON-style text, including truncated
+# JSON that cannot be parsed. Keys stop at the next quote, so failed matches
+# cost no more than the distance to that quote.
+_JSON_PAIR_RE = re.compile(
+    r'"((?:[^"\\\r\n]|\\[^\r\n]){1,128})"(\s{0,16}:\s{0,16})'
+    r'("(?:[^"\\]|\\[\s\S])*(?:"|\\?\Z)|[^\s,:{}\[\]"]{1,1024})'
+)
+
 
 def _normalize_key(k: str) -> str:
     return str(k).strip().lower().replace("-", "_")
@@ -147,7 +192,7 @@ def _sensitive_cfg() -> tuple[set[str], tuple[str, ...], re.Pattern, re.Pattern]
     # A partial fetch can end inside a quoted secret. Consume to end-of-input
     # when its closing quote is absent, including a final escape character.
     kv_re = re.compile(
-        rf"""(?i)\b({alts})\b["']?\s*[:=]\s*(?:"(?:\\[\s\S]|[^"\\])*(?:"|\\?\Z)|'(?:\\[\s\S]|[^'\\])*(?:'|\\?\Z)|[^&\s]+)"""
+        rf"""(?i)\b({alts})\b["']?\s*[:=]\s*("(?:\\[\s\S]|[^"\\])*(?:"|\\?\Z)|'(?:\\[\s\S]|[^'\\])*(?:'|\\?\Z)|[^&\s]+)"""
     )
     return keys, substring_needles, line_re, kv_re
 
@@ -158,6 +203,78 @@ def is_sensitive_key(k: str) -> bool:
     if nk in exact_keys:
         return True
     return any(n in nk for n in needles)
+
+
+def _is_measured_value(nk: str, value: Any) -> bool:
+    shape = MEASURED_FIELDS.get(nk)
+    if shape is None or nk in _sensitive_cfg()[0]:
+        return False
+    if isinstance(value, bool):
+        return shape == "boolean"
+    return isinstance(value, str) and bool(
+        _MEASURED_VALUE_SHAPES[shape].fullmatch(value)
+    )
+
+
+def should_redact_value(k: str, value: Any) -> bool:
+    """Return true when the value stored under key k must be replaced."""
+    if not is_sensitive_key(k):
+        return False
+    return not _is_measured_value(_normalize_key(k), value)
+
+
+def _json_depth(obj: Any, limit: int) -> int | None:
+    """Return the container depth of obj, or None when it exceeds limit."""
+    deepest = 0
+    stack = [(obj, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, (dict, list)):
+            if depth > limit:
+                return None
+            deepest = max(deepest, depth)
+            children = item.values() if isinstance(item, dict) else item
+            stack.extend((child, depth + 1) for child in children)
+    return deepest
+
+
+def _redact_embedded_json(s: str) -> str | None:
+    """Redact a string holding a whole JSON object or array as structured data.
+
+    Returns None when the string is not such a document, or when parsing it
+    would exceed the frame budget. An unchanged document keeps its original
+    text; a changed one is re-serialised compactly.
+    """
+    head = s.lstrip()[:1]
+    budget = _embedded_json_budget.get() - _EMBEDDED_JSON_FRAMES_PER_DOCUMENT
+    if head not in ("{", "[") or len(s) > _EMBEDDED_JSON_MAX_CHARS or budget < 1:
+        return None
+    try:
+        parsed = json.loads(s)
+    except (ValueError, RecursionError):
+        return None
+    depth = _json_depth(parsed, budget) if isinstance(parsed, (dict, list)) else None
+    if depth is None:
+        return None
+    token = _embedded_json_budget.set(budget - depth)
+    try:
+        redacted = redact_obj(parsed)
+    finally:
+        _embedded_json_budget.reset(token)
+    if redacted == parsed:
+        return s
+    return json.dumps(redacted, ensure_ascii=False, separators=(",", ":"))
+
+
+def _redact_json_pairs(txt: str) -> str:
+    def _sub(m: re.Match) -> str:
+        quoted = m.group(3).startswith('"')
+        value = m.group(3)[1:-1] if quoted else m.group(3)
+        if value == REDACTED or not should_redact_value(m.group(1), value):
+            return m.group(0)
+        return f'"{m.group(1)}"{m.group(2)}"{REDACTED}"'
+
+    return _JSON_PAIR_RE.sub(_sub, txt)
 
 
 def redact_query_string(
@@ -195,13 +312,23 @@ def redact_url(url: str) -> str:
 def redact_str(s: str | None) -> str | None:
     if s is None:
         return None
+    structured = _redact_embedded_json(str(s))
+    if structured is not None:
+        return structured
     txt = _URL_RE.sub(lambda m: redact_url(m.group(0)), str(s))
+    # JSON-style pairs keep their syntax and use the same key policy as objects.
+    txt = _redact_json_pairs(txt)
 
     # Free-text key=value redaction
     _, _, line_re, kv_re = _sensitive_cfg()
 
+    def _kv_sub(m: re.Match) -> str:
+        if m.group(2).strip("\"'") == REDACTED:
+            return m.group(0)
+        return f"{m.group(1)}={REDACTED}"
+
     txt = line_re.sub(lambda m: f"{m.group(1)}={REDACTED}", txt)
-    txt = kv_re.sub(lambda m: f"{m.group(1)}={REDACTED}", txt)
+    txt = kv_re.sub(_kv_sub, txt)
 
     # URL redaction (handles cases where the query string contains secrets)
     def _url_sub(m: re.Match) -> str:
@@ -224,7 +351,7 @@ def redact_obj(obj: Any) -> Any:
     if isinstance(obj, dict):
         out = {}
         for k, v in obj.items():
-            if isinstance(k, str) and is_sensitive_key(k):
+            if isinstance(k, str) and should_redact_value(k, v):
                 out[k] = REDACTED
             else:
                 out[k] = redact_obj(v)

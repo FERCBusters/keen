@@ -292,3 +292,131 @@ def test_mailbox_headers_from_a_mail_collector_are_masked_whole(monkeypatch):
     assert fields.redaction_status == "redacted"
     # The dedupe identifier is never masked; it is not shown as evidence.
     assert fields.external_id == "<id@example.test>"
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("posture.password_required", "true"),
+        ("posture.password_required_configured", "false"),
+        ("posture.password_delay_seconds", "2147483647"),
+        ("posture.signatures_age_days", "0"),
+        ("posture.signatures_updated", "2026-10-26T16:57:49.0000000Z"),
+        ("posture.signatures_updated", "2026-10-26T16:57:49+11:00"),
+    ],
+)
+def test_measured_posture_facts_keep_measured_values(key, value):
+    fields = {"fields": {key: value}}
+    assert r.redact_obj(fields) == fields
+    assert r.redact_str(json.dumps(fields)) == json.dumps(fields)
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("posture.password_required", "hunter2"),
+        ("posture.password_required", "true "),
+        ("posture.password_delay_seconds", "12345678901"),
+        ("posture.signatures_age_days", "-1"),
+        ("posture.signatures_updated", "2026-10-26 DO-NOT-LEAK"),
+        ("posture.signatures_updated", {"value": "2026-10-26T16:57:49Z"}),
+        ("password_required", "true"),
+        ("posture.db_password", "true"),
+    ],
+)
+def test_measured_exemption_requires_exact_name_and_shape(key, value):
+    assert r.redact_obj({key: value}) == {key: "REDACTED"}
+
+
+def test_measured_booleans_keep_only_boolean_shapes():
+    assert r.redact_obj({"posture.password_required": False}) == {
+        "posture.password_required": False
+    }
+    assert r.redact_obj({"posture.signatures_age_days": True}) == {
+        "posture.signatures_age_days": "REDACTED"
+    }
+
+
+def test_explicitly_configured_measured_name_is_always_redacted(monkeypatch):
+    monkeypatch.setenv("KEEN_SENSITIVE_KEYS", "posture.password_required")
+    r._sensitive_cfg.cache_clear()
+    assert r.redact_obj({"posture.password_required": "true"}) == {
+        "posture.password_required": "REDACTED"
+    }
+
+
+def test_json_documents_in_strings_get_object_redaction():
+    body = json.dumps(
+        {
+            "check": "custom",
+            "facts": {"db_password": "DO-NOT-LEAK-1", "count": 2},
+            "items": [{"api_token": "DO-NOT-LEAK-2"}, {"auth": {"pin": "x"}}],
+            "token": "DO-NOT-LEAK-3",
+        },
+        separators=(",", ":"),
+    )
+    record = r.redact_obj({"raw": body, "fields": {"facts.db_password": "x"}})
+    assert "DO-NOT-LEAK" not in record["raw"]
+    parsed = json.loads(record["raw"])
+    assert parsed["facts"] == {"db_password": "REDACTED", "count": 2}
+    assert parsed["items"] == [{"api_token": "REDACTED"}, {"auth": "REDACTED"}]
+    assert parsed["token"] == "REDACTED" and parsed["check"] == "custom"
+    assert record["fields"] == {"facts.db_password": "REDACTED"}
+    # The same policy applies when a JSON artifact holds the record.
+    artifact, status = r.redact_bytes(
+        json.dumps({"raw": body}).encode(), "application/json"
+    )
+    assert status == "redacted" and b"DO-NOT-LEAK" not in artifact
+
+
+def test_json_documents_without_secrets_keep_their_text():
+    for body in ['{ "a" : 1,\n "b": "x" }', "[1, 2]", "{}", '"quoted"', "{not json"]:
+        assert r.redact_str(body) == body
+
+
+def test_truncated_json_keeps_its_syntax_while_values_are_redacted():
+    text = '{"user":"bob","db_password":"DO-NOT-LEAK","token": "DO-NOT-LEAK","n":1,"secret":"DO-NOT'
+    result = r.redact_str(text)
+    assert "DO-NOT" not in result
+    assert result == (
+        '{"user":"bob","db_password":"REDACTED","token": "REDACTED",'
+        '"n":1,"secret":"REDACTED"'
+    )
+    assert (
+        r.redact_str('note "api_key": 12345, more')
+        == 'note "api_key": "REDACTED", more'
+    )
+
+
+def test_hostile_json_strings_are_bounded():
+    deep = "[" * 5000 + "]" * 5000
+    assert r.redact_str(deep) == deep
+    nested = json.dumps({"password": "x"})
+    for _ in range(6):
+        nested = json.dumps({"inner": nested})
+    assert "REDACTED" in r.redact_str(nested) and '\\"x\\"' not in r.redact_str(nested)
+    many_quotes = '"a' * 200000
+    assert r.redact_str(many_quotes) == many_quotes
+
+
+def test_embedded_json_cannot_exhaust_the_stack():
+    def embed(levels, depth):
+        doc = {"password": "x"}
+        for _ in range(levels):
+            inner = doc
+            for _ in range(depth):
+                inner = [inner]
+            doc = {"wrap": json.dumps(inner)}
+        return json.dumps(doc)
+
+    def called_from_depth(n, fn):
+        return fn() if n == 0 else called_from_depth(n - 1, fn)
+
+    # Deep and deeply embedded documents fall back to text redaction.
+    hostile = {"a": embed(12, 60), "b": embed(3, 240), "c": embed(1, 300)}
+    called_from_depth(600, lambda: r.redact_obj(hostile))
+    # Ordinary nesting within the budget is redacted as structure throughout.
+    value = json.loads(r.redact_str(embed(8, 3)))
+    while "wrap" in value:
+        value = json.loads(value["wrap"])[0][0][0]
+    assert value == {"password": "REDACTED"}

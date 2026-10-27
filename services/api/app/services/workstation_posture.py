@@ -127,6 +127,12 @@ def evaluate(f):
     if check == "screen_lock":
         if "automatic_lock_configured" in f:
             return _boolean(f, "automatic_lock_configured")
+        if f["provider"] == "windows_user_policy":
+            # Screen saver values are one of several Windows lock paths, and
+            # ScreenSaveActive defaults to 1 with no screen saver selected. Only
+            # the collector's combined automatic_lock_configured fact, which also
+            # covers machine inactivity policy and sign-in on wake, is a result.
+            return "unknown"
         if (
             f.get("password_required") == "false"
             or f.get("saver_enabled") == "false"
@@ -135,8 +141,6 @@ def evaluate(f):
             return "attention"
         if f.get("password_delay_seconds") == "2147483647":
             return "attention"
-        if f["provider"] == "windows_user_policy" and f.get("saver_enabled") != "true":
-            return "unknown"
         if f.get("password_required") == "true" and _positive(f.get("idle_seconds")):
             return "met"
     if check == "antivirus":

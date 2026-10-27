@@ -215,6 +215,29 @@ def test_snapshot_cap(setup, monkeypatch):
             "unknown",
         ),
         (
+            "screen_lock",
+            "windows_user_policy",
+            {
+                "saver_enabled": "true",
+                "password_required": "true",
+                "idle_seconds": "600",
+            },
+            "unknown",
+        ),
+        ("screen_lock", "windows_user_policy", {"saver_enabled": "false"}, "unknown"),
+        (
+            "screen_lock",
+            "windows_user_policy",
+            {"saver_enabled": "false", "automatic_lock_configured": "true"},
+            "met",
+        ),
+        (
+            "screen_lock",
+            "macos_screensaver",
+            {"password_required": "false", "idle_seconds": "300"},
+            "attention",
+        ),
+        (
             "firewall",
             "iptables",
             {"input_policy": "ACCEPT", "input_rule_count": "0"},
@@ -563,3 +586,23 @@ def test_postgres_backfill_preserves_links_and_person_deletion(
     contract_db.expire(agent)
     assert agent.person_id is None
     assert contract_db.get(User, users[0].id) is not None
+
+
+def test_measured_lock_facts_survive_ingestion(setup):
+    """Measured facts named like secrets reach evaluation through redaction."""
+    pid, aid, h = workstation(setup)
+    c, f, *_ = setup
+    for scope, facts in [
+        ("uid:501", {"password_required": "true", "idle_seconds": "300"}),
+        ("uid:502", {"password_required": "true", "password_delay_seconds": "0"}),
+    ]:
+        doc = make_posture("screen_lock", "macos_screensaver", scope, **facts)
+        assert c.post("/v1/otlp/logs", json=doc, headers=h).status_code == 200
+    with f() as db:
+        lock = summary(db, pid)["devices"][0]["checks"][1]
+        assert {o["scope"]: o["status"] for o in lock["observations"]} == {
+            "uid:501": "met",
+            "uid:502": "unknown",
+        }
+        fields = [e.normalized_payload["fields"] for e in db.query(Event)]
+        assert {x["posture.password_required"] for x in fields} == {"true"}

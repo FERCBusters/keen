@@ -137,6 +137,22 @@ def revoke(*, agent_id: str, db: Session):
     return {"ok": True}
 
 
+def stored_record(event) -> dict:
+    """Return the agent record as Keen stores and displays it.
+
+    A posture record's body repeats its posture fields as one JSON string. The
+    fields are the evidence, so the duplicate body is not kept. Log records keep
+    their body, which is the collected evidence itself.
+    """
+    payload = event.model_dump(mode="json")
+    if (
+        event.action.startswith("posture.")
+        and event.fields.get("posture.schema_version") == "1"
+    ):
+        payload["raw"] = ""
+    return payload
+
+
 def persist_batch(*, db, authorization, events):
     # Per-agent row lock serializes ingestion and credential revocation. One transaction
     # persists the whole batch; a lost acknowledgement is safely retried.
@@ -154,7 +170,7 @@ def persist_batch(*, db, authorization, events):
             if old.raw_pointer.get("agent", {}).get("sha256") != digest:
                 raise DomainError(409, "Event UUID reused with different content")
         else:
-            payload = event.model_dump(mode="json")
+            payload = stored_record(event)
             stored = store_event_with_artifact(
                 db,
                 timestamp=event.timestamp.astimezone(timezone.utc).replace(tzinfo=None),

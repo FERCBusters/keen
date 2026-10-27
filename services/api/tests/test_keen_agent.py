@@ -364,3 +364,54 @@ def test_real_middleware_keeps_agent_paths_scoped(setup, monkeypatch):
         assert client.get("/v1/events", headers=headers).status_code == 401
     finally:
         main.app.dependency_overrides.pop(api.get_db, None)
+
+
+def test_json_log_bodies_receive_field_redaction(setup):
+    client, factory, headers, _, stored, _ = setup
+    body = json.dumps({"msg": "connected", "db_password": "DO-NOT-STORE"})
+    assert (
+        client.post(
+            "/v1/otlp/logs", json=record(body=body), headers=headers
+        ).status_code
+        == 200
+    )
+    with factory() as db:
+        row = db.query(Event).one()
+        assert json.loads(row.normalized_payload["raw"]) == {
+            "msg": "connected",
+            "db_password": "REDACTED",
+        }
+        assert "DO-NOT-STORE" not in row.summary
+    assert len(stored) == 1 and b"DO-NOT-STORE" not in stored[0]
+
+
+def test_posture_records_store_fields_without_the_duplicate_body(setup):
+    client, factory, headers, _, stored, _ = setup
+    doc = record(
+        body=json.dumps({"check": "antivirus", "facts": {"api_token": "DO-NOT-STORE"}})
+    )
+    log = logs(doc)[0]
+    log["attributes"] = [a for a in log["attributes"] if a["key"] != "keen.action"]
+    for key, value in {
+        "keen.action": "posture.antivirus",
+        "keen.field.posture.schema_version": "1",
+        "keen.field.posture.signatures_updated": "2026-10-26T16:57:49.0000000Z",
+        "keen.field.posture.signatures_age_days": "0",
+    }.items():
+        log["attributes"].append({"key": key, "value": {"stringValue": value}})
+    assert client.post("/v1/otlp/logs", json=doc, headers=headers).status_code == 200
+    # An identical retry is still recognised after the body is dropped.
+    assert client.post("/v1/otlp/logs", json=doc, headers=headers).status_code == 200
+    with factory() as db:
+        row = db.query(Event).one()
+        assert row.normalized_payload["raw"] == ""
+        fields = row.normalized_payload["fields"]
+        assert fields["posture.signatures_updated"] == "2026-10-26T16:57:49.0000000Z"
+        assert fields["posture.signatures_age_days"] == "0"
+    assert len(stored) == 1 and b"DO-NOT-STORE" not in stored[0]
+    # A record using posture names without the posture schema keeps its body.
+    other = record(body="kept")
+    logs(other)[0]["attributes"][1]["value"]["stringValue"] = "posture.firewall"
+    assert client.post("/v1/otlp/logs", json=other, headers=headers).status_code == 200
+    with factory() as db:
+        assert {e.normalized_payload["raw"] for e in db.query(Event)} == {"", "kept"}
