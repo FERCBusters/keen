@@ -4,10 +4,10 @@
 /* Keen UI – themeable (Bootstrap-friendly) */
 
 :root {
-  /* Accent palette (defaults to Ink) */
+  /* Accent palette (the navy accent stays the single voice; defaults to Sand) */
   --keen-accent: #004987;
   --keen-accent-700: #003768;
-  --keen-accent-100: #e4f2ff;
+  --keen-accent-100: #f1e9d4;
   --keen-accent-rgb: 0, 73, 135;
   --keen-accent-contrast: #fff;
   --keen-link-hover: #002c57;
@@ -15,9 +15,14 @@
   /* Chart palette (defaults to accent) */
   --keen-chart-rgb: var(--keen-accent-rgb);
 
-  /* Neutral palette */
-  --keen-ink: #1f1f2a;
-  --keen-muted: #5e5e75;
+  /* Neutral palette, warmed for the default Sand canvas */
+  --keen-ink: #26221a;
+  --keen-muted: #6b6455;
+
+  /* Light surfaces, warmed for the default Sand canvas */
+  --bs-secondary-bg: #fffdf7;
+  --bs-tertiary-bg: #f4eee1;
+  --bs-border-color: #d9d2c2;
 
   /* Additional aliases for legacy apps */
   --mosp-accent: var(--keen-accent);
@@ -29,19 +34,20 @@
   --bs-primary: var(--keen-accent);
   --bs-primary-rgb: var(--keen-accent-rgb);
   --bs-body-color: var(--keen-ink);
-  --bs-body-bg: #f1f6fc;
+  --bs-body-bg: #f6efe2;
   --bs-link-color: var(--keen-accent-700);
   --bs-link-hover-color: var(--keen-link-hover);
 }
 
-/* Theme palettes (set on <html data-theme="...">) */
+/* Theme palettes (set on <html data-theme="...">). The base tokens are the
+   Sand family; palettes override what they change. */
 :root[data-theme='ink'] {
-  --keen-accent: #004987;
-  --keen-accent-700: #003768;
   --keen-accent-100: #e4f2ff;
-  --keen-accent-rgb: 0, 73, 135;
-  --keen-accent-contrast: #fff;
-  --keen-link-hover: #002c57;
+  --keen-ink: #1f1f2a;
+  --keen-muted: #5e5e75;
+  --bs-secondary-bg: #e9ecef;
+  --bs-tertiary-bg: #f8f9fa;
+  --bs-border-color: #dee2e6;
   --bs-body-bg: #f1f6fc;
 }
 
@@ -117,17 +123,17 @@
 
 :root[data-bs-theme='dark'] {
   color-scheme: dark;
-  --keen-ink: #edf0f6;
-  --keen-muted: #b7bfce;
-  --bs-body-color: #edf0f6;
-  --bs-body-color-rgb: 237, 240, 246;
-  --bs-body-bg: #141820;
-  --bs-body-bg-rgb: 20, 24, 32;
-  --bs-secondary-bg: #202631;
-  --bs-tertiary-bg: #29313e;
-  --bs-border-color: #465061;
+  --keen-ink: #f2ede2;
+  --keen-muted: #b6ae9e;
+  --bs-body-color: #f2ede2;
+  --bs-body-color-rgb: 242, 237, 226;
+  --bs-body-bg: #191611;
+  --bs-body-bg-rgb: 25, 22, 17;
+  --bs-secondary-bg: #262117;
+  --bs-tertiary-bg: #322c20;
+  --bs-border-color: #4c4434;
   --bs-emphasis-color: #fff;
-  --keen-accent-100: color-mix(in srgb, var(--keen-accent) 20%, #202631);
+  --keen-accent-100: color-mix(in srgb, var(--keen-accent) 20%, #262117);
   --bs-link-color: color-mix(in srgb, var(--keen-accent) 55%, white);
   --bs-link-hover-color: color-mix(in srgb, var(--keen-accent) 35%, white);
 }
