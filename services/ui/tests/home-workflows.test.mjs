@@ -11,6 +11,16 @@ const overview = {
   attention: [],
   counts: {},
 };
+const timeline = {
+  days: 30,
+  interval: 'day',
+  items: [
+    { bucket: '2026-10-01', total: 3, mapped: 3, unmapped: 0 },
+    { bucket: '2026-10-02', total: 0, mapped: 0, unmapped: 0 },
+    { bucket: '2026-10-03', total: 2, mapped: 1, unmapped: 1 },
+  ],
+  sources: [{ source: 'forgejo', label: 'Forgejo', color: '#c73e1d', total: 40 }],
+};
 
 const control = (id, extra = {}) => ({
   id,
@@ -46,7 +56,7 @@ async function home(
         addEventListener() {},
         removeEventListener() {},
       });
-      // Compress the ticker's ambient delays; record the polling interval for manual firing.
+      // Record polling intervals for manual firing in tests that need them.
       const realTimeout = window.setTimeout.bind(window);
       window.setTimeout = (fn, ms) => realTimeout(fn, Math.min(Number(ms) || 0, 2));
       window.setInterval = (fn, ms) => (intervals.push({ fn, ms }), intervals.length);
@@ -58,23 +68,13 @@ async function home(
       if (handler !== undefined)
         return typeof handler === 'function' ? handler(u) : structuredClone(handler);
       if (key === '/api/v1/home') return structuredClone(overview);
-      if (key === '/api/v1/evidence/latest') return { events: [] };
+      if (key === '/api/v1/charts/event_volume_timeseries') return structuredClone(timeline);
       throw new Error('Unexpected GET ' + u);
     },
   });
-  ui.intervals = intervals;
-  ui.canvas = () => ui.el('explorerCanvas');
-  ui.zoomCard = (kind, id) =>
-    ui.canvas().querySelector(`[data-kind="${kind}"][data-id="${id}"] .js-zoom`);
-  return ui;
-}
 
-// Layer changes ignore clicks until the transition finishes, so wait one macrotask.
-const tick = () => new Promise((r) => setTimeout(r, 10));
-async function goHome(ui) {
-  ui.el('explorerRoot').click();
-  await settle(() => ui.el('homeExplorer').hidden);
-  await tick();
+  ui.intervals = intervals;
+  return ui;
 }
 
 const getsTo = (ui, path) =>
@@ -85,536 +85,6 @@ const assertNoInjectedMarkup = (ui, scope) => {
   assert.equal(scope.querySelector('img'), null);
   assert.equal(ui.window.pwned, undefined);
 };
-
-test('the control tree drills from sections into a control and its connected records', async (t) => {
-  const ui = await home(t, {
-    routes: {
-      '/api/v1/home/controls': (u) =>
-        u.searchParams.get('prefix')
-          ? listOf([control('c1', { title: HOSTILE + 'Policies' })])
-          : { groups: [{ id: 'A.5', count: 1 }], items: [] },
-      '/api/v1/controls/c1': control('c1', {
-        title: HOSTILE + 'Policies',
-        description: 'Management direction',
-        clauses: [{ clause_id: 'cl1', ref: '4.1', title: 'Context' }],
-      }),
-      '/api/v1/controls/c1/evidence': listOf([
-        {
-          event_id: 'e1',
-          summary: 'Okta sign-in',
-          source: 'okta',
-          timestamp: '2026-01-02T03:04:05Z',
-        },
-      ]),
-      '/api/v1/controls/c1/risks': listOf([
-        {
-          id: 'r1',
-          asset: 'Database',
-          threat_summary: 'Disclosure',
-          risk_types: ['Confidentiality'],
-        },
-      ]),
-      '/api/v1/controls/c1/interested-parties': listOf([
-        { id: 'i1', name: { name: 'Customers' }, nature: { name: 'External' }, controls: [{}, {}] },
-      ]),
-      '/api/v1/controls/c1/effectiveness-measures': listOf([
-        {
-          id: 'm1',
-          summary: 'Patch latency',
-          metric_key: 'patch_days',
-          target_display: '< 7 days',
-        },
-      ]),
-    },
-  });
-  ui.document.querySelector('[data-kind="controls"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('control_section', 'A.5'));
-  assert.equal(ui.el('homeExplorer').hidden, false);
-  assert.equal(ui.el('homeOverview').hidden, true);
-  assert.match(ui.canvas().textContent, /Section A\.5/);
-  assert.match(ui.canvas().textContent, /1 controls · explore this section/);
-  assert.equal(
-    ui.canvas().querySelector('[data-kind="control_section"] a').getAttribute('href'),
-    '/controls.html?q=A.5&framework=A',
-  );
-
-  ui.zoomCard('control_section', 'A.5').click();
-  await settle(() => ui.zoomCard('control', 'c1'));
-  assert.equal(getsTo(ui, '/api/v1/home/controls').at(-1).url.includes('prefix=A.5'), true);
-  assert.match(ui.el('crumbs').textContent, /Controls.*Section A\.5/);
-  assertNoInjectedMarkup(ui, ui.canvas());
-
-  ui.zoomCard('control', 'c1').click();
-  await settle(() => /Related risks/.test(ui.canvas().textContent));
-  const canvas = ui.canvas();
-  assertNoInjectedMarkup(ui, canvas);
-  assert.match(canvas.querySelector('.home-node-heading').textContent, /^A\.5\.1 <img/);
-  assert.match(canvas.querySelector('.home-node-header').textContent, /In scope/);
-  assert.equal(
-    canvas.querySelector('.home-node-header a').getAttribute('href'),
-    '/control.html?id=c1&framework=A',
-  );
-  // Each related record links to its own page and only zoomable kinds offer Zoom in.
-  assert.ok(ui.zoomCard('clause', 'cl1'));
-  assert.ok(ui.zoomCard('risk', 'r1'));
-  assert.ok(ui.zoomCard('interested_party', 'i1'));
-  assert.ok(ui.zoomCard('effectiveness_measure', 'm1'));
-  const evidence = canvas.querySelector('[data-kind="evidence"][data-id="e1"]');
-  assert.equal(evidence.querySelector('.js-zoom'), null);
-  assert.equal(evidence.querySelector('a').getAttribute('href'), '/event.html?id=e1&framework=A');
-  assert.equal(evidence.querySelector('a').getAttribute('rel'), 'noopener noreferrer');
-  assert.match(evidence.textContent, /2026-01-02T03:04:05Z · okta/);
-  const party = canvas.querySelector('[data-kind="interested_party"]');
-  assert.match(party.textContent, /Customers - External/);
-  assert.match(party.textContent, /2 linked controls · 0 communications/);
-  assert.match(
-    canvas.querySelector('[data-kind="effectiveness_measure"]').textContent,
-    /key: patch_days · target < 7 days/,
-  );
-  assert.match(canvas.querySelector('[data-kind="risk"]').textContent, /Confidentiality/);
-  assert.ok(getsTo(ui, '/api/v1/controls/c1/risks')[0].url.includes('framework=A'));
-  assert.ok(getsTo(ui, '/api/v1/controls/c1/evidence')[0].url.endsWith('limit=100'));
-});
-
-test('zoom out returns through the stack and Home restores the overview', async (t) => {
-  const ui = await home(t, {
-    routes: {
-      '/api/v1/risks': listOf([{ id: 'r1', asset: 'Database', threat_summary: 'Disclosure' }]),
-      '/api/v1/risks/r1': {
-        id: 'r1',
-        asset_name: 'Database',
-        threat_summary: 'Disclosure',
-        risk_types: [],
-      },
-      '/api/v1/risks/r1/controls': listOf([control('c1', { in_scope: false })]),
-      '/api/v1/controls/c1': null,
-      '/api/v1/controls/c1/evidence': listOf([]),
-      '/api/v1/controls/c1/risks': listOf([]),
-      '/api/v1/controls/c1/interested-parties': listOf([]),
-      '/api/v1/controls/c1/effectiveness-measures': listOf([]),
-    },
-  });
-  assert.equal(ui.el('explorerBack').disabled, true);
-  ui.document.querySelector('[data-kind="risks"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('risk', 'r1'));
-  ui.zoomCard('risk', 'r1').click();
-  await settle(() => ui.zoomCard('control', 'c1'));
-  assert.match(ui.canvas().textContent, /Risk scenario/);
-  assert.match(ui.canvas().textContent, /Out of scope/);
-  assert.match(ui.el('crumbs').textContent, /Risk register.*Database - Disclosure/);
-  ui.zoomCard('control', 'c1').click();
-  await settle(() => ui.canvas().textContent.includes('Control not found.'));
-
-  ui.el('explorerBack').click();
-  await settle(() => ui.zoomCard('control', 'c1'));
-  assert.equal(getsTo(ui, '/api/v1/risks/r1').length, 2);
-  ui.el('explorerBack').click();
-  await settle(() => ui.zoomCard('risk', 'r1'));
-  ui.el('explorerBack').click();
-  await settle(() => ui.el('homeExplorer').hidden);
-  assert.equal(ui.el('homeOverview').hidden, false);
-  assert.equal(ui.el('explorerBack').disabled, true);
-  // With an empty stack, zoom out does nothing.
-  ui.el('explorerBack').click();
-  assert.equal(ui.el('homeExplorer').hidden, true);
-
-  await tick();
-  ui.document.querySelector('[data-kind="risks"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('risk', 'r1'));
-  await goHome(ui);
-  assert.equal(ui.el('explorerBack').disabled, true);
-  assert.equal(ui.el('crumbs').textContent, 'Framework A');
-});
-
-test('clause layers show parent, children, controls and evidence', async (t) => {
-  const clauses = [
-    { id: 'cl1', ref: '4', title: 'Context' },
-    { id: 'cl2', ref: '4.1', title: 'Understanding', parent_id: 'cl1', parent_ref: '4' },
-    { id: 'cl3', ref: '4.1.1', title: 'Issues', parent_id: 'cl2', parent_ref: '4.1' },
-  ];
-  const ui = await home(t, {
-    routes: {
-      '/api/v1/clauses': (u) =>
-        u.searchParams.get('limit') === '5000' ? listOf(clauses) : listOf([clauses[1]]),
-      '/api/v1/clauses/cl2': clauses[1],
-      '/api/v1/clauses/cl2/controls': listOf([control('c1')]),
-      '/api/v1/events': (u) => {
-        assert.equal(u.searchParams.get('clause'), 'cl2');
-        return listOf([{ id: 'e1', summary: 'Register reviewed' }]);
-      },
-    },
-  });
-  ui.document.querySelector('[data-kind="clauses"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('clause', 'cl2'));
-  assert.match(ui.canvas().textContent, /Under 4/);
-  ui.zoomCard('clause', 'cl2').click();
-  await settle(() => /Applicable controls/.test(ui.canvas().textContent));
-  const sections = [...ui.canvas().querySelectorAll('.home-section')];
-  const byKey = (key) => sections.find((s) => s.dataset.sectionKey === key);
-  assert.ok(byKey('parent-clause').querySelector('[data-id="cl1"]'));
-  assert.ok(byKey('clause-children').querySelector('[data-id="cl3"]'));
-  assert.ok(byKey('clause-controls').querySelector('[data-id="c1"]'));
-  assert.match(byKey('clause-evidence').textContent, /Register reviewed/);
-  assert.match(ui.el('crumbs').textContent, /4\.1 Understanding/);
-});
-
-test('PESTLE(E), Interested Party and audit layers render their relationships', async (t) => {
-  const ui = await home(t, {
-    routes: {
-      '/api/v1/pestle/items': listOf([
-        { id: 'p1', type: 'Legal', lens: 'External', item: 'Privacy law' },
-      ]),
-      '/api/v1/pestle/items/p1': {
-        id: 'p1',
-        type: 'Legal',
-        lens: 'External',
-        item: 'Privacy law',
-        rationale: HOSTILE,
-        overall_relevance: { label: 'High' },
-        business_processes: [
-          { business_process: { name: 'Payroll' }, relevance: { label: 'Medium' } },
-          { business_process: { name: 'Sales' } },
-        ],
-        clauses: [
-          { clause: { id: 'cl1', ref: '4.1', title: 'Context' }, relevance: { label: 'High' } },
-        ],
-        related_controls: [control('c1')],
-      },
-      '/api/v1/interested-parties': listOf([{ id: 'i1', name: 'Regulator', nature: 'Statutory' }]),
-      '/api/v1/interested-parties/i1': {
-        id: 'i1',
-        name: { name: 'Regulator' },
-        nature: { name: 'Statutory' },
-        controls: [control('c2')],
-        communications: [
-          {
-            event: 'Breach notice',
-            with_whom: 'Commissioner',
-            when: 'Within 72 hours',
-            methods: ['Email', 'Portal'],
-          },
-        ],
-      },
-      '/api/v1/audits': listOf([{ id: 'a1', title: 'Annual audit', status: 'fieldwork' }]),
-      '/api/v1/audits/a1': {
-        id: 'a1',
-        title: 'Annual audit',
-        status: 'fieldwork',
-        scoped_clauses: [{ id: 'cl1', ref: '4.1', title: 'Context' }],
-        scoped_controls: [control('c3')],
-        evidence: [
-          { event_id: 'e1', title: 'Sampled login' },
-          { id: 'manual-1', notes: 'Interview notes', added_at: '2026-03-01' },
-        ],
-      },
-    },
-  });
-  ui.document.querySelector('[data-kind="pestle"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('pestle_item', 'p1'));
-  ui.zoomCard('pestle_item', 'p1').click();
-  await settle(() => /Business process relevance/.test(ui.canvas().textContent));
-  assertNoInjectedMarkup(ui, ui.canvas());
-  assert.match(
-    ui.canvas().querySelector('.home-node-header').textContent,
-    /Legal · External · High/,
-  );
-  const processes = [...ui.canvas().querySelectorAll('[data-kind="business_process"]')];
-  assert.deepEqual(
-    processes.map((p) => p.querySelector('.home-node-meta').textContent),
-    ['Medium', '-'],
-  );
-  // Business processes are context-only leaves: no zoom and no link.
-  assert.equal(processes[0].querySelector('.js-zoom, a'), null);
-  assert.match(
-    ui.canvas().querySelector('[data-kind="clause"]').textContent,
-    /PESTLE\(E\) relevance: High/,
-  );
-  assert.ok(ui.zoomCard('control', 'c1'));
-
-  await goHome(ui);
-  ui.document.querySelector('[data-kind="interested_parties"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('interested_party', 'i1'));
-  assert.match(ui.canvas().textContent, /Regulator - Statutory/);
-  ui.zoomCard('interested_party', 'i1').click();
-  await settle(() => /Communications/.test(ui.canvas().textContent));
-  const comms = ui.canvas().querySelector('[data-kind="communication"]');
-  assert.match(comms.textContent, /Breach notice \/ Commissioner/);
-  assert.match(comms.textContent, /Within 72 hours · Email, Portal/);
-  assert.equal(comms.querySelector('a'), null);
-  assert.ok(ui.zoomCard('control', 'c2'));
-
-  await goHome(ui);
-  ui.document.querySelector('[data-kind="audits"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('audit', 'a1'));
-  ui.zoomCard('audit', 'a1').click();
-  await settle(() => /Sampled evidence/.test(ui.canvas().textContent));
-  assert.ok(ui.zoomCard('clause', 'cl1'));
-  assert.ok(ui.zoomCard('control', 'c3'));
-  const sampled = [
-    ...ui.canvas().querySelectorAll('[data-section-key="audit-evidence"] [data-kind="evidence"]'),
-  ];
-  assert.equal(sampled[0].querySelector('a').getAttribute('href'), '/event.html?id=e1&framework=A');
-  // Manual audit evidence has no event page to open.
-  assert.match(sampled[1].textContent, /Interview notes/);
-  assert.equal(sampled[1].querySelector('a'), null);
-});
-
-test('effectiveness measures lead to metric sources and the source layer', async (t) => {
-  const ui = await home(t, {
-    routes: {
-      '/api/v1/isms/effectiveness-measures': listOf([{ id: 'm1', summary: 'Patch latency' }]),
-      '/api/v1/isms/effectiveness-measures/m1': {
-        id: 'm1',
-        summary: 'Patch latency',
-        target_display: '< 7 days',
-        controls: [control('c1')],
-        metric_entries: [
-          {
-            id: 'me1',
-            value_display: '5 days',
-            period: '2026-Q1',
-            source_type: 'keen-agent',
-            source_event_id: 'e1',
-            notes: 'Within target',
-          },
-          // As the API sends it: value_display carries the qualitative value.
-          {
-            id: 'me2',
-            metric_value: null,
-            qualitative_value: 'Improving',
-            value_display: 'Improving',
-            source_type: 'other',
-          },
-          { id: 'me3', value_display: '6 days', source_type: 'keen-agent' },
-        ],
-      },
-      '/api/v1/sources': listOf([{ source: 'keen-agent', label: 'Keen agents', event_count: 3 }]),
-      '/api/v1/events': (u) => {
-        assert.equal(u.searchParams.get('source'), 'keen-agent');
-        return listOf([{ id: 'e1', summary: 'Patch report', source: 'keen-agent' }]);
-      },
-      '/api/v1/sources/keen-agent/effectiveness-measures': listOf([
-        { id: 'm1', summary: 'Patch latency' },
-      ]),
-    },
-  });
-  ui.document.querySelector('[data-kind="effectiveness_measures"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('effectiveness_measure', 'm1'));
-  ui.zoomCard('effectiveness_measure', 'm1').click();
-  await settle(() => /Recent metric entries/.test(ui.canvas().textContent));
-  assert.match(ui.canvas().querySelector('.home-node-header').textContent, /Target < 7 days/);
-  // Sources are de-duplicated and the generic "other" source type is not a Keen source.
-  const sources = [
-    ...ui
-      .canvas()
-      .querySelectorAll('[data-section-key="effectiveness-sources"] [data-kind="source"]'),
-  ];
-  assert.deepEqual(
-    sources.map((s) => s.dataset.id),
-    ['keen-agent'],
-  );
-  assert.equal(
-    sources[0].querySelector('a').getAttribute('href'),
-    '/sources.html?source=keen-agent&framework=A',
-  );
-  const entries = [...ui.canvas().querySelectorAll('[data-kind="metric_entry"]')];
-  assert.deepEqual(
-    entries.map((e) => e.querySelector('.home-node-title').textContent),
-    ['5 days', 'Improving', '6 days'],
-  );
-  assert.match(entries[0].textContent, /2026-Q1 · keen-agent/);
-  assert.equal(
-    entries[0].querySelector('a').getAttribute('href'),
-    '/isms-effectiveness-metric.html?id=me1&framework=A',
-  );
-  assert.equal(entries[1].querySelector('a'), null);
-  assert.equal(entries[0].querySelector('.js-zoom'), null);
-
-  ui.zoomCard('source', 'keen-agent').click();
-  await settle(() => /Events ingested from this source/.test(ui.canvas().textContent));
-  assert.match(ui.el('crumbs').textContent, /Patch latency.*Keen agents/);
-  assert.match(ui.canvas().textContent, /Patch report/);
-  assert.ok(ui.zoomCard('effectiveness_measure', 'm1'));
-  // The source catalogue is global; the per-source queries carry the framework.
-  assert.equal(getsTo(ui, '/api/v1/sources').at(-1).url.includes('framework='), false);
-});
-
-test('an unknown source still opens a layer keyed by its name', async (t) => {
-  const ui = await home(t, {
-    routes: {
-      '/api/v1/sources': (u) =>
-        u.searchParams.get('limit')
-          ? listOf([{ source: 'legacy-sync', event_count: 1 }])
-          : listOf([]),
-      '/api/v1/events': listOf([]),
-      '/api/v1/sources/legacy-sync/effectiveness-measures': () => {
-        throw new Error('Forbidden');
-      },
-    },
-  });
-  ui.document.querySelector('[data-kind="sources"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('source', 'legacy-sync'));
-  ui.zoomCard('source', 'legacy-sync').click();
-  await settle(() => /Recent evidence/.test(ui.canvas().textContent));
-  assert.match(ui.el('crumbs').textContent, /legacy-sync$/);
-  assert.equal(ui.canvas().querySelectorAll('.home-node-card').length, 0);
-});
-
-for (const [entry, kind, id, path, message] of [
-  [
-    'risks',
-    'risk',
-    'r9',
-    '/api/v1/risks',
-    'Risk not found, or you do not have permission to view it.',
-  ],
-  [
-    'pestle',
-    'pestle_item',
-    'p9',
-    '/api/v1/pestle/items',
-    'PESTLE(E) item not found, or you do not have permission to view it.',
-  ],
-  [
-    'interested_parties',
-    'interested_party',
-    'i9',
-    '/api/v1/interested-parties',
-    'Interested party not found, or you do not have permission to view it.',
-  ],
-  [
-    'audits',
-    'audit',
-    'a9',
-    '/api/v1/audits',
-    'Audit not found, or you do not have permission to view it.',
-  ],
-  [
-    'effectiveness_measures',
-    'effectiveness_measure',
-    'm9',
-    '/api/v1/isms/effectiveness-measures',
-    'Effectiveness measure not found, or you do not have permission to view it.',
-  ],
-  ['clauses', 'clause', 'cl9', '/api/v1/clauses', 'Clause not found.'],
-])
-  test(`a ${kind} the user cannot read shows a not-found layer`, async (t) => {
-    const ui = await home(t, {
-      routes: {
-        [path]: listOf([{ id, title: 'Record ' + id }]),
-        [`${path}/${id}`]: () => {
-          throw new Error('403 Forbidden');
-        },
-        [`${path}/${id}/controls`]: listOf([]),
-        '/api/v1/events': listOf([]),
-      },
-    });
-    ui.document.querySelector(`[data-kind="${entry}"] .js-entry-zoom`).click();
-    await settle(() => ui.zoomCard(kind, id));
-    ui.zoomCard(kind, id).click();
-    await settle(() => ui.canvas().textContent.includes(message));
-  });
-
-test('a failed framework structure request reports the error in place', async (t) => {
-  const ui = await home(t, {
-    routes: {
-      '/api/v1/home/controls': () => {
-        throw new Error('Service unavailable');
-      },
-    },
-  });
-  ui.document.querySelector('[data-kind="controls"] .js-entry-zoom').click();
-  await settle(() => ui.canvas().textContent.includes('Could not load this connection layer.'));
-  assert.match(
-    ui.el('status').textContent,
-    /Could not load connection layer: Error: Service unavailable/,
-  );
-  assert.equal(ui.el('status').dataset.alert, 'danger');
-});
-
-test('empty collections and sections explain what is missing', async (t) => {
-  const ui = await home(t, {
-    routes: {
-      '/api/v1/risks': listOf([]),
-      '/api/v1/home/controls': { groups: [], items: [] },
-    },
-  });
-  ui.document.querySelector('[data-kind="risks"] .js-entry-zoom').click();
-  await settle(() =>
-    /No risk register found, or you do not have permission/.test(ui.canvas().textContent),
-  );
-  await goHome(ui);
-  ui.document.querySelector('[data-kind="controls"] .js-entry-zoom').click();
-  await settle(() => ui.canvas().textContent.includes('No controls in this section.'));
-});
-
-test('large sections page locally and keep their page when revisited', async (t) => {
-  const many = Array.from({ length: 150 }, (_, i) => control('c' + i, { ref: 'A.' + i }));
-  const ui = await home(t, { routes: { '/api/v1/home/controls': { groups: [], items: many } } });
-  ui.document.querySelector('[data-kind="controls"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('control', 'c0'));
-  const summary = () => ui.canvas().querySelector('.home-pagination .small-muted').textContent;
-  assert.equal(summary(), 'Showing 1-100 of 150');
-  assert.equal(ui.canvas().querySelectorAll('.home-node-card').length, 100);
-  const [prev, next] = ui.canvas().querySelectorAll('.js-section-page');
-  assert.equal(prev.disabled, true);
-  next.click();
-  await settle(() => ui.zoomCard('control', 'c149'));
-  assert.equal(summary(), 'Showing 101-150 of 150');
-  assert.equal(ui.canvas().querySelectorAll('.home-node-card').length, 50);
-  assert.equal(ui.canvas().querySelectorAll('.js-section-page')[1].disabled, true);
-  ui.canvas().querySelectorAll('.js-section-page')[0].click();
-  await settle(() => ui.zoomCard('control', 'c0'));
-});
-
-test('collections page through the server with offsets and step back from an empty page', async (t) => {
-  const offsets = [];
-  const ui = await home(t, {
-    routes: {
-      '/api/v1/risks': (u) => {
-        const offset = Number(u.searchParams.get('offset'));
-        offsets.push(offset);
-        assert.equal(u.searchParams.get('limit'), '100');
-        // The second page empties between the pager render and the click.
-        if (offset === 100) return { items: [], total: 0 };
-        return { items: [{ id: 'r' + offset, asset: 'Asset ' + offset }], total: 150 };
-      },
-    },
-  });
-  ui.document.querySelector('[data-kind="risks"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('risk', 'r0'));
-  assert.match(ui.canvas().querySelector('.home-pagination').textContent, /Showing 1-100 of 150/);
-  const next = ui.canvas().querySelector('.js-collection-page[data-pager="next"]');
-  assert.equal(next.dataset.offset, '100');
-  next.click();
-  await settle(() => offsets.length === 3 && ui.zoomCard('risk', 'r0'));
-  assert.deepEqual(offsets, [0, 100, 0]);
-});
-
-test('layer changes animate when reduced motion is not requested', async (t) => {
-  const ui = await home(t, {
-    reduced: false,
-    routes: { '/api/v1/audits': listOf([{ id: 'a1', title: 'Annual audit', status: 'planned' }]) },
-  });
-  const entry = ui.document.querySelector('[data-kind="audits"]');
-  assert.equal(entry.getAttribute('data-entering'), 'true');
-  entry.querySelector('.js-entry-zoom').click();
-  // A second click during the transition is ignored.
-  entry.querySelector('.js-entry-zoom').click();
-  await settle(() => ui.zoomCard('audit', 'a1'));
-  assert.equal(
-    ui.zoomCard('audit', 'a1').closest('.home-node-card').getAttribute('data-entering'),
-    'true',
-  );
-  await settle(() => !ui.canvas().classList.contains('home-layer-incoming'));
-  assert.equal(getsTo(ui, '/api/v1/audits').length, 1);
-  ui.el('explorerBack').click();
-  await settle(
-    () =>
-      ui.el('homeExplorer').hidden &&
-      !ui.el('entryCards').classList.contains('home-layer-incoming'),
-  );
-});
 
 test('overview reports coverage and highlight counts for the selected framework', async (t) => {
   const ui = await home(t, {
@@ -638,29 +108,48 @@ test('overview reports coverage and highlight counts for the selected framework'
     kpis.textContent,
     /Control evidence coverage70%7 of 10 in-scope controls have evidence/,
   );
-  assert.equal(kpis.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '70');
+  const ring = kpis.querySelector('.home-kpi-ring');
+  assert.equal(ring.getAttribute('aria-label'), '70% of in-scope controls covered by evidence');
+  assert.equal(ring.getAttribute('role'), 'img');
   assert.doesNotMatch(kpis.textContent, /Framework clauses|Events mapped/);
   const badges = [...ui.el('homeAttention').querySelectorAll('.badge')];
   assert.deepEqual(
-    badges.map((b) => [
-      b.textContent,
-      b.classList.contains('text-bg-warning'),
-      b.getAttribute('href'),
-    ]),
+    badges.map((b) => [b.textContent, b.getAttribute('href')]),
     [
-      ['3 control gaps', true, '/controls.html?gaps=1&framework=A'],
-      ['0 overdue audits', false, '/audits.html?framework=A'],
-      ['2 measures outside threshold', true, '/isms.html?tab=effectiveness&framework=A'],
-      [
-        '1 API collectors with failures · all frameworks',
-        true,
-        '/admin.html?framework=A#integrations',
-      ],
+      ['3 control gaps', '/controls.html?gaps=1&framework=A'],
+      ['2 measures outside threshold', '/isms.html?tab=effectiveness&framework=A'],
+      ['1 API collector with failures · all frameworks', '/admin.html?framework=A#integrations'],
     ],
   );
+  // Zero counts are absence, not work: a grey zero pill is never rendered.
+  assert.ok(badges.every((b) => b.classList.contains('text-bg-warning')));
+  assert.ok(!ui.el('homeAttention').textContent.includes('0 overdue audits'));
   assertNoInjectedMarkup(ui, ui.el('homeAttention'));
   assert.match(ui.el('homeAttention').textContent, /Audit overdue/);
   assert.match(ui.el('homeAttention').textContent, /Showing up to five items per category/);
+  // The activity band rides on the existing event volume endpoint exactly once.
+  const chartCalls = getsTo(ui, '/api/v1/charts/event_volume_timeseries');
+  assert.equal(chartCalls.length, 1);
+  assert.match(chartCalls[0].url, /framework=A&(?:days=30&breakdown=source|.*breakdown=source)/);
+  // This overview has no events payload, so the band stays out of the way.
+  assert.equal(ui.el('homeActivity').hidden, true);
+});
+
+test('the activity band renders the chart payload with its accessibility text', async (t) => {
+  const ui = await home(t);
+  assert.equal(ui.el('homeActivity').hidden, false);
+  assert.ok(ui.document.querySelector('#homeSpark .home-spark-svg'));
+  assert.match(
+    ui.el('homeSpark').getAttribute('aria-label'),
+    /peaking at 3 on 2026-10-01; 5 collected and 4 mapped/,
+  );
+  assert.match(
+    ui.el('homeSparkNote').textContent,
+    /5 events collected · 4 mapped to this framework/,
+  );
+  const sourceLink = ui.el('homeSources').querySelector('a');
+  assert.equal(sourceLink.getAttribute('href'), '/events.html?source=forgejo&framework=A');
+  assert.equal(ui.el('homeSourcesMore').textContent, 'All sources');
 });
 
 test('overview without coverage or structure points to the next step', async (t) => {
@@ -669,7 +158,7 @@ test('overview without coverage or structure points to the next step', async (t)
   });
   assert.match(noCoverage.el('homeKpis').textContent, /4 controls/);
   assert.match(noCoverage.el('homeKpis').textContent, /Explore this framework's controls/);
-  assert.equal(noCoverage.el('homeKpis').querySelector('[role="progressbar"]'), null);
+  assert.equal(noCoverage.el('homeKpis').querySelector('.home-kpi-ring'), null);
   assert.match(noCoverage.el('homeAttention').textContent, /No attention items found/);
 
   const admin = await home(t, {
@@ -680,9 +169,6 @@ test('overview without coverage or structure points to the next step', async (t)
     admin.el('homeKpis').querySelector('a').getAttribute('href'),
     '/admin.html?framework=A#framework-editor',
   );
-  // Without controls or clauses the explorer offers no framework entry points.
-  assert.equal(admin.document.querySelector('[data-kind="controls"]'), null);
-  assert.equal(admin.document.querySelector('[data-kind="clauses"]'), null);
 
   const reader = await home(t, {
     me: { can_view_audits: true },
@@ -692,6 +178,7 @@ test('overview without coverage or structure points to the next step', async (t)
     reader.el('homeKpis').querySelector('a').getAttribute('href'),
     '/help/using.html?framework=A',
   );
+  assert.equal(reader.el('homeActivity').hidden, true);
 });
 
 test('a failed overview leaves workspace links and recovers on refresh', async (t) => {
@@ -707,23 +194,28 @@ test('a failed overview leaves workspace links and recovers on refresh', async (
   assert.equal(ui.el('homeKpis').innerHTML, '');
   assert.match(ui.el('homeAttention').textContent, /The overview could not be loaded/);
   assert.ok(ui.el('homeTasks').querySelector('a'));
+  // Without a loaded overview the activity band stays hidden.
+  assert.equal(ui.el('homeActivity').hidden, true);
   fail = false;
   ui.el('homeRefresh').click();
-  await settle(() => /5 events awaiting mapping/.test(ui.el('homeAttention').textContent));
+  await settle(() => /5 unmapped events/.test(ui.el('homeAttention').textContent));
   assert.equal(ui.el('homeRefresh').disabled, false);
   assert.equal(
     ui.el('homeAttention').querySelector('.home-attention-item').getAttribute('href'),
     '/events.html?unmapped=true&framework=A',
   );
-  await settle(() => ui.document.querySelectorAll('[data-kind="controls"]').length === 1);
+  await settle(() => ui.document.querySelectorAll('.home-task').length >= 3);
+  // The recovered render keeps the fresh overview and activity band together.
+  assert.equal(ui.el('homeActivity').hidden, false);
 });
 
-const taskLabels = (ui) =>
-  [...ui.el('homeTasks').querySelectorAll('.home-task span')].map((s) => s.textContent);
+const taskLabels = (scope) =>
+  [...scope.querySelectorAll('.home-task span')].map((s) => s.textContent);
 
 test('home tasks follow the signed-in role', async (t) => {
   const admin = await home(t);
-  assert.deepEqual(taskLabels(admin), [
+  // Every permitted shortcut renders inline in the compact grid.
+  assert.deepEqual(taskLabels(admin.el('homeTasks')), [
     'Review evidence',
     'Create an evidence mapping',
     'Plan or run an audit',
@@ -731,10 +223,22 @@ test('home tasks follow the signed-in role', async (t) => {
     'Record an effectiveness measurement',
     'Manage documents and assets',
   ]);
+  assert.equal(admin.el('homeTasks').querySelector('details.home-task-more'), null);
+  assert.deepEqual(
+    [...admin.el('homeTasks').querySelectorAll('a.home-task')].map((a) => a.getAttribute('href')),
+    [
+      '/events.html?framework=A',
+      '/admin.html?framework=A#evidence-config',
+      '/audits.html?framework=A',
+      '/risks.html?framework=A',
+      '/isms.html?tab=effectiveness&framework=A',
+      '/isms.html?framework=A',
+    ],
+  );
   assert.equal(admin.el('homeSearch').hidden, false);
 
   const reader = await home(t, { me: { can_view_audits: true, can_view_isms: true } });
-  assert.deepEqual(taskLabels(reader), [
+  assert.deepEqual(taskLabels(reader.el('homeTasks')), [
     'Review audits',
     'Review effectiveness measures',
     'Review documents and assets',
@@ -749,15 +253,15 @@ test('home tasks follow the signed-in role', async (t) => {
       can_manage_isms: true,
     },
   });
-  assert.deepEqual(taskLabels(manager), [
+  assert.deepEqual(taskLabels(manager.el('homeTasks')), [
     'Plan or run an audit',
     'Record an effectiveness measurement',
     'Manage documents and assets',
   ]);
 
   const nobody = await home(t, { me: {} });
-  assert.deepEqual(taskLabels(nobody), []);
-  assert.match(nobody.el('homeTasks').textContent, /Explore the framework cards below/);
+  assert.deepEqual(taskLabels(nobody.el('homeTasks')), []);
+  assert.match(nobody.el('homeTasks').textContent, /No shortcuts are available for your role/);
 });
 
 test('evidence search opens the event list for the current framework', async (t) => {
@@ -774,85 +278,6 @@ test('evidence search opens the event list for the current framework', async (t)
   assert.equal(location.href, '/events.html?framework=A');
 });
 
-test('the latest-evidence ticker shows new events as text and polls after the newest one', async (t) => {
-  const responses = [
-    {
-      events: [
-        {
-          id: 'e1',
-          created_at: '2026-10-01T10:00:00Z',
-          source: 'github',
-          summary: 'Push to main',
-          url: '/event.html?id=e1',
-        },
-        {
-          id: 'e2',
-          created_at: '2026-10-01T10:00:05Z',
-          timestamp: '2026-10-01T09:59:00Z',
-          source: 'okta',
-          system: 'sso',
-          action: 'login',
-          summary: HOSTILE + ' signed in',
-          url: '/event.html?id=e2',
-        },
-      ],
-    },
-    // A response repeating an event already shown is ignored.
-    { events: [{ id: 'e2', source: 'okta', summary: 'Repeat' }] },
-    { events: [{ event_id: 'e3', created_at: '2026-10-01T10:01:00Z', source: 'aws' }] },
-  ];
-  const requests = [];
-  const ui = await home(t, {
-    reduced: false,
-    me: { can_view_events: true },
-    routes: {
-      '/api/v1/events': listOf([]),
-      '/api/v1/sources': listOf([]),
-      '/api/v1/evidence/latest': (u) => {
-        requests.push(Object.fromEntries(u.searchParams));
-        const next = responses.shift();
-        if (!next) throw new Error('Polling failed');
-        return next;
-      },
-    },
-  });
-  const text = () => ui.el('latestEvidenceTickerText').textContent;
-  const link = () => ui.el('latestEvidenceTickerLink');
-  await settle(() => text().startsWith('github'));
-  assert.equal(ui.el('latestEvidenceTicker').classList.contains('d-none'), false);
-  assert.equal(text(), 'github :: Push to main');
-  assert.equal(link().getAttribute('href'), '/event.html?id=e1&framework=A');
-  assert.equal(link().title, 'Open latest evidence');
-  await settle(() => text().startsWith('okta'));
-  assert.equal(text(), 'okta :: sso :: login :: ' + HOSTILE + ' signed in');
-  assertNoInjectedMarkup(ui, ui.el('latestEvidenceTicker'));
-  assert.equal(link().title, 'Open latest evidence from 2026-10-01T09:59:00Z');
-  assert.deepEqual(requests[0], { limit: '5' });
-
-  assert.deepEqual(
-    ui.intervals.map((i) => i.ms),
-    [30000],
-  );
-  await ui.intervals[0].fn();
-  assert.deepEqual(requests[1], { limit: '5', after: '2026-10-01T10:00:05Z' });
-  await ui.intervals[0].fn();
-  assert.equal(requests[2].after, '2026-10-01T10:00:05Z');
-  await settle(() => text().startsWith('aws'));
-  assert.equal(text(), 'aws :: New evidence received');
-  assert.equal(link().getAttribute('href'), '/event.html?id=e3&framework=A');
-  // A failed poll leaves the last item in place.
-  await ui.intervals[0].fn();
-  assert.equal(requests[3].after, '2026-10-01T10:01:00Z');
-  assert.equal(text(), 'aws :: New evidence received');
-});
-
-test('the ticker does not poll for users who cannot view events', async (t) => {
-  const ui = await home(t, { me: { can_view_audits: true } });
-  await new Promise((r) => setTimeout(r, 20));
-  assert.equal(getsTo(ui, '/api/v1/evidence/latest').length, 0);
-  assert.equal(ui.intervals.length, 0);
-});
-
 test('a stale cached home page reloads once with a revision marker, then explains the mismatch', async (t) => {
   const replaced = [];
   const stale = await home(t, {
@@ -864,14 +289,14 @@ test('a stale cached home page reloads once with a revision marker, then explain
       },
     },
   });
-  assert.deepEqual(replaced, ['/?framework=B&__keen_home=20261007-home-2#explore']);
+  assert.deepEqual(replaced, ['/?framework=B&__keen_home=20261026-home-5#explore']);
   assert.equal(stale.calls.length, 0);
 
   const looping = await home(t, {
     htmlName: 'events',
     globals: {
       location: {
-        href: 'https://keen.example/?__keen_home=20261007-home-2',
+        href: 'https://keen.example/?__keen_home=20261026-home-5',
         replace: (u) => replaced.push(u),
       },
     },
@@ -881,125 +306,14 @@ test('a stale cached home page reloads once with a revision marker, then explain
   assert.match(alert.textContent, /from different UI versions/);
 });
 
-test('a long evidence line scrolls across the ticker before the next item', async (t) => {
-  let clock = 1000;
-  const frames = [];
-  const ui = await home(t, {
-    reduced: false,
-    me: { can_view_events: true },
-    globals: { performance: { now: () => clock } },
-    setup(window) {
-      // The link overflows its box by 400px; frames advance a fake clock past the duration.
-      Object.defineProperty(window.HTMLAnchorElement.prototype, 'scrollWidth', {
-        configurable: true,
-        get() {
-          return this.id === 'latestEvidenceTickerLink' ? 500 : 0;
-        },
-      });
-      Object.defineProperty(window.HTMLAnchorElement.prototype, 'clientWidth', {
-        configurable: true,
-        get() {
-          return this.id === 'latestEvidenceTickerLink' ? 100 : 0;
-        },
-      });
-      window.requestAnimationFrame = (fn) => {
-        frames.push(clock);
-        clock += 5000;
-        return window.setTimeout(() => fn(clock), 0);
-      };
-    },
-    routes: {
-      '/api/v1/events': listOf([]),
-      '/api/v1/sources': listOf([]),
-      '/api/v1/evidence/latest': {
-        events: [{ id: 'e1', source: 'github', summary: 'A very long summary of a push' }],
-      },
-    },
-  });
-  const link = ui.el('latestEvidenceTickerLink');
-  await settle(() => ui.el('latestEvidenceTickerText').textContent.startsWith('github'));
-  await settle(() => link.scrollLeft === 400);
-  assert.ok(frames.length >= 1);
-});
-
-test('the ticker forgets the oldest shown events after a hundred, so they can appear again', async (t) => {
-  const batch = Array.from({ length: 101 }, (_, i) => ({
-    id: 'e' + (i + 1),
-    source: 'src' + (i + 1),
-    summary: 'Summary ' + (i + 1),
-    created_at: `2026-10-01T10:${String(i % 60).padStart(2, '0')}:00Z`,
-  }));
-  const responses = [
-    { events: batch },
-    {
-      events: [
-        { id: 'e1', source: 'src1', summary: 'Again 1' },
-        { id: 'e2', source: 'src2', summary: 'Again 2' },
-      ],
-    },
-  ];
-  const ui = await home(t, {
-    me: { can_view_events: true },
-    routes: {
-      '/api/v1/events': listOf([]),
-      '/api/v1/sources': listOf([]),
-      '/api/v1/evidence/latest': () => responses.shift() || { events: [] },
-    },
-  });
-  const text = () => ui.el('latestEvidenceTickerText').textContent;
-  // A hundred items pass through the ticker at the compressed delays.
-  const patient = async (check) => {
-    for (let i = 0; i < 2000 && !check(); i++) await new Promise((r) => setTimeout(r, 5));
-    assert.ok(check(), 'The ticker did not reach the expected item');
-  };
-  await patient(() => text() === 'src101 :: Summary 101');
-  const before = ui.calls.length;
-  await ui.intervals[0].fn();
-  // The first event has dropped out of memory and is shown again. Remembering it
-  // again makes room by forgetting the next oldest, so that one follows it.
-  await patient(() => text() === 'src1 :: Again 1');
-  await patient(() => text() === 'src2 :: Again 2');
-  assert.equal(ui.calls.length, before + 1);
-});
-
 test('without a chosen framework the home page uses the catalogue default', async (t) => {
-  const ui = await home(t, {
-    vendor: { getCurrentFramework: () => '' },
-    routes: { '/api/v1/risks': listOf([{ id: 'r1' }]) },
-  });
+  const ui = await home(t, { vendor: { getCurrentFramework: () => '' } });
   assert.equal(getsTo(ui, '/api/v1/frameworks').length >= 1, true);
-  assert.match(
-    ui.document.querySelector('[data-kind="risks"] a').getAttribute('href'),
-    /framework=A$/,
+  // The catalog is fetched once and shared by the framework lookup and the
+  // overview; the activity chart and shortcuts carry the resolved framework.
+  const risks = [...ui.document.querySelectorAll('#homeTasks a.home-task')].find((a) =>
+    a.getAttribute('href').includes('/risks.html'),
   );
-  ui.document.querySelector('[data-kind="risks"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('risk', 'r1'));
-  assert.equal(getsTo(ui, '/api/v1/risks')[0].url.includes('framework=A'), true);
-});
-
-test('risk and interested-party cards fall back to generic titles when fields are missing', async (t) => {
-  const ui = await home(t, {
-    routes: {
-      '/api/v1/risks': listOf([{ id: 'r1' }]),
-      '/api/v1/interested-parties': listOf([
-        { id: 'i1', name: { name: 'Regulator' }, nature: { name: 'Statutory' } },
-        { id: 'i2' },
-      ]),
-    },
-  });
-  ui.document.querySelector('[data-kind="risks"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('risk', 'r1'));
-  assert.equal(
-    ui.canvas().querySelector('[data-kind="risk"] .home-node-title').textContent,
-    'Risk',
-  );
-  await goHome(ui);
-  ui.document.querySelector('[data-kind="interested_parties"] .js-entry-zoom').click();
-  await settle(() => ui.zoomCard('interested_party', 'i2'));
-  assert.deepEqual(
-    [...ui.canvas().querySelectorAll('[data-kind="interested_party"] .home-node-title')].map(
-      (n) => n.textContent,
-    ),
-    ['Regulator - Statutory', 'Interested party'],
-  );
+  assert.match(risks.getAttribute('href'), /framework=A$/);
+  assert.match(getsTo(ui, '/api/v1/charts/event_volume_timeseries')[0].url, /framework=A\&/);
 });

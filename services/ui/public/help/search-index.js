@@ -1,5 +1,23 @@
 window.KEEN_DOC_INDEX = [
   {
+    title: 'Person and Vendor pages',
+    book: 'Using Keen',
+    url: 'using-people-assets.html#person-vendor-pages',
+    text: 'Open a person or vendor from the register. Edit details, save back to the register, or review tabs for workstation posture, personnel assurance, assets and related SWOT items and Stories. Named quiz assignments and completed results require quiz.manage and ISMS read access.',
+  },
+  {
+    title: 'Compare framework editions',
+    book: 'Administering Keen',
+    url: 'administrator-frameworks.html#compare-frameworks',
+    text: 'Compare two saved frameworks. Before and After show added green, removed red and changed amber entries. Match by category and exact reference; renumbered clauses appear as removals and additions. Compare descriptions, hierarchy, links, scope and ordering. Filter, show unchanged and page through large comparisons.',
+  },
+  {
+    title: 'Source activity rates and Stories',
+    book: 'Using Keen',
+    url: 'using-events.html#source-insights',
+    text: 'Average events per day includes days with no events. Median event gaps can be small for batched RSS collection. Select a daily bar, then select events or right-click to create a Story or add to a Story.',
+  },
+  {
     title: 'Follow the evidence through Keen',
     book: 'Using Keen',
     url: 'using-start.html#evidence-to-assurance',
@@ -679,6 +697,12 @@ window.KEEN_DOC_INDEX = [
     text: ' KEEN_ARTIFACT_STORAGE_BACKEND selects the artefact backend and KEEN_ARTIFACT_LOCAL_DIR sets local storage. For S3, configure the bucket, region, endpoint and credentials; KEEN_S3_USE_INSTANCE_ROLE enables the AWS credential chain in the hosted integration, and its tenant role is never combined with broad static AWS credentials.  SMTP settings are KEEN_SMTP_HOST , port, username, password, TLS or SSL mode, sender address and name, and timeout. Match the TLS mode to the mail service.  Masking personal data  KEEN_EVENT_DATA_MASKING controls optional masking of e-mail and IP addresses, which are recognised by their shape:  true masks every stored text field, structured payload and text artefact as evidence arrives, including mail headers such as From and To, where a display name written with its address is masked with it. samples masks the same text in evidence PDF and ZIP exports only. false keeps the data.  KEEN_SENSITIVE_KEYS removes the whole value of named fields instead. Sample PDF header and footer and the evidence filename prefix control export presentation; review an exported sample to confirm the wording and data treatment. Collect only what assurance needs, and treat automatic secret redaction as a safeguard that can miss an unusual secret.  Going deeper: scheduling and outbound webhooks KEEN_SCHEDULED_AUDIT_CREATE_DAYS_AHEAD controls how far ahead scheduled audits are materialised. KEEN_REMINDER_DAYS_BEFORE (2 by default; 0 turns reminders off) sets how many days before an audit starts, or a quiz round falls due, its attendees and participants are reminded by email. The worker sends reminders once a day at 06:45 UTC, each recipient at most once and only to people whose account is active. It sends quiz invitations as rounds start, opens and closes quiz rounds daily at 00:20 UTC, and then invites anyone an open round has missed. Outbound question, reply and incident webhooks require HTTPS, validate and pin destination addresses, and follow KEEN_INGESTION_ALLOWED_CIDRS for private destinations; loopback and link-local destinations are rejected. Signing secrets and timeouts are configurable. Store them as secrets and test delivery without putting credentials in audit notes. ',
   },
   {
+    title: 'Database and cache settings',
+    book: 'Administering Keen',
+    url: 'administrator-deployment.html#database-and-cache-settings',
+    text: " The supplied Compose file starts PostgreSQL with KEEN_POSTGRES_SHARED_BUFFERS (256 MB by default) and KEEN_POSTGRES_EFFECTIVE_CACHE_SIZE (1 GB), with JIT compilation off. On a larger host, set shared buffers to about a quarter, and the effective cache size to about three quarters, of the memory available to PostgreSQL, then recreate the postgres container. KEEN_AGGREGATE_CACHE_TTL_SECONDS (60 by default) sets how long dashboard counts and other aggregates stay in Valkey, and how often the worker refreshes the event counters of the organisation's enabled frameworks. A longer period recomputes less often and shows new evidence in those counts later; 0 turns the cache off. ",
+  },
+  {
     title: 'Choose the features available in Keen',
     book: 'Administering Keen',
     url: 'administrator-deployment.html#installation-features',
@@ -1144,7 +1168,7 @@ window.KEEN_DOC_INDEX = [
     title: 'Evidence retention and purging',
     book: 'Administering Keen',
     url: 'administrator-retention.html#evidence-retention',
-    text: ' Administrators open Evidence retention to choose a maximum event age in days, keep the newest N unsampled events, or keep everything. Settings cover all frameworks and sources, and automatic deletion starts disabled. Count-based retention keeps audit-protected events in addition to the configured allowance.  Evidence retention: the global policy, source-type and rule overrides, Preview changes, and the separate purge control.  Measure age from the evidence timestamp. Retention counts age from when the evidence happened. Long RSS feeds, mail backlogs, log archives and paginated issue lists record publication or event times in the past, so freshly collected historical items can be deleted by the next retention pass. If a source must keep its historical items, give it a source-type override (Keep everything or a longer maximum age) before enabling age-based deletion. Age is compared in UTC. ',
+    text: ' Administrators open Evidence retention to choose a maximum event age in days, keep the newest N unsampled events, or keep everything. Settings cover all frameworks and sources, and automatic deletion starts disabled. Count-based retention keeps audit-protected events in addition to the configured allowance. Automatic deletion runs in the background: a pass starts within a minute of saving the policy, and later passes start about ten minutes after the previous one completes.  Evidence retention: the global policy, source-type and rule overrides, Preview changes, and the separate purge control.  Measure age from the evidence timestamp. Retention counts age from when the evidence happened. Long RSS feeds, mail backlogs, log archives and paginated issue lists record publication or event times in the past, so freshly collected historical items can be deleted by the next retention pass. If a source must keep its historical items, give it a source-type override (Keep everything or a longer maximum age) before enabling age-based deletion. Age is compared in UTC. ',
   },
   {
     title: 'Source type and rule overrides',

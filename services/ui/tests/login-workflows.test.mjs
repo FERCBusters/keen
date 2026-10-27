@@ -206,7 +206,7 @@ test('missing credentials and refused sign-ins are reported on the page', async 
 
   ui.submit('ada', 'wrong-password');
   await settle(() => /Login failed/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Login failed: Error: Invalid username or password');
+  assert.equal(ui.el('status').textContent, 'Login failed: Invalid username or password');
   assert.equal(ui.el('loginBtn').disabled, false);
   assert.deepEqual(ui.navigated, []);
 });

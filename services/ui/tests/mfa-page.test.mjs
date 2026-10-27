@@ -11,10 +11,11 @@ const b64u = (bytes) => Buffer.from(bytes).toString('base64url');
 // server responses; unexpected endpoints fail the test.
 async function mfaPage(
   t,
-  { states, handlers = {}, search = '', storage = {}, globals = {}, setup } = {},
+  { states, handlers = {}, search = '', storage = {}, globals = {}, setup, confirm = true } = {},
 ) {
   const posts = [];
   const navigations = [];
+  const confirmations = [];
   const store = new Map(Object.entries(storage));
   let stateIndex = 0;
   const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
@@ -37,6 +38,14 @@ async function mfaPage(
     html,
     url: 'https://keen.example/mfa.html' + search,
     setup,
+    modules: {
+      'pages/confirm-modal.js': {
+        confirmAction: async (options) => {
+          confirmations.push(options);
+          return typeof confirm === 'function' ? !!confirm(options) : !!confirm;
+        },
+      },
+    },
     globals: {
       fetch,
       atob,
@@ -60,7 +69,7 @@ async function mfaPage(
   const el = (id) => ui.document.getElementById(id);
   await settle(() => posts.length && !el('intro').textContent.startsWith('Loading'));
   await new Promise((r) => setTimeout(r, 5));
-  return { ...ui, el, posts, navigations, store };
+  return { ...ui, el, posts, navigations, store, confirmations };
 }
 
 const verifyState = (overrides = {}) => ({
@@ -279,12 +288,12 @@ const manageState = (overrides = {}) => ({
 });
 
 test('factor management lists authenticators as text and removes one after confirmation', async (t) => {
-  const prompts = [];
+  const confirmations = [];
   let current = manageState();
   const ui = await mfaPage(t, {
     states: [current, manageState({ totp: false })],
     handlers: { remove: () => ({ ok: true }) },
-    globals: { confirm: (m) => (prompts.push(m), true) },
+    confirm: (options) => (confirmations.push(options), true),
   });
   assert.equal(ui.el('manage').hidden, false);
   assert.equal(ui.el('verify').hidden, true);
@@ -298,12 +307,12 @@ test('factor management lists authenticators as text and removes one after confi
   ui.el('factors').querySelector('button').click();
   await settle(() => ui.posts.some((p) => p.path === 'remove'));
   assert.deepEqual(ui.posts.find((p) => p.path === 'remove').body, { id: 'totp' });
-  assert.equal(prompts[0], 'Remove Authenticator app?');
+  assert.equal(confirmations[0].title, 'Remove authentication factor');
   await settle(() => ui.el('addTotp').hidden === false);
 });
 
 test('declining factor removal sends nothing', async (t) => {
-  const ui = await mfaPage(t, { states: [manageState()], globals: { confirm: () => false } });
+  const ui = await mfaPage(t, { states: [manageState()], confirm: false });
   ui.el('factors').querySelector('button').click();
   await new Promise((r) => setTimeout(r, 10));
   assert.ok(!ui.posts.some((p) => p.path === 'remove'));
@@ -333,6 +342,10 @@ test('authenticator app enrolment shows the setup key, then requires saving reco
   await settle(() => ui.el('totpSetup').hidden === false);
   assert.equal(ui.el('secret').textContent, 'JBSWY3DP');
   assert.equal(ui.el('qr').getAttribute('src'), 'data:image/png;base64,AAAA');
+  // The QR stays hidden until the image has loaded, then is revealed.
+  assert.equal(ui.el('qr').hidden, true);
+  ui.el('qr').dispatchEvent(new ui.window.Event('load'));
+  assert.equal(ui.el('qr').hidden, false);
   ui.el('confirmCode').value = '654321';
   ui.el('confirmForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => ui.el('codesPanel').hidden === false);
@@ -385,7 +398,6 @@ test('security keys can be registered with a name and replacement recovery codes
       window.PublicKeyCredential = function () {};
     },
     globals: {
-      confirm: () => true,
       navigator: {
         credentials: {
           create: async (opts) => {
@@ -419,7 +431,8 @@ test('registration without WebAuthn support or a name does nothing harmful', asy
     setup(window) {
       window.PublicKeyCredential = function () {};
     },
-    globals: { prompt: () => '', confirm: () => false },
+    globals: { prompt: () => '' },
+    confirm: false,
   });
   unnamed.el('addKey').click();
   unnamed.el('regenerate').click();

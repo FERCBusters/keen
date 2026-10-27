@@ -1,6 +1,7 @@
 // The quiz register for the framework in the navigation: each quiz with its
 // schedule and average, a calendar of rounds, and a form for a new quiz.
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -64,7 +65,7 @@ async function loadList() {
       : `<tr><td colspan="6" class="small-muted p-4">No quizzes yet.${canManage ? ' Create one with New quiz.' : ''}</td></tr>`;
   } catch (error) {
     $('meta').textContent = '-';
-    toast(status, `Failed to load quizzes: ${String(error)}`, 'danger');
+    toast(status, `Failed to load quizzes: ${errorText(error)}`, 'danger');
   }
 }
 
@@ -83,7 +84,7 @@ async function loadCalendar() {
       kind: (entry) => entry.kind,
     });
   } catch (error) {
-    toast(status, `Failed to load the calendar: ${String(error)}`, 'danger');
+    toast(status, `Failed to load the calendar: ${errorText(error)}`, 'danger');
   }
 }
 
@@ -107,7 +108,7 @@ $('createForm').addEventListener('submit', async (ev) => {
     });
     location.assign(quizHref(quiz.id));
   } catch (error) {
-    toast(status, `Failed to create the quiz: ${String(error)}`, 'danger');
+    toast(status, `Failed to create the quiz: ${errorText(error)}`, 'danger');
   }
 });
 wireMonthPicker({

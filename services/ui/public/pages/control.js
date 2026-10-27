@@ -2,11 +2,13 @@ import { featureEnabled } from '/pages/feature-availability.js';
 import { createRelatedControlsBrowser } from './related-controls.js';
 import { createControlRequirements } from './control-requirements.js';
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
   apiPatch,
   apiDelete,
+  confirmAction,
   esc,
   fmtTs,
   tsSortKey,
@@ -69,20 +71,9 @@ const controlsBreadcrumb = document.getElementById('controlsBreadcrumb');
 const controlRequirementsTab = document.getElementById('controlRequirementsTab');
 const controlEvidenceTab = document.getElementById('controlEvidenceTab');
 const controlRelatedTab = document.getElementById('controlRelatedTab');
-const controlJustificationTab = document.getElementById('controlJustificationTab');
-const controlJustificationTabItem = document.getElementById('controlJustificationTabItem');
-const controlJustificationPane = document.getElementById('controlJustificationPane');
-const controlClausesTab = document.getElementById('controlClausesTab');
-const controlRisksTab = document.getElementById('controlRisksTab');
-const controlIsmsTab = document.getElementById('controlIsmsTab');
+const controlGovernanceTab = document.getElementById('controlGovernanceTab');
 const controlIsmsView = document.getElementById('controlIsmsView');
-const controlChangelogTab = document.getElementById('controlChangelogTab');
 const controlChangelogEl = document.getElementById('controlChangelog');
-const controlRisksTabItem = document.getElementById('controlRisksTabItem');
-const controlRisksPane = document.getElementById('controlRisksPane');
-const controlInterestedPartiesTabItem = document.getElementById('controlInterestedPartiesTabItem');
-const controlInterestedPartiesTab = document.getElementById('controlInterestedPartiesTab');
-const controlInterestedPartiesPane = document.getElementById('controlInterestedPartiesPane');
 const interestedPartiesCard = document.getElementById('interestedPartiesCard');
 const interestedPartiesView = document.getElementById('interestedPartiesView');
 const interestedPartiesCount = document.getElementById('interestedPartiesCount');
@@ -194,7 +185,7 @@ async function loadCrossFrameworkLinks() {
     if (crossFrameworks.some((f) => f.slug === previous)) crossFrameworkSource.value = previous;
     if (crossFrameworkSource.value) await loadCrossSourceControls();
   } catch (e) {
-    relatedControls.showError(`Could not load control links: ${String(e)}`);
+    relatedControls.showError(`Could not load control links: ${errorText(e)}`);
   }
 }
 
@@ -210,7 +201,7 @@ async function loadCrossSourceControls() {
       .map((c) => `<option value="${esc(c.id)}">${esc(c.ref)} · ${esc(c.title || c.type)}</option>`)
       .join('');
   } catch (e) {
-    toast(status, `Could not load source controls: ${String(e)}`, 'danger');
+    toast(status, `Could not load source controls: ${errorText(e)}`, 'danger');
   }
 }
 
@@ -235,12 +226,20 @@ crossForm?.addEventListener('submit', async (event) => {
     controlLinksChanged();
     await loadCrossFrameworkLinks();
   } catch (e) {
-    toast(status, `Could not link controls: ${String(e)}`, 'danger');
+    toast(status, `Could not link controls: ${errorText(e)}`, 'danger');
   }
 });
 crossList?.addEventListener('click', async (event) => {
   const button = event.target.closest('[data-remove-cross-link]');
-  if (!button || !me?.is_admin || !confirm('Remove inherited evidence relationship?')) return;
+  if (!button || !me?.is_admin) return;
+  if (
+    !(await confirmAction({
+      title: 'Remove inherited evidence relationship',
+      message: 'Remove the inherited evidence relationship with this control?',
+      confirmLabel: 'Remove',
+    }))
+  )
+    return;
   try {
     await apiDelete(
       `/api/v1/controls/${encodeURIComponent(id)}/cross-framework/${encodeURIComponent(button.dataset.removeCrossLink)}`,
@@ -249,7 +248,7 @@ crossList?.addEventListener('click', async (event) => {
     controlLinksChanged();
     await loadCrossFrameworkLinks();
   } catch (e) {
-    toast(status, `Could not remove control link: ${String(e)}`, 'danger');
+    toast(status, `Could not remove control link: ${errorText(e)}`, 'danger');
   }
 });
 let clauseCatalog = [];
@@ -314,7 +313,6 @@ function renderControlChrome() {
 function renderControlJustificationCard() {
   if (!controlJustificationCard) return;
   const canEditJustification = !!me?.is_admin;
-  if (controlJustificationTabItem) controlJustificationTabItem.hidden = !canEditJustification;
   controlJustificationCard.style.display = canEditJustification ? '' : 'none';
   if (!canEditJustification) return;
   if (controlJustification) controlJustification.value = ctrl?.justification || '';
@@ -329,45 +327,25 @@ function setControlTabQuery(tabName) {
   history.replaceState({}, '', `${location.pathname}?${p.toString()}`);
 }
 
-// Shows a tab and returns its name. Tabs the reader cannot use, unknown names
-// and inherited names such as `constructor` open Requirements.
+// Shows a tab and returns its name. Unknown names and inherited names such as
+// `constructor` open Requirements.
 function activateControlTab(tabName) {
-  let name = tabName || 'requirements';
-  if (name === 'risks' && !canViewRisks) name = 'requirements';
-  if (name === 'interested-parties' && !canViewInterestedParties) name = 'requirements';
-  if (name === 'isms' && !canViewIsms) name = 'requirements';
-  if (name === 'justification' && !me?.is_admin) name = 'requirements';
+  const name = tabName || 'requirements';
   const tabs = {
     requirements: controlRequirementsTab,
     evidence: controlEvidenceTab,
     related: controlRelatedTab,
-    justification: controlJustificationTab,
-    clauses: controlClausesTab,
-    risks: controlRisksTab,
-    'interested-parties': controlInterestedPartiesTab,
-    isms: controlIsmsTab,
-    changelog: controlChangelogTab,
+    governance: controlGovernanceTab,
   };
-  if (!Object.hasOwn(tabs, name)) name = 'requirements';
-  if (tabs[name] && window.bootstrap?.Tab)
-    window.bootstrap.Tab.getOrCreateInstance(tabs[name]).show();
-  return name;
+  const resolved = Object.hasOwn(tabs, name) ? name : 'requirements';
+  if (tabs[resolved] && window.bootstrap?.Tab)
+    window.bootstrap.Tab.getOrCreateInstance(tabs[resolved]).show();
+  return resolved;
 }
 
 function wireControlTabs() {
-  if (!canViewRisks) {
-    controlRisksTabItem?.classList.add('d-none');
-    controlRisksPane?.classList.add('d-none');
-  }
-  if (!canViewInterestedParties) {
-    controlInterestedPartiesTabItem?.classList.add('d-none');
-    controlInterestedPartiesPane?.classList.add('d-none');
-  }
-  if (me?.is_admin) {
-    if (controlJustificationTabItem) controlJustificationTabItem.hidden = false;
-  } else {
-    controlJustificationPane?.classList.add('d-none');
-  }
+  if (!canViewRisks) risksCard?.classList.add('d-none');
+  if (!canViewInterestedParties) interestedPartiesCard?.classList.add('d-none');
   controlRequirementsTab?.addEventListener('shown.bs.tab', () => {
     setControlTabQuery('requirements');
     loadRequirements();
@@ -380,22 +358,14 @@ function wireControlTabs() {
     setControlTabQuery('related');
     await loadRelatedControls();
   });
-  controlJustificationTab?.addEventListener('shown.bs.tab', () =>
-    setControlTabQuery('justification'),
-  );
-  controlClausesTab?.addEventListener('shown.bs.tab', () => setControlTabQuery('clauses'));
-  controlRisksTab?.addEventListener('shown.bs.tab', () => setControlTabQuery('risks'));
-  controlInterestedPartiesTab?.addEventListener('shown.bs.tab', async () => {
-    setControlTabQuery('interested-parties');
-    await loadLinkedInterestedParties();
-  });
-  controlIsmsTab?.addEventListener('shown.bs.tab', async () => {
-    setControlTabQuery('isms');
-    await loadControlIsms();
-  });
-  controlChangelogTab?.addEventListener('shown.bs.tab', () => {
-    setControlTabQuery('changelog');
-    loadControlChangelog();
+  controlGovernanceTab?.addEventListener('shown.bs.tab', async () => {
+    setControlTabQuery('governance');
+    await Promise.all([
+      loadLinkedRisks(),
+      loadLinkedInterestedParties(),
+      loadControlIsms(),
+      loadControlChangelog(),
+    ]);
   });
   activeTab = activateControlTab(qs('tab', 'requirements'));
 }
@@ -541,18 +511,21 @@ function riskScoreBadge(score) {
   return `<span class="badge ${cls}">${esc(String(n))}</span>`;
 }
 
-async function loadLinkedRisks() {
+let risksLoaded = false;
+async function loadLinkedRisks({ force = false } = {}) {
   if (!featureEnabled(me, 'risk_cia')) return;
   if (!risksCard || !risksView) return;
   if (!canViewRisks) {
     risksCard.style.display = 'none';
     return;
   }
+  if (risksLoaded && !force) return;
   try {
     const data = await apiGet(
       `/api/v1/controls/${encodeURIComponent(id)}/risks?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
     );
     const items = data?.items || [];
+    risksLoaded = true;
     risksCard.style.display = '';
     if (risksCount) risksCount.textContent = String(items.length);
     if (!items.length) {
@@ -600,6 +573,7 @@ async function loadLinkedRisks() {
       </div>`;
   } catch (e) {
     // Users without risk.read should not get a noisy control page.
+    risksLoaded = false;
     risksCard.style.display = 'none';
   }
 }
@@ -820,7 +794,8 @@ async function reloadControlOnly() {
   renderControlChrome();
   renderControlJustificationCard();
   renderLinkedClauses();
-  await loadLinkedRisks();
+  risksLoaded = false;
+  await loadLinkedRisks({ force: true });
   interestedPartiesLoaded = false;
   await loadLinkedInterestedParties({ force: true });
   renderAdminClauses();
@@ -945,7 +920,7 @@ async function loadEvents() {
 
     setOffsetPagerDisabled(pagerButtons, state);
   } catch (e) {
-    toast(status, `Failed to load evidence: ${String(e)}`, 'danger');
+    toast(status, `Failed to load evidence: ${errorText(e)}`, 'danger');
     if (meta) meta.textContent = '-';
     tbody.innerHTML =
       '<tr><td colspan="4" class="small-muted p-4">Failed to load evidence.</td></tr>';
@@ -1003,11 +978,12 @@ async function load() {
       loadLinkedRisks(),
       loadLinkedInterestedParties({ force: true }),
       tab === 'related' ? loadRelatedControls() : null,
-      tab === 'changelog' ? loadControlChangelog() : null,
-      tab === 'isms' ? loadControlIsms({ force: true }) : null,
+      tab === 'governance'
+        ? Promise.all([loadControlChangelog(), loadControlIsms({ force: true })])
+        : null,
     ]);
   } catch (e) {
-    toast(status, `Failed to load control: ${String(e)}`, 'danger');
+    toast(status, `Failed to load control: ${errorText(e)}`, 'danger');
     if (meta) meta.textContent = '-';
   }
 }
@@ -1049,7 +1025,7 @@ editClauseApplicabilityBtn?.addEventListener('click', async () => {
       clauseApplicabilityEditMode = false;
       renderLinkedClauses();
       renderAdminClauses();
-      toast(status, `Failed to load clauses: ${String(e)}`, 'danger');
+      toast(status, `Failed to load clauses: ${errorText(e)}`, 'danger');
     }
   } else {
     renderAdminClauses();
@@ -1084,7 +1060,7 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
     await apiPost('/api/v1/me/saved-searches', { name, url });
     toast(status, 'Saved', 'success');
   } catch (e) {
-    toast(status, `Failed to save: ${String(e)}`, 'danger');
+    toast(status, `Failed to save: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -1104,7 +1080,7 @@ saveClauseLinksBtn?.addEventListener('click', async () => {
     await reloadControlOnly();
     await loadControlChangelog();
   } catch (e) {
-    toast(status, `Failed to save clauses: ${String(e)}`, 'danger');
+    toast(status, `Failed to save clauses: ${errorText(e)}`, 'danger');
   } finally {
     saveClauseLinksBtn.disabled = false;
   }
@@ -1121,7 +1097,7 @@ saveControlJustificationBtn?.addEventListener('click', async () => {
     await reloadControlOnly();
     await loadControlChangelog();
   } catch (e) {
-    toast(status, `Failed to save justification: ${String(e)}`, 'danger');
+    toast(status, `Failed to save justification: ${errorText(e)}`, 'danger');
   } finally {
     saveControlJustificationBtn.disabled = false;
   }
@@ -1146,7 +1122,7 @@ saveControlUpstreamUrlBtn?.addEventListener('click', async () => {
       }
     }
   } catch (e) {
-    toast(status, `Failed to save control URL: ${String(e)}`, 'danger');
+    toast(status, `Failed to save control URL: ${errorText(e)}`, 'danger');
   } finally {
     saveControlUpstreamUrlBtn.disabled = false;
   }

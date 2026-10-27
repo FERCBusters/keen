@@ -335,7 +335,7 @@ const tabs = {
   soaIsmsEffectivenessTab: 'measures',
   soaIsmsOrgAssetsTab: 'peopleAssets',
   controlRequirementsTab: 'controlRequirements',
-  controlRisksTab: 'risks',
+  controlGovernanceTab: 'risks',
   soaRisksTab: 'risks',
   controlEvidenceTab: 'events',
   sourceEventsTab: 'events',

@@ -1,5 +1,5 @@
 import { safeNext } from './navigation-security.js';
-import { qs, toast } from '/vendor/mosp-design-system/app.js';
+import { errorText, qs, toast } from '/vendor/mosp-design-system/app.js';
 
 const status = document.getElementById('status');
 const form = document.getElementById('loginForm');
@@ -174,7 +174,7 @@ if (form) {
       }
       location.replace(n || '/');
     } catch (e) {
-      toast(status, `Login failed: ${String(e)}`, 'danger');
+      toast(status, `Login failed: ${errorText(e)}`, 'danger');
     } finally {
       if (btn) btn.disabled = false;
     }

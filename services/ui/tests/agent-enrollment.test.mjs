@@ -28,6 +28,12 @@ test('enrollment profile creation displays a one-time key and clears it on navig
   const host = ui.document.getElementById('host'),
     controller = ui.api.enrollmentProfiles(host, async () => {});
   await controller.refresh(false);
+  const badge = host.querySelector('[data-profiles] .badge');
+  assert.equal(
+    badge.className,
+    'badge d-inline-flex align-items-center justify-content-center py-2 px-3 lh-sm text-bg-success',
+  );
+  assert.equal(badge.closest('h3'), null);
   host.querySelector('#ep-name').value = 'Web fleet';
   host.querySelector('#ep-days').value = '30';
   host.querySelector('#ep-limit').value = '5';
@@ -44,6 +50,7 @@ test('enrollment profile creation displays a one-time key and clears it on navig
 
 test('profile revocation is explicit and revoked profiles have no reactivation controls', async (t) => {
   const calls = [];
+  const confirms = [];
   let p = {
     id: 'profile',
     name: 'Fleet <x>',
@@ -54,6 +61,14 @@ test('profile revocation is explicit and revoked profiles have no reactivation c
   };
   const ui = await loadUi('pages/agent-enrollment.js', {
     html: '<section id="host"></section>',
+    modules: {
+      'pages/confirm-modal.js': {
+        confirmAction: async (options) => {
+          confirms.push(options);
+          return true;
+        },
+      },
+    },
     vendor: {
       apiGet: async () => ({ profiles: [p] }),
       apiPost: async (url) => {
@@ -72,6 +87,8 @@ test('profile revocation is explicit and revoked profiles have no reactivation c
     .find((b) => b.textContent === 'Revoke profile and agents')
     .onclick();
   assert.equal(calls[0], '/api/v1/admin/agent-enrollment-profiles/profile/revoke');
+  assert.equal(confirms[0].danger, true, 'revocation asks through the danger confirm dialog');
+  assert.equal(confirms[0].typed, undefined, 'revocation does not ask for typed confirmation');
   assert.equal(host.querySelectorAll('[data-actions] button').length, 0);
   await controller.refresh(true);
   assert.equal(host.querySelector('[data-create]').disabled, true);
@@ -150,4 +167,36 @@ test("creation errors are shown as the server's detail, and the key can be revea
   failure = 'clipboard';
   await host.querySelector('[data-copy]').onclick();
   assert.equal(status(), 'Use Show key to copy it manually.');
+});
+
+test('profile badges use sentence-case labels without changing state-driven actions', async (t) => {
+  const states = ['active', 'paused', 'revoked', 'expired', 'limit_reached', '<img src=x>', null];
+  const ui = await loadUi('pages/agent-enrollment.js', {
+    html: '<section id="host"></section>',
+    vendor: {
+      apiGet: async () => ({
+        profiles: states.map((state, i) => ({
+          id: `profile-${i}`,
+          name: `Profile ${i}`,
+          state,
+          token_days: 30,
+          enrollment_count: 0,
+          allowed_cidrs: [],
+        })),
+      }),
+    },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  await ui.api.enrollmentProfiles(host, async () => {}).refresh(false);
+  const cards = [...host.querySelectorAll('[data-profiles] article')];
+  assert.deepEqual(
+    cards.map((c) => c.querySelector('.badge').textContent),
+    ['Active', 'Paused', 'Revoked', 'Expired', 'Limit reached', '<img src=x>', 'Unknown'],
+  );
+  assert.equal(host.querySelector('img'), null);
+  assert.ok(cards[0].querySelector('.badge').classList.contains('text-bg-success'));
+  assert.match(cards[0].querySelector('[data-actions]').textContent, /Pause enrollment/);
+  assert.match(cards[1].querySelector('[data-actions]').textContent, /Resume enrollment/);
+  assert.equal(cards[2].querySelector('[data-actions]').children.length, 0);
 });

@@ -1,5 +1,6 @@
 // The story register: search, open and start stories.
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -76,7 +77,7 @@ async function load() {
     $('next').disabled = state.offset + state.limit >= state.total;
     renderRows(data.items || []);
   } catch (error) {
-    toast($('status'), `Failed to load stories: ${String(error)}`, 'danger');
+    toast($('status'), `Failed to load stories: ${errorText(error)}`, 'danger');
     $('meta').textContent = '-';
   }
 }
@@ -125,7 +126,7 @@ $('createForm').addEventListener('submit', async (ev) => {
     });
     location.assign(withFramework(`/story.html?id=${encodeURIComponent(story.id)}`, framework));
   } catch (error) {
-    toast($('status'), `Failed to create the story: ${String(error)}`, 'danger');
+    toast($('status'), `Failed to create the story: ${errorText(error)}`, 'danger');
   }
 });
 

@@ -3,12 +3,14 @@
 // questions without their answers and results that describe a group;
 // quiz.manage changes everything and sees each person's answers.
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
   apiPatch,
   apiPut,
   apiDelete,
+  confirmAction,
   esc,
   toast,
   frameworkLabel,
@@ -84,7 +86,7 @@ async function attempt(action, done, failure) {
     if (done) toast(status, done, 'success');
     return result;
   } catch (error) {
-    toast(status, `${failure}: ${String(error)}`, 'danger');
+    toast(status, `${failure}: ${errorText(error)}`, 'danger');
     return null;
   }
 }
@@ -204,13 +206,28 @@ $('activate').addEventListener('click', async () => {
   const saved = await saveSettings({ status: 'active' }, null);
   if (saved) toast(status, ACTIVATED[saved.availability.state](saved.availability), 'success');
 });
-$('archive').addEventListener('click', () => {
-  if (confirm('Archive this quiz? Its open rounds close and its schedule stops.')) {
-    saveSettings({ status: 'archived' }, 'Quiz archived');
-  }
+$('archive').addEventListener('click', async () => {
+  if (
+    !(await confirmAction({
+      title: 'Archive this quiz',
+      message: 'Its open rounds close and its schedule stops. Archive the quiz?',
+      confirmLabel: 'Archive',
+      danger: true,
+    }))
+  )
+    return;
+  saveSettings({ status: 'archived' }, 'Quiz archived');
 });
 $('deleteQuiz').addEventListener('click', async () => {
-  if (!confirm('Delete this quiz and its effectiveness measure?')) return;
+  if (
+    !(await confirmAction({
+      title: 'Delete this quiz',
+      message: 'Delete the quiz and its effectiveness measure?',
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
+  )
+    return;
   const done = await attempt(() => apiDelete(api()), null, 'Not deleted');
   if (done) location.assign(withFramework('/quizzes.html', framework));
 });
@@ -531,7 +548,16 @@ $('roundRows').addEventListener('click', async (ev) => {
       'The round did not change',
     );
     if (changed) await refresh(next === 'open' ? 'Round reopened' : 'Round closed');
-  } else if (button.dataset.deleteRound && confirm('Delete this round?')) {
+  } else if (button.dataset.deleteRound) {
+    if (
+      !(await confirmAction({
+        title: 'Delete this round',
+        message: 'Delete the round with its schedule and the answers handed in for it?',
+        confirmLabel: 'Delete',
+        danger: true,
+      }))
+    )
+      return;
     const removed = await attempt(
       () => apiDelete(api(`/rounds/${encodeURIComponent(button.dataset.deleteRound)}`)),
       null,

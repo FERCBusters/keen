@@ -24,12 +24,16 @@ async function fixture(t, admin = true, options = {}) {
   const ui = await loadUi('pages/evidence-retention.js', {
     html,
     url: 'https://keen.example/admin.html?retention_rule=specific#retention',
+    modules: {
+      'pages/confirm-modal.js': {
+        confirmAction: async (asked) => {
+          confirmations.push(asked);
+          return options.confirm ?? true;
+        },
+      },
+    },
     globals: {
       setInterval: (fn) => (intervals.push(fn), 0),
-      confirm: (message) => {
-        confirmations.push(message);
-        return options.confirm ?? true;
-      },
     },
     vendor: {
       apiGet: async () => {
@@ -113,10 +117,10 @@ test("a purge needs the typed confirmation, a preview and the administrator's ag
   await settle(() => ui.confirmations.length === 1);
   await settle(() => ui.calls.filter((c) => c[0] === 'get').length >= 2);
   assert.match(
-    ui.confirmations[0],
+    ui.confirmations[0].message,
     /^3 events currently eligible; 2 audit-protected; 10 events in total\./,
   );
-  assert.match(ui.confirmations[0], /Permanently purge all eligible evidence/);
+  assert.equal(ui.confirmations[0].danger, true);
   assert.deepEqual(
     ui.calls.filter((c) => c[0] === 'post').map((c) => c[1]),
     ['/api/v1/admin/evidence-retention/preview-all'],
@@ -179,7 +183,18 @@ test('previews report the count, clear when the policy changes and show failures
   const failing = await fixture(t, true, { postFail: 'Preview unavailable' });
   failing.$('preview').click();
   await settle(() => failing.notices.length === 1);
-  assert.deepEqual(failing.notices[0], ['Error: Preview unavailable', 'danger']);
+  assert.deepEqual(failing.notices[0], ['Preview unavailable', 'danger']);
+});
+
+test('an empty database explains how purge and retention remove records', async (t) => {
+  const ui = await fixture(t, true, {
+    data: (data) => ({ ...data, total_events: 0, audit_protected_events: 0 }),
+  });
+  assert.match(ui.$('progress').textContent, /0 events remain · 0 audit-protected/);
+  assert.match(
+    ui.$('progress').textContent,
+    /The retention policy or a manual purge may have removed older records/,
+  );
 });
 
 test('an active purge can be cancelled after confirmation, and stuck files retried', async (t) => {
@@ -201,10 +216,7 @@ test('an active purge can be cancelled after confirmation, and stuck files retri
 
   ui.$('cancel').click();
   await settle(() => ui.confirmations.length === 1);
-  assert.match(
-    ui.confirmations[0],
-    /Cancel the active purge\? Completed deletions cannot be undone/,
-  );
+  assert.match(ui.confirmations[0].message, /Completed deletions cannot be undone/);
   await settle(() => ui.calls.filter((c) => c[0] === 'get').length >= 2);
   assert.ok(!ui.calls.some((c) => c[0] === 'post'));
 

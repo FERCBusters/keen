@@ -1,4 +1,6 @@
 import {
+  fmtTs,
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -94,14 +96,14 @@ async function loadHistory() {
     revisions
       .map(
         (r) =>
-          `<button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" data-revision="${r.version}">Version ${r.version} · ${esc(r.created_at.slice(0, 10))}</button>`,
+          `<button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" data-revision="${r.version}">Version ${r.version} · ${esc(fmtTs(r.created_at))}</button>`,
       )
       .join('') || '<p class="small-muted">No edited content yet.</p>';
   $('commentList').innerHTML =
     comments
       .map(
         (c) =>
-          `<div class="border-bottom py-2"><strong>${esc(c.author?.username || c.author?.display_name || 'User')}</strong> <small>${esc(c.created_at)}</small><div>${esc(c.body)}</div></div>`,
+          `<div class="border-bottom py-2"><strong>${esc(c.author?.username || c.author?.display_name || 'User')}</strong> <small>${esc(fmtTs(c.created_at))}</small><div>${esc(c.body)}</div></div>`,
       )
       .join('') || '<p class="small-muted">No comments yet.</p>';
 }
@@ -116,7 +118,7 @@ $('newDocument').addEventListener('click', () => {
 });
 $('documentList').addEventListener('click', (e) => {
   const row = e.target.closest('[data-document]');
-  if (row) openDocument(row.dataset.document).catch((err) => status(String(err), 'danger'));
+  if (row) openDocument(row.dataset.document).catch((err) => status(errorText(err), 'danger'));
 });
 $('folderList').addEventListener('click', (e) => {
   const row = e.target.closest('[data-folder]');
@@ -138,7 +140,7 @@ $('folderForm').addEventListener('submit', async (e) => {
     await reload();
     status('Folder added.');
   } catch (err) {
-    status(String(err), 'danger');
+    status(errorText(err), 'danger');
   }
 });
 $('documentForm').addEventListener('submit', async (e) => {
@@ -166,7 +168,7 @@ $('documentForm').addEventListener('submit', async (e) => {
     await openDocument(row.id);
     status('Document saved.');
   } catch (err) {
-    status(String(err), 'danger');
+    status(errorText(err), 'danger');
   }
 });
 $('revisionList').addEventListener('click', async (e) => {
@@ -180,7 +182,7 @@ $('revisionList').addEventListener('click', async (e) => {
       `<div class="alert alert-secondary"><strong>Version ${revision.version}</strong> · SHA-256 ${esc(revision.sha256)}<div id="revisionContent" class="mt-2"></div></div>`;
     $('revisionContent').innerHTML = renderRichTextContent(revision.content_html);
   } catch (err) {
-    status(String(err), 'danger');
+    status(errorText(err), 'danger');
   }
 });
 $('commentForm').addEventListener('submit', async (e) => {
@@ -192,7 +194,7 @@ $('commentForm').addEventListener('submit', async (e) => {
     await loadHistory();
     status('Comment added.');
   } catch (err) {
-    status(String(err), 'danger');
+    status(errorText(err), 'danger');
   }
 });
 if (!manage) {
@@ -207,5 +209,5 @@ initRichTextEditors(document);
 try {
   await reload();
 } catch (err) {
-  status(`Could not load documents: ${String(err)}`, 'danger');
+  status(`Could not load documents: ${errorText(err)}`, 'danger');
 }

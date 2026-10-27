@@ -1,4 +1,5 @@
 import {
+  errorText,
   safeExternalHref,
   initNavbar,
   apiGet,
@@ -110,7 +111,7 @@ async function load() {
     await loadChangelog();
     activateTabFromHashOrQuery(params, { changelog: $('documentChangelogTab') });
   } catch (e) {
-    toast(status, `Failed to load document: ${String(e)}`, 'danger');
+    toast(status, `Failed to load document: ${errorText(e)}`, 'danger');
   }
 }
 

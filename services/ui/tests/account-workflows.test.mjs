@@ -128,14 +128,21 @@ async function account(t, options = {}) {
       is_admin: true,
       preferences: options.preferences || {},
       available_themes: [
-        { id: 'purple', name: 'Purple' },
+        { id: 'ink', name: 'Ink' },
         { id: 'dark', name: '<b>Dark</b>' },
       ],
       default_timezone: 'Australia/Melbourne',
       default_date_format: 'dmy',
     },
+    modules: {
+      'pages/confirm-modal.js': {
+        confirmAction: async (asked) => {
+          state.prompts.push(asked);
+          return options.confirm ?? true;
+        },
+      },
+    },
     globals: {
-      confirm: (m) => (state.prompts.push(m), options.confirm ?? true),
       ...options.globals,
     },
     vendor: options.vendor,
@@ -243,7 +250,7 @@ test('my questions show status badges, safe links and deletion for administrator
   rows[0].querySelector('[data-delete-question="t1"]').click();
   await settle(() => ui.el('status').textContent === 'Question deleted');
   assert.deepEqual(state.removed, ['/api/v1/questions/t1']);
-  assert.equal(state.prompts.at(-1), 'Delete this question thread and all replies?');
+  assert.equal(state.prompts.at(-1).title, 'Delete question thread');
   await settle(() => ui.el('myQuestionsTbody').querySelectorAll('tr').length === 2);
 });
 
@@ -261,7 +268,7 @@ test('question deletion respects confirmation, permissions and failures', async 
   await settle(() => failing.ui.el('myQuestionsTbody').querySelector('[data-delete-question]'));
   const button = failing.ui.el('myQuestionsTbody').querySelector('[data-delete-question]');
   button.click();
-  await settle(() => failing.ui.el('status').textContent === 'Error: Not allowed');
+  await settle(() => failing.ui.el('status').textContent === 'Not allowed');
   assert.equal(button.disabled, false);
 
   const reader = await account(t, {
@@ -393,7 +400,7 @@ for (const [tab, endpoint, tbody, empty, wrap, statusId, message] of [
     'myQuestionsEmpty',
     'myQuestionsTableWrap',
     'myQuestionsStatus',
-    'Failed to load questions: Error: Offline',
+    'Failed to load questions: Offline',
   ],
   [
     'my-audits-tab',
@@ -402,7 +409,7 @@ for (const [tab, endpoint, tbody, empty, wrap, statusId, message] of [
     'myAuditsEmpty',
     'myAuditsTableWrap',
     'myAuditsStatus',
-    'Failed to load audits: Error: Offline',
+    'Failed to load audits: Offline',
   ],
   [
     'my-risks-tab',
@@ -411,7 +418,7 @@ for (const [tab, endpoint, tbody, empty, wrap, statusId, message] of [
     'myRisksEmpty',
     'myRisksTableWrap',
     'myRisksStatus',
-    'Failed to load risks: Error: Offline',
+    'Failed to load risks: Offline',
   ],
   [
     'my-meetings-tab',
@@ -420,7 +427,7 @@ for (const [tab, endpoint, tbody, empty, wrap, statusId, message] of [
     'myMeetingsEmpty',
     'myMeetingsTableWrap',
     'myMeetingsStatus',
-    'Failed to load ISMS meetings: Error: Offline',
+    'Failed to load ISMS meetings: Offline',
   ],
   [
     'my-isms-objectives-tab',
@@ -429,7 +436,7 @@ for (const [tab, endpoint, tbody, empty, wrap, statusId, message] of [
     'myIsmsObjectivesEmpty',
     'myIsmsObjectivesTableWrap',
     'myIsmsObjectivesStatus',
-    'Failed to load ISMS objectives: Error: Offline',
+    'Failed to load ISMS objectives: Offline',
   ],
   [
     'my-isms-role-tab',
@@ -438,7 +445,7 @@ for (const [tab, endpoint, tbody, empty, wrap, statusId, message] of [
     'myIsmsRoleEmpty',
     'myIsmsRoleTableWrap',
     'myIsmsRoleStatus',
-    'Failed to load ISMS roles: Error: Offline',
+    'Failed to load ISMS roles: Offline',
   ],
   [
     'my-isms-assets-tab',
@@ -447,7 +454,7 @@ for (const [tab, endpoint, tbody, empty, wrap, statusId, message] of [
     'myIsmsAssetsEmpty',
     'myIsmsAssetsTableWrap',
     'myIsmsAssetsStatus',
-    'Failed to load ISMS assets: Error: Offline',
+    'Failed to load ISMS assets: Offline',
   ],
 ])
   test(`${tab} explains empty lists and load failures`, async (t) => {
@@ -538,7 +545,7 @@ test('preferences load defaults, toggle the timezone and save the chosen setting
   );
   assert.deepEqual(
     [...ui.el('prefTheme').options].map((o) => o.textContent),
-    ['Purple', '<b>Dark</b>'],
+    ['Ink', '<b>Dark</b>'],
   );
   assert.equal(ui.el('prefTheme').value, 'dark');
   assert.equal(ui.el('prefAutoApplyFilters').checked, true);
@@ -568,7 +575,7 @@ test('preferences load defaults, toggle the timezone and save the chosen setting
   ui.el('prefUseBrowserTz').click();
   assert.equal(ui.el('prefTimezone').value, ui.el('prefBrowserTz').textContent);
   ui.el('prefTimezone').value = 'Pacific/Auckland';
-  ui.el('prefTheme').value = 'purple';
+  ui.el('prefTheme').value = 'ink';
   ui.el('prefTheme').dispatchEvent(new ui.window.Event('change'));
   ui.el('prefLandingPage').value = '/events.html?unmapped=true';
   ui.el('prefDefaultFramework').value = '';
@@ -581,7 +588,7 @@ test('preferences load defaults, toggle the timezone and save the chosen setting
     path: '/api/v1/me/preferences',
     body: {
       use_local_timezone: true,
-      theme: 'purple',
+      theme: 'ink',
       date_format: 'dmy',
       auto_apply_filters: true,
       landing_page: '/events.html?unmapped=true',
@@ -591,7 +598,7 @@ test('preferences load defaults, toggle the timezone and save the chosen setting
     },
   });
   assert.equal(ui.el('prefsSaveToast').className, 'badge text-bg-success');
-  assert.equal(ui.window.keenPreferences.theme, 'purple');
+  assert.equal(ui.window.keenPreferences.theme, 'ink');
   assert.equal(ui.window.keenPreferredFramework, '');
 });
 
@@ -604,7 +611,7 @@ test('a rejected preference save is reported beside the button', async (t) => {
   ui.el('prefsForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => ui.el('prefsSaveToast').textContent === 'Failed');
   assert.equal(ui.el('prefsSaveToast').className, 'badge text-bg-danger');
-  assert.equal(ui.el('status').textContent, 'Failed: Error: Rejected');
+  assert.equal(ui.el('status').textContent, 'Failed: Rejected');
 });
 
 test('source colour overrides validate hex values and can be reset', async (t) => {
@@ -640,7 +647,7 @@ test('source colour overrides validate hex values and can be reset', async (t) =
 
   ui.el('sourceColorsResetAll').click();
   await settle(() => state.gets.filter((g) => g === '/api/v1/sources/meta').length === 2);
-  assert.equal(state.prompts.at(-1), 'Reset all your source colour overrides?');
+  assert.equal(state.prompts.at(-1).title, 'Reset source colours');
   await settle(() => body.querySelector('[data-src-hex="okta"]')?.value === '');
   ui.el('prefsForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => state.patched.length === 2);
@@ -689,21 +696,19 @@ test('saved searches can be deleted and duplicate names are disambiguated for th
   ui.el('savedSearchesList').querySelector('button').click();
   await settle(() => state.removed.length === 1);
   assert.deepEqual(state.removed, ['/api/v1/me/saved-searches/s1']);
-  assert.equal(state.prompts[0], 'Delete saved search "Unmapped"?');
+  assert.equal(state.prompts[0].title, 'Delete saved search');
 });
 
 test('saved search failures are reported in the card', async (t) => {
   const failing = await account(t, { fail: { remove: true } });
   failing.ui.el('savedSearchesList').querySelector('button').click();
-  await settle(
-    () => failing.ui.el('status').textContent === 'Failed to delete: Error: Not allowed',
-  );
+  await settle(() => failing.ui.el('status').textContent === 'Failed to delete: Not allowed');
   const declined = await account(t, { confirm: false });
   declined.ui.el('savedSearchesList').querySelector('button').click();
   assert.deepEqual(declined.state.removed, []);
   const unavailable = await account(t, { fail: { saved: true } });
   const message = unavailable.ui.el('savedSearchesEmpty');
-  await settle(() => message.textContent === 'Failed to load saved searches: Error: Unsupported');
+  await settle(() => message.textContent === 'Failed to load saved searches: Unsupported');
   assert.equal(message.className, 'alert alert-danger mb-0');
   assert.equal(message.style.display, '');
   assert.equal(unavailable.ui.el('savedSearchesCard').style.display, '');
@@ -823,6 +828,6 @@ test('Refresh fetches my questions again and shows a later failure in the card',
   fail['/api/v1/me/questions'] = true;
   ui.el('myQuestionsRefresh').click();
   await settle(() => ui.el('myQuestionsStatus').textContent.includes('Offline'));
-  assert.equal(ui.el('myQuestionsStatus').textContent, 'Failed to load questions: Error: Offline');
+  assert.equal(ui.el('myQuestionsStatus').textContent, 'Failed to load questions: Offline');
   assert.equal(ui.el('myQuestionsTableWrap').style.display, 'none');
 });

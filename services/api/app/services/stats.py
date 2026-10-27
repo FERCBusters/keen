@@ -24,19 +24,75 @@ from app.services.control_evidence_stats import (
     get_framework_event_counts,
 )
 from app.services.control_inheritance import (
-    effective_framework_ids,
     evidence_pairs,
+    evidenced_control_ids,
+    framework_event_ids,
     has_inherited_evidence,
+    mapped_event_count,
 )
 from app.services.errors import DomainError
 from app.services.event_filters import EventFilters, event_predicates
 
 
+def _active_user(user) -> bool:
+    return isinstance(user, User) and bool(getattr(user, "is_active", False))
+
+
 def _event_visibility_cache_scope(user) -> str:
     """Cache scope for event/count endpoints after global diary visibility."""
-    if isinstance(user, User) and getattr(user, "is_active", False):
+    if _active_user(user):
         return "authenticated"
     return "anonymous"
+
+
+def _live_event_counts(*, db: Session, framework: str, visibility) -> tuple[int, int]:
+    """Visible events, and those evidencing the framework (with inheritance)."""
+    total = db.query(func.count(Event.id)).filter(visibility).scalar() or 0
+    return int(total), mapped_event_count(db, framework, visibility)
+
+
+def stats_event_counts(
+    *,
+    context: ChangeContext,
+    framework: str = settings.default_framework_slug,
+    db: Session,
+    inherited: bool | None = None,
+) -> dict | None:
+    """Framework event counters alone, for callers that need no control coverage.
+
+    Returns None when the caller may not read events. ``inherited`` may carry
+    the framework's inheritance state already resolved in this request.
+    """
+    user = context.actor
+    if not can_read_events(db, user):
+        return None
+    cache_parts = {
+        "framework": framework,
+        "visibility": _event_visibility_cache_scope(user),
+    }
+
+    def _load() -> dict:
+        has_inheritance = (
+            has_inherited_evidence(db, framework) if inherited is None else inherited
+        )
+        # The same paths as stats_summary: without inheritance, active users
+        # read the global framework event-count cache.
+        if not has_inheritance and _active_user(user):
+            counts = get_framework_event_counts(db, framework)
+            total, mapped = counts["total_events"], counts["mapped_events"]
+        else:
+            total, mapped = _live_event_counts(
+                db=db,
+                framework=framework,
+                visibility=diary_filter_condition(db, user),
+            )
+        return {
+            "total": int(total),
+            "mapped": int(mapped),
+            "unmapped": max(0, int(total) - int(mapped)),
+        }
+
+    return cached_json("stats:event-counts", cache_parts, _load)
 
 
 _EVIDENCE_COVERAGE_KEYS = (
@@ -77,6 +133,8 @@ def stats_summary(
     framework: str = settings.default_framework_slug,
     db: Session,
 ):
+    """Framework dashboard summary."""
+
     user = context.actor
     if not can_read_events(db, user):
         return _summary_without_evidence(framework=framework, db=db)
@@ -129,12 +187,7 @@ def stats_summary(
         # Fast path for authenticated users: diary events are visible to every
         # active user, so these dashboard counters use the global framework
         # event-count cache.
-        has_inheritance = has_inherited_evidence(db, framework)
-        if (
-            not has_inheritance
-            and isinstance(user, User)
-            and getattr(user, "is_active", False)
-        ):
+        if not has_inherited_evidence(db, framework) and _active_user(user):
             controls = (
                 db.query(ControlItem.id, ControlItem.in_scope)
                 .filter(ControlItem.framework_slug == framework)
@@ -167,64 +220,27 @@ def stats_summary(
             )
 
         visibility = diary_filter_condition(db, user)
-
-        total_events = db.query(func.count(Event.id)).filter(visibility).scalar() or 0
-
-        pairs = evidence_pairs(framework, db)
-        mapped_events = (
-            db.query(func.count(func.distinct(pairs.c.event_id)))
-            .join(Event, Event.id == pairs.c.event_id)
-            .filter(visibility)
-            .scalar()
-            or 0
+        total_events, mapped_events = _live_event_counts(
+            db=db, framework=framework, visibility=visibility
         )
-
-        total_controls = (
-            db.query(func.count(ControlItem.id))
+        controls = (
+            db.query(ControlItem.id, ControlItem.in_scope)
             .filter(ControlItem.framework_slug == framework)
-            .scalar()
-            or 0
+            .all()
         )
-        in_scope_controls = (
-            db.query(func.count(ControlItem.id))
-            .filter(
-                ControlItem.framework_slug == framework, ControlItem.in_scope == True
-            )  # noqa: E712
-            .scalar()
-            or 0
-        )
-
-        # Evidence coverage should be reported for IN-SCOPE controls by default.
-        controls_with_evidence_in_scope = (
-            db.query(func.count(func.distinct(pairs.c.control_id)))
-            .join(ControlItem, ControlItem.id == pairs.c.control_id)
-            .join(Event, Event.id == pairs.c.event_id)
-            .filter(
-                ControlItem.framework_slug == framework, ControlItem.in_scope == True
-            )  # noqa: E712
-            .filter(visibility)
-            .scalar()
-            or 0
-        )
-
-        # Also expose "all controls" coverage for completeness.
-        controls_with_evidence_all = (
-            db.query(func.count(func.distinct(pairs.c.control_id)))
-            .join(ControlItem, ControlItem.id == pairs.c.control_id)
-            .join(Event, Event.id == pairs.c.event_id)
-            .filter(ControlItem.framework_slug == framework)
-            .filter(visibility)
-            .scalar()
-            or 0
-        )
+        # Coverage is resolved per control (evidenced sources, then their
+        # crosswalk targets), never per event, and counts only visible events.
+        supported = evidenced_control_ids(db, framework, visibility)
+        in_scope_ids = {control_id for control_id, in_scope in controls if in_scope}
+        framework_ids = {control_id for control_id, _ in controls}
 
         return _summary_payload(
-            total_events=int(total_events),
-            mapped_events=int(mapped_events),
-            total_controls=int(total_controls),
-            in_scope_controls=int(in_scope_controls),
-            controls_with_evidence_in_scope=int(controls_with_evidence_in_scope),
-            controls_with_evidence_all=int(controls_with_evidence_all),
+            total_events=total_events,
+            mapped_events=mapped_events,
+            total_controls=len(controls),
+            in_scope_controls=len(in_scope_ids),
+            controls_with_evidence_in_scope=len(supported & in_scope_ids),
+            controls_with_evidence_all=len(supported & framework_ids),
             stats_source="live_query",
         )
 
@@ -596,41 +612,13 @@ def _stats_events_timeseries(
 
     bucket_expr = func.date_trunc(interval_eff, Event.timestamp).label("b")
 
-    total_q = (
-        db.query(bucket_expr, func.count(Event.id).label("n"))
-        .filter(Event.timestamp >= start)
-        .filter(diary_filter_condition(db, user))
-    )
-    total_q = total_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
-    total_rows = total_q.group_by("b").order_by("b").all()
-    total_by_bucket: dict[datetime, int] = {}
-    for b, n in total_rows:
-        if b is None:
-            continue
-        total_by_bucket[b] = int(n or 0)
-
-    mapped_q = (
-        db.query(
-            bucket_expr,
-            func.count(func.distinct(Event.id)).label("n"),
-        )
-        .join(Mapping, Mapping.event_id == Event.id)
-        .filter(Event.timestamp >= start)
-        .filter(Mapping.control_item_id.in_(effective_framework_ids(framework, db)))
-        .filter(diary_filter_condition(db, user))
-    )
-    mapped_q = mapped_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
-    mapped_rows = mapped_q.group_by("b").order_by("b").all()
-    mapped_by_bucket: dict[datetime, int] = {}
-    for b, n in mapped_rows:
-        if b is None:
-            continue
-        mapped_by_bucket[b] = int(n or 0)
-
-    # Optional per-source breakdown (used by the stacked histogram).
+    # Optional per-source breakdown (used by the stacked histogram). When it
+    # is on, its grouped rows already partition every event in the window, so
+    # they also answer the per-bucket totals without a second full-range scan.
     bd = (breakdown or "").strip().lower()
     want_source_breakdown = bd in {"source", "sources", "by_source"}
 
+    total_by_bucket: dict[datetime, int] = {}
     by_bucket_source: dict[datetime, dict[str, int]] = {}
     totals_by_source: dict[str, int] = {}
     sources_meta = None
@@ -655,6 +643,7 @@ def _stats_events_timeseries(
                 by_bucket_source[b] = {}
             by_bucket_source[b][s] = v
             totals_by_source[s] = totals_by_source.get(s, 0) + v
+            total_by_bucket[b] = total_by_bucket.get(b, 0) + v
 
         # Attach label/colour, respecting user overrides.
         overrides = (
@@ -676,6 +665,36 @@ def _stats_events_timeseries(
                     "total": int(total),
                 }
             )
+    else:
+        total_q = (
+            db.query(bucket_expr, func.count(Event.id).label("n"))
+            .filter(Event.timestamp >= start)
+            .filter(diary_filter_condition(db, user))
+        )
+        total_q = total_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
+        for b, n in total_q.group_by("b").order_by("b").all():
+            if b is None:
+                continue
+            total_by_bucket[b] = int(n or 0)
+
+    # A semi-join counts each mapped event once, so the buckets need no
+    # DISTINCT over every (event, mapping) row in the window.
+    framework_events = framework_event_ids(db, framework)
+    mapped_rows = []
+    if framework_events is not None:
+        mapped_q = (
+            db.query(bucket_expr, func.count(Event.id).label("n"))
+            .filter(Event.timestamp >= start)
+            .filter(Event.id.in_(framework_events))
+            .filter(diary_filter_condition(db, user))
+        )
+        mapped_q = mapped_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
+        mapped_rows = mapped_q.group_by("b").order_by("b").all()
+    mapped_by_bucket: dict[datetime, int] = {}
+    for b, n in mapped_rows:
+        if b is None:
+            continue
+        mapped_by_bucket[b] = int(n or 0)
 
     # Generate a dense sequence of buckets so the chart doesn't have gaps.
     step = _step_for(interval_eff)

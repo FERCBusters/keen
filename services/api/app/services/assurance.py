@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.models import (
@@ -24,7 +23,8 @@ from app.db.models import (
 )
 from app.security.permissions import has_permission
 from app.services.errors import DomainError
-from app.services.mailer import user_email
+from app.services.people import ensure_person_for_user as ensure_person_for_user
+from app.services.people import person_for_user as person_for_user
 
 # The account linked to someone who sits quizzes decides whose rounds and
 # results it reaches, so moving that link is for quiz managers.
@@ -140,39 +140,6 @@ def assurance_meta(*, user, db: Session):
             for a in db.query(RiskAsset).order_by(RiskAsset.name)
         ],
     }
-
-
-def person_for_user(db: Session, user_id) -> IsmsPerson | None:
-    """The People record linked to a Keen account, if there is one."""
-    if user_id is None:
-        return None
-    return db.query(IsmsPerson).filter(IsmsPerson.user_id == user_id).one_or_none()
-
-
-def ensure_person_for_user(db: Session, account: User) -> IsmsPerson:
-    """The account's People record, created from the account when it has none.
-
-    Runs in the caller's transaction. A concurrent request linking the same
-    account wins the unique link; this request then uses that record.
-    """
-    existing = person_for_user(db, account.id)
-    if existing is not None:
-        return existing
-    person = IsmsPerson(
-        name=(account.username or "Keen user")[:256],
-        email=user_email(account) or "",
-        user_id=account.id,
-    )
-    try:
-        with db.begin_nested():
-            db.add(person)
-            db.flush()
-    except IntegrityError:
-        found = person_for_user(db, account.id)
-        if found is None:
-            raise
-        return found
-    return person
 
 
 def list_people(*, user, db: Session):
@@ -386,3 +353,17 @@ def delete_assurance(
         raise DomainError(404, "Assurance record not found")
     db.delete(row)
     db.commit()
+
+
+def record_detail(*, db, user, record_id, kind):
+    from app.services.features import state as feature_state
+    from app.services.isms.access import _can_read_isms
+
+    if not _can_read_isms(db, user):
+        raise DomainError(403, "ISMS read access required")
+    feature_state(db).require("people" if kind == "person" else "vendors")
+    row = _row(db, IsmsPerson if kind == "person" else IsmsVendor, record_id)
+    result = _person_out(row) if kind == "person" else _vendor_out(row)
+    assets = [link.asset for link in row.assets] if kind == "person" else row.assets
+    result["assets"] = [{"id": str(asset.id), "name": asset.name} for asset in assets]
+    return result

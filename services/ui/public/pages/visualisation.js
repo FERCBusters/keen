@@ -16,6 +16,9 @@ import {
 } from './visualisation/dates.js';
 import { truncateMiddleText, renderWrappedNodeLabel } from './visualisation/labels.js';
 import {
+  dateFormatPlaceholder,
+  isoDateToDisplay,
+  errorText,
   initNavbar,
   apiGet,
   apiPatch,
@@ -23,9 +26,8 @@ import {
   toast,
   debounce,
   enableTableSorting,
-  isoDateToDmy,
-  dmyToIsoDate,
-  wireIsoDmyDateField,
+  displayDateToIso,
+  wireIsoDateTextField,
   getCurrentFramework,
   withFramework,
   showInlineLoading,
@@ -83,7 +85,7 @@ const SCOPE_LABELS = {
   clause: 'clause',
   rule: 'mapping rule',
   f: 'text filter',
-  unmapped: 'unmapped only',
+  unmapped: 'Unmapped only',
 };
 
 function describeScope() {
@@ -154,10 +156,10 @@ const dateApply = document.getElementById('dateApply');
 const resetBtn = document.getElementById('vizReset') || document.getElementById('reset');
 
 // Date UI: keep internal filters as YYYY-MM-DD (hidden native <input type="date">),
-// but display dd/mm/yyyy to users.
+// but display the preferred date format to users.
 function _syncDmyFromIso() {
-  if (dateFromDmy && dateFrom) dateFromDmy.value = isoDateToDmy(dateFrom.value || '');
-  if (dateToDmy && dateTo) dateToDmy.value = isoDateToDmy(dateTo.value || '');
+  if (dateFromDmy && dateFrom) dateFromDmy.value = isoDateToDisplay(dateFrom.value || '');
+  if (dateToDmy && dateTo) dateToDmy.value = isoDateToDisplay(dateTo.value || '');
 }
 
 function _syncIsoFromDmy() {
@@ -166,7 +168,7 @@ function _syncIsoFromDmy() {
     if (!raw) {
       dateFrom.value = '';
     } else {
-      const iso = dmyToIsoDate(raw);
+      const iso = displayDateToIso(raw);
       if (iso) dateFrom.value = iso;
     }
   }
@@ -175,7 +177,7 @@ function _syncIsoFromDmy() {
     if (!raw) {
       dateTo.value = '';
     } else {
-      const iso = dmyToIsoDate(raw);
+      const iso = displayDateToIso(raw);
       if (iso) dateTo.value = iso;
     }
   }
@@ -192,11 +194,13 @@ function _setRangeIso(fromIso, toIso) {
   _syncDmyFromIso();
 }
 
-wireIsoDmyDateField(dateFrom, dateFromDmy, dateFromPick, {
+for (const input of [dateFromDmy, dateToDmy])
+  input?.setAttribute('placeholder', dateFormatPlaceholder());
+wireIsoDateTextField(dateFrom, dateFromDmy, dateFromPick, {
   listenInput: false,
   dispatchChangeOnText: true,
 });
-wireIsoDmyDateField(dateTo, dateToDmy, dateToPick, {
+wireIsoDateTextField(dateTo, dateToDmy, dateToPick, {
   listenInput: false,
   dispatchChangeOnText: true,
 });
@@ -352,7 +356,7 @@ function _heatColorForBase(baseHex) {
       .toLowerCase() || '__fallback';
   if (_heatmapColorCache.has(key)) return _heatmapColorCache.get(key);
 
-  const fallback = d3.color('#7c3aed'); // matches default accent in most themes
+  const fallback = d3.color('#004987'); // matches the default Ink accent
   const base = d3.color(key) || fallback;
   const baseRgb = d3.rgb(base);
 
@@ -758,7 +762,7 @@ function setViz(mode, opts = {}) {
       ensureGraphDatasetForMode(vizMode)
         .then(() => drawActive())
         .catch((err) =>
-          toast(status, `Failed to load visualisation data: ${String(err)}`, 'danger'),
+          toast(status, `Failed to load visualisation data: ${errorText(err)}`, 'danger'),
         );
     } else {
       drawActive();
@@ -1938,7 +1942,7 @@ function drawHeatmap() {
     .attr('height', ROW_SWATCH)
     .attr('rx', 2)
     .attr('ry', 2)
-    .attr('fill', (d) => d?.color || '#7c3aed')
+    .attr('fill', (d) => d?.color || '#004987')
     .attr('stroke', 'rgba(0,0,0,0.25)')
     .attr('stroke-width', 1)
     .style('cursor', 'pointer')
@@ -2739,7 +2743,10 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
       .join('');
 
     const total = Math.round(items.reduce((acc, it) => acc + Number(it?.value || 0), 0));
-    const rangeTxt = r && r.from && r.to ? `${esc(r.from)} → ${esc(r.to)}` : '';
+    const rangeTxt =
+      r && r.from && r.to
+        ? `${esc(isoDateToDisplay(r.from))} → ${esc(isoDateToDisplay(r.to))}`
+        : '';
 
     setSunburstOtherPanel(`
     <div class="border rounded p-2" style="background: rgba(31,31,42,0.03)">
@@ -3242,7 +3249,7 @@ async function drawHistogram() {
   if (showOther) stackKeys.push(OTHER_KEY);
 
   const labelByKey = new Map(primary.map((s) => [String(s.source), String(s.label || s.source)]));
-  const colorByKey = new Map(primary.map((s) => [String(s.source), String(s.color || '#7c3aed')]));
+  const colorByKey = new Map(primary.map((s) => [String(s.source), String(s.color || '#004987')]));
   if (showOther) {
     labelByKey.set(OTHER_KEY, 'Other');
     colorByKey.set(OTHER_KEY, 'rgba(31,31,42,0.18)');
@@ -3315,7 +3322,7 @@ async function drawHistogram() {
   })();
 
   const tickFormat = (d) => {
-    if (intervalEff === 'day') return String(d).slice(5);
+    if (intervalEff === 'day') return isoDateToDisplay(String(d));
     const ms = histBucketToUtcMs(d, intervalEff);
     if (!Number.isFinite(ms)) return '';
     return fmtTime ? fmtTime(new Date(ms)) : '';
@@ -3413,7 +3420,7 @@ async function drawHistogram() {
       const label = labelByKey.get(d.key) || d.key;
       const n = Math.max(0, Math.round((d.y1 - d.y0) * 1000) / 1000);
       const t = d.data;
-      return `${t.bucket}\n${label}: ${n}\nTotal: ${t.total}\nMapped: ${t.mapped}\nUnmapped: ${t.unmapped}`;
+      return `${isoDateToDisplay(String(t.bucket).slice(0, 10))}${String(t.bucket).slice(10)} UTC\n${label}: ${n}\nTotal: ${t.total}\nMapped: ${t.mapped}\nUnmapped: ${t.unmapped}`;
     });
 
   // Legend (wrap across rows so it doesn't overlap)
@@ -3470,10 +3477,13 @@ async function drawHistogram() {
     if (zoom && startLabel && endLabel) {
       setVizCaption(
         vizMode,
-        `${intervalLabel} volume from ${startLabel} to ${endLabel}. ${hint} Use Back to return.`,
+        `${intervalLabel} volume from ${isoDateToDisplay(startLabel.slice(0, 10))}${startLabel.slice(10)} to ${isoDateToDisplay(endLabel.slice(0, 10))}${endLabel.slice(10)} UTC. ${hint} Use Back to return.`,
       );
     } else if (r) {
-      setVizCaption(vizMode, `Daily volume from ${r.from} to ${r.to} (${days} days). ${hint}`);
+      setVizCaption(
+        vizMode,
+        `Daily volume from ${isoDateToDisplay(r.from)} to ${isoDateToDisplay(r.to)} (${days} days). ${hint}`,
+      );
     } else {
       setVizCaption(vizMode, `Daily volume for the last ${days} days. ${hint}`);
     }
@@ -3535,7 +3545,7 @@ async function drawHistogram() {
 
         // Re-render histogram for the zoomed range.
         drawHistogram().catch((err) => {
-          toast(status, `Failed to load histogram zoom: ${String(err)}`, 'danger');
+          toast(status, `Failed to load histogram zoom: ${errorText(err)}`, 'danger');
         });
       });
 
@@ -3596,18 +3606,18 @@ function drawActive() {
     if (vizMode === 'histogram') {
       // async: fire-and-forget; errors are shown via toast below
       drawHistogram().catch((err) => {
-        toast(status, `Failed to load histogram data: ${String(err)}`, 'danger');
+        toast(status, `Failed to load histogram data: ${errorText(err)}`, 'danger');
       });
     }
   } catch (err) {
-    toast(status, `Failed to render visualisation: ${String(err)}`, 'danger');
+    toast(status, `Failed to render visualisation: ${errorText(err)}`, 'danger');
   }
 }
 
 gapQ?.addEventListener('input', () => {
   if (!controlStats && coverageGapsOpen()) {
     loadControlStatsForGaps().catch((err) =>
-      toast(status, `Failed to load controls: ${String(err)}`, 'danger'),
+      toast(status, `Failed to load controls: ${errorText(err)}`, 'danger'),
     );
     return;
   }
@@ -3617,20 +3627,20 @@ gapQ?.addEventListener('input', () => {
   'click',
   () => {
     loadControlStatsForGaps({ force: true }).catch((err) =>
-      toast(status, `Failed to load controls: ${String(err)}`, 'danger'),
+      toast(status, `Failed to load controls: ${errorText(err)}`, 'danger'),
     );
   },
 );
 coverageGapsPanel?.addEventListener('shown.bs.collapse', () => {
   if (!controlStats)
     loadControlStatsForGaps().catch((err) =>
-      toast(status, `Failed to load controls: ${String(err)}`, 'danger'),
+      toast(status, `Failed to load controls: ${errorText(err)}`, 'danger'),
     );
 });
 
 function normalizeRangeInputs() {
   if (!dateFrom || !dateTo) return false;
-  // If the user typed dd/mm/yyyy, convert it before validating.
+  // If the user typed a date, convert it before validating.
   _syncIsoFromDmy();
   const r = getActiveRange();
   if (!r) return false;
@@ -3749,7 +3759,7 @@ saveDefaultViz?.addEventListener('click', async () => {
     // Success feedback should be transient.
     toast(status, 'Saved as your default visualisation.', 'success', 2800);
   } catch (err) {
-    toast(status, `Could not save default visualisation: ${String(err)}`, 'danger');
+    toast(status, `Could not save default visualisation: ${errorText(err)}`, 'danger');
   }
 });
 
@@ -3827,7 +3837,7 @@ exportCsvBtn?.addEventListener('click', () => {
     const rows = lastView?.payload?.cells || lastView?.payload?.edges || [];
     downloadCsv(`keen_${mode}_${stamp}.csv`, rows);
   } catch (err) {
-    toast(status, `Export failed: ${String(err)}`, 'danger');
+    toast(status, `Export failed: ${errorText(err)}`, 'danger');
   }
 });
 
@@ -3843,7 +3853,7 @@ exportJsonBtn?.addEventListener('click', () => {
       last_view: lastView,
     });
   } catch (err) {
-    toast(status, `Export failed: ${String(err)}`, 'danger');
+    toast(status, `Export failed: ${errorText(err)}`, 'danger');
   }
 });
 
@@ -3854,7 +3864,7 @@ exportSvgBtn?.addEventListener('click', () => {
     const stamp = r ? `${r.from}_to_${r.to}` : isoTodayUtc();
     downloadCurrentSvg(`keen_${mode}_${stamp}.svg`);
   } catch (err) {
-    toast(status, `Export failed: ${String(err)}`, 'danger');
+    toast(status, `Export failed: ${errorText(err)}`, 'danger');
   }
 });
 
@@ -3913,7 +3923,7 @@ histBack?.addEventListener('click', () => {
   syncAddressBarToShareState();
   if (vizMode === 'histogram') {
     drawHistogram().catch((err) =>
-      toast(status, `Failed to render histogram: ${String(err)}`, 'danger'),
+      toast(status, `Failed to render histogram: ${errorText(err)}`, 'danger'),
     );
   }
 });
@@ -3925,7 +3935,7 @@ histResetZoom?.addEventListener('click', () => {
   syncAddressBarToShareState();
   if (vizMode === 'histogram') {
     drawHistogram().catch((err) =>
-      toast(status, `Failed to render histogram: ${String(err)}`, 'danger'),
+      toast(status, `Failed to render histogram: ${errorText(err)}`, 'danger'),
     );
   }
 });
@@ -4026,7 +4036,7 @@ async function load() {
       if (status) status.style.display = 'none';
     }, 1800);
   } catch (err) {
-    toast(status, `Failed to load visualisation: ${String(err)}`, 'danger');
+    toast(status, `Failed to load visualisation: ${errorText(err)}`, 'danger');
     if (gapsEl && coverageGapsOpen()) gapsEl.textContent = 'Failed to load controls.';
     if (topSourcesEl)
       topSourcesEl.innerHTML = `<tr><td colspan="2" class="small-muted p-3">Failed to load ${esc(vizRelationshipLabels(vizMode).leftPlural)}.</td></tr>`;

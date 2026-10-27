@@ -1,4 +1,4 @@
-import { apiGet, apiPost, esc } from '/app.js';
+import { fmtTs, apiGet, apiPost, confirmAction, esc } from '/app.js';
 
 export function enrollmentProfiles(host, onChanged) {
   const root = '/api/v1/admin/agent-enrollment-profiles';
@@ -53,7 +53,7 @@ export function enrollmentProfiles(host, onChanged) {
       button.disabled = demo;
     }
   }
-  function action(p, label, verb, confirmation) {
+  function action(p, label, verb, confirmSpec) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'btn btn-outline-primary btn-sm';
@@ -61,7 +61,7 @@ export function enrollmentProfiles(host, onChanged) {
     b.disabled = demo;
     b.onclick = () =>
       run(b, async () => {
-        if (confirmation && !confirm(confirmation)) return;
+        if (confirmSpec && !(await confirmAction(confirmSpec))) return;
         clear();
         const r = await apiPost(`${root}/${p.id}/${verb}`, {});
         if (r.bootstrap_key) reveal(r.bootstrap_key);
@@ -77,31 +77,32 @@ export function enrollmentProfiles(host, onChanged) {
     const list = q('[data-profiles]');
     list.replaceChildren();
     for (const p of data.profiles) {
+      const state = String(p.state || 'unknown').replaceAll('_', ' ');
+      const stateLabel = state.charAt(0).toUpperCase() + state.slice(1);
       const card = document.createElement('article');
       card.className = 'border rounded p-3';
-      card.innerHTML = `<h3 class="h6">${esc(p.name)} <span class="badge text-bg-secondary">${esc(p.state)}</span></h3><p class="small-muted text-break">Profile: ${esc(p.id)}</p><p>${Number(p.enrollment_count)} enrolled${p.max_enrollments ? ' / ' + Number(p.max_enrollments) + ' maximum' : ''} · Credentials last ${Number(p.token_days)} days</p><p class="small-muted">Enrollment expires: ${esc(p.expires_at ? new Date(p.expires_at + 'Z').toLocaleString() : 'No expiry')} · Networks: ${esc(p.allowed_cidrs.join(', ') || 'Any address with a valid key')}</p><div class="d-flex flex-wrap gap-2" data-actions></div>`;
+      card.innerHTML = `<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2"><h3 class="h6 mb-0">${esc(p.name)}</h3><span class="badge d-inline-flex align-items-center justify-content-center py-2 px-3 lh-sm ${p.state === 'active' ? 'text-bg-success' : 'text-bg-secondary'}">${esc(stateLabel)}</span></div><p class="small-muted text-break">Profile: ${esc(p.id)}</p><p>${Number(p.enrollment_count)} enrolled${p.max_enrollments ? ' / ' + Number(p.max_enrollments) + ' maximum' : ''} · Credentials last ${Number(p.token_days)} days</p><p class="small-muted">Enrollment expires: ${esc(p.expires_at ? fmtTs(p.expires_at) : 'No expiry')} · Networks: ${esc(p.allowed_cidrs.join(', ') || 'Any address with a valid key')}</p><div class="d-flex flex-wrap gap-2" data-actions></div>`;
       if (p.state !== 'revoked')
-        card
-          .querySelector('[data-actions]')
-          .append(
-            action(
-              p,
-              'Rotate bootstrap key',
-              'rotate',
-              "Replace this profile's bootstrap key? Existing agents keep working.",
-            ),
-            action(
-              p,
-              p.state === 'paused' ? 'Resume enrollment' : 'Pause enrollment',
-              p.state === 'paused' ? 'resume' : 'pause',
-            ),
-            action(
-              p,
-              'Revoke profile and agents',
-              'revoke',
-              `Permanently revoke ${p.name} and ALL its enrolled agents? Existing evidence remains available.`,
-            ),
-          );
+        card.querySelector('[data-actions]').append(
+          action(p, 'Rotate bootstrap key', 'rotate', {
+            title: 'Rotate bootstrap key',
+            message:
+              "Replace this profile's bootstrap key? Existing agents keep working; the current key stops issuing new enrollments.",
+            confirmLabel: 'Rotate',
+            typed: 'Rotate',
+          }),
+          action(
+            p,
+            p.state === 'paused' ? 'Resume enrollment' : 'Pause enrollment',
+            p.state === 'paused' ? 'resume' : 'pause',
+          ),
+          action(p, 'Revoke profile and agents', 'revoke', {
+            title: 'Revoke profile and agents',
+            message: `Permanently revoke ${p.name} and ALL its enrolled agents? The agents lose access for good; existing evidence remains available.`,
+            confirmLabel: 'Revoke',
+            danger: true,
+          }),
+        );
       list.append(card);
     }
     if (!data.profiles.length)

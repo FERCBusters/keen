@@ -1,4 +1,5 @@
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -131,7 +132,7 @@ function wireTabs() {
   tabs.visualisations?.addEventListener('shown.bs.tab', () => {
     setTabQuery('visualisations');
     renderVisualisations().catch((e) =>
-      toast(status, `Failed to load visualisations: ${String(e)}`, 'danger'),
+      toast(status, `Failed to load visualisations: ${errorText(e)}`, 'danger'),
     );
   });
   activateTab(requestedTab || 'items');
@@ -141,7 +142,7 @@ function partyHref(id) {
 }
 function controlHref(id) {
   return withFramework(
-    `/control.html?id=${encodeURIComponent(id || '')}&tab=interested-parties`,
+    `/control.html?id=${encodeURIComponent(id || '')}&tab=governance`,
     framework,
   );
 }
@@ -530,33 +531,35 @@ async function deleteLookup(type, id) {
 function wireEvents() {
   if (newInterestedParty && !canManage) newInterestedParty.style.display = 'none';
   addPartyName?.addEventListener('click', () =>
-    addLookup('name').catch((e) => toast(status, String(e), 'danger')),
+    addLookup('name').catch((e) => toast(status, errorText(e), 'danger')),
   );
   addPartyNature?.addEventListener('click', () =>
-    addLookup('nature').catch((e) => toast(status, String(e), 'danger')),
+    addLookup('nature').catch((e) => toast(status, errorText(e), 'danger')),
   );
   reloadParties?.addEventListener('click', () =>
-    loadParties().catch((e) => toast(status, String(e), 'danger')),
+    loadParties().catch((e) => toast(status, errorText(e), 'danger')),
   );
   const debounced = debounce(
-    () => loadParties().catch((e) => toast(status, String(e), 'danger')),
+    () => loadParties().catch((e) => toast(status, errorText(e), 'danger')),
     250,
   );
   partyQ?.addEventListener('input', debounced);
   partyNameFilter?.addEventListener('change', () =>
-    loadParties().catch((e) => toast(status, String(e), 'danger')),
+    loadParties().catch((e) => toast(status, errorText(e), 'danger')),
   );
   partyNatureFilter?.addEventListener('change', () =>
-    loadParties().catch((e) => toast(status, String(e), 'danger')),
+    loadParties().catch((e) => toast(status, errorText(e), 'danger')),
   );
   document.addEventListener('click', (ev) => {
     const n = ev.target.closest('[data-delete-name]');
     const t = ev.target.closest('[data-delete-nature]');
     if (n)
-      deleteLookup('name', n.dataset.deleteName).catch((e) => toast(status, String(e), 'danger'));
+      deleteLookup('name', n.dataset.deleteName).catch((e) =>
+        toast(status, errorText(e), 'danger'),
+      );
     if (t)
       deleteLookup('nature', t.dataset.deleteNature).catch((e) =>
-        toast(status, String(e), 'danger'),
+        toast(status, errorText(e), 'danger'),
       );
   });
 }
@@ -570,5 +573,5 @@ try {
   await loadParties();
   if (requestedTab === 'visualisations') await renderVisualisations();
 } catch (e) {
-  toast(status, `Failed to load interested parties: ${String(e)}`, 'danger');
+  toast(status, `Failed to load interested parties: ${errorText(e)}`, 'danger');
 }

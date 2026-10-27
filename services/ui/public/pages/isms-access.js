@@ -1,4 +1,5 @@
 import {
+  errorText,
   initNavbar,
   apiGet,
   esc,
@@ -107,7 +108,7 @@ async function load() {
     await loadChangelog();
     activateTabFromHashOrQuery(params, { changelog: $('accessChangelogTab') });
   } catch (e) {
-    toast(status, `Failed to load access control row: ${String(e)}`, 'danger');
+    toast(status, `Failed to load access control row: ${errorText(e)}`, 'danger');
   }
 }
 

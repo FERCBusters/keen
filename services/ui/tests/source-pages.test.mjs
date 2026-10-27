@@ -41,7 +41,7 @@ const insights = {
   typical_gap_seconds: 3600,
   usual_longest_gap_seconds: 7200,
   quiet_threshold_seconds: 14400,
-  message: 'No events for 3 days; it usually sends one every 1 hour.',
+  message: 'No events for 3 days; the average is 66.67 events per day over this 90-day window.',
   quiet_periods: [
     {
       start: '2026-04-01T00:00:00Z',
@@ -74,6 +74,8 @@ async function sourcePage(t, options = {}) {
   const fail = options.fail || {};
   const ui = await page(t, 'source', {
     query: options.query ?? '&source=github',
+    globals: options.globals,
+    post: options.post,
     me: options.me || { is_admin: true },
     get: async (u) => {
       const p = u.pathname;
@@ -140,6 +142,7 @@ async function sourcePage(t, options = {}) {
           ],
         };
       }
+      if (options.get) return options.get(u);
       throw new Error('Unexpected GET ' + u);
     },
   });
@@ -191,7 +194,7 @@ test('source page shows summary counts, filtered event links and safe event rows
   // Only absolute HTTP(S) upstream links are rendered.
   assert.ok(rows[0].querySelector('a[href="https://github.example/commit/1"]'));
   assert.equal(rows[1].querySelector('a[href^="javascript"]'), null);
-  assert.equal(rows[1].cells[4].textContent.trim(), '-');
+  assert.equal(rows[1].cells[5].textContent.trim(), '-');
   assert.equal(lastEvents(ui).searchParams.get('source'), 'github');
 });
 
@@ -298,7 +301,7 @@ test('source summary and event failures are reported', async (t) => {
   const ui = await sourcePage(t, { fail: { sources: true, events: true } });
   assert.equal(ui.el('sourceMeta').textContent, 'Source summary unavailable.');
   await settle(() =>
-    /Failed to load source events: Error: Events offline/.test(ui.el('status').textContent),
+    /Failed to load source events: Events offline/.test(ui.el('status').textContent),
   );
   assert.match(ui.el('eventRows').textContent, /Failed to load source events/);
   const empty = await sourcePage(t, { events: [] });
@@ -439,7 +442,7 @@ test('filters set in the address narrow the register when it loads', async (t) =
 
 test('source list failures are reported', async (t) => {
   const ui = await sourcesPage(t, { fail: true });
-  assert.match(ui.el('status').textContent, /Failed to load sources: Error: Offline/);
+  assert.match(ui.el('status').textContent, /Failed to load sources: Offline/);
 });
 
 test('metric source links on the source page only allow web or Keen URLs', async (t) => {
@@ -491,7 +494,7 @@ test('a quiet source shows a notice, marks the Insights tab and explains its rhy
   );
   const text = ui.el('sourceInsights').textContent;
   assert.match(text, /3 days ago/);
-  assert.match(text, /one every 1 hour; gaps beyond 2 hours are unusual/);
+  assert.match(text, /Median gap: 1 hour; 90% of sampled gaps are at most 2 hours/);
   assert.match(text, /5 in the last 7 days, down 50% on the 7 days before/);
   assert.match(text, /2 days/);
   const bars = ui.el('sourceInsights').querySelectorAll('.source-insight-bar');
@@ -545,4 +548,72 @@ test('the insights tab deep link opens that tab', async (t) => {
   const ui = await sourcePage(t, { query: '&source=github&tab=insights' });
   await settle(() => ui.el('sourceInsightStatus'));
   assert.ok(ui.el('sourceInsightsTab'));
+});
+
+test('source insight drilldown supports multi-selection and story creation', async (t) => {
+  const posted = [],
+    navigated = [];
+  const ui = await sourcePage(t, {
+    query: '&source=github&start_date=2026-05-01&end_date=2026-05-01',
+    globals: { location: { assign: (url) => navigated.push(url), search: '?source=github' } },
+    post: async (url, body) => {
+      posted.push({ url: url.pathname, body });
+      return { id: 'story-1' };
+    },
+  });
+  const all = ui.el('selectAll');
+  all.checked = true;
+  all.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  assert.equal(ui.el('selectionBar').hidden, false);
+  assert.match(ui.el('selectionBar').textContent, /2 selected/);
+  const row = ui.el('eventRows').querySelector('tr');
+  row.dispatchEvent(new ui.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  assert.equal(ui.el('rowMenu').hidden, false);
+  ui.document.querySelector('[data-story-title]').value = 'Review feed';
+  ui.document.querySelector('[data-create-story]').click();
+  await settle(() => navigated.length === 1);
+  assert.equal(posted[0].url, '/api/v1/stories');
+  assert.deepEqual(JSON.parse(JSON.stringify(posted[0].body)), {
+    title: 'Review feed',
+    items: [
+      { kind: 'event', entity_id: 'e1' },
+      { kind: 'event', entity_id: 'e2' },
+    ],
+  });
+  assert.equal(ui.el('selectionBar').hidden, true);
+});
+
+test('source selection obeys Story permissions and feature availability', async (t) => {
+  for (const me of [
+    { can_view_events: true },
+    { is_admin: true, features: { enabled: { stories: false } } },
+  ]) {
+    const ui = await sourcePage(t, { me });
+    assert.equal(ui.el('selectHeader').hidden, true);
+    assert.equal(ui.document.querySelector('[data-select-event]'), null);
+    ui.el('eventRows')
+      .querySelector('tr')
+      .dispatchEvent(new ui.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    assert.equal(ui.el('rowMenu').hidden, true);
+  }
+});
+
+test('batched source insights distinguish daily volume from gaps', async (t) => {
+  const ui = await sourcePage(t, {
+    insights: {
+      ...insights,
+      days: 7,
+      window_events: 35,
+      average_events_per_day: 5,
+      typical_gap_seconds: 0,
+      usual_longest_gap_seconds: 86400,
+      message: 'Five per day.',
+    },
+  });
+  await settle(() => ui.el('sourceInsights').textContent.includes('Average activity'));
+  const text = ui.el('sourceInsights').textContent;
+  assert.match(text, /5 events per day over this 7-day window/);
+  assert.match(text, /Median gap: under a minute/);
+  assert.match(text, /Events may arrive in batches/);
+  assert.doesNotMatch(text, /one every|several a minute/);
 });

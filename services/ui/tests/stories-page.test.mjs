@@ -183,15 +183,13 @@ test('a register that cannot load says so, and a refused story is reported', asy
     },
   });
   await settle(() => ui.el('meta').textContent === '-');
-  assert.equal(ui.el('status').textContent, 'Failed to load stories: Error: Stories offline');
+  assert.equal(ui.el('status').textContent, 'Failed to load stories: Stories offline');
   assert.equal(ui.el('status').dataset.alert, 'danger');
 
   ui.el('showCreate').click();
   ui.el('createTitle').value = 'Incident 42';
   ui.el('createForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(
-    () => ui.el('status').textContent === 'Failed to create the story: Error: Title in use',
-  );
+  await settle(() => ui.el('status').textContent === 'Failed to create the story: Title in use');
   assert.equal(ui.el('createTitle').value, 'Incident 42');
   assert.equal(ui.el('createCard').hidden, false);
 });

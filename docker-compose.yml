@@ -3,6 +3,16 @@
 services:
   postgres:
     image: postgres:16@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
+    # Keen's dashboard queries are short, so JIT compilation costs more than it
+    # saves. Size the buffer cache to the host; see .env.example.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${KEEN_POSTGRES_SHARED_BUFFERS:-256MB}
+      - -c
+      - effective_cache_size=${KEEN_POSTGRES_EFFECTIVE_CACHE_SIZE:-1GB}
+      - -c
+      - jit=off
     environment:
       POSTGRES_USER: keen
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMe123!}

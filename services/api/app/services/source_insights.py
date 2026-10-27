@@ -128,11 +128,16 @@ def source_insights(
 def _compute(src, framework, window_days, db, user, clock) -> dict:
     visibility = diary_filter_condition(db, user)
     window_start = clock - timedelta(days=window_days)
-    in_window = [Event.source == src, Event.timestamp >= window_start, visibility]
+    in_window = [
+        Event.source == src,
+        Event.timestamp >= window_start,
+        Event.timestamp <= clock,
+        visibility,
+    ]
 
     last_seen, lifetime_total = (
         db.query(func.max(Event.timestamp), func.count(Event.id))
-        .filter(Event.source == src, visibility)
+        .filter(Event.source == src, Event.timestamp <= clock, visibility)
         .one()
     )
     lifetime_total = int(lifetime_total or 0)
@@ -183,6 +188,7 @@ def _compute(src, framework, window_days, db, user, clock) -> dict:
         "as_of": clock.isoformat(),
         "lifetime_events": lifetime_total,
         "window_events": total_in_window,
+        "average_events_per_day": round(total_in_window / window_days, 2),
         "sample_size": len(sample),
         "sampled": total_in_window > len(sample),
         "last_seen": last_seen.isoformat() if last_seen else None,
@@ -227,15 +233,15 @@ def _compute(src, framework, window_days, db, user, clock) -> dict:
     result["quiet_periods"] = _quiet_periods(timestamps, gaps, threshold)
 
     rhythm = (
-        f"it usually sends one every {humanise_seconds(typical)}"
-        if typical >= 60
-        else "it usually sends several a minute"
+        f"the average is {result['average_events_per_day']:g} events per day "
+        f"over this {window_days}-day window"
     )
     if since_last > threshold:
         result["status"] = "quiet"
         result["message"] = (
-            f"No events for {humanise_seconds(since_last)}; {rhythm}, and gaps "
-            f"longer than {humanise_seconds(usual_longest)} are unusual for it."
+            f"No events for {humanise_seconds(since_last)}; {rhythm}. "
+            f"90% of sampled gaps are at most {humanise_seconds(usual_longest)}. "
+            "Events may arrive in batches."
         )
     else:
         result["status"] = "active"

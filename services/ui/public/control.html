@@ -21,7 +21,7 @@
       <div class="small-muted" id="ctrlLinks"></div>
     </div>
 
-    <div id="status" class="alert alert-info" style="display:none;"></div>
+    <div id="status" class="alert alert-info" style="display:none;" role="status"></div>
 
     <ul class="nav nav-tabs mb-3 no-print" id="controlPageTabs" role="tablist">
       <li class="nav-item" role="presentation">
@@ -33,23 +33,8 @@
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="controlRelatedTab" data-bs-toggle="tab" data-bs-target="#controlRelatedPane" type="button" role="tab" aria-controls="controlRelatedPane" aria-selected="false">Related controls</button>
       </li>
-      <li class="nav-item" role="presentation" id="controlJustificationTabItem" hidden>
-        <button class="nav-link" id="controlJustificationTab" data-bs-toggle="tab" data-bs-target="#controlJustificationPane" type="button" role="tab" aria-controls="controlJustificationPane" aria-selected="false">Justification</button>
-      </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="controlClausesTab" data-bs-toggle="tab" data-bs-target="#controlClausesPane" type="button" role="tab" aria-controls="controlClausesPane" aria-selected="false">Clauses</button>
-      </li>
-      <li class="nav-item" role="presentation" id="controlRisksTabItem">
-        <button class="nav-link" id="controlRisksTab" data-feature="risk_cia" data-bs-toggle="tab" data-bs-target="#controlRisksPane" type="button" role="tab" aria-controls="controlRisksPane" aria-selected="false">Risks</button>
-      </li>
-      <li class="nav-item" role="presentation" id="controlInterestedPartiesTabItem">
-        <button class="nav-link" id="controlInterestedPartiesTab" data-feature="interested_parties" data-bs-toggle="tab" data-bs-target="#controlInterestedPartiesPane" type="button" role="tab" aria-controls="controlInterestedPartiesPane" aria-selected="false">Interested parties</button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="controlIsmsTab" data-feature="isms" data-bs-toggle="tab" data-bs-target="#controlIsmsPane" type="button" role="tab" aria-controls="controlIsmsPane" aria-selected="false">ISMS</button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="controlChangelogTab" data-bs-toggle="tab" data-bs-target="#controlChangelogPane" type="button" role="tab" aria-controls="controlChangelogPane" aria-selected="false">Changelog</button>
+        <button class="nav-link" id="controlGovernanceTab" data-bs-toggle="tab" data-bs-target="#controlGovernancePane" type="button" role="tab" aria-controls="controlGovernancePane" aria-selected="false">Governance</button>
       </li>
     </ul>
 
@@ -151,7 +136,7 @@
         </div>
       </section>
 
-      <section class="tab-pane fade" id="controlJustificationPane" role="tabpanel" aria-labelledby="controlJustificationTab" tabindex="0">
+      <section class="tab-pane fade" id="controlGovernancePane" role="tabpanel" aria-labelledby="controlGovernanceTab" tabindex="0">
         <div id="controlJustificationCard" class="card mb-3 no-print" style="display:none;">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
@@ -177,9 +162,7 @@
             </div>
           </div>
         </div>
-      </section>
 
-      <section class="tab-pane fade" id="controlClausesPane" role="tabpanel" aria-labelledby="controlClausesTab" tabindex="0">
         <div id="clausesCard" class="card mb-3" style="display:none;">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
@@ -222,9 +205,7 @@
             </div>
           </div>
         </div>
-      </section>
 
-      <section class="tab-pane fade" id="controlRisksPane" role="tabpanel" aria-labelledby="controlRisksTab" tabindex="0">
         <div id="risksCard" class="card mb-3" style="display:none;">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
@@ -237,9 +218,7 @@
             <div id="risksView" class="small-muted">No risks linked.</div>
           </div>
         </div>
-      </section>
 
-      <section class="tab-pane fade" id="controlInterestedPartiesPane" role="tabpanel" aria-labelledby="controlInterestedPartiesTab" tabindex="0">
         <div id="interestedPartiesCard" class="card mb-3" style="display:none;">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
@@ -252,9 +231,7 @@
             <div id="interestedPartiesView" class="small-muted">No interested parties linked.</div>
           </div>
         </div>
-      </section>
 
-      <section class="tab-pane fade" id="controlIsmsPane" role="tabpanel" aria-labelledby="controlIsmsTab" tabindex="0">
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div><div class="fw-bold">ISMS references</div><div class="small-muted">SWOT items, objectives, organisation roles, assets and meetings linked to this control. Policies, processes and effectiveness measures are under Requirements.</div></div>
@@ -262,11 +239,8 @@
           </div>
           <div id="controlIsmsView" class="card-body small-muted">Loading ISMS references</div>
         </div>
-      </section>
 
-
-      <section class="tab-pane fade" id="controlChangelogPane" role="tabpanel" aria-labelledby="controlChangelogTab" tabindex="0">
-        <div id="controlChangelog" class="card card-body small-muted">Loading changelog</div>
+        <div id="controlChangelog" class="card card-body small-muted mb-3">Loading changelog</div>
       </section>
     </div>
   </main>

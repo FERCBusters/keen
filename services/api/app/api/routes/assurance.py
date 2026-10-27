@@ -26,6 +26,18 @@ def list_people(user=Depends(require_isms_read), db: Session = Depends(get_db)):
     return service.list_people(user=user, db=db)
 
 
+@router.get("/v1/isms/people/{person_id}/workstation-posture")
+def workstation_posture(
+    person_id: uuid.UUID,
+    offset: int = 0,
+    user=Depends(require_isms_read),
+    db: Session = Depends(get_db),
+):
+    from app.services.workstation_posture import person_posture
+
+    return person_posture(db=db, user=user, person_id=person_id, offset=offset)
+
+
 @router.post("/v1/isms/people", status_code=201)
 def create_person(
     payload: PersonInput,
@@ -123,4 +135,37 @@ def delete_assurance(
 ):
     return service.delete_assurance(
         person_id=person_id, assurance_id=assurance_id, user=user, db=db
+    )
+
+
+@router.get("/v1/isms/people/{person_id}")
+def person_detail(
+    person_id: uuid.UUID, user=Depends(require_isms_read), db: Session = Depends(get_db)
+):
+    return service.record_detail(db=db, user=user, record_id=person_id, kind="person")
+
+
+@router.get("/v1/isms/vendors/{vendor_id}")
+def vendor_detail(
+    vendor_id: uuid.UUID, user=Depends(require_isms_read), db: Session = Depends(get_db)
+):
+    return service.record_detail(db=db, user=user, record_id=vendor_id, kind="vendor")
+
+
+@router.get("/v1/isms/people/{person_id}/quizzes")
+def person_quizzes(
+    person_id: uuid.UUID,
+    offset: int = 0,
+    assignments_offset: int = 0,
+    user=Depends(require_isms_read),
+    db: Session = Depends(get_db),
+):
+    from app.services.person_quizzes import person_quizzes as summary
+
+    return summary(
+        db=db,
+        user=user,
+        person_id=person_id,
+        offset=offset,
+        assignments_offset=assignments_offset,
     )

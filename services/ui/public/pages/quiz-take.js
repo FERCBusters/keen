@@ -2,7 +2,7 @@
 // Mitigator's trophy, the points earned and, when the quiz shows them, the
 // right answers. Answers on a page are saved as the person moves on from it,
 // so leaving part-way loses only the page on screen.
-import { initNavbar, apiGet, apiPost, apiPut, esc, toast } from '/app.js';
+import { errorText, initNavbar, apiGet, apiPost, apiPut, confirmAction, esc, toast } from '/app.js';
 import { dateText, mascotHtml, scoreText, TROPHIES } from '/pages/quiz-common.js';
 
 const $ = (id) => document.getElementById(id);
@@ -211,7 +211,7 @@ $('pageForm').addEventListener('submit', async (ev) => {
     renderPage();
     window.scrollTo?.(0, 0);
   } catch (error) {
-    toast(status, `Your answers were not saved: ${String(error)}`, 'danger');
+    toast(status, `Your answers were not saved: ${errorText(error)}`, 'danger');
   }
   $('next').disabled = false;
 });
@@ -225,9 +225,11 @@ $('handIn').addEventListener('click', async () => {
   const unanswered = attempt.questions.filter((q) => !answered(q)).length;
   if (
     unanswered &&
-    !confirm(
-      `${unanswered} question${unanswered === 1 ? ' is' : 's are'} unanswered. Hand in anyway?`,
-    )
+    !(await confirmAction({
+      title: 'Hand in with unanswered questions',
+      message: `${unanswered} question${unanswered === 1 ? ' is' : 's are'} unanswered. Hand in anyway?`,
+      confirmLabel: 'Hand in',
+    }))
   )
     return;
   $('handIn').disabled = true;
@@ -238,7 +240,7 @@ $('handIn').addEventListener('click', async () => {
     );
     render(view);
   } catch (error) {
-    toast(status, `Your answers were not handed in: ${String(error)}`, 'danger');
+    toast(status, `Your answers were not handed in: ${errorText(error)}`, 'danger');
     $('handIn').disabled = false;
   }
 });
@@ -255,7 +257,7 @@ async function load() {
       toast(status, 'Open a quiz from My quizzes on your account page.', 'warning');
     }
   } catch (error) {
-    toast(status, `This quiz cannot be opened: ${String(error)}`, 'danger');
+    toast(status, `This quiz cannot be opened: ${errorText(error)}`, 'danger');
   }
 }
 

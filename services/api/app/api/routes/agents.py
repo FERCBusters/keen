@@ -23,7 +23,7 @@ from app.security.auth import require_admin
 from app.security.client_ip import request_ip
 from app.security.rate_limit import fixed_window_allow
 from app.services import agents as service
-from app.services.agents import Registration, Rotation
+from app.services.agents import Assignment, Registration, Rotation
 from app.services.errors import DomainError
 
 
@@ -85,6 +85,11 @@ def listing(response: Response, db: Session = Depends(get_db)):
 def register(body: Registration, response: Response, db: Session = Depends(get_db)):
     response.headers["Cache-Control"] = "no-store"
     return service.register(body=body, db=db)
+
+
+@admin.patch("/{agent_id}")
+def assign(agent_id: str, body: Assignment, db: Session = Depends(get_db)):
+    return service.assign(agent_id=agent_id, body=body, db=db)
 
 
 @admin.post("/{agent_id}/rotate")

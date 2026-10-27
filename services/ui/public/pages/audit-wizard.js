@@ -3,6 +3,8 @@
 // last step, when the audit and its attendees are created together.
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
+  isoDateToDisplay,
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -12,9 +14,13 @@ import {
   frameworkLabel,
   withFramework,
   rememberSamplingAudit,
+  unsavedGuard,
 } from '/app.js';
 
 const $ = (id) => document.getElementById(id);
+
+// Leaving the wizard with unsaved details warns first and shows a hint.
+const unsaved = unsavedGuard({ root: $('wizardForm'), hint: $('unsaved') });
 
 // The details step works while the navigation is still loading: nothing
 // submits the form early, and the highlighted card follows the chosen type.
@@ -171,7 +177,7 @@ async function fetchList(key, url, pick = (data) => data?.items || []) {
   try {
     catalogue[key] = pick(await apiGet(url));
   } catch (error) {
-    failures[key] = String(error?.message || error);
+    failures[key] = errorText(error);
   }
 }
 
@@ -344,7 +350,7 @@ function loadPeople() {
         ? apiGet('/api/v1/isms/people').catch(() => ({ items: [] }))
         : { items: [] },
       apiGet('/api/v1/audits/users').catch((error) => {
-        notify(`Could not list Keen accounts: ${String(error?.message || error)}`, 'warning');
+        notify(`Could not list Keen accounts: ${errorText(error)}`, 'warning');
         return { items: [] };
       }),
     ]);
@@ -434,7 +440,7 @@ $('attendeeList').addEventListener('click', (ev) => {
 // --- Review and create -------------------------------------------------------
 
 function dateText(value) {
-  return value || 'not set';
+  return isoDateToDisplay(value) || 'not set';
 }
 
 function scopeSummary() {
@@ -503,11 +509,12 @@ async function create() {
   try {
     created = await apiPost('/api/v1/audits', payload());
   } catch (error) {
-    notify(`Could not create the audit: ${String(error?.message || error)}`);
+    notify(`Could not create the audit: ${errorText(error)}`);
     return;
   } finally {
     button.disabled = false;
   }
+  unsaved.markClean();
   rememberSamplingAudit(created.id);
   status.style.display = 'none';
   renderDone();

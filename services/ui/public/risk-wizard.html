@@ -25,7 +25,7 @@
       </div>
     </div>
 
-    <div id="status" class="alert alert-info" style="display:none;"></div>
+    <div id="status" class="alert alert-info" style="display:none;" role="status"></div>
 
     <ol class="risk-wizard-steps list-unstyled d-flex flex-wrap gap-2 mb-3 no-print" id="wizardSteps" aria-label="Steps"></ol>
 
@@ -72,7 +72,7 @@
                 </div>
               </div>
             </div>
-            <div id="selectedAssetSummary" class="alert alert-light border mt-3 py-2 mb-0" hidden></div>
+            <div id="selectedAssetSummary" class="alert alert-light border mt-3 py-2 mb-0" hidden role="status"></div>
           </div>
           <div data-subject="pestle" hidden>
             <h2 class="h5">Which business processes does it touch?</h2>
@@ -191,7 +191,7 @@
         <section class="risk-wizard-step" data-step="controls" hidden>
           <h2 class="h5">Which controls help with it?</h2>
           <p class="small-muted">Optional. Controls are the safeguards that reduce the risk. Tick the ones that apply in <span id="controlsFramework">this framework</span>; suggested controls are pre-ticked for you to review.</p>
-          <div id="suggestedControlsNote" class="alert alert-light border py-2" hidden></div>
+          <div id="suggestedControlsNote" class="alert alert-light border py-2" hidden role="status"></div>
           <input id="controlSearch" class="form-control form-control-sm mb-2" type="search" placeholder="Filter controls by reference or title" aria-label="Filter controls">
           <div id="controlList" class="border rounded p-2 risk-wizard-scroll"></div>
           <div class="small-muted mt-2"><span id="controlCount">0</span> selected.</div>

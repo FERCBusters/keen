@@ -305,10 +305,10 @@ test('objectives show status, owners and linked requirements', async (t) => {
   assert.match(ui.el('objectiveMeta').textContent, /^2026-12-31 · In Progress · updated/);
   assert.equal(ui.el('objectiveStatusValue').textContent, 'In Progress');
   assert.equal(ui.el('objectiveMetric').textContent, 'No metric recorded.');
-  // Other ISMS records link to the control's ISMS tab.
+  // Other ISMS records link to the control's Governance tab.
   assert.equal(
     ui.el('objectiveControls').querySelector('a').getAttribute('href'),
-    '/control.html?id=c1&tab=isms&framework=A',
+    '/control.html?id=c1&tab=governance&framework=A',
   );
   const body = await sample(ui, posted, 'sampleObjectiveAudit');
   assert.equal(body.entity_type, 'isms_objective');
@@ -384,25 +384,17 @@ for (const [name, path, message] of [
   [
     'isms-effectiveness-metric',
     '/api/v1/isms/effectiveness-metrics/x1',
-    /Failed to load effectiveness metric: Error: Record offline/,
+    /Failed to load effectiveness metric: Record offline/,
   ],
-  [
-    'isms-meeting',
-    '/api/v1/isms/meetings/x1',
-    /Failed to load meeting minutes: Error: Record offline/,
-  ],
-  ['isms-document', '/api/v1/isms/documents/x1', /Failed to load document: Error: Record offline/],
+  ['isms-meeting', '/api/v1/isms/meetings/x1', /Failed to load meeting minutes: Record offline/],
+  ['isms-document', '/api/v1/isms/documents/x1', /Failed to load document: Record offline/],
   [
     'isms-access',
     '/api/v1/isms/access-control-matrix/x1',
-    /Failed to load access control row: Error: Record offline/,
+    /Failed to load access control row: Record offline/,
   ],
-  [
-    'isms-objective',
-    '/api/v1/isms/objectives/x1',
-    /Failed to load objective: Error: Record offline/,
-  ],
-  ['isms-asset', '/api/v1/isms/assets/x1', /Failed to load asset: Error: Record offline/],
+  ['isms-objective', '/api/v1/isms/objectives/x1', /Failed to load objective: Record offline/],
+  ['isms-asset', '/api/v1/isms/assets/x1', /Failed to load asset: Record offline/],
 ])
   test(`${name} reports load failures and missing ids`, async (t) => {
     const failed = await detail(t, name, { path, fail: true, swot: true, sources: true });

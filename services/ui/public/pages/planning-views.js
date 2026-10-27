@@ -1,4 +1,4 @@
-import { esc, withFramework } from '/app.js';
+import { isoDateToDisplay, esc, withFramework } from '/app.js';
 
 export const statuses = [
   'defined',
@@ -33,7 +33,7 @@ function card(row, framework, editable) {
   return `<article class="card planning-card mb-2" ${editable ? `draggable="true" data-drag-id="${esc(row.id)}"` : ''}>
     <div class="card-body p-3"><div class="small-muted">${esc(label(row.kind || 'objective'))}${row.significance ? ` · ${row.significance}/5` : ''}</div>
     <a class="fw-bold" href="${esc(href(row, framework))}">${esc(row.title)}</a>
-    <div class="small-muted mt-2">${esc(row.target_date || 'No target date')}</div>
+    <div class="small-muted mt-2">${esc(isoDateToDisplay(row.target_date) || 'No target date')}</div>
     ${editable ? `<label class="small mt-2">Status<select class="form-select form-select-sm" data-status-id="${esc(row.id)}">${statuses.map((s) => `<option value="${s}" ${s === row.status ? 'selected' : ''}>${label(s)}</option>`).join('')}</select></label>` : `<div class="small">${esc(label(row.status))}</div>`}
     </div></article>`;
 }
@@ -51,7 +51,7 @@ function compactQuadrantCard(row, framework, editable) {
     : `<span class="badge text-bg-light planning-compact-status-text">${esc(label(row.status))}</span>`;
   return `<article class="card planning-card planning-card-compact mb-2"><div class="card-body planning-compact-row">
     <a class="fw-bold planning-compact-title" href="${esc(href(row, framework))}">${esc(row.title)}</a>
-    <div class="planning-compact-meta">${meter}${row.target_date ? `<time class="small-muted planning-compact-date" datetime="${esc(row.target_date)}" title="Target completion: ${esc(row.target_date)}"><span class="visually-hidden">Target completion: </span>${esc(row.target_date)}</time>` : ''}${statusControl}</div>
+    <div class="planning-compact-meta">${meter}${row.target_date ? `<time class="small-muted planning-compact-date" datetime="${esc(row.target_date)}" title="Target completion: ${esc(isoDateToDisplay(row.target_date))}"><span class="visually-hidden">Target completion: </span>${esc(isoDateToDisplay(row.target_date))}</time>` : ''}${statusControl}</div>
   </div></article>`;
 }
 function quadrantCards(items, framework, editable) {
@@ -177,7 +177,12 @@ export function renderTimeline(host, rows, framework) {
     .append('g')
     .attr('class', 'planning-date-axis')
     .attr('transform', 'translate(0,30)')
-    .call(d3.axisTop(x).tickValues(ticks).tickFormat(d3.utcFormat('%d %b %Y')));
+    .call(
+      d3
+        .axisTop(x)
+        .tickValues(ticks)
+        .tickFormat((d) => isoDateToDisplay(d.toISOString().slice(0, 10))),
+    );
   dated.forEach((row, i) => {
     const y = 52 + i * 38,
       end = x(parse(row.target_date)),
@@ -201,7 +206,7 @@ export function renderTimeline(host, rows, framework) {
         .attr('rx', 4)
         .attr('fill', row.status === 'completed' ? '#198754' : '#6f42c1')
         .append('title')
-        .text(`${row.start_date} → ${row.target_date}`);
+        .text(`${isoDateToDisplay(row.start_date)} → ${isoDateToDisplay(row.target_date)}`);
     else
       svg
         .append('path')

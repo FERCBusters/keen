@@ -1,4 +1,6 @@
 import {
+  fmtTs,
+  errorText,
   apiGet,
   apiPost,
   apiPatch,
@@ -41,7 +43,7 @@ export async function initBookstackDocuments(me, root) {
       pageOffset = data.next_offset;
       $('morePages').style.display = pageOffset == null ? 'none' : '';
     } catch (e) {
-      notify(`Could not load BookStack pages: ${String(e)}`, 'danger');
+      notify(`Could not load BookStack pages: ${errorText(e)}`, 'danger');
     }
   }
   async function loadTargets() {
@@ -69,7 +71,7 @@ export async function initBookstackDocuments(me, root) {
             .join(''),
       );
     } catch (e) {
-      notify(`Could not load framework requirements: ${String(e)}`, 'danger');
+      notify(`Could not load framework requirements: ${errorText(e)}`, 'danger');
     }
   }
   async function loadSnapshots() {
@@ -81,8 +83,8 @@ export async function initBookstackDocuments(me, root) {
           .map(
             (s) => `<tr class="${s.archived ? 'text-muted' : ''}">
       <td>${esc(s.document_title)}</td><td><a href="${esc(s.permalink)}" target="_blank" rel="noopener noreferrer">${esc(s.page_title)}${s.anchor ? ` #${esc(s.anchor)}` : ''}</a></td>
-      <td>${esc(s.target_framework || 'Deleted framework')} · ${esc(s.target_ref || 'Deleted requirement')}</td><td>${esc(s.captured_at)}</td>
-      <td>${s.revision_count ?? '-'} <small>${esc(s.page_updated_at || '')}</small></td>
+      <td>${esc(s.target_framework || 'Deleted framework')} · ${esc(s.target_ref || 'Deleted requirement')}</td><td>${esc(fmtTs(s.captured_at))}</td>
+      <td>${s.revision_count ?? '-'} <small>${esc(fmtTs(s.page_updated_at) || '')}</small></td>
       <td><a href="/api/v1/isms/bookstack-sections/${encodeURIComponent(s.id)}/snapshot">Download JSON</a><div class="small-muted" title="SHA-256 ${esc(s.sha256)}">SHA-256 ${esc(s.sha256.slice(0, 12))}…</div></td>
       <td>${canSampleIntoAudit(me, 'isms') ? `<button type="button" class="btn btn-sm btn-outline-primary" data-sample="${esc(s.id)}">Sample into audit</button>` : ''}
       ${manage ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-archive="${esc(s.id)}" data-archived="${s.archived}">${s.archived ? 'Restore' : 'Archive'}</button>` : ''}</td></tr>`,
@@ -90,7 +92,7 @@ export async function initBookstackDocuments(me, root) {
           .join('') ||
         '<tr><td colspan="7" class="small-muted">No policy versions captured yet.</td></tr>';
     } catch (e) {
-      notify(`Could not load policy evidence: ${String(e)}`, 'danger');
+      notify(`Could not load policy evidence: ${errorText(e)}`, 'danger');
     }
   }
   $('bookSelect').addEventListener('change', () => loadPages());
@@ -112,7 +114,7 @@ export async function initBookstackDocuments(me, root) {
       await loadSnapshots();
       notify('BookStack page version captured and linked.');
     } catch (err) {
-      notify(`Could not capture policy version: ${String(err)}`, 'danger');
+      notify(`Could not capture policy version: ${errorText(err)}`, 'danger');
     }
   });
   $('sectionRows').addEventListener('click', async (e) => {
@@ -140,7 +142,7 @@ export async function initBookstackDocuments(me, root) {
       await loadSnapshots();
       notify('Policy evidence status updated.');
     } catch (err) {
-      notify(`Could not update policy evidence: ${String(err)}`, 'danger');
+      notify(`Could not update policy evidence: ${errorText(err)}`, 'danger');
     }
   });
   async function init() {
@@ -169,7 +171,7 @@ export async function initBookstackDocuments(me, root) {
       await loadTargets();
       await loadSnapshots();
     } catch (e) {
-      notify(`Could not load BookStack catalogue: ${String(e)}`, 'danger');
+      notify(`Could not load BookStack catalogue: ${errorText(e)}`, 'danger');
     }
   }
   if (!manage) $('sectionForm').style.display = 'none';

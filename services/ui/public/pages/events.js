@@ -1,4 +1,6 @@
 import {
+  dateFormatPlaceholder,
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -6,9 +8,9 @@ import {
   fmtTs,
   tsSortKey,
   toast,
-  isoDateToDmy,
-  dmyToIsoDate,
-  wireIsoDmyDateField,
+  isoDateToDisplay,
+  displayDateToIso,
+  wireIsoDateTextField,
   qs,
   qbool,
   qint,
@@ -38,6 +40,19 @@ import { createEventSelection } from '/pages/event-selection.js';
 const me = await initNavbar();
 const framework = getCurrentFramework();
 enableTableSorting();
+
+// The events service keeps every event list page size in 1..200, coercing
+// larger requests to 200. Match the service values here so the meta line can
+// say when a requested page size was not honoured.
+const EVENT_LIMIT_MAX = 200;
+
+function coerceLimit(requested) {
+  const n = Number(requested);
+  if (!Number.isInteger(n)) return { limit: 50, capped: false };
+  if (n > EVENT_LIMIT_MAX) return { limit: EVENT_LIMIT_MAX, capped: true };
+  if (n <= 0) return { limit: n === 0 ? 50 : 1, capped: true };
+  return { limit: n, capped: false };
+}
 
 // Admin-only shortcut: jump straight to the Diary section.
 // Kept out of the HTML so non-admin users never see it.
@@ -129,7 +144,7 @@ const selLimit = document.getElementById('limit');
 const startDate = document.getElementById('startDate');
 const endDate = document.getElementById('endDate');
 
-// Visible dd/mm/yyyy fields (the hidden inputs above keep YYYY-MM-DD for API/URLs)
+// Visible preferred-format fields (the hidden inputs above keep YYYY-MM-DD for API/URLs)
 const startDateDmy = document.getElementById('startDateDmy');
 const endDateDmy = document.getElementById('endDateDmy');
 const startDatePick = document.getElementById('startDatePick');
@@ -172,6 +187,9 @@ let state = {
   total: 0,
   framework,
 };
+const initialLimit = coerceLimit(state.limit);
+state.limit = initialLimit.limit;
+state.limitCapped = initialLimit.capped;
 
 let sourceMeta = {};
 let controlsIndex = {};
@@ -309,9 +327,9 @@ function syncInputs() {
   // Hidden native date inputs keep YYYY-MM-DD values.
   if (startDate) startDate.value = state.start_date || '';
   if (endDate) endDate.value = state.end_date || '';
-  // Visible fields show dd/mm/yyyy.
-  if (startDateDmy) startDateDmy.value = isoDateToDmy(state.start_date || '');
-  if (endDateDmy) endDateDmy.value = isoDateToDmy(state.end_date || '');
+  // Visible fields follow the date preference.
+  if (startDateDmy) startDateDmy.value = isoDateToDisplay(state.start_date || '');
+  if (endDateDmy) endDateDmy.value = isoDateToDisplay(state.end_date || '');
   // control/source filled after options load
 }
 
@@ -531,7 +549,8 @@ function renderRows(items) {
 
   if ((items || []).length === 0) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="${columnCount}" class="small-muted p-4">No events match the current filters.</td>`;
+    tr.id = 'emptyState';
+    tr.innerHTML = `<td colspan="${columnCount}" class="small-muted p-4">No events match the current filters.<div>Older records may have been removed by the evidence retention policy.</div></td>`;
     tbody.appendChild(tr);
   }
 }
@@ -566,13 +585,14 @@ async function loadEvents() {
       state.start_ts && state.end_ts
         ? ` · window ${fmtTs(state.start_ts)}-${fmtTs(state.end_ts)}`
         : '';
-    meta.textContent = `${page.start}-${page.end} of ${page.total}${timeNote}`;
+    const limitNote = state.limitCapped ? ` · page size capped at ${state.limit}` : '';
+    meta.textContent = `${page.start}-${page.end} of ${page.total}${timeNote}${limitNote}`;
 
     renderRows(data.items || []);
 
     setOffsetPagerDisabled(pagerButtons, state);
   } catch (e) {
-    toast(status, `Failed to load events: ${String(e)}`, 'danger');
+    toast(status, `Failed to load events: ${errorText(e)}`, 'danger');
     meta.textContent = '-';
     tbody.innerHTML = `<tr><td colspan="${columnCount}" class="small-muted p-4">Failed to load events.</td></tr>`;
   }
@@ -588,7 +608,7 @@ function applyFromInputs(resetOffset = true) {
   state.conditions = conditionEditor.values();
   state.unmapped = chkUnmapped.checked;
 
-  // Sync visible dd/mm/yyyy fields into the hidden YYYY-MM-DD inputs.
+  // Sync visible date fields into the hidden YYYY-MM-DD inputs.
   const startUser = (startDateDmy?.value || '').trim();
   const endUser = (endDateDmy?.value || '').trim();
 
@@ -596,11 +616,11 @@ function applyFromInputs(resetOffset = true) {
     if (!startUser) {
       startDate.value = '';
     } else {
-      const iso = dmyToIsoDate(startUser);
+      const iso = displayDateToIso(startUser);
       if (iso) {
         startDate.value = iso;
       } else {
-        toast(status, "Invalid 'From' date. Use dd/mm/yyyy.", 'warning');
+        toast(status, `Invalid 'From' date. Use ${dateFormatPlaceholder()}.`, 'warning');
         // keep previous hidden value
       }
     }
@@ -609,11 +629,11 @@ function applyFromInputs(resetOffset = true) {
     if (!endUser) {
       endDate.value = '';
     } else {
-      const iso = dmyToIsoDate(endUser);
+      const iso = displayDateToIso(endUser);
       if (iso) {
         endDate.value = iso;
       } else {
-        toast(status, "Invalid 'To' date. Use dd/mm/yyyy.", 'warning');
+        toast(status, `Invalid 'To' date. Use ${dateFormatPlaceholder()}.`, 'warning');
         // keep previous hidden value
       }
     }
@@ -627,11 +647,11 @@ function applyFromInputs(resetOffset = true) {
   let endIso = endRaw ? parseIsoDate(endRaw) : '';
 
   if (startRaw && !startIso) {
-    toast(status, "Invalid 'From' date. Use dd/mm/yyyy.", 'warning');
+    toast(status, `Invalid 'From' date. Use ${dateFormatPlaceholder()}.`, 'warning');
     startIso = state.start_date || '';
   }
   if (endRaw && !endIso) {
-    toast(status, "Invalid 'To' date. Use dd/mm/yyyy.", 'warning');
+    toast(status, `Invalid 'To' date. Use ${dateFormatPlaceholder()}.`, 'warning');
     endIso = state.end_date || '';
   }
 
@@ -651,10 +671,11 @@ function applyFromInputs(resetOffset = true) {
   // Reflect normalized values back into the inputs.
   if (startDate) startDate.value = state.start_date || '';
   if (endDate) endDate.value = state.end_date || '';
-  if (startDateDmy) startDateDmy.value = isoDateToDmy(state.start_date || '');
-  if (endDateDmy) endDateDmy.value = isoDateToDmy(state.end_date || '');
+  if (startDateDmy) startDateDmy.value = isoDateToDisplay(state.start_date || '');
+  if (endDateDmy) endDateDmy.value = isoDateToDisplay(state.end_date || '');
 
   state.limit = parseInt(selLimit.value || '50', 10);
+  state.limitCapped = false;
   if (resetOffset) state.offset = 0;
 
   setQuery({
@@ -809,7 +830,7 @@ document.getElementById('saveSearch').addEventListener('click', async () => {
     await apiPost('/api/v1/me/saved-searches', { name, url });
     toast(status, 'Saved', 'success');
   } catch (e) {
-    toast(status, `Failed to save: ${String(e)}`, 'danger');
+    toast(status, `Failed to save: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -826,9 +847,11 @@ selLimit.addEventListener('change', () => {
 });
 
 // Date helpers: open native picker via the hidden <input type="date">, but
-// display dd/mm/yyyy in the visible text boxes.
-wireIsoDmyDateField(startDate, startDateDmy, startDatePick, { dispatchChangeOnText: false });
-wireIsoDmyDateField(endDate, endDateDmy, endDatePick, { dispatchChangeOnText: false });
+// display the preferred date format in the visible text boxes.
+for (const input of [startDateDmy, endDateDmy])
+  input?.setAttribute('placeholder', dateFormatPlaceholder());
+wireIsoDateTextField(startDate, startDateDmy, startDatePick, { dispatchChangeOnText: false });
+wireIsoDateTextField(endDate, endDateDmy, endDatePick, { dispatchChangeOnText: false });
 
 // Init from query
 syncInputs();

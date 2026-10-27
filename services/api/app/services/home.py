@@ -20,9 +20,12 @@ from app.security.permissions import has_permission
 from app.security.roles import attach_effective_role
 from app.services.context import ChangeContext
 from app.services.control_evidence_stats import get_control_evidence_stats_by_id
-from app.services.control_inheritance import evidence_pairs, has_inherited_evidence
+from app.services.control_inheritance import (
+    evidenced_control_ids,
+    has_inherited_evidence,
+)
 from app.services.isms.metric_values import threshold_status
-from app.services.stats import stats_summary
+from app.services.stats import stats_event_counts
 
 
 def outside_threshold(value, target, comparison, unit, target_unit):
@@ -78,15 +81,12 @@ def home_overview(
     if events:
         inherited = has_inherited_evidence(db, framework)
         if inherited:
-            pairs = evidence_pairs(framework, db)
-            supported = {
-                row[0] for row in db.query(pairs.c.control_id).distinct().all()
-            }
+            supported = evidenced_control_ids(db, framework)
         else:
-            stats = get_control_evidence_stats_by_id(db, framework)
+            evidence_stats = get_control_evidence_stats_by_id(db, framework)
             supported = {
                 key
-                for key, value in stats.items()
+                for key, value in evidence_stats.items()
                 if value.get("evidence_count", 0) > 0
             }
         scoped = [c for c in controls if c.in_scope]
@@ -96,9 +96,11 @@ def home_overview(
             "with_evidence": covered,
             "without_evidence": len(scoped) - covered,
         }
-        result["events"] = stats_summary(context=context, framework=framework, db=db)[
-            "events"
-        ]
+        # Only the event counters are shown; the control coverage above is
+        # this overview's own, so the full summary is not computed.
+        result["events"] = stats_event_counts(
+            context=context, framework=framework, db=db, inherited=inherited
+        )
         for c in sorted(
             (c for c in scoped if c.id not in supported), key=lambda c: c.ref
         )[:5]:

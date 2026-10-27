@@ -1,8 +1,10 @@
 import {
+  errorText,
   safeExternalHref,
   initNavbar,
   apiGet,
   apiDelete,
+  confirmAction,
   esc,
   fmtTs,
   getCurrentFramework,
@@ -478,7 +480,7 @@ async function load() {
     await loadChangelog();
     activateTabFromHashOrQuery();
   } catch (e) {
-    toast(status, `Failed to load effectiveness measure: ${String(e)}`, 'danger');
+    toast(status, `Failed to load effectiveness measure: ${errorText(e)}`, 'danger');
   }
 }
 
@@ -526,7 +528,15 @@ document.addEventListener('click', async (ev) => {
   }
   if (deleteBtn) {
     const id = deleteBtn.getAttribute('data-delete-metric');
-    if (!id || !confirm('Delete this effectiveness metric entry?')) return;
+    if (
+      !id ||
+      !(await confirmAction({
+        title: 'Delete effectiveness metric entry',
+        message: 'Delete this recorded metric entry? The measurement history loses the entry.',
+        confirmLabel: 'Delete',
+      }))
+    )
+      return;
     try {
       await apiDelete(
         `/api/v1/isms/effectiveness-metrics/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
@@ -539,7 +549,7 @@ document.addEventListener('click', async (ev) => {
       renderMetricTrend();
       toast(status, 'Effectiveness metric entry deleted.', 'success');
     } catch (e) {
-      toast(status, `Failed to delete metric entry: ${String(e)}`, 'danger');
+      toast(status, `Failed to delete metric entry: ${errorText(e)}`, 'danger');
     }
   }
 });

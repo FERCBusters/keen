@@ -69,8 +69,15 @@ async function admin(t, options = {}) {
   const ui = await loadUi('pages/admin.js', {
     html,
     url: 'https://keen.example/admin.html' + (options.hash || ''),
+    modules: {
+      'pages/confirm-modal.js': {
+        confirmAction: async (asked) => {
+          state.prompts.push(asked);
+          return options.confirm ?? true;
+        },
+      },
+    },
     setup(window) {
-      window.confirm = (m) => (state.prompts.push(m), options.confirm ?? true);
       window.bootstrap = {
         Modal: FakeModal,
         Tab: {
@@ -89,7 +96,6 @@ async function admin(t, options = {}) {
       setInterval: () => 0,
       clearInterval: () => {},
       FormData,
-      confirm: (m) => (state.prompts.push(m), options.confirm ?? true),
       prompt: (m) => (state.prompts.push(m), state.promptAnswer),
     },
     vendor: {
@@ -324,16 +330,14 @@ test('source catalogue failures are reported', async (t) => {
   const button = catalogue.querySelector('[data-source-pause]');
   button.click();
   await settle(
-    () =>
-      failedPut.el('status').textContent ===
-      'Could not change ingestion state: Error: Put rejected',
+    () => failedPut.el('status').textContent === 'Could not change ingestion state: Put rejected',
   );
   assert.equal(button.disabled, false);
   const offline = await admin(t, { fail: { catalogue: true } });
   await settle(
     () =>
       offline.el('source-catalogue').textContent ===
-      'Could not load source catalogue: Error: Catalogue offline',
+      'Could not load source catalogue: Catalogue offline',
   );
 });
 
@@ -357,7 +361,7 @@ test('disabled ingest runners are hidden and runners report queued work', async 
 
   el('resetLokiCursors').click();
   await settle(() => calls('POST', '/api/v1/admin/ingest/loki/reset').length === 1);
-  assert.match(state.prompts.at(-1), /Reset all Loki ingestion cursors/);
+  assert.equal(state.prompts.at(-1).title, 'Reset Loki cursors');
 });
 
 test('runner failures are shown in the output panel', async (t) => {
@@ -368,8 +372,8 @@ test('runner failures are shown in the output panel', async (t) => {
     '',
   );
   ui.document.querySelector('[data-run="/api/v1/admin/ingest/github/run"]').click();
-  await settle(() => el('status').textContent === 'Failed: Error: Rejected');
-  assert.equal(el('out').textContent, 'Error: Rejected');
+  await settle(() => el('status').textContent === 'Failed: Rejected');
+  assert.equal(el('out').textContent, 'Rejected');
 });
 
 test('declining the Loki reset does nothing', async (t) => {
@@ -439,10 +443,7 @@ test('users are listed safely, updated, reset and deleted', async (t) => {
   el('usersRows').querySelectorAll('[data-delete]')[1].click();
   await settle(() => el('usersStatus').textContent === `Deleted ${HOSTILE}sam`);
   assert.deepEqual(calls('DELETE', '/api/v1/users/')[0].url, '/api/v1/users/u%2F2');
-  assert.match(
-    state.prompts.at(-1),
-    /^Delete <img src=x onerror="globalThis\.pwned=1">sam permanently\?/,
-  );
+  assert.match(state.prompts.at(-1).title, /^Delete <img src=x onerror="globalThis\.pwned=1">sam$/);
   el('usersRefresh').click();
   await settle(() => calls('GET', '/api/v1/users').length === 4);
   assert.equal(ui.window.pwned, undefined);
@@ -451,16 +452,16 @@ test('users are listed safely, updated, reset and deleted', async (t) => {
 test('user actions report failures and an empty list', async (t) => {
   const { el } = await admin(t, { fail: { post: true } });
   el('usersRows').querySelector('[data-save]').click();
-  await settle(() => el('usersStatus').textContent === 'Failed: Error: Rejected');
+  await settle(() => el('usersStatus').textContent === 'Failed: Rejected');
   el('usersStatus').textContent = '';
   el('usersRows').querySelector('[data-reset]').click();
-  await settle(() => el('usersStatus').textContent === 'Failed: Error: Rejected');
+  await settle(() => el('usersStatus').textContent === 'Failed: Rejected');
   el('usersStatus').textContent = '';
   el('usersRows').querySelector('[data-delete]').click();
-  await settle(() => el('usersStatus').textContent === 'Failed: Error: Rejected');
+  await settle(() => el('usersStatus').textContent === 'Failed: Rejected');
   const offline = await admin(t, { fail: { users: true } });
   assert.match(offline.el('usersRows').textContent, /No users found/);
-  assert.equal(offline.el('usersStatus').textContent, 'Failed to load users: Error: Users offline');
+  assert.equal(offline.el('usersStatus').textContent, 'Failed to load users: Users offline');
 });
 
 test('new users need a username and password, and the form resets after creation', async (t) => {
@@ -468,10 +469,10 @@ test('new users need a username and password, and the form resets after creation
   const submit = () =>
     el('userCreateForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   submit();
-  await settle(() => el('usersStatus').textContent === 'Failed: Error: Username is required');
+  await settle(() => el('usersStatus').textContent === 'Failed: Username is required');
   el('newUsername').value = ' riley ';
   submit();
-  await settle(() => el('usersStatus').textContent === 'Failed: Error: Password is required');
+  await settle(() => el('usersStatus').textContent === 'Failed: Password is required');
   el('newEmail').value = 'riley@example.test';
   el('newPassword').value = 'synthetic-password-2';
   // The role menu shares its choices with the users table and the group form.
@@ -533,12 +534,10 @@ test('access dialog load and save failures are reported', async (t) => {
   FakeModal.shown = [];
   const { el } = await admin(t, { fail: { access: true, put: true } });
   el('usersRows').querySelector('[data-access]').click();
-  await settle(
-    () => el('userAccessStatus').textContent === 'Failed to load: Error: Access offline',
-  );
+  await settle(() => el('userAccessStatus').textContent === 'Failed to load: Access offline');
   assert.equal(el('userAccessEffective').textContent, '');
   el('userAccessSave').click();
-  await settle(() => el('userAccessStatus').textContent === 'Failed: Error: Put rejected');
+  await settle(() => el('userAccessStatus').textContent === 'Failed: Put rejected');
   el('userAccessUserId').value = '';
   el('userAccessSave').click();
 });
@@ -598,7 +597,7 @@ test('groups open into an editable detail with members and permissions', async (
 
   el('groupDelete').click();
   await settle(() => el('groupsStatus').textContent === 'Group deleted');
-  assert.equal(state.prompts.at(-1), 'Delete this group?');
+  assert.equal(state.prompts.at(-1).title, 'Delete group');
   assert.equal(el('groupDetail').style.display, 'none');
   assert.equal(el('groupDetailEmpty').style.display, 'block');
   // Without a selected group the detail actions do nothing.
@@ -637,7 +636,7 @@ test('New group opens the group form empty, creates the group and then edits it'
     ],
   );
   submit();
-  await settle(() => el('groupsStatus').textContent === 'Failed: Error: Group name is required');
+  await settle(() => el('groupsStatus').textContent === 'Failed: Group name is required');
   el('groupName').value = ' Reviewers ';
   el('groupRole').value = 'normal';
   submit();
@@ -668,27 +667,22 @@ test('New group opens the group form empty, creates the group and then edits it'
 test('group failures are reported', async (t) => {
   const offline = await admin(t, { fail: { groups: true } });
   assert.match(offline.el('groupsRows').textContent, /No groups/);
-  assert.equal(
-    offline.el('groupsStatus').textContent,
-    'Failed to load groups: Error: Groups offline',
-  );
+  assert.equal(offline.el('groupsStatus').textContent, 'Failed to load groups: Groups offline');
   const missing = await admin(t, { fail: { group: true } });
   missing.el('groupsRows').querySelector('tr').click();
-  await settle(
-    () => missing.el('groupsStatus').textContent === 'Failed to load group: Error: Group gone',
-  );
+  await settle(() => missing.el('groupsStatus').textContent === 'Failed to load group: Group gone');
   const rejected = await admin(t, { fail: { post: true, put: true } });
   rejected.el('groupsRows').querySelector('tr').click();
   await settle(() => rejected.el('groupName').value === 'Auditors');
   rejected.el('groupSave').click();
-  await settle(() => rejected.el('groupsStatus').textContent === 'Failed: Error: Rejected');
+  await settle(() => rejected.el('groupsStatus').textContent === 'Failed: Rejected');
   rejected.el('groupApplyMembers').click();
-  await settle(() => rejected.el('groupsStatus').textContent === 'Failed: Error: Put rejected');
+  await settle(() => rejected.el('groupsStatus').textContent === 'Failed: Put rejected');
   rejected.el('groupsStatus').textContent = '';
   rejected.el('groupApplyPermissions').click();
-  await settle(() => rejected.el('groupsStatus').textContent === 'Failed: Error: Put rejected');
+  await settle(() => rejected.el('groupsStatus').textContent === 'Failed: Put rejected');
   rejected.el('groupDelete').click();
-  await settle(() => rejected.el('groupsStatus').textContent === 'Failed: Error: Rejected');
+  await settle(() => rejected.el('groupsStatus').textContent === 'Failed: Rejected');
 });
 
 test('diary evidence collects controls, links, timestamp and attachments', async (t) => {
@@ -740,7 +734,7 @@ test('diary evidence collects controls, links, timestamp and attachments', async
   const submit = () =>
     el('diaryForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   submit();
-  await settle(() => el('status').textContent === 'Failed: Error: Missing summary');
+  await settle(() => el('status').textContent === 'Failed: Missing summary');
 
   el('diarySummary').value = ' Quarterly access review ';
   el('diaryDetails').value = 'Reviewed all admins';
@@ -802,8 +796,8 @@ test('a rejected diary entry is reported', async (t) => {
   const { el, ui } = await admin(t, { fail: { post: true } });
   el('diarySummary').value = 'Entry';
   el('diaryForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => el('status').textContent === 'Failed: Error: Rejected');
-  assert.equal(el('out').textContent, 'Error: Rejected');
+  await settle(() => el('status').textContent === 'Failed: Rejected');
+  assert.equal(el('out').textContent, 'Rejected');
   assert.equal(el('diarySummary').value, 'Entry');
 });
 
@@ -839,7 +833,7 @@ test('the entity changelog pages and filters', async (t) => {
 test('a changelog failure is reported', async (t) => {
   const { el } = await admin(t, { fail: { changelog: true } });
   await settle(
-    () => el('status').textContent === 'Failed to load entity changelog: Error: Changelog offline',
+    () => el('status').textContent === 'Failed to load entity changelog: Changelog offline',
   );
   assert.equal(el('entityChangeMeta').textContent, 'Showing 0-0 of 0');
   assert.equal(el('entityChangeNext').disabled, true);
@@ -916,8 +910,8 @@ test('changelog filters wait for Enter or change without auto-apply', async (t) 
 
 test('an audit trail failure is reported', async (t) => {
   const { el } = await admin(t, { fail: { audit: true } });
-  await settle(() => el('status').textContent === 'Failed to load audit: Error: Audit offline');
-  assert.equal(el('out').textContent, 'Error: Audit offline');
+  await settle(() => el('status').textContent === 'Failed to load audit: Audit offline');
+  assert.equal(el('out').textContent, 'Audit offline');
   assert.equal(el('auditMeta').textContent, 'Showing 0-0 of 0');
 });
 
@@ -960,7 +954,7 @@ test('tabs follow the address hash and update it when changed', async (t) => {
 test('the access dialog opens with empty lists when groups and permissions are unavailable', async (t) => {
   FakeModal.shown = [];
   const { el, ui } = await admin(t, { fail: { groups: true, permissions: true, controls: true } });
-  assert.match(el('groupsStatus').textContent, /Failed to load groups: Error: Groups offline/);
+  assert.match(el('groupsStatus').textContent, /Failed to load groups: Groups offline/);
   el('usersRows').querySelector('[data-access]').click();
   await settle(() => FakeModal.shown.includes('userAccessModal'));
   assert.equal(el('userAccessGroups').options.length, 0);

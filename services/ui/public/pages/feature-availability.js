@@ -19,6 +19,8 @@ const pages = {
   '/interested_parties.html': 'interested_parties',
   '/interested_party.html': 'interested_parties',
   '/assurance.html': 'isms',
+  '/person.html': 'people',
+  '/vendor.html': 'vendors',
   '/risks.html': 'risk_cia',
   '/risk.html': 'risk_cia',
   '/risk-wizard.html': 'risk_cia',

@@ -1,4 +1,4 @@
-import { fmtTsFilename, sourceLabel, toast } from '/app.js';
+import { errorText, fmtTsFilename, sourceLabel, toast } from '/app.js';
 import { maskDomText } from './masking.js';
 import { parseContentDispositionFilename, extFromContentType, buildZipStore } from './archive.js';
 import {
@@ -454,6 +454,17 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       _setPreviewSelected(modalEl, v);
     };
 
+    // Reveal a preview only once its image is ready to paint, so the
+    // placeholder never gives way to an empty frame while the blob loads.
+    const revealPreviewImg = (img, frame) => {
+      const show = () => frame?.classList.add('has-img');
+      if (img.complete && img.naturalWidth > 0) {
+        show();
+        return;
+      }
+      img.addEventListener('load', show, { once: true });
+    };
+
     // Bind preview-card click/keyboard handlers once.
     if (!modalEl.dataset.previewBound) {
       modalEl.dataset.previewBound = '1';
@@ -547,11 +558,11 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
 
           if (p.status === 'fulfilled' && portraitImg) {
             portraitImg.src = p.value;
-            portraitFrame?.classList.add('has-img');
+            revealPreviewImg(portraitImg, portraitFrame);
           }
           if (l.status === 'fulfilled' && landscapeImg) {
             landscapeImg.src = l.value;
-            landscapeFrame?.classList.add('has-img');
+            revealPreviewImg(landscapeImg, landscapeFrame);
           }
         } catch {
           // Non-fatal: previews are best-effort.
@@ -695,7 +706,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         } catch {}
       }, 2800);
     } catch (err) {
-      toast(status, String(err), 'danger');
+      toast(status, errorText(err), 'danger');
     } finally {
       if (btn) {
         btn.disabled = false;
@@ -778,7 +789,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         } catch {}
       }, 2800);
     } catch (err) {
-      toast(status, String(err), 'danger');
+      toast(status, errorText(err), 'danger');
     } finally {
       if (btn) {
         btn.disabled = false;

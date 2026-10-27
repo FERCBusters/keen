@@ -63,7 +63,7 @@ async function sitting(
   const ui = await page(t, 'quiz-take', {
     me: { can_view_quizzes: false },
     query,
-    globals: { confirm: confirm || (() => true) },
+    confirm,
     setup(window) {
       // The clock ticks once straight away rather than every second.
       window.setInterval = (fn) => {
@@ -189,8 +189,8 @@ test('handing in with questions unanswered asks first', async (t) => {
   const posts = [];
   const { ui } = await sitting(t, {
     start: attempt({ pages_saved: 2 }),
-    confirm: (message) => {
-      asked = message;
+    confirm: (options) => {
+      asked = options.message;
       return false;
     },
     post: async (url) => {
@@ -233,7 +233,7 @@ test('a page that fails to save stays on screen, and so does a failed hand-in', 
   choose(1, 'o3');
   ui.el('pageForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => ui.el('status').textContent.includes('not saved'));
-  assert.equal(ui.el('status').textContent, 'Your answers were not saved: Error: offline');
+  assert.equal(ui.el('status').textContent, 'Your answers were not saved: offline');
   assert.equal(ui.el('pageLabel').textContent, 'Page 1 of 2');
   assert.equal(ui.el('next').disabled, false);
 
@@ -243,7 +243,7 @@ test('a page that fails to save stays on screen, and so does a failed hand-in', 
   write(2, 'Spoofed sender');
   ui.el('handIn').click();
   await settle(() => ui.el('status').textContent.includes('not handed in'));
-  assert.equal(ui.el('status').textContent, 'Your answers were not handed in: Error: round closed');
+  assert.equal(ui.el('status').textContent, 'Your answers were not handed in: round closed');
   assert.equal(ui.el('handIn').disabled, false);
   failing.handIn = false;
   ui.el('handIn').click();
@@ -409,6 +409,6 @@ test('a closed round, a missing link and a refused round explain themselves', as
   });
   assert.equal(
     refused.ui.el('status').textContent,
-    'This quiz cannot be opened: Error: Quiz round not found',
+    'This quiz cannot be opened: Quiz round not found',
   );
 });

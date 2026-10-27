@@ -275,9 +275,7 @@ test('existing PESTLE items are updated with PATCH', async (t) => {
 test('failed saves report the error and re-enable the save button', async (t) => {
   const { ui } = await pestleItem(t, { patchFail: true });
   ui.el('pestleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() =>
-    /Failed to save PESTLE\(E\) item: Error: Rejected/.test(ui.el('status').textContent),
-  );
+  await settle(() => /Failed to save PESTLE\(E\) item: Rejected/.test(ui.el('status').textContent));
   assert.equal(ui.el('savePestleItem').disabled, false);
   tab(ui, 'pestleRelevanceTab');
   await settle(() => ui.el('businessProcessRelevanceList').querySelector('select'));
@@ -385,7 +383,7 @@ test('deep links load relevance and changelog panes with the item', async (t) =>
 
 test('a metadata failure is reported as a load failure', async (t) => {
   const { ui } = await pestleItem(t, { fail: { meta: true } });
-  assert.match(ui.el('status').textContent, /Failed to load PESTLE\(E\) item: Error: Meta offline/);
+  assert.match(ui.el('status').textContent, /Failed to load PESTLE\(E\) item: Meta offline/);
 });
 
 test('deleting a PESTLE item requires confirmation', async (t) => {
@@ -474,7 +472,7 @@ test('a refused deletion is reported and the button is usable again', async (t) 
   const { ui, state } = await pestleItem(t, { globals: { confirm: () => true }, removeFail: true });
   ui.el('deletePestleItem').click();
   await settle(() => /Failed to delete PESTLE\(E\) item/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Failed to delete PESTLE(E) item: Error: Rejected');
+  assert.equal(ui.el('status').textContent, 'Failed to delete PESTLE(E) item: Rejected');
   assert.equal(ui.el('deletePestleItem').disabled, false);
   assert.deepEqual(state.removed, ['/api/v1/pestle/items/p1']);
   assert.equal(ui.el('pestleItemTitle').textContent, item().item);

@@ -13,6 +13,9 @@ export async function loadUi(
     globals = {},
     setup,
     scripts = [],
+    // Replacements for individual first-party modules, keyed by their path
+    // under public/ (for example 'pages/confirm-modal.js').
+    modules = {},
   } = {},
 ) {
   const runtimeErrors = [];
@@ -41,8 +44,13 @@ export async function loadUi(
     apiPut: unsupported,
     apiDelete: unsupported,
     fmtTs: (value) => String(value),
+    isoDateToDisplay: (value) => value || '',
     safeExternalHref: unsupported,
     toast: unsupported,
+    errorText: (err) => {
+      console.debug('STUB-ERRORTEXT', err);
+      return String(err?.message || err || '');
+    },
     sourceBadgeHtml: unsupported,
     initNavbar: unsupported,
     initCollapsibleFilterSections: unsupported,
@@ -108,6 +116,25 @@ export async function loadUi(
       ? new URL(specifier.slice(1), publicRoot)
       : new URL(specifier, parent.identifier);
     if (!next.href.startsWith(publicRoot.href)) throw new Error('Unexpected module ' + specifier);
+    const replacement = modules[next.href.slice(publicRoot.href.length)];
+    if (replacement) {
+      const key = next.href;
+      if (!cache.has(key)) {
+        cache.set(
+          key,
+          Promise.resolve(
+            new vm.SyntheticModule(
+              Object.keys(replacement),
+              function () {
+                for (const [k, v] of Object.entries(replacement)) this.setExport(k, v);
+              },
+              { context },
+            ),
+          ),
+        );
+      }
+      return cache.get(key);
+    }
     return moduleFor(next);
   }
   const module = await moduleFor(new URL(path, publicRoot));

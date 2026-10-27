@@ -230,7 +230,7 @@ test('story failures are reported and the selection is kept for another try', as
 
   ui.el('selectionBar').querySelector('[data-create-story]').click();
   await settle(() => ui.el('status').textContent.startsWith('Failed to create the story'));
-  assert.equal(ui.el('status').textContent, 'Failed to create the story: Error: Stories offline');
+  assert.equal(ui.el('status').textContent, 'Failed to create the story: Stories offline');
   assert.equal(ui.el('status').dataset.alert, 'danger');
   assert.equal(ui.el('selectionBar').hidden, false);
   assert.equal(ui.document.querySelectorAll('#rows [data-select-event]:checked').length, 1);
@@ -245,7 +245,7 @@ test('story failures are reported and the selection is kept for another try', as
   target.value = 's1';
   ui.el('selectionBar').querySelector('[data-add-to-story]').click();
   await settle(() => ui.el('status').textContent.startsWith('Failed to add to the story'));
-  assert.equal(ui.el('status').textContent, 'Failed to add to the story: Error: Stories offline');
+  assert.equal(ui.el('status').textContent, 'Failed to add to the story: Stories offline');
   assert.equal(
     ui.el('selectionBar').querySelector('[data-selection-count]').textContent,
     '2 selected',

@@ -1,4 +1,6 @@
 import {
+  isoDateToDisplay,
+  errorText,
   safeExternalHref,
   initNavbar,
   apiGet,
@@ -6,6 +8,7 @@ import {
   apiPatch,
   apiDelete,
   apiPostForm,
+  confirmAction,
   enableTableSorting,
   esc,
   fmtTs,
@@ -143,7 +146,7 @@ async function loadMeetingPeople() {
     meetingPeople = (await apiGet('/api/v1/isms/people')).items || [];
   } catch (err) {
     meetingPeople = [];
-    toast(status, `Could not load People: ${String(err)}`, 'warning');
+    toast(status, `Could not load People: ${errorText(err)}`, 'warning');
   }
 }
 
@@ -991,7 +994,9 @@ function populateEditForm(kind, item) {
           if ($('documentForm').dataset.editingId === item.id)
             $('docFolder').value = item.folder_id;
         })
-        .catch((err) => toast(status, `Could not load document folder: ${String(err)}`, 'warning'));
+        .catch((err) =>
+          toast(status, `Could not load document folder: ${errorText(err)}`, 'warning'),
+        );
     }
     documentTags = [...(item.tags || [])];
     renderDocumentTags();
@@ -1105,7 +1110,15 @@ async function deleteIsms(kind, id) {
   const item = findItem(kind, id);
   const label =
     item?.display || item?.title || item?.name || item?.asset || item?.goal || 'this ISMS item';
-  if (!confirm(`Delete ${label}? This will remove the ISMS record and its ISMS links.`)) return;
+  if (
+    !(await confirmAction({
+      title: `Delete ${label}`,
+      message: 'Delete the ISMS record and its ISMS links?',
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
+  )
+    return;
   await apiDelete(
     `/api/v1/isms/${ep}/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
   );
@@ -1251,7 +1264,7 @@ async function moveObjective(id, nextStatus) {
     toast(status, `Status changed to ${label(nextStatus)}.`, 'success');
   } catch (error) {
     renderObjectivePlanning();
-    let message = String(error);
+    let message = errorText(error);
     try {
       await ensureSection('objectives', { force: true });
     } catch {
@@ -1281,7 +1294,7 @@ function renderObjectives() {
     <td class="wrap"><div class="fw-semibold"><a href="${esc(objectiveHref(o))}">${esc(shorten(o.goal || o.requirement || 'Objective', 150))}</a></div><div class="small-muted">${esc(shorten(o.requirement || '', 160))}</div></td>
     <td class="wrap">${esc(shorten(o.metric || '-', 180))}</td>
     <td class="isms-objectives-owner-cell">${objectiveUserPill(o.owner)}</td>
-    <td class="wrap">${esc(o.completion_target_date || '-')}</td>
+    <td class="wrap">${esc(isoDateToDisplay(o.completion_target_date) || '-')}</td>
     <td class="isms-objectives-resources-cell">${objectiveUserBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 100))}</div></td>
     <td class="wrap">${controlBadges(o.controls, framework)}</td><td class="wrap">${clauseBadges(o.clauses, framework)}</td>${actionsHtml('objective', o.id, 'isms-objectives-actions')}
   </tr>`,
@@ -1909,7 +1922,7 @@ function renderMeetings() {
             .filter(Boolean)
             .join('<br>') || '<span class="small-muted">-</span>';
         const href = meetingHref(m);
-        return `<tr data-isms-row="meeting"><td>${esc(m.date || '-')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('-') || '-')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls, framework)}</td><td>${clauseBadges(m.clauses, framework)}</td>${actionsHtml('meeting', m.id)}</tr>`;
+        return `<tr data-isms-row="meeting"><td>${esc(isoDateToDisplay(m.date) || '-')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('-') || '-')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls, framework)}</td><td>${clauseBadges(m.clauses, framework)}</td>${actionsHtml('meeting', m.id)}</tr>`;
       })
       .join('') || emptyRow(9, 'No meeting minutes yet.');
 }
@@ -1917,7 +1930,7 @@ function renderMeetings() {
 function populateForms() {
   initRichTextEditors($('documentForm'));
   loadDocumentFolders().catch((err) =>
-    toast(status, `Could not load document folders: ${String(err)}`, 'warning'),
+    toast(status, `Could not load document folders: ${errorText(err)}`, 'warning'),
   );
   for (const id of [
     'objectiveFormCard',
@@ -2014,7 +2027,7 @@ function renderAccessFormOptions(targetAccountValues = []) {
 
 // A refused save leaves the form as it was and says why.
 function reportIsmsFailure(error) {
-  toast(status, `Could not save: ${String(error?.message || error)}`, 'danger');
+  toast(status, `Could not save: ${errorText(error)}`, 'danger');
 }
 function onIsmsSubmit(id, handler) {
   $(id)?.addEventListener('submit', async (ev) => {
@@ -2243,7 +2256,7 @@ async function loadSwotOverview() {
     $('swotNext').disabled = swotOffset + result.items.length >= result.total;
   } catch (error) {
     $('swotQuadrants').replaceChildren();
-    $('swotSummary').textContent = `Unable to load SWOT: ${String(error)}`;
+    $('swotSummary').textContent = `Unable to load SWOT: ${errorText(error)}`;
     $('swotPrevious').disabled = swotOffset === 0;
   } finally {
     swotLoading = false;
@@ -2302,7 +2315,7 @@ async function load() {
   try {
     await ensureSection('overview');
   } catch (e) {
-    toast(status, `Failed to load ISMS: ${String(e)}`, 'danger');
+    toast(status, `Failed to load ISMS: ${errorText(e)}`, 'danger');
   }
 }
 
@@ -2313,7 +2326,7 @@ async function reloadAfter(message, section = null) {
     await ensureSection(target, { force: true });
     toast(status, message, 'success');
   } catch (e) {
-    toast(status, `Failed to reload ISMS: ${String(e)}`, 'danger');
+    toast(status, `Failed to reload ISMS: ${errorText(e)}`, 'danger');
   }
 }
 
@@ -2395,7 +2408,7 @@ $('docAddFolder')?.addEventListener('click', async () => {
     $('docNewFolder').value = '';
     toast(status, 'Folder created and selected.', 'success');
   } catch (err) {
-    toast(status, String(err), 'danger');
+    toast(status, errorText(err), 'danger');
   }
 });
 $('docNewFolder')?.addEventListener('keydown', (event) => {
@@ -2550,7 +2563,7 @@ $('meetingCreatePerson')?.addEventListener('click', async () => {
     updateMeetingPersonBubble();
     toast(status, 'Person added to the directory and selected as an attendee.', 'success');
   } catch (err) {
-    toast(status, `Could not add Person: ${String(err)}`, 'danger');
+    toast(status, `Could not add Person: ${errorText(err)}`, 'danger');
   }
 });
 onIsmsSubmit('meetingForm', async (ev) => {
@@ -2648,7 +2661,15 @@ document.addEventListener('click', async (ev) => {
       const id = licenseDeleteBtn.getAttribute('data-license-delete');
       const item = licenses().find((l) => String(l.id) === String(id));
       const label = item?.name || 'this license';
-      if (!confirm(`Delete ${label}? Licenses related to assets cannot be deleted.`)) return;
+      if (
+        !(await confirmAction({
+          title: `Delete ${label}`,
+          message:
+            'Delete this license from the licence register? Licenses related to assets cannot be deleted.',
+          confirmLabel: 'Delete',
+        }))
+      )
+        return;
       await apiDelete(
         `/api/v1/isms/licenses/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
       );
@@ -2667,7 +2688,16 @@ document.addEventListener('click', async (ev) => {
       const id = awsAccountDeleteBtn.getAttribute('data-aws-account-delete');
       const item = awsAccounts().find((a) => String(a.id) === String(id));
       const label = item?.name || 'this hosting account';
-      if (!confirm(`Delete ${label}? This removes it from access control matrix rows.`)) return;
+      if (
+        !(await confirmAction({
+          title: `Delete ${label}`,
+          message:
+            'Delete this hosting account? It is removed from access control matrix rows, and the access it recorded is no longer listed.',
+          confirmLabel: 'Delete',
+          danger: true,
+        }))
+      )
+        return;
       await apiDelete(`/api/v1/isms/aws-accounts/${encodeURIComponent(id)}`);
       resetAwsAccountForm();
       await reloadAfter('hosting account deleted');
@@ -2690,7 +2720,7 @@ document.addEventListener('click', async (ev) => {
       resetForm(cancelBtn.getAttribute('data-isms-cancel-edit'));
     }
   } catch (e) {
-    toast(status, `ISMS action failed: ${String(e)}`, 'danger');
+    toast(status, `ISMS action failed: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -2741,14 +2771,14 @@ for (const btn of Array.from(document.querySelectorAll('#ismsTabs [data-bs-toggl
     url.searchParams.set('tab', tabName);
     window.history.replaceState({}, '', url.toString());
     ensureSection(section).catch((e) =>
-      toast(status, `Failed to load ISMS section: ${String(e)}`, 'danger'),
+      toast(status, `Failed to load ISMS section: ${errorText(e)}`, 'danger'),
     );
   });
 }
 
 load()
   .then(() => activateInitialTab())
-  .catch((e) => toast(status, `Failed to load ISMS: ${String(e)}`, 'danger'));
+  .catch((e) => toast(status, `Failed to load ISMS: ${errorText(e)}`, 'danger'));
 
 // BookStack is part of document management and loads only when expanded.
 const bookstackDocuments = document.getElementById('bookstackDocuments');
@@ -2763,7 +2793,7 @@ if (bookstackDocuments && me?.bookstack_enabled) {
       await initBookstackDocuments(me, document.getElementById('bookstackDocumentContent'));
     } catch (error) {
       loaded = false;
-      toast(status, `Could not open BookStack documents: ${String(error)}`, 'danger');
+      toast(status, `Could not open BookStack documents: ${errorText(error)}`, 'danger');
     }
   });
   if (new URLSearchParams(location.search).get('bookstack') === '1') bookstackDocuments.open = true;

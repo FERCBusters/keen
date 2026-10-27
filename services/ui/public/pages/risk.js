@@ -1,5 +1,7 @@
 import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
+  isoDateToDisplay,
+  errorText,
   initNavbar,
   apiGet,
   esc,
@@ -243,7 +245,9 @@ function renderRisk(risk) {
   if (riskParties)
     riskParties.innerHTML = partyBadgesHtml(risk?.interested_parties, risk?.framework || framework);
   if (riskTreatment) {
-    const due = risk?.treatment_due_at ? ` · due ${esc(risk.treatment_due_at)}` : '';
+    const due = risk?.treatment_due_at
+      ? ` · due ${esc(isoDateToDisplay(risk.treatment_due_at))}`
+      : '';
     riskTreatment.innerHTML = `${esc(treatmentLabel(risk?.treatment_strategy))} <span class="small-muted">(${esc(treatmentStatusLabel(risk?.treatment_status))}${due})</span>${risk?.treatment_plan ? `<div class="small whitespace-pre-wrap mt-1">${esc(risk.treatment_plan)}</div>` : ''}`;
   }
   setText(threatSummary, threat, 'No threat summary.');
@@ -266,7 +270,7 @@ sampleRiskAudit?.addEventListener('click', () => {
 
 async function loadRisk() {
   // Try the API even when the user lacks global risk.read: risk owners can
-  // view their own risks from Account → Risks I own. The backend still
+  // view their own risks from Account → My Risks. The backend still
   // enforces risk.read/ownership.
   if (!id) {
     toast(status, 'Missing risk id.', 'danger');
@@ -280,7 +284,7 @@ async function loadRisk() {
     if (qs('tab') === 'changelog') await loadRiskChangelog();
     if (qs('tab') === 'questions') await riskQuestions.refresh();
   } catch (e) {
-    toast(status, `Failed to load risk: ${String(e)}`, 'danger');
+    toast(status, `Failed to load risk: ${errorText(e)}`, 'danger');
     if (linkedControls)
       linkedControls.innerHTML = '<span class="text-danger">Failed to load linked controls.</span>';
   }

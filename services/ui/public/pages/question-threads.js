@@ -3,11 +3,13 @@
 // row helpers for the question queue and each person's own questions.
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
+  errorText,
   apiDelete,
   apiGet,
   apiPatch,
   apiPost,
   apiPostForm,
+  confirmAction,
   esc,
   fmtTs,
   safeExternalHref,
@@ -69,7 +71,15 @@ export function questionActionsHtml(item, { framework, canDelete }) {
 
 // Asks first; resolves to true once the thread is deleted.
 export async function deleteQuestionThread(threadId) {
-  if (!confirm('Delete this question thread and all replies?')) return false;
+  if (
+    !(await confirmAction({
+      title: 'Delete question thread',
+      message: 'Delete this question thread and all of its replies?',
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
+  )
+    return false;
   await apiDelete(`/api/v1/questions/${encodeURIComponent(threadId)}`);
   return true;
 }
@@ -228,7 +238,7 @@ export function mountQuestionThreads({
       }
       focusRequestedThread();
     } catch (err) {
-      list.innerHTML = `<div class="text-danger small">Failed to load questions: ${esc(String(err))}</div>`;
+      list.innerHTML = `<div class="text-danger small">Failed to load questions: ${esc(errorText(err))}</div>`;
     }
   }
 
@@ -240,7 +250,7 @@ export function mountQuestionThreads({
     try {
       await work();
     } catch (err) {
-      toast(status, String(err), 'danger');
+      toast(status, errorText(err), 'danger');
     } finally {
       button.disabled = false;
       button.textContent = label;
@@ -296,7 +306,7 @@ export function mountQuestionThreads({
       await apiPatch(`/api/v1/admin/questions/${encodeURIComponent(tid)}`, { status: menu.value });
       await refresh();
     } catch (err) {
-      toast(status, String(err), 'danger');
+      toast(status, errorText(err), 'danger');
     }
   });
 

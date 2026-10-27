@@ -59,6 +59,7 @@ async function editor(t, options = {}) {
   const ui = await page(t, 'framework-editor', {
     htmlName: 'admin',
     globals: options.globals,
+    confirm: options.confirm,
     get: async (u) => {
       if (u.pathname === '/api/v1/admin/framework-selection') {
         if (options.fail) throw new Error('Selection offline');
@@ -101,7 +102,12 @@ async function editor(t, options = {}) {
     },
   });
   const $ = (id) => ui.el('fe-' + id);
-  await settle(() => $('tree').children.length || $('message').textContent);
+  await settle(
+    () =>
+      $('tree').children.length ||
+      $('message').textContent ||
+      ($('slug').value && !state.nodes[$('slug').value]?.length),
+  );
   return { ui, state, $ };
 }
 
@@ -141,10 +147,7 @@ test('organisation framework selection respects environment restrictions and sav
       ['C', false, true],
     ],
   );
-  assert.match(
-    $('organisation-frameworks').textContent,
-    /<b>Gamma<\/b> \(C\) · excluded by environment/,
-  );
+  assert.match($('organisation-frameworks').textContent, /<b>Gamma<\/b> · excluded by environment/);
   assert.equal($('organisation-frameworks').querySelector('b'), null);
   assert.equal(
     $('organisation-note').textContent,
@@ -305,7 +308,7 @@ test('node references are stable and required fields are validated', async (t) =
 test('node deletion confirms and reports server refusals', async (t) => {
   const prompts = [];
   const { ui, state, $ } = await editor(t, {
-    globals: { confirm: (m) => (prompts.push(m), true) },
+    confirm: (options) => (prompts.push(options), true),
   });
   $('delete-node').click();
   assert.equal(prompts.length, 0);
@@ -313,9 +316,9 @@ test('node deletion confirms and reports server refusals', async (t) => {
   $('delete-node').click();
   await settle(() => $('message').textContent === 'Node deleted');
   assert.deepEqual(state.removed, ['/api/v1/admin/frameworks/A/nodes/annex_control/A.5.1']);
-  assert.equal(prompts[0], 'Delete annex_control A.5.1?');
+  assert.equal(prompts[0].title, 'Delete annex_control A.5.1');
 
-  const refused = await editor(t, { deleteFail: true, globals: { confirm: () => true } });
+  const refused = await editor(t, { deleteFail: true });
   [...refused.$('tree').children][0].click();
   refused.$('delete-node').click();
   await settle(() => refused.$('message').textContent === 'Node has children');
@@ -444,4 +447,118 @@ test('Previous and Next move through the tree in its displayed order', async (t)
   assert.equal($('next-node').disabled, true);
   $('next-node').click();
   assert.equal($('ref').value, rows().at(-1).textContent.split('  ')[0]);
+});
+
+test('framework cards and the selected framework open comparison without changing organisation selection', async (t) => {
+  const { ui, $, state } = await editor(t);
+  const checked = [...$('organisation-frameworks').querySelectorAll('input:checked')].map(
+    (el) => el.value,
+  );
+  ui.document.querySelector('[data-compare-framework="B"]').click();
+  const host = ui.el('frameworkComparison');
+  assert.equal(host.hidden, false);
+  assert.equal(host.querySelector('[data-before]').value, 'B');
+  assert.deepEqual(
+    [...$('organisation-frameworks').querySelectorAll('input:checked')].map((el) => el.value),
+    checked,
+  );
+  host.querySelector('[data-close]').click();
+  $('compare').click();
+  assert.equal(host.querySelector('[data-before]').value, 'A');
+  assert.equal(state.put.length, 0);
+});
+
+test('catalogue pages and filters preserve selection outside the visible cards', async (t) => {
+  const items = Array.from({ length: 19 }, (_, i) => ({
+    slug: `f${i}`,
+    name: `Framework ${i}`,
+    description: `Description ${i}`,
+    enabled: i === 0,
+    allowed: i !== 18,
+  }));
+  const { ui, $, state } = await editor(t, { selection: selection({ items, default: 'f0' }) });
+  const visible = () => [...$('organisation-frameworks').children].filter((c) => !c.hidden);
+  assert.equal(visible().length, 8);
+  assert.match($('page-status').textContent, /Page 1 of 3/);
+  assert.equal($('page-prev').disabled, true);
+  $('page-next').click();
+  const box = visible()[0].querySelector('input');
+  box.checked = true;
+  box.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  $('catalogue-search').value = 'Description 17';
+  $('catalogue-search').dispatchEvent(new ui.window.Event('input'));
+  assert.equal(visible().length, 1);
+  assert.match(visible()[0].textContent, /Framework 17/);
+  $('save-selection').click();
+  await settle(() => state.put.length === 1);
+  assert.deepEqual(state.put[0].body.enabled, ['f0', 'f8']);
+  await settle(() => $('organisation-note').textContent.includes('saved'));
+  $('catalogue-search').value = '';
+  $('catalogue-search').dispatchEvent(new ui.window.Event('input'));
+  $('enabled-only').checked = true;
+  $('enabled-only').dispatchEvent(new ui.window.Event('input'));
+  assert.equal(visible().length, 2);
+  $('select-all').click();
+  assert.equal($('organisation-frameworks').querySelectorAll('input:checked').length, 18);
+  $('deselect-all').click();
+  assert.equal(visible().length, 0);
+  assert.match($('page-status').textContent, /No frameworks/);
+  $('enabled-only').checked = false;
+  $('enabled-only').dispatchEvent(new ui.window.Event('input'));
+  $('page-next').click();
+  $('page-next').click();
+  assert.equal(visible().length, 3);
+  assert.equal($('page-next').disabled, true);
+  $('page-prev').click();
+  assert.match($('page-status').textContent, /Page 2 of 3/);
+});
+
+test('catalogue categories use OSA regions and safely put custom names under Other', async (t) => {
+  const items = [
+    { slug: 'iso_27001_2022', name: 'ISO 27001', enabled: true, allowed: true },
+    { slug: 'apra_cps_234', name: 'APRA', allowed: true },
+    { slug: 'api_1164', name: 'API', allowed: true },
+    {
+      slug: 'constructor',
+      name: '<img src=x>',
+      description: '<script>bad()</script>',
+      allowed: true,
+    },
+  ];
+  const { ui, $ } = await editor(t, { selection: selection({ items, default: items[0].slug }) });
+  const visible = () => [...$('organisation-frameworks').children].filter((c) => !c.hidden);
+  const region = (name) => [...$('categories').children].find((b) => b.dataset.category === name);
+  region('Asia-Pacific').click();
+  assert.equal(visible().length, 1);
+  assert.match(visible()[0].textContent, /APRA/);
+  assert.equal(region('Asia-Pacific').getAttribute('aria-pressed'), 'true');
+  region('Americas').click();
+  assert.equal(visible().length, 1);
+  region('Global').click();
+  assert.equal(visible().length, 2);
+  region('Other').click();
+  assert.equal(visible().length, 1);
+  assert.equal($('organisation-frameworks').querySelector('img,script'), null);
+  assert.match(visible()[0].textContent, /<script>bad/);
+  region('Africa').click();
+  assert.equal(visible().length, 0);
+});
+
+test('catalogue edit and new actions reveal a separate editor and retain browsing state', async (t) => {
+  const { ui, $ } = await editor(t);
+  assert.equal($('editor').hidden, true);
+  assert.equal($('catalogue').hidden, false);
+  $('catalogue-search').value = 'Beta';
+  $('catalogue-search').dispatchEvent(new ui.window.Event('input'));
+  ui.document.querySelector('[data-edit-framework="B"]').click();
+  await settle(() => $('slug').value === 'B');
+  assert.equal($('editor').hidden, false);
+  assert.equal($('catalogue').hidden, true);
+  $('back').click();
+  assert.equal($('editor').hidden, true);
+  assert.equal($('catalogue-search').value, 'Beta');
+  assert.equal(ui.document.activeElement, $('catalogue-search'));
+  $('create').click();
+  assert.equal($('editor').hidden, false);
+  assert.equal($('slug').value, '');
 });

@@ -850,10 +850,8 @@ class User(Base):
     # IANA timezone name (e.g. "Australia/Melbourne"). Optional.
     pref_timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    # UI theme id (e.g. "purple", "ocean", ...)
-    pref_theme: Mapped[str] = mapped_column(
-        String(32), default="purple", nullable=False
-    )
+    # UI theme id (e.g. "sand", "ink", ...)
+    pref_theme: Mapped[str] = mapped_column(String(32), default="sand", nullable=False)
 
     # Visible date input format preference. "default" means use KEEN_UI_DATE_FORMAT.
     pref_date_format: Mapped[str] = mapped_column(
@@ -3174,6 +3172,15 @@ class KeenAgent(Base):
     enrollment_profile_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("agent_enrollment_profiles.id"), index=True
     )
+    posture_assigned_at: Mapped[datetime | None] = mapped_column(DateTime)
+    agent_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="server", server_default="server"
+    )
+    person_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_people.id", ondelete="SET NULL"),
+        index=True,
+    )
     enrollment_nonce_hash: Mapped[str | None] = mapped_column(String(64))
     enrollment_ip: Mapped[str | None] = mapped_column(String(64))
     enrollment_labels: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
@@ -3186,6 +3193,12 @@ class KeenAgent(Base):
             "enrollment_nonce_hash",
             name="uq_agent_enrollment_attempt",
         ),
+        CheckConstraint(
+            "agent_type IN ('server', 'workstation')", name="ck_agent_type"
+        ),
+        CheckConstraint(
+            "agent_type = 'workstation' OR person_id IS NULL", name="ck_agent_person"
+        ),
     )
 
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -3195,6 +3208,23 @@ class KeenAgent(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime)
     health: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class AgentPostureObservation(Base):
+    """Latest evidence pointer per agent/provider/scope; deleted with its evidence."""
+
+    __tablename__ = "agent_posture_observations"
+    agent_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("keen_agents.id", ondelete="CASCADE"), primary_key=True
+    )
+    stream_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("events.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    observed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 # Retention is managed with explicit SQL so database row locks, the storage
@@ -3256,6 +3286,13 @@ Index(
     unique=True,
     postgresql_where=sql_text("status IN ('queued','running')"),
     _table=_evidence_purge_jobs,
+)
+# Evidence writers check for manual purge jobs; automatic history stays out.
+Index(
+    "ix_evidence_purge_jobs_manual_status",
+    _evidence_purge_jobs.c.status,
+    _evidence_purge_jobs.c.updated_at,
+    postgresql_where=sql_text("NOT automatic"),
 )
 _evidence_object_cleanup = Table(
     "evidence_object_cleanup",

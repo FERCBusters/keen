@@ -1,5 +1,6 @@
 import { mountFeatures } from '/pages/admin-features.js';
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
@@ -7,6 +8,7 @@ import {
   apiPut,
   apiDelete,
   apiPostForm,
+  confirmAction,
   esc,
   toast,
   debounce,
@@ -67,14 +69,14 @@ async function loadSourceCatalogue() {
           button.disabled = false;
           toast(
             document.getElementById('status'),
-            `Could not change ingestion state: ${String(error)}`,
+            `Could not change ingestion state: ${errorText(error)}`,
             'danger',
           );
         }
       });
     }
   } catch (e) {
-    node.textContent = `Could not load source catalogue: ${String(e)}`;
+    node.textContent = `Could not load source catalogue: ${errorText(e)}`;
   }
 }
 document
@@ -291,8 +293,8 @@ async function runJsonPost(path, body) {
     setOut(typeof res === 'string' ? res : JSON.stringify(res, null, 2));
     toast(status, res?.queued ? res.note || 'Collection queued.' : 'OK', 'success');
   } catch (e) {
-    setOut(String(e));
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    setOut(errorText(e));
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 }
 
@@ -413,7 +415,7 @@ function renderUsers(users) {
         toast(usersStatus, 'User updated', 'success');
         await refreshUsers(false);
       } catch (e) {
-        toast(usersStatus, `Failed: ${String(e)}`, 'danger');
+        toast(usersStatus, `Failed: ${errorText(e)}`, 'danger');
       }
     });
   });
@@ -443,7 +445,7 @@ function renderUsers(users) {
         await apiPost(`/api/v1/users/${encodeURIComponent(userId)}/password`, { new_password: pw });
         toast(usersStatus, `Password updated for ${username}`, 'success');
       } catch (e) {
-        toast(usersStatus, `Failed: ${String(e)}`, 'danger');
+        toast(usersStatus, `Failed: ${errorText(e)}`, 'danger');
       }
     });
   });
@@ -455,9 +457,13 @@ function renderUsers(users) {
       const userId = tr.getAttribute('data-user-id');
       const username = tr.querySelector('[data-username]')?.dataset.username || 'user';
       if (
-        !confirm(
-          `Delete ${username} permanently? This removes the account row but keeps historical audit/question records with a blank/deleted author.`,
-        )
+        !(await confirmAction({
+          title: `Delete ${username}`,
+          message:
+            'Delete this account permanently? The account row is removed; historical audit and question records keep a blank or deleted author.',
+          confirmLabel: 'Delete',
+          danger: true,
+        }))
       )
         return;
       usersStatus.style.display = 'none';
@@ -466,7 +472,7 @@ function renderUsers(users) {
         toast(usersStatus, `Deleted ${username}`, 'success');
         await refreshUsers(false);
       } catch (e) {
-        toast(usersStatus, `Failed: ${String(e)}`, 'danger');
+        toast(usersStatus, `Failed: ${errorText(e)}`, 'danger');
       }
     });
   });
@@ -484,7 +490,7 @@ async function refreshUsers(showLoading = true) {
     renderUsers(cachedUsers);
   } catch (e) {
     renderUsers([]);
-    toast(usersStatus, `Failed to load users: ${String(e)}`, 'danger');
+    toast(usersStatus, `Failed to load users: ${errorText(e)}`, 'danger');
   }
 }
 
@@ -511,7 +517,7 @@ if (userCreateForm) {
       if (newRole) newRole.value = 'inherit';
       await refreshUsers(false);
     } catch (e) {
-      toast(usersStatus, `Failed: ${String(e)}`, 'danger');
+      toast(usersStatus, `Failed: ${errorText(e)}`, 'danger');
     }
   });
 }
@@ -606,7 +612,7 @@ async function openUserAccessModal(userId, username) {
       userAccessEffective.textContent = Array.isArray(eff) ? eff.join(', ') : String(eff || '');
     }
   } catch (e) {
-    showUserAccessStatus(`Failed to load: ${String(e)}`, 'danger');
+    showUserAccessStatus(`Failed to load: ${errorText(e)}`, 'danger');
     if (userAccessEffective) userAccessEffective.textContent = '';
   }
 
@@ -634,7 +640,7 @@ if (userAccessSave) {
 
       showUserAccessStatus('Saved', 'success');
     } catch (e) {
-      showUserAccessStatus(`Failed: ${String(e)}`, 'danger');
+      showUserAccessStatus(`Failed: ${errorText(e)}`, 'danger');
     }
   });
 }
@@ -738,7 +744,7 @@ async function refreshGroups(showLoading = true) {
   } catch (e) {
     cachedGroups = [];
     renderGroups([]);
-    showGroupsStatus(`Failed to load groups: ${String(e)}`, 'danger');
+    showGroupsStatus(`Failed to load groups: ${errorText(e)}`, 'danger');
   }
 }
 
@@ -794,7 +800,7 @@ async function openGroupDetail(gid, { keepStatus = false } = {}) {
     // Highlight selection in list
     renderGroups(cachedGroups);
   } catch (e) {
-    showGroupsStatus(`Failed to load group: ${String(e)}`, 'danger');
+    showGroupsStatus(`Failed to load group: ${errorText(e)}`, 'danger');
   }
 }
 
@@ -829,14 +835,22 @@ groupForm?.addEventListener('submit', async (ev) => {
     await refreshGroups(false);
     if (g?.id) await openGroupDetail(g.id, { keepStatus: true });
   } catch (e) {
-    toast(groupsStatus, `Failed: ${String(e)}`, 'danger');
+    toast(groupsStatus, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 
 if (groupDelete) {
   groupDelete.addEventListener('click', async () => {
     if (!selectedGroupId) return;
-    if (!confirm('Delete this group?')) return;
+    if (
+      !(await confirmAction({
+        title: 'Delete group',
+        message: 'Delete this group? Members lose any access the group grants.',
+        confirmLabel: 'Delete',
+        danger: true,
+      }))
+    )
+      return;
     showGroupsStatus('', 'info');
     try {
       await apiDelete(`/api/v1/admin/groups/${encodeURIComponent(String(selectedGroupId))}`);
@@ -845,7 +859,7 @@ if (groupDelete) {
       showGroupForm(null);
       await refreshGroups(false);
     } catch (e) {
-      toast(groupsStatus, `Failed: ${String(e)}`, 'danger');
+      toast(groupsStatus, `Failed: ${errorText(e)}`, 'danger');
     }
   });
 }
@@ -863,7 +877,7 @@ if (groupApplyMembers) {
       await refreshGroups(false);
       await openGroupDetail(selectedGroupId, { keepStatus: true });
     } catch (e) {
-      showGroupsStatus(`Failed: ${String(e)}`, 'danger');
+      showGroupsStatus(`Failed: ${errorText(e)}`, 'danger');
     }
   });
 }
@@ -882,7 +896,7 @@ if (groupApplyPermissions) {
       await refreshGroups(false);
       await openGroupDetail(selectedGroupId, { keepStatus: true });
     } catch (e) {
-      showGroupsStatus(`Failed: ${String(e)}`, 'danger');
+      showGroupsStatus(`Failed: ${errorText(e)}`, 'danger');
     }
   });
 }
@@ -904,10 +918,15 @@ document.querySelectorAll('[data-run]').forEach((btn) => {
 });
 
 document.getElementById('resetLokiCursors')?.addEventListener('click', async () => {
-  const ok = window.confirm(
-    'Reset all Loki ingestion cursors to now? Existing events stay, and earlier Loki backlog is skipped.',
-  );
-  if (!ok) return;
+  if (
+    !(await confirmAction({
+      title: 'Reset Loki cursors',
+      message:
+        'Reset all Loki ingestion cursors to now? Existing events stay, and earlier Loki backlog is skipped.',
+      confirmLabel: 'Reset',
+    }))
+  )
+    return;
   await runJsonPost('/api/v1/admin/ingest/loki/reset', {});
 });
 
@@ -1146,8 +1165,8 @@ document.getElementById('diaryForm')?.addEventListener('submit', async (ev) => {
       diaryAddLinkRow();
     }
   } catch (e) {
-    setOut(String(e));
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    setOut(errorText(e));
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 
@@ -1202,7 +1221,7 @@ async function refreshEntityChanges() {
     renderEntityChanges(res.items || [], res.total || 0);
   } catch (e) {
     renderEntityChanges([], 0);
-    toast(status, `Failed to load entity changelog: ${String(e)}`, 'danger');
+    toast(status, `Failed to load entity changelog: ${errorText(e)}`, 'danger');
   }
 }
 
@@ -1318,8 +1337,8 @@ async function refreshAudit() {
     renderAudit(res.items || [], res.total || 0);
   } catch (e) {
     renderAudit([], 0);
-    setOut(String(e));
-    toast(status, `Failed to load audit: ${String(e)}`, 'danger');
+    setOut(errorText(e));
+    toast(status, `Failed to load audit: ${errorText(e)}`, 'danger');
   }
 }
 

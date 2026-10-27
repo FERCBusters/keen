@@ -9,7 +9,7 @@ an owner an administrator has changed.
 import pytest
 from app import bootstrap_hosted
 from app.core.config import settings
-from app.db.models import User, UserIdentity
+from app.db.models import IsmsPerson, User, UserIdentity
 from app.security.passwords import hash_password, verify_password
 from sqlalchemy.orm import sessionmaker
 
@@ -39,6 +39,8 @@ def test_the_first_run_creates_one_oidc_owner_and_later_runs_confirm_it(db):
         "admin",
         True,
     )
+    person = db.query(IsmsPerson).filter_by(user_id=owner.id).one()
+    assert (person.name, person.email) == (owner.username, EMAIL)
     (identity,) = db.query(UserIdentity).all()
     assert (identity.user_id, identity.provider, identity.issuer, identity.subject) == (
         owner.id,
@@ -51,6 +53,7 @@ def test_the_first_run_creates_one_oidc_owner_and_later_runs_confirm_it(db):
         assert not verify_password(guess, owner.password_hash)
 
     assert _bootstrap(db).id == owner.id
+    assert db.query(IsmsPerson).filter_by(user_id=owner.id).count() == 1
     assert (db.query(User).count(), db.query(UserIdentity).count()) == (1, 1)
 
 

@@ -193,7 +193,7 @@ test('the histogram stacks daily volume by source and opens one day of events', 
   );
   const bar = ui.titled(
     '#viz g.layer rect',
-    '2026-10-02\nGitHub: 1\nTotal: 4\nMapped: 4\nUnmapped: 0',
+    '2026-10-02 UTC\nGitHub: 1\nTotal: 4\nMapped: 4\nUnmapped: 0',
   );
   ui.click(bar, { ctrlKey: true });
   assert.deepEqual(ui.opened, [
@@ -232,7 +232,7 @@ test('sources beyond the twelfth share an Other stack that opens unfiltered even
   // The two quietest sources (2 + 1 events) make up the Other stack.
   const other = ui.titled(
     '#viz g.layer rect',
-    '2026-10-03\nOther: 3\nTotal: 105\nMapped: 105\nUnmapped: 0',
+    '2026-10-03 UTC\nOther: 3\nTotal: 105\nMapped: 105\nUnmapped: 0',
   );
   ui.click(other, { metaKey: true });
   assert.equal(
@@ -445,8 +445,8 @@ test('with auto-apply, editing the dates or Days reloads the chart', async (t) =
     typeDays(ui, days);
     await settle(() => window()[0] === start);
     assert.deepEqual(window(), [start, '2026-10-10'], days);
-    assert.equal(ui.el('dateFromDmy').value, start.split('-').reverse().join('/'));
-    assert.equal(ui.el('dateToDmy').value, '10/10/2026');
+    assert.equal(ui.el('dateFromDmy').value, start);
+    assert.equal(ui.el('dateToDmy').value, '2026-10-10');
   }
 });
 
@@ -571,7 +571,7 @@ test('a default needs a whole date range, and a refused save is reported', async
   await settle(() => /Could not save/.test(ui.el('status').textContent));
   assert.equal(
     ui.el('status').textContent,
-    'Could not save default visualisation: Error: Preferences offline',
+    'Could not save default visualisation: Preferences offline',
   );
   assert.equal(ui.el('status').dataset.alert, 'danger');
 
@@ -1233,7 +1233,7 @@ test('right-clicking a bar picks that bar alone, and a full window is reported',
   assert.ok(ui.el('histStory').classList.contains('d-none'));
   const bar = ui.titled(
     '#viz g.layer rect',
-    '2026-10-02\nGitHub: 1\nTotal: 4\nMapped: 4\nUnmapped: 0',
+    '2026-10-02 UTC\nGitHub: 1\nTotal: 4\nMapped: 4\nUnmapped: 0',
   );
   const menu = new ui.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true });
   bar.dispatchEvent(menu);
@@ -1322,7 +1322,7 @@ test('a window with no events and no note is refused, and a failed save is repor
   panel.querySelector('[data-window-title]').value = '';
   panel.querySelector('[data-window-create]').click();
   await settle(() => /Failed to create the story/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Failed to create the story: Error: Stories offline');
+  assert.equal(ui.el('status').textContent, 'Failed to create the story: Stories offline');
   assert.equal(posted.length, 1);
   assert.equal(posted[0].items[0].kind, 'note');
   assert.match(posted[0].title, /^Events from /);
@@ -1626,7 +1626,7 @@ test('a failed download is reported for each export format', async (t) => {
   for (const id of ['vizExportCsv', 'vizExportJson', 'vizExportSvg']) {
     ui.el('status').textContent = '';
     ui.el(id).click();
-    assert.equal(ui.el('status').textContent, 'Export failed: Error: No blob URLs here', id);
+    assert.equal(ui.el('status').textContent, 'Export failed: No blob URLs here', id);
     assert.equal(ui.el('status').dataset.alert, 'danger');
   }
   assert.deepEqual(ui.files, []);
@@ -1734,7 +1734,7 @@ test('a drag that fails to load reports the zoom failure', async (t) => {
   dragBrush(ui, 80, 180);
   await settle(() => hourRequests === 1);
   await settle(() => /Failed to load histogram zoom/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Failed to load histogram zoom: Error: Zoom offline');
+  assert.equal(ui.el('status').textContent, 'Failed to load histogram zoom: Zoom offline');
   assert.equal(ui.el('status').dataset.alert, 'danger');
 });
 

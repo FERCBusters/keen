@@ -1,6 +1,6 @@
 // Selecting events on the Events page to start a story or add to one. The
 // selection survives paging and filtering until it is cleared or used.
-import { apiGet, apiPost, esc, toast, withFramework } from '/app.js';
+import { errorText, apiGet, apiPost, esc, toast, withFramework } from '/app.js';
 import { featureEnabled } from '/pages/feature-availability.js';
 
 export const MAX_SELECTED = 200;
@@ -76,7 +76,7 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
       clear();
       location.assign(storyUrl(story.id));
     } catch (error) {
-      toast(statusEl, `Failed to create the story: ${String(error)}`, 'danger');
+      toast(statusEl, `Failed to create the story: ${errorText(error)}`, 'danger');
     }
   }
 
@@ -92,7 +92,7 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
           .join('');
       storiesLoaded = true;
     } catch (error) {
-      toast(statusEl, `Failed to list stories: ${String(error)}`, 'danger');
+      toast(statusEl, `Failed to list stories: ${errorText(error)}`, 'danger');
     }
   }
 
@@ -113,7 +113,7 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
       link.className = 'ms-2';
       statusEl?.append(link);
     } catch (error) {
-      toast(statusEl, `Failed to add to the story: ${String(error)}`, 'danger');
+      toast(statusEl, `Failed to add to the story: ${errorText(error)}`, 'danger');
     }
   }
 

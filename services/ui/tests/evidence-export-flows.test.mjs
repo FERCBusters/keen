@@ -285,7 +285,7 @@ test('exports wait for an event and a renderer', async (t) => {
 
   delete ui.window.html2canvas;
   await ui.exporter.downloadPdf(event);
-  assert.deepEqual(ui.notices.at(-1), ['Error: html2canvas is not available', 'danger']);
+  assert.deepEqual(ui.notices.at(-1), ['html2canvas is not available', 'danger']);
   assert.equal(ui.document.getElementById('btnPdf').disabled, false);
 });
 
@@ -371,6 +371,10 @@ test('the layout dialog previews both orientations and remembers the choice', as
   );
   assert.ok($('pdfPreviewPortraitImg').src.startsWith('blob:keen/'));
   assert.ok($('pdfPreviewLandscapeImg').src.startsWith('blob:keen/'));
+  // Each frame reveals its preview only once the image has loaded.
+  $('pdfPreviewPortraitImg').dispatchEvent(new ui.window.Event('load'));
+  $('pdfPreviewLandscapeImg').dispatchEvent(new ui.window.Event('load'));
+  assert.ok($('pdfPreviewPortraitImg').closest('.pdf-preview-frame').classList.contains('has-img'));
   assert.ok(
     $('pdfPreviewLandscapeImg').closest('.pdf-preview-frame').classList.contains('has-img'),
   );
@@ -700,10 +704,7 @@ test('a failed artifact download stops the ZIP and releases its body', async (t)
   );
   await ui.exporter.downloadArtifactsZip({ ...event, artifacts: [{ id: 'a1' }] });
 
-  assert.deepEqual(ui.notices.at(-1), [
-    'Error: Failed to download artifact a1 (HTTP 403)',
-    'danger',
-  ]);
+  assert.deepEqual(ui.notices.at(-1), ['Failed to download artifact a1 (HTTP 403)', 'danger']);
   assert.equal(cancelled, 1);
   assert.deepEqual(ui.downloads, []);
   assert.equal(ui.document.getElementById('btnZip').disabled, false);

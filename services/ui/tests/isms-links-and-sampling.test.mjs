@@ -253,7 +253,7 @@ test('a refused move on the objectives board is reported and the board reloaded'
   move();
 
   await settle(() => /Objective changed elsewhere/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Error: Objective changed elsewhere');
+  assert.equal(ui.el('status').textContent, 'Objective changed elsewhere');
   assert.equal(ui.el('status').dataset.alert, 'danger');
   await settle(() => summaries === before + 1);
   assert.equal(ui.el('objectivesPlanningView').hasAttribute('aria-busy'), false);
@@ -264,7 +264,7 @@ test('a refused move on the objectives board is reported and the board reloaded'
   await settle(() => /reload before trying again/.test(ui.el('status').textContent));
   assert.equal(
     ui.el('status').textContent,
-    'Error: Objective changed elsewhere Unable to refresh objectives; reload before trying again.',
+    'Objective changed elsewhere Unable to refresh objectives; reload before trying again.',
   );
 });
 
@@ -521,7 +521,7 @@ test('a People directory that cannot load is reported and the meetings still ren
     },
   });
   await settle(() => ui.el('meetingsRows').textContent.includes('Annual review'));
-  assert.equal(ui.el('status').textContent, 'Could not load People: Error: People offline');
+  assert.equal(ui.el('status').textContent, 'Could not load People: People offline');
   assert.equal(ui.el('status').dataset.alert, 'warning');
   assert.equal(ui.el('meetingPersonAttendees').options.length, 0);
 });
@@ -656,10 +656,7 @@ test('a folder list that cannot be refreshed while editing is reported as a warn
   ui.document.querySelector('[data-isms-edit="document"][data-isms-id="d1"]').click();
 
   await settle(() => ui.el('status').textContent.includes('Folders offline'));
-  assert.equal(
-    ui.el('status').textContent,
-    'Could not load document folder: Error: Folders offline',
-  );
+  assert.equal(ui.el('status').textContent, 'Could not load document folder: Folders offline');
   assert.equal(ui.el('status').dataset.alert, 'warning');
   assert.equal(ui.el('docFolder').value, '');
   assert.equal(ui.el('docTitle').value, 'Security policy');
@@ -681,7 +678,7 @@ test('a refused folder is reported and the typed name is kept', async (t) => {
 
   ui.el('docAddFolder').click();
 
-  await settle(() => ui.el('status').textContent === 'Error: Folder name taken');
+  await settle(() => ui.el('status').textContent === 'Folder name taken');
   assert.equal(ui.el('status').dataset.alert, 'danger');
   assert.equal(ui.el('docNewFolder').value, 'Policies');
   assert.equal(ui.el('docFolder').options.length, 1);
@@ -715,7 +712,6 @@ test('a delete the API refuses is reported and the row stays', async (t) => {
   const ui = await isms(t, {
     query: '&tab=assets',
     summary: (r) => ({ ...r, ...registerRows() }),
-    globals: { confirm: () => true },
     remove: () => {
       throw new Error('Asset has risks');
     },
@@ -724,7 +720,7 @@ test('a delete the API refuses is reported and the row stays', async (t) => {
 
   ui.document.querySelector('[data-isms-delete="asset"][data-isms-id="a1"]').click();
 
-  await settle(() => ui.el('status').textContent === 'ISMS action failed: Error: Asset has risks');
+  await settle(() => ui.el('status').textContent === 'ISMS action failed: Asset has risks');
   assert.equal(ui.el('status').dataset.alert, 'danger');
   assert.match(ui.el('assetsRows').textContent, /Database/);
   assert.deepEqual(
@@ -750,7 +746,7 @@ test('a person the directory refuses is reported and nothing is selected', async
 
   ui.el('meetingCreatePerson').click();
 
-  await settle(() => ui.el('status').textContent === 'Could not add Person: Error: Email in use');
+  await settle(() => ui.el('status').textContent === 'Could not add Person: Email in use');
   assert.equal(ui.el('status').dataset.alert, 'danger');
   assert.equal(ui.el('meetingNewPersonName').value, 'Eli');
   assert.equal(ui.el('meetingPersonAttendees').selectedOptions.length, 0);
@@ -876,7 +872,7 @@ test('a SWOT page that cannot load says so, and paging back returns to the start
   ui.el('swotNext').click();
 
   await settle(() => ui.el('swotSummary').textContent.includes('SWOT offline'));
-  assert.equal(ui.el('swotSummary').textContent, 'Unable to load SWOT: Error: SWOT offline');
+  assert.equal(ui.el('swotSummary').textContent, 'Unable to load SWOT: SWOT offline');
   assert.equal(ui.el('swotQuadrants').childElementCount, 0);
   // The failed page can still be left for the one before it.
   assert.equal(ui.el('swotPrevious').disabled, false);

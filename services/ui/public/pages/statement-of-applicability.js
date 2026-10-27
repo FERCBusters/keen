@@ -1,4 +1,6 @@
 import {
+  isoDateToDisplay,
+  errorText,
   safeExternalHref,
   initNavbar,
   apiGet,
@@ -396,7 +398,7 @@ function renderInterestedParties() {
         (item.controls || [])
           .map(
             (c) =>
-              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=interested-parties`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`,
+              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=governance`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`,
           )
           .join('') || '<span class="small-muted">-</span>';
       const comms =
@@ -446,7 +448,7 @@ function renderIsmsObjectives() {
     rows
       .map(
         (o) =>
-          `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement || '', 180))}</div></td><td>${esc(o.metric || '-')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(o.completion_target_date || '-')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${controlBadges(o.controls, framework)}</td><td>${clauseBadges(o.clauses, framework)}</td></tr>`,
+          `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement || '', 180))}</div></td><td>${esc(o.metric || '-')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(isoDateToDisplay(o.completion_target_date) || '-')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${controlBadges(o.controls, framework)}</td><td>${clauseBadges(o.clauses, framework)}</td></tr>`,
       )
       .join('') ||
     '<tr><td colspan="7" class="p-4 small-muted">No ISMS objectives match.</td></tr>';
@@ -575,7 +577,7 @@ async function load() {
     );
     renderAll();
   } catch (e) {
-    toast(status, `Failed to load Statement of Applicability: ${String(e)}`, 'danger');
+    toast(status, `Failed to load Statement of Applicability: ${errorText(e)}`, 'danger');
     controlsRows.innerHTML = '<tr><td class="p-4 small-muted">Failed to load controls.</td></tr>';
     clausesRows.innerHTML = '<tr><td class="p-4 small-muted">Failed to load clauses.</td></tr>';
     risksRows.innerHTML =

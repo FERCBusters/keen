@@ -1,4 +1,6 @@
 import {
+  isoDateToDisplay,
+  errorText,
   safeExternalHref,
   initNavbar,
   apiGet,
@@ -44,7 +46,7 @@ function badgeList(items, labelKey = 'ref', urlFn = null) {
 function controlBadges(items) {
   return badgeList(items, 'ref', (c) =>
     withFramework(
-      `/control.html?id=${encodeURIComponent(c.id)}&tab=isms`,
+      `/control.html?id=${encodeURIComponent(c.id)}&tab=governance`,
       c.framework || framework,
     ),
   );
@@ -80,8 +82,8 @@ function renderMeeting(meeting) {
   document.title = `Keen - ${title}`;
   $('meetingTitle').textContent = title;
   $('meetingMeta').textContent =
-    `${meeting.date || 'No date'} · ${[meeting.start_time, meeting.end_time].filter(Boolean).join('-') || 'No time recorded'}`;
-  $('meetingDate').textContent = meeting.date || '-';
+    `${isoDateToDisplay(meeting.date) || 'No date'} · ${[meeting.start_time, meeting.end_time].filter(Boolean).join('-') || 'No time recorded'}`;
+  $('meetingDate').textContent = isoDateToDisplay(meeting.date) || '-';
   $('meetingTime').textContent =
     [meeting.start_time, meeting.end_time].filter(Boolean).join('-') || '-';
   $('meetingAttendees').innerHTML = personBadges(meeting.attendees);
@@ -130,7 +132,7 @@ async function load() {
     await loadChangelog();
     activateTabFromHashOrQuery();
   } catch (e) {
-    toast(status, `Failed to load meeting minutes: ${String(e)}`, 'danger');
+    toast(status, `Failed to load meeting minutes: ${errorText(e)}`, 'danger');
   }
 }
 

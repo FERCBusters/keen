@@ -1,14 +1,14 @@
 import { confirmEvidenceRemoval } from './evidence-removal.js';
-import { apiGet, apiPost, apiPut, esc } from '/app.js';
+import { fmtTs, apiGet, apiPost, apiPut, confirmAction, esc, unsavedGuard } from '/app.js';
 const root = '/api/v1/admin/integrations';
 const $ = (id) => document.getElementById('ig-' + id);
 let data = { connections: [], collectors: [], runs: [], templates: [], measures: [] },
   current = null,
   definition = {},
   step = 0,
-  dirty = false,
   loading = false,
   authorized = false;
+const unsaved = unsavedGuard({ hint: $('unsaved') });
 const labels = ['Connect', 'Request', 'Evidence', 'Schedule', 'Test & publish'];
 function message(text, tone = 'info') {
   $('status').hidden = !text;
@@ -30,7 +30,7 @@ function state(status) {
   return `<span class="ig-state ${busy ? 'busy' : good ? 'good' : bad ? 'bad' : ''}">${busy ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>' : `<i class="bi bi-${good ? 'check-circle' : bad ? 'exclamation-circle' : 'pause-circle'}" aria-hidden="true"></i>`}${esc(status)}</span>`;
 }
 function date(v) {
-  return v ? new Date(v.endsWith('Z') ? v : v + 'Z').toLocaleString() : 'Never';
+  return v ? fmtTs(v) : 'Never';
 }
 function button(text, fn, cls = 'btn btn-outline-primary btn-sm') {
   const b = document.createElement('button');
@@ -191,7 +191,7 @@ async function removeItem(item) {
     onError: error,
     onRemoved: async () => {
       current = null;
-      dirty = false;
+      unsaved.markClean();
       watching = null;
       $('editor').hidden = true;
       $('home').hidden = false;
@@ -348,7 +348,7 @@ function fieldRow(name = '', map = {}) {
       '×',
       () => {
         row.remove();
-        dirty = true;
+        unsaved.markDirty();
       },
       'btn btn-outline-danger',
     ),
@@ -436,7 +436,7 @@ function open(c = null) {
     return;
   }
   current = c;
-  dirty = false;
+  unsaved.markClean();
   $('home').hidden = true;
   $('editor').hidden = false;
   $('name').value = c?.name || '';
@@ -471,7 +471,14 @@ async function historyRevisions() {
       row.append(
         text,
         button('Restore live revision', async () => {
-          if (!confirm('Restore this revision? The existing cursor is retained.')) return;
+          if (
+            !(await confirmAction({
+              title: 'Restore live revision',
+              message: 'Restore this revision? The existing cursor is retained.',
+              confirmLabel: 'Restore',
+            }))
+          )
+            return;
           await act(current, 'rollback', { revision: r.revision });
           open(current);
           showStep(4);
@@ -499,7 +506,7 @@ async function save() {
   current = current
     ? await apiPut(`${root}/collectors/${current.id}`, body)
     : await apiPost(`${root}/collectors`, body);
-  dirty = false;
+  unsaved.markClean();
   definition = current.draft;
   await load();
   message('Draft saved. Your live revision is unchanged.', 'success');
@@ -547,26 +554,44 @@ $('new').onclick = () => {
     connection();
   } else open();
 };
-$('close').onclick = () => {
-  if (dirty && !confirm('Discard unsaved changes?')) return;
+$('close').onclick = async () => {
+  if (
+    unsaved.isDirty() &&
+    !(await confirmAction({
+      title: 'Discard unsaved changes',
+      message: 'Closing the editor now loses the draft values you have typed.',
+      confirmLabel: 'Discard',
+      danger: true,
+    }))
+  )
+    return;
   $('home').hidden = false;
   $('editor').hidden = true;
   current = null;
-  dirty = false;
+  unsaved.markClean();
 };
 $('builder').onsubmit = (e) => e.preventDefault();
-$('builder').oninput = () => (dirty = true);
+$('builder').oninput = () => unsaved.markDirty();
 $('prev').onclick = () => showStep(Math.max(0, step - 1));
 $('next').onclick = () => showStep(Math.min(4, step + 1));
 $('template').onchange = templateDescription;
-$('apply-template').onclick = () => {
-  if (dirty && !confirm('Replace draft form values with this template?')) return;
+$('apply-template').onclick = async () => {
+  if (
+    unsaved.isDirty() &&
+    !(await confirmAction({
+      title: 'Use this template',
+      message:
+        'Replace the draft form values with the template? The values you have typed are lost.',
+      confirmLabel: 'Use template',
+    }))
+  )
+    return;
   fill(data.templates.find((t) => t.id === $('template').value).definition);
-  dirty = true;
+  unsaved.markDirty();
 };
 $('add-field').onclick = () => {
   fieldRow();
-  dirty = true;
+  unsaved.markDirty();
 };
 $('measure').onchange = () => {
   $('unit').value = data.measures.find((m) => m.id === $('measure').value)?.unit || '';
@@ -587,7 +612,14 @@ $('publish').onclick = () =>
   });
 $('reset').onclick = () =>
   guard($('reset'), async () => {
-    if (current && confirm('Replay history on the next run? Existing evidence is retained.'))
+    if (
+      current &&
+      (await confirmAction({
+        title: 'Replay history on the next run',
+        message: 'The next run replays the request history. Existing evidence is retained.',
+        confirmLabel: 'Replay',
+      }))
+    )
       await act(current, 'reset-cursor');
   });
 $('write-json').onclick = () => {
@@ -600,7 +632,7 @@ $('write-json').onclick = () => {
 $('read-json').onclick = () => {
   try {
     fill(JSON.parse($('json').value));
-    dirty = true;
+    unsaved.markDirty();
     message('JSON loaded into the form. Save and test before publishing.');
   } catch (e) {
     error(e);
@@ -625,19 +657,13 @@ $('import').onchange = async (e) => {
     if (!f) return;
     if (f.size > 65536) throw Error('Definition exceeds 64 KiB');
     fill(JSON.parse(await f.text()));
-    dirty = true;
+    unsaved.markDirty();
   } catch (e) {
     error(e);
   }
 };
 $('search').oninput = render;
 $('refresh').onclick = () => guard($('refresh'), load);
-window.addEventListener('beforeunload', (e) => {
-  if (dirty) {
-    e.preventDefault();
-    e.returnValue = '';
-  }
-});
 setInterval(() => {
   if (document.hidden || !authorized) return;
   if (watching) watch();

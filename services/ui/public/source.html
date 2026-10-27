@@ -26,7 +26,7 @@
       </div>
     </div>
 
-    <div id="status" class="alert alert-info" style="display:none;"></div>
+    <div id="status" class="alert alert-info" style="display:none;" role="status"></div>
     <div id="sourceQuietNotice" class="alert alert-warning d-flex flex-wrap align-items-center gap-2 no-print" role="alert" hidden>
       <i class="bi bi-moon-stars" aria-hidden="true"></i>
       <span id="sourceQuietMessage"></span>
@@ -80,6 +80,22 @@
           </div>
         </div>
 
+    <div id="selectionBar" class="alert alert-primary d-flex flex-wrap gap-2 align-items-center py-2 no-print" role="region" aria-label="Selected events" aria-live="polite" hidden>
+      <strong data-selection-count>0 selected</strong>
+      <input class="form-control form-control-sm" data-story-title aria-label="Story title" maxlength="256" placeholder="Story title" style="width:16rem;">
+      <button class="btn btn-sm btn-primary" type="button" data-create-story><i class="bi bi-journal-plus me-1" aria-hidden="true"></i>Create story</button>
+      <span class="small-muted">or</span>
+      <select class="form-select form-select-sm" data-story-target aria-label="Add to an existing story" style="width:16rem;"><option value="">Choose a story</option></select>
+      <button class="btn btn-sm btn-outline-primary" type="button" data-add-to-story>Add to story</button>
+      <button class="btn btn-sm btn-outline-secondary ms-auto" type="button" data-clear-selection>Clear selection</button>
+    </div>
+    <div id="rowMenu" class="dropdown-menu show position-absolute shadow" role="menu" hidden>
+      <button class="dropdown-item" type="button" role="menuitem" data-menu-action="create">Create story from <span data-selection-count>1</span> selected</button>
+      <button class="dropdown-item" type="button" role="menuitem" data-menu-action="add">Add selected to a story</button>
+      <button class="dropdown-item" type="button" role="menuitem" data-menu-action="clear">Clear selection</button>
+    </div>
+
+
         <div class="card">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
@@ -94,7 +110,7 @@
           <div class="card-body p-0">
             <div class="table-responsive">
               <table class="table table-sm table-hover align-middle mb-0 sortable" data-sortable="1">
-                <thead><tr><th style="width:170px;">Time</th><th style="width:310px;">Event UUID</th><th style="width:180px;">Context</th><th>Summary</th><th style="width:210px;">Controls</th><th style="width:80px;">Links</th><th style="width:90px;">Artifacts</th></tr></thead>
+                <thead><tr><th id="selectHeader" class="story-select-cell" hidden><input class="form-check-input" type="checkbox" id="selectAll" aria-label="Select every event on this page"></th><th style="width:170px;">Time</th><th style="width:310px;">Event UUID</th><th style="width:180px;">Context</th><th>Summary</th><th style="width:210px;">Controls</th><th style="width:80px;">Links</th><th style="width:90px;">Artifacts</th></tr></thead>
                 <tbody id="eventRows"><tr><td colspan="7" class="p-4 small-muted">Loading source events</td></tr></tbody>
               </table>
             </div>

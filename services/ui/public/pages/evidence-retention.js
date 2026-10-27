@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, esc, toast } from '/app.js';
+import { errorText, apiGet, apiPost, apiPut, confirmAction, esc, toast } from '/app.js';
 
 export function initEvidenceRetention(isAdmin) {
   if (!isAdmin) return;
@@ -129,6 +129,9 @@ export function initEvidenceRetention(isAdmin) {
       $('purge').disabled = !!active || busy || $('confirm').value !== 'PURGE EVIDENCE';
       $('progress').innerHTML =
         `<p><strong>${data.total_events.toLocaleString()}</strong> events remain · <strong>${data.audit_protected_events.toLocaleString()}</strong> audit-protected</p>` +
+        (data.total_events === 0
+          ? '<p class="text-secondary">No evidence remains in the database. The retention policy or a manual purge may have removed older records, or nothing has been collected yet.</p>'
+          : '') +
         (data.ingestion_pause?.paused
           ? '<p class="text-warning">Ingestion paused for purge or its five-minute cooldown.</p>'
           : '') +
@@ -140,7 +143,7 @@ export function initEvidenceRetention(isAdmin) {
           .map((e) => `<p class="text-warning-emphasis">${esc(e)}</p>`)
           .join('');
     } catch (e) {
-      toast($('status'), String(e), 'danger');
+      toast($('status'), errorText(e), 'danger');
     } finally {
       fetching = false;
     }
@@ -151,7 +154,7 @@ export function initEvidenceRetention(isAdmin) {
     try {
       await fn();
     } catch (e) {
-      toast($('status'), String(e), 'danger');
+      toast($('status'), errorText(e), 'danger');
     } finally {
       busy = false;
       await refresh();
@@ -178,9 +181,12 @@ export function initEvidenceRetention(isAdmin) {
       const result = await apiPost(`${endpoint}/preview`, p);
       if (
         (p.mode !== 'disabled' || p.overrides.some((item) => item.mode !== 'disabled')) &&
-        !confirm(
-          `${summary(result)}\nEnable automatic deletion across all frameworks? Deletion is permanent. Eligibility changes as events arrive and audits are deleted.`,
-        )
+        !(await confirmAction({
+          title: 'Enable automatic deletion',
+          message: `${summary(result)}\nEnable automatic deletion across all frameworks? Deletion is permanent. Eligibility changes as events arrive and audits are deleted.`,
+          confirmLabel: 'Enable deletion',
+          danger: true,
+        }))
       )
         return;
       const saved = await apiPut(endpoint, p);
@@ -193,9 +199,12 @@ export function initEvidenceRetention(isAdmin) {
       if ($('confirm').value !== 'PURGE EVIDENCE') return;
       const p = await apiPost(`${endpoint}/preview-all`, {});
       if (
-        !confirm(
-          `${summary(p)}\nPermanently purge all eligible evidence across all frameworks? Audit-protected events remain. Older events held only by other purged events may become eligible during cleanup.`,
-        )
+        !(await confirmAction({
+          title: 'Purge all eligible evidence',
+          message: `${summary(p)}\nPermanently purge all eligible evidence across all frameworks? Audit-protected events remain. Older events held only by other purged events may become eligible during cleanup.`,
+          confirmLabel: 'Purge',
+          danger: true,
+        }))
       )
         return;
       await apiPost(`${endpoint}/purge`, { mode: 'all', confirmation: $('confirm').value });
@@ -206,9 +215,12 @@ export function initEvidenceRetention(isAdmin) {
   $('cancel').addEventListener('click', () =>
     act(async () => {
       if (
-        !confirm(
-          'Cancel the active purge? Completed deletions cannot be undone. Stored-file cleanup continues. To stop automatic retention, set the global policy and every override to Keep everything.',
-        )
+        !(await confirmAction({
+          title: 'Cancel the active purge',
+          message:
+            'Completed deletions cannot be undone and stored-file cleanup continues. To stop automatic retention, set the global policy and every override to Keep everything.',
+          confirmLabel: 'Cancel purge',
+        }))
       )
         return;
       await apiPost(`${endpoint}/cancel`, {});

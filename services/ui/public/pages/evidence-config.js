@@ -4,9 +4,18 @@ import {
   observedPayloadFields,
   fieldChoiceGroups,
 } from '/pages/evidence-fields.js';
-import { apiGet, apiPost, apiPut, apiDelete, getCurrentFramework } from '/app.js';
+import {
+  apiGet,
+  apiPost,
+  apiPut,
+  apiDelete,
+  confirmAction,
+  getCurrentFramework,
+  unsavedGuard,
+} from '/app.js';
 
 const $ = (suffix) => document.getElementById(`ec-${suffix}`);
+const unsaved = unsavedGuard({ root: $('editor'), hint: $('unsaved') });
 let statusTimer = null;
 function status(message, tone = 'danger') {
   clearTimeout(statusTimer);
@@ -591,6 +600,7 @@ function showLibrary() {
     node.classList.remove('d-none');
   });
   renderRules();
+  unsaved.markClean();
 }
 function nextStep() {
   if (step === 2 && !$('description').value.trim()) {
@@ -900,6 +910,7 @@ async function newRule({ openEditor = true } = {}) {
     'Choose a recent event to inspect its fields. You can also define a rule before evidence arrives.';
   await selectDefinitionAdapter();
   if (openEditor) showEditor(1);
+  unsaved.markClean();
 }
 function showSelectedInput() {
   const adapter = $('definition-adapter').value,
@@ -986,6 +997,7 @@ async function editRule(rule) {
   await loadRuleRevisions();
   loadRecentBackfill(rule.id).catch((error) => status(error.message));
   showStep(1);
+  unsaved.markClean();
 }
 function renderRules() {
   const list = $('rules');
@@ -1053,9 +1065,11 @@ function renderRules() {
     remove.textContent = 'Delete definition';
     remove.addEventListener('click', async () => {
       if (
-        !confirm(
-          `Delete evidence definition ${rule.description || rule.id}? Collection and existing evidence are retained.`,
-        )
+        !(await confirmAction({
+          title: 'Delete evidence definition',
+          message: `Delete evidence definition ${rule.description || rule.id}? Collection and existing evidence are retained.`,
+          confirmLabel: 'Delete',
+        }))
       )
         return;
       try {
@@ -1172,9 +1186,12 @@ async function restore(selectedRevision) {
   if (
     !ruleId ||
     !selectedRevision ||
-    !confirm(
-      'Restore this rule to the selected revision? Other rules and collection settings are unchanged.',
-    )
+    !(await confirmAction({
+      title: 'Restore this rule revision',
+      message:
+        'Restore this rule to the selected revision? Other rules and collection settings are unchanged.',
+      confirmLabel: 'Restore',
+    }))
   )
     return;
   await apiPost(
@@ -1417,7 +1434,13 @@ function showBackfill(data) {
     cancel.className = 'btn btn-sm btn-outline-secondary ms-2';
     cancel.textContent = 'Cancel';
     cancel.addEventListener('click', async () => {
-      if (!confirm('Stop applying this rule to older evidence? Completed batches stay mapped.'))
+      if (
+        !(await confirmAction({
+          title: 'Cancel backfill',
+          message: 'Stop applying this rule to older evidence? Completed batches stay mapped.',
+          confirmLabel: 'Cancel backfill',
+        }))
+      )
         return;
       await apiPost(`${apiRoot}/rule-backfills/${encodeURIComponent(data.id)}/cancel`, {});
       await pollBackfill(data.id);
@@ -1460,7 +1483,12 @@ $('save-rule').addEventListener('click', async () => {
       previewedRule &&
       !previewCount &&
       !$('predefine').checked &&
-      !confirm('There is no recent evidence for this source. Save the rule without a sample match?')
+      !(await confirmAction({
+        title: 'Save without a sample match',
+        message:
+          'There is no recent evidence for this source. Save the rule without a sample match?',
+        confirmLabel: 'Save',
+      }))
     )
       return;
     const definition = definitionFromForm();
@@ -1491,9 +1519,11 @@ $('backfill-start').addEventListener('click', async () => {
     return;
   }
   if (
-    !confirm(
-      `Evaluate all previous ${$('when-source').value} evidence against saved rule ${selectedRule}? This runs in the background.`,
-    )
+    !(await confirmAction({
+      title: 'Backfill earlier evidence',
+      message: `Evaluate all previous ${$('when-source').value} evidence against saved rule ${selectedRule}? This runs in the background.`,
+      confirmLabel: 'Backfill',
+    }))
   )
     return;
   try {
@@ -1515,9 +1545,11 @@ $('delete-rule').addEventListener('click', async () => {
     return;
   }
   if (
-    !confirm(
-      `Delete evidence definition ${selectedRule}? Collected evidence and existing mappings are retained.`,
-    )
+    !(await confirmAction({
+      title: 'Delete evidence definition',
+      message: `Delete evidence definition ${selectedRule}? Collected evidence and existing mappings are retained.`,
+      confirmLabel: 'Delete',
+    }))
   )
     return;
   try {

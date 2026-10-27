@@ -1,4 +1,13 @@
-import { initNavbar, apiGet, esc, fmtTs, toast, getCurrentFramework, userPillHtml } from '/app.js';
+import {
+  errorText,
+  initNavbar,
+  apiGet,
+  esc,
+  fmtTs,
+  toast,
+  getCurrentFramework,
+  userPillHtml,
+} from '/app.js';
 import {
   deleteQuestionThread,
   myQuestionRowHtml,
@@ -65,7 +74,7 @@ async function load() {
   } catch (err) {
     statusEl.className = 'alert alert-danger';
     statusEl.style.display = '';
-    statusEl.textContent = `Failed to load questions: ${err?.message || String(err)}`;
+    statusEl.textContent = `Failed to load questions: ${errorText(err)}`;
   }
 }
 

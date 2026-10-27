@@ -111,7 +111,7 @@ test('opening a document shows its fields, revisions and comments safely', async
   assert.equal(ui.el('historyCard').style.display, '');
   assert.deepEqual(
     [...ui.el('revisionList').querySelectorAll('button')].map((b) => b.textContent),
-    ['Version 2 · 2026-01-02', 'Version 1 · 2026-01-01'],
+    ['Version 2 · 2026-01-02T03:04:05Z', 'Version 1 · 2026-01-01T00:00:00Z'],
   );
   assert.equal(ui.el('commentList').querySelector('img'), null);
   assert.match(ui.el('commentList').textContent, /dana[\s\S]*<img src=x>Looks good[\s\S]*User/);
@@ -197,19 +197,16 @@ test('document readers cannot edit and failures are reported', async (t) => {
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(state.posted.length + state.patched.length, 0);
   const failed = await documentsPage(t, { fail: true });
-  assert.match(
-    failed.ui.el('status').textContent,
-    /Could not load documents: Error: Folders offline/,
-  );
+  assert.match(failed.ui.el('status').textContent, /Could not load documents: Folders offline/);
   const rejected = await documentsPage(t, { postFail: true, revisionFail: true });
   rejected.ui
     .el('folderForm')
     .dispatchEvent(new rejected.ui.window.Event('submit', { cancelable: true }));
-  await settle(() => rejected.ui.el('status').textContent === 'Error: Rejected');
+  await settle(() => rejected.ui.el('status').textContent === 'Rejected');
   rejected.ui.el('documentList').querySelector('[data-document="d1"]').click();
   await settle(() => rejected.ui.el('revisionList').querySelector('button'));
   rejected.ui.el('revisionList').querySelector('button').click();
-  await settle(() => rejected.ui.el('status').textContent === 'Error: Revision gone');
+  await settle(() => rejected.ui.el('status').textContent === 'Revision gone');
 });
 
 // ---------------------------------------------------------- BookStack sections
@@ -372,7 +369,7 @@ test('BookStack readers only see captured versions; disabled or failing catalogu
     .el('sectionForm')
     .dispatchEvent(new empty.ui.window.Event('submit', { cancelable: true }));
   await settle(() =>
-    /Could not capture policy version: Error: Capture refused/.test(
+    /Could not capture policy version: Capture refused/.test(
       empty.ui.el('bookstackStatus').textContent,
     ),
   );
@@ -382,7 +379,7 @@ test('each BookStack lookup that fails is reported without hiding the rest of th
   const sections = await bookstack(t, { sectionsFail: true });
   assert.equal(
     sections.ui.el('bookstackStatus').textContent,
-    'Could not load policy evidence: Error: Sections down',
+    'Could not load policy evidence: Sections down',
   );
   assert.equal(sections.ui.el('bookstackStatus').dataset.alert, 'danger');
   // The capture form still works for the next attempt.
@@ -391,7 +388,7 @@ test('each BookStack lookup that fails is reported without hiding the rest of th
   const requirements = await bookstack(t, { requirementsFail: true });
   assert.equal(
     requirements.ui.el('bookstackStatus').textContent,
-    'Could not load framework requirements: Error: Framework down',
+    'Could not load framework requirements: Framework down',
   );
   assert.deepEqual(
     [...requirements.ui.el('targetRequirement').options].map((o) => o.value),
@@ -406,7 +403,7 @@ test('each BookStack lookup that fails is reported without hiding the rest of th
   );
   assert.equal(
     pages.ui.el('bookstackStatus').textContent,
-    'Could not load BookStack pages: Error: Pages down',
+    'Could not load BookStack pages: Pages down',
   );
 
   const archive = await bookstack(t, { patchFail: true });
@@ -416,7 +413,7 @@ test('each BookStack lookup that fails is reported without hiding the rest of th
   );
   assert.equal(
     archive.ui.el('bookstackStatus').textContent,
-    'Could not update policy evidence: Error: Archive refused',
+    'Could not update policy evidence: Archive refused',
   );
   assert.deepEqual(archive.state.patched, ['/api/v1/isms/bookstack-sections/s1?archived=true']);
   assert.equal(archive.ui.el('sectionRows').querySelectorAll('tr').length, 2);
@@ -478,13 +475,14 @@ function agentsFixture(overrides = {}) {
 }
 
 async function agentsPage(t, options = {}) {
-  const state = { posted: [], data: options.data || agentsFixture() };
+  const state = { posted: [], patched: [], data: options.data || agentsFixture() };
   // Keen Agents is a tab of the administration page.
   const ui = await page(t, 'agents', {
     htmlName: 'admin',
+    vendor: options.vendor || {},
+    confirm: options.confirm ?? true,
     globals: {
       setInterval: () => 0,
-      confirm: () => options.confirm ?? true,
       navigator: options.navigator || { clipboard: { writeText: async () => {} } },
       ...options.globals,
     },
@@ -507,6 +505,10 @@ async function agentsPage(t, options = {}) {
           ],
         };
       throw new Error('Unexpected GET ' + u);
+    },
+    patch: async (u, b) => {
+      state.patched.push({ path: u.pathname, body: plain(b) });
+      return { agent: {} };
     },
     post: async (u, b) => {
       state.posted.push({ path: u.pathname, body: plain(b) });
@@ -548,7 +550,7 @@ test('registering an agent reveals its credential once and dismissal clears it',
   await settle(() => $('credential').hidden === false);
   assert.deepEqual(state.posted[0], {
     path: '/api/v1/admin/agents',
-    body: { name: 'db-1', expires_days: 30 },
+    body: { name: 'db-1', expires_days: 30, agent_type: 'server', person_id: null },
   });
   assert.equal($('token').value, 'keen-agent-secret-1');
   assert.equal($('token').type, 'password');
@@ -636,4 +638,63 @@ test('the agent YAML template downloads with the server endpoint', async (t) => 
     /^endpoint: "https:\/\/keen\.example\/api\/v1\/otlp\/logs"\ntoken_file: \/etc\/keen-agent\/token/,
   );
   assert.equal(blob.type, 'application/yaml');
+});
+
+test('workstation registration requires a person and sends the explicit association', async (t) => {
+  const { ui, state, $ } = await agentsPage(t, {
+    data: agentsFixture({
+      people_enabled: true,
+      people: [{ id: 'p1', name: '<img src=x onerror=alert(1)>' }],
+    }),
+  });
+  assert.equal($('person-field').hidden, true);
+  $('type').value = 'workstation';
+  $('type').dispatchEvent(new ui.window.Event('change'));
+  assert.equal($('person-field').hidden, false);
+  assert.equal($('person').required, true);
+  assert.equal($('person').querySelector('img'), null);
+  $('person').value = 'p1';
+  $('agent-name').value = 'laptop';
+  $('register').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => state.posted.length === 1 && !$('register-button').disabled);
+  assert.equal(state.posted[0].body.person_id, 'p1');
+  assert.equal(state.posted[0].body.agent_type, 'workstation');
+  $('type').value = 'server';
+  $('type').dispatchEvent(new ui.window.Event('change'));
+  assert.equal($('person').disabled, true);
+  assert.equal($('person').value, '');
+});
+
+test('existing agents can be assigned to a person after confirmation', async (t) => {
+  const { ui, state, $ } = await agentsPage(t, {
+    data: agentsFixture({ people: [{ id: 'p1', name: 'Person' }] }),
+  });
+  const type = ui.document.getElementById('agent-type-a1'),
+    person = ui.document.getElementById('agent-person-a1');
+  type.value = 'workstation';
+  type.dispatchEvent(new ui.window.Event('change'));
+  person.value = 'p1';
+  [...$('agents').querySelector('article').querySelectorAll('button')]
+    .find((b) => b.textContent === 'Save assignment')
+    .click();
+  await settle(() => state.patched.length === 1);
+  assert.deepEqual(state.patched[0], {
+    path: '/api/v1/admin/agents/a1',
+    body: { agent_type: 'workstation', person_id: 'p1' },
+  });
+});
+
+test('agent timestamps use the shared preference formatter and remain escaped', async (t) => {
+  const seen = [];
+  const { $ } = await agentsPage(t, {
+    vendor: {
+      fmtTs: (iso) => {
+        seen.push(iso);
+        return '23/10/2026 20:08:08 <img src=x>';
+      },
+    },
+  });
+  assert.ok(seen.length > 0);
+  assert.match($('agents').textContent, /Last contact: 23\/10\/2026 20:08:08 <img src=x>/);
+  assert.equal($('agents').querySelector('img'), null);
 });

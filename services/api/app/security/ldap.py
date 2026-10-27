@@ -189,6 +189,9 @@ def authenticate_ldap(db, username, password):
     try:
         db.add(user)
         db.flush()
+        from app.services.people import ensure_person_for_user
+
+        ensure_person_for_user(db, user)
         db.add(
             UserIdentity(
                 user_id=user.id,

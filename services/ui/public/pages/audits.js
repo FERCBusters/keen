@@ -1,9 +1,12 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
+  isoDateToDisplay,
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
   apiDelete,
+  confirmAction,
   esc,
   fmtTs,
   toast,
@@ -45,6 +48,7 @@ const schedFuzzyYear = document.getElementById('schedFuzzyYear');
 const schedDatePreview = document.getElementById('schedDatePreview');
 const schedAttendeeUserId = document.getElementById('schedAttendeeUserId');
 const schedDocuments = document.getElementById('schedDocuments');
+const schedTitle = document.getElementById('schedTitle');
 const coverageMode = document.getElementById('coverageMode');
 const coverageStart = document.getElementById('coverageStart');
 const coverageEnd = document.getElementById('coverageEnd');
@@ -62,6 +66,47 @@ let scheduledTemplates = [];
 let scheduledOccurrences = [];
 let scheduledDocuments = [];
 let coverageData = null;
+
+// Progressive disclosure: the form leads with the core schedule, and the
+// attendees and in-scope-document sections collapse until they hold something.
+const schedSectionsReady = () => Boolean((schedTitle?.value || '').trim() && schedStart?.value);
+
+function updateScheduleSections() {
+  const coreReady = schedSectionsReady();
+  const sections = [
+    {
+      id: 'schedDocumentsSection',
+      badge: 'schedDocumentsBadge',
+      count: schedDocuments?.selectedOptions?.length || 0,
+      unit: 'document',
+    },
+    {
+      id: 'schedAttendeesSection',
+      badge: 'schedAttendeesBadge',
+      count: scheduledAttendees.length,
+      unit: 'attendee',
+    },
+  ];
+  for (const section of sections) {
+    const el = document.getElementById(section.id);
+    if (!el) continue;
+    const badge = document.getElementById(section.badge);
+    if (badge) {
+      const set = section.count > 0;
+      badge.className = `badge ms-1 ${set ? 'badge-soft' : coreReady ? 'text-bg-warning' : 'text-bg-light'}`;
+      badge.textContent = set
+        ? `${section.count} ${section.unit}${section.count === 1 ? '' : 's'}`
+        : coreReady
+          ? 'Needs attention'
+          : 'Not set';
+    }
+  }
+}
+
+for (const el of [schedTitle, schedStart]) {
+  el?.addEventListener('input', updateScheduleSections);
+  el?.addEventListener('change', updateScheduleSections);
+}
 
 const schedStartWire = wireIsoDateTextField(
   schedStart,
@@ -149,7 +194,11 @@ function renderAudits(items) {
         `/audit.html?id=${encodeURIComponent(a.id)}`,
         a.framework_slug || getCurrentFramework(),
       );
-      const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ') || '-';
+      const dates =
+        [a.start_date, a.end_date]
+          .filter(Boolean)
+          .map((d) => isoDateToDisplay(d))
+          .join(' → ') || '-';
       const scope = `${a.scope_count ?? 0}`;
       const scopeBreakdown = `${a.document_scope_count ?? 0} documents, ${a.clause_scope_count ?? 0} clauses, ${a.control_scope_count ?? 0} controls`;
       return `<tr>
@@ -182,9 +231,13 @@ function renderAudits(items) {
       }
       const title = btn.getAttribute('data-delete-audit-title') || 'this audit';
       if (
-        !confirm(
-          `Delete audit "${title}"? This permanently removes the audit, its scope, attendees, sample links and findings. Events protected only by this audit become eligible for evidence retention or purge.`,
-        )
+        !(await confirmAction({
+          title: `Delete audit ${title}`,
+          message:
+            'This permanently removes the audit, its scope, attendees, sample links and findings. Events protected only by this audit become eligible for evidence retention or purge.',
+          confirmLabel: 'Delete',
+          danger: true,
+        }))
       )
         return;
       try {
@@ -194,7 +247,7 @@ function renderAudits(items) {
         toast(status, 'Audit deleted', 'success');
         await loadAudits();
       } catch (e) {
-        toast(status, `Failed: ${String(e)}`, 'danger');
+        toast(status, `Failed: ${errorText(e)}`, 'danger');
       }
     }),
   );
@@ -214,7 +267,7 @@ async function loadAudits() {
     const data = await apiGet(`/api/v1/audits?${params.toString()}`);
     renderAudits(data?.items || []);
   } catch (e) {
-    rows.innerHTML = `<tr><td colspan="10" class="p-4 text-danger">${esc(String(e))}</td></tr>`;
+    rows.innerHTML = `<tr><td colspan="10" class="p-4 text-danger">Could not load the audit list. Use the refresh button to try again. ${esc(errorText(e))}</td></tr>`;
   }
 }
 
@@ -271,7 +324,7 @@ function coverageSourceHtml(sources) {
       .slice(0, 8)
       .map((src) => {
         const label =
-          `${src.start_date || src.occurrence_date || ''} ${src.title || 'Audit'}`.trim();
+          `${isoDateToDisplay(src.start_date || src.occurrence_date) || ''} ${src.title || 'Audit'}`.trim();
         const href = withFramework(
           `/audit.html?id=${encodeURIComponent(src.audit_id || src.id || '')}`,
           src.framework_slug || coverageData?.framework_slug || getCurrentFramework(),
@@ -599,8 +652,8 @@ async function loadScopeCoverage() {
     if (coverageSummary) coverageSummary.innerHTML = '';
     if (coverageChart) coverageChart.innerHTML = '';
     if (coverageGapMatrix) coverageGapMatrix.innerHTML = '';
-    coverageIncludedRows.innerHTML = `<tr><td colspan="3" class="p-4 text-danger">${esc(String(e))}</td></tr>`;
-    coverageGapRows.innerHTML = `<tr><td colspan="3" class="p-4 text-danger">${esc(String(e))}</td></tr>`;
+    coverageIncludedRows.innerHTML = `<tr><td colspan="3" class="p-4 text-danger">${esc(errorText(e))}</td></tr>`;
+    coverageGapRows.innerHTML = `<tr><td colspan="3" class="p-4 text-danger">${esc(errorText(e))}</td></tr>`;
   }
 }
 
@@ -628,7 +681,7 @@ async function loadScheduledAttendeeUsers() {
     scheduledAttendeeUsers = [];
     toast(
       status,
-      `Failed to load Keen users for scheduled audit attendees: ${String(e)}`,
+      `Failed to load Keen users for scheduled audit attendees: ${errorText(e)}`,
       'warning',
     );
   }
@@ -680,6 +733,7 @@ function renderScheduledAttendees() {
       renderScheduledAttendees();
     }),
   );
+  updateScheduleSections();
 }
 
 function renderScheduledRows(items) {
@@ -702,8 +756,8 @@ function renderScheduledRows(items) {
         <a class="fw-semibold" href="${esc(url)}">${esc(a.title || 'Scheduled audit')}</a>
         <div class="small-muted">${esc(auditTypeLabel(a.audit_type))} · ${esc(a.framework_slug || '')}</div>
       </td>
-      <td>${esc(a.schedule_next_run_date || '-')}</td>
-      <td>${esc(scheduleSummary(a))}${a.schedule_until_date ? `<div class="small-muted">Until ${esc(a.schedule_until_date)}</div>` : ''}</td>
+      <td>${esc(isoDateToDisplay(a.schedule_next_run_date) || '-')}</td>
+      <td>${esc(scheduleSummary(a))}${a.schedule_until_date ? `<div class="small-muted">Until ${esc(isoDateToDisplay(a.schedule_until_date))}</div>` : ''}</td>
       <td>${esc(attendees.length)}</td>
       <td class="text-end">
         <div class="btn-group btn-group-sm">
@@ -718,7 +772,14 @@ function renderScheduledRows(items) {
     btn.addEventListener('click', async () => {
       if (!ensureAuditManage()) return;
       if (!canDeleteAudits()) return;
-      if (!confirm('Delete this scheduled audit template?')) return;
+      if (
+        !(await confirmAction({
+          title: 'Delete scheduled audit template',
+          message: 'Delete this schedule? No new audits are created from it.',
+          confirmLabel: 'Delete',
+        }))
+      )
+        return;
       try {
         await apiDelete(
           `/api/v1/audits/scheduled/${encodeURIComponent(btn.getAttribute('data-delete-schedule'))}`,
@@ -726,7 +787,7 @@ function renderScheduledRows(items) {
         toast(status, 'Scheduled audit template deleted', 'success');
         await loadScheduledAudits();
       } catch (e) {
-        toast(status, `Failed: ${String(e)}`, 'danger');
+        toast(status, `Failed: ${errorText(e)}`, 'danger');
       }
     }),
   );
@@ -749,7 +810,7 @@ async function loadScheduledAudits() {
       fallback: 'Audit',
     });
   } catch (e) {
-    scheduledRows.innerHTML = `<tr><td colspan="5" class="p-4 text-danger">${esc(String(e))}</td></tr>`;
+    scheduledRows.innerHTML = `<tr><td colspan="5" class="p-4 text-danger">${esc(errorText(e))}</td></tr>`;
   }
 }
 
@@ -773,7 +834,7 @@ async function loadScheduledDocuments() {
   } catch (e) {
     scheduledDocuments = [];
     schedDocuments.innerHTML = '';
-    toast(status, `Failed to load ISMS documents: ${String(e)}`, 'warning');
+    toast(status, `Failed to load ISMS documents: ${errorText(e)}`, 'warning');
   }
 }
 
@@ -799,6 +860,9 @@ function resetScheduleForm() {
   if (schedDocuments) schedDocuments.innerHTML = '';
   renderScheduledAttendees();
   loadScheduledDocuments();
+  for (const id of ['schedDocumentsSection', 'schedAttendeesSection'])
+    document.getElementById(id)?.removeAttribute('open');
+  updateScheduleSections();
 }
 
 if (!canManageAudits()) showCreate?.classList.add('d-none');
@@ -823,6 +887,9 @@ document.getElementById('coverage-tab')?.addEventListener('shown.bs.tab', () => 
 });
 document.getElementById('scheduleReset')?.addEventListener('click', resetScheduleForm);
 schedAttendeeUserId?.addEventListener('change', syncScheduledAttendeeUserSelection);
+schedDocuments?.addEventListener('change', () => {
+  updateScheduleSections();
+});
 document.getElementById('schedAddAttendee')?.addEventListener('click', () => {
   const user = selectedScheduledAttendeeUser();
   const nameEl = document.getElementById('schedAttendeeName');
@@ -898,7 +965,7 @@ scheduleForm?.addEventListener('submit', async (ev) => {
     resetScheduleForm();
     await loadScheduledAudits();
   } catch (e) {
-    toast(status, `Failed: ${String(e)}`, 'danger');
+    toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
 });
 

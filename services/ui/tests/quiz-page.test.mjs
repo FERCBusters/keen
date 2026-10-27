@@ -277,7 +277,8 @@ async function quizPage(
   const ui = await page(t, 'quiz', {
     me: { can_manage_quizzes: view.can_manage, can_view_quizzes: true },
     query,
-    globals: { confirm, ...globals },
+    globals,
+    confirm,
     patch,
     put,
     post,
@@ -830,7 +831,7 @@ test('a missing or unreadable quiz, and failed requests, are reported', async (t
   await settle(() => refused.el('status').style.display === '');
   assert.equal(
     refused.el('status').textContent,
-    'Failed to load the quiz: Error: quiz.read permission required',
+    'Failed to load the quiz: quiz.read permission required',
   );
 
   const failing = await quizPage(t, {

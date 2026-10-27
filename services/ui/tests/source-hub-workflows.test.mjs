@@ -56,12 +56,16 @@ async function hub(t, data = {}) {
   const ui = await loadUi('pages/connection-hub.js', {
     html,
     url: 'https://keen.example/admin.html',
+    modules: {
+      'pages/confirm-modal.js': {
+        confirmAction: async (asked) => {
+          calls.push({ method: 'CONFIRM', message: asked.message, title: asked.title });
+          return data.confirm ?? true;
+        },
+      },
+    },
     globals: {
       structuredClone,
-      confirm: (message) => {
-        calls.push({ method: 'CONFIRM', message });
-        return data.confirm ?? true;
-      },
     },
     setup(w) {
       w.HTMLDialogElement.prototype.showModal = function () {
@@ -200,10 +204,7 @@ test('Delete source asks first, deletes the version shown and reloads', async (t
   const declined = await hub(t, { confirm: false });
   await declined.button(declined.card('My Forgejo'), 'Delete source').onclick();
   assert.equal(declined.calls.filter((c) => c.method === 'DELETE').length, 0);
-  assert.equal(
-    declined.calls.find((c) => c.method === 'CONFIRM').message,
-    'Delete My Forgejo? Collected evidence and its connection identity will be retained.',
-  );
+  assert.equal(declined.calls.find((c) => c.method === 'CONFIRM').title, 'Delete connection');
 
   const ui = await hub(t, { remove: async () => ({}) });
   const before = ui.loads();

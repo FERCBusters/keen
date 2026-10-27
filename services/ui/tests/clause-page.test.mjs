@@ -237,7 +237,7 @@ test('administrators save the guidance URL and see failures reported', async (t)
   const failing = await clausePage(t, { patchFail: true });
   failing.ui.el('saveClauseUpstreamUrl').click();
   await settle(() =>
-    /Failed to save clause URL: Error: Rejected/.test(failing.ui.el('status').textContent),
+    /Failed to save clause URL: Rejected/.test(failing.ui.el('status').textContent),
   );
   assert.equal(failing.ui.el('saveClauseUpstreamUrl').disabled, false);
   failing.ui.el('editClauseEvidence').click();
@@ -351,7 +351,7 @@ test('empty and failed PESTLE/ISMS lookups are explained', async (t) => {
 
 test('clause load failures and a missing id are reported', async (t) => {
   const failed = await clausePage(t, { fail: { clause: true } });
-  assert.match(failed.ui.el('status').textContent, /Failed to load clause: Error: Clause offline/);
+  assert.match(failed.ui.el('status').textContent, /Failed to load clause: Clause offline/);
   assert.match(failed.ui.el('rows').textContent, /Failed to load linked controls/);
   const missing = await page(t, 'clause', {
     get: async (u) => {
@@ -381,7 +381,7 @@ test('a control catalogue that cannot load is reported when editing linked contr
   const { ui } = await clausePage(t, { fail: { controls: true } });
   ui.el('editLinkedControls').click();
   await settle(() => /Failed to load controls/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Failed to load controls: Error: Catalogue offline');
+  assert.equal(ui.el('status').textContent, 'Failed to load controls: Catalogue offline');
   assert.equal(ui.el('status').dataset.alert, 'danger');
   assert.equal(ui.el('adminControlsList').querySelector('select'), null);
 });

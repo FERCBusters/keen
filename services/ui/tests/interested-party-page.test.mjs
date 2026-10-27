@@ -113,7 +113,7 @@ test('interested party details render selected lookups, controls and communicati
   );
   assert.match(
     ui.el('controlsChecklist').querySelector('a').getAttribute('href'),
-    /control\.html\?id=c1&tab=interested-parties&framework=A/,
+    /control\.html\?id=c1&tab=governance&framework=A/,
   );
   const row = ui.document.querySelector('[data-comm-row="0"]');
   assert.equal(row.querySelector('[data-comm-event]').value, 'Incident');
@@ -263,17 +263,14 @@ test('deletion confirms first and save failures are reported', async (t) => {
   assert.deepEqual(state.removed, ['/api/v1/interested-parties/ip1']);
   const failing = await partyPage(t, { patchFail: true });
   failing.ui.el('partyForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(() => failing.ui.el('status').textContent === 'Error: Rejected');
+  await settle(() => failing.ui.el('status').textContent === 'Rejected');
   failing.ui.el('saveCommunications').click();
   await settle(() => failing.state.patched.length === 2);
 });
 
 test('lookup failures are reported and the party can be sampled into an audit', async (t) => {
   const failed = await partyPage(t, { fail: true });
-  assert.match(
-    failed.ui.el('status').textContent,
-    /Failed to load interested party: Error: Meta offline/,
-  );
+  assert.match(failed.ui.el('status').textContent, /Failed to load interested party: Meta offline/);
   const { ui, state } = await partyPage(t);
   ui.el('samplePartyAudit').click();
   await settle(() => ui.document.getElementById('entityAuditSampleSelect')?.value === 'au1');

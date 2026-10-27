@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import func, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.cache import cache_delete_prefix, cache_get_json, cache_set_json
@@ -196,6 +196,12 @@ def _compute_framework_event_counts(
 
     The result is cached for ``KEEN_AGGREGATE_CACHE_TTL_SECONDS`` and
     periodically warmed by Celery.
+
+    Mapped events are aggregated in one GROUP BY over the framework's
+    mappings, deduplicating multi-mapped events before the count. Grouping
+    reads only the (small) mappings side, never the wide events heap, so the
+    cold dashboard load stays near-linear in mapped evidence on both
+    supported databases.
     """
 
     total = (
@@ -203,13 +209,14 @@ def _compute_framework_event_counts(
         if total_events is not None
         else int(db.query(func.count(Event.id)).scalar() or 0)
     )
-    mapped = (
-        db.query(func.count(func.distinct(Mapping.event_id)))
+    mapped_events = (
+        select(Mapping.event_id)
         .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-        .filter(ControlItem.framework_slug == framework)
-        .scalar()
-        or 0
+        .where(ControlItem.framework_slug == framework)
+        .group_by(Mapping.event_id)
+        .subquery()
     )
+    mapped = db.query(func.count()).select_from(mapped_events).scalar() or 0
     return _normalise_event_counts(total, int(mapped or 0))
 
 
@@ -254,16 +261,23 @@ def get_framework_event_counts(db: Session, framework: str) -> dict[str, int]:
 def refresh_framework_event_counts_cache(
     db: Session, framework: str | None = None
 ) -> dict[str, dict[str, int]]:
-    """Refresh cached global mapped/unmapped counters for one or all frameworks."""
+    """Refresh cached global mapped/unmapped counters for one or all frameworks.
+
+    Without a framework, the organisation's enabled frameworks and the default
+    are refreshed. Other catalogue frameworks are counted on their first
+    request and cached as usual, so the periodic refresh does not scan the
+    mappings once for every framework in the catalogue.
+    """
+    from app.services.framework_catalogue import _framework_selection
 
     total_events = int(db.query(func.count(Event.id)).scalar() or 0)
     frameworks: list[str]
     if framework:
         frameworks = [framework]
     else:
-        rows = db.query(ControlItem.framework_slug).distinct().all()
+        enabled = _framework_selection(db)[3]
         frameworks = sorted(
-            {str(slug) for (slug,) in rows if slug}
+            {str(slug) for slug in enabled if slug}
             | {settings.default_framework_slug or "default"}
         )
 

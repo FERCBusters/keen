@@ -25,7 +25,7 @@
       </div>
     </div>
 
-    <div id="status" class="alert alert-info" style="display:none;"></div>
+    <div id="status" class="alert alert-info" style="display:none;" role="status"></div>
     <!-- Tabs -->
     <div class="admin-tab-layout d-flex flex-column flex-lg-row gap-3">
       <button id="admin-navigation-toggle" type="button" class="btn btn-outline-primary d-lg-none" aria-expanded="false" aria-controls="adminTabs">Administration menu</button>
@@ -100,10 +100,10 @@
   <div class="card mt-3"><div class="card-body"><h3 class="h5">Shortcuts</h3><div class="admin-quicklinks"><a href="#framework-editor">Review frameworks <i class="bi bi-arrow-up-right"></i></a><a href="#diary">Record manual evidence <i class="bi bi-arrow-up-right"></i></a><a href="#users">Manage people's access <i class="bi bi-arrow-up-right"></i></a><a href="/help/administrator.html">Read the administrator guide <i class="bi bi-arrow-up-right"></i></a></div></div></div>
 </section>
 <section class="tab-pane fade" id="pane-agents" role="tabpanel" aria-labelledby="tab-agents" tabindex="0">
-<div class="d-flex justify-content-between flex-wrap gap-3"><div><h1 class="h3">Keen Agents</h1><p class="small-muted">Collect server activity as traceable evidence. Manage one identity per server or collector.</p></div><button id="ka-refresh" class="btn btn-outline-primary align-self-start">Refresh</button></div>
+<div class="d-flex justify-content-between flex-wrap gap-3"><div><h2 class="h3">Keen Agents</h2><p class="small-muted">Collect server activity as traceable evidence. Manage one identity per server or collector.</p></div><button id="ka-refresh" class="btn btn-outline-primary align-self-start">Refresh</button></div>
 <div id="ka-status" role="status" aria-live="polite" hidden></div>
-<div class="card mb-3"><div class="card-body"><h2 class="h5">Register a collector</h2><p>Use Keen Agent or an OTLP/HTTP JSON collector. Each credential can submit evidence and health reports for its registered identity. New registrations expire after the selected lifetime.</p><form id="ka-register" class="row g-3 align-items-end"><div class="col-md-6"><label class="form-label" for="ka-agent-name">Server / collector name</label><input id="ka-agent-name" class="form-control" required maxlength="128" pattern="[a-zA-Z0-9][a-zA-Z0-9_.:\-]*" placeholder="web-prod-01" autocomplete="off"></div><div class="col-md-3"><label class="form-label" for="ka-expiry">Credential lifetime (days)</label><input id="ka-expiry" type="number" min="1" max="365" value="90" class="form-control" required></div><div class="col-md-3"><button id="ka-register-button" class="btn btn-primary" disabled>Register agent</button></div></form></div></div>
-<section id="ka-credential" class="card border-warning mb-3" hidden aria-labelledby="ka-credential-title"><div class="card-body"><h2 id="ka-credential-title" class="h5">Save this credential now</h2><p>Keen displays it once. Save it to the agent's protected token file. Rotating a credential immediately invalidates the previous one.</p><label for="ka-token" class="form-label">Agent credential</label><input id="ka-token" type="password" class="form-control font-monospace" readonly autocomplete="off" spellcheck="false"><div class="d-flex flex-wrap gap-2 my-3"><button id="ka-copy" class="btn btn-primary">Copy credential</button><button id="ka-reveal" class="btn btn-outline-primary">Show credential</button><button id="ka-dismiss" class="btn btn-outline-secondary">Saved - dismiss</button></div></div></section>
+<div class="card mb-3"><div class="card-body"><h3 class="h5">Register a collector</h3><p>Use Keen Agent or an OTLP/HTTP JSON collector. Each credential can submit evidence and health reports for its registered identity. New registrations expire after the selected lifetime.</p><form id="ka-register" class="row g-3 align-items-end"><div class="col-md-6"><label class="form-label" for="ka-agent-name">Hostname / collector name</label><input id="ka-agent-name" class="form-control" required maxlength="128" pattern="[a-zA-Z0-9][a-zA-Z0-9_.:\-]*" placeholder="web-prod-01" autocomplete="off"></div><div class="col-md-3"><label class="form-label" for="ka-type">Device type</label><select id="ka-type" class="form-select"><option value="server">Server</option><option value="workstation">Workstation</option></select></div><div class="col-md-6" id="ka-person-field" hidden><label class="form-label" for="ka-person">Person</label><select id="ka-person" class="form-select" disabled></select><div class="form-text">Register each device separately, using its hostname as the collector name.</div></div><div class="col-md-3"><label class="form-label" for="ka-expiry">Credential lifetime (days)</label><input id="ka-expiry" type="number" min="1" max="365" value="90" class="form-control" required></div><div class="col-md-3"><button id="ka-register-button" class="btn btn-primary" disabled>Register agent</button></div></form></div></div>
+<section id="ka-credential" class="card border-warning mb-3" hidden aria-labelledby="ka-credential-title"><div class="card-body"><h3 id="ka-credential-title" class="h5">Save this credential now</h3><p>Keen displays it once. Save it to the agent's protected token file. Rotating a credential immediately invalidates the previous one.</p><label for="ka-token" class="form-label">Agent credential</label><input id="ka-token" type="password" class="form-control font-monospace" readonly autocomplete="off" spellcheck="false"><div class="d-flex flex-wrap gap-2 my-3"><button id="ka-copy" class="btn btn-primary">Copy credential</button><button id="ka-reveal" class="btn btn-outline-primary">Show credential</button><button id="ka-dismiss" class="btn btn-outline-secondary">Saved - dismiss</button></div></div></section>
 <details class="card mb-3"><summary class="card-header">Installation, configuration and evidence mapping</summary><div class="card-body"><p>Build the standalone Go agent from the <code>keen-agent</code> directory and follow its README and systemd installation instructions. The supplied service runs as a dedicated user. Grant read access to the selected logs and their rotated successors.</p><p>OTLP logs endpoint: <code id="ka-endpoint"></code></p><p>Save the credential in <code>/etc/keen-agent/token</code> with mode <code>0640</code>, owned by <code>root:keen-agent</code>. It is omitted from the configuration download.</p><button id="ka-yaml" class="btn btn-outline-primary mb-3">Download starter YAML</button><p>Events appear with source <strong>Keen Agent</strong> and the registered name as their system. In Sources &amp; evidence mapping, match <code>source = keen-agent</code> and the required action, outcome or normalized payload fields, then select the relevant framework controls.</p><p class="mb-0">Review the meaning and scope of each rule: a package transaction can demonstrate maintenance activity; the organization's patching threshold still requires an appropriate measurement and review.</p></div></details>
 <div id="ka-agents" class="d-grid gap-3" aria-live="polite"></div>
 
@@ -130,7 +130,7 @@
     <p class="mt-3 small-muted">Existing specialist adapters remain available under <a href="#ingest">Ingest runners</a>.</p>
   </div>
   <div id="ig-editor" hidden class="card"><div class="card-body">
-    <div class="d-flex justify-content-between gap-2"><h3 id="ig-heading" class="h5">Build an integration</h3><button id="ig-close" class="btn btn-outline-secondary btn-sm">Back to integrations</button></div>
+    <div class="d-flex justify-content-between gap-2"><h3 id="ig-heading" class="h5">Build an integration</h3><span id="ig-unsaved" class="badge text-bg-warning" hidden>Unsaved changes</span><button id="ig-close" class="btn btn-outline-secondary btn-sm">Back to integrations</button></div>
     <nav id="ig-steps" class="ig-steps my-3" aria-label="Integration setup"></nav>
     <form id="ig-builder">
       <section data-ig-step="0"><h4 class="h6">1. Connect a system</h4><label for="ig-template" class="form-label">Start from a template</label><select id="ig-template" class="form-select mb-2"></select><p id="ig-template-description" class="small-muted"></p><button type="button" id="ig-apply-template" class="btn btn-outline-primary btn-sm mb-3">Use this template</button>
@@ -167,7 +167,7 @@
             </div>
           </div>
           <div class="card-body">
-            <div id="usersStatus" class="alert alert-info" style="display:none;"></div>
+            <div id="usersStatus" class="alert alert-info" style="display:none;" role="status"></div>
 
             <form id="userCreateForm" class="row g-2 align-items-end mb-3">
               <div class="col-12 col-lg">
@@ -224,7 +224,7 @@
             </div>
           </div>
           <div class="card-body">
-            <div id="groupsStatus" class="alert alert-info" style="display:none;"></div>
+            <div id="groupsStatus" class="alert alert-info" style="display:none;" role="status"></div>
 
             <div class="row g-3 admin-groups-layout">
               <div class="col-12 col-lg-5 admin-groups-list-col">
@@ -314,19 +314,20 @@
 
       <!-- Framework editor -->
       <div class="tab-pane fade" id="pane-framework-editor" role="tabpanel" aria-labelledby="tab-framework-editor" tabindex="0">
-        <div class="card mb-3"><div class="card-header fw-bold">Frameworks used by your organisation</div><div class="card-body">
+        <div id="fe-catalogue"><div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-center"><span class="fw-bold">Framework catalogue</span><button id="fe-create" type="button" class="btn btn-sm btn-outline-primary">New framework</button></div><div class="card-body">
           <p class="small-muted">Choose the frameworks offered in workspace selectors. Existing controls, evidence, audits and mapping rules are retained. This selection is independent of access permissions.</p>
-          <p class="small-muted">Framework data and crosswalks: <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Keen derives related-control links through shared NIST controls. Coverage notes identify gaps; linked evidence needs review. Imported frameworks and nodes remain editable.</p>
-<div class="d-flex gap-2 mb-3" role="group" aria-label="Select organisation frameworks">
-            <button id="fe-select-all" type="button" class="btn btn-outline-secondary btn-sm">Select all</button>
-            <button id="fe-deselect-all" type="button" class="btn btn-outline-secondary btn-sm">Deselect all</button>
-          </div>
+          <div class="row g-2 align-items-end mb-3"><div class="col-sm-8"><label class="form-label" for="fe-catalogue-search">Find a framework</label><input id="fe-catalogue-search" type="search" class="form-control" placeholder="Search titles and descriptions"></div><div class="col-sm-4"><label class="form-check mb-2"><input id="fe-enabled-only" class="form-check-input" type="checkbox"> Enabled only</label></div></div>
+          <div id="fe-categories" class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Framework regions"></div>
 <div id="fe-organisation-frameworks" class="row g-2"></div>
+          <div class="d-flex align-items-center justify-content-between gap-2 mt-3"><span id="fe-page-status" class="small-muted" role="status"></span><nav class="d-flex gap-2" aria-label="Framework catalogue pages"><button id="fe-page-prev" type="button" class="btn btn-sm btn-outline-secondary">Previous</button><button id="fe-page-next" type="button" class="btn btn-sm btn-outline-secondary">Next</button></nav></div>
+          <details class="mt-3"><summary class="small-muted">Catalogue sources and bulk selection</summary><p class="small-muted mt-2">Framework data and crosswalks from <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener noreferrer">Open Security Architecture</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>. Regional categories use the bundled OSA jurisdictions; other catalogues and custom frameworks appear under Other. Keen derives related-control links through shared NIST controls. Linked evidence needs review.</p><div class="d-flex gap-2"><button id="fe-select-all" type="button" class="btn btn-outline-secondary btn-sm">Select all available frameworks</button><button id="fe-deselect-all" type="button" class="btn btn-outline-secondary btn-sm">Deselect all frameworks</button></div><p class="small-muted mt-2">These actions apply across all pages and filters.</p></details>
           <label class="form-label mt-3" for="fe-organisation-default">Organisation default</label><select id="fe-organisation-default" class="form-select" style="max-width:30rem"></select>
           <p id="fe-organisation-note" class="small-muted mt-2" role="status"></p>
           <button id="fe-save-selection" type="button" class="btn btn-primary">Save organisation selection</button>
         </div></div>
-        <div class="card mb-3"><div class="card-header fw-bold">Framework details</div><div class="card-body">
+        </div>
+        <section id="frameworkComparison" aria-label="Framework comparison" hidden></section>
+        <section id="fe-editor" hidden aria-label="Framework editor"><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0" id="fe-editor-heading" tabindex="-1">Edit framework</h2><button id="fe-back" type="button" class="btn btn-outline-secondary btn-sm">Back to catalogue</button></div><div id="fe-message" class="small mb-2" role="status"></div><div class="card mb-3"><div class="card-header fw-bold">Framework details</div><div class="card-body">
           <div class="row g-2"><div class="col-md-4"><label class="form-label">Slug</label><input id="fe-slug" class="form-control" maxlength="64"></div>
           <div class="col-md-5"><label class="form-label">Name</label><input id="fe-name" class="form-control"></div>
           <div class="col-md-3"><label class="form-label">Version</label><input id="fe-version" class="form-control"></div></div>
@@ -334,8 +335,8 @@
           <label class="form-label mt-2">Upstream URL</label><input id="fe-url" type="url" class="form-control">
           <button id="fe-save-framework" class="btn btn-primary mt-2">Save framework</button> <button id="fe-new-framework" class="btn btn-outline-primary mt-2">New framework</button>
         </div></div>
-        <div class="row g-3"><div class="col-lg-5"><div class="card"><div class="card-header d-flex justify-content-between">Nodes <button id="fe-new" class="btn btn-sm btn-outline-primary">New node</button></div><div class="card-body">
-          <label class="form-label">Select framework</label><select id="fe-frameworks" class="form-select mb-2"></select>
+        <div id="fe-node-editor" class="row g-3"><div class="col-lg-5"><div class="card"><div class="card-header d-flex justify-content-between">Nodes <button id="fe-new" class="btn btn-sm btn-outline-primary">New node</button></div><div class="card-body">
+          <label class="form-label">Select framework</label><select id="fe-frameworks" class="form-select mb-2"></select><button id="fe-compare" class="btn btn-sm btn-outline-secondary mb-2" type="button">Compare selected framework</button>
           <input id="fe-search" class="form-control mb-2" placeholder="Search references and titles">
           <div id="fe-tree" class="list-group"></div></div></div></div>
         <div class="col-lg-7"><div class="card"><div class="card-header d-flex justify-content-between align-items-center"><span class="fw-bold">Node details</span><span class="btn-group btn-group-sm" role="group" aria-label="Move through the node tree"><button id="fe-prev-node" class="btn btn-outline-secondary" type="button" disabled title="Edit the previous node in the tree"><i class="bi bi-chevron-up" aria-hidden="true"></i> Previous</button><button id="fe-next-node" class="btn btn-outline-secondary" type="button" disabled title="Edit the next node in the tree">Next <i class="bi bi-chevron-down" aria-hidden="true"></i></button></span></div><div class="card-body">
@@ -349,8 +350,7 @@
           <label class="form-label mt-2">Sort order</label><input id="fe-sort" type="number" class="form-control" value="0">
           <label class="form-check mt-2"><input id="fe-scope" type="checkbox" class="form-check-input" checked> In scope</label>
           <div class="d-flex gap-2 mt-3"><button id="fe-save-node" class="btn btn-primary">Save node</button><button id="fe-delete-node" class="btn btn-outline-danger">Delete node</button></div>
-          <div id="fe-message" class="small mt-2" role="status"></div>
-        </div></div></div></div>
+        </div></div></div></div></section>
       </div>
 
       <div class="tab-pane fade" id="pane-evidence-config" role="tabpanel" aria-labelledby="tab-evidence-config" tabindex="0">
@@ -373,6 +373,7 @@
             <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between mb-3">
               <div>
                 <h3 id="ec-editor-heading" class="h4 mb-1">Create a mapping</h3>
+                <span id="ec-unsaved" class="badge text-bg-warning" hidden>Unsaved changes</span>
                 <p class="small-muted mb-0">A mapping turns matching events into evidence for the controls you choose. Pick the events, say what they show, then check the matches before you publish.</p>
               </div>
               <button id="ec-close-editor" type="button" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to mappings</button>
@@ -796,7 +797,7 @@
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="userAccessModalLabel">User access</h5>
+          <h2 class="modal-title h5" id="userAccessModalLabel">User access</h2>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
@@ -821,7 +822,7 @@
             <div id="userAccessEffective" class="mono small"></div>
           </div>
 
-          <div id="userAccessStatus" class="alert alert-info mt-3" style="display:none;"></div>
+          <div id="userAccessStatus" class="alert alert-info mt-3" style="display:none;" role="status"></div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>

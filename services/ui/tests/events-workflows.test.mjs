@@ -230,9 +230,9 @@ test('a typed date that cannot be read is reported and the previous range is kep
   await settle(() => ui.requests.events.length === 2);
   assert.equal(ui.lastEvents().get('start_date'), '2026-01-01');
   assert.equal(ui.lastEvents().get('end_date'), '2026-01-31');
-  assert.equal(ui.el('startDateDmy').value, '01/01/2026');
-  assert.equal(ui.el('endDateDmy').value, '31/01/2026');
-  assert.equal(ui.el('status').textContent, "Invalid 'To' date. Use dd/mm/yyyy.");
+  assert.equal(ui.el('startDateDmy').value, '2026-01-01');
+  assert.equal(ui.el('endDateDmy').value, '2026-01-31');
+  assert.equal(ui.el('status').textContent, "Invalid 'To' date. Use YYYY-MM-DD.");
   assert.equal(ui.el('status').dataset.alert, 'warning');
 });
 
@@ -317,7 +317,7 @@ test('a saved search that cannot be stored reports why', async (t) => {
   ui.el('saveSearch').click();
 
   await settle(() => /Failed to save/.test(ui.el('status').textContent));
-  assert.equal(ui.el('status').textContent, 'Failed to save: Error: Name already used');
+  assert.equal(ui.el('status').textContent, 'Failed to save: Name already used');
   assert.equal(ui.el('status').dataset.alert, 'danger');
 });
 
@@ -513,3 +513,26 @@ test('without the source register or facets the chosen sources stay and the list
   assert.equal(ui.document.querySelectorAll('#rows tr[data-event-id]').length, 1);
   assert.equal(ui.el('status').dataset.alert, undefined);
 });
+
+for (const format of ['ymd', 'dmy']) {
+  test(`event filters display ${format} and submit ISO dates`, async (t) => {
+    const display = (iso) =>
+      !iso ? '' : format === 'dmy' ? iso.split('-').reverse().join('/') : iso;
+    const ui = await events(t, {
+      query: '&start_date=2026-10-01&end_date=2026-10-23',
+      vendor: {
+        isoDateToDisplay: display,
+        dateFormatPlaceholder: () => (format === 'dmy' ? 'DD/MM/YYYY' : 'YYYY-MM-DD'),
+        displayDateToIso: (value) =>
+          format === 'dmy' ? value.split('/').reverse().join('-') : value,
+      },
+    });
+    assert.equal(ui.el('startDateDmy').value, display('2026-10-01'));
+    assert.equal(ui.el('endDateDmy').value, display('2026-10-23'));
+    assert.equal(ui.el('startDateDmy').placeholder, format === 'dmy' ? 'DD/MM/YYYY' : 'YYYY-MM-DD');
+    ui.el('startDateDmy').value = display('2026-10-02');
+    ui.el('filters').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+    await settle(() => ui.lastEvents().get('start_date') === '2026-10-02');
+    assert.equal(ui.lastEvents().get('end_date'), '2026-10-23');
+  });
+}

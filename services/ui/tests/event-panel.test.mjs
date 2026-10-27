@@ -218,7 +218,7 @@ test('a failed event load is reported in the panel', async (t) => {
   await settle(() => /unavailable/.test(ui.panel.querySelector('[data-panel-title]').textContent));
   assert.match(
     ui.panel.querySelector('[data-panel-body]').textContent,
-    /Failed to load the event: Error: Event offline/,
+    /Failed to load the event: Event offline/,
   );
   assert.equal(
     ui.panel.querySelector('[data-panel-full]').getAttribute('href'),

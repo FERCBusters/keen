@@ -103,6 +103,7 @@ async function ssoEmails(t, options = {}) {
   const ui = await page(t, 'sso-emails', {
     htmlName: 'account',
     globals: options.globals,
+    confirm: options.confirm,
     get: async (u) => {
       if (u.pathname === '/api/v1/me/sso-emails') {
         if (options.fail) throw new Error('Session expired');
@@ -127,7 +128,7 @@ async function ssoEmails(t, options = {}) {
 test('verified SSO addresses are listed as text and removed after confirmation', async (t) => {
   const prompts = [];
   const { ui, state } = await ssoEmails(t, {
-    globals: { confirm: (m) => (prompts.push(m), true) },
+    confirm: (asked) => (prompts.push(asked), true),
   });
   assert.equal(ui.el('ssoEmailForm').hidden, false);
   assert.match(
@@ -143,7 +144,7 @@ test('verified SSO addresses are listed as text and removed after confirmation',
     path: '/api/v1/me/sso-emails/remove',
     body: { email: '<b>alice</b>@example.test' },
   });
-  assert.match(prompts[0], /Existing linked sign-in identities will remain active/);
+  assert.match(prompts[0].message, /Existing linked sign-in identities will remain active/);
 });
 
 test('SSO email verification requests report the outcome', async (t) => {
@@ -167,10 +168,10 @@ test('SSO email management requires SMTP and reports failures', async (t) => {
   assert.match(noSmtp.ui.el('ssoEmailStatus').textContent, /must configure SMTP/);
   const failed = await ssoEmails(t, { fail: true });
   assert.equal(failed.ui.el('ssoEmailStatus').textContent, 'Session expired');
-  const declined = await ssoEmails(t, { globals: { confirm: () => false } });
+  const declined = await ssoEmails(t, { confirm: false });
   declined.ui.el('ssoEmailList').querySelector('button').click();
   assert.equal(declined.state.posted.length, 0);
-  const rejected = await ssoEmails(t, { postFail: true, globals: { confirm: () => true } });
+  const rejected = await ssoEmails(t, { postFail: true });
   const button = rejected.ui.el('ssoEmailList').querySelector('button');
   button.click();
   await settle(() => rejected.ui.el('ssoEmailStatus').textContent === 'Reauthenticate first');

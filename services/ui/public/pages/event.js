@@ -4,6 +4,7 @@ import { createEvidenceExporter } from './evidence-export/index.js';
 import { renderJson } from '/json-highlight.js';
 import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
+  errorText,
   initNavbar,
   canSampleIntoAudit,
   canEditAuditForUser,
@@ -11,6 +12,7 @@ import {
   apiPatch,
   apiPost,
   apiDelete,
+  confirmAction,
   esc,
   fmtTs,
   toast,
@@ -490,7 +492,7 @@ async function openEditDiaryModal() {
         toast(status, 'Diary entry updated', 'success');
         await load();
       } catch (err) {
-        const msg = String(err);
+        const msg = errorText(err);
         if (modalStatus) {
           modalStatus.className = 'alert alert-danger';
           modalStatus.textContent = msg;
@@ -558,7 +560,11 @@ async function deleteIncident(incidentId) {
     toast(status, 'incident.delete permission required.', 'danger');
     return;
   }
-  const ok = window.confirm('Delete this incident reference from Keen?');
+  const ok = await confirmAction({
+    title: 'Delete incident reference',
+    message: 'Delete this incident reference from Keen?',
+    confirmLabel: 'Delete',
+  });
   if (!ok) return;
   try {
     await apiDelete(
@@ -570,7 +576,7 @@ async function deleteIncident(incidentId) {
     renderIncidents(currentEvent.incidents);
     toast(status, 'Incident deleted.', 'success');
   } catch (err) {
-    toast(status, `Failed to delete incident: ${String(err)}`, 'danger');
+    toast(status, `Failed to delete incident: ${errorText(err)}`, 'danger');
   }
 }
 
@@ -764,7 +770,7 @@ async function load() {
     }
 
     if (controls.length === 0) {
-      controlsEl.innerHTML = `<span class="badge text-bg-light">unmapped</span>`;
+      controlsEl.innerHTML = `<span class="badge text-bg-light">Unmapped</span>`;
       if (rationaleEl) rationaleEl.innerHTML = `<span class="badge text-bg-light">none</span>`;
     } else {
       // Render mapped controls list
@@ -974,7 +980,7 @@ async function load() {
       await exporter.autoPrintEvidence(e);
     }
   } catch (err) {
-    toast(status, `Failed to load event: ${String(err)}`, 'danger');
+    toast(status, `Failed to load event: ${errorText(err)}`, 'danger');
   }
 }
 
@@ -1146,11 +1152,12 @@ async function openAuditSampleModal() {
         );
       }
     } catch (e) {
+      console.debug('DEBUG-1154', e, typeof errorText, errorText(e));
       auditSampleSelect.innerHTML = '<option value="">Failed to load audits</option>';
       if (auditSampleSubmit) auditSampleSubmit.disabled = true;
       if (auditSampleNotes) auditSampleNotes.disabled = true;
       if (auditSampleUseCurrentUrl) auditSampleUseCurrentUrl.disabled = true;
-      toast(auditSampleStatus || status, `Failed to load audits: ${String(e)}`, 'danger');
+      toast(auditSampleStatus || status, `Failed to load audits: ${errorText(e)}`, 'danger');
     }
   }
 
@@ -1191,7 +1198,7 @@ async function submitAuditSample() {
       window.bootstrap.Modal.getOrCreateInstance(auditSampleModalEl).hide();
     }
   } catch (e) {
-    toast(auditSampleStatus || status, `Failed: ${String(e)}`, 'danger');
+    toast(auditSampleStatus || status, `Failed: ${errorText(e)}`, 'danger');
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -1284,7 +1291,7 @@ async function submitIncident() {
       window.bootstrap.Modal.getOrCreateInstance(incidentModalEl).hide();
     }
   } catch (e) {
-    toast(incidentStatusEl || status, `Failed to create incident: ${String(e)}`, 'danger');
+    toast(incidentStatusEl || status, `Failed to create incident: ${errorText(e)}`, 'danger');
   } finally {
     if (btn) {
       btn.disabled = false;

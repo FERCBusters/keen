@@ -179,11 +179,9 @@ async function isms(t, tab, options = {}) {
   const ui = await page(t, 'isms', {
     query: '&tab=' + tab,
     me: options.me || { is_admin: true },
-    globals: {
-      confirm: (message) => {
-        prompts.push(message);
-        return options.confirm ?? true;
-      },
+    confirm: (asked) => {
+      prompts.push(asked);
+      return options.confirm ?? true;
     },
     setup(window) {
       window.d3 = d3;
@@ -394,9 +392,11 @@ test('deleting asks first, and declining sends nothing', async (t) => {
   const declined = await isms(t, 'objectives', { confirm: false });
   await settle(() => declined.el('objectivesRows').textContent.includes('Train operators'));
   declined.click('[data-isms-delete="objective"][data-isms-id="o1"]');
-  assert.deepEqual(declined.prompts, [
-    'Delete Train operators? This will remove the ISMS record and its ISMS links.',
-  ]);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(
+    declined.prompts.map((p) => p.title),
+    ['Delete Train operators'],
+  );
   assert.deepEqual(declined.writes(), []);
 
   const ui = await isms(t, 'objectives');
@@ -601,9 +601,10 @@ test('categories, licences and hosting accounts are managed in their own cards',
       ['POST', '/api/v1/isms/licenses?framework=A', { name: 'Open source', description: '' }],
     ],
   );
-  assert.deepEqual(ui.prompts, [
-    'Delete Enterprise? Licenses related to assets cannot be deleted.',
-  ]);
+  assert.deepEqual(
+    ui.prompts.map((p) => p.title),
+    ['Delete Enterprise'],
+  );
 });
 
 // --- Access control matrix -----------------------------------------------------------
@@ -700,9 +701,10 @@ test('hosting accounts are edited and removed from their card', async (t) => {
       ],
     ],
   );
-  assert.deepEqual(ui.prompts, [
-    'Delete Staging? This removes it from access control matrix rows.',
-  ]);
+  assert.deepEqual(
+    ui.prompts.map((p) => p.title),
+    ['Delete Staging'],
+  );
 });
 
 // --- Effectiveness and meetings --------------------------------------------------------

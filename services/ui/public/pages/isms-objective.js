@@ -1,4 +1,6 @@
 import {
+  isoDateToDisplay,
+  errorText,
   initNavbar,
   apiGet,
   fmtTs,
@@ -63,7 +65,7 @@ function renderObjective(row) {
   $('objectiveOwner').innerHTML = userPillHtml(objective.owner);
   $('objectiveResources').innerHTML = userBadges(objective.resource_users);
   $('objectiveResourceText').textContent = objective.resource_requirements_text || '-';
-  $('objectiveTarget').textContent = objective.completion_target_date || '-';
+  $('objectiveTarget').textContent = isoDateToDisplay(objective.completion_target_date) || '-';
   $('objectiveStatusValue').textContent = statusLabel(objective.status);
   $('objectiveUpdated').textContent = fmtTs(objective.updated_at) || '-';
   $('objectiveControls').innerHTML = controlBadges(objective.controls, framework);
@@ -102,7 +104,7 @@ async function load() {
     await loadChangelog();
     activateTabFromHashOrQuery(params, { changelog: $('objectiveChangelogTab') });
   } catch (e) {
-    toast(status, `Failed to load objective: ${String(e)}`, 'danger');
+    toast(status, `Failed to load objective: ${errorText(e)}`, 'danger');
   }
 }
 

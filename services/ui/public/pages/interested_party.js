@@ -1,10 +1,12 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
   apiPatch,
   apiDelete,
+  confirmAction,
   esc,
   fmtTs,
   toast,
@@ -98,7 +100,7 @@ function fillSelects() {
 }
 function controlHref(id) {
   return withFramework(
-    `/control.html?id=${encodeURIComponent(id || '')}&tab=interested-parties`,
+    `/control.html?id=${encodeURIComponent(id || '')}&tab=governance`,
     framework,
   );
 }
@@ -261,7 +263,15 @@ async function saveComms() {
 }
 async function deleteCurrent() {
   if (!itemId || !canManage) return;
-  if (!confirm('Delete this interested party?')) return;
+  if (
+    !(await confirmAction({
+      title: 'Delete interested party',
+      message: 'Delete this interested party and its links to risks, assets and controls?',
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
+  )
+    return;
   await apiDelete(`/api/v1/interested-parties/${encodeURIComponent(itemId)}`);
   location.href = withFramework('/interested_parties.html', framework);
 }
@@ -278,7 +288,7 @@ async function loadChangelog() {
 }
 function wireEvents() {
   form?.addEventListener('submit', (ev) =>
-    saveItem(ev).catch((e) => toast(status, String(e), 'danger')),
+    saveItem(ev).catch((e) => toast(status, errorText(e), 'danger')),
   );
   controlSearch?.addEventListener('input', debounce(renderControls, 180));
   addCommunication?.addEventListener('click', () => {
@@ -292,10 +302,10 @@ function wireEvents() {
     renderCommunications();
   });
   saveCommunications?.addEventListener('click', () =>
-    saveComms().catch((e) => toast(status, String(e), 'danger')),
+    saveComms().catch((e) => toast(status, errorText(e), 'danger')),
   );
   deleteParty?.addEventListener('click', () =>
-    deleteCurrent().catch((e) => toast(status, String(e), 'danger')),
+    deleteCurrent().catch((e) => toast(status, errorText(e), 'danger')),
   );
   document.addEventListener('click', (ev) => {
     const btn = ev.target.closest('[data-remove-comm]');
@@ -329,5 +339,5 @@ try {
   await loadItem();
   if (requestedTab === 'changelog') await loadChangelog();
 } catch (e) {
-  toast(status, `Failed to load interested party: ${String(e)}`, 'danger');
+  toast(status, `Failed to load interested party: ${errorText(e)}`, 'danger');
 }

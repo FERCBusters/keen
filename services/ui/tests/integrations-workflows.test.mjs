@@ -189,9 +189,16 @@ async function builder(t, options = {}) {
     },
     globals: {
       setInterval: (fn, ms) => (state.intervals.push({ fn, ms }), state.intervals.length),
-      confirm: (m) => (state.prompts.push(m), options.confirm ?? true),
       Blob,
       ...options.globals,
+    },
+    modules: {
+      'pages/confirm-modal.js': {
+        confirmAction: async (asked) => {
+          state.prompts.push(asked);
+          return options.confirm ?? true;
+        },
+      },
     },
     vendor: {
       apiGet: async (url) => {
@@ -597,15 +604,12 @@ test('editing an existing draft previews, publishes and restores revisions', asy
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(state.posted.at(-1).url, `${root}/collectors/c1/rollback`);
   assert.deepEqual(state.posted.at(-1).body, { version: 6, revision: 2 });
-  assert.equal(state.prompts.at(-1), 'Restore this revision? The existing cursor is retained.');
+  assert.equal(state.prompts.at(-1).title, 'Restore live revision');
 
   el('reset').click();
   await settle(() => el('status').textContent === 'reset-cursor completed.');
   assert.equal(state.posted.at(-1).url, `${root}/collectors/c1/reset-cursor`);
-  assert.equal(
-    state.prompts.at(-1),
-    'Replay history on the next run? Existing evidence is retained.',
-  );
+  assert.equal(state.prompts.at(-1).title, 'Replay history on the next run');
 });
 
 test('declined confirmations keep the draft and cursor unchanged', async (t) => {
@@ -626,12 +630,15 @@ test('declined confirmations keep the draft and cursor unchanged', async (t) => 
   assert.equal(el('editor').hidden, false);
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(state.posted.length, 0);
-  assert.deepEqual(state.prompts, [
-    'Restore this revision? The existing cursor is retained.',
-    'Replay history on the next run? Existing evidence is retained.',
-    'Replace draft form values with this template?',
-    'Discard unsaved changes?',
-  ]);
+  assert.deepEqual(
+    state.prompts.map((p) => p.title),
+    [
+      'Restore live revision',
+      'Replay history on the next run',
+      'Use this template',
+      'Discard unsaved changes',
+    ],
+  );
 });
 
 test('a revision history failure is reported', async (t) => {

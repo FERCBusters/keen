@@ -2,11 +2,14 @@ import { featureEnabled } from '/pages/feature-availability.js';
 import { deleteQuestionThread, myQuestionRowHtml } from '/pages/question-threads.js';
 import { mountMyQuizzes } from '/pages/my-quizzes.js';
 import {
+  isoDateToDisplay,
+  errorText,
   initNavbar,
   apiGet,
   apiPost,
   apiPatch,
   apiDelete,
+  confirmAction,
   applyTheme,
   THEMES,
   toast,
@@ -225,7 +228,7 @@ function loadPrefs(meObj) {
   if (prefUseLocalTz) prefUseLocalTz.checked = !!prefs.use_local_timezone;
   if (prefTimezone) prefTimezone.value = (prefs.timezone || browserTz || '').trim();
   if (prefTheme) {
-    const t = (prefs.theme || 'purple').trim() || 'purple';
+    const t = (prefs.theme || 'sand').trim() || 'sand';
     prefTheme.value = t;
     applyTheme(t);
   }
@@ -454,8 +457,15 @@ async function loadSourceColors() {
 }
 
 if (sourceColorsResetAll) {
-  sourceColorsResetAll.addEventListener('click', () => {
-    if (!confirm('Reset all your source colour overrides?')) return;
+  sourceColorsResetAll.addEventListener('click', async () => {
+    if (
+      !(await confirmAction({
+        title: 'Reset source colours',
+        message: 'Reset all your source colour overrides to the defaults?',
+        confirmLabel: 'Reset',
+      }))
+    )
+      return;
     sourceColorOverrides = {};
     sourceColorsDirty = true;
     loadSourceColors();
@@ -501,12 +511,19 @@ function renderSavedSearches(items) {
     del.className = 'btn btn-sm btn-outline-danger';
     del.textContent = 'Delete';
     del.addEventListener('click', async () => {
-      if (!confirm(`Delete saved search "${s.name || ''}"?`)) return;
+      if (
+        !(await confirmAction({
+          title: 'Delete saved search',
+          message: `Delete the saved search ${s.name || '(without a name)'}?`,
+          confirmLabel: 'Delete',
+        }))
+      )
+        return;
       try {
         await apiDelete(`/api/v1/me/saved-searches/${encodeURIComponent(s.id)}`);
         await loadSavedSearches();
       } catch (e) {
-        toast(status, `Failed to delete: ${String(e)}`, 'danger');
+        toast(status, `Failed to delete: ${errorText(e)}`, 'danger');
       }
     });
 
@@ -534,7 +551,7 @@ async function loadSavedSearches() {
     if (savedSearchesEmpty) {
       savedSearchesEmpty.className = 'alert alert-danger mb-0';
       savedSearchesEmpty.style.display = '';
-      savedSearchesEmpty.textContent = `Failed to load saved searches: ${String(e)}`;
+      savedSearchesEmpty.textContent = `Failed to load saved searches: ${errorText(e)}`;
     }
   }
 }
@@ -560,6 +577,16 @@ function accountTabForHash(hash) {
 function maybeLoadActiveAccountTab(target) {
   if (Object.hasOwn(accountLists, target)) accountLists[target].loadOnce();
 }
+
+const accountNavigationToggle = document.getElementById('account-navigation-toggle');
+accountNavigationToggle?.addEventListener('click', () => {
+  const open = document.getElementById('accountTabs').classList.toggle('admin-nav-open');
+  accountNavigationToggle.setAttribute('aria-expanded', String(open));
+});
+document.getElementById('accountTabs')?.addEventListener('shown.bs.tab', () => {
+  document.getElementById('accountTabs').classList.remove('admin-nav-open');
+  accountNavigationToggle?.setAttribute('aria-expanded', 'false');
+});
 
 function bindAccountTabs() {
   const tabButtons = Array.from(document.querySelectorAll('#accountTabs [data-bs-toggle="tab"]'));
@@ -632,7 +659,7 @@ function accountList({
       wrap.style.display = 'none';
       listStatus.className = 'alert alert-danger';
       listStatus.style.display = '';
-      listStatus.textContent = `Failed to load ${noun}: ${String(err)}`;
+      listStatus.textContent = `Failed to load ${noun}: ${errorText(err)}`;
     }
   }
   el('Refresh')?.addEventListener('click', load);
@@ -649,7 +676,7 @@ document.getElementById('myQuestionsTbody')?.addEventListener('click', async (ev
       await accountLists['#my-questions-pane'].load();
     }
   } catch (e) {
-    toast(status, String(e), 'danger');
+    toast(status, errorText(e), 'danger');
   }
   button.disabled = false;
 });
@@ -669,7 +696,11 @@ function myAuditRow(a) {
     `/audit.html?id=${encodeURIComponent(a.id)}`,
     a.framework_slug || getCurrentFramework(),
   );
-  const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ') || '-';
+  const dates =
+    [a.start_date, a.end_date]
+      .filter(Boolean)
+      .map((d) => isoDateToDisplay(d))
+      .join(' → ') || '-';
   const attendeeRole = String(a?.my_attendee?.role || '').trim() || 'Attendee';
   const updated = a.updated_at ? fmtTs(a.updated_at) : '-';
   return `<tr>
@@ -686,7 +717,7 @@ function myAuditRow(a) {
 }
 
 // ---------------------------------------------------------------------------
-// Risks I own
+// My Risks
 // ---------------------------------------------------------------------------
 
 function riskScoreClass(score) {
@@ -777,7 +808,7 @@ function myMeetingRow(item) {
   );
   return `<tr>
     <td class="wrap"><span class="fw-semibold">${esc(item?.title || 'Meeting')}</span><div class="small-muted">${esc(item?.agenda_minutes_notes || '')}</div></td>
-    <td class="small-muted">${esc(item?.date || '-')}</td>
+    <td class="small-muted">${esc(isoDateToDisplay(item?.date) || '-')}</td>
     <td class="small-muted">${esc(meetingTimeLabel(item))}</td>
     <td><span class="badge text-bg-light">${esc(item?.my_attendance_label || '-')}</span></td>
     <td>${userPillsHtml(item?.attendees || [])}</td>
@@ -939,7 +970,7 @@ if (prefsForm) {
 
     const payload = {
       use_local_timezone: !!prefUseLocalTz?.checked,
-      theme: (prefTheme?.value || 'purple').trim() || 'purple',
+      theme: (prefTheme?.value || 'sand').trim() || 'sand',
       date_format: (prefDateFormat?.value || 'default').trim() || 'default',
       auto_apply_filters: !!prefAutoApplyFilters?.checked,
       landing_page: (prefLandingPage?.value || '/').trim() || '/',
@@ -979,7 +1010,7 @@ if (prefsForm) {
       toast(status, 'Preferences saved', 'success', 2500);
     } catch (e) {
       showPrefsSaveToast('Failed', 'danger', 5200);
-      toast(status, `Failed: ${String(e)}`, 'danger');
+      toast(status, `Failed: ${errorText(e)}`, 'danger');
     }
   });
 }
@@ -1030,7 +1061,7 @@ if (pwForm && me?.password_change_enabled !== false) {
       if (curPw) curPw.value = '';
       if (newPw) newPw.value = '';
     } catch (e) {
-      toast(status, `Failed: ${String(e)}`, 'danger');
+      toast(status, `Failed: ${errorText(e)}`, 'danger');
     }
   });
 }

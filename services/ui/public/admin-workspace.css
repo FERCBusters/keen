@@ -29,7 +29,7 @@ body[data-page='admin'] .container-tight {
   padding: 16px 14px 6px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 750;
   color: var(--keen-muted);
 }
@@ -120,16 +120,6 @@ body[data-page='admin'] .container-tight {
   overflow-wrap: anywhere;
 }
 @media (max-width: 991px) {
-  .admin-tab-nav {
-    position: static;
-    flex-basis: auto;
-    width: 100%;
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .admin-nav-label {
-    grid-column: 1/-1;
-  }
   .ig-field {
     grid-template-columns: 1fr 1fr;
   }
@@ -144,9 +134,6 @@ body[data-page='admin'] .container-tight {
 }
 
 @media (max-width: 991px) {
-  .admin-tab-nav:not(.admin-nav-open) {
-    display: none !important;
-  }
   .ig-field {
     padding: 12px;
     background: rgba(var(--keen-accent-rgb), 0.04);

@@ -1,11 +1,14 @@
 import { applyFeatures, featureEnabled } from '/pages/feature-availability.js';
 // Re-export the MOSP design-system helpers.
 export * from '/vendor/mosp-design-system/app.js';
+export { confirmAction } from './pages/confirm-modal.js';
+export { unsavedGuard } from './pages/unsaved-guard.js';
 import { initContextHelp } from './help-launcher.js';
 
 // Design-system helpers this module uses itself; pages reach every
 // design-system export through the re-export above.
 import {
+  errorText,
   getCurrentFramework,
   getLoadedFrameworkCatalog,
   apiGet,
@@ -281,8 +284,15 @@ async function initialiseNavbar(...args) {
             : '/api/v1/me/questions/summary'
           : '',
     },
-    brandIcon: '/keen-mitigator.png',
-    nav: { ...cfg.nav, expandClass: 'navbar-expand-lg' },
+    brandIcon: '/keen-mitigator-64.png',
+    nav: {
+      ...cfg.nav,
+      expandClass: 'navbar-expand-lg',
+      extraHtml: (me) =>
+        me?.can_manage_audits || me?.is_admin
+          ? '<a class="btn btn-sm btn-light me-2" data-nav-fw="1" data-base-href="/audit-wizard.html" href="/audit-wizard.html"><i class="bi bi-clipboard2-plus me-1" aria-hidden="true"></i><span class="nav-label-optional">Start audit</span></a>'
+          : '',
+    },
     framework: { ...cfg.framework, selectMaxChars: 19, selectMinChars: 14 },
   });
   // Keen logout mutates authentication state and therefore uses a CSRF POST.
@@ -750,7 +760,7 @@ function _ensureEntityAuditSampleModal() {
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <div id="entityAuditSampleStatus" class="alert alert-info" style="display:none;"></div>
+            <div id="entityAuditSampleStatus" class="alert alert-info" style="display:none;" role="status"></div>
             <div class="mb-3">
               <label class="form-label small-muted mb-1" for="entityAuditSampleSelect">Audit</label>
               <select id="entityAuditSampleSelect" class="form-select"></select>
@@ -885,7 +895,7 @@ export async function openAuditSampleModal({
       if (els.submit) els.submit.disabled = true;
       if (els.notes) els.notes.disabled = true;
       if (els.useUrl) els.useUrl.disabled = true;
-      toast(els.status || statusEl, `Failed to load audits: ${String(e)}`, 'danger');
+      toast(els.status || statusEl, `Failed to load audits: ${errorText(e)}`, 'danger');
     }
   }
 
@@ -921,7 +931,7 @@ export async function openAuditSampleModal({
       }
       if (typeof onSampled === 'function') await onSampled(auditId);
     } catch (e) {
-      toast(els.status || statusEl, `Failed: ${String(e)}`, 'danger');
+      toast(els.status || statusEl, `Failed: ${errorText(e)}`, 'danger');
     } finally {
       if (btn) {
         btn.disabled = false;

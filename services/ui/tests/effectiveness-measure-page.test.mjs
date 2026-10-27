@@ -274,7 +274,7 @@ test('failed metric deletion is reported and leaves the entry', async (t) => {
   const { ui } = await measurePage(t, { deleteFail: true, globals: { confirm: () => true } });
   ui.document.querySelector('[data-delete-metric="e2"]').click();
   await settle(() =>
-    /Failed to delete metric entry: Error: Delete refused/.test(ui.el('status').textContent),
+    /Failed to delete metric entry: Delete refused/.test(ui.el('status').textContent),
   );
   assert.equal(ui.el('metricsMeta').textContent, '3 / 3');
 });
@@ -323,7 +323,7 @@ test('load failures, changelog failures and a missing id are reported', async (t
   const failed = await measurePage(t, { fail: true, sourcesFail: true });
   assert.match(
     failed.ui.el('status').textContent,
-    /Failed to load effectiveness measure: Error: Measure offline/,
+    /Failed to load effectiveness measure: Measure offline/,
   );
   const log = await measurePage(t, { changelogFail: true });
   assert.match(log.ui.el('measureChangelog').textContent, /Failed to load changelog/);
