@@ -1,4 +1,5 @@
 import {
+  isoDateToDisplay,
   errorText,
   safeExternalHref,
   initNavbar,
@@ -81,8 +82,8 @@ function renderMeeting(meeting) {
   document.title = `Keen - ${title}`;
   $('meetingTitle').textContent = title;
   $('meetingMeta').textContent =
-    `${meeting.date || 'No date'} · ${[meeting.start_time, meeting.end_time].filter(Boolean).join('-') || 'No time recorded'}`;
-  $('meetingDate').textContent = meeting.date || '-';
+    `${isoDateToDisplay(meeting.date) || 'No date'} · ${[meeting.start_time, meeting.end_time].filter(Boolean).join('-') || 'No time recorded'}`;
+  $('meetingDate').textContent = isoDateToDisplay(meeting.date) || '-';
   $('meetingTime').textContent =
     [meeting.start_time, meeting.end_time].filter(Boolean).join('-') || '-';
   $('meetingAttendees').innerHTML = personBadges(meeting.attendees);

@@ -1,4 +1,5 @@
 import {
+  isoDateToDisplay,
   errorText,
   safeExternalHref,
   initNavbar,
@@ -447,7 +448,7 @@ function renderIsmsObjectives() {
     rows
       .map(
         (o) =>
-          `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement || '', 180))}</div></td><td>${esc(o.metric || '-')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(o.completion_target_date || '-')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${controlBadges(o.controls, framework)}</td><td>${clauseBadges(o.clauses, framework)}</td></tr>`,
+          `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement || '', 180))}</div></td><td>${esc(o.metric || '-')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(isoDateToDisplay(o.completion_target_date) || '-')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${controlBadges(o.controls, framework)}</td><td>${clauseBadges(o.clauses, framework)}</td></tr>`,
       )
       .join('') ||
     '<tr><td colspan="7" class="p-4 small-muted">No ISMS objectives match.</td></tr>';

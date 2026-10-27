@@ -1,4 +1,5 @@
 import {
+  dateFormatPlaceholder,
   errorText,
   initNavbar,
   apiGet,
@@ -7,9 +8,9 @@ import {
   fmtTs,
   tsSortKey,
   toast,
-  isoDateToDmy,
-  dmyToIsoDate,
-  wireIsoDmyDateField,
+  isoDateToDisplay,
+  displayDateToIso,
+  wireIsoDateTextField,
   qs,
   qbool,
   qint,
@@ -143,7 +144,7 @@ const selLimit = document.getElementById('limit');
 const startDate = document.getElementById('startDate');
 const endDate = document.getElementById('endDate');
 
-// Visible dd/mm/yyyy fields (the hidden inputs above keep YYYY-MM-DD for API/URLs)
+// Visible preferred-format fields (the hidden inputs above keep YYYY-MM-DD for API/URLs)
 const startDateDmy = document.getElementById('startDateDmy');
 const endDateDmy = document.getElementById('endDateDmy');
 const startDatePick = document.getElementById('startDatePick');
@@ -326,9 +327,9 @@ function syncInputs() {
   // Hidden native date inputs keep YYYY-MM-DD values.
   if (startDate) startDate.value = state.start_date || '';
   if (endDate) endDate.value = state.end_date || '';
-  // Visible fields show dd/mm/yyyy.
-  if (startDateDmy) startDateDmy.value = isoDateToDmy(state.start_date || '');
-  if (endDateDmy) endDateDmy.value = isoDateToDmy(state.end_date || '');
+  // Visible fields follow the date preference.
+  if (startDateDmy) startDateDmy.value = isoDateToDisplay(state.start_date || '');
+  if (endDateDmy) endDateDmy.value = isoDateToDisplay(state.end_date || '');
   // control/source filled after options load
 }
 
@@ -607,7 +608,7 @@ function applyFromInputs(resetOffset = true) {
   state.conditions = conditionEditor.values();
   state.unmapped = chkUnmapped.checked;
 
-  // Sync visible dd/mm/yyyy fields into the hidden YYYY-MM-DD inputs.
+  // Sync visible date fields into the hidden YYYY-MM-DD inputs.
   const startUser = (startDateDmy?.value || '').trim();
   const endUser = (endDateDmy?.value || '').trim();
 
@@ -615,11 +616,11 @@ function applyFromInputs(resetOffset = true) {
     if (!startUser) {
       startDate.value = '';
     } else {
-      const iso = dmyToIsoDate(startUser);
+      const iso = displayDateToIso(startUser);
       if (iso) {
         startDate.value = iso;
       } else {
-        toast(status, "Invalid 'From' date. Use dd/mm/yyyy.", 'warning');
+        toast(status, `Invalid 'From' date. Use ${dateFormatPlaceholder()}.`, 'warning');
         // keep previous hidden value
       }
     }
@@ -628,11 +629,11 @@ function applyFromInputs(resetOffset = true) {
     if (!endUser) {
       endDate.value = '';
     } else {
-      const iso = dmyToIsoDate(endUser);
+      const iso = displayDateToIso(endUser);
       if (iso) {
         endDate.value = iso;
       } else {
-        toast(status, "Invalid 'To' date. Use dd/mm/yyyy.", 'warning');
+        toast(status, `Invalid 'To' date. Use ${dateFormatPlaceholder()}.`, 'warning');
         // keep previous hidden value
       }
     }
@@ -646,11 +647,11 @@ function applyFromInputs(resetOffset = true) {
   let endIso = endRaw ? parseIsoDate(endRaw) : '';
 
   if (startRaw && !startIso) {
-    toast(status, "Invalid 'From' date. Use dd/mm/yyyy.", 'warning');
+    toast(status, `Invalid 'From' date. Use ${dateFormatPlaceholder()}.`, 'warning');
     startIso = state.start_date || '';
   }
   if (endRaw && !endIso) {
-    toast(status, "Invalid 'To' date. Use dd/mm/yyyy.", 'warning');
+    toast(status, `Invalid 'To' date. Use ${dateFormatPlaceholder()}.`, 'warning');
     endIso = state.end_date || '';
   }
 
@@ -670,8 +671,8 @@ function applyFromInputs(resetOffset = true) {
   // Reflect normalized values back into the inputs.
   if (startDate) startDate.value = state.start_date || '';
   if (endDate) endDate.value = state.end_date || '';
-  if (startDateDmy) startDateDmy.value = isoDateToDmy(state.start_date || '');
-  if (endDateDmy) endDateDmy.value = isoDateToDmy(state.end_date || '');
+  if (startDateDmy) startDateDmy.value = isoDateToDisplay(state.start_date || '');
+  if (endDateDmy) endDateDmy.value = isoDateToDisplay(state.end_date || '');
 
   state.limit = parseInt(selLimit.value || '50', 10);
   state.limitCapped = false;
@@ -846,9 +847,11 @@ selLimit.addEventListener('change', () => {
 });
 
 // Date helpers: open native picker via the hidden <input type="date">, but
-// display dd/mm/yyyy in the visible text boxes.
-wireIsoDmyDateField(startDate, startDateDmy, startDatePick, { dispatchChangeOnText: false });
-wireIsoDmyDateField(endDate, endDateDmy, endDatePick, { dispatchChangeOnText: false });
+// display the preferred date format in the visible text boxes.
+for (const input of [startDateDmy, endDateDmy])
+  input?.setAttribute('placeholder', dateFormatPlaceholder());
+wireIsoDateTextField(startDate, startDateDmy, startDatePick, { dispatchChangeOnText: false });
+wireIsoDateTextField(endDate, endDateDmy, endDatePick, { dispatchChangeOnText: false });
 
 // Init from query
 syncInputs();

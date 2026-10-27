@@ -2,7 +2,7 @@
 // labelled links drawn between them. The canvas keeps the layout in memory and
 // reports every change so the page can offer to save it. A box's title opens
 // its record in a new tab.
-import { esc, safeExternalHref } from '/app.js';
+import { fmtTs, esc, safeExternalHref } from '/app.js';
 
 export const NODE_WIDTH = 200;
 export const NODE_HEIGHT = 90;
@@ -160,7 +160,7 @@ export function createFlowCanvas({
     const title = item.label || item.title || item.kind_label;
     const subtitle = item.label && item.title && item.title !== item.label ? item.title : '';
     const when = item.occurred_at
-      ? `<div class="small-muted story-node-time">${esc(item.occurred_at)}</div>`
+      ? `<div class="small-muted story-node-time">${esc(fmtTs(item.occurred_at))}</div>`
       : '';
     return `<span class="badge badge-soft story-node-kind">${esc(item.kind_label || item.kind)}</span>
       <div class="story-node-title">${titleHtml(item, title)}</div>

@@ -1,5 +1,6 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
+  isoDateToDisplay,
   errorText,
   initNavbar,
   apiGet,
@@ -193,7 +194,11 @@ function renderAudits(items) {
         `/audit.html?id=${encodeURIComponent(a.id)}`,
         a.framework_slug || getCurrentFramework(),
       );
-      const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ') || '-';
+      const dates =
+        [a.start_date, a.end_date]
+          .filter(Boolean)
+          .map((d) => isoDateToDisplay(d))
+          .join(' → ') || '-';
       const scope = `${a.scope_count ?? 0}`;
       const scopeBreakdown = `${a.document_scope_count ?? 0} documents, ${a.clause_scope_count ?? 0} clauses, ${a.control_scope_count ?? 0} controls`;
       return `<tr>
@@ -319,7 +324,7 @@ function coverageSourceHtml(sources) {
       .slice(0, 8)
       .map((src) => {
         const label =
-          `${src.start_date || src.occurrence_date || ''} ${src.title || 'Audit'}`.trim();
+          `${isoDateToDisplay(src.start_date || src.occurrence_date) || ''} ${src.title || 'Audit'}`.trim();
         const href = withFramework(
           `/audit.html?id=${encodeURIComponent(src.audit_id || src.id || '')}`,
           src.framework_slug || coverageData?.framework_slug || getCurrentFramework(),
@@ -751,8 +756,8 @@ function renderScheduledRows(items) {
         <a class="fw-semibold" href="${esc(url)}">${esc(a.title || 'Scheduled audit')}</a>
         <div class="small-muted">${esc(auditTypeLabel(a.audit_type))} · ${esc(a.framework_slug || '')}</div>
       </td>
-      <td>${esc(a.schedule_next_run_date || '-')}</td>
-      <td>${esc(scheduleSummary(a))}${a.schedule_until_date ? `<div class="small-muted">Until ${esc(a.schedule_until_date)}</div>` : ''}</td>
+      <td>${esc(isoDateToDisplay(a.schedule_next_run_date) || '-')}</td>
+      <td>${esc(scheduleSummary(a))}${a.schedule_until_date ? `<div class="small-muted">Until ${esc(isoDateToDisplay(a.schedule_until_date))}</div>` : ''}</td>
       <td>${esc(attendees.length)}</td>
       <td class="text-end">
         <div class="btn-group btn-group-sm">

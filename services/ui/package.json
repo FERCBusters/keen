@@ -3,12 +3,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@fercbusters/mosp-design-system": "github:FERCBusters/mosp-design-system#58c7da3706799b06d672d614665d8f53d0654755",
     "bootstrap": "5.3.8",
     "bootstrap-icons": "1.13.1",
     "d3": "7.9.0",
     "html2canvas": "1.4.1",
-    "wysi": "github:mdbassit/Wysi#v0.5.1",
-    "@fercbusters/mosp-design-system": "git+https://github.com/FERCBusters/mosp-design-system.git#dcb93b092829350cc5df19a6af548d4aaa9f708c"
+    "wysi": "github:mdbassit/Wysi#v0.5.1"
   },
   "devDependencies": {
     "esbuild": "^0.28.0"

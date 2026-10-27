@@ -44,6 +44,7 @@ export async function loadUi(
     apiPut: unsupported,
     apiDelete: unsupported,
     fmtTs: (value) => String(value),
+    isoDateToDisplay: (value) => value || '',
     safeExternalHref: unsupported,
     toast: unsupported,
     errorText: (err) => {

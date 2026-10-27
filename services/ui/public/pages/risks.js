@@ -4,6 +4,7 @@
 // the risk wizard; rating and treatment can also be adjusted in place.
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
+  isoDateToDisplay,
   errorText,
   initNavbar,
   apiGet,
@@ -222,7 +223,7 @@ function renderRows(items) {
       <td>${userPillHtml(r.risk_owner)}</td>
       <td class="text-end" data-sort="${esc(Number(r.risk_score || 0))}">${ratingBadge(r, 'inherent')}</td>
       <td class="text-end" data-sort="${esc(Number(r.residual_risk_score || 0))}">${ratingBadge(r, 'residual')}</td>
-      <td>${esc(treatmentLabel(r.treatment_strategy))}<div class="small-muted">${esc(treatmentStatusLabel(r.treatment_status))}${r.treatment_due_at ? ` · due ${esc(r.treatment_due_at)}` : ''}</div></td>
+      <td>${esc(treatmentLabel(r.treatment_strategy))}<div class="small-muted">${esc(treatmentStatusLabel(r.treatment_status))}${r.treatment_due_at ? ` · due ${esc(isoDateToDisplay(r.treatment_due_at))}` : ''}</div></td>
       <td data-sort="${esc(Number(r.control_count || 0))}">${controlsCountHtml(r)}</td>
       <td class="no-print">${actionsHtml(r, { rate: true })}</td>
     </tr>`,

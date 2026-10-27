@@ -16,6 +16,8 @@ import {
 } from './visualisation/dates.js';
 import { truncateMiddleText, renderWrappedNodeLabel } from './visualisation/labels.js';
 import {
+  dateFormatPlaceholder,
+  isoDateToDisplay,
   errorText,
   initNavbar,
   apiGet,
@@ -24,9 +26,8 @@ import {
   toast,
   debounce,
   enableTableSorting,
-  isoDateToDmy,
-  dmyToIsoDate,
-  wireIsoDmyDateField,
+  displayDateToIso,
+  wireIsoDateTextField,
   getCurrentFramework,
   withFramework,
   showInlineLoading,
@@ -155,10 +156,10 @@ const dateApply = document.getElementById('dateApply');
 const resetBtn = document.getElementById('vizReset') || document.getElementById('reset');
 
 // Date UI: keep internal filters as YYYY-MM-DD (hidden native <input type="date">),
-// but display dd/mm/yyyy to users.
+// but display the preferred date format to users.
 function _syncDmyFromIso() {
-  if (dateFromDmy && dateFrom) dateFromDmy.value = isoDateToDmy(dateFrom.value || '');
-  if (dateToDmy && dateTo) dateToDmy.value = isoDateToDmy(dateTo.value || '');
+  if (dateFromDmy && dateFrom) dateFromDmy.value = isoDateToDisplay(dateFrom.value || '');
+  if (dateToDmy && dateTo) dateToDmy.value = isoDateToDisplay(dateTo.value || '');
 }
 
 function _syncIsoFromDmy() {
@@ -167,7 +168,7 @@ function _syncIsoFromDmy() {
     if (!raw) {
       dateFrom.value = '';
     } else {
-      const iso = dmyToIsoDate(raw);
+      const iso = displayDateToIso(raw);
       if (iso) dateFrom.value = iso;
     }
   }
@@ -176,7 +177,7 @@ function _syncIsoFromDmy() {
     if (!raw) {
       dateTo.value = '';
     } else {
-      const iso = dmyToIsoDate(raw);
+      const iso = displayDateToIso(raw);
       if (iso) dateTo.value = iso;
     }
   }
@@ -193,11 +194,13 @@ function _setRangeIso(fromIso, toIso) {
   _syncDmyFromIso();
 }
 
-wireIsoDmyDateField(dateFrom, dateFromDmy, dateFromPick, {
+for (const input of [dateFromDmy, dateToDmy])
+  input?.setAttribute('placeholder', dateFormatPlaceholder());
+wireIsoDateTextField(dateFrom, dateFromDmy, dateFromPick, {
   listenInput: false,
   dispatchChangeOnText: true,
 });
-wireIsoDmyDateField(dateTo, dateToDmy, dateToPick, {
+wireIsoDateTextField(dateTo, dateToDmy, dateToPick, {
   listenInput: false,
   dispatchChangeOnText: true,
 });
@@ -2740,7 +2743,10 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
       .join('');
 
     const total = Math.round(items.reduce((acc, it) => acc + Number(it?.value || 0), 0));
-    const rangeTxt = r && r.from && r.to ? `${esc(r.from)} → ${esc(r.to)}` : '';
+    const rangeTxt =
+      r && r.from && r.to
+        ? `${esc(isoDateToDisplay(r.from))} → ${esc(isoDateToDisplay(r.to))}`
+        : '';
 
     setSunburstOtherPanel(`
     <div class="border rounded p-2" style="background: rgba(31,31,42,0.03)">
@@ -3316,7 +3322,7 @@ async function drawHistogram() {
   })();
 
   const tickFormat = (d) => {
-    if (intervalEff === 'day') return String(d).slice(5);
+    if (intervalEff === 'day') return isoDateToDisplay(String(d));
     const ms = histBucketToUtcMs(d, intervalEff);
     if (!Number.isFinite(ms)) return '';
     return fmtTime ? fmtTime(new Date(ms)) : '';
@@ -3414,7 +3420,7 @@ async function drawHistogram() {
       const label = labelByKey.get(d.key) || d.key;
       const n = Math.max(0, Math.round((d.y1 - d.y0) * 1000) / 1000);
       const t = d.data;
-      return `${t.bucket}\n${label}: ${n}\nTotal: ${t.total}\nMapped: ${t.mapped}\nUnmapped: ${t.unmapped}`;
+      return `${isoDateToDisplay(String(t.bucket).slice(0, 10))}${String(t.bucket).slice(10)} UTC\n${label}: ${n}\nTotal: ${t.total}\nMapped: ${t.mapped}\nUnmapped: ${t.unmapped}`;
     });
 
   // Legend (wrap across rows so it doesn't overlap)
@@ -3471,10 +3477,13 @@ async function drawHistogram() {
     if (zoom && startLabel && endLabel) {
       setVizCaption(
         vizMode,
-        `${intervalLabel} volume from ${startLabel} to ${endLabel}. ${hint} Use Back to return.`,
+        `${intervalLabel} volume from ${isoDateToDisplay(startLabel.slice(0, 10))}${startLabel.slice(10)} to ${isoDateToDisplay(endLabel.slice(0, 10))}${endLabel.slice(10)} UTC. ${hint} Use Back to return.`,
       );
     } else if (r) {
-      setVizCaption(vizMode, `Daily volume from ${r.from} to ${r.to} (${days} days). ${hint}`);
+      setVizCaption(
+        vizMode,
+        `Daily volume from ${isoDateToDisplay(r.from)} to ${isoDateToDisplay(r.to)} (${days} days). ${hint}`,
+      );
     } else {
       setVizCaption(vizMode, `Daily volume for the last ${days} days. ${hint}`);
     }
@@ -3631,7 +3640,7 @@ coverageGapsPanel?.addEventListener('shown.bs.collapse', () => {
 
 function normalizeRangeInputs() {
   if (!dateFrom || !dateTo) return false;
-  // If the user typed dd/mm/yyyy, convert it before validating.
+  // If the user typed a date, convert it before validating.
   _syncIsoFromDmy();
   const r = getActiveRange();
   if (!r) return false;

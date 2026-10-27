@@ -2,6 +2,7 @@ import { featureEnabled } from '/pages/feature-availability.js';
 import { deleteQuestionThread, myQuestionRowHtml } from '/pages/question-threads.js';
 import { mountMyQuizzes } from '/pages/my-quizzes.js';
 import {
+  isoDateToDisplay,
   errorText,
   initNavbar,
   apiGet,
@@ -695,7 +696,11 @@ function myAuditRow(a) {
     `/audit.html?id=${encodeURIComponent(a.id)}`,
     a.framework_slug || getCurrentFramework(),
   );
-  const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ') || '-';
+  const dates =
+    [a.start_date, a.end_date]
+      .filter(Boolean)
+      .map((d) => isoDateToDisplay(d))
+      .join(' → ') || '-';
   const attendeeRole = String(a?.my_attendee?.role || '').trim() || 'Attendee';
   const updated = a.updated_at ? fmtTs(a.updated_at) : '-';
   return `<tr>
@@ -803,7 +808,7 @@ function myMeetingRow(item) {
   );
   return `<tr>
     <td class="wrap"><span class="fw-semibold">${esc(item?.title || 'Meeting')}</span><div class="small-muted">${esc(item?.agenda_minutes_notes || '')}</div></td>
-    <td class="small-muted">${esc(item?.date || '-')}</td>
+    <td class="small-muted">${esc(isoDateToDisplay(item?.date) || '-')}</td>
     <td class="small-muted">${esc(meetingTimeLabel(item))}</td>
     <td><span class="badge text-bg-light">${esc(item?.my_attendance_label || '-')}</span></td>
     <td>${userPillsHtml(item?.attendees || [])}</td>

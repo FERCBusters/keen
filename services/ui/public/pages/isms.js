@@ -1,4 +1,5 @@
 import {
+  isoDateToDisplay,
   errorText,
   safeExternalHref,
   initNavbar,
@@ -1293,7 +1294,7 @@ function renderObjectives() {
     <td class="wrap"><div class="fw-semibold"><a href="${esc(objectiveHref(o))}">${esc(shorten(o.goal || o.requirement || 'Objective', 150))}</a></div><div class="small-muted">${esc(shorten(o.requirement || '', 160))}</div></td>
     <td class="wrap">${esc(shorten(o.metric || '-', 180))}</td>
     <td class="isms-objectives-owner-cell">${objectiveUserPill(o.owner)}</td>
-    <td class="wrap">${esc(o.completion_target_date || '-')}</td>
+    <td class="wrap">${esc(isoDateToDisplay(o.completion_target_date) || '-')}</td>
     <td class="isms-objectives-resources-cell">${objectiveUserBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 100))}</div></td>
     <td class="wrap">${controlBadges(o.controls, framework)}</td><td class="wrap">${clauseBadges(o.clauses, framework)}</td>${actionsHtml('objective', o.id, 'isms-objectives-actions')}
   </tr>`,
@@ -1921,7 +1922,7 @@ function renderMeetings() {
             .filter(Boolean)
             .join('<br>') || '<span class="small-muted">-</span>';
         const href = meetingHref(m);
-        return `<tr data-isms-row="meeting"><td>${esc(m.date || '-')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('-') || '-')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls, framework)}</td><td>${clauseBadges(m.clauses, framework)}</td>${actionsHtml('meeting', m.id)}</tr>`;
+        return `<tr data-isms-row="meeting"><td>${esc(isoDateToDisplay(m.date) || '-')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('-') || '-')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls, framework)}</td><td>${clauseBadges(m.clauses, framework)}</td>${actionsHtml('meeting', m.id)}</tr>`;
       })
       .join('') || emptyRow(9, 'No meeting minutes yet.');
 }

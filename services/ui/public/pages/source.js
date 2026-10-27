@@ -1,4 +1,5 @@
 import {
+  isoDateToDisplay,
   errorText,
   initNavbar,
   apiGet,
@@ -398,7 +399,7 @@ function dailyBarsHtml(daily) {
     .map((d) => {
       const count = Number(d.count) || 0;
       const height = count ? Math.max(6, Math.round((count / max) * 100)) : 2;
-      return `<a class="source-insight-bar${count ? '' : ' is-empty'}" style="height:${height}%" href="${esc(eventFilterHref({ start_date: d.date, end_date: d.date, q: '', unmapped: false }))}" title="${esc(d.date)}: ${esc(count)} event${count === 1 ? '' : 's'}"></a>`;
+      return `<a class="source-insight-bar${count ? '' : ' is-empty'}" style="height:${height}%" href="${esc(eventFilterHref({ start_date: d.date, end_date: d.date, q: '', unmapped: false }))}" title="${esc(isoDateToDisplay(d.date))}: ${esc(count)} event${count === 1 ? '' : 's'}"></a>`;
     })
     .join('')}</div>`;
 }
@@ -466,7 +467,7 @@ function renderInsights(data) {
         ? `<table class="table table-sm mb-0"><thead><tr><th>Day</th><th>Events</th><th>Typical active day</th></tr></thead><tbody>${spikes
             .map(
               (sp) =>
-                `<tr><td><a href="${esc(eventFilterHref({ start_date: sp.date, end_date: sp.date, q: '', unmapped: false }))}">${esc(sp.date)}</a></td><td>${esc(sp.count)}${sp.ratio ? ` <span class="small-muted">(×${esc(sp.ratio)})</span>` : ''}</td><td>${esc(sp.baseline)}</td></tr>`,
+                `<tr><td><a href="${esc(eventFilterHref({ start_date: sp.date, end_date: sp.date, q: '', unmapped: false }))}">${esc(isoDateToDisplay(sp.date))}</a></td><td>${esc(sp.count)}${sp.ratio ? ` <span class="small-muted">(×${esc(sp.ratio)})</span>` : ''}</td><td>${esc(sp.baseline)}</td></tr>`,
             )
             .join('')}</tbody></table>`
         : `<div class="small-muted">No day stands out against this source's typical active day.</div>`,

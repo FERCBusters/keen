@@ -1,5 +1,5 @@
 import { enrollmentProfiles } from './agent-enrollment.js';
-import { apiGet, apiPost, apiPatch, initNavbar, confirmAction, esc } from '/app.js';
+import { fmtTs, apiGet, apiPost, apiPatch, initNavbar, confirmAction, esc } from '/app.js';
 const root = '/api/v1/admin/agents',
   $ = (id) => document.getElementById('ka-' + id);
 let people = [];
@@ -43,7 +43,7 @@ function fail(e) {
   msg(text, 'danger');
 }
 function date(v) {
-  return v ? new Date(/Z$|[+-]\d\d:\d\d$/.test(v) ? v : v + 'Z').toLocaleString() : 'Never';
+  return v ? fmtTs(v) : 'Never';
 }
 function dismiss() {
   $('token').value = '';

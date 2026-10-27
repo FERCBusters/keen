@@ -3,6 +3,7 @@
 // last step, when the audit and its attendees are created together.
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
+  isoDateToDisplay,
   errorText,
   initNavbar,
   apiGet,
@@ -439,7 +440,7 @@ $('attendeeList').addEventListener('click', (ev) => {
 // --- Review and create -------------------------------------------------------
 
 function dateText(value) {
-  return value || 'not set';
+  return isoDateToDisplay(value) || 'not set';
 }
 
 function scopeSummary() {

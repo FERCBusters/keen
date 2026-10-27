@@ -1,5 +1,6 @@
 import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
+  isoDateToDisplay,
   errorText,
   initNavbar,
   apiGet,
@@ -244,7 +245,9 @@ function renderRisk(risk) {
   if (riskParties)
     riskParties.innerHTML = partyBadgesHtml(risk?.interested_parties, risk?.framework || framework);
   if (riskTreatment) {
-    const due = risk?.treatment_due_at ? ` · due ${esc(risk.treatment_due_at)}` : '';
+    const due = risk?.treatment_due_at
+      ? ` · due ${esc(isoDateToDisplay(risk.treatment_due_at))}`
+      : '';
     riskTreatment.innerHTML = `${esc(treatmentLabel(risk?.treatment_strategy))} <span class="small-muted">(${esc(treatmentStatusLabel(risk?.treatment_status))}${due})</span>${risk?.treatment_plan ? `<div class="small whitespace-pre-wrap mt-1">${esc(risk.treatment_plan)}</div>` : ''}`;
   }
   setText(threatSummary, threat, 'No threat summary.');

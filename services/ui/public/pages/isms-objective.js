@@ -1,4 +1,5 @@
 import {
+  isoDateToDisplay,
   errorText,
   initNavbar,
   apiGet,
@@ -64,7 +65,7 @@ function renderObjective(row) {
   $('objectiveOwner').innerHTML = userPillHtml(objective.owner);
   $('objectiveResources').innerHTML = userBadges(objective.resource_users);
   $('objectiveResourceText').textContent = objective.resource_requirements_text || '-';
-  $('objectiveTarget').textContent = objective.completion_target_date || '-';
+  $('objectiveTarget').textContent = isoDateToDisplay(objective.completion_target_date) || '-';
   $('objectiveStatusValue').textContent = statusLabel(objective.status);
   $('objectiveUpdated').textContent = fmtTs(objective.updated_at) || '-';
   $('objectiveControls').innerHTML = controlBadges(objective.controls, framework);

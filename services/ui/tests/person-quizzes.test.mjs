@@ -9,6 +9,7 @@ test('person quiz history escapes content, paginates both lists, and retries fai
   const ui = await loadUi('pages/person-quizzes.js', {
     html: '<section id="host"></section>',
     vendor: {
+      isoDateToDisplay: (iso) => iso.split('-').reverse().join('/'),
       withFramework: (url) => url,
       apiGet: async (url) => {
         calls.push(url);
@@ -43,6 +44,7 @@ test('person quiz history escapes content, paginates both lists, and retries fai
   const controller = ui.api.personQuizzes(host, 'person-1');
   await controller.load();
   assert.equal(host.querySelector('img,b'), null);
+  assert.match(host.textContent, /01\/01\/2026 \/ 01\/02\/2026/);
   assert.match(host.textContent, /85% · No pass mark/);
   host.querySelector('[data-assignment-pages] button').click();
   await settle(() => calls.length === 2 && host.querySelector('[data-result-pages]'));

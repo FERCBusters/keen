@@ -1,4 +1,5 @@
 import {
+  fmtTs,
   errorText,
   apiGet,
   apiPost,
@@ -82,8 +83,8 @@ export async function initBookstackDocuments(me, root) {
           .map(
             (s) => `<tr class="${s.archived ? 'text-muted' : ''}">
       <td>${esc(s.document_title)}</td><td><a href="${esc(s.permalink)}" target="_blank" rel="noopener noreferrer">${esc(s.page_title)}${s.anchor ? ` #${esc(s.anchor)}` : ''}</a></td>
-      <td>${esc(s.target_framework || 'Deleted framework')} · ${esc(s.target_ref || 'Deleted requirement')}</td><td>${esc(s.captured_at)}</td>
-      <td>${s.revision_count ?? '-'} <small>${esc(s.page_updated_at || '')}</small></td>
+      <td>${esc(s.target_framework || 'Deleted framework')} · ${esc(s.target_ref || 'Deleted requirement')}</td><td>${esc(fmtTs(s.captured_at))}</td>
+      <td>${s.revision_count ?? '-'} <small>${esc(fmtTs(s.page_updated_at) || '')}</small></td>
       <td><a href="/api/v1/isms/bookstack-sections/${encodeURIComponent(s.id)}/snapshot">Download JSON</a><div class="small-muted" title="SHA-256 ${esc(s.sha256)}">SHA-256 ${esc(s.sha256.slice(0, 12))}…</div></td>
       <td>${canSampleIntoAudit(me, 'isms') ? `<button type="button" class="btn btn-sm btn-outline-primary" data-sample="${esc(s.id)}">Sample into audit</button>` : ''}
       ${manage ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-archive="${esc(s.id)}" data-archived="${s.archived}">${s.archived ? 'Restore' : 'Archive'}</button>` : ''}</td></tr>`,

@@ -111,7 +111,7 @@ test('opening a document shows its fields, revisions and comments safely', async
   assert.equal(ui.el('historyCard').style.display, '');
   assert.deepEqual(
     [...ui.el('revisionList').querySelectorAll('button')].map((b) => b.textContent),
-    ['Version 2 · 2026-01-02', 'Version 1 · 2026-01-01'],
+    ['Version 2 · 2026-01-02T03:04:05Z', 'Version 1 · 2026-01-01T00:00:00Z'],
   );
   assert.equal(ui.el('commentList').querySelector('img'), null);
   assert.match(ui.el('commentList').textContent, /dana[\s\S]*<img src=x>Looks good[\s\S]*User/);
@@ -479,6 +479,7 @@ async function agentsPage(t, options = {}) {
   // Keen Agents is a tab of the administration page.
   const ui = await page(t, 'agents', {
     htmlName: 'admin',
+    vendor: options.vendor || {},
     confirm: options.confirm ?? true,
     globals: {
       setInterval: () => 0,
@@ -681,4 +682,19 @@ test('existing agents can be assigned to a person after confirmation', async (t)
     path: '/api/v1/admin/agents/a1',
     body: { agent_type: 'workstation', person_id: 'p1' },
   });
+});
+
+test('agent timestamps use the shared preference formatter and remain escaped', async (t) => {
+  const seen = [];
+  const { $ } = await agentsPage(t, {
+    vendor: {
+      fmtTs: (iso) => {
+        seen.push(iso);
+        return '23/10/2026 20:08:08 <img src=x>';
+      },
+    },
+  });
+  assert.ok(seen.length > 0);
+  assert.match($('agents').textContent, /Last contact: 23\/10\/2026 20:08:08 <img src=x>/);
+  assert.equal($('agents').querySelector('img'), null);
 });

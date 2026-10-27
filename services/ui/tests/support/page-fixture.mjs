@@ -106,7 +106,13 @@ export async function page(
       apiPostForm: route('POST', post),
       wireIsoDateTextField: () => {},
       isoDateToDisplay: (s) => s || '',
-      dateFormatPlaceholder: () => 'yyyy-mm-dd',
+      dateFormatPlaceholder: () => 'YYYY-MM-DD',
+      displayDateToIso: (s) =>
+        /^\d{4}-\d{2}-\d{2}$/.test(s)
+          ? s
+          : /^\d{2}\/\d{2}\/\d{4}$/.test(s)
+            ? s.split('/').reverse().join('-')
+            : '',
       apiGet: route('GET', get),
       apiPost: route('POST', post),
       apiPatch: route('PATCH', patch),

@@ -1,4 +1,5 @@
 import {
+  fmtTs,
   errorText,
   initNavbar,
   apiGet,
@@ -95,14 +96,14 @@ async function loadHistory() {
     revisions
       .map(
         (r) =>
-          `<button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" data-revision="${r.version}">Version ${r.version} · ${esc(r.created_at.slice(0, 10))}</button>`,
+          `<button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" data-revision="${r.version}">Version ${r.version} · ${esc(fmtTs(r.created_at))}</button>`,
       )
       .join('') || '<p class="small-muted">No edited content yet.</p>';
   $('commentList').innerHTML =
     comments
       .map(
         (c) =>
-          `<div class="border-bottom py-2"><strong>${esc(c.author?.username || c.author?.display_name || 'User')}</strong> <small>${esc(c.created_at)}</small><div>${esc(c.body)}</div></div>`,
+          `<div class="border-bottom py-2"><strong>${esc(c.author?.username || c.author?.display_name || 'User')}</strong> <small>${esc(fmtTs(c.created_at))}</small><div>${esc(c.body)}</div></div>`,
       )
       .join('') || '<p class="small-muted">No comments yet.</p>';
 }
