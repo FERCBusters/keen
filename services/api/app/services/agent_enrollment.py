@@ -4,6 +4,7 @@ import hmac
 import ipaddress
 import re
 import secrets
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -69,6 +70,10 @@ NONCE = r"^[A-Za-z0-9_-]{43}$"
 
 class Enrollment(Strict):
     public_key: str = Field(pattern=PUBLIC_KEY)
+    # Each attempt signs a fresh proof: its creation time and a nonce KEEN
+    # accepts once, so a recorded request cannot be replayed for the grant.
+    created: int = Field(ge=0, le=2**53 - 1)
+    proof_nonce: str = Field(pattern=NONCE)
     proof: str = Field(pattern=PROOF)
     # Profile enrolment names the new agent and carries the agent's saved
     # nonce, so a retry after a lost response returns the same agent.
@@ -273,6 +278,31 @@ def bind(db, agent, public_key, origin, credential_hash, previous=None):
     return key
 
 
+PROOF_SECONDS = 300
+PROOF_NONCE_SECONDS = 2 * PROOF_SECONDS
+
+
+def proof_store():
+    return get_valkey()
+
+
+def remember_proof(public_key, nonce):
+    """Accept each enrolment proof once. Without Valkey, refuse."""
+    try:
+        fresh = proof_store().set(
+            "keen:enrollment:proof:" + digest(public_key) + ":" + nonce,
+            "1",
+            nx=True,
+            ex=PROOF_NONCE_SECONDS,
+        )
+    except Exception:
+        raise DomainError(
+            503, "Enrollment unavailable; retry later", headers={"Retry-After": "30"}
+        ) from None
+    if not fresh:
+        raise DomainError(400, "Key proof has been used; sign a new proof and retry")
+
+
 def prove(body, statement):
     try:
         verify_proof(body.public_key, statement, body.proof)
@@ -308,23 +338,29 @@ def enroll(
     if not match:
         raise DomainError(401, "Invalid enrollment credential")
     credential, kind, ident = match.groups()
+    if abs(time.time() - body.created) > PROOF_SECONDS:
+        raise DomainError(
+            400, "Key proof is not current; check the machine's clock and retry"
+        )
     statement = {
-        "context": "keen-agent-enroll-v1",
+        "context": "keen-agent-enroll-v2",
+        "created": body.created,
         "credential_sha256": digest(credential),
+        "proof_nonce": body.proof_nonce,
         "public_key": body.public_key,
     }
+    prove(body, statement)
+    remember_proof(body.public_key, body.proof_nonce)
     if kind == "kc":
-        agent, key = enroll_with_code(db, context, credential, ident, body, statement)
+        agent, key = enroll_with_code(db, context, credential, ident, body)
     else:
-        agent, key = enroll_with_profile(
-            db, context, credential, ident, body, statement
-        )
+        agent, key = enroll_with_profile(db, context, credential, ident, body)
     result = grant(db, agent, key)
     db.commit()
     return result
 
 
-def enroll_with_code(db, context, code, ident, body, statement):
+def enroll_with_code(db, context, code, ident, body):
     if body.name is not None or body.nonce is not None:
         raise DomainError(400, "Enrolment codes take only a key and its proof")
     agent = (
@@ -340,7 +376,6 @@ def enroll_with_code(db, context, code, ident, body, statement):
     code_hash = digest(code)
     key = previous_binding(db, agent, code_hash, body.public_key)
     if key is not None:
-        prove(body, statement)
         return agent, key
     if (
         not agent.enrollment_code_hash
@@ -352,7 +387,6 @@ def enroll_with_code(db, context, code, ident, body, statement):
     if agent.enrollment_profile_id is not None:
         # Codes are issued to individually registered agents only.
         raise DomainError(401, "Invalid enrollment credential")
-    prove(body, statement)
     agent.enrollment_code_hash = None
     agent.enrollment_code_expires_at = None
     agent.enrollment_ip = context.client_ip
@@ -361,7 +395,7 @@ def enroll_with_code(db, context, code, ident, body, statement):
     return agent, key
 
 
-def enroll_with_profile(db, context, bootstrap, ident, body, statement):
+def enroll_with_profile(db, context, bootstrap, ident, body):
     if body.name is None or body.nonce is None:
         raise DomainError(400, "Profile enrolment needs a name and a nonce")
     profile = (
@@ -393,7 +427,6 @@ def enroll_with_profile(db, context, bootstrap, ident, body, statement):
         raise DomainError(
             403, "Client address is outside the enrollment profile networks"
         )
-    prove(body, statement)
     nonce_hash = digest(body.nonce)
     agent = (
         db.query(KeenAgent)

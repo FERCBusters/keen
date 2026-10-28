@@ -99,31 +99,47 @@ class SimAgent:
         self.last_hash = None
 
     # -- enrolment -----------------------------------------------------
-    def enroll(self, credential, *, name=None, nonce=None, key=None):
+    def enrollment(self, credential, *, key=None, created=None, proof_nonce=None):
+        """An enrolment body with a fresh proof, as the agent signs per attempt."""
         key = key or self.key
-        body = {
+        created = (
+            int(datetime.now(timezone.utc).timestamp()) if created is None else created
+        )
+        proof_nonce = proof_nonce or secrets.token_urlsafe(32)
+        return {
             "public_key": public(key),
+            "created": created,
+            "proof_nonce": proof_nonce,
             "proof": proof(
                 key,
                 {
-                    "context": "keen-agent-enroll-v1",
+                    "context": "keen-agent-enroll-v2",
+                    "created": created,
                     "credential_sha256": hashlib.sha256(
                         credential.encode()
                     ).hexdigest(),
+                    "proof_nonce": proof_nonce,
                     "public_key": public(key),
                 },
             ),
         }
-        if name is not None:
-            body["name"], body["nonce"] = name, nonce or secrets.token_urlsafe(32)
+
+    def post_enrollment(self, credential, body, key=None):
         r = self.client.post(
             "/v1/agents/enroll",
             json=body,
             headers={"Authorization": "Bearer " + credential},
         )
         if r.status_code == 201:
-            self.accept(r.json(), key)
+            self.accept(r.json(), key or self.key)
         return r
+
+    def enroll(self, credential, *, name=None, nonce=None, key=None):
+        key = key or self.key
+        body = self.enrollment(credential, key=key)
+        if name is not None:
+            body["name"], body["nonce"] = name, nonce or secrets.token_urlsafe(32)
+        return self.post_enrollment(credential, body, key)
 
     def accept(self, grant, key):
         self.grant = grant

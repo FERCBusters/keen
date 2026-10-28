@@ -25,7 +25,7 @@ from app.services.ueu_evidence import display_payload, evidence_record
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from tests.test_keen_agent import setup as setup
-from tests.ueu_agent import SimAgent, b64url, key_id, stamp
+from tests.ueu_agent import FakeValkey, SimAgent, b64url, key_id, stamp
 
 VECTORS = json.loads(
     (Path(__file__).resolve().parent / "fixtures/ueu-vectors.json").read_text()
@@ -37,6 +37,8 @@ ROOT = Path(__file__).resolve().parents[3]
 def keen(setup, monkeypatch):
     client, factory, _, _, _, app = setup
     monkeypatch.setattr(enrollment_operations, "get_valkey", lambda: None)
+    proofs = FakeValkey()
+    monkeypatch.setattr(enrollment_operations, "proof_store", lambda: proofs)
     monkeypatch.setattr(
         enrollment_operations, "fixed_window_allow", lambda *a, **k: (True, 0)
     )
@@ -186,15 +188,11 @@ def test_enrolment_rejects_bad_codes_proofs_and_expired_codes(keen):
     wrong = code[:-4] + ("AAAA" if not code.endswith("AAAA") else "BBBB")
     assert agent.enroll(wrong).status_code == 401
     # A proof made for another credential does not bind the key.
-    r = keen.client.post(
-        "/v1/agents/enroll",
-        json={
-            "public_key": b64url(agent.key.public_key().public_bytes_raw()),
-            "proof": b64url(agent.key.sign(b"something else")),
-        },
-        headers={"Authorization": "Bearer " + code},
-    )
-    assert r.status_code == 400
+    body = agent.enrollment(code)
+    body["proof"] = b64url(agent.key.sign(b"something else"))
+    assert agent.post_enrollment(code, body).status_code == 400
+    # So does a proof signed for another credential.
+    assert agent.post_enrollment(code, agent.enrollment(wrong)).status_code == 400
     assert agent.enroll(code, name="x").status_code == 400
     with keen.db() as db:
         row = db.get(KeenAgent, info["agent"]["id"])
@@ -203,6 +201,67 @@ def test_enrolment_rejects_bad_codes_proofs_and_expired_codes(keen):
     assert agent.enroll(code).status_code == 401
     with keen.db() as db:
         assert db.query(AgentKey).count() == 0
+
+
+def test_recorded_enrolment_requests_cannot_be_replayed(keen, monkeypatch):
+    import time
+
+    from cryptography.fernet import Fernet
+
+    monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
+    info = register(keen, subject_type="public")
+    code = info["enrollment_code"]
+    agent = SimAgent(keen.client)
+    recorded = agent.enrollment(code)
+    first = agent.post_enrollment(code, recorded)
+    assert first.status_code == 201 and first.json()["subject"]["type"] == "public"
+    # Someone who saw the request cannot send it again for the grant.
+    replay = keen.client.post(
+        "/v1/agents/enroll",
+        json=recorded,
+        headers={"Authorization": "Bearer " + code},
+    )
+    assert replay.status_code == 400
+    assert "subject" not in replay.text
+    # The key holder's retry, with a fresh proof, recovers the same binding.
+    again = agent.enroll(code)
+    assert again.status_code == 201 and again.json()["key_id"] == agent.key_id
+    # Proofs outside the five-minute window are refused before anything else.
+    now = int(time.time())
+    for created in (now - 301, now + 301):
+        stale = agent.enrollment(code, created=created)
+        assert agent.post_enrollment(code, stale).status_code == 400
+    assert (
+        agent.post_enrollment(
+            code, agent.enrollment(code, created=now - 290)
+        ).status_code
+        == 201
+    )
+
+    class Down:
+        def set(self, *a, **k):
+            raise ConnectionError("valkey down")
+
+    monkeypatch.setattr(enrollment_operations, "proof_store", lambda: Down())
+    r = agent.enroll(code)
+    assert r.status_code == 503 and r.headers["retry-after"]
+    with keen.db() as db:
+        assert db.query(AgentKey).count() == 1
+
+
+def test_profile_enrolment_proofs_are_single_use(keen):
+    r = keen.client.post("/v1/admin/agent-enrollment-profiles", json={"name": "fleet"})
+    assert r.status_code in (200, 201), r.text
+    bootstrap = r.json()["bootstrap_key"]
+    agent = SimAgent(keen.client)
+    body = agent.enrollment(bootstrap)
+    body["name"], body["nonce"] = "host-1", secrets.token_urlsafe(32)
+    assert agent.post_enrollment(bootstrap, body).status_code == 201
+    assert agent.post_enrollment(bootstrap, body).status_code == 400
+    retry = agent.enrollment(bootstrap)
+    retry["name"], retry["nonce"] = body["name"], body["nonce"]
+    again = agent.post_enrollment(bootstrap, retry)
+    assert again.status_code == 201 and again.json()["key_id"] == agent.key_id
 
 
 def test_token_collectors_cannot_enrol_or_sign(keen):

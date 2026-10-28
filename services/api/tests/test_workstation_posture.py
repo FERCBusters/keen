@@ -21,12 +21,14 @@ from app.services.people import ensure_person_for_user
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe
 from tests.test_keen_agent import setup as setup
-from tests.ueu_agent import SimAgent
+from tests.ueu_agent import FakeValkey, SimAgent
 
 
 @pytest.fixture(autouse=True)
 def enrolment_limits(monkeypatch):
     monkeypatch.setattr(enrollment_operations, "get_valkey", lambda: None)
+    proofs = FakeValkey()
+    monkeypatch.setattr(enrollment_operations, "proof_store", lambda: proofs)
     monkeypatch.setattr(
         enrollment_operations, "fixed_window_allow", lambda *a, **k: (True, 0)
     )

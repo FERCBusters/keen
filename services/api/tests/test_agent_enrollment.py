@@ -17,13 +17,15 @@ from tests.test_keen_agent import record
 
 # Imported fixtures are discovered by pytest by name.
 from tests.test_keen_agent import setup as setup
-from tests.ueu_agent import SimAgent
+from tests.ueu_agent import FakeValkey, SimAgent
 
 
 @pytest.fixture
 def fleet(setup, monkeypatch):
     client, factory, headers, info, stored, app = setup
     monkeypatch.setattr(agent_enrollment_operations, "get_valkey", lambda: None)
+    proofs = FakeValkey()
+    monkeypatch.setattr(agent_enrollment_operations, "proof_store", lambda: proofs)
     monkeypatch.setattr(
         agent_enrollment_operations, "fixed_window_allow", lambda *a, **k: (True, 0)
     )
