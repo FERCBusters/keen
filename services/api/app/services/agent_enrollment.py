@@ -1,35 +1,36 @@
 from __future__ import annotations
 
-import base64
 import hmac
 import ipaddress
 import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from pydantic import Field, field_validator
 from sqlalchemy.orm import Session
 
-from app.agents.credentials import (
-    digest,
-    live_only,
-    locked_agent,
-    parse_agent_credential,
-    view,
-)
+from app.agents.credentials import digest, live_only, reauthenticate
 from app.agents.schema import Strict
 from app.core.datetime_utils import utc_now_naive
 from app.core.valkey import get_valkey
-from app.db.models import AgentEnrollmentProfile, AuditLog, KeenAgent
+from app.db.models import AgentEnrollmentProfile, AgentKey, AuditLog, KeenAgent
+from app.security.agent_signatures import SignatureError, key_id, verify_proof
 from app.security.rate_limit import fixed_window_allow
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
+from app.services.ueu_evidence import catalogue_grant
+from app.services.ueu_subjects import public_subject_key, subject_grant
 
 
 class ProfileInput(Strict):
     name: str = Field(min_length=1, max_length=128)
     token_days: int = Field(default=90, ge=1, le=365)
+    subject_type: Literal["pairwise", "public"] = "pairwise"
+    evidence_mode_ceiling: Literal["events", "events_with_lines", "all_lines"] = (
+        "events"
+    )
     expires_at: datetime | None = None
     max_enrollments: int | None = Field(default=None, ge=1, le=1000000)
     allowed_cidrs: list[str] = Field(default_factory=list, max_length=32)
@@ -61,15 +62,29 @@ class ProfileInput(Strict):
         return value
 
 
+PUBLIC_KEY = r"^[A-Za-z0-9_-]{43}$"
+PROOF = r"^[A-Za-z0-9_-]{86}$"
+NONCE = r"^[A-Za-z0-9_-]{43}$"
+
+
 class Enrollment(Strict):
-    name: str = Field(
-        min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$"
+    public_key: str = Field(pattern=PUBLIC_KEY)
+    proof: str = Field(pattern=PROOF)
+    # Profile enrolment names the new agent and carries the agent's saved
+    # nonce, so a retry after a lost response returns the same agent.
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$",
     )
-    nonce: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$")
+    nonce: str | None = Field(default=None, pattern=NONCE)
 
 
 class Renewal(Strict):
-    nonce: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$")
+    public_key: str = Field(pattern=PUBLIC_KEY)
+    nonce: str = Field(pattern=NONCE)
+    proof: str = Field(pattern=PROOF)
 
 
 def audit(db, context: ChangeContext, action, profile=None, agent=None):
@@ -95,6 +110,8 @@ def public(profile):
             "name",
             "state",
             "token_days",
+            "subject_type",
+            "evidence_mode_ceiling",
             "expires_at",
             "max_enrollments",
             "enrollment_count",
@@ -155,6 +172,8 @@ def listing(*, db: Session):
 
 def create(*, body: ProfileInput, context: ChangeContext, db: Session):
     live_only()
+    if body.subject_type == "public":
+        public_subject_key(db)
     profile = AgentEnrollmentProfile(
         id=str(uuid.uuid4()), state="active", enrollment_count=0, **body.model_dump()
     )
@@ -191,6 +210,14 @@ def manage(*, ident: str, action: str, context: ChangeContext, db: Session):
             },
             synchronize_session=False,
         )
+        enrolled = db.query(KeenAgent.id).filter_by(enrollment_profile_id=ident)
+        db.query(AgentKey).filter(
+            AgentKey.agent_id.in_(enrolled.scalar_subquery()),
+            AgentKey.state != "revoked",
+        ).update(
+            {AgentKey.state: "revoked", AgentKey.retired_at: utc_now_naive()},
+            synchronize_session=False,
+        )
     else:
         profile.state = "paused" if action == "pause" else "active"
     audit(db, context, "profile-" + action, ident)
@@ -201,17 +228,73 @@ def manage(*, ident: str, action: str, context: ChangeContext, db: Session):
     return result
 
 
-def derived_token(key, nonce, ident, purpose):
-    secret = (
-        base64.urlsafe_b64encode(
-            hmac.digest(
-                key.encode(), (purpose + ":" + ident + ":" + nonce).encode(), "sha256"
-            )
-        )
-        .decode()
-        .rstrip("=")
+def grant(db, agent, key):
+    """What an agent learns from enrolment or renewal."""
+    return {
+        "agent": {
+            "id": agent.id,
+            "name": agent.name,
+            "agent_type": agent.agent_type,
+            "enrollment_profile_id": agent.enrollment_profile_id,
+            "expires_at": agent.expires_at,
+            "enabled": agent.enabled,
+        },
+        "key_id": key.key_id,
+        "subject": subject_grant(db, agent.subject_type),
+        "evidence_mode_ceiling": agent.evidence_mode_ceiling,
+        "catalogue": catalogue_grant(),
+    }
+
+
+def bind(db, agent, public_key, origin, credential_hash, previous=None):
+    """Make public_key the agent's only active key."""
+    ident = key_id(agent.id, public_key)
+    if db.get(AgentKey, ident) is not None:
+        raise DomainError(409, "This key has already been used; generate a new key")
+    now = utc_now_naive()
+    db.query(AgentKey).filter_by(agent_id=agent.id, state="active").update(
+        {AgentKey.state: "retired", AgentKey.retired_at: now},
+        synchronize_session=False,
     )
-    return "ka_" + ident + "." + secret
+    db.flush()
+    key = AgentKey(
+        key_id=ident,
+        agent_id=agent.id,
+        public_key=public_key,
+        state="active",
+        created_at=now,
+        previous_key_id=previous,
+        origin=origin,
+        credential_hash=credential_hash,
+    )
+    db.add(key)
+    agent.expires_at = now + timedelta(days=agent.validity_days)
+    db.flush()
+    return key
+
+
+def prove(body, statement):
+    try:
+        verify_proof(body.public_key, statement, body.proof)
+    except SignatureError:
+        raise DomainError(400, "Key proof invalid") from None
+
+
+def previous_binding(db, agent, credential_hash, public_key):
+    """A retried request returns the binding it made, and nothing else."""
+    key = (
+        db.query(AgentKey)
+        .filter_by(agent_id=agent.id, credential_hash=credential_hash)
+        .one_or_none()
+    )
+    if key is None:
+        return None
+    if key.state != "active" or key.public_key != public_key:
+        raise DomainError(
+            409,
+            "This enrolment credential has been used; ask an administrator for a new code",
+        )
+    return key
 
 
 def enroll(
@@ -220,12 +303,67 @@ def enroll(
     live_only()
     rate(context)
     match = re.fullmatch(
-        r"Bearer (ke_([0-9a-f-]{36})\.[A-Za-z0-9_-]{43})",
-        authorization,
+        r"Bearer ((k[ce])_([0-9a-f-]{36})\.[A-Za-z0-9_-]{43})", authorization
     )
     if not match:
         raise DomainError(401, "Invalid enrollment credential")
-    key, ident = match.groups()
+    credential, kind, ident = match.groups()
+    statement = {
+        "context": "keen-agent-enroll-v1",
+        "credential_sha256": digest(credential),
+        "public_key": body.public_key,
+    }
+    if kind == "kc":
+        agent, key = enroll_with_code(db, context, credential, ident, body, statement)
+    else:
+        agent, key = enroll_with_profile(
+            db, context, credential, ident, body, statement
+        )
+    result = grant(db, agent, key)
+    db.commit()
+    return result
+
+
+def enroll_with_code(db, context, code, ident, body, statement):
+    if body.name is not None or body.nonce is not None:
+        raise DomainError(400, "Enrolment codes take only a key and its proof")
+    agent = (
+        db.query(KeenAgent)
+        .filter_by(id=ident)
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if agent is None or not agent.enabled or agent.credential_type != "key":
+        raise DomainError(401, "Invalid enrollment credential")
+    rate(context, "code", ident, 10)
+    code_hash = digest(code)
+    key = previous_binding(db, agent, code_hash, body.public_key)
+    if key is not None:
+        prove(body, statement)
+        return agent, key
+    if (
+        not agent.enrollment_code_hash
+        or not hmac.compare_digest(agent.enrollment_code_hash, code_hash)
+        or agent.enrollment_code_expires_at is None
+        or agent.enrollment_code_expires_at <= utc_now_naive()
+    ):
+        raise DomainError(401, "Invalid enrollment credential")
+    if agent.enrollment_profile_id is not None:
+        # Codes are issued to individually registered agents only.
+        raise DomainError(401, "Invalid enrollment credential")
+    prove(body, statement)
+    agent.enrollment_code_hash = None
+    agent.enrollment_code_expires_at = None
+    agent.enrollment_ip = context.client_ip
+    key = bind(db, agent, body.public_key, "code", code_hash)
+    audit(db, context, "enrolled", None, agent.id)
+    return agent, key
+
+
+def enroll_with_profile(db, context, bootstrap, ident, body, statement):
+    if body.name is None or body.nonce is None:
+        raise DomainError(400, "Profile enrolment needs a name and a nonce")
     profile = (
         db.query(AgentEnrollmentProfile)
         .filter_by(id=ident)
@@ -236,7 +374,7 @@ def enroll(
     if (
         not profile
         or profile.state == "revoked"
-        or not hmac.compare_digest(profile.key_hash, digest(key))
+        or not hmac.compare_digest(profile.key_hash, digest(bootstrap))
     ):
         raise DomainError(401, "Invalid enrollment credential")
     rate(context, "profile", ident, 120)
@@ -255,6 +393,7 @@ def enroll(
         raise DomainError(
             403, "Client address is outside the enrollment profile networks"
         )
+    prove(body, statement)
     nonce_hash = digest(body.nonce)
     agent = (
         db.query(KeenAgent)
@@ -264,69 +403,75 @@ def enroll(
         .one_or_none()
     )
     if agent:
-        token = derived_token(key, body.nonce, agent.id, "enroll")
+        key = None
         if (
-            not agent.enabled
-            or agent.expires_at <= utc_now_naive()
-            or agent.name != body.name
-            or not hmac.compare_digest(agent.token_hash, digest(token))
+            agent.enabled
+            and agent.expires_at > utc_now_naive()
+            and agent.name == body.name
         ):
+            key = previous_binding(db, agent, nonce_hash, body.public_key)
+        if key is None:
             raise DomainError(
                 409,
-                "Enrollment attempt is no longer recoverable; restore the agent credential or contact an administrator",
+                "Enrollment attempt is no longer recoverable; restore the agent state or contact an administrator",
             )
-    else:
-        if (
-            profile.max_enrollments is not None
-            and profile.enrollment_count >= profile.max_enrollments
-        ):
-            raise DomainError(403, "Enrollment limit reached")
-        agent = KeenAgent(
-            id=str(uuid.uuid4()),
-            name=body.name,
-            enabled=True,
-            health={},
-            enrollment_profile_id=ident,
-            enrollment_nonce_hash=nonce_hash,
-            enrollment_ip=address,
-            enrollment_labels=dict(profile.labels),
-            expires_at=utc_now_naive() + timedelta(days=profile.token_days),
-        )
-        token = derived_token(key, body.nonce, agent.id, "enroll")
-        agent.token_hash = digest(token)
-        db.add(agent)
-        profile.enrollment_count += 1
-        audit(db, context, "enrolled", ident, agent.id)
-    db.commit()
-    return {"agent": view(agent), "token": token}
+        return agent, key
+    if (
+        profile.max_enrollments is not None
+        and profile.enrollment_count >= profile.max_enrollments
+    ):
+        raise DomainError(403, "Enrollment limit reached")
+    agent = KeenAgent(
+        id=str(uuid.uuid4()),
+        name=body.name,
+        enabled=True,
+        health={},
+        token_hash="",
+        credential_type="key",
+        subject_type=profile.subject_type,
+        evidence_mode_ceiling=profile.evidence_mode_ceiling,
+        validity_days=profile.token_days,
+        enrollment_profile_id=ident,
+        enrollment_nonce_hash=nonce_hash,
+        enrollment_ip=address,
+        enrollment_labels=dict(profile.labels),
+        expires_at=utc_now_naive() + timedelta(days=profile.token_days),
+    )
+    db.add(agent)
+    db.flush()
+    key = bind(db, agent, body.public_key, "profile", nonce_hash)
+    profile.enrollment_count += 1
+    audit(db, context, "enrolled", ident, agent.id)
+    return agent, key
 
 
-def renew(*, body: Renewal, context: ChangeContext, db: Session, authorization: str):
+def renew(*, body: Renewal, context: ChangeContext, db: Session, auth):
+    """Replace the agent's key. The request is signed by the current key and
+    the body proves possession of the new one. A retry signed by the key the
+    renewal retired returns the same result for 24 hours."""
     live_only()
     rate(context, "renew-ip")
-    token, ident = parse_agent_credential(authorization)
-    agent, profile = locked_agent(db, ident)
-    rate(context, "renew-agent", ident, 6)
-    if profile is None:
-        raise DomainError(
-            403, "Individual agent credentials are renewed by an administrator"
-        )
+    agent, current = reauthenticate(db, auth, allow_retired=True)
+    rate(context, "renew-agent", agent.id, 6)
     nonce_hash = digest(body.nonce)
-    fresh = derived_token(token, body.nonce, agent.id, "renew")
-    if hmac.compare_digest(agent.token_hash, digest(token)):
-        agent.previous_token_hash = agent.token_hash
-        agent.renewal_nonce_hash = nonce_hash
-        agent.renewal_retry_until = utc_now_naive() + timedelta(minutes=5)
-        agent.token_hash = digest(fresh)
-        agent.expires_at = utc_now_naive() + timedelta(days=profile.token_days)
-        audit(db, context, "renewed", profile.id, agent.id)
-    elif not (
-        agent.previous_token_hash
-        and hmac.compare_digest(agent.previous_token_hash, digest(token))
-        and agent.renewal_nonce_hash == nonce_hash
-        and agent.renewal_retry_until > utc_now_naive()
-        and hmac.compare_digest(agent.token_hash, digest(fresh))
-    ):
+    statement = {
+        "context": "keen-agent-renew-v1",
+        "agent_id": agent.id,
+        "previous_key_id": current.key_id,
+        "public_key": body.public_key,
+    }
+    prove(body, statement)
+    key = previous_binding(db, agent, nonce_hash, body.public_key)
+    if key is not None:
+        if key.previous_key_id != current.key_id:
+            raise DomainError(401, "Invalid agent credential")
+    elif current.state != "active":
         raise DomainError(401, "Invalid agent credential")
+    else:
+        key = bind(
+            db, agent, body.public_key, "renewal", nonce_hash, previous=current.key_id
+        )
+        audit(db, context, "renewed", agent.enrollment_profile_id, agent.id)
+    result = grant(db, agent, key)
     db.commit()
-    return {"agent": view(agent), "token": fresh}
+    return result

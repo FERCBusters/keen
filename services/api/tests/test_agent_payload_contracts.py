@@ -6,9 +6,13 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from app.agents.otlp import attributes, decode, value
+from app.agents.otlp import attributes, decode_batch, value
 from app.agents.schema import AgentEvent, Health, fingerprint
 from pydantic import ValidationError
+
+
+def decode(data, agent_id):
+    return decode_batch(data, agent_id).events
 
 
 def payload(**overrides):

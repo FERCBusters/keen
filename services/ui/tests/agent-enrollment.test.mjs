@@ -38,8 +38,12 @@ test('enrollment profile creation displays a one-time key and clears it on navig
   host.querySelector('#ep-days').value = '30';
   host.querySelector('#ep-limit').value = '5';
   host.querySelector('#ep-labels').value = 'environment=production';
+  host.querySelector('#ep-mode').value = 'all_lines';
+  host.querySelector('#ep-subject').value = 'public';
   await host.querySelector('form').onsubmit({ preventDefault() {} });
   assert.equal(saved.body.name, 'Web fleet');
+  assert.equal(saved.body.evidence_mode_ceiling, 'all_lines');
+  assert.equal(saved.body.subject_type, 'public');
   assert.equal(saved.body.labels.environment, 'production');
   assert.equal(host.querySelector('#ep-secret').value, 'ke_test-secret');
   assert.equal(host.querySelector('#ep-secret').type, 'password');

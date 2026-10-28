@@ -86,9 +86,9 @@ Custom API destinations require `KEEN_INTEGRATION_ALLOWED_HOSTS` (`host` for HTT
 
 ## Keen Agent
 
-[Keen Agent](https://github.com/FERCBusters/keen-agent) collects evidence from hosts and sends it over authenticated HTTPS. Create an individual agent credential for a persistent host, or an enrollment profile for a fleet. A profile has a shared enrollment key; each enrolled agent receives its own expiring credential. Revoking a profile revokes its associated agent credentials.
+[Keen Agent](https://github.com/FERCBusters/keen-agent) sends signed evidence from servers and workstations in Keen's profile of the draft Universal Evidence Utility (UEU) format, over OTLP/HTTP JSON. Each agent holds its own Ed25519 key: register a persistent host to receive a single-use enrolment code, or create an enrollment profile for a fleet, whose shared bootstrap key lets each machine bind its own key. Keen verifies every request, batch signature, envelope and chain position, checks typed fields against the event catalogue, records any redaction in a custody record and keeps each envelope's provenance. Verification bundles let a reviewer check stored evidence independently with `tools/ueu_verify_bundle.py`. Other OpenTelemetry collectors can send logs with a bearer token.
 
-Workstation credentials link each device to a Person. People & vendors shows current posture checks per registered hostname, with completion counts and links to the underlying evidence. Each new Keen account receives a linked Person record; people can also exist without accounts.
+Workstation agents link each device to a Person. People & vendors shows current posture checks per registered hostname, judged by versioned rules and, where set, the organisation's own targets from effectiveness measures, with links to the underlying evidence. Each new Keen account receives a linked Person record; people can also exist without accounts.
 
 People and Vendors have dedicated detail pages with editing, assets and related-item tabs. Person pages also show workstation posture, personnel assurance and, for quiz managers with ISMS read access, named quiz assignments and round results.
 

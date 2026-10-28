@@ -173,6 +173,7 @@ def normalise_ingested_fields(
     normalized_payload: dict[str, Any],
     artifact_bytes: bytes,
     artifact_content_type: str,
+    payload_redaction: str | None = None,
 ) -> NormalisedFields:
     """Redact, optionally mask and make storable every persisted event field.
 
@@ -186,11 +187,17 @@ def normalise_ingested_fields(
     )
     summary = summary or ""
     raw_pointer = redact_obj(raw_pointer) or {}
-    normalized_payload = redact_obj(normalized_payload) or {}
-
-    artifact_bytes, redaction_status = redact_bytes(
-        artifact_bytes, artifact_content_type
-    )
+    if payload_redaction is None:
+        normalized_payload = redact_obj(normalized_payload) or {}
+        artifact_bytes, redaction_status = redact_bytes(
+            artifact_bytes, artifact_content_type
+        )
+    else:
+        # The caller redacted the payload and artifact against a declared
+        # schema (UEU envelopes and their catalogue), so typed measurements
+        # whose names resemble secrets are kept and the result is recorded in
+        # the evidence's custody record.
+        redaction_status = payload_redaction
 
     # Optional privacy masking at ingestion time.  The "samples" mode is
     # intentionally not applied here; it is applied dynamically during evidence
@@ -258,6 +265,7 @@ def store_event_with_artifact(
     artifact_key: str,
     captured_by: str,
     commit: bool = True,
+    payload_redaction: str | None = None,
 ) -> dict[str, Any]:
     from app.services.ingestion_pause import require_purge_receiving
 
@@ -290,6 +298,7 @@ def store_event_with_artifact(
         normalized_payload=normalized_payload,
         artifact_bytes=artifact_bytes,
         artifact_content_type=artifact_content_type,
+        payload_redaction=payload_redaction,
     )
 
     # Fast de-dupe check (avoids triggering a rollback that would also undo

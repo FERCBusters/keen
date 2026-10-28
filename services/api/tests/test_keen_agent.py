@@ -1,4 +1,6 @@
-"""OTLP contract, scoped credentials, atomic acceptance and redaction regressions."""
+"""OTLP contract for bearer-token collectors: scoped credentials, atomic
+acceptance and redaction regressions. Signed keen-agent evidence is covered in
+test_ueu_evidence.py."""
 
 import copy
 import gzip
@@ -9,7 +11,8 @@ from types import SimpleNamespace
 
 import app.services.agents as agents_operations
 import pytest
-from app.agents.otlp import decode
+from app.agents import credentials
+from app.agents.otlp import decode_batch
 from app.agents.schema import fingerprint
 from app.api.routes import agents as api
 from app.core.datetime_utils import utc_now_naive
@@ -25,6 +28,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from tests.db_helpers import create_sqlite_schema
+from tests.ueu_agent import FakeValkey
+
+
+def decode(data, agent_id):
+    return decode_batch(data, agent_id).events
 
 
 @compiles(JSONB, "sqlite")
@@ -90,6 +98,8 @@ def setup(monkeypatch):
     app.dependency_overrides[api.require_admin] = lambda: True
     monkeypatch.setattr(agents_operations.settings, "demo_mode", False)
     monkeypatch.setattr(api, "get_valkey", lambda: None)
+    nonces = FakeValkey()
+    monkeypatch.setattr(credentials, "get_valkey", lambda: nonces)
     monkeypatch.setattr(api, "fixed_window_allow", lambda *a, **k: (True, 0))
     stored = []
 
@@ -102,7 +112,10 @@ def setup(monkeypatch):
     monkeypatch.setattr(common, "put_bytes", put)
     monkeypatch.setattr(common, "apply_rules", lambda *a: 0)
     with TestClient(app, raise_server_exceptions=False) as client:
-        registration = client.post("/v1/admin/agents", json={"name": "trusted-server"})
+        registration = client.post(
+            "/v1/admin/agents",
+            json={"name": "trusted-server", "credential_type": "token"},
+        )
         assert registration.status_code == 201, registration.text
         info = registration.json()
         headers = {"Authorization": "Bearer " + info["token"]}
@@ -288,22 +301,6 @@ def test_plain_mapping_reasons_explain_exact_values():
     assert "failure" in reasons[1] and "failed" in reasons[1]
 
 
-def test_go_agent_wire_contract():
-    from pathlib import Path
-
-    data = (
-        Path(__file__).resolve().parent / "fixtures/keen-agent-otlp.json"
-    ).read_bytes()
-    event = decode(data, "agent-1")[0]
-    assert str(event.id) == "6f8459a2-2768-41a4-94d5-a0cdcc2d7187"
-    assert event.action == "package.upgrade" and event.outcome == "info"
-    assert (
-        event.fields["package"] == "example:amd64"
-        and event.fields["agent.version"] == "0.1.0"
-    )
-    assert event.severity == 3
-
-
 def test_webhook_artifact_metadata_excludes_all_credential_headers(monkeypatch):
     from app.ingest import webhooks
 
@@ -383,35 +380,3 @@ def test_json_log_bodies_receive_field_redaction(setup):
         }
         assert "DO-NOT-STORE" not in row.summary
     assert len(stored) == 1 and b"DO-NOT-STORE" not in stored[0]
-
-
-def test_posture_records_store_fields_without_the_duplicate_body(setup):
-    client, factory, headers, _, stored, _ = setup
-    doc = record(
-        body=json.dumps({"check": "antivirus", "facts": {"api_token": "DO-NOT-STORE"}})
-    )
-    log = logs(doc)[0]
-    log["attributes"] = [a for a in log["attributes"] if a["key"] != "keen.action"]
-    for key, value in {
-        "keen.action": "posture.antivirus",
-        "keen.field.posture.schema_version": "1",
-        "keen.field.posture.signatures_updated": "2026-10-26T16:57:49.0000000Z",
-        "keen.field.posture.signatures_age_days": "0",
-    }.items():
-        log["attributes"].append({"key": key, "value": {"stringValue": value}})
-    assert client.post("/v1/otlp/logs", json=doc, headers=headers).status_code == 200
-    # An identical retry is still recognised after the body is dropped.
-    assert client.post("/v1/otlp/logs", json=doc, headers=headers).status_code == 200
-    with factory() as db:
-        row = db.query(Event).one()
-        assert row.normalized_payload["raw"] == ""
-        fields = row.normalized_payload["fields"]
-        assert fields["posture.signatures_updated"] == "2026-10-26T16:57:49.0000000Z"
-        assert fields["posture.signatures_age_days"] == "0"
-    assert len(stored) == 1 and b"DO-NOT-STORE" not in stored[0]
-    # A record using posture names without the posture schema keeps its body.
-    other = record(body="kept")
-    logs(other)[0]["attributes"][1]["value"]["stringValue"] = "posture.firewall"
-    assert client.post("/v1/otlp/logs", json=other, headers=headers).status_code == 200
-    with factory() as db:
-        assert {e.normalized_payload["raw"] for e in db.query(Event)} == {"", "kept"}

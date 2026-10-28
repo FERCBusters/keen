@@ -51,9 +51,14 @@ function dismiss() {
   $('credential').hidden = true;
   $('reveal').textContent = 'Show credential';
 }
-function credential(token) {
+function credential(r) {
   dismiss();
-  $('token').value = token;
+  const code = Boolean(r.enrollment_code);
+  $('token-label').textContent = code ? 'Enrolment code' : 'Agent credential';
+  $('credential-help').textContent = code
+    ? 'Keen displays it once. It enrols one Keen Agent within 24 hours and cannot be used again. Issuing a new code leaves the current key working until the new code is used.'
+    : "Keen displays it once. Save it to the collector's protected configuration. Rotating it immediately invalidates the previous one.";
+  $('token').value = code ? r.enrollment_code : r.token;
   $('credential').hidden = false;
   $('credential').scrollIntoView({ behavior: 'smooth', block: 'center' });
   $('copy').focus();
@@ -76,6 +81,110 @@ function button(label, fn) {
   b.disabled = demo;
   b.onclick = () => guard(b, fn);
   return b;
+}
+const modeLabels = {
+  events: 'Recognised events only',
+  events_with_lines: 'Events with their source lines',
+  all_lines: 'All log lines',
+};
+const subjectLabels = {
+  pairwise: 'Pairwise (differ between devices)',
+  public: 'Public (match across devices)',
+};
+function select(id, label, options, value) {
+  const wrap = document.createElement('div');
+  wrap.className = 'col-md-4';
+  const l = document.createElement('label');
+  l.className = 'form-label';
+  l.htmlFor = id;
+  l.textContent = label;
+  const s = document.createElement('select');
+  s.className = 'form-select';
+  s.id = id;
+  for (const [key, text] of Object.entries(options))
+    s.add(new Option(text, key, false, key === value));
+  wrap.append(l, s);
+  return [wrap, s];
+}
+function bundleForm(a) {
+  const row = document.createElement('div');
+  row.className = 'row g-2 align-items-end mt-2';
+  const day = 86400000,
+    iso = (t) => new Date(t).toISOString().slice(0, 10);
+  const link = document.createElement('a');
+  link.className = 'btn btn-outline-primary btn-sm';
+  link.textContent = 'Download verification bundle';
+  const fields = [
+    ['since', 'Evidence from', iso(Date.now() - 7 * day)],
+    ['until', 'Evidence before', iso(Date.now() + day)],
+  ].map(([name, text, value]) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'col-md-3';
+    const l = document.createElement('label');
+    l.className = 'form-label';
+    l.htmlFor = `agent-${name}-${a.id}`;
+    l.textContent = text;
+    const input = document.createElement('input');
+    input.type = 'date';
+    input.className = 'form-control';
+    input.id = l.htmlFor;
+    input.value = value;
+    wrap.append(l, input);
+    row.append(wrap);
+    return input;
+  });
+  const update = () => {
+    const [since, until] = fields.map((f) => new Date(f.value + 'T00:00:00'));
+    if (Number.isNaN(since.getTime()) || Number.isNaN(until.getTime())) {
+      link.removeAttribute('href');
+      return;
+    }
+    link.href = `${root}/${encodeURIComponent(a.id)}/evidence-bundle?since=${encodeURIComponent(since.toISOString())}&until=${encodeURIComponent(until.toISOString())}`;
+  };
+  for (const f of fields) f.addEventListener('change', update);
+  update();
+  const wrap = document.createElement('div');
+  wrap.className = 'col-12 col-md-auto';
+  wrap.append(link);
+  row.append(wrap);
+  return row;
+}
+function evidencePolicy(a) {
+  const section = document.createElement('div');
+  section.className = 'border-top pt-3 mt-3';
+  const help = document.createElement('p');
+  help.className = 'small-muted';
+  help.textContent =
+    'Keen applies the evidence mode limit to everything it receives from now on. The agent learns both settings at its next enrolment or key renewal.';
+  const row = document.createElement('div');
+  row.className = 'row g-2 align-items-end';
+  const [modeWrap, mode] = select(
+    `agent-mode-${a.id}`,
+    'Evidence mode limit',
+    modeLabels,
+    a.evidence_mode_ceiling,
+  );
+  const [subjectWrap, subject] = select(
+    `agent-subject-${a.id}`,
+    'Account pseudonyms',
+    subjectLabels,
+    a.subject_type,
+  );
+  const actions = document.createElement('div');
+  actions.className = 'col-12 col-md-auto';
+  actions.append(
+    button('Save evidence settings', async () => {
+      await apiPatch(root + '/' + a.id + '/evidence', {
+        evidence_mode_ceiling: mode.value,
+        subject_type: subject.value,
+      });
+      msg('Evidence settings saved.', 'success');
+      await load();
+    }),
+  );
+  row.append(modeWrap, subjectWrap, actions);
+  section.append(help, row, bundleForm(a));
+  return section;
 }
 async function load() {
   if (loading) return;
@@ -117,7 +226,7 @@ async function load() {
       const bad = !a.enabled || expired || h.delivery_blocked;
       const card = document.createElement('article');
       card.className = 'card';
-      card.innerHTML = `<div class="card-body"><div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2"><h2 class="h5 mb-0">${esc(a.name)}</h2><span class="badge d-inline-flex align-items-center justify-content-center py-2 px-3 lh-sm ${bad ? 'text-bg-danger' : stale ? 'text-bg-secondary' : 'text-bg-success'}">${esc(status)}</span></div><div class="small-muted text-break">${esc(a.id)}</div><div class="row g-2 my-2"><div class="col-md-6">Last contact: ${esc(date(a.last_seen))}</div><div class="col-md-6">Credential expiry: ${esc(date(a.expires_at))}</div><div class="col-md-6">Queued: ${Number(h.queued || 0)} · Queue bytes: ${Number(h.queue_bytes || 0)}</div><div class="col-md-6">Dropped records / detected gaps: ${Number(h.rejected || 0)}</div></div><p class="small-muted">Health report: ${esc(date(h.health_received_at))} · Agent ${esc(h.version || 'version not reported')}</p><div class="agent-sources small mb-3"></div><div class="agent-actions d-flex gap-2 flex-wrap"></div></div>`;
+      card.innerHTML = `<div class="card-body"><div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2"><h2 class="h5 mb-0">${esc(a.name)}</h2><span class="badge d-inline-flex align-items-center justify-content-center py-2 px-3 lh-sm ${bad ? 'text-bg-danger' : stale ? 'text-bg-secondary' : 'text-bg-success'}">${esc(status)}</span></div><div class="small-muted text-break">${esc(a.id)}</div><div class="row g-2 my-2"><div class="col-md-6">Last contact: ${esc(date(a.last_seen))}</div><div class="col-md-6">Credential expiry: ${esc(date(a.expires_at))}</div><div class="col-md-6">Queued: ${Number(h.queued || 0)} · Queue bytes: ${Number(h.queue_bytes || 0)}</div><div class="col-md-6">Dropped records / detected gaps: ${Number(h.rejected || 0)}</div><div class="col-md-6">Credential: ${a.credential_type === 'key' ? 'Signing key' : 'Bearer token'}${a.enrollment_code_expires_at ? ` · enrolment code valid until ${esc(date(a.enrollment_code_expires_at))}` : ''}</div><div class="col-md-6">Evidence chain position: ${Number(h.chain_sequence || 0)}${h.evidence_mode_clamped ? ' · a source asks for more than the limit allows' : ''}</div></div><p class="small-muted">Health report: ${esc(date(h.health_received_at))} · Agent ${esc(h.version || 'version not reported')}</p><div class="agent-sources small mb-3"></div><div class="agent-actions d-flex gap-2 flex-wrap"></div></div>`;
       const provenance = document.createElement('p');
       provenance.className = 'small-muted';
       provenance.textContent = a.enrollment_profile_id
@@ -134,25 +243,63 @@ async function load() {
       }
       if (a.enabled && !demo)
         card.querySelector('.agent-actions').append(
-          button('Rotate credential', async () => {
-            if (
-              !(await confirmAction({
-                title: 'Rotate agent credential',
-                message:
-                  'Invalidate the current credential and issue a replacement for ' +
-                  a.name +
-                  '? Agents using the current credential stop reporting until they are re-issued it.',
-                confirmLabel: 'Rotate',
-                typed: 'Rotate',
-              }))
-            )
-              return;
-            const r = await apiPost(root + '/' + a.id + '/rotate', {
-              expires_days: Number($('expiry').value),
-            });
-            credential(r.token);
-            await load();
-          }),
+          button(
+            a.credential_type === 'key' ? 'Issue enrolment code' : 'Rotate credential',
+            async () => {
+              if (
+                !(await confirmAction(
+                  a.credential_type === 'key'
+                    ? {
+                        title: 'Issue enrolment code',
+                        message:
+                          'Issue a single-use enrolment code for ' +
+                          a.name +
+                          '? The current key keeps working until the code enrols a new key, which replaces it.',
+                        confirmLabel: 'Issue code',
+                      }
+                    : {
+                        title: 'Rotate agent credential',
+                        message:
+                          'Invalidate the current credential and issue a replacement for ' +
+                          a.name +
+                          '? Collectors using the current credential stop reporting until they are re-issued it.',
+                        confirmLabel: 'Rotate',
+                        typed: 'Rotate',
+                      },
+                ))
+              )
+                return;
+              const r = await apiPost(root + '/' + a.id + '/rotate', {
+                expires_days: Number($('expiry').value),
+              });
+              credential(r);
+              await load();
+            },
+          ),
+          ...(a.credential_type === 'token'
+            ? [
+                button('Move to key', async () => {
+                  if (
+                    !(await confirmAction({
+                      title: 'Move agent to key enrolment',
+                      message:
+                        'Issue a single-use enrolment code for ' +
+                        a.name +
+                        '? Its token stops working now; a Keen Agent 0.2 or later enrols its own key with the code and sends signed evidence.',
+                      confirmLabel: 'Issue code',
+                      typed: 'Move',
+                    }))
+                  )
+                    return;
+                  const r = await apiPost(root + '/' + a.id + '/rotate', {
+                    expires_days: Number($('expiry').value),
+                    credential_type: 'key',
+                  });
+                  credential(r);
+                  await load();
+                }),
+              ]
+            : []),
           button('Revoke', async () => {
             if (
               !(await confirmAction({
@@ -233,6 +380,7 @@ async function load() {
         association.append(controls);
       }
       card.querySelector('.card-body').append(association);
+      if (!demo && a.enabled) card.querySelector('.card-body').append(evidencePolicy(a));
       $('agents').append(card);
     }
   } finally {
@@ -247,16 +395,22 @@ $('register').onsubmit = (e) => {
       agent_type: $('type').value,
       person_id: $('type').value === 'workstation' ? $('person').value : null,
       expires_days: Number($('expiry').value),
+      credential_type: $('credential-type').value,
+      evidence_mode_ceiling: $('mode').value,
+      subject_type: $('subject').value,
     });
     $('agent-name').value = '';
-    credential(r.token);
+    credential(r);
     await load();
   });
 };
 $('copy').onclick = async () => {
   try {
     await navigator.clipboard.writeText($('token').value);
-    msg('Credential copied. Save it to the protected token file.', 'success');
+    msg(
+      'Credential copied. Save it to the protected file the agent or collector reads.',
+      'success',
+    );
   } catch {
     msg('Clipboard unavailable. Use Show credential and copy it manually.', 'warning');
   }
@@ -271,7 +425,7 @@ window.addEventListener('pagehide', dismiss);
 document.getElementById('tab-agents')?.addEventListener('hidden.bs.tab', dismiss);
 $('refresh').onclick = () => load().catch(fail);
 $('yaml').onclick = () => {
-  const text = `endpoint: ${JSON.stringify(endpoint)}\ntoken_file: /etc/keen-agent/token\nstate_dir: /var/lib/keen-agent\nqueue_mb: 256\npoll_seconds: 5\nretention_days: 0\ninitial_lookback: 24h\nsources:\n  - name: system\n    kind: journal\n    parser: syslog\n`;
+  const text = `endpoint: ${JSON.stringify(endpoint)}\nenrollment:\n  code_file: /etc/keen-agent/enrollment-code\nstate_dir: /var/lib/keen-agent\nqueue_mb: 256\npoll_seconds: 5\nretention_days: 0\ninitial_lookback: 24h\n# events, events_with_lines or all_lines; Keen enforces the identity's limit.\nevidence_mode: events\nsources:\n  - name: system\n    kind: journal\n    parser: syslog\n`;
   const url = URL.createObjectURL(new Blob([text], { type: 'application/yaml' }));
   const a = document.createElement('a');
   a.href = url;

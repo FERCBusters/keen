@@ -1,15 +1,23 @@
 import { fmtTs, apiGet, apiPost, confirmAction, esc } from '/app.js';
 
+const modes = {
+  events: 'Recognised events only',
+  events_with_lines: 'Events with source lines',
+  all_lines: 'All log lines',
+};
+
 export function enrollmentProfiles(host, onChanged) {
   const root = '/api/v1/admin/agent-enrollment-profiles';
   host.innerHTML = `<div class="card mb-3"><div class="card-body"><h2 class="h5">Enrollment profiles</h2>
-  <p>Give each autoscaling fleet its own bootstrap key. Each enrolled machine receives a separate agent credential. Revoking a profile revokes every agent enrolled through it.</p>
+  <p>Give each autoscaling fleet its own bootstrap key. Each enrolled machine generates its own key pair and Keen binds its public key to a separate agent identity. Revoking a profile revokes every agent enrolled through it.</p>
   <form class="row g-3" data-form>
   <div class="col-md-6"><label class="form-label" for="ep-name">Profile name</label><input id="ep-name" name="name" class="form-control" maxlength="128" required></div>
-  <div class="col-md-3"><label class="form-label" for="ep-days">Agent credential lifetime (days)</label><input id="ep-days" name="days" type="number" min="1" max="365" value="90" class="form-control" required></div>
+  <div class="col-md-3"><label class="form-label" for="ep-days">Agent key lifetime (days)</label><input id="ep-days" name="days" type="number" min="1" max="365" value="90" class="form-control" required></div>
   <div class="col-md-3"><label class="form-label" for="ep-limit">Maximum enrollments (optional)</label><input id="ep-limit" name="limit" type="number" min="1" max="1000000" class="form-control"></div>
   <div class="col-md-6"><label class="form-label" for="ep-expires">Enrollment expiry (local time, optional)</label><input id="ep-expires" name="expires" type="datetime-local" class="form-control"></div>
   <div class="col-md-6"><label class="form-label" for="ep-cidrs">Allowed CIDRs (optional, comma-separated)</label><input id="ep-cidrs" name="cidrs" class="form-control" placeholder="192.0.2.0/24, 2001:db8::/32"></div>
+  <div class="col-md-6"><label class="form-label" for="ep-mode">Evidence mode limit</label><select id="ep-mode" name="mode" class="form-select"><option value="events">Recognised events only</option><option value="events_with_lines">Events with their source lines</option><option value="all_lines">All log lines</option></select></div>
+  <div class="col-md-6"><label class="form-label" for="ep-subject">Account pseudonyms</label><select id="ep-subject" name="subject" class="form-select"><option value="pairwise">Pairwise (differ between devices)</option><option value="public">Public (match across devices)</option></select></div>
   <div class="col-12"><label class="form-label" for="ep-labels">Fleet labels (optional, one key=value per line)</label><textarea id="ep-labels" name="labels" class="form-control" rows="2" placeholder="environment=production"></textarea></div>
   <div class="col-12"><button class="btn btn-primary" data-create>Create enrollment profile</button></div></form>
   <p class="small-muted mt-3">Store bootstrap keys in your cluster's secret manager. Limit access to the enrollment endpoint at your reverse proxy. <a href="/help/administrator-agents.html#agent-enrollment-profiles">Enrollment help</a></p>
@@ -81,7 +89,7 @@ export function enrollmentProfiles(host, onChanged) {
       const stateLabel = state.charAt(0).toUpperCase() + state.slice(1);
       const card = document.createElement('article');
       card.className = 'border rounded p-3';
-      card.innerHTML = `<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2"><h3 class="h6 mb-0">${esc(p.name)}</h3><span class="badge d-inline-flex align-items-center justify-content-center py-2 px-3 lh-sm ${p.state === 'active' ? 'text-bg-success' : 'text-bg-secondary'}">${esc(stateLabel)}</span></div><p class="small-muted text-break">Profile: ${esc(p.id)}</p><p>${Number(p.enrollment_count)} enrolled${p.max_enrollments ? ' / ' + Number(p.max_enrollments) + ' maximum' : ''} · Credentials last ${Number(p.token_days)} days</p><p class="small-muted">Enrollment expires: ${esc(p.expires_at ? fmtTs(p.expires_at) : 'No expiry')} · Networks: ${esc(p.allowed_cidrs.join(', ') || 'Any address with a valid key')}</p><div class="d-flex flex-wrap gap-2" data-actions></div>`;
+      card.innerHTML = `<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2"><h3 class="h6 mb-0">${esc(p.name)}</h3><span class="badge d-inline-flex align-items-center justify-content-center py-2 px-3 lh-sm ${p.state === 'active' ? 'text-bg-success' : 'text-bg-secondary'}">${esc(stateLabel)}</span></div><p class="small-muted text-break">Profile: ${esc(p.id)}</p><p>${Number(p.enrollment_count)} enrolled${p.max_enrollments ? ' / ' + Number(p.max_enrollments) + ' maximum' : ''} · Keys last ${Number(p.token_days)} days · ${esc(modes[p.evidence_mode_ceiling] || p.evidence_mode_ceiling)} · ${esc(p.subject_type === 'public' ? 'Public pseudonyms' : 'Pairwise pseudonyms')}</p><p class="small-muted">Enrollment expires: ${esc(p.expires_at ? fmtTs(p.expires_at) : 'No expiry')} · Networks: ${esc(p.allowed_cidrs.join(', ') || 'Any address with a valid key')}</p><div class="d-flex flex-wrap gap-2" data-actions></div>`;
       if (p.state !== 'revoked')
         card.querySelector('[data-actions]').append(
           action(p, 'Rotate bootstrap key', 'rotate', {
@@ -133,6 +141,8 @@ export function enrollmentProfiles(host, onChanged) {
           .map((x) => x.trim())
           .filter(Boolean),
         labels,
+        evidence_mode_ceiling: String(f.get('mode')),
+        subject_type: String(f.get('subject')),
       });
       reveal(r.bootstrap_key);
       status('Enrollment profile created. Save its bootstrap key.');

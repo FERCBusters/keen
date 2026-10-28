@@ -1,18 +1,34 @@
-"""Bounded, evidence-backed workstation summaries for the People register."""
+"""Bounded, evidence-backed workstation summaries for the People register.
+
+Workstation agents send UEU observations: measured states with typed facts.
+The rules below turn facts into a result per check. They are versioned so a
+result can always be traced to the rules that produced it. Where a check
+depends on the organisation's own policy (how soon a screen must lock, how
+old antivirus signatures may be), the rule reads the target from an ISMS
+effectiveness measure with a fixed metric key; with no such measure, the
+check judges only whether the protection is configured.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import timedelta
 
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import AgentPostureObservation, Event, IsmsPerson, KeenAgent
+from app.db.models import (
+    AgentPostureObservation,
+    Event,
+    IsmsEffectivenessMeasure,
+    IsmsPerson,
+    KeenAgent,
+)
 from app.security.permissions import has_permission
 from app.services.errors import DomainError
 from app.services.features import state as feature_state
+from app.services.isms.metric_values import threshold_status
 
+RULES_VERSION = "keen-workstation-posture-2"
 CHECKS = {
     "disk_encryption": "Disk encryption",
     "screen_lock": "Screen lock",
@@ -20,53 +36,72 @@ CHECKS = {
     "firewall": "Firewall",
     "automatic_updates": "Automatic updates",
 }
+# ISMS effectiveness measures with these metric keys set an organisation's
+# own posture targets. Units must match for a target to apply.
+THRESHOLDS = {
+    "keen.workstation.screen_lock_seconds": ("screen_lock", "seconds"),
+    "keen.workstation.antivirus_signature_age_days": ("antivirus", "days"),
+}
+COVERAGE = "evidence.collection.completed"
 MAX_STREAMS = 128
 PAGE_SIZE = 20
 MAX_AGE = timedelta(hours=24)
-SAFE_PROVIDER = re.compile(r"^[a-z][a-z0-9_.]{0,63}$")
+
+
+def _envelope(event):
+    payload = event.normalized_payload or {}
+    doc = payload.get("ueu")
+    if not isinstance(doc, dict) or not isinstance(doc.get("event_type"), str):
+        return None
+    return doc
 
 
 def observation(event):
-    payload = event.normalized_payload or {}
-    f = payload.get("fields", {})
-    if not isinstance(f, dict):
+    """The posture observation an event holds, or None."""
+    doc = _envelope(event)
+    if doc is None:
         return None
-    check, provider, scope = (
-        f.get("posture." + k, "") for k in ("check", "provider", "scope")
-    )
+    parts = doc["event_type"].split(".")
+    observed = doc.get("observation")
     if (
-        check not in CHECKS
-        or event.action != "posture." + check
-        or f.get("posture.schema_version") != "1"
-        or not isinstance(provider, str)
-        or not SAFE_PROVIDER.fullmatch(provider)
-        or not isinstance(scope, str)
-        or not scope
-        or len(scope) > 512
+        len(parts) != 3
+        or parts[0] != "endpoint"
+        or parts[2] != "observed"
+        or parts[1] not in CHECKS
+        or doc.get("catalogue") != {"id": "keen", "version": "2026.10"}
+        or not isinstance(observed, dict)
+        or not isinstance(observed.get("facts"), dict)
     ):
         return None
-    # Only explicitly namespaced, bounded posture metadata reaches the summary.
+    subject = doc.get("subject", {}).get("identifier", "")
+    scope = str(observed.get("scope", ""))
     return {
-        k[8:]: v
-        for k, v in f.items()
-        if isinstance(k, str)
-        and k.startswith("posture.")
-        and isinstance(v, str)
-        and len(v) <= 1024
+        "check": parts[1],
+        "provider": str(doc.get("source", {}).get("component", "")),
+        "scope": scope + (" · " + subject[12:24] if subject else ""),
+        "stream": [parts[1], doc.get("source", {}).get("component"), scope, subject],
+        "reason": str(doc.get("event", {}).get("reason_code", "")),
+        "facts": observed["facts"],
     }
 
 
-def record_observation(db, agent, event_id):
-    """Caller holds the authenticated agent row lock and owns the transaction."""
-    event = db.get(Event, event_id)
-    f = observation(event)
-    if agent.posture_assigned_at is None or event.timestamp < agent.posture_assigned_at:
-        return
-    if f is None:
-        return
-    key = hashlib.sha256(
-        json.dumps([f["check"], f["provider"], f["scope"]]).encode()
-    ).hexdigest()
+def coverage(event):
+    doc = _envelope(event)
+    if doc is None or doc["event_type"] != COVERAGE:
+        return None
+    attrs = doc.get("attributes", {})
+    if not isinstance(attrs, dict):
+        return None
+    lists = {}
+    for key in ("checks_attempted", "checks_observed", "checks_unavailable"):
+        value = attrs.get(key, [])
+        lists[key] = (
+            [v for v in value if v in CHECKS] if isinstance(value, list) else []
+        )
+    return {"collector": str(attrs.get("collector", "")), **lists}
+
+
+def _pointer(db, agent, event, key):
     row = db.get(AgentPostureObservation, (agent.id, key))
     if row is not None:
         if event.timestamp <= row.observed_at:
@@ -89,101 +124,168 @@ def record_observation(db, agent, event_id):
     db.flush()
 
 
-def _boolean(f, *keys):
-    values = [f[k] for k in keys if f.get(k) in ("true", "false")]
-    if "false" in values:
+def record_observation(db, agent, event_id):
+    """Caller holds the authenticated agent row lock and owns the transaction."""
+    event = db.get(Event, event_id)
+    if agent.posture_assigned_at is None or event.timestamp < agent.posture_assigned_at:
+        return
+    found = observation(event)
+    if found is not None:
+        key = hashlib.sha256(json.dumps(found["stream"]).encode()).hexdigest()
+        _pointer(db, agent, event, key)
+        return
+    run = coverage(event)
+    if run is not None:
+        key = hashlib.sha256(json.dumps(["coverage", run["collector"]]).encode())
+        _pointer(db, agent, event, key.hexdigest())
+
+
+def _all_true(f, *keys):
+    values = [f[k] for k in keys if isinstance(f.get(k), bool)]
+    if False in values:
         return "attention"
     return "met" if values else "unknown"
 
 
 def _positive(value):
-    return (
-        isinstance(value, str)
-        and value.isascii()
-        and value.isdigit()
-        and 0 < int(value) < 2**32
-    )
+    return isinstance(value, int) and not isinstance(value, bool) and 0 < value < 2**32
 
 
-def evaluate(f):
-    if f.get("reason") == "managed_outside_qube":
-        return "external"
-    if f.get("status") != "observed":
-        return "unknown"
-    check = f["check"]
-    if check == "disk_encryption":
-        if f.get("transition_in_progress") == "true":
-            return "attention"
-        keys = (
-            ("fully_encrypted", "protection_enabled")
-            if f["provider"] == "bitlocker"
-            else ("encrypted", "enabled")
+def lock_seconds(f):
+    """Seconds of inactivity before the screen locks, where it is known."""
+    for key in ("lock_after_seconds", "total_idle_to_lock_seconds"):
+        if _positive(f.get(key)):
+            return f[key]
+    idle = f.get("idle_seconds")
+    if _positive(idle):
+        delay = f.get("password_delay_seconds", 0)
+        return (
+            idle + delay if isinstance(delay, int) and 0 <= delay < 2**31 - 1 else None
         )
-        if f["provider"] == "bitlocker" and any(
-            f.get(k) not in ("true", "false") for k in keys
-        ):
-            return "unknown"
-        return _boolean(f, *keys)
+    return None
+
+
+def _target(value, threshold, describe):
+    """Apply an organisation's target to a configured protection."""
+    if threshold is None:
+        return "met", ""
+    target, operator, unit = threshold
+    if value is None:
+        return "unknown", "No measured value for the organisation's target"
+    result = threshold_status(value, target, operator, unit, unit)
+    text = describe(value) + "; target " + operator + " " + f"{target:g}" + " " + unit
+    if result == "met":
+        return "met", text
+    if result == "outside":
+        return "attention", text
+    return "unknown", text
+
+
+def evaluate(o, thresholds=None):
+    """Return (status, detail) for one observation under RULES_VERSION."""
+    thresholds = thresholds or {}
+    f, provider, check = o["facts"], o["provider"], o["check"]
+    if o["reason"] == "managed_outside_qube":
+        return "external", ""
+    if check == "disk_encryption":
+        if f.get("transition_in_progress") is True:
+            return "attention", "Encryption is changing"
+        if provider == "bitlocker":
+            keys = ("fully_encrypted", "protection_enabled")
+            if any(not isinstance(f.get(k), bool) for k in keys):
+                return "unknown", ""
+            return _all_true(f, *keys), ""
+        return _all_true(f, "encrypted", "enabled"), ""
     if check == "screen_lock":
-        if "automatic_lock_configured" in f:
-            return _boolean(f, "automatic_lock_configured")
-        if f["provider"] == "windows_user_policy":
-            # Screen saver values are one of several Windows lock paths, and
-            # ScreenSaveActive defaults to 1 with no screen saver selected. Only
-            # the collector's combined automatic_lock_configured fact, which also
-            # covers machine inactivity policy and sign-in on wake, is a result.
-            return "unknown"
-        if (
-            f.get("password_required") == "false"
-            or f.get("saver_enabled") == "false"
-            or f.get("idle_seconds") == "0"
-        ):
-            return "attention"
-        if f.get("password_delay_seconds") == "2147483647":
-            return "attention"
-        if f.get("password_required") == "true" and _positive(f.get("idle_seconds")):
-            return "met"
+        configured = f.get("automatic_lock_configured")
+        if configured is False:
+            return "attention", "Automatic locking is not configured"
+        if configured is not True:
+            if provider == "windows_user_policy":
+                # Screen saver values are one of several Windows lock paths, and
+                # ScreenSaveActive defaults to 1 with no screen saver selected.
+                # Only the combined automatic_lock_configured fact is a result.
+                return "unknown", ""
+            if (
+                f.get("password_required") is False
+                or f.get("saver_enabled") is False
+                or f.get("idle_seconds") == 0
+                or f.get("password_delay_seconds") == 2147483647
+            ):
+                return "attention", "Locking or the password prompt is off"
+            if not (
+                f.get("password_required") is True and _positive(f.get("idle_seconds"))
+            ):
+                return "unknown", ""
+        return _target(
+            lock_seconds(f),
+            thresholds.get("screen_lock"),
+            lambda v: f"Locks after {v} s",
+        )
     if check == "antivirus":
-        state = _boolean(
+        state = _all_true(
             f,
             "antivirus_enabled",
             "real_time_protection_enabled",
             "service_enabled",
             "healthy",
         )
-        if state != "unknown":
-            return state
-        if (
-            f.get("reason")
+        if state == "unknown" and (
+            o["reason"]
             in ("components_detected", "service_detected", "product_registered")
-            or f.get("installed") == "true"
+            or f.get("installed") is True
         ):
-            return "met"
+            state = "met"
+        if state != "met":
+            return state, ""
+        age = f.get("signatures_age_days")
+        if "antivirus" not in thresholds or not isinstance(age, int):
+            return "met", ""
+        return _target(
+            age, thresholds["antivirus"], lambda v: f"Signatures {v} days old"
+        )
     if check == "firewall":
-        state = _boolean(f, "enabled", "manager_active")
+        state = _all_true(f, "enabled", "manager_active")
         if state != "unknown":
-            return state
+            return state, ""
         if f.get("input_policy") in ("DROP", "REJECT") or _positive(
             f.get("input_drop_policy_chains")
         ):
-            return "met"
-        if f.get("input_policy") == "ACCEPT" and f.get("input_rule_count") == "0":
-            return "attention"
+            return "met", ""
+        if f.get("input_policy") == "ACCEPT" and f.get("input_rule_count") == 0:
+            return "attention", "Inbound traffic is accepted without rules"
+        return "unknown", ""
     if check == "automatic_updates":
         if f.get("configuration_effective") == "unknown":
-            return "unknown"
-        if (
-            f.get("scheduler_state") in ("inactive", "failed", "not_loaded")
-            or f.get("policy_no_auto_update") == "1"
-        ):
-            return "attention"
-        return _boolean(
+            return "unknown", ""
+        if f.get("scheduler_state") in ("inactive", "failed", "not_loaded") or f.get(
+            "policy_no_auto_update"
+        ) in ("1", 1, True):
+            return "attention", "Automatic updates are disabled"
+        return _all_true(
             f,
             "automatic_install_configured",
             "automatic_os_install_configured",
             "legacy_scheduled_install_configured",
-        )
-    return "unknown"
+        ), ""
+    return "unknown", ""
+
+
+def thresholds(db):
+    """The organisation's posture targets from ISMS effectiveness measures."""
+    out = {}
+    rows = db.query(IsmsEffectivenessMeasure).filter(
+        IsmsEffectivenessMeasure.metric_key.in_(list(THRESHOLDS))
+    )
+    for row in rows:
+        check, unit = THRESHOLDS[row.metric_key]
+        if (
+            row.target_value is not None
+            and row.threshold_operator in ("lt", "lte", "eq", "gte", "gt")
+            and (row.target_unit or "").strip() == unit
+        ):
+            out[check] = (row.target_value, row.threshold_operator, unit)
+    return out
 
 
 def _iso(value):
@@ -220,25 +322,34 @@ def person_posture(*, db, user, person_id, offset=0):
     grouped = {}
     for pointer, event in evidence:
         grouped.setdefault(pointer.agent_id, []).append(event)
+    targets = thresholds(db)
     now = utc_now_naive()
     devices = []
     for agent in agents:
         active = agent.enabled and agent.expires_at > now
+        unavailable = set()
+        for event in grouped.get(agent.id, []):
+            run = coverage(event)
+            if run is not None and now - MAX_AGE <= event.timestamp <= now:
+                unavailable.update(run["checks_unavailable"])
         checks = []
         for key, label in CHECKS.items():
             rows = []
             for event in grouped.get(agent.id, []):
-                f = observation(event)
-                if f is None or f["check"] != key:
+                o = observation(event)
+                if o is None or o["check"] != key:
                     continue
                 fresh = now - MAX_AGE <= event.timestamp <= now
-                status = evaluate(f) if fresh and active else "stale"
+                status, detail = (
+                    evaluate(o, targets) if fresh and active else ("stale", "")
+                )
                 rows.append(
                     {
-                        "provider": f["provider"],
-                        "scope": f["scope"],
+                        "provider": o["provider"],
+                        "scope": o["scope"],
                         "status": status,
-                        "reason": f.get("reason", ""),
+                        "reason": o["reason"],
+                        "detail": detail,
                         "observed_at": _iso(event.timestamp),
                         "event_id": str(event.id),
                     }
@@ -252,7 +363,7 @@ def person_posture(*, db, user, person_id, offset=0):
                     for s in ("attention", "stale", "unknown", "external", "met")
                     if s in states
                 ),
-                "unknown",
+                "not_collected" if key in unavailable else "unknown",
             )
             if (
                 key in ("antivirus", "firewall", "automatic_updates")
@@ -292,4 +403,9 @@ def person_posture(*, db, user, person_id, offset=0):
         "offset": offset,
         "next_offset": offset + PAGE_SIZE if offset + PAGE_SIZE < total else None,
         "freshness_hours": 24,
+        "rules_version": RULES_VERSION,
+        "targets": {
+            check: {"operator": op, "value": value, "unit": unit}
+            for check, (value, op, unit) in targets.items()
+        },
     }

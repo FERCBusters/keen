@@ -1,4 +1,4 @@
-"""Enrollment scope, revocation, nonce recovery and renewal boundaries."""
+"""Enrollment scope, revocation, nonce recovery and key renewal boundaries."""
 
 import secrets
 from datetime import timedelta
@@ -9,7 +9,7 @@ from app.agents.credentials import digest
 from app.api.context import change_context
 from app.api.routes import agent_enrollment as api
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import AgentEnrollmentProfile, AuditLog, KeenAgent
+from app.db.models import AgentEnrollmentProfile, AgentKey, AuditLog, KeenAgent
 from app.services.errors import DomainError
 from starlette.requests import Request
 
@@ -17,6 +17,7 @@ from tests.test_keen_agent import record
 
 # Imported fixtures are discovered by pytest by name.
 from tests.test_keen_agent import setup as setup
+from tests.ueu_agent import SimAgent
 
 
 @pytest.fixture
@@ -39,18 +40,23 @@ def fleet(setup, monkeypatch):
     return client, factory, p, headers
 
 
-def enroll(client, p, nonce=None, name="web-01"):
-    return client.post(
-        "/v1/agents/enroll",
-        json={"name": name, "nonce": nonce or secrets.token_urlsafe(32)},
-        headers={"Authorization": "Bearer " + p["bootstrap_key"]},
+def enroll(client, p, nonce=None, name="web-01", agent=None):
+    agent = agent or SimAgent(client)
+    r = agent.enroll(
+        p["bootstrap_key"], name=name, nonce=nonce or secrets.token_urlsafe(32)
     )
+    r.sim = agent
+    return r
 
 
 def action(client, p, name):
     return client.post(
         "/v1/admin/agent-enrollment-profiles/" + p["profile"]["id"] + "/" + name
     )
+
+
+def firewall(agent):
+    return agent.send(agent.observation("firewall", "ufw", {"enabled": True}))[0]
 
 
 def test_profile_key_hash_and_enrollment_scope(fleet):
@@ -60,11 +66,13 @@ def test_profile_key_hash_and_enrollment_scope(fleet):
         assert row.key_hash == digest(p["bootstrap_key"])
     listing = c.get("/v1/admin/agent-enrollment-profiles").json()
     assert "bootstrap_key" not in str(listing) and "key_hash" not in str(listing)
+    assert listing["profiles"][0]["evidence_mode_ceiling"] == "events"
     r = enroll(c, p)
     assert r.status_code == 201, r.text
     a = r.json()
     assert a["agent"]["enrollment_profile_id"] == p["profile"]["id"]
-    assert a["agent"]["enrollment_labels"] == {"environment": "prod"}
+    assert "token" not in a and a["subject"] == {"type": "pairwise"}
+    # The bootstrap key enrols; it never authenticates evidence.
     assert (
         c.post(
             "/v1/otlp/logs",
@@ -73,54 +81,47 @@ def test_profile_key_hash_and_enrollment_scope(fleet):
         ).status_code
         == 401
     )
-    assert (
-        c.post(
-            "/v1/otlp/logs",
-            json=record(),
-            headers={"Authorization": "Bearer " + a["token"]},
-        ).status_code
-        == 200
-    )
+    assert firewall(r.sim).status_code == 200
     with f() as db:
         assert db.query(AuditLog).filter_by(path="/v1/agents/enrolled").count() == 1
+        agent = db.get(KeenAgent, a["agent"]["id"])
+        assert agent.enrollment_labels == {"environment": "prod"}
+        assert agent.credential_type == "key" and agent.token_hash == ""
 
 
 def test_lost_response_retry_quota_and_agent_revocation(fleet):
     c, f, p, _ = fleet
     n = secrets.token_urlsafe(32)
-    a = enroll(c, p, n).json()
-    assert enroll(c, p, n).json() == a
-    assert enroll(c, p, n, name="another").status_code == 409
+    first = enroll(c, p, n)
+    a = first.json()
+    # The same nonce and key return the same agent and key.
+    again = enroll(c, p, n, agent=first.sim)
+    assert again.status_code == 201 and again.json()["key_id"] == a["key_id"]
+    # The same nonce cannot bind another key or another name.
+    assert enroll(c, p, n).status_code == 409
+    assert enroll(c, p, n, name="another", agent=first.sim).status_code == 409
     assert enroll(c, p).status_code == 201
     assert enroll(c, p).status_code == 403
     c.post("/v1/admin/agents/" + a["agent"]["id"] + "/revoke")
-    assert enroll(c, p, n).status_code == 409
+    assert enroll(c, p, n, agent=first.sim).status_code == 409
     with f() as db:
         assert db.get(AgentEnrollmentProfile, p["profile"]["id"]).enrollment_count == 2
 
 
 def test_pause_rotate_revoke_and_manual_independence(fleet):
     c, f, p, manual = fleet
-    a = enroll(c, p).json()
-    header = {"Authorization": "Bearer " + a["token"]}
+    sim = enroll(c, p).sim
     assert action(c, p, "pause").status_code == 200
     assert enroll(c, p).status_code == 403
-    assert c.post("/v1/otlp/logs", json=record(), headers=header).status_code == 200
+    assert firewall(sim).status_code == 200
     assert action(c, p, "resume").status_code == 200
     updated = action(c, p, "rotate").json()
     assert enroll(c, p).status_code == 401
     assert enroll(c, updated).status_code == 201
-    assert c.post("/v1/otlp/logs", json=record(), headers=header).status_code == 200
+    assert firewall(sim).status_code == 200
     assert action(c, p, "revoke").status_code == 200
-    assert c.post("/v1/otlp/logs", json=record(), headers=header).status_code == 401
-    assert (
-        c.post(
-            "/v1/agents/renew",
-            json={"nonce": secrets.token_urlsafe(32)},
-            headers=header,
-        ).status_code
-        == 401
-    )
+    assert firewall(sim).status_code == 401
+    assert sim.renew()[0].status_code == 401
     assert enroll(c, updated).status_code == 401
     assert action(c, p, "resume").status_code == 409
     assert c.post("/v1/otlp/logs", json=record(), headers=manual).status_code == 200
@@ -131,44 +132,26 @@ def test_pause_rotate_revoke_and_manual_independence(fleet):
                 enrollment_profile_id=p["profile"]["id"]
             )
         )
+        assert {k.state for k in db.query(AgentKey)} == {"revoked"}
 
 
-def test_renewal_retry_old_token_scope_and_nonce_binding(fleet):
+def test_renewal_retry_window_and_nonce_binding(fleet):
     c, f, p, _ = fleet
-    a = enroll(c, p).json()
-    header = {"Authorization": "Bearer " + a["token"]}
-    nonce = secrets.token_urlsafe(32)
-    r = c.post("/v1/agents/renew", json={"nonce": nonce}, headers=header)
+    sim = enroll(c, p).sim
+    old = sim.key_id
+    r, new, nonce = sim.renew()
     assert r.status_code == 200, r.text
-    assert (
-        c.post("/v1/agents/renew", json={"nonce": nonce}, headers=header).json()
-        == r.json()
-    )
-    assert (
-        c.post(
-            "/v1/agents/renew",
-            json={"nonce": secrets.token_urlsafe(32)},
-            headers=header,
-        ).status_code
-        == 401
-    )
-    assert c.post("/v1/otlp/logs", json=record(), headers=header).status_code == 401
-    assert (
-        c.post(
-            "/v1/otlp/logs",
-            json=record(),
-            headers={"Authorization": "Bearer " + r.json()["token"]},
-        ).status_code
-        == 200
-    )
+    again, _, _ = sim.renew(nonce=nonce, new=new)
+    assert again.status_code == 200 and again.json() == r.json()
+    assert sim.renew()[0].status_code == 401
+    assert firewall(sim).status_code == 401
     with f() as db:
-        row = db.get(KeenAgent, a["agent"]["id"])
-        row.renewal_retry_until = utc_now_naive() - timedelta(seconds=1)
+        key = db.get(AgentKey, old)
+        key.retired_at = utc_now_naive() - timedelta(hours=25)
         db.commit()
-    assert (
-        c.post("/v1/agents/renew", json={"nonce": nonce}, headers=header).status_code
-        == 401
-    )
+    assert sim.renew(nonce=nonce, new=new)[0].status_code == 401
+    sim.accept(r.json(), new)
+    assert firewall(sim).status_code == 200
 
 
 def test_expiry_network_limits_and_limiter_failure(fleet, monkeypatch):
@@ -214,25 +197,14 @@ def test_session_admin_required(setup):
 
 def test_profile_revocation_checked_even_if_agent_flag_remains_enabled(fleet):
     c, f, p, _ = fleet
-    a = enroll(c, p).json()
+    sim = enroll(c, p).sim
     with f() as db:
         profile = db.get(AgentEnrollmentProfile, p["profile"]["id"])
         profile.state = "revoked"
         db.commit()
-    header = {"Authorization": "Bearer " + a["token"]}
-    assert c.post("/v1/otlp/logs", json=record(), headers=header).status_code == 401
-    assert c.post("/v1/agents/heartbeat", json={}, headers=header).status_code in {
-        401,
-        422,
-    }
-    assert (
-        c.post(
-            "/v1/agents/renew",
-            json={"nonce": secrets.token_urlsafe(32)},
-            headers=header,
-        ).status_code
-        == 401
-    )
+    assert firewall(sim).status_code == 401
+    assert sim.heartbeat().status_code == 401
+    assert sim.renew()[0].status_code == 401
 
 
 def test_profile_and_nonce_validation(fleet):
@@ -250,18 +222,23 @@ def test_profile_and_nonce_validation(fleet):
             == 422
         )
     assert enroll(c, p, "short").status_code == 422
-    assert (
-        c.post(
-            "/v1/agents/enroll",
-            json={
-                "name": "host",
-                "nonce": secrets.token_urlsafe(32),
-                "labels": {"admin": "true"},
-            },
-            headers={"Authorization": "Bearer " + p["bootstrap_key"]},
-        ).status_code
-        == 422
-    )
+    for extra in ({"labels": {"admin": "true"}}, {"agent_type": "workstation"}):
+        assert (
+            c.post(
+                "/v1/agents/enroll",
+                json={
+                    "name": "host",
+                    "nonce": secrets.token_urlsafe(32),
+                    "public_key": "A" * 43,
+                    "proof": "A" * 86,
+                    **extra,
+                },
+                headers={"Authorization": "Bearer " + p["bootstrap_key"]},
+            ).status_code
+            == 422
+        )
+    # Profile enrolment names the agent and carries a nonce.
+    assert SimAgent(c).enroll(p["bootstrap_key"]).status_code == 400
 
 
 def test_profile_expiry_must_be_a_future_instant_with_a_timezone(fleet):
@@ -306,7 +283,12 @@ def test_unknown_profiles_actions_and_credentials_are_refused(fleet):
     ]:
         refused = c.post(
             "/v1/agents/enroll",
-            json={"name": "web-01", "nonce": secrets.token_urlsafe(32)},
+            json={
+                "name": "web-01",
+                "nonce": secrets.token_urlsafe(32),
+                "public_key": "A" * 43,
+                "proof": "A" * 86,
+            },
             headers={"Authorization": authorization} if authorization else {},
         )
         assert refused.status_code in {401, 422}, authorization
@@ -318,14 +300,13 @@ def test_unknown_profiles_actions_and_credentials_are_refused(fleet):
             == 0
         )
         assert db.get(AgentEnrollmentProfile, p["profile"]["id"]).state == "active"
-    # A manually created agent has no profile and cannot renew itself.
+    # Bearer-token collectors cannot use key renewal.
     renewal = c.post(
         "/v1/agents/renew",
         json={"nonce": secrets.token_urlsafe(32)},
         headers=manual,
     )
-    assert renewal.status_code == 403
-    assert "administrator" in renewal.json()["detail"]
+    assert renewal.status_code == 401
     assert c.post("/v1/otlp/logs", json=record(), headers=manual).status_code == 200
 
 
@@ -385,6 +366,7 @@ def test_profile_locks_serialize_revocation_on_postgres(
             KeenAgent(
                 id=agent_id,
                 name="host",
+                credential_type="token",
                 token_hash=digest(token),
                 enrollment_profile_id=ident,
                 enabled=True,
@@ -398,7 +380,7 @@ def test_profile_locks_serialize_revocation_on_postgres(
         Session(contract_postgres_engine) as first,
         Session(contract_postgres_engine) as second,
     ):
-        authenticate(request, first)
+        authenticate(request, first, operation="otlp-logs", lock=True)
         second.execute(text("SET LOCAL lock_timeout='100ms'"))
         with pytest.raises(OperationalError):
             api.manage(ident, "revoke", request, Response(), second)
@@ -408,5 +390,5 @@ def test_profile_locks_serialize_revocation_on_postgres(
         from fastapi import HTTPException
 
         with pytest.raises((HTTPException, DomainError)) as exc:
-            authenticate(request, first)
+            authenticate(request, first, operation="otlp-logs", lock=True)
         assert exc.value.status_code == 401

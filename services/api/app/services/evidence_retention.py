@@ -313,6 +313,7 @@ def database_batch():
             ).scalars()
         )
         deleted = 0
+        batches = set()
         for event_id in ids:
             if not db.execute(
                 text(f"SELECT 1 FROM events e WHERE e.id=:id AND {UNPROTECTED}"),
@@ -336,8 +337,25 @@ def database_batch():
             db.execute(
                 text("DELETE FROM artifacts WHERE event_id=:id"), {"id": event_id}
             )
+            # UEU provenance rows cascade with the event; the signed batch
+            # manifests they name are removed below once no evidence uses them.
+            batches.update(
+                db.execute(
+                    text(
+                        "SELECT batch_id FROM ueu_evidence"
+                        " WHERE event_id=:id AND batch_id IS NOT NULL"
+                    ),
+                    {"id": event_id},
+                ).scalars()
+            )
             db.execute(text("DELETE FROM events WHERE id=:id"), {"id": event_id})
             deleted += 1
+        for batch_id in batches:
+            db.execute(
+                text("""DELETE FROM ueu_batches b WHERE b.id=:id
+                AND NOT EXISTS (SELECT 1 FROM ueu_evidence u WHERE u.batch_id=b.id)"""),
+                {"id": batch_id},
+            )
         db.execute(
             text("""UPDATE evidence_purge_jobs SET deleted=deleted+:deleted,
             status=:status, updated_at=:now,last_error=NULL WHERE id=:id"""),

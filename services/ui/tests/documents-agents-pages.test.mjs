@@ -429,9 +429,15 @@ function agentsFixture(overrides = {}) {
         id: 'a1',
         name: '<b>web-1</b>',
         enabled: true,
+        credential_type: 'key',
+        evidence_mode_ceiling: 'events_with_lines',
+        subject_type: 'pairwise',
+        enrollment_code_expires_at: naive(3600000),
         expires_at: naive(86400000),
         last_seen: naive(-1000),
         health: {
+          chain_sequence: 42,
+          evidence_mode_clamped: true,
           queued: 2,
           queue_bytes: 10,
           sources: { journal: 'ok' },
@@ -442,6 +448,7 @@ function agentsFixture(overrides = {}) {
       {
         id: 'a2',
         name: 'old',
+        credential_type: 'token',
         enabled: true,
         expires_at: naive(-1000),
         last_seen: null,
@@ -513,6 +520,7 @@ async function agentsPage(t, options = {}) {
     post: async (u, b) => {
       state.posted.push({ path: u.pathname, body: plain(b) });
       if (options.postFail) throw new Error(JSON.stringify({ detail: [{ msg: 'bad' }] }));
+      if (options.code) return { enrollment_code: 'kc_code-' + state.posted.length };
       return { token: 'keen-agent-secret-' + state.posted.length };
     },
   });
@@ -550,8 +558,17 @@ test('registering an agent reveals its credential once and dismissal clears it',
   await settle(() => $('credential').hidden === false);
   assert.deepEqual(state.posted[0], {
     path: '/api/v1/admin/agents',
-    body: { name: 'db-1', expires_days: 30, agent_type: 'server', person_id: null },
+    body: {
+      name: 'db-1',
+      expires_days: 30,
+      agent_type: 'server',
+      person_id: null,
+      credential_type: 'key',
+      evidence_mode_ceiling: 'events',
+      subject_type: 'pairwise',
+    },
   });
+  assert.equal($('token-label').textContent, 'Agent credential');
   assert.equal($('token').value, 'keen-agent-secret-1');
   assert.equal($('token').type, 'password');
   assert.equal($('agent-name').value, '');
@@ -635,7 +652,7 @@ test('the agent YAML template downloads with the server endpoint', async (t) => 
   const text = await blob.text();
   assert.match(
     text,
-    /^endpoint: "https:\/\/keen\.example\/api\/v1\/otlp\/logs"\ntoken_file: \/etc\/keen-agent\/token/,
+    /^endpoint: "https:\/\/keen\.example\/api\/v1\/otlp\/logs"\nenrollment:\n  code_file: \/etc\/keen-agent\/enrollment-code\n/,
   );
   assert.equal(blob.type, 'application/yaml');
 });
@@ -697,4 +714,71 @@ test('agent timestamps use the shared preference formatter and remain escaped', 
   assert.ok(seen.length > 0);
   assert.match($('agents').textContent, /Last contact: 23\/10\/2026 20:08:08 <img src=x>/);
   assert.equal($('agents').querySelector('img'), null);
+});
+
+test('token agents can be moved to key enrolment after confirmation', async (t) => {
+  const { state, $ } = await agentsPage(t, { code: true });
+  const token = [...$('agents').querySelectorAll('article.card')][1];
+  const labels = [...token.querySelectorAll('.agent-actions button')].map((b) => b.textContent);
+  assert.deepEqual(labels, ['Rotate credential', 'Move to key', 'Revoke']);
+  [...token.querySelectorAll('.agent-actions button')]
+    .find((b) => b.textContent === 'Move to key')
+    .click();
+  await settle(() => state.posted.length === 1);
+  assert.deepEqual(state.posted[0], {
+    path: '/api/v1/admin/agents/a2/rotate',
+    body: { expires_days: 90, credential_type: 'key' },
+  });
+  await settle(() => $('token').value === 'kc_code-1');
+  assert.equal($('token-label').textContent, 'Enrolment code');
+  const key = $('agents').querySelector('article.card');
+  assert.ok(
+    ![...key.querySelectorAll('.agent-actions button')].some(
+      (b) => b.textContent === 'Move to key',
+    ),
+  );
+});
+
+test('key agents show their chain, issue single-use codes and keep evidence settings', async (t) => {
+  const { ui, state, $ } = await agentsPage(t, { code: true });
+  const cards = [...$('agents').querySelectorAll('article.card')];
+  assert.match(cards[0].textContent, /Credential: Signing key · enrolment code valid until/);
+  assert.match(cards[0].textContent, /Evidence chain position: 42 · a source asks for more/);
+  assert.match(cards[1].textContent, /Credential: Bearer token/);
+  const [issue] = cards[0].querySelectorAll('.agent-actions button');
+  assert.equal(issue.textContent, 'Issue enrolment code');
+  assert.equal(cards[1].querySelector('.agent-actions button').textContent, 'Rotate credential');
+  issue.click();
+  await settle(() => $('token').value === 'kc_code-1');
+  assert.equal($('token-label').textContent, 'Enrolment code');
+  assert.match($('credential-help').textContent, /cannot be used again/);
+  // Issuing a code reloads the cards.
+  await settle(() => ui.calls.filter((c) => c.url === '/api/v1/admin/agents').length >= 2);
+  const card = $('agents').querySelector('article.card');
+  const mode = ui.document.getElementById('agent-mode-a1'),
+    subject = ui.document.getElementById('agent-subject-a1');
+  assert.equal(mode.value, 'events_with_lines');
+  mode.value = 'all_lines';
+  subject.value = 'public';
+  [...card.querySelectorAll('button')]
+    .find((b) => b.textContent === 'Save evidence settings')
+    .click();
+  await settle(() => state.patched.length === 1);
+  assert.deepEqual(state.patched[0], {
+    path: '/api/v1/admin/agents/a1/evidence',
+    body: { evidence_mode_ceiling: 'all_lines', subject_type: 'public' },
+  });
+  await settle(() => /Evidence settings saved/.test($('status').textContent));
+  const link = [...$('agents').querySelectorAll('a')].find((a) =>
+    a.textContent.startsWith('Download verification bundle'),
+  );
+  const since = ui.document.getElementById('agent-since-a1');
+  since.value = '2026-10-01';
+  since.dispatchEvent(new ui.window.Event('change'));
+  const url = new URL(link.href);
+  assert.equal(url.pathname, '/api/v1/admin/agents/a1/evidence-bundle');
+  assert.ok(url.searchParams.get('since').startsWith('2026-'));
+  since.value = '';
+  since.dispatchEvent(new ui.window.Event('change'));
+  assert.equal(link.hasAttribute('href'), false);
 });

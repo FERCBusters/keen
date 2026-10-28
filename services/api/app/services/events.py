@@ -63,6 +63,7 @@ from app.services.exports import Export
 from app.services.mapping_provenance import rule_id_of
 from app.services.presentation import event_identifier as _event_identifier
 from app.services.presentation import extract_source_url as _extract_source_url
+from app.services.ueu_evidence import display_payload, evidence_record
 
 INCIDENT_CREATE_PERMISSION = "incident.create"
 INCIDENT_DELETE_PERMISSION = "incident.delete"
@@ -622,7 +623,12 @@ def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session
     )
 
     raw_pointer = _redact_obj(e.raw_pointer)
-    normalized_payload = _redact_obj(e.normalized_payload)
+    provenance = evidence_record(db, eid) if e.source == "keen-agent" else None
+    normalized_payload = (
+        display_payload(e.normalized_payload)
+        if provenance is not None
+        else _redact_obj(e.normalized_payload)
+    )
     source_url = _redact_str(_extract_source_url(e.raw_pointer, e.normalized_payload))
 
     resp = {
@@ -655,6 +661,7 @@ def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session
             for a in arts
         ],
         "incidents": [_incident_to_dict(i) for i in incidents],
+        "ueu": provenance,
     }
 
     return resp

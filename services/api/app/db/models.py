@@ -5,6 +5,7 @@ from datetime import date, datetime
 from datetime import time as dtime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -20,6 +21,7 @@ from sqlalchemy import (
     Time,
     UniqueConstraint,
 )
+from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -3158,10 +3160,25 @@ class AgentEnrollmentProfile(Base):
     enrollment_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     allowed_cidrs: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     labels: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    subject_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pairwise", server_default="pairwise"
+    )
+    evidence_mode_ceiling: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="events", server_default="events"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utcnow
     )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    __table_args__ = (
+        CheckConstraint(
+            "subject_type IN ('pairwise','public')", name="ck_profile_subject_type"
+        ),
+        CheckConstraint(
+            "evidence_mode_ceiling IN ('events','events_with_lines','all_lines')",
+            name="ck_profile_evidence_mode",
+        ),
+    )
 
 
 class KeenAgent(Base):
@@ -3187,11 +3204,39 @@ class KeenAgent(Base):
     previous_token_hash: Mapped[str | None] = mapped_column(String(64))
     renewal_nonce_hash: Mapped[str | None] = mapped_column(String(64))
     renewal_retry_until: Mapped[datetime | None] = mapped_column(DateTime)
+    # keen-agent identities hold an Ed25519 key ("key"); OTLP collectors that
+    # cannot sign hold a bearer token ("token").
+    credential_type: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="key", server_default="token"
+    )
+    enrollment_code_hash: Mapped[str | None] = mapped_column(String(64))
+    enrollment_code_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    validity_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=90, server_default="90"
+    )
+    subject_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pairwise", server_default="pairwise"
+    )
+    evidence_mode_ceiling: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="events", server_default="events"
+    )
+    ueu_last_sequence: Mapped[int | None] = mapped_column(BigInteger)
+    ueu_last_hash: Mapped[str | None] = mapped_column(String(80))
     __table_args__ = (
         UniqueConstraint(
             "enrollment_profile_id",
             "enrollment_nonce_hash",
             name="uq_agent_enrollment_attempt",
+        ),
+        CheckConstraint(
+            "credential_type IN ('key','token')", name="ck_agent_credential_type"
+        ),
+        CheckConstraint(
+            "subject_type IN ('pairwise','public')", name="ck_agent_subject_type"
+        ),
+        CheckConstraint(
+            "evidence_mode_ceiling IN ('events','events_with_lines','all_lines')",
+            name="ck_agent_evidence_mode",
         ),
         CheckConstraint(
             "agent_type IN ('server', 'workstation')", name="ck_agent_type"
@@ -3208,6 +3253,105 @@ class KeenAgent(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime)
     health: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class AgentKey(Base):
+    """An agent's Ed25519 public key. KEEN never holds agent private keys."""
+
+    __tablename__ = "agent_keys"
+    key_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    agent_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("keen_agents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    public_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime)
+    previous_key_id: Mapped[str | None] = mapped_column(String(64))
+    # How the key was bound, and a digest of the single-use credential that
+    # bound it (enrolment code, profile enrolment nonce or renewal nonce), so
+    # a retried request after a lost response returns the same binding.
+    origin: Mapped[str] = mapped_column(String(16), nullable=False)
+    credential_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('active','retired','revoked')", name="ck_agent_key_state"
+        ),
+        CheckConstraint(
+            "origin IN ('code','profile','renewal')", name="ck_agent_key_origin"
+        ),
+        UniqueConstraint("agent_id", "credential_hash", name="uq_agent_key_credential"),
+        Index(
+            "uq_agent_keys_one_active",
+            "agent_id",
+            unique=True,
+            postgresql_where=sql_text("state = 'active'"),
+            sqlite_where=sql_text("state = 'active'"),
+        ),
+    )
+
+
+class UeuBatch(Base):
+    """A received batch manifest and its signature, kept for re-verification."""
+
+    __tablename__ = "ueu_batches"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("keen_agents.id", ondelete="SET NULL"), index=True
+    )
+    key_id: Mapped[str | None] = mapped_column(String(64))
+    manifest: Mapped[str | None] = mapped_column(Text)
+    signature: Mapped[str | None] = mapped_column(String(128))
+    verification: Mapped[str] = mapped_column(String(16), nullable=False)
+    record_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, index=True
+    )
+
+
+class UeuEvidence(Base):
+    """Provenance of one stored UEU envelope; deleted with its event."""
+
+    __tablename__ = "ueu_evidence"
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("events.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("keen_agents.id", ondelete="SET NULL"), index=True
+    )
+    evidence_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("ueu_batches.id", ondelete="SET NULL"),
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    key_id: Mapped[str | None] = mapped_column(String(64))
+    evidence_hash: Mapped[str] = mapped_column(String(80), nullable=False)
+    sequence: Mapped[int | None] = mapped_column(BigInteger)
+    verification: Mapped[str] = mapped_column(String(16), nullable=False)
+    chain_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    schema_validation: Mapped[str] = mapped_column(String(32), nullable=False)
+    catalogue: Mapped[str] = mapped_column(String(65), nullable=False)
+    custody: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class UeuSettings(Base):
+    """Singleton; the public subject key is encrypted with the integration key."""
+
+    __tablename__ = "ueu_settings"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_subject_key: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_ueu_settings_singleton"),)
 
 
 class AgentPostureObservation(Base):
@@ -3230,9 +3374,6 @@ class AgentPostureObservation(Base):
 # Retention is managed with explicit SQL so database row locks, the storage
 # outbox and deletion are one transaction. Register its tables for metadata and
 # migration tooling as well (there are deliberately no ORM cascade relationships).
-from sqlalchemy import BigInteger
-from sqlalchemy import text as sql_text
-
 _evidence_retention_policy = Table(
     "evidence_retention_policy",
     Base.metadata,

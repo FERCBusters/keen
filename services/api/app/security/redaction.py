@@ -238,6 +238,13 @@ def _json_depth(obj: Any, limit: int) -> int | None:
     return deepest
 
 
+def _unique_object(pairs):
+    names = [name for name, _ in pairs]
+    if len(set(names)) != len(names):
+        raise ValueError("duplicate name")
+    return dict(pairs)
+
+
 def _redact_embedded_json(s: str) -> str | None:
     """Redact a string holding a whole JSON object or array as structured data.
 
@@ -250,7 +257,9 @@ def _redact_embedded_json(s: str) -> str | None:
     if head not in ("{", "[") or len(s) > _EMBEDDED_JSON_MAX_CHARS or budget < 1:
         return None
     try:
-        parsed = json.loads(s)
+        # Duplicate names would let json.loads hide an earlier secret behind a
+        # later value; such text falls back to text redaction.
+        parsed = json.loads(s, object_pairs_hook=_unique_object)
     except (ValueError, RecursionError):
         return None
     depth = _json_depth(parsed, budget) if isinstance(parsed, (dict, list)) else None

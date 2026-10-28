@@ -2,6 +2,7 @@ import hashlib
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -56,6 +57,28 @@ class Health(Strict):
             raise ValueError("Invalid filtered counts")
         return values
 
+    not_evidence_by_source: dict[str, int] = Field(default_factory=dict, max_length=64)
+
+    @field_validator("not_evidence_by_source")
+    @classmethod
+    def not_evidence_counts(cls, values):
+        if any(not key or len(key) > 64 or count < 0 for key, count in values.items()):
+            raise ValueError("Invalid counts")
+        return values
+
+    chain_sequence: int = Field(default=0, ge=0, le=2**53 - 1)
+    evidence_modes: dict[str, Literal["events", "events_with_lines", "all_lines"]] = (
+        Field(default_factory=dict, max_length=64)
+    )
+
+    @field_validator("evidence_modes")
+    @classmethod
+    def modes_bounded(cls, values):
+        if any(not key or len(key) > 64 for key in values):
+            raise ValueError("Invalid source names")
+        return values
+
+    evidence_mode_clamped: bool = False
     delivered_since_start: int = Field(default=0, ge=0)
     delivery_batches_since_start: int = Field(default=0, ge=0)
     delivery_events_per_second_since_start: float = Field(

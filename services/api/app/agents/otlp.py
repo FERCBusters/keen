@@ -3,11 +3,14 @@
 import hashlib
 import json
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from app.agents.schema import AgentEvent
 
 NAMESPACE = uuid.UUID("bb62b969-9e11-4f40-aefe-784f8c2577e3")
+# A request carries at most 256 UEU envelopes and at most 64 plain log records.
+MAX_RECORDS = 256
 
 
 def value(v, depth=0):
@@ -65,7 +68,45 @@ def string(x):
     )
 
 
-def decode(data, agent_id):
+@dataclass
+class UeuRecord:
+    body: str
+    evidence_id: str
+    event_name: str
+
+
+@dataclass
+class UeuResource:
+    """One resource's UEU records and the batch attributes that sign them."""
+
+    attributes: dict
+    records: list = field(default_factory=list)
+
+
+@dataclass
+class Batch:
+    events: list
+    ueu: list
+
+    @property
+    def size(self):
+        return len(self.events) + sum(len(r.records) for r in self.ueu)
+
+
+def ueu_record(record, a):
+    """A UEU record carries the canonical envelope as its string body."""
+    body = record.get("body", {})
+    if not isinstance(body, dict) or set(body) != {"stringValue"}:
+        raise ValueError("UEU records carry the envelope as a string body")
+    text = body["stringValue"]
+    evidence_id, name = a.get("ueu.evidence_id"), a.get("event.name")
+    if not isinstance(text, str) or not isinstance(evidence_id, str):
+        raise ValueError("UEU records name their evidence")
+    return UeuRecord(text, evidence_id, name if isinstance(name, str) else "")
+
+
+def decode_batch(data, agent_id):
+    """Split an OTLP/HTTP JSON logs request into UEU envelopes and log events."""
     document = json.loads(data)
     if not isinstance(document, dict):
         raise ValueError("Expected OTLP object")
@@ -73,19 +114,28 @@ def decode(data, agent_id):
     if not isinstance(resources, list) or len(resources) > 64:
         raise ValueError("Resource limit")
     out = []
+    ueu = []
+    count = 0
     for resource in resources:
         rattrs = attributes(resource.get("resource", {}).get("attributes", []))
         scopes = resource.get("scopeLogs", [])
         if not isinstance(scopes, list) or len(scopes) > 64:
             raise ValueError("Scope limit")
+        signed = UeuResource(rattrs)
         for scope in scopes:
             records = scope.get("logRecords", [])
             if not isinstance(records, list):
                 raise ValueError("Expected records")
             for record in records:
+                count += 1
+                if count > MAX_RECORDS:
+                    raise ValueError("Batch exceeds the record limit")
+                a = attributes(record.get("attributes", []))
+                if "ueu.spec_version" in a:
+                    signed.records.append(ueu_record(record, a))
+                    continue
                 if len(out) >= 64:
                     raise ValueError("Batch exceeds 64 records")
-                a = attributes(record.get("attributes", []))
                 raw = string(value(record.get("body", {})))
                 ns = int(record.get("timeUnixNano") or 0) or int(
                     record.get("observedTimeUnixNano") or 0
@@ -147,6 +197,10 @@ def decode(data, agent_id):
                     fields=fields,
                 )
                 out.append(event)
+        if signed.records:
+            ueu.append(signed)
+        elif any(k.startswith("ueu.batch.") for k in rattrs):
+            raise ValueError("A signed batch carries UEU records only")
     if len({e.id for e in out}) != len(out):
         # Identical retried records inside a request are accepted once.
         unique = {}
@@ -156,4 +210,4 @@ def decode(data, agent_id):
                 raise ValueError("Conflicting record UUIDs")
             unique[key] = e
         out = list(unique.values())
-    return out
+    return Batch(out, ueu)

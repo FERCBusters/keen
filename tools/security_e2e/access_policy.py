@@ -232,6 +232,8 @@ POLICY = {
     "PATCH /v1/admin/agents/{agent_id}": ADMIN,
     "POST /v1/admin/agents/{agent_id}/revoke": ADMIN,
     "POST /v1/admin/agents/{agent_id}/rotate": ADMIN,
+    "GET /v1/admin/agents/{agent_id}/evidence-bundle": ADMIN,
+    "PATCH /v1/admin/agents/{agent_id}/evidence": ADMIN,
     "GET /v1/admin/audit": AUDIT_TRAIL,
     "GET /v1/admin/bookstack/catalog": ADMIN,
     "PATCH /v1/admin/clauses/{clause_id}/controls": ADMIN,
@@ -371,6 +373,7 @@ POLICY = {
     "GET /v1/events/facets": EVENTS_READ,
     "GET /v1/events/{event_id}": EVENTS_READ,
     "GET /v1/events/{event_id}/control-suggestions": EVENTS_READ,
+    "GET /v1/events/{event_id}/ueu-bundle": EVENTS_READ,
     "POST /v1/events/{event_id}/incident": all_of("incident.create", "events.read"),
     "DELETE /v1/events/{event_id}/incidents/{incident_id}": all_of(
         "incident.delete", "events.read"

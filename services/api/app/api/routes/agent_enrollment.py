@@ -1,8 +1,10 @@
-"""Fleet bootstrap credentials grant enrollment only; each agent owns its token."""
+"""Enrolment codes and fleet bootstrap keys bind an agent key; the agent signs
+every later request with it."""
 
 from __future__ import annotations
 
-from fastapi import Depends, Request, Response
+from fastapi import Depends, HTTPException, Request, Response
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.context import change_context
@@ -67,15 +69,31 @@ def enroll(
 
 
 @router.post("/v1/agents/renew")
-def renew(
-    body: Renewal, request: Request, response: Response, db: Session = Depends(get_db)
-):
+async def renew(request: Request, response: Response, db: Session = Depends(get_db)):
+    from app.agents.credentials import live_only
+
+    from .agents import authenticate_agent, bounded_body
+
+    live_only()
+    auth = authenticate_agent(
+        request,
+        db,
+        "keen:agent:renew:auth-failure:ip:",
+        operation="renew",
+        allow_retired=True,
+    )
+    if auth.signed is None:
+        raise HTTPException(401, "Invalid agent credential")
+    db.rollback()
+    body = await bounded_body(request, 4096)
+    auth.check_body(body)
+    try:
+        renewal = Renewal.model_validate_json(body)
+    except ValidationError:
+        raise HTTPException(400, "Invalid renewal request")
     response.headers["Cache-Control"] = "no-store"
     return service.renew(
-        body=body,
-        context=change_context(request),
-        db=db,
-        authorization=request.headers.get("authorization", ""),
+        body=renewal, context=change_context(request), db=db, auth=auth
     )
 
 

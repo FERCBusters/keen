@@ -1,4 +1,4 @@
-"""Agent administration is session-admin only; ingest uses its own scoped token."""
+"""Agent administration is session-admin only; agents sign with their own key."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import asyncio
 import gzip
 import io
 import logging
+from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -13,7 +14,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.agents.credentials import authenticate, live_only
-from app.agents.otlp import decode
+from app.agents.otlp import decode_batch
 from app.agents.schema import Health
 from app.api.errors import DomainRoute
 from app.api.routing import Router
@@ -23,8 +24,10 @@ from app.security.auth import require_admin
 from app.security.client_ip import request_ip
 from app.security.rate_limit import fixed_window_allow
 from app.services import agents as service
-from app.services.agents import Assignment, Registration, Rotation
+from app.services import ueu_bundle
+from app.services.agents import Assignment, EvidencePolicy, Registration, Rotation
 from app.services.errors import DomainError
+from app.storage.filenames import content_disposition_attachment
 
 
 class AgentRoute(DomainRoute):
@@ -105,17 +108,50 @@ def revoke(agent_id: str, db: Session = Depends(get_db)):
     return service.revoke(agent_id=agent_id, db=db)
 
 
+@admin.get("/{agent_id}/evidence-bundle")
+def evidence_bundle(
+    agent_id: str,
+    since: datetime,
+    until: datetime,
+    db: Session = Depends(get_db),
+):
+    def naive(value):
+        if value.tzinfo is not None:
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
+    data = ueu_bundle.agent_bundle(
+        db=db, agent_id=agent_id, since=naive(since), until=naive(until)
+    )
+    return Response(
+        data,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": content_disposition_attachment(
+                "ueu-evidence-" + agent_id + ".zip"
+            ),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@admin.patch("/{agent_id}/evidence")
+def evidence_policy(agent_id: str, body: EvidencePolicy, db: Session = Depends(get_db)):
+    return service.set_evidence_policy(agent_id=agent_id, body=body, db=db)
+
+
 @router.post("/v1/otlp/logs")
 async def ingest(request: Request, response: Response, db: Session = Depends(get_db)):
     live_only()
-    a = authenticate_agent(request, db, "keen:agent:auth-failure:ip:")
+    auth = authenticate_agent(
+        request, db, "keen:agent:auth-failure:ip:", operation="otlp-logs"
+    )
     from app.services.ingestion_pause import require_receiving
 
     require_receiving(db, "keen-agent")
-    agent_id = a.id
     db.rollback()
     ok, retry = fixed_window_allow(
-        get_valkey(), "keen:agent:id:" + agent_id, 60, 60, fail_closed=True
+        get_valkey(), "keen:agent:id:" + auth.agent_id, 60, 60, fail_closed=True
     )
     if not ok:
         raise HTTPException(429, "Rate limited", headers={"Retry-After": str(retry)})
@@ -130,13 +166,15 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
     if request.headers.get("content-encoding", "identity") not in ("identity", "gzip"):
         raise HTTPException(415, "Unsupported encoding")
     body = await bounded_body(request, MAX_BODY)
+    # A signed request's digest covers the bytes as sent.
+    auth.check_body(body)
     try:
         if request.headers.get("content-encoding") == "gzip":
             with gzip.GzipFile(fileobj=io.BytesIO(body)) as stream:
                 body = stream.read(MAX_BODY + 1)
             if len(body) > MAX_BODY:
                 raise HTTPException(413, "Decompressed batch exceeds 1 MiB")
-        events = decode(body, agent_id)
+        batch = decode_batch(body, auth.agent_id)
     except (
         ValueError,
         TypeError,
@@ -151,13 +189,16 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
             400, "Invalid OTLP JSON logs; maximum 64 records and bounded attributes"
         )
     result = service.persist_batch(
-        db=db, authorization=request.headers.get("authorization", ""), events=events
+        db=db,
+        auth=auth,
+        authorization=request.headers.get("authorization", ""),
+        batch=batch,
     )
     response.headers["Cache-Control"] = "no-store"
     return result
 
 
-def authenticate_agent(request, db, failure_key):
+def authenticate_agent(request, db, failure_key, *, operation, allow_retired=False):
     """Authenticate before applying address limits.
 
     Agents commonly share one proxy address. Counting only rejected credentials
@@ -165,7 +206,9 @@ def authenticate_agent(request, db, failure_key):
     accepted agents are bounded by their own per-agent limits.
     """
     try:
-        return authenticate(request, db, lock=False)
+        return authenticate(
+            request, db, operation=operation, lock=False, allow_retired=allow_retired
+        )
     except HTTPException as exc:
         if exc.status_code != 401:
             raise
@@ -201,21 +244,26 @@ async def heartbeat(
     request: Request, response: Response, db: Session = Depends(get_db)
 ):
     live_only()
-    a = authenticate_agent(request, db, "keen:agent:health:auth-failure:ip:")
-    agent_id = a.id
+    auth = authenticate_agent(
+        request, db, "keen:agent:health:auth-failure:ip:", operation="heartbeat"
+    )
     db.rollback()
     ok, retry = fixed_window_allow(
-        get_valkey(), "keen:agent:health:id:" + agent_id, 6, 60, fail_closed=True
+        get_valkey(), "keen:agent:health:id:" + auth.agent_id, 6, 60, fail_closed=True
     )
     if not ok:
         raise HTTPException(429, "Rate limited", headers={"Retry-After": str(retry)})
     body = await bounded_body(request, 32768)
+    auth.check_body(body)
     try:
         health = Health.model_validate_json(body)
     except ValidationError:
         raise HTTPException(400, "Invalid health report")
     result = service.record_heartbeat(
-        db=db, authorization=request.headers.get("authorization", ""), health=health
+        db=db,
+        auth=auth,
+        authorization=request.headers.get("authorization", ""),
+        health=health,
     )
     response.headers["Cache-Control"] = "no-store"
     return result

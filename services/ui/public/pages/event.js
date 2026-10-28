@@ -3,6 +3,7 @@ import { canManageStories, mountStoryRelated } from '/pages/story-related.js';
 import { createEvidenceExporter } from './evidence-export/index.js';
 import { renderJson } from '/json-highlight.js';
 import { mountQuestionThreads } from '/pages/question-threads.js';
+import { renderUeuEvidence } from '/pages/ueu-evidence.js';
 import {
   errorText,
   initNavbar,
@@ -826,6 +827,8 @@ async function load() {
     }
 
     setupSuggestedControls(e, controls);
+
+    renderUeuEvidence(document.getElementById('ueuBlock'), e);
 
     // Diary notes + links (if present)
     renderDiaryEvidence(e);
