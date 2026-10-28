@@ -43,7 +43,7 @@ async function loadSourceCatalogue() {
         <div class="small-muted">${item.collection_items} collection items · ${item.definitions} definitions</div>
         <div class="small-muted">${item.observed_events} events · last seen ${esc(item.last_seen || 'never')}</div>
         ${item.paused ? '<p class="small mt-2 mb-1">Collection is paused across all connections of this type. Existing evidence is retained.</p>' : ''}
-        ${item.enabled && item.can_pause ? `<button type="button" class="btn btn-sm ${item.paused ? 'btn-outline-success' : 'btn-outline-warning'} mt-2" data-source-pause="${esc(item.adapter)}" data-paused="${!item.paused}" ${!item.enabled && !item.paused ? 'disabled' : ''}>${item.paused ? 'Resume ingestion' : 'Pause ingestion'}</button>` : ''}
+        ${item.enabled && item.can_pause ? `<button type="button" class="btn btn-sm ${item.paused ? 'btn-outline-success' : 'btn-outline-warning'} mt-2" data-source-pause="${esc(item.adapter)}" data-paused="${!item.paused}">${item.paused ? 'Resume ingestion' : 'Pause ingestion'}</button>` : ''}
       </div></div>`,
       )
       .join('');

@@ -284,7 +284,7 @@ async function admin(t, options = {}) {
 test('the source catalogue shows ingestion state and pauses or resumes collection', async (t) => {
   const { ui, el, calls } = await admin(t);
   const catalogue = el('source-catalogue');
-  await settle(() => catalogue.querySelectorAll('[data-source-pause]').length === 3);
+  await settle(() => catalogue.querySelectorAll('[data-source-pause]').length === 2);
   assert.equal(catalogue.querySelector('img'), null);
   assert.equal(ui.window.pwned, undefined);
   const cards = [...catalogue.querySelectorAll('.border')];
@@ -297,8 +297,8 @@ test('the source catalogue shows ingestion state and pauses or resumes collectio
     /2 collection items · 3 definitions[\s\S]*40 events · last seen 2026-10-01/,
   );
   assert.match(cards[1].textContent, /last seen never[\s\S]*Collection is paused/);
-  assert.equal(cards[2].querySelector('button').disabled, true);
-  assert.match(cards[2].textContent, /Disabled by installation settings/);
+  // A source disabled by installation settings gets no pause control at all.
+  assert.equal(cards[2].querySelector('button'), null);
   assert.equal(cards[3].querySelector('button'), null);
 
   cards[0].querySelector('button').click();
