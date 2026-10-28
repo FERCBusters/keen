@@ -29,6 +29,7 @@ from app.services.errors import DomainError
 BATCH_CONTEXT = "keen-ueu-batch-v1"
 MODE_RANK = {"events": 1, "events_with_lines": 2, "all_lines": 3}
 LINES_ONLY = {"log.line.collected"}
+PLATFORMS = {"linux", "darwin", "windows"}
 
 
 def effective_mode(env) -> int:
@@ -267,6 +268,15 @@ def persist(db, agent, resources, received_at):
                 db.flush()
             store(db, agent, env, doc, changes, signed, chain, batch, received_at)
             stored += 1
+            platform = env.document["asset"]["platform"]
+            if (
+                agent.credential_type == "key"
+                and env.stream == agent.id
+                and platform in PLATFORMS
+                and agent.health.get("platform") != platform
+            ):
+                # The platform the agent's own key reports, for display.
+                agent.health = {**agent.health, "platform": platform}
     return stored, duplicates, withheld
 
 

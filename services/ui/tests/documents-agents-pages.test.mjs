@@ -716,6 +716,56 @@ test('agent timestamps use the shared preference formatter and remain escaped', 
   assert.equal($('agents').querySelector('img'), null);
 });
 
+test('agent cards collapse, remember what is open and show reported platforms', async (t) => {
+  const data = agentsFixture();
+  data.agents[0].health.platform = 'darwin';
+  data.agents[1].health = { platform: '<img src=x onerror=alert(1)>' };
+  data.agents = data.agents.slice(0, 2);
+  const { ui, $ } = await agentsPage(t, { data });
+  const details = () => [...$('agents').querySelectorAll('details[data-agent]')];
+  assert.equal(details().length, 2);
+  // With several agents each card starts collapsed, its heading still visible.
+  assert.deepEqual(
+    details().map((d) => d.open),
+    [false, false],
+  );
+  const first = details()[0].querySelector('summary');
+  assert.equal(first.querySelector('.bi-apple').getAttribute('title'), 'macOS');
+  assert.match(first.textContent, /macOS/);
+  // An unknown platform shows no icon and no reported text.
+  assert.equal(details()[1].querySelector('summary .platform-icon'), null);
+  assert.equal($('agents').querySelector('img'), null);
+  const buttons = [...$('agents').querySelectorAll('button')];
+  buttons.find((b) => b.textContent === 'Expand all').click();
+  assert.deepEqual(
+    details().map((d) => d.open),
+    [true, true],
+  );
+  buttons.find((b) => b.textContent === 'Collapse all').click();
+  details()[1].open = true;
+  await settle(() => true);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  // A reload after an action keeps the card the administrator opened.
+  $('refresh').click();
+  await settle(() => ui.calls.filter((c) => c.url === '/api/v1/admin/agents').length >= 2);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(
+    details().map((d) => d.open),
+    [false, true],
+  );
+});
+
+test('a single agent opens by default', async (t) => {
+  const data = agentsFixture();
+  data.agents = [data.agents[0]];
+  const { $ } = await agentsPage(t, { data });
+  assert.equal($('agents').querySelector('details[data-agent]').open, true);
+  assert.equal(
+    [...$('agents').querySelectorAll('button')].some((b) => b.textContent === 'Expand all'),
+    false,
+  );
+});
+
 test('token agents can be moved to key enrolment after confirmation', async (t) => {
   const { state, $ } = await agentsPage(t, { code: true });
   const token = [...$('agents').querySelectorAll('article.card')][1];

@@ -789,3 +789,22 @@ def test_measured_lock_facts_survive_ingestion(setup):
             e.normalized_payload["ueu"]["observation"]["facts"] for e in db.query(Event)
         ]
         assert {x["password_required"] for x in facts} == {True}
+
+
+def test_devices_report_the_platform_their_key_sends(setup):
+    pid, aid, sim = workstation(setup)
+    client, factory, *_ = setup
+    with factory() as db:
+        # Before any evidence the platform is not known.
+        assert summary(db, pid)["devices"][0]["platform"] is None
+    assert send(sim, make_posture(sim)).status_code == 200
+    listed = client.get("/v1/admin/agents").json()["agents"]
+    assert next(a for a in listed if a["id"] == aid)["health"]["platform"] == "windows"
+    with factory() as db:
+        assert db.get(KeenAgent, aid).health["platform"] == "windows"
+        assert summary(db, pid)["devices"][0]["platform"] == "windows"
+        # Older agents' evidence still shows the platform before the next batch.
+        row = db.get(KeenAgent, aid)
+        row.health = {k: v for k, v in row.health.items() if k != "platform"}
+        db.commit()
+        assert summary(db, pid)["devices"][0]["platform"] == "windows"

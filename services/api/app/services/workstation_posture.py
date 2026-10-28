@@ -27,6 +27,7 @@ from app.security.permissions import has_permission
 from app.services.errors import DomainError
 from app.services.features import state as feature_state
 from app.services.isms.metric_values import threshold_status
+from app.services.ueu_evidence import PLATFORMS
 
 RULES_VERSION = "keen-workstation-posture-2"
 CHECKS = {
@@ -288,6 +289,19 @@ def thresholds(db):
     return out
 
 
+def _platform(agent, events):
+    """The device's platform: recorded at ingestion, or from loaded evidence."""
+    platform = (agent.health or {}).get("platform")
+    if platform in PLATFORMS:
+        return platform
+    for event in events:
+        envelope = (event.normalized_payload or {}).get("ueu") or {}
+        platform = (envelope.get("asset") or {}).get("platform")
+        if platform in PLATFORMS:
+            return platform
+    return None
+
+
 def _iso(value):
     return value.isoformat() + "Z" if value is not None else None
 
@@ -389,6 +403,7 @@ def person_posture(*, db, user, person_id, offset=0):
             {
                 "agent_id": agent.id,
                 "hostname": agent.name,
+                "platform": _platform(agent, grouped.get(agent.id, [])),
                 "active": active,
                 "last_seen": _iso(agent.last_seen),
                 "overflow": bool(agent.health.get("posture_overflow")),

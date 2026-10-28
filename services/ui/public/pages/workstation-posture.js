@@ -1,4 +1,5 @@
 import { apiGet, esc, fmtTs } from '/app.js';
+import { openState, platformIcon } from './platform.js';
 const labels = {
   met: 'Met',
   attention: 'Needs attention',
@@ -28,7 +29,17 @@ function targets(value) {
     )
     .join('; ')}.`;
 }
+function evidence(check) {
+  const rows = check.observations.map(
+    (o) =>
+      `<div class="mb-1"><a href="/event.html?id=${encodeURIComponent(o.event_id)}">${esc(o.provider)} · ${esc(o.scope)}</a> · ${esc(fmtTs(o.observed_at))} · ${esc(labels[o.status] || 'Not established')}<div class="small-muted">${esc(o.reason.replaceAll('_', ' '))}${o.detail ? ` · ${esc(o.detail)}` : ''}</div></div>`,
+  );
+  if (!rows.length) return 'No current evidence';
+  if (rows.length === 1) return rows[0];
+  return `<details data-posture-evidence><summary>${rows.length} observations</summary>${rows.join('')}</details>`;
+}
 export function workstationPosture(host, allowed) {
+  const opened = openState();
   let person = null,
     generation = 0,
     offset = 0;
@@ -53,7 +64,13 @@ export function workstationPosture(host, allowed) {
       for (const device of devices) {
         const article = document.createElement('article');
         article.className = 'border-top pt-3 mt-3';
-        article.innerHTML = `<h3 class="h6">${esc(device.hostname)} <span class="badge badge-soft">${Number(device.met)} / ${Number(device.target)}</span></h3><p class="small-muted">${device.active ? 'Active credential' : 'Credential revoked or expired'} · Last contact: ${esc(device.last_seen ? fmtTs(device.last_seen) : 'Never')}</p>${device.overflow ? '<p class="text-warning">Too many observation scopes to establish device completion. Review the agent configuration.</p>' : ''}<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Check</th><th>Result</th><th>Latest evidence by scope</th></tr></thead><tbody>${device.checks.map((check) => `<tr><th scope="row">${esc(check.label)}</th><td><span class="badge text-bg-${tones[check.status] || 'secondary'}">${esc(labels[check.status] || 'Not established')}</span></td><td>${check.observations.length ? check.observations.map((o) => `<div class="mb-1"><a href="/event.html?id=${encodeURIComponent(o.event_id)}">${esc(o.provider)} · ${esc(o.scope)}</a> · ${esc(fmtTs(o.observed_at))} · ${esc(labels[o.status] || 'Not established')}<div class="small-muted">${esc(o.reason.replaceAll('_', ' '))}${o.detail ? ` · ${esc(o.detail)}` : ''}</div></div>`).join('') : 'No current evidence'}</td></tr>`).join('')}</tbody></table></div>`;
+        article.innerHTML = `<details class="collapsible-card" data-posture-device><summary class="d-flex align-items-center gap-2"><i class="bi bi-chevron-right collapse-chevron" aria-hidden="true"></i>${platformIcon(device.platform)}<h3 class="h6 mb-0">${esc(device.hostname)}</h3><span class="badge badge-soft">${Number(device.met)} / ${Number(device.target)}</span></summary><p class="small-muted mt-2">${device.active ? 'Active credential' : 'Credential revoked or expired'} · Last contact: ${esc(device.last_seen ? fmtTs(device.last_seen) : 'Never')}</p>${device.overflow ? '<p class="text-warning">Too many observation scopes to establish device completion. Review the agent configuration.</p>' : ''}<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Check</th><th>Result</th><th>Latest evidence by scope</th></tr></thead><tbody>${device.checks.map((check) => `<tr><th scope="row">${esc(check.label)}</th><td><span class="badge text-bg-${tones[check.status] || 'secondary'}">${esc(labels[check.status] || 'Not established')}</span></td><td>${evidence(check)}</td></tr>`).join('')}</tbody></table></div></details>`;
+        // One device opens by default; with several, each opens on request.
+        opened.apply(
+          article.querySelector('details'),
+          String(device.agent_id),
+          devices.length === 1,
+        );
         container.append(article);
       }
       host.querySelector('[data-posture-refresh]').addEventListener('click', load);

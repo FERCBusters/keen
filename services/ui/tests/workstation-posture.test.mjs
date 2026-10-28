@@ -101,3 +101,57 @@ test('failed loading is retryable and empty devices have useful instructions', a
   await tick();
   assert.match(host.textContent, /No workstation agents linked/);
 });
+test('devices collapse with their platform shown and long evidence lists fold', async (t) => {
+  const observation = (n) => ({
+    provider: 'p' + n,
+    scope: 'host',
+    reason: 'components_detected',
+    observed_at: '2026-10-26T00:00:00Z',
+    event_id: 'e' + n,
+    status: 'met',
+  });
+  const device = (id, platform) => ({
+    ...result(id).devices[0],
+    agent_id: id,
+    platform,
+    checks: [{ label: 'Antivirus', status: 'met', observations: [observation(1), observation(2)] }],
+  });
+  let data = {
+    ...result(),
+    total: 2,
+    devices: [device('mac', 'darwin'), device('pc', 'nonsense')],
+  };
+  const ui = await loadUi('pages/workstation-posture.js', {
+    html: '<section id="host"></section>',
+    vendor: { apiGet: async () => data },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  ui.api.workstationPosture(host, true).select({ id: 'p', name: 'Person' });
+  await tick();
+  const devices = () => [...host.querySelectorAll('details[data-posture-device]')];
+  assert.deepEqual(
+    devices().map((d) => d.open),
+    [false, false],
+  );
+  assert.equal(devices()[0].querySelector('summary .bi-apple').getAttribute('title'), 'macOS');
+  assert.equal(devices()[1].querySelector('summary .platform-icon'), null);
+  const folded = devices()[0].querySelector('details[data-posture-evidence]');
+  assert.equal(folded.querySelector('summary').textContent, '2 observations');
+  assert.equal(folded.open, false);
+  // An opened device stays open when the panel refreshes.
+  devices()[1].open = true;
+  await tick();
+  host.querySelector('[data-posture-refresh]').click();
+  await tick();
+  assert.deepEqual(
+    devices().map((d) => d.open),
+    [false, true],
+  );
+  // A person with one device sees it open.
+  data = { ...result(), devices: [device('only', 'windows')] };
+  host.querySelector('[data-posture-refresh]').click();
+  await tick();
+  assert.equal(devices()[0].open, true);
+  assert.ok(devices()[0].querySelector('summary .bi-windows'));
+});

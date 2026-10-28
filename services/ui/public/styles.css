@@ -463,6 +463,35 @@ a.schedule-calendar-event {
   cursor: pointer;
 }
 
+/* Collapsible Keen Agent and workstation posture cards. */
+.collapsible-card > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.collapsible-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-card > summary .collapse-chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.collapsible-card[open] > summary .collapse-chevron {
+  transform: rotate(90deg);
+}
+
+.collapsible-card:not([open]) > summary.card-header {
+  border-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapsible-card > summary .collapse-chevron {
+    transition: none;
+  }
+}
+
 /* Risk wizard: one question at a time. */
 .risk-wizard-steps {
   padding-left: 0;
