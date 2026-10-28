@@ -766,6 +766,49 @@ test('a single agent opens by default', async (t) => {
   );
 });
 
+test('revoked agents stay hidden until shown, and the choice survives a refresh', async (t) => {
+  const { ui, $ } = await agentsPage(t);
+  const cards = () => [...$('agents').querySelectorAll('article.card')];
+  const revoked = () => cards().filter((c) => c.querySelector('.badge').textContent === 'Revoked');
+  assert.equal(revoked().length, 1);
+  assert.equal(revoked()[0].hidden, true);
+  assert.equal(cards().filter((c) => !c.hidden).length, 4);
+  const box = () => $('agents').querySelector('#show-revoked');
+  assert.equal(box().checked, false);
+  assert.match(box().closest('label').textContent, /Show revoked agents \(1\)/);
+  // Expanding everything leaves hidden cards closed.
+  [...$('agents').querySelectorAll('button')].find((b) => b.textContent === 'Expand all').click();
+  assert.equal(revoked()[0].querySelector('details').open, false);
+  box().checked = true;
+  box().dispatchEvent(new ui.window.Event('change'));
+  assert.equal(revoked()[0].hidden, false);
+  $('refresh').click();
+  await settle(() => ui.calls.filter((c) => c.url === '/api/v1/admin/agents').length >= 2);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(box().checked, true);
+  assert.equal(revoked()[0].hidden, false);
+  box().checked = false;
+  box().dispatchEvent(new ui.window.Event('change'));
+  assert.equal(revoked()[0].hidden, true);
+});
+
+test('with only revoked agents the page says so and offers to show them', async (t) => {
+  const data = agentsFixture();
+  data.agents = data.agents.filter((a) => !a.enabled);
+  const { $ } = await agentsPage(t, { data });
+  assert.match($('agents').textContent, /No active agents\./);
+  assert.ok($('agents').querySelector('#show-revoked'));
+  assert.equal($('agents').querySelector('article.card').hidden, true);
+  assert.equal($('agents').querySelector('details[data-agent]').open, false);
+});
+
+test('without revoked agents there is no revoked toggle', async (t) => {
+  const data = agentsFixture();
+  data.agents = data.agents.filter((a) => a.enabled);
+  const { $ } = await agentsPage(t, { data });
+  assert.equal($('agents').querySelector('#show-revoked'), null);
+});
+
 test('token agents can be moved to key enrolment after confirmation', async (t) => {
   const { state, $ } = await agentsPage(t, { code: true });
   const token = [...$('agents').querySelectorAll('article.card')][1];

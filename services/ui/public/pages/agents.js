@@ -5,6 +5,7 @@ const root = '/api/v1/admin/agents',
   $ = (id) => document.getElementById('ka-' + id);
 let people = [];
 const opened = openState();
+let showRevoked = false;
 function personOptions(selected = '') {
   return (
     '<option value="">Choose a person</option>' +
@@ -207,27 +208,53 @@ async function load() {
       );
     const profileNames = await profiles.refresh(demo);
     $('agents').replaceChildren();
+    const revoked = data.agents.filter((a) => !a.enabled).length,
+      active = data.agents.length - revoked;
     if (!data.agents.length) {
       const p = document.createElement('p');
       p.textContent = 'No agents registered yet.';
       $('agents').append(p);
-    } else if (data.agents.length > 1) {
+    } else {
       const bar = document.createElement('div');
-      bar.className = 'd-flex gap-2 justify-content-end';
-      for (const [label, open] of [
-        ['Expand all', true],
-        ['Collapse all', false],
-      ]) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'btn btn-sm btn-outline-secondary';
-        b.textContent = label;
-        b.addEventListener('click', () => {
-          for (const d of $('agents').querySelectorAll('details[data-agent]')) d.open = open;
+      bar.className = 'd-flex gap-2 justify-content-end align-items-center flex-wrap';
+      if (revoked) {
+        const label = document.createElement('label');
+        label.className = 'form-check form-check-inline me-auto mb-0';
+        label.innerHTML = `<input class="form-check-input" type="checkbox" id="show-revoked"> <span class="form-check-label">Show revoked agents (${revoked})</span>`;
+        const box = label.querySelector('input');
+        box.checked = showRevoked;
+        box.addEventListener('change', () => {
+          showRevoked = box.checked;
+          for (const card of $('agents').querySelectorAll('[data-revoked]'))
+            card.hidden = !showRevoked;
         });
-        bar.append(b);
+        bar.append(label);
+      }
+      if (data.agents.length > 1) {
+        for (const [label, open] of [
+          ['Expand all', true],
+          ['Collapse all', false],
+        ]) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'btn btn-sm btn-outline-secondary';
+          b.textContent = label;
+          b.addEventListener('click', () => {
+            for (const d of $('agents').querySelectorAll(
+              'article:not([hidden]) details[data-agent]',
+            ))
+              d.open = open;
+          });
+          bar.append(b);
+        }
       }
       $('agents').append(bar);
+      if (!active) {
+        const p = document.createElement('p');
+        p.className = 'small-muted';
+        p.textContent = 'No active agents.';
+        $('agents').append(p);
+      }
     }
     for (const a of data.agents) {
       const expired = new Date(a.expires_at + 'Z') < new Date(),
@@ -246,8 +273,13 @@ async function load() {
       const card = document.createElement('article');
       card.className = 'card';
       card.innerHTML = `<details class="collapsible-card" data-agent="${esc(a.id)}"><summary class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2"><span class="d-flex align-items-center gap-2"><i class="bi bi-chevron-right collapse-chevron" aria-hidden="true"></i>${platformIcon(h.platform)}<h2 class="h5 mb-0">${esc(a.name)}</h2></span><span class="badge d-inline-flex align-items-center justify-content-center py-2 px-3 lh-sm ${bad ? 'text-bg-danger' : stale ? 'text-bg-secondary' : 'text-bg-success'}">${esc(status)}</span></summary><div class="card-body"><div class="small-muted text-break">${esc(a.id)}</div><div class="row g-2 my-2"><div class="col-md-6">Last contact: ${esc(date(a.last_seen))}</div><div class="col-md-6">Credential expiry: ${esc(date(a.expires_at))}</div><div class="col-md-6">Queued: ${Number(h.queued || 0)} · Queue bytes: ${Number(h.queue_bytes || 0)}</div><div class="col-md-6">Dropped records / detected gaps: ${Number(h.rejected || 0)}</div><div class="col-md-6">Credential: ${a.credential_type === 'key' ? 'Signing key' : 'Bearer token'}${a.enrollment_code_expires_at ? ` · enrolment code valid until ${esc(date(a.enrollment_code_expires_at))}` : ''}</div><div class="col-md-6">Evidence chain position: ${Number(h.chain_sequence || 0)}${h.evidence_mode_clamped ? ' · a source asks for more than the limit allows' : ''}</div></div><p class="small-muted">Health report: ${esc(date(h.health_received_at))} · Agent ${esc(h.version || 'version not reported')}</p><div class="agent-sources small mb-3"></div><div class="agent-actions d-flex gap-2 flex-wrap"></div></div></details>`;
-      // A single agent opens by default; with several, each opens on request.
-      opened.apply(card.querySelector('details'), a.id, data.agents.length === 1);
+      // Revoked agents stay hidden unless asked for.
+      if (!a.enabled) {
+        card.dataset.revoked = '';
+        card.hidden = !showRevoked;
+      }
+      // A single active agent opens by default; with several, each opens on request.
+      opened.apply(card.querySelector('details'), a.id, active === 1 && a.enabled);
       const provenance = document.createElement('p');
       provenance.className = 'small-muted';
       provenance.textContent = a.enrollment_profile_id
