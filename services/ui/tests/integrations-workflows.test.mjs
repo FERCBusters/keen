@@ -281,6 +281,14 @@ async function builder(t, options = {}) {
   await new Promise((r) => setTimeout(r, 5));
   return { ui, el, state, buttonIn };
 }
+test('without paused ingesters the admin overview shows no alert', async (t) => {
+  const data = baseData();
+  data.collectors = data.collectors.map((c) => ({ ...c, failures: 0 }));
+  const { el } = await builder(t, { data });
+  assert.equal(el('attention').textContent, '');
+  assert.match(el('overview').textContent, /Need attention0/);
+});
+
 const cardFor = (ctx, name) =>
   [...ctx.el('list').querySelectorAll('.ig-card')].find(
     (c) => c.querySelector('h3').textContent === name,
@@ -291,9 +299,16 @@ test('the overview summarises integration health and each status', async (t) => 
   const { el, ui } = ctx;
   assert.deepEqual(
     [...el('overview').querySelectorAll('.kpi')].map((s) => s.textContent),
-    ['Configured integrations7', 'Scheduled5', 'Need attention1'],
+    ['Custom API ingesters7', 'Scheduled5', 'Need attention1'],
   );
-  assert.match(el('overview').textContent, /paused after repeated failures/);
+  // The counters sit with the builder; the admin overview only raises failures.
+  assert.ok(el('overview').closest('#pane-integrations'));
+  assert.equal(el('attention').closest('#pane-overview').id, 'pane-overview');
+  assert.equal(el('attention').querySelector('.kpi'), null);
+  assert.match(
+    el('attention').textContent,
+    /A custom API ingester is paused after repeated failures\. Review them in API ingester builder\./,
+  );
   assert.equal(ui.document.querySelector('#ig-list img, #ig-runs img, #ig-connections img'), null);
   assert.equal(ui.window.pwned, undefined);
   const status = (name) => cardFor(ctx, name).querySelector('.ig-state').textContent;

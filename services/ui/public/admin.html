@@ -96,7 +96,7 @@
 
 <section class="tab-pane fade show active" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
   <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2"><div><h2 class="h4 mb-1">Overview</h2><p class="small-muted mb-0">Connect a system, collect its records and map them to framework controls.</p></div><div class="d-flex flex-wrap gap-2"><a href="#integrations" class="btn btn-primary">Build an API ingester</a><a href="#evidence-config" class="btn btn-outline-primary">Manage sources &amp; mapping</a></div></div>
-  <div id="ig-overview" class="row g-3 my-2" aria-live="polite"></div>
+  <div id="ig-attention" class="my-2" aria-live="polite"></div>
   <div class="card mt-3"><div class="card-body"><h3 class="h5">Shortcuts</h3><div class="admin-quicklinks"><a href="#framework-editor">Review frameworks <i class="bi bi-arrow-up-right"></i></a><a href="#diary">Record manual evidence <i class="bi bi-arrow-up-right"></i></a><a href="#users">Manage people's access <i class="bi bi-arrow-up-right"></i></a><a href="/help/administrator.html">Read the administrator guide <i class="bi bi-arrow-up-right"></i></a></div></div></div>
 </section>
 <section class="tab-pane fade" id="pane-agents" role="tabpanel" aria-labelledby="tab-agents" tabindex="0">
@@ -114,6 +114,7 @@
   <div class="d-flex flex-wrap justify-content-between gap-2 mb-3"><div><h2 class="h4">API ingester builder</h2><p class="small-muted">Build custom API ingesters: define authentication, requests, pagination and event fields. Configure built-in sources and map events under Sources &amp; evidence mapping.</p></div><div><button id="ig-refresh" class="btn btn-outline-primary">Refresh</button> <button id="ig-new" class="btn btn-primary"><i class="bi bi-plus-lg" aria-hidden="true"></i> New integration</button></div></div>
   <div id="ig-status" hidden role="status" aria-live="polite"></div>
   <div id="ig-home">
+    <div id="ig-overview" class="row g-3 mb-3" aria-live="polite"></div>
     <label for="ig-search" class="visually-hidden">Search integrations</label><input id="ig-search" class="form-control mb-3" placeholder="Search integrations">
     <div id="ig-list" class="d-grid gap-3"></div>
     <details class="card mt-4"><summary class="card-header">Custom API connections &amp; credentials</summary><div class="card-body"><p class="small-muted">These connections belong to custom API ingesters. Define built-in sources such as Forgejo, GitHub and Loki, including their credentials, under Sources &amp; evidence mapping. API credentials are encrypted and never included in exported definitions.</p><div id="ig-connections" class="mb-3"></div><button id="ig-add-connection" class="btn btn-outline-primary">Add connection</button><form id="ig-connection-form" class="mt-3" hidden>

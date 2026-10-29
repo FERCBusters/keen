@@ -73,20 +73,22 @@ function render() {
   }
 
   const failed = data.collectors.filter((c) => c.failures >= 3).length;
-  $('overview').innerHTML =
-    [
-      [data.collectors.length, 'Configured integrations'],
-      [data.collectors.filter((c) => c.enabled).length, 'Scheduled'],
-      [failed, 'Need attention'],
-    ]
-      .map(
-        ([n, label]) =>
-          `<div class="col-md-4"><div class="kpi"><div class="label">${label}</div><div class="value">${n}</div></div></div>`,
-      )
-      .join('') +
-    (failed
-      ? '<div class="col-12"><div class="alert alert-danger">Some integrations are paused after repeated failures. <a href="#integrations">Review their run history</a>.</div></div>'
-      : '');
+  // These count custom API ingesters only; built-in sources, Keen Agents and
+  // webhooks have their own health views.
+  $('overview').innerHTML = [
+    [data.collectors.length, 'Custom API ingesters'],
+    [data.collectors.filter((c) => c.enabled).length, 'Scheduled'],
+    [failed, 'Need attention'],
+  ]
+    .map(
+      ([n, label]) =>
+        `<div class="col-md-4"><div class="kpi"><div class="label">${label}</div><div class="value">${n}</div></div></div>`,
+    )
+    .join('');
+  // The admin overview raises paused ingesters without showing the counters.
+  $('attention').innerHTML = failed
+    ? `<div class="alert alert-danger mb-0">${failed === 1 ? 'A custom API ingester is' : 'Some custom API ingesters are'} paused after repeated failures. <a href="#integrations">Review them in API ingester builder</a>.</div>`
+    : '';
   $('list').replaceChildren();
   const items = data.collectors.filter((c) =>
     c.name.toLowerCase().includes($('search').value.toLowerCase()),
