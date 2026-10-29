@@ -20,10 +20,10 @@ jobs:
     timeout-minutes: 30
     # Images are pinned by digest; tools/docker_image_pins.py keeps them current.
     container:
-      image: docker.io/library/debian:13@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308
+      image: docker.io/library/debian:13@sha256:8c4733a92aacd0bcff3779eadc35a4a5147f36cb20a5fcb56504cbc740212259
     services:
       postgres:
-        image: docker.io/library/postgres:16@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
+        image: docker.io/library/postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
         env:
           POSTGRES_USER: keen_test
           POSTGRES_PASSWORD: keen_test
