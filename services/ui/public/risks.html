@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-GB">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -11,16 +11,17 @@
   <script src="/demo-notice.js" defer></script>
 </head>
 <body data-page="risks">
+  <a class="visually-hidden-focusable" href="#main-content">Skip to content</a>
   <div id="navbar"></div>
 
-  <main class="container-fluid py-4">
+  <main id="main-content" class="container-fluid py-4">
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
         <h1 class="h3 mb-1">Risks</h1>
         <div class="small-muted">Manage the risk register, information-security (CIA) risks, PESTLE(E) factors and the reusable risk library.</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
-        <a class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" id="mitigatorLink" data-nav-fw="1" href="/mitigator.html" data-feature="mitigator"><img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon-sm"> Ask the Mitigator</a>
+        <a class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" id="mitigatorLink" data-nav-fw="1" href="/mitigator.html" data-feature="mitigator"><img src="/keen-mitigator-64.png" alt="" class="keen-mitigator-icon-sm"> Ask the Mitigator</a>
         <a class="btn btn-outline-primary" id="interestedPartiesLink" data-nav-fw="1" href="/interested_parties.html" data-feature="interested_parties"><i class="bi bi-people" aria-hidden="true"></i> Interested parties</a>
         <a id="newRisk" class="btn btn-primary" data-nav-fw="1" href="/risk-wizard.html"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a risk</a>
       </div>

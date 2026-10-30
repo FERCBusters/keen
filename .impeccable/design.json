@@ -1,159 +1,362 @@
 {
-  "schemaVersion": 2,
-  "generatedAt": "2026-10-24",
-  "title": "Design System: Keen (Key Evidence ENgine)",
-  "extensions": {
-    "colorMeta": {
-      "accent": { "role": "primary", "displayName": "Muted Amethyst", "canonical": "#7e57c2", "tonalRamp": ["#2d1e47", "#46306b", "#6a3fb2", "#7e57c2", "#9a7bd1", "#b8a0e0", "#d5c6ee", "#f2ecfb"] },
-      "accent-deep": { "role": "primary-hover", "displayName": "Amethyst Deep", "canonical": "#6a3fb2" },
-      "accent-wash": { "role": "primary-tint", "displayName": "Amethyst Dawn", "canonical": "#f2ecfb" },
-      "link-hover": { "role": "link", "displayName": "Deepest Link", "canonical": "#55308f" },
-      "canvas": { "role": "neutral-bg", "displayName": "Page Canvas", "canonical": "#f7f4fb" },
-      "ink": { "role": "neutral-text", "displayName": "Ink", "canonical": "#1f1f2a", "tonalRamp": ["#1f1f2a", "#31313f", "#47475a", "#5e5e75", "#8585a0", "#a8a8bd", "#cfcfdd", "#f2f2f7"] },
-      "muted": { "role": "neutral-muted", "displayName": "Ink Muted", "canonical": "#5e5e75" },
-      "dark-canvas": { "role": "dark-bg", "displayName": "Night Canvas", "canonical": "#141820" },
-      "dark-panel": { "role": "dark-panel", "displayName": "Night Panel", "canonical": "#202631" },
-      "dark-panel-2": { "role": "dark-panel-elevated", "displayName": "Night Panel 2", "canonical": "#29313e" },
-      "dark-border": { "role": "dark-border", "displayName": "Night Border", "canonical": "#465061" },
-      "dark-ink": { "role": "dark-text", "displayName": "Frost Ink", "canonical": "#edf0f6" }
-    },
-    "colorThemes": [
-      { "id": "purple", "accent": "#7e57c2", "accent700": "#6a3fb2", "accent100": "#f2ecfb", "hover": "#55308f", "canvas": "#f7f4fb", "contrast": "#ffffff" },
-      { "id": "ocean", "accent": "#2563eb", "accent700": "#1d4ed8", "accent100": "#e8f0ff", "hover": "#1e40af", "canvas": "#f4f8ff", "contrast": "#ffffff" },
-      { "id": "forest", "accent": "#16a34a", "accent700": "#15803d", "accent100": "#eaf7ef", "hover": "#166534", "canvas": "#f3fbf6", "contrast": "#ffffff" },
-      { "id": "sunset", "accent": "#f97316", "accent700": "#ea580c", "accent100": "#fff1e6", "hover": "#c2410c", "canvas": "#fff7f2", "contrast": "#111827" },
-      { "id": "rose", "accent": "#db2777", "accent700": "#be185d", "accent100": "#ffeaf3", "hover": "#9d174d", "canvas": "#fff5fa", "contrast": "#ffffff" },
-      { "id": "slate", "accent": "#475569", "accent700": "#334155", "accent100": "#eef2f6", "hover": "#1f2937", "canvas": "#f6f8fb", "contrast": "#ffffff" },
-      { "id": "teal", "accent": "#0f766e", "accent700": "#0f5b55", "accent100": "#e6f6f4", "hover": "#134e4a", "canvas": "#f3fbfa", "contrast": "#ffffff" }
-    ],
-    "typographyMeta": {
-      "body": { "displayName": "Body", "purpose": "System sans stack; no webfonts; Bootstrap 5 scale." },
-      "kpi-value": { "displayName": "Emphasis", "purpose": "Metric numbers on KPI blocks." },
-      "label": { "displayName": "Label", "purpose": "Helper and KPI labels at 12px in muted ink." },
-      "mono": { "displayName": "Mono", "purpose": "Identifiers, tokens, JSON and event payloads at 12.5px." }
-    },
-    "shadows": [
-      { "name": "surface", "value": "0 10px 30px rgba(20, 20, 40, 0.06)", "purpose": "Resting card presence." },
-      { "name": "kpi", "value": "0 10px 22px rgba(20, 20, 40, 0.05)", "purpose": "KPI block presence." },
-      { "name": "navbar", "value": "0 6px 18px rgba(var(--keen-accent-rgb), 0.22)", "purpose": "Accent-tinted glow under the fixed navbar." },
-      { "name": "media", "value": "0 8px 18px rgba(20, 20, 40, 0.06)", "purpose": "Evidence image and PDF frames." },
-      { "name": "toolbar", "value": "0 6px 18px rgba(15, 23, 42, 0.12)", "purpose": "Floating graph zoom controls." },
-      { "name": "hover-rise", "value": "0 0.65rem 1.5rem rgba(15, 23, 42, 0.1)", "purpose": "Home explorer cards on hover, with translateY(-2px)." }
-    ],
-    "motion": [
-      { "name": "ease-soft", "value": "120ms ease", "purpose": "Pill, tag and hover-rise transitions." }
-    ],
-    "breakpoints": [
-      { "name": "lg", "value": "991.98px" },
-      { "name": "xxl", "value": "1399.98px" }
+ "schemaVersion": 2,
+ "generatedAt": "2026-10-30",
+ "title": "Design System: Keen (Key Evidence ENgine)",
+ "extensions": {
+  "colorMeta": {
+   "accent": {
+    "role": "primary",
+    "displayName": "Muted Amethyst",
+    "canonical": "#7e57c2",
+    "tonalRamp": [
+     "#2d1e47",
+     "#46306b",
+     "#6a3fb2",
+     "#7e57c2",
+     "#9a7bd1",
+     "#b8a0e0",
+     "#d5c6ee",
+     "#f2ecfb"
     ]
+   },
+   "accent-deep": {
+    "role": "primary-hover",
+    "displayName": "Amethyst Deep",
+    "canonical": "#6a3fb2"
+   },
+   "accent-wash": {
+    "role": "primary-tint",
+    "displayName": "Amethyst Dawn",
+    "canonical": "#f2ecfb"
+   },
+   "link-hover": {
+    "role": "link",
+    "displayName": "Deepest Link",
+    "canonical": "#55308f"
+   },
+   "canvas": {
+    "role": "neutral-bg",
+    "displayName": "Page Canvas",
+    "canonical": "#f7f4fb"
+   },
+   "ink": {
+    "role": "neutral-text",
+    "displayName": "Ink",
+    "canonical": "#1f1f2a",
+    "tonalRamp": [
+     "#1f1f2a",
+     "#31313f",
+     "#47475a",
+     "#5e5e75",
+     "#8585a0",
+     "#a8a8bd",
+     "#cfcfdd",
+     "#f2f2f7"
+    ]
+   },
+   "muted": {
+    "role": "neutral-muted",
+    "displayName": "Ink Muted",
+    "canonical": "#5e5e75"
+   },
+   "flow-hint": {
+    "role": "accent-tint",
+    "displayName": "Hint Lavender",
+    "canonical": "#6a5fae"
+   },
+   "dark-canvas": {
+    "role": "dark-bg",
+    "displayName": "Night Canvas",
+    "canonical": "#141820"
+   },
+   "dark-panel": {
+    "role": "dark-panel",
+    "displayName": "Night Panel",
+    "canonical": "#202631"
+   },
+   "dark-panel-2": {
+    "role": "dark-panel-elevated",
+    "displayName": "Night Panel 2",
+    "canonical": "#29313e"
+   },
+   "dark-border": {
+    "role": "dark-border",
+    "displayName": "Night Border",
+    "canonical": "#465061"
+   },
+   "dark-ink": {
+    "role": "dark-text",
+    "displayName": "Frost Ink",
+    "canonical": "#edf0f6"
+   }
   },
-  "components": [
-    {
-      "name": "Primary Button",
-      "kind": "button",
-      "refersTo": "button-primary",
-      "description": "Solid accent action; drops to accent-700 on hover and active.",
-      "html": "<button class=\"ds-btn-primary\">Assign evidence</button>",
-      "css": ".ds-btn-primary { background: var(--keen-accent, #7e57c2); color: var(--keen-accent-contrast, #fff); border: 1px solid var(--keen-accent, #7e57c2); border-radius: 0.375rem; padding: 0.375rem 0.75rem; font-size: 1rem; font-weight: 400; transition: background 0.15s ease, border-color 0.15s ease; } .ds-btn-primary:hover { background: var(--keen-accent-700, #6a3fb2); border-color: var(--keen-accent-700, #6a3fb2); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 0.25rem rgba(var(--keen-accent-rgb, 126,87,194), 0.25); }"
-    },
-    {
-      "name": "Outline Button",
-      "kind": "button",
-      "refersTo": "button-outline-primary",
-      "description": "Tinted-outline secondary action; fills solid accent on hover.",
-      "html": "<button class=\"ds-btn-outline\">Preview mapping</button>",
-      "css": ".ds-btn-outline { background: transparent; color: var(--keen-accent-700, #6a3fb2); border: 1px solid rgba(var(--keen-accent-rgb, 126,87,194), 0.55); border-radius: 0.375rem; padding: 0.375rem 0.75rem; font-size: 1rem; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; } .ds-btn-outline:hover { background: var(--keen-accent, #7e57c2); color: var(--keen-accent-contrast, #fff); border-color: var(--keen-accent, #7e57c2); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 0.25rem rgba(var(--keen-accent-rgb, 126,87,194), 0.25); }"
-    },
-    {
-      "name": "Card",
-      "kind": "card",
-      "refersTo": "card",
-      "description": "Glassy soft panel with accent-tinted border, gradient header and ambient shadow.",
-      "html": "<div class=\"ds-card\"><div class=\"ds-card-header\">Coverage</div><div class=\"ds-card-body\">Mapped to 128 collected events.</div></div>",
-      "css": ".ds-card { background: #fff; color: var(--keen-ink, #1f1f2a); border: 1px solid rgba(var(--keen-accent-rgb, 126,87,194), 0.20); border-radius: 18px; box-shadow: 0 10px 30px rgba(20, 20, 40, 0.06); overflow: hidden; } .ds-card-header { background: linear-gradient(180deg, rgba(var(--keen-accent-rgb, 126,87,194), 0.10) 0%, rgba(var(--keen-accent-rgb, 126,87,194), 0.02) 100%); border-bottom: 1px solid rgba(var(--keen-accent-rgb, 126,87,194), 0.18); padding: 0.75rem 1rem; font-weight: 600; } .ds-card-body { padding: 1rem; }"
-    },
-    {
-      "name": "KPI Block",
-      "kind": "card",
-      "refersTo": "kpi",
-      "description": "Translucent metric tile: 12px muted label over a 22px/700 value.",
-      "html": "<div class=\"ds-kpi\"><div class=\"ds-kpi-label\">Quiet sources</div><div class=\"ds-kpi-value\">3</div></div>",
-      "css": ".ds-kpi { display: inline-block; border-radius: 18px; border: 1px solid rgba(var(--keen-accent-rgb, 126,87,194), 0.22); background: rgba(255,255,255,0.78); box-shadow: 0 10px 22px rgba(20, 20, 40, 0.05); padding: 14px 16px; color: var(--keen-ink, #1f1f2a); } .ds-kpi-label { color: var(--keen-muted, #5e5e75); font-size: 12px; } .ds-kpi-value { font-size: 22px; font-weight: 700; letter-spacing: -0.2px; }"
-    },
-    {
-      "name": "Soft Badge",
-      "kind": "chip",
-      "refersTo": "badge-soft",
-      "description": "Accent-wash status chip.",
-      "html": "<span class=\"ds-badge-soft\">In scope</span>",
-      "css": ".ds-badge-soft { display: inline-block; background: rgba(var(--keen-accent-rgb, 126,87,194), 0.10); border: 1px solid rgba(var(--keen-accent-rgb, 126,87,194), 0.24); color: var(--keen-accent-700, #6a3fb2); font-weight: 600; font-size: 0.75em; padding: 0.35em 0.65em; border-radius: 0.375rem; }"
-    },
-    {
-      "name": "Tag Pill",
-      "kind": "chip",
-      "refersTo": "tag-pill",
-      "description": "Fully rounded tag with optional colour dot.",
-      "html": "<span class=\"ds-tag\"><span class=\"ds-tag-dot\"></span>access-review</span>",
-      "css": ".ds-tag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 0.85rem; background: rgba(var(--keen-accent-rgb, 126,87,194), 0.14); color: var(--keen-accent-700, #6a3fb2); } .ds-tag-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; opacity: 0.9; }"
-    },
-    {
-      "name": "Text Input",
-      "kind": "input",
-      "refersTo": "input",
-      "description": "Glassy form field with accent focus ring.",
-      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search events\">",
-      "css": ".ds-input { display: block; width: 100%; background: rgba(255,255,255,0.95); color: var(--keen-ink, #1f1f2a); border: 1px solid rgba(31,31,42,0.20); border-radius: 0.375rem; padding: 0.375rem 0.75rem; font-size: 1rem; transition: border-color 0.15s ease, box-shadow 0.15s ease; } .ds-input::placeholder { color: var(--keen-muted, #5e5e75); } .ds-input:focus { outline: none; border-color: var(--keen-accent, #7e57c2); box-shadow: 0 0 0 0.25rem rgba(var(--keen-accent-rgb, 126,87,194), 0.25); }"
-    },
-    {
-      "name": "Pill Tab",
-      "kind": "nav",
-      "refersTo": "tab-btn",
-      "description": "Lightweight in-page tab: 999px pill that fills with the accent wash when active.",
-      "html": "<div class=\"ds-tabs\"><button class=\"ds-tab ds-tab-active\">Timeline</button><button class=\"ds-tab\">Flow</button></div>",
-      "css": ".ds-tabs { display: flex; gap: 6px; border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 8px; } .ds-tab { border: none; background: transparent; padding: 6px 10px; border-radius: 999px; color: #6c757d; font-weight: 600; font-size: 1rem; cursor: pointer; transition: background 0.15s ease; } .ds-tab:hover { background: rgba(var(--keen-accent-rgb, 126,87,194), 0.06); } .ds-tab-active { background: var(--keen-accent-100, #f2ecfb); color: var(--keen-accent-700, #6a3fb2); }"
-    },
-    {
-      "name": "Navbar",
-      "kind": "nav",
-      "refersTo": "navbar",
-      "description": "Fixed accent bar with white pills for hover/active links and the glowing brand row.",
-      "html": "<nav class=\"ds-nav\"><span class=\"ds-nav-brand\">Keen</span><a class=\"ds-nav-link ds-nav-link-active\" href=\"#\">Controls</a><a class=\"ds-nav-link\" href=\"#\">Events</a></nav>",
-      "css": ".ds-nav { display: flex; align-items: center; gap: 0.25rem; background: var(--keen-accent, #7e57c2); box-shadow: 0 6px 18px rgba(var(--keen-accent-rgb, 126,87,194), 0.22); padding: 0.5rem 0.75rem; border-radius: 10px; } .ds-nav-brand { color: #fff; font-size: 0.95rem; font-weight: 600; margin-right: 0.75rem; } .ds-nav-link { color: #fff; opacity: 0.95; font-size: 0.9rem; text-decoration: none; padding: 0.25rem 0.55rem; border-radius: 10px; } .ds-nav-link:hover { opacity: 1; background: rgba(255,255,255,0.16); } .ds-nav-link-active { background: rgba(255,255,255,0.18); }"
-    }
+  "colorThemes": [
+   {
+    "id": "purple",
+    "accent": "#7e57c2",
+    "accent700": "#6a3fb2",
+    "accent100": "#f2ecfb",
+    "hover": "#55308f",
+    "canvas": "#f7f4fb",
+    "contrast": "#ffffff"
+   },
+   {
+    "id": "ocean",
+    "accent": "#2563eb",
+    "accent700": "#1d4ed8",
+    "accent100": "#e8f0ff",
+    "hover": "#1e40af",
+    "canvas": "#f4f8ff",
+    "contrast": "#ffffff"
+   },
+   {
+    "id": "forest",
+    "accent": "#16a34a",
+    "accent700": "#15803d",
+    "accent100": "#eaf7ef",
+    "hover": "#166534",
+    "canvas": "#f3fbf6",
+    "contrast": "#ffffff"
+   },
+   {
+    "id": "sunset",
+    "accent": "#f97316",
+    "accent700": "#ea580c",
+    "accent100": "#fff1e6",
+    "hover": "#c2410c",
+    "canvas": "#fff7f2",
+    "contrast": "#111827"
+   },
+   {
+    "id": "rose",
+    "accent": "#db2777",
+    "accent700": "#be185d",
+    "accent100": "#ffeaf3",
+    "hover": "#9d174d",
+    "canvas": "#fff5fa",
+    "contrast": "#ffffff"
+   },
+   {
+    "id": "slate",
+    "accent": "#475569",
+    "accent700": "#334155",
+    "accent100": "#eef2f6",
+    "hover": "#1f2937",
+    "canvas": "#f6f8fb",
+    "contrast": "#ffffff"
+   },
+   {
+    "id": "teal",
+    "accent": "#0f766e",
+    "accent700": "#0f5b55",
+    "accent100": "#e6f6f4",
+    "hover": "#134e4a",
+    "canvas": "#f3fbfa",
+    "contrast": "#ffffff"
+   }
   ],
-  "narrative": {
-    "northStar": "The Tinted Glass Console",
-    "overview": "Keen's interface is a calm, airy, quietly confident stack of soft panels in a single accent colour. The page canvas is an airy tinted wash lightened by a radial highlight; on it sit glassy, gently lifted cards with large rounded corners and accent-tinted translucent borders. One accent — Muted Amethyst in the shipped default — is the system's single voice, applied as washes and tints rather than heavy decoration. Depth comes from translucency and diffuse low shadows, not crisp layer boundaries. The system is deliberately themable: the accent palette swaps wholesale by data-theme (seven palettes, each with a dark variant), and typography is the platform's own voice with numbers, identifiers and evidence text in a compact monospace face.",
-    "keyCharacteristics": [
-      "One accent voice, applied as rgba washes and tints over near-white translucent surfaces.",
-      "Soft, large radii: 999px pills, 18px cards, 14px media, 10–12px controls.",
-      "Depth by translucency plus diffuse ambient shadow.",
-      "System sans typography; mono for identifiers, JSON and event payloads.",
-      "Full themability through --keen-accent* variables; seven palettes with dark variants.",
-      "Bootstrap 5 base with tables as the primary data surface."
-    ],
-    "rules": [
-      { "name": "The One Voice Rule", "body": "A single accent owns the identity. Never introduce a second decorative hue; role semantics outside the accent (risk score pills, Bootstrap success/warning/danger states) are the only sanctioned exceptions.", "section": "colors" },
-      { "name": "The Wash-Not-Solid Rule", "body": "Accent colour is used solid only on the navbar and primary buttons; all other accent application is an rgba tint over white or the wash.", "section": "colors" },
-      { "name": "The System-Stack Rule", "body": "No webfonts. Faces come from the platform; express hierarchy through weight and size, not through type purchases.", "section": "typography" },
-      { "name": "The Ambient-Only Rule", "body": "Shadows signal that a surface exists above the canvas, not that it is more important. Strong accent shadows are reserved for the navbar; everything else barely lifts.", "section": "elevation" }
-    ],
-    "dos": [
-      "Do theme everything through --keen-accent* variables (and --bs-primary); never hard-code an accent hex in app CSS.",
-      "Do apply the accent as an alpha wash (0.06–0.24) for surfaces, borders and tints; reserve solid accent for the navbar and primary buttons.",
-      "Do use the established radius scale: 999px pills, 18px cards, 14px media, 10–12px small controls.",
-      "Do keep tables sticky-headered on desktop with page-driven scrolling and the body-bg header backing.",
-      "Do use .mono for identifiers, tokens and payload text.",
-      "Do state dark-variant concerns alongside any new shared component theming in mosp-design-system."
-    ],
-    "donts": [
-      "Don't introduce a second decorative accent; semantic status colours (risk pills, Bootstrap states) are the only exceptions.",
-      "Don't add webfonts or replace the system type stacks.",
-      "Don't use structural or coloured shadows; shadows stay in the ambient vocabulary in Elevation & Depth.",
-      "Don't put Keen-generic components into services/ui/public/styles.css; shared things belong in mosp-design-system, Keen-specific overrides stay scoped to Keen's selectors.",
-      "Don't clone per-source or per-capability colours into fixed CSS; they are per-entity tints applied via CSS variables (--src-rgb, --cap-color).",
-      "Don't rely on rebuilding Bootstrap components in custom JS; pages are static HTML + Bootstrap + the MOSP app.js helpers."
-    ]
+  "typographyMeta": {
+   "body": {
+    "displayName": "Body",
+    "purpose": "System sans stack; no webfonts; Bootstrap 5 scale."
+   },
+   "kpi-value": {
+    "displayName": "Emphasis",
+    "purpose": "Metric numbers on KPI blocks."
+   },
+   "label": {
+    "displayName": "Label",
+    "purpose": "Helper and KPI labels at 12px in muted ink."
+   },
+   "mono": {
+    "displayName": "Mono",
+    "purpose": "Identifiers, tokens, JSON and event payloads at 12.5px."
+   }
+  },
+  "shadows": [
+   {
+    "name": "surface",
+    "value": "0 10px 30px rgba(20, 20, 40, 0.06)",
+    "purpose": "Resting card presence."
+   },
+   {
+    "name": "kpi",
+    "value": "0 10px 22px rgba(20, 20, 40, 0.05)",
+    "purpose": "KPI block presence."
+   },
+   {
+    "name": "navbar",
+    "value": "0 6px 18px rgba(var(--keen-accent-rgb), 0.22)",
+    "purpose": "Accent-tinted glow under the fixed navbar."
+   },
+   {
+    "name": "media",
+    "value": "0 8px 18px rgba(20, 20, 40, 0.06)",
+    "purpose": "Evidence image and PDF frames."
+   },
+   {
+    "name": "toolbar",
+    "value": "0 6px 18px rgba(15, 23, 42, 0.12)",
+    "purpose": "Floating graph zoom controls."
+   },
+   {
+    "name": "hover-rise",
+    "value": "0 0.65rem 1.5rem rgba(15, 23, 42, 0.1)",
+    "purpose": "Home explorer cards on hover, with translateY(-2px)."
+   }
+  ],
+  "motion": [
+   {
+    "name": "ease-soft",
+    "value": "120ms ease",
+    "purpose": "Pill, tag and hover-rise transitions."
+   }
+  ],
+  "breakpoints": [
+   {
+    "name": "lg",
+    "value": "991.98px"
+   },
+   {
+    "name": "xxl",
+    "value": "1399.98px"
+   }
+  ]
+ },
+ "components": [
+  {
+   "name": "Primary Button",
+   "kind": "button",
+   "refersTo": "button-primary",
+   "description": "Solid accent action; drops to accent-700 on hover and active.",
+   "html": "<button class=\"ds-btn-primary\">Assign evidence</button>",
+   "css": ".ds-btn-primary { background: var(--keen-accent, #7e57c2); color: var(--keen-accent-contrast, #fff); border: 1px solid var(--keen-accent, #7e57c2); border-radius: 0.375rem; padding: 0.375rem 0.75rem; font-size: 1rem; font-weight: 400; transition: background 0.15s ease, border-color 0.15s ease; } .ds-btn-primary:hover { background: var(--keen-accent-700, #6a3fb2); border-color: var(--keen-accent-700, #6a3fb2); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 0.25rem rgba(var(--keen-accent-rgb, 126,87,194), 0.25); }"
+  },
+  {
+   "name": "Outline Button",
+   "kind": "button",
+   "refersTo": "button-outline-primary",
+   "description": "Tinted-outline secondary action; fills solid accent on hover.",
+   "html": "<button class=\"ds-btn-outline\">Preview mapping</button>",
+   "css": ".ds-btn-outline { background: transparent; color: var(--keen-accent-700, #6a3fb2); border: 1px solid rgba(var(--keen-accent-rgb, 126,87,194), 0.55); border-radius: 0.375rem; padding: 0.375rem 0.75rem; font-size: 1rem; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; } .ds-btn-outline:hover { background: var(--keen-accent, #7e57c2); color: var(--keen-accent-contrast, #fff); border-color: var(--keen-accent, #7e57c2); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 0.25rem rgba(var(--keen-accent-rgb, 126,87,194), 0.25); }"
+  },
+  {
+   "name": "Card",
+   "kind": "card",
+   "refersTo": "card",
+   "description": "Glassy soft panel with accent-tinted border, gradient header and ambient shadow.",
+   "html": "<div class=\"ds-card\"><div class=\"ds-card-header\">Coverage</div><div class=\"ds-card-body\">Mapped to 128 collected events.</div></div>",
+   "css": ".ds-card { background: #fff; color: var(--keen-ink, #1f1f2a); border: 1px solid rgba(var(--keen-accent-rgb, 126,87,194), 0.20); border-radius: 18px; box-shadow: 0 10px 30px rgba(20, 20, 40, 0.06); overflow: hidden; } .ds-card-header { background: linear-gradient(180deg, rgba(var(--keen-accent-rgb, 126,87,194), 0.10) 0%, rgba(var(--keen-accent-rgb, 126,87,194), 0.02) 100%); border-bottom: 1px solid rgba(var(--keen-accent-rgb, 126,87,194), 0.18); padding: 0.75rem 1rem; font-weight: 600; } .ds-card-body { padding: 1rem; }"
+  },
+  {
+   "name": "KPI Block",
+   "kind": "card",
+   "refersTo": "kpi",
+   "description": "Translucent metric tile: 12px muted label over a 22px/700 value.",
+   "html": "<div class=\"ds-kpi\"><div class=\"ds-kpi-label\">Quiet sources</div><div class=\"ds-kpi-value\">3</div></div>",
+   "css": ".ds-kpi { display: inline-block; border-radius: 18px; border: 1px solid rgba(var(--keen-accent-rgb, 126,87,194), 0.22); background: rgba(255,255,255,0.78); box-shadow: 0 10px 22px rgba(20, 20, 40, 0.05); padding: 14px 16px; color: var(--keen-ink, #1f1f2a); } .ds-kpi-label { color: var(--keen-muted, #5e5e75); font-size: 12px; } .ds-kpi-value { font-size: 22px; font-weight: 700; letter-spacing: -0.2px; }"
+  },
+  {
+   "name": "Soft Badge",
+   "kind": "chip",
+   "refersTo": "badge-soft",
+   "description": "Accent-wash status chip.",
+   "html": "<span class=\"ds-badge-soft\">In scope</span>",
+   "css": ".ds-badge-soft { display: inline-block; background: rgba(var(--keen-accent-rgb, 126,87,194), 0.10); border: 1px solid rgba(var(--keen-accent-rgb, 126,87,194), 0.24); color: var(--keen-accent-700, #6a3fb2); font-weight: 600; font-size: 0.75em; padding: 0.35em 0.65em; border-radius: 0.375rem; }"
+  },
+  {
+   "name": "Tag Pill",
+   "kind": "chip",
+   "refersTo": "tag-pill",
+   "description": "Fully rounded tag with optional colour dot.",
+   "html": "<span class=\"ds-tag\"><span class=\"ds-tag-dot\"></span>access-review</span>",
+   "css": ".ds-tag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 0.85rem; background: rgba(var(--keen-accent-rgb, 126,87,194), 0.14); color: var(--keen-accent-700, #6a3fb2); } .ds-tag-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; opacity: 0.9; }"
+  },
+  {
+   "name": "Text Input",
+   "kind": "input",
+   "refersTo": "input",
+   "description": "Glassy form field with accent focus ring.",
+   "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search events\">",
+   "css": ".ds-input { display: block; width: 100%; background: rgba(255,255,255,0.95); color: var(--keen-ink, #1f1f2a); border: 1px solid rgba(31,31,42,0.20); border-radius: 0.375rem; padding: 0.375rem 0.75rem; font-size: 1rem; transition: border-color 0.15s ease, box-shadow 0.15s ease; } .ds-input::placeholder { color: var(--keen-muted, #5e5e75); } .ds-input:focus { outline: none; border-color: var(--keen-accent, #7e57c2); box-shadow: 0 0 0 0.25rem rgba(var(--keen-accent-rgb, 126,87,194), 0.25); }"
+  },
+  {
+   "name": "Pill Tab",
+   "kind": "nav",
+   "refersTo": "tab-btn",
+   "description": "Lightweight in-page tab: 999px pill that fills with the accent wash when active.",
+   "html": "<div class=\"ds-tabs\"><button class=\"ds-tab ds-tab-active\">Timeline</button><button class=\"ds-tab\">Flow</button></div>",
+   "css": ".ds-tabs { display: flex; gap: 6px; border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 8px; } .ds-tab { border: none; background: transparent; padding: 6px 10px; border-radius: 999px; color: #6c757d; font-weight: 600; font-size: 1rem; cursor: pointer; transition: background 0.15s ease; } .ds-tab:hover { background: rgba(var(--keen-accent-rgb, 126,87,194), 0.06); } .ds-tab-active { background: var(--keen-accent-100, #f2ecfb); color: var(--keen-accent-700, #6a3fb2); }"
+  },
+  {
+   "name": "Navbar",
+   "kind": "nav",
+   "refersTo": "navbar",
+   "description": "Fixed accent bar with white pills for hover/active links and the glowing brand row.",
+   "html": "<nav class=\"ds-nav\"><span class=\"ds-nav-brand\">Keen</span><a class=\"ds-nav-link ds-nav-link-active\" href=\"#\">Controls</a><a class=\"ds-nav-link\" href=\"#\">Events</a></nav>",
+   "css": ".ds-nav { display: flex; align-items: center; gap: 0.25rem; background: var(--keen-accent, #7e57c2); box-shadow: 0 6px 18px rgba(var(--keen-accent-rgb, 126,87,194), 0.22); padding: 0.5rem 0.75rem; border-radius: 10px; } .ds-nav-brand { color: #fff; font-size: 0.95rem; font-weight: 600; margin-right: 0.75rem; } .ds-nav-link { color: #fff; opacity: 0.95; font-size: 0.9rem; text-decoration: none; padding: 0.25rem 0.55rem; border-radius: 10px; } .ds-nav-link:hover { opacity: 1; background: rgba(255,255,255,0.16); } .ds-nav-link-active { background: rgba(255,255,255,0.18); }"
   }
+ ],
+ "narrative": {
+  "northStar": "The Tinted Glass Console",
+  "overview": "Keen's interface is a calm, airy, quietly confident stack of soft panels in a single accent colour. The page canvas is an airy tinted wash lightened by a radial highlight; on it sit glassy, gently lifted cards with large rounded corners and accent-tinted translucent borders. One accent \u2014 Muted Amethyst in the shipped default \u2014 is the system's single voice, applied as washes and tints rather than heavy decoration. Depth comes from translucency and diffuse low shadows, not crisp layer boundaries. The system is deliberately themable: the accent palette swaps wholesale by data-theme (seven palettes, each with a dark variant), and typography is the platform's own voice with numbers, identifiers and evidence text in a compact monospace face.",
+  "keyCharacteristics": [
+   "One accent voice, applied as rgba washes and tints over near-white translucent surfaces.",
+   "Soft, large radii: 999px pills, 18px cards, 14px media, 10\u201312px controls.",
+   "Depth by translucency plus diffuse ambient shadow.",
+   "System sans typography; mono for identifiers, JSON and event payloads.",
+   "Full themability through --keen-accent* variables; seven palettes with dark variants.",
+   "Bootstrap 5 base with tables as the primary data surface."
+  ],
+  "rules": [
+   {
+    "name": "The One Voice Rule",
+    "body": "A single accent owns the identity. Never introduce a second decorative hue; role semantics outside the accent (risk score pills, Bootstrap success/warning/danger states) are the only sanctioned exceptions.",
+    "section": "colors"
+   },
+   {
+    "name": "The Wash-Not-Solid Rule",
+    "body": "Accent colour is used solid only on the navbar and primary buttons; all other accent application is an rgba tint over white or the wash.",
+    "section": "colors"
+   },
+   {
+    "name": "The System-Stack Rule",
+    "body": "No webfonts. Faces come from the platform; express hierarchy through weight and size, not through type purchases.",
+    "section": "typography"
+   },
+   {
+    "name": "The Ambient-Only Rule",
+    "body": "Shadows signal that a surface exists above the canvas, not that it is more important. Strong accent shadows are reserved for the navbar; everything else barely lifts.",
+    "section": "elevation"
+   },
+   {
+    "name": "The Side-Marker Rule",
+    "body": "A semantic category marker on a panel or list row - documentation callouts, story-node kind markers, framework section rows - is expressed as a single 4px to 5px marker on one side of a rounded panel, always written with border-inline-start (never border-left/border-right) so the idiom follows reading direction. Its colour belongs to the token semantic state (theme accent, Bootstrap status colours, per-entity hue variables such as --section-hue and --framework-hue), never a free decorative tint.",
+    "section": "colors"
+   },
+   {
+    "name": "The Document-Ink Rule",
+    "body": "Authored rich text (policy documents, minutes, audit findings) reads as one ink: headings carry hierarchy through size, weight and italic alone (var(--bs-body-color)), never through per-level colours. Colour inside document content means semantic status, nothing else.",
+    "section": "typography"
+   }
+  ],
+  "dos": [
+   "Do theme everything through --keen-accent* variables (and --bs-primary); never hard-code an accent hex in app CSS.",
+   "Do apply the accent as an alpha wash (0.06\u20130.24) for surfaces, borders and tints; reserve solid accent for the navbar and primary buttons.",
+   "Do use the established radius scale: 999px pills, 18px cards, 14px media, 10\u201312px small controls.",
+   "Do keep tables sticky-headered on desktop with page-driven scrolling and the body-bg header backing.",
+   "Do use .mono for identifiers, tokens and payload text.",
+   "Do state dark-variant concerns alongside any new shared component theming in mosp-design-system.",
+   "Do write semantic side markers with border-inline-start at 4-5px on one side of a rounded panel, coloured from the token's semantic state."
+  ],
+  "donts": [
+   "Don't introduce a second decorative accent; semantic status colours (risk pills, Bootstrap states) are the only exceptions.",
+   "Don't add webfonts or replace the system type stacks.",
+   "Don't use structural or coloured shadows; shadows stay in the ambient vocabulary in Elevation & Depth.",
+   "Don't put Keen-generic components into services/ui/public/styles.css; shared things belong in mosp-design-system, Keen-specific overrides stay scoped to Keen's selectors.",
+   "Don't clone per-source or per-capability colours into fixed CSS; they are per-entity tints applied via CSS variables (--src-rgb, --cap-color).",
+   "Don't rely on rebuilding Bootstrap components in custom JS; pages are static HTML + Bootstrap + the MOSP app.js helpers.",
+   "Don't colour rich-text headings per level; hierarchy comes from size, weight and italic in one ink."
+  ]
+ }
 }

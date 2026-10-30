@@ -12,6 +12,7 @@ colors:
   ink: "#1f1f2a"
   muted: "#5e5e75"
   chart-tint: "var(--keen-accent-rgb)"
+  flow-hint: "#6a5fae"
   dark-ink: "#edf0f6"
   dark-canvas: "#141820"
   dark-panel: "#202631"
@@ -144,6 +145,8 @@ Each `data-theme` replaces the accent family and canvas tint in one move (ocean 
 - **Nav** (Bootstrap defaults, 0.8–0.95rem, white on accent): navbar brand and links.
 - **Data labels (SVG)** (600–700, 10–16px): D3 node/axis/legend labels via `.viz-axis` and `.viz-legend` classes.
 
+**The Document-Ink Rule.** Authored rich text (policy documents, minutes, audit findings) reads as one ink: headings carry hierarchy through size, weight and italic alone (`var(--bs-body-color)`), never through per-level colours. Colour inside document content means semantic status, nothing else.
+
 ### Named Rules
 **The System-Stack Rule.** No webfonts. Faces come from the platform; express hierarchy through weight and size, not through type purchases.
 
@@ -169,6 +172,8 @@ Gently lifted, ambient. Depth is the glass model: translucent white surfaces (0.
 ## Shapes
 
 Soft and generous. Cards and KPI blocks at 18px radius; media frames, graph cards and question posts at 12–14px; admin rails and their nav links at 14–18px; nav links at 10px; small toggles at 8–10px. Pills and chips (tags, tab buttons, score pills, zoom buttons) go all the way to 999px. Distinctive geometry: translucency as material (surface = white at partial alpha), accent borders always as 1px alpha-tinted lines (0.16–0.55), dashed accent-tinted guides for tree child-edges, and circular dot markers inside tag pills. Borders carry the definition; backgrounds rarely change for state — they deepen by a small alpha step on hover/selection (0.06 → 0.08 → 0.16 → 0.22 → 0.4/0.65).
+
+**The Side-Marker Rule.** A semantic category marker on a panel or list row — documentation callouts, story-node kind markers, framework section rows — is expressed as a single 4px to 5px marker on one side of a rounded panel, always written with `border-inline-start` (never `border-left`/`border-right`) so the idiom follows reading direction. Its colour belongs to the token's semantic state (theme accent, Bootstrap status colours, per-entity hue variables such as `--section-hue` and `--framework-hue`), never a free decorative tint.
 
 ## Components
 
@@ -212,7 +217,7 @@ The primary data surface. Sticky 700-weight headers pinned below the navbar with
 Evidence thumbnails crop to 14px-rounded frames with the media-lift shadow (`object-fit: cover`, max-height 220px); PDF thumbnails switch to `contain` on a 0.02 black wash so documents are never cropped; print/export strips shadows and prefers full readable images. Evidence PDFs are export-grade first-class content — print headers/footers, page numbers and link suppression are part of the system.
 
 ### Visualisations (signature)
-D3 chart containers share the 18px radius + 0.22 accent border of cards; node tiles follow a two-ink system — accent-tinted fills for source nodes, ink-dark fills for control nodes — with white 11px/600 stroke-haloed labels on dark tiles and dark labels with a background-coloured halo on light canvases. Graph links are 28–30% alpha accent strokes; brushes and zoom controls use the accent family; every swatch exposed for tinting reads from the theme variables.
+D3 chart containers share the 18px radius + 0.22 accent border of cards; node tiles follow a two-ink system — accent-tinted fills for source nodes, ink-dark fills for control nodes — with white 11px/600 stroke-haloed labels on dark tiles and dark labels with a background-coloured halo on light canvases. Graph links are 28–30% alpha accent strokes; brushes and zoom controls use the accent family; every swatch exposed for tinting reads from the theme variables. Flow-chart hint strokes and the animated sugar trail use `--keen-flow-hint` (`#6a5fae` in the light appearance, `#a99ede` in dark), the Mitigator mascot's lavender resolved as a theme-bound token so it stays ≥3:1 against both appearances.
 
 ## Do's and Don'ts
 
@@ -222,6 +227,7 @@ D3 chart containers share the 18px radius + 0.22 accent border of cards; node ti
 - **Do** use the established radius scale: 999px pills, 18px cards, 14px media, 10–12px small controls.
 - **Do** keep tables sticky-headered on desktop with page-driven scrolling and the body-bg header backing.
 - **Do** use `.mono` for identifiers, tokens and payload text.
+- **Do** write semantic side markers with `border-inline-start` at 4–5px on one side of a rounded panel, coloured from the token's semantic state.
 - **Do** state dark-variant concerns alongside any new shared component theming in mosp-design-system.
 
 ### Don't:
@@ -230,4 +236,5 @@ D3 chart containers share the 18px radius + 0.22 accent border of cards; node ti
 - **Don't** use structural or coloured shadows; shadows stay in the ambient vocabulary in Elevation & Depth.
 - **Don't** put Keen-generic components into `services/ui/public/styles.css`; shared things belong in mosp-design-system, Keen-specific overrides stay scoped to Keen's selectors.
 - **Don't** clone per-source or per-capability colours into fixed CSS; they are per-entity tints applied via CSS variables (`--src-rgb`, `--cap-color`).
+- **Don't** colour rich-text headings per level; hierarchy comes from size, weight and italic in one ink.
 - **Don't** rely on backbone JS rebuilds of Bootstrap components; pages are static HTML + Bootstrap + the MOSP `app.js` helpers.

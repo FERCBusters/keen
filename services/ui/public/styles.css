@@ -828,8 +828,15 @@ a.schedule-calendar-event {
   opacity: 0.62;
 }
 
+:root {
+  --keen-flow-hint: #6a5fae;
+}
+:root[data-bs-theme='dark'] {
+  --keen-flow-hint: #a99ede;
+}
+
 .isms-flow-side-hint {
-  stroke: #b8abe6;
+  stroke: var(--keen-flow-hint);
   stroke-dasharray: 8 10;
   opacity: 1;
 }
@@ -839,17 +846,17 @@ a.schedule-calendar-event {
 }
 
 .isms-flow-hint-arrow-head {
-  fill: #b8abe6;
+  fill: var(--keen-flow-hint);
 }
 
 .isms-flow-pulse {
   fill: none;
-  stroke: #b8abe6;
+  stroke: var(--keen-flow-hint);
   stroke-width: 6;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-dasharray: 40 1100;
-  filter: drop-shadow(0 0 0.35rem rgba(184, 171, 230, 0.9));
+  filter: drop-shadow(0 0 0.35rem color-mix(in srgb, var(--keen-flow-hint) 90%, transparent));
   opacity: 0.95;
   animation: isms-flow-pulse 5.25s linear infinite;
 }
@@ -1083,7 +1090,7 @@ a.schedule-calendar-event {
 
 .rich-text-content,
 .rich-text-editor [contenteditable] {
-  color: #000;
+  color: var(--bs-body-color);
   /* Keep the system-sans stack; 'Open Sans' is not shipped so it never applied
      and locally-installed copies made editor text render in a second face. */
   font-family: var(--bs-body-font-family);
@@ -1092,7 +1099,7 @@ a.schedule-calendar-event {
 }
 
 .rich-text-editor [contenteditable] {
-  background: #fff;
+  background: var(--bs-body-bg);
   min-height: 260px;
 }
 
@@ -1136,23 +1143,25 @@ a.schedule-calendar-event {
   margin-bottom: 0.75rem;
 }
 
+/* Rich-text headings read as hierarchy, not colour: one ink keeps them inside
+   the One Voice Rule and contrast-safe in every theme. */
 .rich-text-content h1,
 .rich-text-editor [contenteditable] h1 {
-  color: #20124d;
+  color: var(--bs-body-color);
   font-size: 18px;
   font-weight: 700;
 }
 
 .rich-text-content h2,
 .rich-text-editor [contenteditable] h2 {
-  color: #ff9900;
+  color: var(--bs-body-color);
   font-size: 14px;
   font-weight: 700;
 }
 
 .rich-text-content h3,
 .rich-text-editor [contenteditable] h3 {
-  color: #cc0000;
+  color: var(--bs-body-color);
   font-size: 13px;
   font-weight: 700;
 }
@@ -1163,7 +1172,7 @@ a.schedule-calendar-event {
 .rich-text-editor [contenteditable] h4,
 .rich-text-editor [contenteditable] h5,
 .rich-text-editor [contenteditable] h6 {
-  color: #38761d;
+  color: var(--bs-body-color);
   font-size: 12px;
   font-style: italic;
   font-weight: 700;
@@ -1173,7 +1182,7 @@ a.schedule-calendar-event {
 .rich-text-content li,
 .rich-text-editor [contenteditable] p,
 .rich-text-editor [contenteditable] li {
-  color: #000;
+  color: var(--bs-body-color);
   font-size: 11px;
 }
 
@@ -2210,13 +2219,13 @@ button.keen-filter-pill-chip:focus-visible {
   text-overflow: ellipsis;
 }
 .story-node[data-kind='event'] {
-  border-left: 4px solid var(--bs-primary);
+  border-inline-start: 4px solid var(--bs-primary);
 }
 .story-node[data-kind='risk'] {
-  border-left: 4px solid var(--bs-danger);
+  border-inline-start: 4px solid var(--bs-danger);
 }
 .story-node[data-kind='note'] {
-  border-left: 4px solid var(--bs-warning);
+  border-inline-start: 4px solid var(--bs-warning);
 }
 .story-node[data-kind='document'],
 .story-node[data-kind='asset'],
@@ -2224,11 +2233,11 @@ button.keen-filter-pill-chip:focus-visible {
 .story-node[data-kind='swot'],
 .story-node[data-kind='effectiveness_measure'],
 .story-node[data-kind='meeting'] {
-  border-left: 4px solid var(--bs-success);
+  border-inline-start: 4px solid var(--bs-success);
 }
 .story-node[data-kind='person'],
 .story-node[data-kind='vendor'] {
-  border-left: 4px solid var(--bs-info);
+  border-inline-start: 4px solid var(--bs-info);
 }
 /* A title link opens the record; the rest of the box drags. */
 .story-node-title a {

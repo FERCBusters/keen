@@ -1778,7 +1778,8 @@ test('resizing the window redraws the chart it shows', async (t) => {
   ui.el('viz').innerHTML = '';
   assert.equal(ui.document.querySelectorAll('#viz g.node-source').length, 0);
   ui.window.dispatchEvent(new ui.window.Event('resize'));
-  assert.equal(ui.document.querySelectorAll('#viz g.node-source').length, 2);
+  // Resizes coalesce redraws into the next animation frame.
+  await settle(() => ui.document.querySelectorAll('#viz g.node-source').length === 2);
 });
 
 test('typing in the gaps filter of an open panel loads the controls first', async (t) => {

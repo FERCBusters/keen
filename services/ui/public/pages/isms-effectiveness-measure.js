@@ -492,9 +492,15 @@ $('trendReset')?.addEventListener('click', () => {
   resetTrendRangeToData();
   renderMetricTrend();
 });
+// Coalesce resize redraws to one trend draw per frame while the window changes.
+let resizeFrame = 0;
 window.addEventListener('resize', () => {
-  if (document.getElementById('measureVisualisationsPane')?.classList.contains('active'))
-    renderMetricTrend();
+  if (resizeFrame) cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = 0;
+    if (document.getElementById('measureVisualisationsPane')?.classList.contains('active'))
+      renderMetricTrend();
+  });
 });
 $('sampleMeasureAudit')?.addEventListener('click', () => {
   if (!measure) return;

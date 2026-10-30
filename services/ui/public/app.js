@@ -76,7 +76,7 @@ function _patchRiskNavDropdown() {
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risk-wizard.html'))}">Add a risk</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risks.html?tab=pestle'))}">PESTLE(E) method</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/interested_parties.html'))}">Interested parties</a></li>
-      <li><a class="dropdown-item d-inline-flex align-items-center gap-2" href="${esc(_withCurrentFramework('/mitigator.html'))}"><img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator</a></li>
+      <li><a class="dropdown-item d-inline-flex align-items-center gap-2" href="${esc(_withCurrentFramework('/mitigator.html'))}"><img src="/keen-mitigator-64.png" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator</a></li>
     </ul>`;
   navRoot.dataset.pestleRiskDropdownPatched = '1';
 }

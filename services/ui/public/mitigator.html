@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-GB">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -11,9 +11,10 @@
 <script src="/demo-notice.js" defer></script>
 </head>
 <body data-page="mitigator">
+  <a class="visually-hidden-focusable" href="#main-content">Skip to content</a>
   <div id="navbar"></div>
 
-  <main class="container container-tight py-4">
+  <main id="main-content" class="container container-tight py-4">
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
         <h1 class="h3 mb-1 d-flex align-items-center gap-2">Keen Mitigator</h1>
@@ -31,7 +32,7 @@
   <div class="card mb-3 no-print">
     <div class="card-header d-flex flex-wrap gap-3 align-items-center justify-content-between">
       <div class="d-flex gap-3 align-items-center">
-        <img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon">
+        <img src="/keen-mitigator-64.png" alt="" class="keen-mitigator-icon">
         <div>
           <div class="fw-bold">Keen Mitigator</div>
           <div class="small-muted">I'm the Mitigator, your friendly risk assessor. Describe what worries you and I will check whether a risk like it already exists, point you at library templates, and suggest the controls a new risk could link to.</div>
@@ -106,7 +107,7 @@
           <div class="small-muted">Suggestions come from explainable rules; you decide what to keep in the risk wizard.</div>
           <div class="d-flex gap-2 align-items-center">
             <div id="mitigatorThinking" class="d-flex align-items-center gap-2 small-muted" role="status" aria-live="polite" hidden>
-              <img src="/keen-mitigator.png" alt="" class="keen-mitigator-icon-sm keen-mitigator-thinking">
+              <img src="/keen-mitigator-64.png" alt="" class="keen-mitigator-icon-sm keen-mitigator-thinking">
               <span>Thinking</span>
             </div>
             <button id="mitigatorClear" class="btn btn-outline-secondary" type="button">Clear</button>

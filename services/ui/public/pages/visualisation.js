@@ -3987,8 +3987,14 @@ window.addEventListener('blur', () => {
   updateHistogramBrushEnabled();
 });
 
+// Coalesce resize redraws to one chart draw per frame while the window changes.
+let resizeFrame = 0;
 window.addEventListener('resize', () => {
-  drawActive();
+  if (resizeFrame) cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = 0;
+    drawActive();
+  });
 });
 
 async function load() {
