@@ -10,12 +10,22 @@ import {
   canSampleIntoAudit,
   openAuditSampleModal,
   loadEntityChangelog,
+  isoDateToDisplay,
+  userPillHtml,
 } from '/app.js';
 import {
   activateTabFromHashOrQuery,
   clauseBadges,
   controlBadges,
 } from '/pages/isms-detail-common.js';
+import { featureEnabled } from '/pages/feature-availability.js';
+import {
+  riskDisplayTitle,
+  riskHref,
+  scoreBadge,
+  treatmentLabel,
+  treatmentStatusLabel,
+} from '/pages/risk-common.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -25,7 +35,10 @@ const status = document.getElementById('status');
 const $ = (id) => document.getElementById(id);
 const canManageIsms = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);
 const canSampleAudits = canSampleIntoAudit(me, 'isms');
+const canViewRisks =
+  featureEnabled(me, 'risk_cia') && !!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks);
 let asset = null;
+let risksLoaded = false;
 
 function assetHref(id = assetId) {
   return withFramework(`/isms-asset.html?id=${encodeURIComponent(id || '')}`, framework);
@@ -75,6 +88,48 @@ async function loadChangelog() {
   );
 }
 
+function risksHtml(items) {
+  if (!items.length)
+    return '<p class="small-muted mb-0">No risks are recorded against this asset.</p>';
+  const rows = items
+    .map((r) => {
+      const types = (r.risk_types || [])
+        .map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`)
+        .join('');
+      const due = r.treatment_due_at ? isoDateToDisplay(r.treatment_due_at) : '';
+      return `<tr>
+        <td><a class="fw-semibold" href="${esc(riskHref(r.id, framework))}">${esc(riskDisplayTitle(r))}</a>${types ? `<div>${types}</div>` : ''}</td>
+        <td>${esc(treatmentLabel(r.treatment_strategy))}<div class="small-muted">${esc(treatmentStatusLabel(r.treatment_status))}${due ? ` · due ${esc(due)}` : ''}</div></td>
+        <td class="text-end">${scoreBadge(r.risk_score)}</td>
+        <td class="text-end">${scoreBadge(r.residual_risk_score)}</td>
+        <td>${userPillHtml(r.risk_owner)}</td>
+      </tr>`;
+    })
+    .join('');
+  return `<div class="table-responsive"><table class="table table-sm align-middle mb-0">
+    <thead><tr><th>Risk</th><th>Treatment</th><th class="text-end">Risk</th><th class="text-end">Residual</th><th>Owner</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+async function loadRisks() {
+  if (!canViewRisks || risksLoaded) return;
+  const host = $('assetRisks');
+  try {
+    const data = await apiGet(
+      `/api/v1/risks?asset_id=${encodeURIComponent(assetId)}&framework=${encodeURIComponent(framework)}&limit=500`,
+    );
+    risksLoaded = true;
+    host.innerHTML = risksHtml(data?.items || []);
+  } catch (e) {
+    host.textContent = `Risks could not be loaded: ${errorText(e)}`;
+  }
+}
+
+if (canViewRisks) {
+  $('assetRisksTabItem').hidden = false;
+  $('assetRisksTab').addEventListener('shown.bs.tab', loadRisks);
+}
+
 async function load() {
   if (!assetId) {
     toast(status, 'Missing asset id.', 'danger');
@@ -86,7 +141,10 @@ async function load() {
     );
     renderAsset(row);
     await loadChangelog();
-    activateTabFromHashOrQuery(params, { changelog: $('assetChangelogTab') });
+    activateTabFromHashOrQuery(params, {
+      changelog: $('assetChangelogTab'),
+      ...(canViewRisks ? { risks: $('assetRisksTab') } : {}),
+    });
   } catch (e) {
     toast(status, `Failed to load asset: ${errorText(e)}`, 'danger');
   }
@@ -106,7 +164,10 @@ $('sampleAssetAudit')?.addEventListener('click', () => {
 });
 
 window.addEventListener('hashchange', () =>
-  activateTabFromHashOrQuery(params, { changelog: $('assetChangelogTab') }),
+  activateTabFromHashOrQuery(params, {
+    changelog: $('assetChangelogTab'),
+    ...(canViewRisks ? { risks: $('assetRisksTab') } : {}),
+  }),
 );
 load();
 

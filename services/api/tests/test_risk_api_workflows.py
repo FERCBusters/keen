@@ -755,8 +755,20 @@ def test_register_filters_by_category_owner_and_risk_type(reg, register):
     ]
     assert _ids(listed(owner_user_id=str(register.owner.id))) == [register.severe["id"]]
     assert _ids(listed(owner_role_id=str(register.role.id))) == [register.laptops["id"]]
+    # An asset page lists the risks recorded against that asset.
+    assert _ids(listed(asset_id=register.website["asset_id"])) == [
+        register.website["id"]
+    ]
+    assert listed(asset_id=str(uuid.uuid4()))["items"] == []
+    # Asset risks stay behind risk read access.
+    isms_reader = reg.keen.client(reg.keen.user("isms.read"))
+    response = isms_reader.get(
+        "/v1/risks", params={"asset_id": register.website["asset_id"]}
+    )
+    assert response.status_code == 403
 
     rejected = {
+        "asset_id": "not-a-uuid",
         "category_id": "not-a-uuid",
         "subcategory_id": f"{uuid.uuid4()},nope",
         "owner_user_id": "nope",

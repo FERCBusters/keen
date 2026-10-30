@@ -30,6 +30,7 @@
 
     <ul class="nav nav-tabs mb-3 no-print" id="assetTabs" role="tablist">
       <li class="nav-item" role="presentation"><button class="nav-link active" id="assetDetailsTab" data-bs-toggle="tab" data-bs-target="#assetDetailsPane" type="button" role="tab">Details</button></li>
+      <li class="nav-item" role="presentation" id="assetRisksTabItem" hidden><button class="nav-link" id="assetRisksTab" data-bs-toggle="tab" data-bs-target="#assetRisksPane" type="button" role="tab" aria-controls="assetRisksPane">Risks</button></li>
       <li class="nav-item" role="presentation"><button class="nav-link" id="assetChangelogTab" data-bs-toggle="tab" data-bs-target="#assetChangelogPane" type="button" role="tab">Changelog</button></li>
     </ul>
 
@@ -70,6 +71,12 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <section class="tab-pane fade" id="assetRisksPane" role="tabpanel" aria-labelledby="assetRisksTab" tabindex="0">
+        <h2 class="h5">Risks</h2>
+        <p class="small-muted">Risks recorded against this asset, highest first.</p>
+        <div id="assetRisks"><p class="small-muted mb-0">Loading risks</p></div>
       </section>
 
       <section class="tab-pane fade" id="assetChangelogPane" role="tabpanel" tabindex="0">

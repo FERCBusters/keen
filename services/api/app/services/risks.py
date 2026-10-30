@@ -1578,6 +1578,7 @@ def list_risks(
     risk_type: str = "",
     owner_user_id: str = "",
     owner_role_id: str = "",
+    asset_id: str = "",
     limit: int = 200,
     offset: int = 0,
     user,
@@ -1632,6 +1633,11 @@ def list_risks(
         raise DomainError(status_code=400, detail="owner_user_id must be a UUID")
     if oid:
         qry = qry.filter(Risk.risk_owner_user_id == oid)
+    if asset_id:
+        aid = _try_uuid(asset_id)
+        if aid is None:
+            raise DomainError(400, "asset_id must be a UUID")
+        qry = qry.filter(Risk.asset_id == aid)
 
     total = int(qry.count() or 0)
     rows = (

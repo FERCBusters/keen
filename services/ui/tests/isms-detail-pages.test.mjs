@@ -18,6 +18,7 @@ async function detail(
     query = '&id=x1',
     fail = false,
     sources = false,
+    risks = null,
     setup,
   } = {},
 ) {
@@ -36,6 +37,10 @@ async function detail(
       if (swot && u.pathname === '/api/v1/isms/swot') return { items: [], total: 0 };
       if (sources && u.pathname === '/api/v1/sources')
         return { items: [{ source: 'jira', label: 'Jira' }] };
+      if (risks && u.pathname === '/api/v1/risks') {
+        assert.equal(u.searchParams.get('asset_id'), 'x1');
+        return { items: risks };
+      }
       if (u.pathname === '/api/v1/audits')
         return { items: [{ id: 'au1', title: 'Audit', status: 'open' }] };
       throw new Error('Unexpected GET ' + u);
@@ -378,6 +383,56 @@ test('assets show classification, owners and risk counts', async (t) => {
   assert.equal(reader.ui.el('assetTitle').textContent, 'Laptop');
   assert.equal(reader.ui.el('editAssetLink').style.display, 'none');
   assert.equal(reader.ui.el('sampleAssetAudit').style.display, 'none');
+  // Risks stay with people who can read the risk register.
+  assert.equal(reader.ui.el('assetRisksTabItem').hidden, true);
+  assert.equal(
+    reader.ui.calls.some((c) => c.url.startsWith('/api/v1/risks')),
+    false,
+  );
+});
+
+test('an asset lists its risks to risk readers when the tab opens', async (t) => {
+  const risk = {
+    id: 'r1',
+    title: hostile + 'Unrestricted users without 2FA',
+    risk_types: ['Confidentiality'],
+    treatment_strategy: 'accept',
+    treatment_status: 'open',
+    treatment_due_at: '2026-12-01',
+    risk_score: 15,
+    residual_risk_score: 4,
+    risk_owner: null,
+  };
+  const { ui } = await detail(t, 'isms-asset', {
+    path: '/api/v1/isms/assets/x1',
+    row: { id: 'x1', name: 'Linode account', risk_count: 1 },
+    swot: true,
+    risks: [risk],
+    me: { can_view_isms: true, can_view_risks: true },
+  });
+  assert.equal(ui.el('assetRisksTabItem').hidden, false);
+  assert.equal(
+    ui.calls.some((c) => c.url.startsWith('/api/v1/risks')),
+    false,
+  );
+  ui.el('assetRisksTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('assetRisks').querySelector('table'));
+  const link = ui.el('assetRisks').querySelector('a');
+  assert.equal(link.textContent, risk.title);
+  assert.match(link.getAttribute('href'), /^\/risk\.html\?id=r1/);
+  assert.equal(ui.el('assetRisks').querySelector('img'), null);
+  assert.match(ui.el('assetRisks').textContent, /Accept/);
+  assert.match(ui.el('assetRisks').textContent, /due 01\/12\/2026|due 2026-12-01|due 1 Dec/);
+
+  const none = await detail(t, 'isms-asset', {
+    path: '/api/v1/isms/assets/x1',
+    row: { id: 'x1', name: 'Spare laptop' },
+    swot: true,
+    risks: [],
+    me: { can_view_isms: true, can_manage_risks: true },
+  });
+  none.ui.el('assetRisksTab').dispatchEvent(new none.ui.window.Event('shown.bs.tab'));
+  await settle(() => /No risks/.test(none.ui.el('assetRisks').textContent));
 });
 
 for (const [name, path, message] of [
