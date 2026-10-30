@@ -332,6 +332,36 @@ class DemoTeardown:
                 )
             )
         )
+        if settings.demo_mode:
+            # Demo mode never reads a cloud vendor, so all cloud posture and
+            # activity there is the seed's fictional data.
+            from app.ingest.cloud import KEYS
+            from app.ingest.cloud import provider as cloud_provider
+            from app.ingest.cloud.runner import vendor_id_for
+
+            found["events"] = sorted(
+                set(found["events"])
+                | set(
+                    self.ids(
+                        db.query(Event.id).filter(
+                            Event.connection_id.in_(["env:" + k for k in KEYS]),
+                            Event.source.in_(KEYS),
+                        )
+                    )
+                ),
+                key=str,
+            )
+            created = [vendor_id_for(cloud_provider(k)) for k in KEYS]
+            found["vendors"] = sorted(
+                set(found["vendors"])
+                | set(
+                    self.ids(db.query(IsmsVendor.id).filter(IsmsVendor.id.in_(created)))
+                ),
+                key=str,
+            )
+            found["cloud"] = list(KEYS)
+        else:
+            found["cloud"] = []
         return found
 
     def delete_stories(self, found: dict[str, list[Any]]) -> None:
@@ -516,6 +546,14 @@ class DemoTeardown:
         )
         self.delete_ids(IsmsSwot, IsmsSwot.id, found["swot"])
         self.delete_ids(IsmsPerson, IsmsPerson.id, found["people"])
+        if found["cloud"]:
+            from app.db.models import CloudProvider, IngestionCursor
+
+            self.delete_ids(CloudProvider, CloudProvider.provider, found["cloud"])
+            for key in found["cloud"]:
+                self.delete_where(
+                    IngestionCursor, IngestionCursor.name.like(f"env:{key}:%")
+                )
         self.delete_ids(IsmsVendor, IsmsVendor.id, found["vendors"])
         self.delete_ids(IsmsOrgNode, IsmsOrgNode.id, found["org_nodes"])
 

@@ -268,6 +268,12 @@ const sourceGuides = {
   riskledger: ['Risk Ledger', 'riskledger'],
   google_workspace: ['Google Workspace', 'google-workspace'],
   cloudwatch_logs: ['Amazon CloudWatch Logs', 'cloudwatch'],
+  aws: ['AWS', 'aws'],
+  azure: ['Microsoft Entra ID and Azure', 'azure'],
+  google_cloud: ['Google Cloud', 'google-cloud'],
+  linode: ['Akamai Cloud (Linode)', 'linode'],
+  digitalocean: ['DigitalOcean', 'digitalocean'],
+  scaleway: ['Scaleway', 'scaleway'],
   webhook: ['Incoming webhooks', 'webhooks'],
   'keen-agent': ['Keen Agent', 'agents'],
 };

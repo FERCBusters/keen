@@ -3375,8 +3375,9 @@ class PostureRiskLink(Base):
     """A risk recorded against a posture result; removed with the risk.
 
     The origin says which posture produced the result: ``workstation`` keys are
-    KEEN Agent identities and ``cloud`` keys are source connections. An empty
-    ``subject_key`` means the risk covers the whole check in that scope.
+    KEEN Agent identities and ``cloud`` keys are cloud providers, such as
+    ``aws``. An empty ``subject_key`` means the risk covers the whole check in
+    that scope.
     """
 
     __tablename__ = "posture_risk_links"
@@ -3414,6 +3415,60 @@ class PostureRiskLink(Base):
             name="uq_posture_risk_link",
         ),
         Index("ix_posture_risk_links_origin", "origin", "origin_key"),
+    )
+
+
+class CloudProvider(Base):
+    """A cloud vendor KEEN reads posture from, and the Vendor that shows it.
+
+    The provider key is the event source, such as ``aws``. Removing the Vendor
+    clears the link; the next refresh links or creates one again.
+    """
+
+    __tablename__ = "cloud_providers"
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    vendor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_vendors.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    attempted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    refresh_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    activity_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    activity_error: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    activity_truncated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+
+
+class CloudPostureScope(Base):
+    """The latest checks and identities for one account, subscription or
+    project. Rows not refreshed for a while are removed."""
+
+    __tablename__ = "cloud_posture_scopes"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    provider: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("cloud_providers.provider", ondelete="CASCADE"),
+        nullable=False,
+    )
+    scope_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    label: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    # What the scope is, such as "tenant", when it differs from the
+    # provider's usual scope.
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    checked_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    checks: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    identities: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    __table_args__ = (
+        UniqueConstraint("provider", "scope_key", name="uq_cloud_posture_scope"),
     )
 
 

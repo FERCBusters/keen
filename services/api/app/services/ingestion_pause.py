@@ -5,6 +5,7 @@ from functools import wraps
 from sqlalchemy import select, text
 
 from app.db.models import SourceIngestionState
+from app.ingest.cloud import KEYS as CLOUD_SOURCES
 from app.services.errors import DomainError
 
 POLLING_SOURCES = frozenset(
@@ -26,7 +27,12 @@ POLLING_SOURCES = frozenset(
         "google_workspace",
     )
 )
-PAUSABLE_SOURCES = POLLING_SOURCES | {"webhooks", "keen-agent", "api-ingesters"}
+# Pausing a cloud posture provider pauses its settings checks and activity.
+PAUSABLE_SOURCES = (
+    POLLING_SOURCES
+    | frozenset(CLOUD_SOURCES)
+    | {"webhooks", "keen-agent", "api-ingesters"}
+)
 
 
 # Separate from operator pause flags: completing a purge must never resume a

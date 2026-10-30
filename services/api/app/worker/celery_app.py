@@ -45,6 +45,8 @@ celery_app.conf.task_routes = {
         for source in HTTP_INGEST_SOURCES
     },
     "keen.ingest_source_connection": {"queue": "ingest-http"},
+    "app.worker.tasks.cloud_posture_refresh_task": {"queue": "ingest-http"},
+    "app.worker.tasks.cloud_activity_task": {"queue": "ingest-http"},
     "app.worker.tasks.integration_run_task": {"queue": "ingest-http"},
     "keen.ingest_imap_connection": {"queue": "imap"},
 }
@@ -107,6 +109,15 @@ celery_app.conf.beat_schedule = {
     "ingest-google-workspace-every-30m": {
         "task": "app.worker.tasks.ingest_google_workspace_all_task",
         "schedule": crontab(minute="*/30"),
+    },
+    # Each provider refreshes once KEEN_CLOUD_POSTURE_POLL_SECONDS have passed.
+    "cloud-posture-refresh": {
+        "task": "app.worker.tasks.cloud_posture_refresh_task",
+        "schedule": 900.0,
+    },
+    "cloud-activity": {
+        "task": "app.worker.tasks.cloud_activity_task",
+        "schedule": float(settings.cloud_activity_poll_seconds),
     },
     "recover-rule-backfills": {
         "task": "app.worker.tasks.recover_rule_backfills_task",

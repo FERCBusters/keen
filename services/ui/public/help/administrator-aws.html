@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>AWS - Keen documentation</title><link href="design-tokens.css" rel="stylesheet"/><link href="docs.css" rel="stylesheet"/><script src="docs-theme.js"></script><script defer="" src="search-index.js"></script><script defer="" src="docs.js"></script></head><body><a class="skip" href="#content">Skip to content</a><header><a href="index.html">Keen documentation</a><div class="header-actions"><button aria-label="Switch colour mode" id="docs-theme-toggle" type="button">Colour mode</button><a href="/">Open Keen ↗</a></div></header><div class="layout"><aside><label for="search">Search all handbooks</label><input id="search" placeholder="Mapping, audit, LDAP" type="search"/><div aria-live="polite" id="results" role="status"></div><nav aria-label="Handbooks"><a href="using.html">Using Keen</a><a aria-current="true" href="administrator.html">Administering Keen</a><a href="developer.html">Developing Keen</a></nav><details class="chapter-menu" open=""><summary>Chapters</summary><nav aria-label="Chapters"><a href="administrator-deployment.html">1. Install and configure Keen</a><a href="administrator-identity.html">2. Local accounts, MFA and security email</a><a href="administrator-sso-ldap.html">3. SSO linking and LDAP authentication</a><a href="administrator-frameworks.html">4. Organisation frameworks and risk library</a><a href="administrator-sources.html">5. Sources, connections and API ingesters</a><a href="administrator-rules.html">6. Manage rules, YAML and historical mapping</a><a href="administrator-scheduling.html">7. Schedules, pauses and metric submissions</a><a href="administrator-git.html">8. Choose a Git service</a><a href="administrator-jenkins.html">9. Jenkins</a><a href="administrator-loki.html">10. Loki</a><a href="administrator-elasticsearch.html">11. Elasticsearch</a><a href="administrator-cloudwatch.html">12. Amazon CloudWatch Logs</a><a href="administrator-cloud-posture.html">13. Cloud vendor posture</a><a aria-current="page" href="administrator-aws.html">14. AWS</a><a href="administrator-azure.html">15. Microsoft Entra ID and Azure</a><a href="administrator-google-cloud.html">16. Google Cloud</a><a href="administrator-linode.html">17. Akamai Cloud (Linode)</a><a href="administrator-digitalocean.html">18. DigitalOcean</a><a href="administrator-scaleway.html">19. Scaleway</a><a href="administrator-github.html">20. GitHub</a><a href="administrator-forgejo.html">21. Forgejo</a><a href="administrator-gitea.html">22. Gitea</a><a href="administrator-gitlab.html">23. GitLab</a><a href="administrator-rss.html">24. RSS / Atom</a><a href="administrator-imap.html">25. IMAP mail</a><a href="administrator-taiga.html">26. Taiga</a><a href="administrator-bookstack.html">27. BookStack</a><a href="administrator-google-workspace.html">28. Google Workspace</a><a href="administrator-webhooks.html">29. Incoming webhooks</a><a href="administrator-diary.html">30. Diary evidence</a><a href="administrator-api-ingesters.html">31. Custom API ingesters</a><a href="administrator-redmine.html">32. Redmine issues and journals</a><a href="administrator-riskledger.html">33. Risk Ledger suppliers, risks and framework</a><a href="administrator-agents.html">34. Keen Agent installation and operation</a><a href="administrator-retention.html">35. Evidence storage and retention</a><a href="administrator-audit-trail.html">36. Audit trail and change history</a><a href="administrator-maintenance.html">37. Upgrades, backups and troubleshooting</a></nav></details><nav aria-label="On this page"><a href="#source-aws">AWS</a><a href="#aws-posture-checks">Checks</a><a href="#aws-posture-activity">CloudTrail activity</a><a href="#aws-posture-role">1. Create the read-only role in each account</a><a href="#aws-posture-credentials">2. Give Keen its own credentials</a><a href="#aws-posture-enable">3. Configure Keen</a><a href="#aws-posture-verify">4. Verify</a></nav></aside><main id="content"><p class="eyebrow">Administering Keen</p><h1>AWS</h1><p class="edition">Chapter 14 of 37</p><h2 id="source-aws">AWS</h2>
+<p class="lead">AWS posture reads each account's IAM users and administrators, root user, password policy, CloudTrail logging, S3 Block Public Access, security groups and RDS exposure, and Security Hub findings, with read-only access, and records CloudTrail console sign-ins and IAM changes. Results appear on the Amazon Web Services vendor's <strong>Cloud posture</strong> tab (see <a href="administrator-cloud-posture.html">Cloud vendor posture</a>).</p>
+<p>Keen reaches each account by assuming a read-only role in it, with an external ID, and confirms through STS that the credentials answer for that account before reading anything. With one account, Keen's own identity can hold the read actions and no role is needed.</p>
+<h3 id="aws-posture-checks">Checks</h3>
+<table><thead><tr><th>Check</th><th>Action</th><th>Met when</th></tr></thead><tbody>
+<tr><td>MFA for console users</td><td><code>posture.identity.mfa</code></td><td>Every IAM user with a console password has an MFA device.</td></tr>
+<tr><td>MFA for administrators</td><td><code>posture.identity.admin_mfa</code></td><td>Every console user with administrator rights has an MFA device.</td></tr>
+<tr><td>Administrators</td><td><code>posture.identity.admins</code></td><td>Reported for information: the users and roles holding <code>AdministratorAccess</code>, directly or through a group, or any policy that allows <code>*</code> on <code>*</code>. Service-linked roles are left out.</td></tr>
+<tr><td>Unused users</td><td><code>posture.identity.inactive</code></td><td>No IAM user has gone unused, by console or access key, for <code>KEEN_CLOUD_INACTIVE_DAYS</code>.</td></tr>
+<tr><td>Access key age</td><td><code>posture.credentials.key_age</code></td><td>No active access key is older than <code>KEEN_CLOUD_KEY_AGE_DAYS</code>.</td></tr>
+<tr><td>Root user</td><td><code>posture.aws.root</code></td><td>The root user has MFA and neither access keys nor signing certificates.</td></tr>
+<tr><td>Password policy</td><td><code>posture.aws.password_policy</code></td><td>An account password policy requires at least 14 characters and prevents reuse of the last 24 passwords.</td></tr>
+<tr><td>CloudTrail logging</td><td><code>posture.logging.audit_trail</code></td><td>A multi-region trail, such as an organisation trail, is logging.</td></tr>
+<tr><td>S3 Block Public Access</td><td><code>posture.storage.public_access</code></td><td>All four account-level Block Public Access settings are on.</td></tr>
+<tr><td>SSH and RDP open to the internet</td><td><code>posture.network.admin_ports</code></td><td>No security group attached to a network interface lets TCP port 22 or 3389 in from <code>0.0.0.0/0</code> or <code>::/0</code>.</td></tr>
+<tr><td>Databases open to the internet</td><td><code>posture.network.databases</code></td><td>No publicly accessible RDS instance has a security group that admits the internet on its database port.</td></tr>
+<tr><td>Security Hub findings</td><td><code>posture.findings</code></td><td>Security Hub holds no active critical or high finding in the <em>New</em> or <em>Notified</em> workflow state for the account.</td></tr>
+</tbody></table>
+<p>Administrators come from the account's authorisation snapshot; Keen does not work out effective permissions through service control policies, permission boundaries or resource policies. People who sign in through IAM Identity Center appear as <code>AWSReservedSSO_</code> roles. AWS regenerates the credential report at most every four hours, so a user's last use can be up to four hours old. A member account may see its organisation's trail without being allowed its status; CloudTrail logging then reads Not established, unless another multi-region trail in the account is logging. The network checks read every region enabled in the account, up to 40, or the regions in <code>KEEN_AWS_REGIONS</code>; security group rules that admit a prefix list or another security group are left out. Security Hub findings come from <code>KEEN_AWS_REGION</code>, so choose your Security Hub aggregation region there to cover every region; Keen counts up to 5,000 findings and says <em>at least</em> beyond that. An account without Security Hub reads Not established.</p>
+<p>The vendor page lists each account's IAM users, with their console access, access keys, MFA and last use, and the root user.</p>
+<h3 id="aws-posture-activity">CloudTrail activity</h3>
+<p>Keen reads CloudTrail's event history, which holds the last 90 days of management events in each region and needs no trail. It records console sign-ins and role switches, successful or failed, with whether MFA was used, and password changes, from the regions AWS records sign-ins in (<code>us-east-1</code>, <code>us-east-2</code>, <code>us-west-2</code>, <code>eu-north-1</code> and <code>ap-southeast-2</code>), and every IAM call that changes something, such as creating a user or attaching a policy, from <code>us-east-1</code>, where AWS records IAM (<code>us-gov-west-1</code> and <code>cn-north-1</code> in those partitions). Read-only IAM calls are left out. CloudTrail delivers events within about 15 minutes, so each read stops 20 minutes before the present, and it answers two event history requests a second, so a busy account can take a few minutes per read.</p>
+<h3 id="aws-posture-role">1. Create the read-only role in each account</h3>
+<p>Choose an external ID: a random value that only Keen and your role trust policies know, for example from <code>openssl rand -hex 24</code>. Save this permissions policy as <code>keen-posture.json</code>:</p>
+<pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "KeenPostureReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetAccountSummary",
+        "iam:GenerateCredentialReport",
+        "iam:GetCredentialReport",
+        "iam:GetAccountAuthorizationDetails",
+        "iam:GetAccountPasswordPolicy",
+        "iam:ListAccountAliases",
+        "cloudtrail:DescribeTrails",
+        "cloudtrail:GetTrailStatus",
+        "cloudtrail:LookupEvents",
+        "s3:GetAccountPublicAccessBlock",
+        "ec2:DescribeRegions",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeNetworkInterfaces",
+        "rds:DescribeDBInstances",
+        "securityhub:GetFindings"
+      ],
+      "Resource": "*"
+    }
+  ]
+}</code></pre>
+<p>Save this trust policy as <code>keen-trust.json</code>, naming the IAM user Keen signs in as (step 2) and your external ID. If Keen runs with an instance profile or task role, name that role's ARN instead.</p>
+<pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::111122223333:user/keen-posture" },
+      "Action": "sts:AssumeRole",
+      "Condition": { "StringEquals": { "sts:ExternalId": "YOUR-EXTERNAL-ID" } }
+    }
+  ]
+}</code></pre>
+<p>Then create the role in each account Keen should read, signed in to that account:</p>
+<pre><code>aws iam create-role --role-name KeenPostureReadOnly \
+  --assume-role-policy-document file://keen-trust.json
+aws iam put-role-policy --role-name KeenPostureReadOnly \
+  --policy-name KeenPosture --policy-document file://keen-posture.json</code></pre>
+<p>In an AWS organisation, a CloudFormation StackSet can create the same role in every member account. Running <code>put-role-policy</code> again replaces the policy. With a single account, attach <code>keen-posture.json</code> to Keen's own IAM user from step 2 and skip the role.</p>
+<h3 id="aws-posture-credentials">2. Give Keen its own credentials</h3>
+<p>Create a dedicated IAM user, in a security or management account, that can only assume the posture roles. Save this policy as <code>keen-assume.json</code>:</p>
+<pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "sts:AssumeRole",
+      "Resource": "arn:aws:iam::*:role/KeenPostureReadOnly"
+    }
+  ]
+}</code></pre>
+<pre><code>aws iam create-user --user-name keen-posture
+aws iam put-user-policy --user-name keen-posture \
+  --policy-name KeenAssumePostureRoles --policy-document file://keen-assume.json
+aws iam create-access-key --user-name keen-posture</code></pre>
+<p>The last command prints the access key ID and secret access key once. Store them as Keen's posture credentials and nowhere else. Rotate them by creating a second key, updating Keen and deleting the first.</p>
+<h3 id="aws-posture-enable">3. Configure Keen</h3>
+<table><thead><tr><th>Setting</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>KEEN_AWS_ENABLED</code></td><td>Turns AWS posture on.</td></tr>
+<tr><td><code>AWS_POSTURE_ACCESS_KEY_ID</code>, <code>AWS_POSTURE_SECRET_ACCESS_KEY</code></td><td>The keys from step 2. Leave both blank to use the host's role chain, such as an instance profile or task role. These names leave <code>AWS_ACCESS_KEY_ID</code> to CloudWatch Logs collection.</td></tr>
+<tr><td><code>AWS_POSTURE_SESSION_TOKEN</code></td><td>Only for temporary keys.</td></tr>
+<tr><td><code>AWS_POSTURE_EXTERNAL_ID</code></td><td>The external ID from step 1.</td></tr>
+<tr><td><code>KEEN_AWS_ROLE_ARNS</code></td><td>The role in each account, separated by commas, such as <code>arn:aws:iam::444455556666:role/KeenPostureReadOnly</code>; up to 100. Leave it blank to read only the account Keen's credentials belong to.</td></tr>
+<tr><td><code>KEEN_AWS_REGION</code></td><td>The region for STS, CloudTrail trails, S3 Control and Security Hub; <code>us-east-1</code> by default. Use a China or GovCloud region in those partitions.</td></tr>
+<tr><td><code>KEEN_AWS_REGIONS</code></td><td>The regions the network checks read, separated by commas; blank reads every region enabled in the account.</td></tr>
+</tbody></table>
+<h3 id="aws-posture-verify">4. Verify</h3>
+<p>Recreate the API, worker and beat containers, then wait for the first refresh, or open the Amazon Web Services vendor and choose <strong>Refresh now</strong>. Each account appears under its account alias, or its ID. A check that reads Not established names its reason: <em>not allowed</em> means the role or its policy is missing an action, and <em>not set up, or the credentials were not accepted</em> covers wrong keys, an external ID that does not match the trust policy, a role in a different account from its ARN, and an account without Security Hub.</p>
+<nav aria-label="Chapter pagination" class="chapter-pagination"><a href="administrator-cloud-posture.html" rel="prev">← Previous: Cloud vendor posture</a><a href="administrator-azure.html" rel="next">Next: Microsoft Entra ID and Azure →</a></nav></main></div></body></html>

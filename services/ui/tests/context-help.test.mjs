@@ -128,6 +128,12 @@ test('every supported source help link resolves to a published guide', async (t)
     'riskledger',
     'google_workspace',
     'cloudwatch_logs',
+    'aws',
+    'azure',
+    'google_cloud',
+    'linode',
+    'digitalocean',
+    'scaleway',
     'webhook',
     'keen-agent',
   ]) {

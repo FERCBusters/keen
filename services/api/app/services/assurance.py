@@ -366,4 +366,8 @@ def record_detail(*, db, user, record_id, kind):
     result = _person_out(row) if kind == "person" else _vendor_out(row)
     assets = [link.asset for link in row.assets] if kind == "person" else row.assets
     result["assets"] = [{"id": str(asset.id), "name": asset.name} for asset in assets]
+    if kind == "vendor":
+        from app.services.cloud_posture import has_posture
+
+        result["has_cloud_posture"] = has_posture(db, row.id)
     return result

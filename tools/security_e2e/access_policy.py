@@ -534,6 +534,13 @@ POLICY = {
     "GET /v1/isms/people": ISMS_READ,
     "GET /v1/isms/people/{person_id}": ISMS_READ,
     "GET /v1/isms/vendors/{vendor_id}": ISMS_READ,
+    "GET /v1/isms/vendors/{vendor_id}/cloud-posture": Rule(
+        "permissions", tuple(p | {"events.read"} for p in ISMS_READ.alternatives)
+    ),
+    "POST /v1/isms/vendors/{vendor_id}/cloud-posture/refresh": ADMIN,
+    "POST /v1/isms/vendors/{vendor_id}/cloud-posture/risks": all_of(
+        "events.read", "risk.manage"
+    ),
     "GET /v1/isms/people/{person_id}/quizzes": Rule(
         "permissions", tuple(p | {"quiz.manage"} for p in ISMS_READ.alternatives)
     ),

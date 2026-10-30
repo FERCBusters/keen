@@ -15,6 +15,7 @@ import {
 } from '/app.js';
 import { featureEnabled } from './feature-availability.js';
 import { workstationPosture } from './workstation-posture.js';
+import { cloudPosture } from './cloud-posture.js';
 import { mountSwotRelated } from './swot-related.js';
 import { canViewStories, mountStoryRelated } from './story-related.js';
 import { personQuizzes } from './person-quizzes.js';
@@ -32,8 +33,8 @@ export async function assuranceRecord(kind) {
   const back = withFramework('/assurance.html?tab=' + feature, framework);
   $('registerLink').href = back;
   const manage = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);
-  const canPosture =
-    person && featureEnabled(me, 'evidence') && !!(me?.is_admin || me?.can_view_events);
+  const evidenceReader = featureEnabled(me, 'evidence') && !!(me?.is_admin || me?.can_view_events);
+  const canPosture = person && evidenceReader;
   const canQuizzes =
     person && featureEnabled(me, 'quizzes') && !!(me?.is_admin || me?.can_manage_quizzes);
   const enabled = featureEnabled(me, feature);
@@ -47,7 +48,11 @@ export async function assuranceRecord(kind) {
   const assuranceGuard = person
     ? unsavedGuard({ root: $('assuranceForm'), hint: $('assuranceDirty') })
     : null;
-  const posture = person ? workstationPosture($('workstationPosture'), canPosture) : null;
+  const posture = person
+    ? workstationPosture($('workstationPosture'), canPosture)
+    : cloudPosture($('cloudPosture'), evidenceReader);
+  // A vendor shows cloud posture only once a cloud provider links to it.
+  const hasCloud = () => !person && evidenceReader && !!record?.has_cloud_posture;
   const tabButtons = [...document.querySelectorAll('[data-record-tab]')];
   if (person) $('tab-posture').parentElement.hidden = !canPosture;
   $('tab-assets').parentElement.hidden = !featureEnabled(me, 'assets');
@@ -69,6 +74,7 @@ export async function assuranceRecord(kind) {
       history.replaceState({}, '', url.pathname + url.search);
     }
     if (record && tab === 'posture') posture.select(record);
+    if (record && tab === 'cloud') posture.select(record);
     if (record && tab === 'related' && !relatedLoaded) {
       relatedLoaded = true;
       let any = false;
@@ -143,6 +149,7 @@ export async function assuranceRecord(kind) {
     $('editRecord').hidden = !manage || !record;
     $('deleteRecord').hidden = !manage || !record;
     $('recordTabs').hidden = !record;
+    if (!person) $('tab-cloud').parentElement.hidden = !hasCloud();
     const facts = person
       ? [
           ['Name', record?.name],
@@ -416,7 +423,9 @@ export async function assuranceRecord(kind) {
             ? canPosture
               ? 'posture'
               : 'assurance'
-            : 'details',
+            : hasCloud()
+              ? 'cloud'
+              : 'details',
         false,
       );
       if (params.get('edit') === '1') await edit();

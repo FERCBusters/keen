@@ -812,8 +812,43 @@ def source_catalogue(*, db: Session):
             "description": "Register scoped identities under Admin → Keen Agents.",
         }
     )
-    from app.db.models import IntegrationCollector, SourceIngestionState
+    from app.db.models import (
+        CloudPostureScope,
+        IntegrationCollector,
+        SourceIngestionState,
+    )
+    from app.ingest.cloud import providers as cloud_providers
     from app.services.ingestion_pause import PAUSABLE_SOURCES
+
+    scopes = dict(
+        db.query(CloudPostureScope.provider, func.count(CloudPostureScope.id))
+        .group_by(CloudPostureScope.provider)
+        .all()
+    )
+    for provider in cloud_providers():
+        if provider.key in CONNECTORS:
+            continue  # Shown with the source's own collector.
+        events, last_seen = observed.get(provider.key, (0, None))
+        items.append(
+            {
+                "adapter": provider.key,
+                "enabled": bool(getattr(settings, provider.setting, False)),
+                "collection_items": int(scopes.get(provider.key, 0)),
+                "definitions": sum(
+                    1
+                    for r in rules
+                    if (r.get("when") or {}).get("source") == provider.key
+                ),
+                "observed_events": events,
+                "last_seen": last_seen,
+                "managed_version": 0,
+                "description": (
+                    f"{provider.label} cloud posture. Credentials and accounts are "
+                    "set in the deployment environment; results show on the "
+                    "vendor's page."
+                ),
+            }
+        )
 
     custom_count = (
         db.query(IntegrationCollector)

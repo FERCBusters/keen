@@ -10,8 +10,10 @@ from sqlalchemy.orm import Session
 from app.api.dependencies.isms import require_isms_manage, require_isms_read
 from app.api.routing import Router
 from app.db.session import get_db
+from app.security.auth import require_admin
 from app.services import assurance as service
 from app.services.assurance import AssuranceInput, PersonInput, VendorInput
+from app.services.cloud_posture import CloudRiskInput
 from app.services.workstation_posture import WorkstationRiskInput
 
 router = Router()
@@ -110,6 +112,40 @@ def delete_vendor(
     db: Session = Depends(get_db),
 ):
     return service.delete_vendor(vendor_id=vendor_id, user=user, db=db)
+
+
+@router.get("/v1/isms/vendors/{vendor_id}/cloud-posture")
+def vendor_cloud_posture(
+    vendor_id: uuid.UUID,
+    user=Depends(require_isms_read),
+    db: Session = Depends(get_db),
+):
+    from app.services.cloud_posture import vendor_posture
+
+    return vendor_posture(db=db, user=user, vendor_id=vendor_id)
+
+
+@router.post("/v1/isms/vendors/{vendor_id}/cloud-posture/refresh", status_code=202)
+def refresh_vendor_cloud_posture(
+    vendor_id: uuid.UUID,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from app.services.cloud_posture import request_refresh
+
+    return request_refresh(db=db, user=user, vendor_id=vendor_id)
+
+
+@router.post("/v1/isms/vendors/{vendor_id}/cloud-posture/risks", status_code=201)
+def record_cloud_risk(
+    vendor_id: uuid.UUID,
+    body: CloudRiskInput,
+    user=Depends(require_isms_read),
+    db: Session = Depends(get_db),
+):
+    from app.services.cloud_posture import create_cloud_risk
+
+    return create_cloud_risk(db=db, user=user, vendor_id=vendor_id, body=body)
 
 
 @router.post("/v1/isms/people/{person_id}/assurances", status_code=201)

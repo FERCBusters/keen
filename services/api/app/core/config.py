@@ -405,6 +405,87 @@ class Settings(BaseSettings):
     cloudwatch_logs_region: str = Field(default="")
     cloudwatch_logs_config_path: str = Field(default="/app/config/cloudwatch_logs.yml")
 
+    # --- Cloud vendor posture, shown on each cloud Vendor's page
+    # Every enabled provider's settings checks run on one schedule and its
+    # activity reads on another.
+    cloud_posture_poll_seconds: int = Field(default=43200, ge=3600, le=86400)
+    cloud_activity_poll_seconds: int = Field(default=1800, ge=300, le=86400)
+    # Users unused for, and access keys older than, these many days need
+    # attention.
+    cloud_inactive_days: int = Field(default=45, ge=1, le=3650)
+    cloud_key_age_days: int = Field(default=90, ge=1, le=3650)
+
+    # AWS: one account per role ARN, or the credentials' own account. The
+    # _POSTURE_ names never collide with AWS_ACCESS_KEY_ID, which boto3 reads
+    # implicitly for CloudWatch. Blank keys use the host's role chain.
+    aws_enabled: bool = Field(default=False)
+    aws_region: str = Field(default="us-east-1")
+    aws_role_arns: str = Field(default="")
+    # Regions the network checks read; blank reads every enabled region.
+    aws_regions: str = Field(default="")
+    aws_access_key_id: str = Field(
+        default="", validation_alias="AWS_POSTURE_ACCESS_KEY_ID"
+    )
+    aws_secret_access_key: str = Field(
+        default="", validation_alias="AWS_POSTURE_SECRET_ACCESS_KEY", repr=False
+    )
+    aws_session_token: str = Field(
+        default="", validation_alias="AWS_POSTURE_SESSION_TOKEN", repr=False
+    )
+    aws_external_id: str = Field(default="", validation_alias="AWS_POSTURE_EXTERNAL_ID")
+
+    # Microsoft Entra ID and Azure: one tenant, read as an app registration.
+    # The _POSTURE_ names keep Azure SDKs, which read AZURE_CLIENT_SECRET
+    # implicitly, from using them.
+    azure_enabled: bool = Field(default=False)
+    azure_tenant_id: str = Field(default="", validation_alias="AZURE_POSTURE_TENANT_ID")
+    azure_client_id: str = Field(default="", validation_alias="AZURE_POSTURE_CLIENT_ID")
+    azure_client_secret: str = Field(
+        default="", validation_alias="AZURE_POSTURE_CLIENT_SECRET", repr=False
+    )
+    # Subscription IDs to read; blank reads every one the app can see.
+    azure_subscriptions: str = Field(default="")
+
+    # Google Cloud: one organisation, or one project without an organisation,
+    # read as a service account.
+    google_cloud_enabled: bool = Field(default=False)
+    google_cloud_organization: str = Field(default="")
+    google_cloud_project: str = Field(default="")
+    # Projects whose Admin Activity logs are read beside the organisation's.
+    google_cloud_projects: str = Field(default="")
+    google_cloud_sa_keyfile: str = Field(
+        default="", validation_alias="GOOGLE_CLOUD_SA_KEYFILE"
+    )
+    google_cloud_sa_json: str = Field(
+        default="", validation_alias="GOOGLE_CLOUD_SA_JSON", repr=False
+    )
+    google_cloud_sa_json_b64: str = Field(
+        default="", validation_alias="GOOGLE_CLOUD_SA_JSON_B64", repr=False
+    )
+
+    # Akamai Cloud (Linode): the account a read-only personal access token
+    # belongs to.
+    linode_enabled: bool = Field(default=False)
+    linode_token: str = Field(default="", validation_alias="LINODE_TOKEN", repr=False)
+
+    # DigitalOcean: the team a custom-scoped, read-only token belongs to.
+    digitalocean_enabled: bool = Field(default=False)
+    digitalocean_token: str = Field(
+        default="", validation_alias="DIGITALOCEAN_TOKEN", repr=False
+    )
+
+    # Scaleway: one Organization, read with an API key whose policy grants
+    # read-only permission sets.
+    scaleway_enabled: bool = Field(default=False)
+    scaleway_organization_id: str = Field(default="")
+    scaleway_secret_key: str = Field(
+        default="", validation_alias="SCALEWAY_SECRET_KEY", repr=False
+    )
+    # Zones whose Instance security groups are read; Managed Databases and
+    # Kubernetes are read in their regions. Blank reads every zone in Paris,
+    # Amsterdam and Warsaw.
+    scaleway_zones: str = Field(default="")
+
     # GitHub (polling)
     github_enabled: bool = Field(default=False)
     github_base_url: str = Field(default="https://api.github.com")
@@ -504,6 +585,9 @@ class Settings(BaseSettings):
     google_workspace_sa_json_b64: str = Field(
         default="", validation_alias="GOOGLE_WORKSPACE_SA_JSON_B64"
     )
+    # Workspace posture uses the same service account and delegated
+    # administrator, with the read-only Directory scope.
+    google_workspace_posture_enabled: bool = Field(default=False)
 
     # Config paths inside container
     enabled_frameworks: str = (

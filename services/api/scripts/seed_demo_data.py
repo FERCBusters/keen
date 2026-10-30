@@ -2084,6 +2084,10 @@ class DemoSeeder:
         seed_quizzes(self)
         seed_link_diary(self)
         seed_stories(self, events, docs, assets, risks, objectives)
+        # Fictional cloud posture shows on the cloud vendors' pages.
+        from app.ingest.cloud.demo import seed as seed_cloud_posture
+
+        self.stats["cloud posture providers"] += seed_cloud_posture(self.db)
         # The ISMS dataset is written against ISO 27001, so it leads.
         select_frameworks(self, frameworks, default="iso_27001_2022")
 
