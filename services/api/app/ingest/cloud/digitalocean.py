@@ -1,7 +1,7 @@
 """DigitalOcean posture and resource actions for the team a token belongs to.
 
 KEEN reads the team through the built-in HTTP client with a custom-scoped,
-read-only token, and names the scope after the team's UUID from
+read-only token, and names the scope after the team's ID from
 ``/v2/account``. Listings are paged by number; links in a response are never
 followed. DigitalOcean publishes no API for team members, so KEEN lists none.
 """
@@ -27,7 +27,8 @@ from app.ingest.cloud.base import (
 )
 
 ORIGIN = "https://api.digitalocean.com"
-TEAM = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+# Team and account IDs are 40 hexadecimal digits; UUIDs are accepted too.
+IDENT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 TOKEN = re.compile(r"[A-Za-z0-9_.-]{16,512}")
 PAGE_SIZE = 200
 MAX_PAGES = 100
@@ -88,13 +89,18 @@ def connect() -> DigitalOcean:
     return DigitalOcean(ORIGIN, {"Authorization": f"Bearer {token}"})
 
 
-def team(api: DigitalOcean) -> tuple[str, str]:
+def team(api: DigitalOcean) -> tuple[str, str, str]:
+    """The scope's ID, name and kind: the token's team, or its account when
+    the token is not used in a team context."""
     account = api.get("/v2/account").get("account")
-    found = account.get("team") if isinstance(account, dict) else None
-    key = str((found or {}).get("uuid") or "") if isinstance(found, dict) else ""
-    if not TEAM.fullmatch(key):
+    account = account if isinstance(account, dict) else {}
+    found = account.get("team") if isinstance(account.get("team"), dict) else None
+    source, kind = (found, "team") if found else (account, "account")
+    key = str(source.get("uuid") or "").lower()
+    if not IDENT.fullmatch(key):
         raise Unavailable("unavailable")
-    return key, clip(found.get("name") or key, 128)
+    name = source.get("name") if found else source.get("email")
+    return key, clip(name or key, 128), kind
 
 
 def _covers(rule: dict, port: int) -> bool:
@@ -289,7 +295,7 @@ def findings(api: DigitalOcean) -> Check:
 
 def collect() -> list[ScopeResult]:
     with connect() as api:
-        key, name = team(api)
+        key, name, kind = team(api)
         checks = guarded(
             CHECKS,
             ["network.admin_ports", "network.firewall_coverage"],
@@ -301,7 +307,7 @@ def collect() -> list[ScopeResult]:
             CHECKS, ["kubernetes.control_plane"], lambda: [kubernetes(api)]
         )
         checks += guarded(CHECKS, ["findings"], lambda: [findings(api)])
-        return [ScopeResult(key, name, checks, kind="team")]
+        return [ScopeResult(key, name, checks, kind=kind)]
 
 
 # --- activity ---------------------------------------------------------------------
@@ -358,7 +364,7 @@ def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
     """Resource actions started in [since, until). The listing runs newest
     first, so reading stops at the first page older than the window."""
     with connect() as api:
-        key, _ = team(api)
+        key = team(api)[0]
         found, complete = [], False
         for page in range(1, MAX_ACTIVITY // PAGE_SIZE + 2):
             body = api.get("/v2/actions", params={"page": page, "per_page": PAGE_SIZE})

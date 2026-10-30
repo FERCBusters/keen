@@ -245,43 +245,80 @@ def vendor_posture(*, db, user, vendor_id):
     }
 
 
+NOT_QUEUED = (
+    "No refresh was queued: the provider is turned off or paused, or a "
+    "refresh was requested in the last two minutes."
+)
+
+
+def _claim(db, row: CloudProvider, now) -> bool:
+    """Whether a refresh of the provider may be queued now; claims the
+    request window when it may. The caller holds the row's lock."""
+    from app.services.ingestion_pause import is_paused
+
+    provider = cloud_provider(row.provider)
+    if not enabled(provider) or is_paused(db, provider.key):
+        return False
+    if row.refresh_requested_at and now - row.refresh_requested_at < REFRESH_SPACING:
+        return False
+    row.refresh_requested_at = now
+    return True
+
+
+def _dispatch(keys: list[str]) -> None:
+    """Queue a refresh and an activity read of each provider, after the
+    claims commit."""
+    from app.worker import tasks
+
+    for key in keys:
+        tasks.cloud_posture_refresh_task.apply_async(args=[key], expires=300)
+        if cloud_provider(key).activity is not None:
+            tasks.cloud_activity_task.apply_async(args=[key], expires=300)
+
+
 def request_refresh(*, db, user, vendor_id):
     """Queue a refresh of every enabled provider linked to the Vendor. The
     route admits administrators only."""
-    from app.services.ingestion_pause import is_paused
-    from app.worker import tasks
-
     _require_read(db, user)
     _vendor(db, vendor_id)
-    queued = []
     now = utc_now_naive()
-    for row in (
+    rows = (
         db.query(CloudProvider)
         .filter(CloudProvider.vendor_id == vendor_id, CloudProvider.provider.in_(KEYS))
         .order_by(CloudProvider.provider)
         .with_for_update()
         .all()
-    ):
-        provider = cloud_provider(row.provider)
-        if not enabled(provider) or is_paused(db, provider.key):
-            continue
-        if (
-            row.refresh_requested_at
-            and now - row.refresh_requested_at < REFRESH_SPACING
-        ):
-            continue
-        row.refresh_requested_at = now
-        queued.append(provider.key)
+    )
+    queued = [row.provider for row in rows if _claim(db, row, now)]
     db.commit()
     if not queued:
-        raise DomainError(
-            409,
-            "No refresh was queued: the provider is turned off or paused, or a "
-            "refresh was requested in the last two minutes.",
-        )
-    for key in queued:
-        tasks.cloud_posture_refresh_task.apply_async(args=[key], expires=300)
+        raise DomainError(409, NOT_QUEUED)
+    _dispatch(queued)
     return {"queued": queued}
+
+
+def run_provider(*, db, key: str) -> dict:
+    """Queue one provider's refresh and activity read from Admin's ingest
+    runners, before any Vendor shows it. The route admits administrators
+    only, and the same request window applies as on the Vendor page."""
+    from app.ingest.cloud.runner import provider_row
+
+    if key not in KEYS:
+        raise DomainError(404, "Cloud provider not found")
+    provider = cloud_provider(key)
+    if not enabled(provider):
+        raise DomainError(409, "Source type is disabled")
+    if not _claim(db, provider_row(db, provider), utc_now_naive()):
+        db.rollback()
+        raise DomainError(409, NOT_QUEUED)
+    db.commit()
+    _dispatch([key])
+    return {
+        "queued": True,
+        "providers": [key],
+        "note": f"{provider.label} posture refresh queued on the HTTP ingestion "
+        "worker; results appear on its Vendor page when it completes.",
+    }
 
 
 class CloudRiskInput(posture_risks.PostureRiskInput):

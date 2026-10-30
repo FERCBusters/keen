@@ -117,7 +117,7 @@ async function admin(t, options = {}) {
         const path = url.split('?')[0];
         if (path === '/api/v1/admin/ingest/status') {
           if (fail.ingestStatus) throw new Error('offline');
-          return { enabled: { loki: false, github: true } };
+          return options.ingestStatus ?? { enabled: { loki: false, github: true } };
         }
         if (path === '/api/v1/users') {
           if (fail.users) throw new Error('Users offline');
@@ -248,6 +248,8 @@ async function admin(t, options = {}) {
         if (fail.post) throw new Error('Rejected');
         if (url === '/api/v1/admin/groups') return { id: 'g1' };
         if (url.startsWith('/api/v1/admin/ingest/github')) return { queued: true };
+        if (url.startsWith('/api/v1/admin/ingest/cloud/'))
+          return { queued: true, providers: ['aws'], note: 'AWS posture refresh queued.' };
         return { ok: true };
       },
       apiPostForm: async (url, body) => {
@@ -362,6 +364,31 @@ test('disabled ingest runners are hidden and runners report queued work', async 
   el('resetLokiCursors').click();
   await settle(() => calls('POST', '/api/v1/admin/ingest/loki/reset').length === 1);
   assert.equal(state.prompts.at(-1).title, 'Reset Loki cursors');
+});
+
+test('cloud posture runners follow their own providers', async (t) => {
+  const run = (key) => `[data-run="/api/v1/admin/ingest/cloud/${key}/run"]`;
+  const { el, ui, calls } = await admin(t, {
+    ingestStatus: {
+      enabled: { google_workspace: false },
+      cloud: { aws: true, google_workspace: true, linode: false },
+    },
+  });
+  const doc = ui.document;
+  // The audit ingester and the posture provider are switched separately.
+  assert.equal(
+    doc.querySelector('[data-run="/api/v1/admin/ingest/google_workspace/run"]').style.display,
+    'none',
+  );
+  assert.equal(doc.querySelector(run('google_workspace')).style.display, '');
+  assert.equal(doc.querySelector(run('linode')).style.display, 'none');
+  assert.equal(el('cloudRunners').style.display, '');
+  doc.querySelector(run('aws')).click();
+  await settle(() => el('status').textContent === 'AWS posture refresh queued.');
+  assert.equal(calls('POST', '/api/v1/admin/ingest/cloud/aws/run').length, 1);
+
+  const none = await admin(t, { ingestStatus: { enabled: {}, cloud: { aws: false } } });
+  assert.equal(none.el('cloudRunners').style.display, 'none');
 });
 
 test('runner failures are shown in the output panel', async (t) => {

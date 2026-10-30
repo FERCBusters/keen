@@ -364,15 +364,22 @@ def test_vendor_page_shows_posture_to_evidence_readers_only(keen, cloud):
     )
 
 
-def test_refresh_requests_are_for_administrators_and_spaced(keen, cloud, monkeypatch):
+def capture_tasks(monkeypatch) -> list:
+    """Queued cloud tasks, as (task, keyword arguments)."""
     from app.worker import tasks
 
     queued = []
-    monkeypatch.setattr(
-        tasks.cloud_posture_refresh_task,
-        "apply_async",
-        lambda **kwargs: queued.append(kwargs),
-    )
+    for name in ("cloud_posture_refresh_task", "cloud_activity_task"):
+        monkeypatch.setattr(
+            getattr(tasks, name),
+            "apply_async",
+            lambda name=name, **kwargs: queued.append((name, kwargs)),
+        )
+    return queued
+
+
+def test_refresh_requests_are_for_administrators_and_spaced(keen, cloud, monkeypatch):
+    queued = capture_tasks(monkeypatch)
     runner.refresh(keen.db, "aws")
     path = f"/v1/isms/vendors/{vendor_of(keen)}/cloud-posture/refresh"
     reader = keen.client(keen.user(*READER))
@@ -382,16 +389,78 @@ def test_refresh_requests_are_for_administrators_and_spaced(keen, cloud, monkeyp
     response = admin.post(path, headers=unsafe(admin))
     assert response.status_code == 202, response.text
     assert response.json() == {"queued": ["aws"]}
-    assert queued == [{"args": ["aws"], "expires": 300}]
+    assert queued == [
+        ("cloud_posture_refresh_task", {"args": ["aws"], "expires": 300}),
+        ("cloud_activity_task", {"args": ["aws"], "expires": 300}),
+    ]
     again = admin.post(path, headers=unsafe(admin))
     assert again.status_code == 409
     monkeypatch.setattr(settings, "aws_enabled", False)
     keen.db.get(CloudProvider, "aws").refresh_requested_at = None
     keen.db.commit()
     assert admin.post(path, headers=unsafe(admin)).status_code == 409
-    assert len(queued) == 1
+    assert len(queued) == 2
     data = admin.get(f"/v1/isms/vendors/{vendor_of(keen)}/cloud-posture").json()
     assert data["can_refresh"] is True and data["providers"][0]["enabled"] is False
+
+
+def test_admin_runners_queue_a_provider_before_any_vendor_shows_it(
+    keen, cloud, monkeypatch
+):
+    queued = capture_tasks(monkeypatch)
+    path = "/v1/admin/ingest/cloud/aws/run"
+    reader = keen.client(keen.user(*READER, "risk.manage"))
+    assert reader.post(path, headers=unsafe(reader)).status_code == 403
+    admin = keen.client(keen.user(role="admin"))
+    assert admin.post(path).status_code == 403  # CSRF and Origin are required.
+    for bad in ("telepathy", "AWS", "aws%2Frun", "x" * 40):
+        response = admin.post(
+            f"/v1/admin/ingest/cloud/{bad}/run", headers=unsafe(admin)
+        )
+        assert response.status_code in (404, 422), (bad, response.status_code)
+    monkeypatch.setattr(settings, "linode_enabled", False)
+    response = admin.post("/v1/admin/ingest/cloud/linode/run", headers=unsafe(admin))
+    assert response.status_code == 409
+    assert keen.db.get(CloudProvider, "linode") is None
+    # Requests share the test's connection; end this read before they write.
+    keen.db.rollback()
+    assert queued == []
+
+    response = admin.post(path, headers=unsafe(admin))
+    assert response.status_code == 202, response.text
+    assert response.json()["providers"] == ["aws"]
+    assert "AWS" in response.json()["note"]
+    assert [name for name, _ in queued] == [
+        "cloud_posture_refresh_task",
+        "cloud_activity_task",
+    ]
+    # One request window per provider, shared with the Vendor page.
+    assert admin.post(path, headers=unsafe(admin)).status_code == 409
+    runner.refresh(keen.db, "aws")
+    refresh = f"/v1/isms/vendors/{vendor_of(keen)}/cloud-posture/refresh"
+    assert admin.post(refresh, headers=unsafe(admin)).status_code == 409
+    keen.db.get(CloudProvider, "aws").refresh_requested_at = None
+    keen.db.add(SourceIngestionState(source="aws", paused=True))
+    keen.db.commit()
+    assert admin.post(path, headers=unsafe(admin)).status_code == 409
+    assert len(queued) == 2
+
+    status = admin.get("/v1/admin/ingest/status").json()
+    assert status["cloud"]["aws"] is True and status["cloud"]["linode"] is False
+    assert set(status["cloud"]) == set(KEYS)
+
+
+def test_a_failed_first_read_still_shows_its_reason_on_a_vendor(keen, cloud):
+    cloud["results"] = Unavailable("not_configured")
+    cloud["activity"] = Unavailable("permission_denied")
+    assert runner.refresh(keen.db, "aws")["error"] == "not_configured"
+    assert runner.collect_activity(keen.db, "aws")["error"] == "permission_denied"
+    client = keen.client(keen.user(*READER))
+    data = client.get(f"/v1/isms/vendors/{vendor_of(keen)}/cloud-posture").json()
+    (provider,) = data["providers"]
+    assert provider["scopes"] == []
+    assert "credentials were not accepted" in provider["error"]
+    assert "not allowed" in provider["activity_error"]
 
 
 def test_risks_are_recorded_against_checks_and_subjects(keen, cloud):

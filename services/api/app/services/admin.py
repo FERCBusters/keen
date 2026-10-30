@@ -35,6 +35,8 @@ from app.db.models import (
     user_groups,
 )
 from app.ingest.bookstack import apply_bookstack_config_mappings
+from app.ingest.cloud import providers as cloud_providers
+from app.ingest.cloud.runner import enabled as cloud_enabled
 from app.ingest.common import apply_rules
 from app.ingest.diary import add_diary_entry
 from app.ingest.loki import load_loki_queries
@@ -914,7 +916,10 @@ def admin_ingest_status(*, user):
             "bookstack": bool(settings.bookstack_enabled),
             "imap": bool(settings.imap_enabled) and not settings.demo_mode,
             "rss": bool(settings.rss_enabled),
-        }
+        },
+        # Cloud vendor posture providers, keyed apart from the ingesters:
+        # Google Workspace is both.
+        "cloud": {p.key: cloud_enabled(p) for p in cloud_providers()},
     }
 
 

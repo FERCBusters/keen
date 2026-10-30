@@ -293,6 +293,9 @@ def refresh(db, key: str, *, force: bool = False) -> dict:
                 failure = "unavailable"
             if failure:
                 row = provider_row(db, provider)
+                # Linked even when the first read fails, so the Vendor page
+                # can show why.
+                link_vendor(db, provider, row)
                 row.attempted_at = utc_now_naive()
                 row.error = failure
                 db.commit()
@@ -380,6 +383,7 @@ def collect_activity(db, key: str, *, force: bool = False) -> dict:
                 failure = "unavailable"
             if failure:
                 row = provider_row(db, provider)
+                link_vendor(db, provider, row)
                 row.activity_error = failure
                 db.commit()
                 return {"provider": key, "error": failure}

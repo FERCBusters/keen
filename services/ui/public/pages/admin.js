@@ -167,15 +167,22 @@ async function hideDisabledIngestButtons() {
   try {
     const data = await apiGet('/api/v1/admin/ingest/status');
     const enabled = data?.enabled || {};
+    const cloud = data?.cloud || {};
     document.querySelectorAll('[data-run]').forEach((btn) => {
       const path = (btn.getAttribute('data-run') || '').trim();
-      const m = path.match(/\/admin\/ingest\/([^/]+)\/run/i);
-      const name = (m?.[1] || '').toLowerCase();
+      const m = path.match(/\/admin\/ingest\/(cloud\/)?([^/]+)\/run/i);
+      const name = (m?.[2] || '').toLowerCase();
       if (!name) return;
-      if (enabled[name] === false) {
+      // Cloud posture providers have their own map: Google Workspace is
+      // both an ingester and a posture provider.
+      if ((m[1] ? cloud : enabled)[name] === false) {
         btn.style.display = 'none';
       }
     });
+    const cloudRunners = document.getElementById('cloudRunners');
+    if (cloudRunners && !Object.values(cloud).some(Boolean)) {
+      cloudRunners.style.display = 'none';
+    }
     const resetLokiBtn = document.getElementById('resetLokiCursors');
     if (resetLokiBtn && enabled.loki === false) {
       resetLokiBtn.style.display = 'none';

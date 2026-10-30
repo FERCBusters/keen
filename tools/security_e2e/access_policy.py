@@ -273,6 +273,7 @@ POLICY = {
     "PUT /v1/admin/groups/{group_id}/members": ADMIN,
     "PUT /v1/admin/groups/{group_id}/permissions": ADMIN,
     "POST /v1/admin/ingest/bookstack/run": ADMIN,
+    "POST /v1/admin/ingest/cloud/{provider}/run": ADMIN,
     "POST /v1/admin/ingest/cloudwatch_logs/run": ADMIN,
     "POST /v1/admin/ingest/forgejo/run": ADMIN,
     "POST /v1/admin/ingest/gitea/run": ADMIN,

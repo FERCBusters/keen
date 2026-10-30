@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import Depends, Request
+from fastapi import Depends, Path, Request
 from sqlalchemy.orm import Session
 
 from app.api.context import change_context
@@ -30,6 +30,7 @@ from app.schemas import (
 )
 from app.security.auth import require_admin, require_authenticated
 from app.services import admin as service
+from app.services import cloud_posture
 from app.services.presentation import (
     normalize_diary_details as _normalize_diary_details,
 )
@@ -212,6 +213,15 @@ def admin_run_google_workspace_ingest(
     db: Session = Depends(get_db),
 ):
     return service.admin_run_google_workspace_ingest(user=user, db=db)
+
+
+@router.post("/v1/admin/ingest/cloud/{provider}/run", status_code=202)
+def admin_run_cloud_posture(
+    provider: str = Path(max_length=32),
+    user=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return cloud_posture.run_provider(db=db, key=provider)
 
 
 @router.get("/v1/admin/ingest/status")

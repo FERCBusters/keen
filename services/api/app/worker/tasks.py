@@ -164,11 +164,13 @@ def cloud_posture_refresh_task(provider: str | None = None) -> list[dict]:
     soft_time_limit=1500,
     time_limit=1800,
 )
-def cloud_activity_task() -> list[dict]:
+def cloud_activity_task(provider: str | None = None) -> list[dict]:
     from app.ingest.cloud import runner
 
     with SessionLocal() as db:
-        return runner.activity_all(db)
+        if provider is None:
+            return runner.activity_all(db)
+        return [runner.collect_activity(db, provider)]
 
 
 @celery_app.task(name="app.worker.tasks.materialize_scheduled_audits_task")

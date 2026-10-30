@@ -12,7 +12,9 @@ from app.ingest.cloud import digitalocean as do
 from app.ingest.cloud.base import Unavailable
 
 TOKEN = "dop_v1_synthetic0token0value0000"
-TEAM = "5f0c1d2e-3a4b-4c5d-8e6f-708192a3b4c5"
+# DigitalOcean team and account IDs are 40 hexadecimal digits.
+TEAM = "5df3e3004a17e242b7c20ca6c9fc25b701a47ece"
+ACCOUNT = "b6fc48dbf6d9906cace5f3c78dc9851e757381ef"
 DB_OPEN = "0f0e0d0c-0b0a-4908-8706-050403020100"
 DB_SAFE = "1f1e1d1c-1b1a-4918-8716-151413121110"
 NOW = datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
@@ -36,7 +38,13 @@ def anywhere(*ports, action="allow"):
 
 def default_data():
     return {
-        "/v2/account": {"account": {"team": {"uuid": TEAM, "name": "Example Ltd"}}},
+        "/v2/account": {
+            "account": {
+                "uuid": ACCOUNT,
+                "email": "owner@example.org",
+                "team": {"uuid": TEAM, "name": "Example Ltd"},
+            }
+        },
         "/v2/droplets": [
             {"id": 1, "name": "web-1", "tags": ["web"], "features": ["backups"]},
             {"id": 2, "name": "staging-web", "tags": [], "features": []},
@@ -184,6 +192,23 @@ def test_collect_reads_the_team(use):
     assert checks["findings"].status == "attention"
     assert checks["findings"].detail.startswith("0 critical and 1 high")
     assert all(r.url.host == "api.digitalocean.com" for r in api.requests)
+
+
+def test_the_scope_is_the_team_or_else_the_account(use):
+    data = default_data()
+    data["/v2/account"]["account"].pop("team")
+    use(Api(data))
+    [scope] = do.collect()
+    assert (scope.key, scope.label, scope.kind) == (
+        ACCOUNT,
+        "owner@example.org",
+        "account",
+    )
+    for bad in ("", "not-an-id", "g" * 40, "../v2/droplets"):
+        data["/v2/account"]["account"]["uuid"] = bad
+        use(Api(data))
+        with pytest.raises(Unavailable):
+            do.collect()
 
 
 def test_a_deny_rule_for_every_address_wins():
