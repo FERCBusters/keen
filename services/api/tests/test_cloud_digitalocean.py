@@ -262,6 +262,70 @@ def test_activity_stops_at_the_window(use):
     assert entries[0].scope == TEAM
 
 
+def test_a_valid_token_opens_a_session_on_digitaloceans_host(monkeypatch):
+    monkeypatch.setattr(settings, "digitalocean_token", TOKEN)
+    with do.connect() as api:
+        assert api.origin == do.ORIGIN
+
+
+def test_rules_that_cannot_admit_the_port_are_ignored():
+    def allow(protocol, ports, addresses):
+        return {
+            "protocol": protocol,
+            "ports": ports,
+            "action": "allow",
+            "sources": {"addresses": addresses},
+        }
+
+    wall = {
+        "inbound_rules": [
+            allow("udp", "22", ["0.0.0.0/0"]),
+            allow("tcp", "ssh", ["0.0.0.0/0"]),
+            allow("tcp", "3389", ["not-an-address", "::/0"]),
+        ]
+    }
+    assert do.exposed_ports(wall) == [3389]
+
+
+def test_database_listings_must_be_bounded_and_well_formed(use, monkeypatch):
+    for change in (
+        {"/v2/databases": [{"id": "../v2/account", "name": "odd"}]},
+        {f"/v2/databases/{DB_OPEN}/firewall": {"rules": "none"}},
+    ):
+        use(Api({**default_data(), **change}))
+        [scope] = do.collect()
+        assert by_key(scope.checks)["network.databases"].reason == "unavailable"
+    monkeypatch.setattr(do, "MAX_DATABASES", 1)
+    use(Api())
+    [scope] = do.collect()
+    assert by_key(scope.checks)["network.databases"].status == "unknown"
+
+
+def test_clusters_without_upgrades_and_clean_scans(use):
+    data = default_data()
+    data["/v2/kubernetes/clusters"] = [
+        {"id": "k3", "name": "edge", "ha": True, "auto_upgrade": False}
+    ]
+    data["/v2/security/scans/latest"] = {"scan": {"status": "COMPLETED"}}
+    use(Api(data))
+    [scope] = do.collect()
+    checks = by_key(scope.checks)
+    assert checks["kubernetes.control_plane"].subjects == [
+        "edge: no automatic upgrades"
+    ]
+    assert checks["findings"].status == "met"
+
+
+def test_unreadable_actions_are_skipped_and_activity_is_bounded(use, monkeypatch):
+    assert do._when("") is None and do._when("yesterday") is None
+    assert do._when("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
+    assert do.action_entry({"id": "9", "type": "x", "started_at": ago(1)}, TEAM) is None
+    monkeypatch.setattr(do, "MAX_ACTIVITY", 1)
+    use(Api(page_size=2))
+    entries, complete = do.activity(NOW - timedelta(hours=6), NOW)
+    assert [e.id for e in entries] == ["action:9"] and complete is False
+
+
 def test_help_documents_scopes_checks_and_settings():
     from pathlib import Path
 

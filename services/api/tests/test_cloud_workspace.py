@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import datetime
 
 import pytest
 from app.core.config import settings
@@ -64,6 +65,15 @@ def test_directory_checks_and_identities(directory):
     assert len([c for c in directory.calls if c[0] == "users.list"]) == 3
     assert directory.services[0].closed
     assert all(kwargs["customer"] == "my_customer" for _, kwargs in directory.calls)
+
+
+def test_times_are_read_strictly_and_listings_bounded(directory, monkeypatch):
+    assert workspace._when("yesterday") is None
+    assert workspace._when("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
+    monkeypatch.setattr(workspace, "MAX_IDENTITIES", 1)
+    with pytest.raises(Unavailable) as caught:
+        workspace.users()
+    assert caught.value.reason == "unavailable"
 
 
 def test_users_of_another_customer_are_refused(directory):

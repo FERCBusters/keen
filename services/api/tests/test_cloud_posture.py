@@ -3,6 +3,7 @@ assembled application against PostgreSQL."""
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import logging
 import uuid
@@ -25,6 +26,8 @@ from app.db.models import (
 )
 from app.ingest.cloud import KEYS, aws, providers, runner
 from app.ingest.cloud.base import Activity, Check, Identity, ScopeResult, Unavailable
+from app.services.errors import DomainError
+from sqlalchemy.exc import IntegrityError
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe
@@ -657,3 +660,141 @@ def test_scopes_keep_their_kind_and_checks_their_own_label(keen, cloud):
     assert found[ACCOUNT]["kind"] == "account"
     assert found["444455556666"]["kind"] == "organisation"
     assert found["444455556666"]["checks"][0]["label"] == "Owners"
+
+
+# --- concurrency and failure paths ---------------------------------------------------
+
+
+@contextlib.contextmanager
+def held_elsewhere(db, name):
+    yield False
+
+
+def test_runs_held_elsewhere_or_paused_meanwhile_are_skipped(keen, cloud, monkeypatch):
+    db = keen.db
+    monkeypatch.setattr(runner, "run_lock", held_elsewhere)
+    assert runner.refresh(db, "aws")["reason"] == "running"
+    assert runner.collect_activity(db, "aws")["reason"] == "running"
+    assert cloud["calls"] == 0
+    monkeypatch.undo()
+    monkeypatch.setattr(settings, "aws_enabled", True)
+    monkeypatch.setattr(settings, "demo_mode", False)
+
+    def purging(*args, **kwargs):
+        raise DomainError(409, "Ingestion is paused")
+
+    monkeypatch.setattr(runner, "store", purging)
+    monkeypatch.setattr(runner, "record_activity", purging)
+    monkeypatch.setattr(
+        aws,
+        "PROVIDER",
+        dataclasses.replace(
+            aws.PROVIDER,
+            collect=lambda: [scope()],
+            activity=lambda since, until: ([entry("a", until)], True),
+        ),
+    )
+    assert runner.refresh(db, "aws")["reason"] == "paused"
+    assert runner.collect_activity(db, "aws")["reason"] == "paused"
+    assert db.query(CloudPostureScope).count() == 0
+
+
+def test_activity_needs_a_reader_and_an_open_window(keen, cloud, monkeypatch, caplog):
+    db = keen.db
+    cloud["activity"] = RuntimeError("secret=abc")
+    with caplog.at_level(logging.WARNING):
+        assert runner.collect_activity(db, "aws")["error"] == "unavailable"
+    assert "secret=abc" not in caplog.text
+    with runner.connection_scope(runner.connection(aws.PROVIDER)):
+        name = runner.namespace("cloud-activity:aws")
+    db.add(
+        IngestionCursor(
+            name=name, last_ts=utc_now_naive() + timedelta(hours=1), meta={}
+        )
+    )
+    db.commit()
+    assert runner.collect_activity(db, "aws") == {"provider": "aws", "records": 0}
+    monkeypatch.setattr(
+        aws, "PROVIDER", dataclasses.replace(aws.PROVIDER, activity=None)
+    )
+    assert runner.collect_activity(db, "aws")["reason"] == "no activity"
+
+
+def test_blank_and_repeated_scopes_are_stored_once_and_none_clears_all(keen, cloud):
+    db = keen.db
+    cloud["results"] = [scope(), scope(key=""), scope()]
+    assert runner.refresh(db, "aws")["scopes"] == 3
+    assert db.query(CloudPostureScope).count() == 1
+    cloud["results"] = []
+    runner.refresh(db, "aws")
+    assert db.query(CloudPostureScope).count() == 0
+
+
+def test_schedules_report_a_provider_that_fails_and_carry_on(keen, monkeypatch, caplog):
+    db = keen.db
+
+    def failing(db, key, **kwargs):
+        if key == "aws":
+            raise RuntimeError("token=secret")
+        return {"provider": key, "records": 0}
+
+    monkeypatch.setattr(runner, "refresh", failing)
+    monkeypatch.setattr(runner, "collect_activity", failing)
+    with caplog.at_level(logging.WARNING):
+        refreshed = runner.refresh_all(db)
+        read = runner.activity_all(db)
+    assert {"provider": "aws", "error": "failed"} in refreshed
+    assert {"provider": "aws", "error": "failed"} in read
+    assert len(read) == len(KEYS) and "token=secret" not in caplog.text
+
+
+class Missing:
+    """A query that finds nothing, as one made before another run's insert."""
+
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: self if name != "first" else None
+
+    def one_or_none(self):
+        return None
+
+
+def test_rows_and_vendors_added_by_a_concurrent_run_are_used(keen, cloud, monkeypatch):
+    db = keen.db
+    db.add(CloudProvider(provider="aws"))
+    vendor = IsmsVendor(name="Amazon Web Services")
+    db.add(vendor)
+    db.commit()
+    real = db.query
+    answers = [Missing()]
+
+    def racing(*entities):
+        return answers.pop(0) if answers else real(*entities)
+
+    # The first lookups miss rows another run commits before the inserts.
+    monkeypatch.setattr(db, "query", racing)
+    row = runner.provider_row(db, aws.PROVIDER)
+    assert row.provider == "aws"
+    answers.append(Missing())
+    assert runner.link_vendor(db, aws.PROVIDER, row) == vendor.id
+
+
+def test_a_vendor_id_conflict_without_a_name_match_is_raised(keen, monkeypatch):
+    db = keen.db
+    ident = runner.vendor_id_for(aws.PROVIDER)
+    db.add(IsmsVendor(id=ident, name="Renamed supplier"))
+    row = CloudProvider(provider="aws")
+    db.add(row)
+    db.commit()
+    # KEEN's own vendor, renamed, is kept.
+    assert runner.link_vendor(db, aws.PROVIDER, row) == ident
+    row.vendor_id = None
+    real = db.get
+    monkeypatch.setattr(
+        db,
+        "get",
+        lambda model, key, **kw: (
+            None if model is IsmsVendor else real(model, key, **kw)
+        ),
+    )
+    with pytest.raises(IntegrityError):
+        runner.link_vendor(db, aws.PROVIDER, row)

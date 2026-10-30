@@ -487,6 +487,92 @@ def test_admin_activity_reads_iam_and_policy_changes(monkeypatch, configured):
         gc.activity(now - timedelta(hours=6), now)
 
 
+def test_clients_carry_the_key_and_unknown_members_are_left_out(monkeypatch):
+    monkeypatch.setattr(gc.google, "client", lambda *args: args)
+    api = gc.Api(dict(KEY), f"organizations/{ORG}")
+    assert api.client("logging", "v2", [gc.READ_ONLY]) == (
+        "logging",
+        "v2",
+        KEY,
+        [gc.READ_ONLY],
+    )
+    assert gc._member("principalSet:x") is None
+    assert gc._when("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
+
+
+def test_project_administrators_and_repeated_bindings(monkeypatch, configured):
+    fake = FakeCloud(parent="projects/solo-project-1")
+    bindings = fake.policies["roles/owner"][0]["policy"]["bindings"]
+    bindings.append({"role": "roles/owner", "members": ["user:alice@example.org"]})
+    fake.assets[gc.KEY_ASSET] = []
+    fake.groups = []
+    monkeypatch.setattr(gc, "connect", lambda: fake)
+    (result,) = gc.collect()
+    found = by_key(result.checks)
+    people = {p.name: p for p in result.identities}
+    assert people["alice@example.org"].detail == "Owner"
+    assert found["credentials.key_age"].detail == "No user-managed service account keys"
+    assert found["findings"].status == "met"
+    monkeypatch.setattr(gc, "MAX_IDENTITIES", 1)
+    (result,) = gc.collect()
+    assert by_key(result.checks)["identity.admins"].reason == "unavailable"
+
+
+class PolicyFailures(FakeCloud):
+    def __init__(self, failures):
+        super().__init__()
+        self.failures = failures
+
+    def answer(self, name, kwargs):
+        constraint = kwargs.get("name", "").rsplit("/", 1)[-1]
+        if constraint in self.failures:
+            raise http_error(self.failures[constraint])
+        return super().answer(name, kwargs)
+
+
+def test_managed_constraints_an_organisation_lacks_count_as_unset(
+    monkeypatch, configured
+):
+    fake = PolicyFailures({"iam.managed.allowedPolicyMembers": 400})
+    monkeypatch.setattr(gc, "connect", lambda: fake)
+    (result,) = gc.collect()
+    assert by_key(result.checks)["google_cloud.domain_sharing"].status == "met"
+    fake = PolicyFailures({"storage.publicAccessPrevention": 403})
+    monkeypatch.setattr(gc, "connect", lambda: fake)
+    (result,) = gc.collect()
+    found = by_key(result.checks)
+    assert found["storage.public_access"].reason == "permission_denied"
+
+
+def test_list_constraints_and_unreadable_rules():
+    rules = ["junk", {"condition": {"expression": "x"}}, {}, {"enforce": True}]
+    assert gc._restricted({"rules": rules}) == (True, 0)
+    assert gc._restricted({"rules": [{"allowAll": True}]}) == (False, 0)
+    rule = {
+        "priority": 1,
+        "sourceRanges": ["not-a-range", "0.0.0.0/0"],
+        "allowed": ["junk", {"IPProtocol": "tcp", "ports": ["ssh", "3389"]}],
+    }
+    assert gc.exposed_ports([rule]) == [3389]
+
+
+def test_activity_beyond_the_ceiling_keeps_the_newest(monkeypatch, configured):
+    fake = FakeCloud()
+    now = NOW.replace(tzinfo=None)
+    fake.entries = [
+        {
+            "insertId": f"e{n}",
+            "timestamp": stamp(NOW - timedelta(hours=n)),
+            "protoPayload": {"methodName": "SetIamPolicy"},
+        }
+        for n in (1, 2, 3)
+    ]
+    monkeypatch.setattr(gc, "connect", lambda: fake)
+    monkeypatch.setattr(gc, "MAX_ACTIVITY", 1)
+    entries, complete = gc.activity(now - timedelta(hours=6), now)
+    assert len(entries) == 1 and complete is False
+
+
 def test_help_documents_roles_checks_and_settings():
     from pathlib import Path
 

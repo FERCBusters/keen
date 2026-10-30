@@ -937,6 +937,153 @@ def test_activity_reports_truncation(monkeypatch, credentials):
     assert complete is False and len(entries) == 3
 
 
+def test_connect_hands_the_settings_to_one_session(monkeypatch, credentials):
+    monkeypatch.setattr(az, "Azure", lambda *args: args)
+    assert az.connect() == (TENANT, CLIENT, SECRET)
+
+
+def test_unreadable_errors_and_tokens_are_unavailable():
+    assert az._error(httpx.Response(403, content=b"<html>")) == ("", "")
+    assert az._error(httpx.Response(403, json={"error": "denied"})) == ("", "")
+    assert az._when("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
+    assert az.audit_entry({"id": "a1"}, TENANT) is None
+
+    def refuse(request):
+        raise httpx.ConnectError("secret", request=request)
+
+    answers = (
+        refuse,
+        lambda request: httpx.Response(200, content=b"not json"),
+        lambda request: httpx.Response(200, json={"access_token": ""}),
+        lambda request: httpx.Response(200, json=["token"]),
+    )
+    for handler in answers:
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        with pytest.raises(Unavailable) as caught:
+            az.Azure(TENANT, CLIENT, SECRET, client=client)
+        assert caught.value.reason == "unavailable"
+
+
+def test_paging_links_must_be_text():
+    api = Api()
+    session = api.azure()
+    session.apis["graph"].http._transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200, json={"value": [], "@odata.nextLink": {"href": "x"}}
+        )
+    )
+    with pytest.raises(Unavailable):
+        session.pages("graph", "/v1.0/users")
+
+
+@pytest.mark.parametrize(
+    "platforms",
+    [{"includePlatforms": ["android"]}, {"excludePlatforms": ["linux"]}],
+)
+def test_conditional_access_for_some_platforms_is_not_everyone(platforms):
+    policy = {
+        "state": "enabled",
+        "conditions": {
+            "users": {"includeUsers": ["All"]},
+            "applications": {"includeApplications": ["All"]},
+            "platforms": platforms,
+        },
+        "grantControls": {"operator": "OR", "builtInControls": ["mfa"]},
+    }
+    assert az.requires_mfa(policy) is False
+    policy["conditions"]["platforms"] = {"includePlatforms": ["All"]}
+    assert az.requires_mfa(policy) is True
+
+
+def test_tenant_listings_are_bounded_and_refusals_are_reasons(monkeypatch, credentials):
+    monkeypatch.setattr(az, "MAX_IDENTITIES", 1)
+    found = by_key(az.tenant_result(Api().azure()).checks)
+    for key in ("identity.mfa", "identity.inactive", "credentials.key_age"):
+        assert (found[key].status, found[key].reason) == ("unknown", "unavailable")
+    monkeypatch.setattr(az, "MAX_IDENTITIES", 5000)
+    denied = (403, {"error": {"code": "Authorization_RequestDenied"}})
+    api = Api(status={("graph", "/v1.0/identity/conditionalAccess/policies"): denied})
+    found = by_key(az.tenant_result(api.azure()).checks)
+    assert found["identity.mfa_enforced"].reason == "permission_denied"
+
+
+def test_group_exclusions_and_credential_ages(credentials):
+    data = default_data()
+    policies = data[("graph", "/v1.0/identity/conditionalAccess/policies")]
+    policies[1]["conditions"]["users"].update(excludeUsers=[], excludeRoles=["r1"])
+    data[("graph", "/v1.0/applications")] = []
+    found = by_key(az.tenant_result(Api(data).azure()).checks)
+    assert (
+        found["identity.mfa_enforced"].status,
+        found["identity.mfa_enforced"].detail,
+    ) == (
+        "met",
+        "MFA is required by 2 Conditional Access policies; 1 group or role excluded",
+    )
+    assert found["credentials.key_age"].detail == "No live secrets or certificates"
+    data[("graph", "/v1.0/applications")] = [
+        {
+            "displayName": "Billing",
+            "passwordCredentials": [
+                {"startDateTime": ago(200), "endDateTime": ago(-400)}
+            ],
+        }
+    ]
+    keys = by_key(az.tenant_result(Api(data).azure()).checks)["credentials.key_age"]
+    assert keys.detail == "1 of 1 live secret or certificate older than 90 days"
+
+
+def test_subscription_edge_cases(monkeypatch, credentials):
+    sub = f"/subscriptions/{SUB}"
+    data = default_data()
+    data[("arm", sub + "/providers/Microsoft.Insights/diagnosticSettings")] = {
+        "value": []
+    }
+    data[("arm", sub + "/providers/Microsoft.Security/secureScores/ascScore")] = {
+        "properties": {"score": {"percentage": "high"}}
+    }
+    data[("arm", sub + "/providers/Microsoft.Sql/servers")] = [
+        server("Microsoft.Sql/servers", "theirs") | {"id": "/subscriptions/x/y"}
+    ]
+    denied = (403, {"error": {"code": "Authorization_RequestDenied"}})
+    api = Api(data, status={("graph", f"/v1.0/users/{uid(1)}"): denied})
+    found = by_key(az.subscription_result(api.azure(), SUB, "Production").checks)
+    assert uid(1) in found["identity.admins"].subjects
+    assert found["logging.audit_trail"].status == "attention"
+    assert found["findings"].detail == "3 high, 4 medium and 0 low recommendations"
+    assert found["network.databases"].status == "unknown"
+
+
+def test_rules_with_unreadable_ports_or_priorities_are_ignored():
+    group = {
+        "properties": {
+            "securityRules": [
+                rule("Allow", "*", "ssh", 100),
+                rule("Allow", "*", "22", "first"),
+                rule("Allow", "*", "3389", 300),
+            ]
+        }
+    }
+    assert az.exposed_ports(group) == [3389]
+
+
+def test_activity_skips_subscriptions_outside_the_tenant(monkeypatch, credentials):
+    data = default_data()
+    data[("arm", f"/subscriptions/{OTHER}")] = {
+        "subscriptionId": OTHER,
+        "tenantId": uid(77),
+    }
+    monkeypatch.setattr(settings, "azure_subscriptions", f"{SUB},{OTHER}")
+    api = Api(data, page_size=10)
+    use(monkeypatch, api)
+    now = NOW.replace(tzinfo=None)
+    entries, _ = az.activity(now - timedelta(hours=6), now)
+    assert {e.scope for e in entries if e.id.startswith("activity:")} == {SUB}
+    assert not any(
+        OTHER in r.url.path and "eventtypes" in r.url.path for r in api.requests
+    )
+
+
 def test_help_documents_permissions_checks_and_settings():
     from pathlib import Path
 

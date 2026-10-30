@@ -20,7 +20,9 @@ from tests.cloud_fakes import (
     FakeS3Control,
     FakeSession,
     ago,
+    default_rows,
     error,
+    report,
     row,
     trail_event,
 )
@@ -813,3 +815,141 @@ def test_help_documents_every_action_check_and_setting():
         assert f"<code>{name}</code>" in text, name
     for region in aws.SIGNIN_REGIONS:
         assert f"<code>{region}</code>" in text
+
+
+# --- edge cases -------------------------------------------------------------------
+
+
+def test_unreadable_report_values_and_documents_are_tolerated():
+    assert aws._when("not a date") is None
+    assert aws._when("2026-10-01T09:30:00+10:00") == datetime(2026, 9, 30, 23, 30)
+    iam = FakeIam()
+    iam.content = report(default_rows()).decode()
+    assert aws.credential_report(iam)
+    iam.content = b"\xff\xfe"
+    with pytest.raises(Unavailable):
+        aws.credential_report(iam)
+    assert aws._trail_detail("{not json") == {}
+    assert aws._trail_detail("[]") == {}
+    assert aws._email("alice", [{"Key": "Email", "Value": "not an address"}]) == ""
+    assert aws._email("alice", ["not a tag", {"Key": "mail", "Value": "a@b.org"}]) == (
+        "a@b.org"
+    )
+
+
+def test_password_policy_and_alias_failures(monkeypatch):
+    with pytest.raises(Unavailable) as caught:
+        aws.password_policy(
+            FakeIam(fail={"get_account_password_policy": "AccessDenied"})
+        )
+    assert caught.value.reason == "permission_denied"
+
+    class Broken(FakeIam):
+        def get_account_password_policy(self):
+            raise EndpointConnectionError(endpoint_url="https://iam.amazonaws.com")
+
+    with pytest.raises(Unavailable):
+        aws.password_policy(Broken())
+    session = FakeSession(FakeIam(fail={"list_account_aliases": "AccessDenied"}))
+    assert aws._alias(session) == ""
+
+
+def test_signing_certificates_and_policies_granting_everything():
+    check = aws.root_check(
+        {
+            "AccountMFAEnabled": 1,
+            "AccountAccessKeysPresent": 0,
+            "AccountSigningCertificatesPresent": 1,
+        },
+        None,
+    )
+    assert check.detail == "Root user: it has signing certificates"
+    details = {
+        "Policies": [
+            {
+                "Arn": "arn:aws:iam::111122223333:policy/Everything",
+                "PolicyVersionList": [
+                    {
+                        "IsDefaultVersion": True,
+                        "Document": {
+                            "Statement": [
+                                {"Effect": "Allow", "Action": "*", "Resource": "*"}
+                            ]
+                        },
+                    }
+                ],
+            },
+            {"Arn": "arn:aws:iam::111122223333:policy/Old", "PolicyVersionList": []},
+        ],
+        "GroupDetailList": [],
+        "UserDetailList": [
+            {
+                "Arn": "arn:aws:iam::111122223333:user/ops",
+                "AttachedManagedPolicies": [
+                    {"PolicyArn": "arn:aws:iam::111122223333:policy/Everything"}
+                ],
+            },
+            {
+                "Arn": "arn:aws:iam::111122223333:user/viewer",
+                "AttachedManagedPolicies": [
+                    {"PolicyArn": "arn:aws:iam::aws:policy/ReadOnlyAccess"}
+                ],
+            },
+        ],
+        "RoleDetailList": [],
+    }
+    users, roles = aws.administrators(details)
+    assert users == {"arn:aws:iam::111122223333:user/ops"} and roles == []
+
+
+def test_trails_without_an_arn_and_s3_endpoint_failures():
+    class Trails(FakeCloudTrail):
+        def describe_trails(self, **options):
+            return {"trailList": [{"Name": "no-arn"}, "not a trail"]}
+
+    session = FakeSession(FakeIam(), trails=Trails())
+    assert aws.audit_trail(session).detail.startswith("No multi-region trail")
+
+    class Broken(FakeS3Control):
+        def get_public_access_block(self, AccountId):  # noqa: N803 - mirrors boto3
+            raise EndpointConnectionError(endpoint_url="https://s3-control")
+
+    with pytest.raises(Unavailable):
+        aws.public_access(FakeSession(FakeIam(), control=Broken()))
+    group = {"IpPermissions": ["not a permission"]}
+    assert aws.reaches(group, 22) is False
+
+
+def test_password_events_and_incomplete_lookups():
+    when = datetime(2026, 10, 1, 9, 30, tzinfo=timezone.utc)
+    changed = aws.trail_entry(trail_event("PasswordUpdated", when), ACCOUNT)
+    assert changed.outcome == "success"
+    failed = aws.trail_entry(
+        trail_event("PasswordUpdated", when, error_code="Denied"), ACCOUNT
+    )
+    assert failed.outcome == "failure"
+    naive = aws.trail_entry(
+        trail_event("ConsoleLogin", when.replace(tzinfo=None)), ACCOUNT
+    )
+    assert naive.at == datetime(2026, 10, 1, 9, 30)
+    assert aws._when("2026-10-01T09:30:00") == datetime(2026, 10, 1, 9, 30)
+    unnamed = trail_event("ConsoleLogin", when)
+    unnamed["EventTime"] = "not a time"
+    assert aws.trail_entry(unnamed, ACCOUNT) is None
+
+    class Lookups:
+        def __init__(self):
+            self.calls = 0
+
+        def lookup_events(self, **options):
+            self.calls += 1
+            return {
+                "Events": ["not an event", trail_event("ConsoleLogin", when)],
+                "NextToken": "more",
+            }
+
+    client = Lookups()
+    found, pages, complete = aws._lookup(
+        client, "signin.amazonaws.com", NOW, NOW, ACCOUNT, room=0, pages=3
+    )
+    assert (len(found), pages, complete) == (1, 1, False)

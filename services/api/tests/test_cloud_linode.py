@@ -314,6 +314,64 @@ def test_refusals_carry_reasons_without_the_token(use):
     assert TOKEN not in repr(caught.value)
 
 
+def test_times_ports_addresses_and_entities_are_read_strictly():
+    assert ln._when("") is None and ln._when("yesterday") is None
+    assert ln._when("2026-01-02T13:04:05+10:00") == datetime(2026, 1, 2, 3, 4, 5)
+    anywhere = {"ipv4": ["not-an-address", "0.0.0.0/0"]}
+
+    def wall(*rules):
+        return {"rules": {"inbound_policy": "DROP", "inbound": list(rules)}}
+
+    def accept(ports, addresses=anywhere):
+        return {
+            "action": "ACCEPT",
+            "protocol": "TCP",
+            "ports": ports,
+            "addresses": addresses,
+        }
+
+    assert ln.exposed_ports(wall(accept("22,,23"))) == [22]
+    assert ln.exposed_ports(wall(accept("ssh"))) == []
+    assert ln.exposed_ports(wall(accept("3389", "0.0.0.0/0"))) == []
+    entities = [
+        "junk",
+        {"type": "linode_interface", "id": 9},
+        {"type": "nodebalancer", "id": 3},
+        {"type": "linode", "id": 4},
+    ]
+    assert ln._protected({"entities": entities}) == {"4"}
+    assert ln.login_entry({"id": "1", "datetime": ago(1)}, EUUID) is None
+    assert ln.event_entry({"id": 1, "created": ago(1)}, EUUID) is None
+
+
+def test_account_listings_are_bounded_and_identified(use, monkeypatch):
+    data = default_data()
+    data["/v4/account/settings"] = {"backups_enabled": False}
+    data["/v4/lke/clusters"] = [{"id": "../account", "label": "odd"}]
+    use(Api(data))
+    monkeypatch.setattr(ln, "MAX_IDENTITIES", 1)
+    [scope] = ln.collect()
+    checks = by_key(scope.checks)
+    assert checks["identity.mfa"].reason == "unavailable"
+    assert "by default" not in checks["resilience.backups"].detail
+    assert checks["kubernetes.control_plane"].reason == "unavailable"
+    monkeypatch.setattr(ln, "MAX_CLUSTERS", 1)
+    use(Api())
+    [scope] = ln.collect()
+    assert by_key(scope.checks)["kubernetes.control_plane"].status == "unknown"
+    data["/v4/account"] = {"euuid": "short"}
+    use(Api(data))
+    with pytest.raises(Unavailable):
+        ln.collect()
+
+
+def test_activity_beyond_the_ceiling_keeps_the_newest(use, monkeypatch):
+    monkeypatch.setattr(ln, "MAX_ACTIVITY", 1)
+    use(Api())
+    entries, complete = ln.activity(NOW - timedelta(hours=6), NOW)
+    assert [e.id for e in entries] == ["login:1"] and complete is False
+
+
 def test_help_documents_scopes_checks_and_settings():
     from pathlib import Path
 

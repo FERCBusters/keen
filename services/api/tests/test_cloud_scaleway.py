@@ -508,6 +508,70 @@ def test_activity_reports_truncation(use, monkeypatch):
     assert entries[0].action == "DeleteServer"
 
 
+def test_times_identifiers_and_addresses_are_read_strictly():
+    assert scw._when("yesterday") is None
+    assert scw._when("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
+    with pytest.raises(Unavailable):
+        scw._uuid("../iam")
+    assert scw.everywhere("not-a-range") is False
+    udp = {
+        "direction": "inbound",
+        "protocol": "UDP",
+        "action": "accept",
+        "ip_range": "0.0.0.0/0",
+        "dest_port_from": 22,
+        "position": 1,
+    }
+    assert scw.exposed_ports({"inbound_default_policy": "drop"}, [udp]) == []
+    assert scw.event_entry({"id": uid(1), "recorded_at": ago(1)}, ORG, {}) is None
+    assert scw.sign_in_entry({"recorded_at": ago(1)}, ORG) is None
+
+
+def test_admin_policies_for_unknown_groups_and_bounded_listings(use, monkeypatch):
+    data = default_data()
+    data["/iam/v1alpha1/policies"].append({"id": uid(98), "group_id": uid(97)})
+    data[("/iam/v1alpha1/rules", uid(98))] = [
+        {"permission_set_names": ["OrganizationManager"]}
+    ]
+    data["/iam/v1alpha1/api-keys"] = []
+    data["/rdb/v1/regions/fr-par/instances"].append(
+        {
+            "id": uid(96),
+            "name": "reports",
+            "endpoints": [{"ip": "51.15.0.2"}],
+            "backup_schedule": {"disabled": False},
+        }
+    )
+    data[f"/rdb/v1/regions/fr-par/instances/{uid(96)}/acls"] = [
+        {"ip": "203.0.113.0/24"}
+    ]
+    use(Api(data))
+    [scope] = scw.collect()
+    checks = by_key(scope.checks)
+    assert checks["identity.admins"].status == "info"
+    assert checks["credentials.key_age"].detail == "No live API keys"
+    assert checks["network.databases"].subjects == ["fr-par/analytics"]
+    for name in ("MAX_IDENTITIES", "MAX_GROUPS", "MAX_DATABASES", "MAX_CLUSTERS"):
+        monkeypatch.setattr(scw, name, 0)
+    use(Api())
+    [scope] = scw.collect()
+    checks = by_key(scope.checks)
+    for key in (
+        "identity.mfa",
+        "network.admin_ports",
+        "network.databases",
+        "kubernetes.control_plane",
+    ):
+        assert checks[key].reason == "unavailable", key
+
+
+def test_activity_without_names_keeps_principal_ids(use):
+    use(Api(status={"/iam/v1alpha1/users": 403}))
+    entries, _ = scw.activity(NOW - timedelta(hours=6), NOW)
+    deleted = next(e for e in entries if e.action == "DeleteServer")
+    assert APP in deleted.actor
+
+
 def test_help_documents_permission_sets_checks_and_settings():
     from pathlib import Path
 
