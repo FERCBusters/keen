@@ -421,6 +421,8 @@ dl.terms dd {
 }
 #supported-ingesters + p + ul a {
   display: block;
+  box-sizing: border-box;
+  height: 100%;
   padding: 0.65rem 0.8rem;
   border: 1px solid var(--docs-border);
   border-radius: 0.5rem;
