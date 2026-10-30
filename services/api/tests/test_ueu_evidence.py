@@ -1,13 +1,11 @@
 """Signed UEU evidence from keen-agent: keys, requests, batches, chains,
-catalogue checks, custody and verification bundles."""
+catalogue checks and custody."""
 
 import hashlib
 import hmac
-import io
 import json
 import secrets
 import uuid
-import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,7 +18,6 @@ from app.core.datetime_utils import utc_now_naive
 from app.db.models import AgentKey, Artifact, Event, KeenAgent, UeuBatch, UeuEvidence
 from app.ingest import common
 from app.security import agent_signatures as signatures
-from app.services import ueu_bundle
 from app.services.ueu_evidence import display_payload, evidence_record
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -52,7 +49,6 @@ def keen(setup, monkeypatch):
         )
 
     monkeypatch.setattr(common, "put_bytes", put)
-    monkeypatch.setattr(ueu_bundle, "_read", lambda a: objects[a.storage_uri])
     return SimpleNamespace(client=client, db=factory, objects=objects, app=app)
 
 
@@ -800,121 +796,30 @@ def test_public_subjects_need_the_integration_key(keen, monkeypatch):
     assert one.pseudonym("unix_uid", "1000") == two.pseudonym("unix_uid", "1000")
 
 
-# -- verification bundles ------------------------------------------------------
+# -- verification is shown, not exported ---------------------------------------
 
 
-def test_bundles_verify_offline(keen, capsys, tmp_path):
-    import importlib.util
-
-    agent, info = enrolled(keen, evidence_mode_ceiling="all_lines")
+def test_verification_bundle_downloads_are_gone(keen):
+    # Keen shows each record's checks on the event page; it no longer packages
+    # envelopes, manifests and keys for offline verification.
+    agent, info = enrolled(keen)
     agent.send(agent.observation("firewall", "ufw", {"enabled": True}))
-    agent.send(
-        agent.event(
-            "log.line.collected",
-            "log_line",
-            {"source": "auth", "parser": "syslog"},
-            payload="token=abc123 used",
-            mode="all_lines",
-            outcome="info",
-        )
-    )
+    with keen.db() as db:
+        event_id = db.query(Event).one().id
     since = stamp(datetime.now(timezone.utc) - timedelta(hours=1))
     until = stamp(datetime.now(timezone.utc) + timedelta(hours=1))
-    r = keen.client.get(
-        f"/v1/admin/agents/{info['agent']['id']}/evidence-bundle",
-        params={"since": since, "until": until},
-    )
-    assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
-    names = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
-    assert "manifest.json" in names and any(n.startswith("keys/") for n in names)
-    spec = importlib.util.spec_from_file_location(
-        "verify", ROOT / "tools/ueu_verify_bundle.py"
-    )
-    tool = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(tool)
-    path = tmp_path / ("bundle-" + secrets.token_hex(4) + ".zip")
-    path.write_bytes(r.content)
-
-    def rewrite(edit):
-        out = io.BytesIO()
-        with (
-            zipfile.ZipFile(io.BytesIO(r.content)) as src,
-            zipfile.ZipFile(out, "w") as dst,
-        ):
-            manifest = json.loads(src.read("manifest.json"))
-            for name in src.namelist():
-                data = edit(name, src.read(name), manifest)
-                if data is not None:
-                    dst.writestr(name, data)
-        path.write_bytes(out.getvalue())
-        return tool.check(str(path))
-
-    with zipfile.ZipFile(io.BytesIO(r.content)) as src:
-        manifest = json.loads(src.read("manifest.json"))
-        key = json.loads(
-            src.read(next(n for n in src.namelist() if n.startswith("keys/")))
-        )
-    clean = next(x for x in manifest["records"] if not x["custody"]["changes"])
-    try:
-        # The redacted log line cannot be checked against its signed hash, so
-        # it is reported as unverified rather than ok.
-        assert tool.check(str(path)) == 2
-        out = capsys.readouterr().out
-        assert "2 records, 0 failed, 1 unverified" in out
-        assert "keys taken from the bundle" in out
-        # Pinning the producer's key keeps the signed record ok.
-        assert tool.check(str(path), {key["key_id"]: key["public_key"]}) == 2
-        assert "0 failed" in capsys.readouterr().out
-        # A key other than the pinned one fails.
-        other = b64url(Ed25519PrivateKey.generate().public_key().public_bytes_raw())
-        assert tool.check(str(path), {key["key_id"]: other}) == 1
-        assert tool.check(str(path), {"someone:0000000000000000": other}) == 1
-        capsys.readouterr()
-
-        def tamper(name, data, manifest):
-            if name == clean["file"]:
-                return data.replace(b'"enabled":true', b'"enabled":false')
-            return data
-
-        # Tampering with a stored envelope is detected.
-        assert rewrite(tamper) == 1
-
-        def disguise(name, data, manifest):
-            # Tampering plus an invented custody change is never reported ok.
-            if name == "manifest.json":
-                for x in manifest["records"]:
-                    if x["file"] == clean["file"]:
-                        x["custody"]["changes"] = [
-                            {"path": "observation.facts", "reason": "x\x1b[2J"}
-                        ]
-                return json.dumps(manifest)
-            return tamper(name, data, manifest)
-
-        assert rewrite(disguise) == 2
-        out = capsys.readouterr().out
-        assert "0 unverified" not in out and "\x1b[2J" not in out
-
-        # Without the keys, nothing signed can be verified.
-        assert rewrite(lambda n, d, m: None if n.startswith("keys/") else d) == 2
-        assert "2 unverified" in capsys.readouterr().out
-
-        def foreign_key(name, data, manifest):
-            if name.startswith("keys/"):
-                doc = json.loads(data)
-                doc["agent_id"] = "someone-else"
-                return json.dumps(doc)
-            return data
-
-        assert rewrite(foreign_key) == 1
-    finally:
-        path.unlink()
     assert (
         keen.client.get(
             f"/v1/admin/agents/{info['agent']['id']}/evidence-bundle",
-            params={"since": until, "until": since},
+            params={"since": since, "until": until},
         ).status_code
-        == 400
+        == 404
     )
+    assert keen.client.get(f"/v1/events/{event_id}/ueu-bundle").status_code == 404
+    assert not (ROOT / "tools/ueu_verify_bundle.py").exists()
+    with keen.db() as db:
+        # The checks stay recorded and shown with the event.
+        assert evidence_record(db, event_id)["verification"] == "verified"
 
 
 def test_manifest_signature_material_is_not_redacted_from_storage(keen):

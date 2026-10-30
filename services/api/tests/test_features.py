@@ -294,6 +294,8 @@ def test_every_router_has_an_availability_decision():
         "users",
         "webhooks",
         "stats",
+        # Published UEU catalogues are vocabularies, available with any feature set.
+        "ueu",
     }
     seen = []
 

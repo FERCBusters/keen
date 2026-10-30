@@ -1754,6 +1754,21 @@ def analyse_mitigator_risk(*, payload: RiskMitigatorAnalysePayload, user, db: Se
 def create_risk(
     *, payload: RiskUpsertPayload, context: ChangeContext, user, db: Session
 ):
+    fw = framework_parameter(payload.framework)
+    risk = insert_risk(payload=payload, user=user, db=db)
+    db.commit()
+    db.refresh(risk)
+    return _risk_out(db, risk, framework=fw, include_controls=True)
+
+
+def insert_risk(
+    *, payload: RiskUpsertPayload, user, db: Session, request_path: str = "/v1/risks"
+) -> Risk:
+    """Add a risk with its links, diary entry and change record; no commit.
+
+    The caller owns the transaction, so a risk can be created together with
+    records that refer to it.
+    """
     template_refs: list[str] = []
     if payload.library_template_id:
         template = db.get(RiskLibraryEntry, payload.library_template_id)
@@ -1818,11 +1833,9 @@ def create_risk(
         after=risk_changelog_state(db, risk.id, framework=fw),
         user=user,
         request_method="POST",
-        request_path="/v1/risks",
+        request_path=request_path,
     )
-    db.commit()
-    db.refresh(risk)
-    return _risk_out(db, risk, framework=fw, include_controls=True)
+    return risk
 
 
 def get_risk(

@@ -68,8 +68,10 @@ def requirements(route, params=None, query=None):
         needed.update(p for p in ("people", "vendors") if p in parts)
     if owner == "assurance" and parts[-1] == "quizzes":
         needed.add("quizzes")
-    if owner == "assurance" and parts[-1] == "workstation-posture":
+    if owner == "assurance" and "workstation-posture" in parts:
         needed.add("evidence")
+    if owner == "assurance" and parts[-1] == "risks":
+        needed.add("risk_cia")
     if "scheduled" in parts and owner == "audits":
         needed.add("audit_scheduling")
     if "mitigator" in parts and owner == "risks":

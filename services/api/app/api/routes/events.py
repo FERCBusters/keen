@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import uuid
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Query, Request, Response
+from fastapi import Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -22,10 +21,8 @@ from app.schemas import IncidentCreatePayload
 from app.security.permissions import has_permission
 from app.security.roles import is_effective_admin
 from app.services import events as service
-from app.services import ueu_bundle
 from app.services.event_filters import parse_event_filters
 from app.services.exports import Export
-from app.storage.filenames import content_disposition_attachment
 
 router = Router()
 
@@ -239,24 +236,6 @@ def event_control_suggestions(
     user = _require_events_read(db, request)
     return service.event_control_suggestions(
         user=user, event_id=event_id, framework=framework, db=db
-    )
-
-
-@router.get("/v1/events/{event_id}/ueu-bundle")
-def get_event_ueu_bundle(
-    request: Request, event_id: uuid.UUID, db: Session = Depends(get_db)
-):
-    _require_events_read(db, request)
-    data = ueu_bundle.event_bundle(db=db, event_id=event_id)
-    return Response(
-        data,
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": content_disposition_attachment(
-                f"ueu-evidence-{event_id}.zip"
-            ),
-            "Cache-Control": "no-store",
-        },
     )
 
 

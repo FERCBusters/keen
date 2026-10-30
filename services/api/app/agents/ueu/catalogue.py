@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
@@ -71,6 +71,9 @@ class Catalogue:
     version: str
     description: str
     event_types: dict[str, EventType] = field(default_factory=dict)
+    # Where KEEN found the file, and its bytes as loaded, for publication.
+    origin: str = "built-in"
+    content: bytes = field(default=b"", repr=False, compare=False)
 
     @property
     def ref(self) -> str:
@@ -182,7 +185,12 @@ def _load(directory: str) -> dict[tuple[str, str], Catalogue]:
     if extra.is_dir():
         paths += sorted(p for p in extra.glob("*.json") if p.is_file())
     for path in paths:
-        catalogue = parse_catalogue(path.read_bytes())
+        data = path.read_bytes()
+        catalogue = replace(
+            parse_catalogue(data),
+            origin="built-in" if path.parent == BUILTIN else "deployment",
+            content=data,
+        )
         key = (catalogue.id, catalogue.version)
         if key in found:
             raise CatalogueError(f"catalogue {catalogue.ref} is defined twice")

@@ -39,6 +39,7 @@ test('device totals and evidence links escape hostile names; refresh and clear w
   const ui = await loadUi('pages/workstation-posture.js', {
     html: '<section id="host"></section>',
     vendor: {
+      withFramework: (url) => url,
       apiGet: async () => {
         calls++;
         return result();
@@ -64,7 +65,10 @@ test('permission gating and late response do not disclose another person', async
   const pending = [];
   const ui = await loadUi('pages/workstation-posture.js', {
     html: '<section id="host"></section>',
-    vendor: { apiGet: () => new Promise((resolve) => pending.push(resolve)) },
+    vendor: {
+      withFramework: (url) => url,
+      apiGet: () => new Promise((resolve) => pending.push(resolve)),
+    },
   });
   t.after(ui.close);
   const host = ui.document.getElementById('host');
@@ -85,6 +89,7 @@ test('failed loading is retryable and empty devices have useful instructions', a
   const ui = await loadUi('pages/workstation-posture.js', {
     html: '<section id="host"></section>',
     vendor: {
+      withFramework: (url) => url,
       apiGet: async () => {
         if (fail) throw Error('offline');
         return { ...result(), devices: [], total: 0 };
@@ -123,7 +128,7 @@ test('devices collapse with their platform shown and long evidence lists fold', 
   };
   const ui = await loadUi('pages/workstation-posture.js', {
     html: '<section id="host"></section>',
-    vendor: { apiGet: async () => data },
+    vendor: { withFramework: (url) => url, apiGet: async () => data },
   });
   t.after(ui.close);
   const host = ui.document.getElementById('host');
@@ -154,4 +159,178 @@ test('devices collapse with their platform shown and long evidence lists fold', 
   await tick();
   assert.equal(devices()[0].open, true);
   assert.ok(devices()[0].querySelector('summary .bi-windows'));
+});
+
+const unmet = (extra = {}) => ({
+  ...result('laptop-01'),
+  can_create_risk: true,
+  devices: [
+    {
+      ...result('laptop-01').devices[0],
+      agent_id: 'agent-1',
+      checks: [
+        {
+          check: 'disk_encryption',
+          label: 'Disk encryption',
+          status: 'attention',
+          risks: [],
+          observations: [
+            {
+              provider: 'lsblk',
+              scope: '/',
+              reason: 'measured',
+              detail: hostile,
+              observed_at: '2026-10-26T00:00:00Z',
+              event_id: 'e1',
+              status: 'attention',
+            },
+          ],
+          ...extra,
+        },
+        { check: 'antivirus', label: 'Antivirus', status: 'met', risks: [], observations: [] },
+      ],
+    },
+  ],
+});
+test('unmet checks offer an inline risk form that records the risk', async (t) => {
+  let data = unmet();
+  const posts = [];
+  let fail = false;
+  const ui = await loadUi('pages/workstation-posture.js', {
+    html: '<section id="host"></section>',
+    vendor: {
+      withFramework: (url, fw) => `${url}&framework=${fw}`,
+      apiGet: async (url) =>
+        url === '/api/v1/risks/users' ? { items: [{ id: 'u1', username: hostile }] } : data,
+      apiPost: async (url, body) => {
+        posts.push({ url, body });
+        if (fail) throw Error('An accepted risk needs an owner');
+        return { risk_id: 'r1', asset_id: 'a1' };
+      },
+    },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  ui.api.workstationPosture(host, true).select({ id: 'p 1', name: 'Pat' });
+  await tick();
+  const buttons = [...host.querySelectorAll('[data-posture-risk]')];
+  assert.equal(buttons.length, 1, 'only the unmet check offers a risk');
+  assert.equal(buttons[0].textContent, 'Create a risk');
+  buttons[0].click();
+  await tick();
+  const form = host.querySelector('[data-posture-risk-form]');
+  const $ = (suffix) =>
+    ui.document.getElementById(`posture-risk-agent-1-disk_encryption-${suffix}`);
+  assert.equal(ui.document.activeElement, $('title'));
+  assert.equal($('title').value, 'laptop-01: Disk encryption needs attention');
+  assert.match($('summary').value, /The Disk encryption check needs attention on laptop-01/);
+  assert.match($('summary').value, /lsblk · \/ · measured · <img/);
+  assert.equal(host.querySelector('img'), null);
+  assert.deepEqual(
+    [...$('owner').options].map((o) => o.textContent),
+    ['Nobody yet', hostile],
+  );
+  assert.equal($('due').getAttribute('aria-describedby'), $('due').id + '-help');
+  // Accepting needs an owner and a review date before anything is sent.
+  $('strategy').value = 'accept';
+  form.dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await tick();
+  assert.equal(posts.length, 0);
+  assert.match(form.querySelector('[role="status"]').textContent, /owner and a review date/);
+  $('title').value = '  ';
+  form.dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  assert.match(form.querySelector('[role="status"]').textContent, /Give the risk a title/);
+  $('title').value = 'Unencrypted laptop';
+  $('owner').value = 'u1';
+  $('due').value = '2026-12-01';
+  // A refused save shows the reason and can be retried.
+  fail = true;
+  form.dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await tick();
+  assert.match(form.querySelector('[role="status"]').textContent, /needs an owner/);
+  assert.equal(form.querySelector('[type="submit"]').disabled, false);
+  fail = false;
+  data = unmet({
+    status: 'accepted',
+    risks: [{ id: 'r1', title: hostile, accepted: true, due: '2026-12-01' }],
+  });
+  form.dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await tick();
+  await tick();
+  // The body was built in the page's realm; compare its JSON.
+  assert.deepEqual(JSON.parse(JSON.stringify(posts.at(-1))), {
+    url: '/api/v1/isms/people/p%201/workstation-posture/risks',
+    body: {
+      agent_id: 'agent-1',
+      check: 'disk_encryption',
+      title: 'Unencrypted laptop',
+      threat_summary: posts.at(-1).body.threat_summary,
+      treatment_strategy: 'accept',
+      treatment_due_at: '2026-12-01',
+      risk_owner_user_id: 'u1',
+      framework: 'F1',
+    },
+  });
+  const notice = host.querySelector('[data-posture-notice]');
+  assert.equal(notice.hidden, false);
+  assert.equal(notice.querySelector('a').getAttribute('href'), '/risk.html?id=r1&framework=F1');
+  // The reloaded result shows the acceptance and no longer offers a risk.
+  assert.match(host.textContent, /Risk accepted until 2026-12-01/);
+  assert.equal(host.querySelector('[data-posture-risk]'), null);
+  const linked = host.querySelector('[data-posture-linked-risk] a');
+  assert.equal(linked.textContent, hostile);
+  assert.equal(host.querySelector('img'), null);
+  assert.ok([...host.querySelectorAll('.badge')].some((b) => b.textContent === 'Risk accepted'));
+});
+test('cancelling the risk form returns focus; owners failing to load still allows saving', async (t) => {
+  const ui = await loadUi('pages/workstation-posture.js', {
+    html: '<section id="host"></section>',
+    vendor: {
+      withFramework: (url) => url,
+      apiGet: async (url) => {
+        if (url === '/api/v1/risks/users') throw Error('forbidden');
+        return unmet();
+      },
+    },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  ui.api.workstationPosture(host, true).select({ id: 'p', name: 'Pat' });
+  await tick();
+  const button = host.querySelector('[data-posture-risk]');
+  button.click();
+  await tick();
+  const form = host.querySelector('[data-posture-risk-form]');
+  assert.match(form.querySelector('[role="status"]').textContent, /Owners could not be loaded/);
+  [...form.querySelectorAll('button')].find((b) => b.textContent === 'Cancel').click();
+  assert.equal(host.querySelector('[data-posture-risk-form]'), null);
+  assert.equal(ui.document.activeElement, button);
+});
+test('without risk management, recorded risks show without titles or actions', async (t) => {
+  const data = {
+    ...unmet({
+      risks: [
+        { id: 'r9', title: null, accepted: false, acceptance_expired: true, due: '2026-01-01' },
+        { id: 'r8', title: null, accepted: false, due: null },
+      ],
+    }),
+    can_create_risk: false,
+  };
+  const ui = await loadUi('pages/workstation-posture.js', {
+    html: '<section id="host"></section>',
+    vendor: { withFramework: (url) => url, apiGet: async () => data },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  ui.api.workstationPosture(host, true).select({ id: 'p', name: 'Pat' });
+  await tick();
+  const rows = [...host.querySelectorAll('[data-posture-linked-risk]')].map((r) => r.textContent);
+  assert.deepEqual(rows, ['Acceptance expired', 'Risk recorded']);
+  assert.equal(host.querySelector('[data-posture-linked-risk] a'), null);
+  assert.equal(host.querySelector('[data-posture-risk]'), null);
+  // Devices without risks or risk management keep the three-column table.
+  data.devices[0].checks[0].risks = [];
+  host.querySelector('[data-posture-refresh]').click();
+  await tick();
+  assert.equal(host.querySelectorAll('thead th').length, 3);
 });

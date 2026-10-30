@@ -12,6 +12,7 @@ from app.api.routing import Router
 from app.db.session import get_db
 from app.services import assurance as service
 from app.services.assurance import AssuranceInput, PersonInput, VendorInput
+from app.services.workstation_posture import WorkstationRiskInput
 
 router = Router()
 
@@ -36,6 +37,18 @@ def workstation_posture(
     from app.services.workstation_posture import person_posture
 
     return person_posture(db=db, user=user, person_id=person_id, offset=offset)
+
+
+@router.post("/v1/isms/people/{person_id}/workstation-posture/risks", status_code=201)
+def record_workstation_risk(
+    person_id: uuid.UUID,
+    body: WorkstationRiskInput,
+    user=Depends(require_isms_read),
+    db: Session = Depends(get_db),
+):
+    from app.services.workstation_posture import create_workstation_risk
+
+    return create_workstation_risk(db=db, user=user, person_id=person_id, body=body)
 
 
 @router.post("/v1/isms/people", status_code=201)

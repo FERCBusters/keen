@@ -232,7 +232,6 @@ POLICY = {
     "PATCH /v1/admin/agents/{agent_id}": ADMIN,
     "POST /v1/admin/agents/{agent_id}/revoke": ADMIN,
     "POST /v1/admin/agents/{agent_id}/rotate": ADMIN,
-    "GET /v1/admin/agents/{agent_id}/evidence-bundle": ADMIN,
     "PATCH /v1/admin/agents/{agent_id}/evidence": ADMIN,
     "GET /v1/admin/audit": AUDIT_TRAIL,
     "GET /v1/admin/bookstack/catalog": ADMIN,
@@ -373,7 +372,6 @@ POLICY = {
     "GET /v1/events/facets": EVENTS_READ,
     "GET /v1/events/{event_id}": EVENTS_READ,
     "GET /v1/events/{event_id}/control-suggestions": EVENTS_READ,
-    "GET /v1/events/{event_id}/ueu-bundle": EVENTS_READ,
     "POST /v1/events/{event_id}/incident": all_of("incident.create", "events.read"),
     "DELETE /v1/events/{event_id}/incidents/{incident_id}": all_of(
         "incident.delete", "events.read"
@@ -385,6 +383,8 @@ POLICY = {
     "GET /v1/artifacts/{artifact_id}/download": EVENTS_READ,
     "GET /v1/artifacts/{artifact_id}/preview": EVENTS_READ,
     "GET /v1/charts/event_volume_timeseries": EVENTS_READ,
+    "GET /v1/ueu/catalogues": SIGNED_IN,
+    "GET /v1/ueu/catalogues/{catalogue_id}/{version}": SIGNED_IN,
     "GET /v1/clauses": SIGNED_IN,
     "GET /v1/clauses/{clause_id}": SIGNED_IN,
     "GET /v1/clauses/{clause_id}/changelog": SIGNED_IN,
@@ -539,6 +539,9 @@ POLICY = {
     ),
     "GET /v1/isms/people/{person_id}/workstation-posture": Rule(
         "permissions", tuple(p | {"events.read"} for p in ISMS_READ.alternatives)
+    ),
+    "POST /v1/isms/people/{person_id}/workstation-posture/risks": all_of(
+        "events.read", "risk.manage"
     ),
     "POST /v1/isms/people": ISMS_MANAGE,
     "DELETE /v1/isms/people/{person_id}": ISMS_MANAGE,

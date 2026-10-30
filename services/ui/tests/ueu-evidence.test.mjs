@@ -48,7 +48,8 @@ test('provenance shows signature, chain, catalogue and custody as text', async (
   assert.match(host.textContent, /removed: above the identity’s evidence mode/);
   assert.match(host.textContent, /Event data masking was on/);
   assert.match(host.textContent, /no longer matches the evidence hash/);
-  assert.equal(host.querySelector('a').getAttribute('href'), '/api/v1/events/event%2F1/ueu-bundle');
+  // Verification is shown on the page; there is no download to check offline.
+  assert.equal(host.querySelector('a'), null);
 });
 
 test('unsigned, unknown and unchanged evidence read clearly; other events hide the panel', async (t) => {

@@ -109,49 +109,6 @@ function select(id, label, options, value) {
   wrap.append(l, s);
   return [wrap, s];
 }
-function bundleForm(a) {
-  const row = document.createElement('div');
-  row.className = 'row g-2 align-items-end mt-2';
-  const day = 86400000,
-    iso = (t) => new Date(t).toISOString().slice(0, 10);
-  const link = document.createElement('a');
-  link.className = 'btn btn-outline-primary btn-sm';
-  link.textContent = 'Download verification bundle';
-  const fields = [
-    ['since', 'Evidence from', iso(Date.now() - 7 * day)],
-    ['until', 'Evidence before', iso(Date.now() + day)],
-  ].map(([name, text, value]) => {
-    const wrap = document.createElement('div');
-    wrap.className = 'col-md-3';
-    const l = document.createElement('label');
-    l.className = 'form-label';
-    l.htmlFor = `agent-${name}-${a.id}`;
-    l.textContent = text;
-    const input = document.createElement('input');
-    input.type = 'date';
-    input.className = 'form-control';
-    input.id = l.htmlFor;
-    input.value = value;
-    wrap.append(l, input);
-    row.append(wrap);
-    return input;
-  });
-  const update = () => {
-    const [since, until] = fields.map((f) => new Date(f.value + 'T00:00:00'));
-    if (Number.isNaN(since.getTime()) || Number.isNaN(until.getTime())) {
-      link.removeAttribute('href');
-      return;
-    }
-    link.href = `${root}/${encodeURIComponent(a.id)}/evidence-bundle?since=${encodeURIComponent(since.toISOString())}&until=${encodeURIComponent(until.toISOString())}`;
-  };
-  for (const f of fields) f.addEventListener('change', update);
-  update();
-  const wrap = document.createElement('div');
-  wrap.className = 'col-12 col-md-auto';
-  wrap.append(link);
-  row.append(wrap);
-  return row;
-}
 function evidencePolicy(a) {
   const section = document.createElement('div');
   section.className = 'border-top pt-3 mt-3';
@@ -186,7 +143,7 @@ function evidencePolicy(a) {
     }),
   );
   row.append(modeWrap, subjectWrap, actions);
-  section.append(help, row, bundleForm(a));
+  section.append(help, row);
   return section;
 }
 async function load() {

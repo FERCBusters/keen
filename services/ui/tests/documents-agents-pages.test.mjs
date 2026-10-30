@@ -862,16 +862,10 @@ test('key agents show their chain, issue single-use codes and keep evidence sett
     body: { evidence_mode_ceiling: 'all_lines', subject_type: 'public' },
   });
   await settle(() => /Evidence settings saved/.test($('status').textContent));
-  const link = [...$('agents').querySelectorAll('a')].find((a) =>
-    a.textContent.startsWith('Download verification bundle'),
+  // Evidence verification is shown in Keen; agent cards offer no bundle download.
+  assert.equal(
+    [...$('agents').querySelectorAll('a')].some((a) => /verification bundle/i.test(a.textContent)),
+    false,
   );
-  const since = ui.document.getElementById('agent-since-a1');
-  since.value = '2026-10-01';
-  since.dispatchEvent(new ui.window.Event('change'));
-  const url = new URL(link.href);
-  assert.equal(url.pathname, '/api/v1/admin/agents/a1/evidence-bundle');
-  assert.ok(url.searchParams.get('since').startsWith('2026-'));
-  since.value = '';
-  since.dispatchEvent(new ui.window.Event('change'));
-  assert.equal(link.hasAttribute('href'), false);
+  assert.equal(ui.document.getElementById('agent-since-a1'), null);
 });

@@ -131,11 +131,5 @@ export function renderUeuEvidence(host, e) {
   note.textContent = changes.length
     ? 'The stored envelope differs from the signed one at the paths listed, so it no longer matches the evidence hash. The batch manifest and signature are kept for verification.'
     : 'The stored envelope artifact is the exact signed bytes; its SHA-256 is the evidence hash.';
-  const link = document.createElement('a');
-  link.className = 'btn btn-sm btn-outline-primary no-print';
-  link.href = `/api/v1/events/${encodeURIComponent(String(e.id || ''))}/ueu-bundle`;
-  link.textContent = 'Download verification bundle';
-  link.title =
-    'The envelope, its signed batch manifest, the public key and the catalogue, for independent checking';
-  host.append(title, badges, dl, note, link);
+  host.append(title, badges, dl, note);
 }

@@ -466,36 +466,27 @@ def test_assembled_permissions_and_csrf(keen):
     )
 
 
-def test_assembled_permissions_for_evidence_bundles_and_policy(keen):
+def test_assembled_permissions_for_evidence_policy(keen):
     admin = keen.user(role="admin")
     reader = keen.user("events.read")
     c = keen.client(admin)
     r = c.post(
         "/v1/admin/agents",
-        json=dict(name="bundle-host", agent_type="server"),
+        json=dict(name="policy-host", agent_type="server"),
         headers=unsafe(c),
     )
     assert r.status_code == 201, r.text
     aid = r.json()["agent"]["id"]
-    bundle = f"/v1/admin/agents/{aid}/evidence-bundle"
-    window = {"since": "2026-01-01T00:00:00Z", "until": "2026-01-02T00:00:00Z"}
     policy = f"/v1/admin/agents/{aid}/evidence"
-    event_bundle = f"/v1/events/{uuid.uuid4()}/ueu-bundle"
     anonymous = keen.client()
-    assert anonymous.get(bundle, params=window).status_code == 401
-    assert anonymous.get(event_bundle).status_code == 401
     assert anonymous.patch(policy, json={}).status_code in (401, 403)
     rc = keen.client(reader)
-    assert rc.get(bundle, params=window).status_code == 403
     assert (
         rc.patch(
             policy, json={"evidence_mode_ceiling": "all_lines"}, headers=unsafe(rc)
         ).status_code
         == 403
     )
-    assert rc.get(event_bundle).status_code == 404
-    assert keen.client(keen.user()).get(event_bundle).status_code == 403
-    assert c.get(bundle, params=window).status_code == 200
     body = {"evidence_mode_ceiling": "all_lines"}
     assert c.patch(policy, json=body).status_code == 403
     r = c.patch(policy, json=body, headers=unsafe(c))

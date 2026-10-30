@@ -6,7 +6,6 @@ import asyncio
 import gzip
 import io
 import logging
-from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -24,10 +23,8 @@ from app.security.auth import require_admin
 from app.security.client_ip import request_ip
 from app.security.rate_limit import fixed_window_allow
 from app.services import agents as service
-from app.services import ueu_bundle
 from app.services.agents import Assignment, EvidencePolicy, Registration, Rotation
 from app.services.errors import DomainError
-from app.storage.filenames import content_disposition_attachment
 
 
 class AgentRoute(DomainRoute):
@@ -106,33 +103,6 @@ def rotate(
 @admin.post("/{agent_id}/revoke")
 def revoke(agent_id: str, db: Session = Depends(get_db)):
     return service.revoke(agent_id=agent_id, db=db)
-
-
-@admin.get("/{agent_id}/evidence-bundle")
-def evidence_bundle(
-    agent_id: str,
-    since: datetime,
-    until: datetime,
-    db: Session = Depends(get_db),
-):
-    def naive(value):
-        if value.tzinfo is not None:
-            value = value.astimezone(timezone.utc).replace(tzinfo=None)
-        return value
-
-    data = ueu_bundle.agent_bundle(
-        db=db, agent_id=agent_id, since=naive(since), until=naive(until)
-    )
-    return Response(
-        data,
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": content_disposition_attachment(
-                "ueu-evidence-" + agent_id + ".zip"
-            ),
-            "Cache-Control": "no-store",
-        },
-    )
 
 
 @admin.patch("/{agent_id}/evidence")

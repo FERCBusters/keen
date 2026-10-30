@@ -89,6 +89,10 @@ OPENAPI_TAGS = [
         "description": "Curated sets of events, records and notes with a timeline and flow chart.",
     },
     {"name": "Stats", "description": "Aggregate statistics and counts."},
+    {
+        "name": "UEU",
+        "description": "Universal Evidence Utility event catalogues KEEN holds.",
+    },
     {"name": "Graph", "description": "Graph/topology endpoints."},
 ]
 
@@ -153,3 +157,7 @@ router.include_router(source_connections_router, tags=["Admin"])
 
 
 router.include_router(features_router, tags=["Admin"])
+
+from .ueu import router as ueu_router
+
+router.include_router(ueu_router, tags=["UEU"])

@@ -3371,6 +3371,52 @@ class AgentPostureObservation(Base):
     observed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class PostureRiskLink(Base):
+    """A risk recorded against a posture result; removed with the risk.
+
+    The origin says which posture produced the result: ``workstation`` keys are
+    KEEN Agent identities and ``cloud`` keys are source connections. An empty
+    ``subject_key`` means the risk covers the whole check in that scope.
+    """
+
+    __tablename__ = "posture_risk_links"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    origin: Mapped[str] = mapped_column(String(16), nullable=False)
+    origin_key: Mapped[str] = mapped_column(String(96), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    check_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    subject_key: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    risk_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("risks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "origin IN ('workstation','cloud')", name="ck_posture_risk_origin"
+        ),
+        UniqueConstraint(
+            "origin",
+            "origin_key",
+            "scope_key",
+            "check_key",
+            "subject_key",
+            "risk_id",
+            name="uq_posture_risk_link",
+        ),
+        Index("ix_posture_risk_links_origin", "origin", "origin_key"),
+    )
+
+
 # Retention is managed with explicit SQL so database row locks, the storage
 # outbox and deletion are one transaction. Register its tables for metadata and
 # migration tooling as well (there are deliberately no ORM cascade relationships).
