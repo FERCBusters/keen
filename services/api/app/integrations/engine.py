@@ -1,6 +1,5 @@
-from .errors import IntegrationError
-
 """Bounded extraction; identical normalization is used by preview and collection."""
+
 import hashlib
 import json
 import math
@@ -9,6 +8,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote, urljoin, urlsplit
 
+from .errors import IntegrationError
 from .schema import Definition, pointer
 from .transport import request
 

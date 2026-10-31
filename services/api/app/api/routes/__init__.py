@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.api.routing import Router
 
 from .admin import router as admin_router
+from .agents import router as agents_router
 from .artifacts import router as artifacts_router
 from .assurance import router as assurance_router
 from .audits import router as audits_router
@@ -12,22 +13,29 @@ from .clauses import router as clauses_router
 from .control_links import router as control_links_router
 from .controls import router as controls_router
 from .events import router as events_router
+from .evidence_retention import router as evidence_retention_router
 from .features import router as features_router
 from .frameworks import router as frameworks_router
 from .graph import router as graph_router
+from .home import router as home_router
+from .integrations import router as integrations_router
 from .interested_parties import router as interested_parties_router
 from .isms import router as isms_router
 from .managed_configurations import router as managed_configurations_router
 from .me import router as me_router
+from .mfa import router as mfa_router
 from .pestle import router as pestle_router
 from .questions import router as questions_router
 from .quizzes import router as quizzes_router
 from .risk_register import router as risk_register_router
 from .risks import router as risks_router
 from .soa import router as soa_router
+from .source_connections import router as source_connections_router
 from .sources import router as sources_router
+from .sso_emails import router as sso_emails_router
 from .stats import router as stats_router
 from .stories import router as stories_router
+from .ueu import router as ueu_router
 from .users import router as users_router
 from .webhooks import router as webhooks_router
 
@@ -126,38 +134,12 @@ router.include_router(stories_router, tags=["Stories"])
 router.include_router(quizzes_router, tags=["Quizzes"])
 router.include_router(stats_router, tags=["Stats"])
 router.include_router(graph_router, tags=["Graph"])
-
-from .integrations import router as integrations_router
-
 router.include_router(integrations_router, tags=["Admin"])
-
-from .agents import router as agents_router
-
 router.include_router(agents_router, tags=["Keen Agent"])
-
-from .evidence_retention import router as evidence_retention_router
-
 router.include_router(evidence_retention_router, tags=["Admin"])
-
-from .mfa import router as mfa_router
-
 router.include_router(mfa_router, tags=["Auth"])
-
-from .home import router as home_router
-
 router.include_router(home_router, tags=["Home"])
-
-from .sso_emails import router as sso_emails_router
-
 router.include_router(sso_emails_router, tags=["Me"])
-
-from .source_connections import router as source_connections_router
-
 router.include_router(source_connections_router, tags=["Admin"])
-
-
 router.include_router(features_router, tags=["Admin"])
-
-from .ueu import router as ueu_router
-
 router.include_router(ueu_router, tags=["UEU"])

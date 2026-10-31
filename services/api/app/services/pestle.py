@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -12,8 +11,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive as _utcnow
-from app.core.references import control_justification as _control_justification
-from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
@@ -27,7 +24,8 @@ from app.db.models import (
     PestleRelevanceLevel,
     User,
 )
-from app.security.permissions import has_permission
+from app.security.permissions import has_any_permission
+from app.services.control_refs import clause_summary, control_summary
 from app.services.entity_changelog import (
     list_entity_changelogs,
     pestle_business_process_changelog_state,
@@ -36,7 +34,7 @@ from app.services.entity_changelog import (
 )
 from app.services.errors import DomainError
 from app.services.frameworks import framework_parameter
-from app.services.text import clean_text
+from app.services.text import clean_text, split_filter_values
 
 PESTLE_READ_PERMISSION = "pestle.read"
 PESTLE_MANAGE_PERMISSION = "pestle.manage"
@@ -76,10 +74,6 @@ _RELEVANCE_CODE_ALIASES = {
 }
 
 
-def _split_filter_values(value: str | None) -> list[str]:
-    return [part.strip() for part in str(value or "").split(",") if part.strip()]
-
-
 class PestleItemPayload(BaseModel):
     framework: str | None = Field(default=None, max_length=64)
     type: str = Field(..., min_length=1, max_length=32)
@@ -109,25 +103,21 @@ class ClauseLinksPayload(BaseModel):
     items: list[RelevanceLinkPayload] = Field(default_factory=list)
 
 
-def _can_read_pestle(db: Session, user: User | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
-        return False
-    return bool(
-        has_permission(db, user, PESTLE_MANAGE_PERMISSION)
-        or has_permission(db, user, PESTLE_READ_PERMISSION)
-        # Backwards-compatible: existing risk viewers can see the new assessment area
-        # until deployments have explicitly assigned the new PESTLE(E) permissions.
-        or has_permission(db, user, RISK_MANAGE_PERMISSION)
-        or has_permission(db, user, RISK_READ_PERMISSION)
+def can_read_pestle(db: Session, user: User | None) -> bool:
+    # Risk viewers can also read PESTLE(E) assessments.
+    return has_any_permission(
+        db,
+        user,
+        PESTLE_MANAGE_PERMISSION,
+        PESTLE_READ_PERMISSION,
+        RISK_MANAGE_PERMISSION,
+        RISK_READ_PERMISSION,
     )
 
 
-def _can_manage_pestle(db: Session, user: User | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
-        return False
-    return bool(
-        has_permission(db, user, PESTLE_MANAGE_PERMISSION)
-        or has_permission(db, user, RISK_MANAGE_PERMISSION)
+def can_manage_pestle(db: Session, user: User | None) -> bool:
+    return has_any_permission(
+        db, user, PESTLE_MANAGE_PERMISSION, RISK_MANAGE_PERMISSION
     )
 
 
@@ -209,7 +199,7 @@ def _default_relevance(db: Session) -> PestleRelevanceLevel:
     return _relevance_by_id_or_code(db, relevance_code="na")
 
 
-def _relevance_out(row: PestleRelevanceLevel | None) -> dict[str, Any]:
+def relevance_summary(row: PestleRelevanceLevel | None) -> dict[str, Any]:
     return {
         "id": str(row.id) if row else None,
         "code": row.code if row else "na",
@@ -225,31 +215,6 @@ def _business_process_out(row: PestleBusinessProcess) -> dict[str, Any]:
         "created_by": getattr(row.created_by, "username", None),
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-    }
-
-
-def _clause_summary(row: FrameworkClause) -> dict[str, Any]:
-    return {
-        "id": str(row.id),
-        "framework": row.framework_slug,
-        "ref": row.ref,
-        "title": row.title,
-        "parent_id": str(row.parent_clause_id) if row.parent_clause_id else None,
-        "parent_ref": row.parent.ref if getattr(row, "parent", None) else None,
-        "sort_order": int(row.sort_order or 0),
-    }
-
-
-def _control_summary(row: ControlItem) -> dict[str, Any]:
-    return {
-        "id": str(row.id),
-        "framework": row.framework_slug,
-        "type": row.type,
-        "ref": row.ref,
-        "title": row.title,
-        "in_scope": row.in_scope,
-        "justification": _control_justification(row),
-        "upstream_url": _control_upstream_url(row),
     }
 
 
@@ -301,7 +266,7 @@ def _item_out(
         "type": row.type,
         "lens": row.lens,
         "item": row.item or "",
-        "overall_relevance": _relevance_out(row.overall_relevance),
+        "overall_relevance": relevance_summary(row.overall_relevance),
         "overall_relevance_id": (
             str(row.overall_relevance_id) if row.overall_relevance_id else None
         ),
@@ -316,7 +281,7 @@ def _item_out(
         out["business_processes"] = [
             {
                 "business_process": _business_process_out(link.business_process),
-                "relevance": _relevance_out(link.relevance),
+                "relevance": relevance_summary(link.relevance),
                 "relevance_id": str(link.relevance_id),
                 "updated_at": link.updated_at.isoformat() if link.updated_at else None,
             }
@@ -330,8 +295,8 @@ def _item_out(
         ]
         out["clauses"] = [
             {
-                "clause": _clause_summary(link.clause),
-                "relevance": _relevance_out(link.relevance),
+                "clause": clause_summary(link.clause),
+                "relevance": relevance_summary(link.relevance),
                 "relevance_id": str(link.relevance_id),
                 "updated_at": link.updated_at.isoformat() if link.updated_at else None,
             }
@@ -344,7 +309,7 @@ def _item_out(
             )
         ]
         out["related_controls"] = [
-            _control_summary(c)
+            control_summary(c)
             for c in _related_controls_for_item(db, row.id, row.framework_slug)
         ]
     return out
@@ -427,10 +392,10 @@ def pestle_meta(*, user, db: Session):
     return {
         "types": PESTLE_TYPES,
         "lenses": PESTLE_LENSES,
-        "relevance_levels": [_relevance_out(x) for x in _relevance_levels(db)],
+        "relevance_levels": [relevance_summary(x) for x in _relevance_levels(db)],
         "permissions": {
-            "can_view_pestle": _can_read_pestle(db, user),
-            "can_manage_pestle": _can_manage_pestle(db, user),
+            "can_view_pestle": can_read_pestle(db, user),
+            "can_manage_pestle": can_manage_pestle(db, user),
         },
     }
 
@@ -462,14 +427,14 @@ def list_pestle_items(
                 func.lower(PestleItem.lens).like(like),
             )
         )
-    types = [_clean_type(value) for value in _split_filter_values(type)]
+    types = [_clean_type(value) for value in split_filter_values(type)]
     if types:
         qry = qry.filter(PestleItem.type.in_(set(types)))
-    lenses = [_clean_lens(value) for value in _split_filter_values(lens)]
+    lenses = [_clean_lens(value) for value in split_filter_values(lens)]
     if lenses:
         qry = qry.filter(PestleItem.lens.in_(set(lenses)))
     relevance_ids = []
-    for value in _split_filter_values(relevance_code):
+    for value in split_filter_values(relevance_code):
         rel = _relevance_by_id_or_code(db, relevance_code=value)
         relevance_ids.append(rel.id)
     if relevance_ids:
@@ -699,7 +664,7 @@ def get_item_business_process_relevance(*, item_id: str, user, db: Session):
         "items": [
             {
                 "business_process": _business_process_out(proc),
-                "relevance": _relevance_out(
+                "relevance": relevance_summary(
                     links.get(str(proc.id)).relevance
                     if str(proc.id) in links
                     else default
@@ -780,8 +745,8 @@ def get_item_clause_relevance(*, item_id: str, user, db: Session):
         "item": _item_out(db, row),
         "items": [
             {
-                "clause": _clause_summary(clause),
-                "relevance": _relevance_out(
+                "clause": clause_summary(clause),
+                "relevance": relevance_summary(
                     links.get(str(clause.id)).relevance
                     if str(clause.id) in links
                     else default
@@ -933,7 +898,7 @@ def pestle_visualisations(
                     "clause_title": link.clause.title,
                     "relevance_code": link.relevance.code,
                     "relevance_label": link.relevance.label,
-                    "relevance": _relevance_out(link.relevance),
+                    "relevance": relevance_summary(link.relevance),
                 }
             )
         proc_rows = (
@@ -967,7 +932,7 @@ def pestle_visualisations(
                     "business_process": link.business_process.name,
                     "relevance_code": link.relevance.code,
                     "relevance_label": link.relevance.label,
-                    "relevance": _relevance_out(link.relevance),
+                    "relevance": relevance_summary(link.relevance),
                 }
             )
 
@@ -1000,11 +965,11 @@ def clause_pestle_relevance(*, clause_id: str, user, db: Session):
         )
     )
     return {
-        "clause": _clause_summary(clause),
+        "clause": clause_summary(clause),
         "items": [
             {
                 "pestle_item": _item_out(db, link.pestle_item),
-                "relevance": _relevance_out(link.relevance),
+                "relevance": relevance_summary(link.relevance),
                 "relevance_id": str(link.relevance_id),
             }
             for link in links

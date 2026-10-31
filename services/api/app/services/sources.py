@@ -20,8 +20,6 @@ from app.services.control_inheritance import effective_framework_ids
 from app.services.frameworks import framework_parameter
 from app.services.isms.serializers import _effectiveness_measure_out
 
-EVENTS_READ_PERMISSION = "events.read"
-
 
 def _source_overrides(user) -> dict | None:
     return getattr(user, "pref_source_colors", None) if isinstance(user, User) else None

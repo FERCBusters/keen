@@ -333,11 +333,11 @@ async def admin_diary(
       - application/json {summary, details?, controls?}
       - multipart/form-data (summary, details?, timestamp?, controls[], attachments[])
 
-    The author is taken from the upstream auth header (Vouch) and cannot be
-    overridden by the browser.
+    The author is the authenticated administrator and cannot be overridden by
+    the browser.
     """
 
-    author = getattr(getattr(request.state, "user", None), "username", None)
+    author = user.username
     ctype = (request.headers.get("content-type") or "").lower()
 
     summary: str | None = None

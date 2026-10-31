@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from app.core.config import settings
 from app.ingest.cloud.api import JsonApi, items
@@ -23,7 +23,9 @@ from app.ingest.cloud.base import (
     Unavailable,
     clip,
     guarded,
+    parse_time,
     plural,
+    text_field,
 )
 
 ORIGIN = "https://api.digitalocean.com"
@@ -313,33 +315,16 @@ def collect() -> list[ScopeResult]:
 # --- activity ---------------------------------------------------------------------
 
 
-def _when(value) -> datetime | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo:
-        parsed = parsed.astimezone(timezone.utc)
-    return parsed.replace(tzinfo=None)
-
-
-def _text(value, limit=128) -> str:
-    return value[:limit] if isinstance(value, str) else ""
-
-
 def action_entry(action: dict, scope: str) -> Activity | None:
-    when = _when(action.get("started_at"))
+    when = parse_time(action.get("started_at"))
     ident = action.get("id")
-    kind = _text(action.get("type"))
+    kind = text_field(action.get("type"))
     if when is None or not isinstance(ident, int) or not kind:
         return None
     outcome = {"completed": "success", "errored": "failure"}.get(
         action.get("status"), "info"
     )
-    resource = _text(action.get("resource_type"), 64)
+    resource = text_field(action.get("resource_type"), 64)
     return Activity(
         id=f"action:{ident}",
         at=when,
@@ -352,7 +337,7 @@ def action_entry(action: dict, scope: str) -> Activity | None:
             for k, v in {
                 "service": "digitalocean",
                 "resource_type": resource,
-                "region": _text(action.get("region_slug"), 64),
+                "region": text_field(action.get("region_slug"), 64),
             }.items()
             if v
         },

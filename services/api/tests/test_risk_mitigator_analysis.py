@@ -28,6 +28,7 @@ from app.db.models import (
     RiskLibraryEntry,
 )
 from app.services import risk_mitigator as mitigator
+from app.services.control_refs import clause_summary, control_summary
 
 HOSTILE = '<img src=x onerror="alert(1)">'
 
@@ -766,5 +767,5 @@ def test_control_documents_include_metadata_and_tags_when_present():
 
 
 def test_missing_catalogue_rows_serialise_as_empty_objects():
-    assert mitigator._control_out(None) == {}
-    assert mitigator._clause_summary(None) == {}
+    assert control_summary(None) == {}
+    assert clause_summary(None) == {}

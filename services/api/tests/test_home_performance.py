@@ -13,9 +13,6 @@ import uuid
 from datetime import datetime
 
 import pytest
-from sqlalchemy import create_engine, event as sql_event, func, insert, select
-from sqlalchemy.orm import Session
-
 from app.core.config import settings
 from app.db.models import (
     ControlEvidenceStats,
@@ -31,6 +28,9 @@ from app.services import control_evidence_stats as ces
 from app.services import home as home_service
 from app.services import stats as stats_service
 from app.services.context import ChangeContext
+from sqlalchemy import create_engine, func, insert, select
+from sqlalchemy import event as sql_event
+from sqlalchemy.orm import Session
 
 from tests.db_helpers import create_sqlite_schema
 

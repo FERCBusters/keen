@@ -1,4 +1,4 @@
-// Canvas pagination and PDF encoding; caller supplies content and labels.
+// Capture waits, canvas pagination and PDF encoding; caller supplies content and labels.
 
 // ------------------------------------------------------------------
 // Client-side evidence PDF generation
@@ -10,6 +10,30 @@ const _A4_LANDSCAPE = { w: 841.89, h: 595.28 };
 function _pageSize(orientation) {
   const o = String(orientation || 'portrait').toLowerCase();
   return o === 'landscape' ? _A4_LANDSCAPE : _A4_PORTRAIT;
+}
+
+// Waits until the images under root have loaded or failed, for at most timeoutMs,
+// so a capture does not miss them.
+export async function waitForImages(root, timeoutMs = 15_000) {
+  if (!root) return;
+  const imgs = Array.from(root.querySelectorAll('img'));
+  const pending = imgs
+    .filter((img) => img && img.src)
+    .map((img) => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise((resolve) => {
+        const done = () => {
+          img.removeEventListener('load', done);
+          img.removeEventListener('error', done);
+          resolve();
+        };
+        img.addEventListener('load', done);
+        img.addEventListener('error', done);
+      });
+    });
+
+  if (!pending.length) return;
+  await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, timeoutMs))]);
 }
 
 async function _canvasToJpegBytes(canvas, quality = 0.92) {
@@ -25,6 +49,7 @@ export async function sliceCanvasToA4JpegPages(
   footerText,
   orientation,
   avoidRanges = [],
+  { fitText = false } = {},
 ) {
   const { w: pageW, h: pageH } = _pageSize(orientation);
 
@@ -40,6 +65,10 @@ export async function sliceCanvasToA4JpegPages(
   const footerPx = Math.round(footerPt / ratio);
   const contentHeightPx = Math.max(1, pageHeightPx - headerPx - footerPx);
   const fontPx = Math.max(10, Math.round(10 / ratio));
+  // With fitText, long text is narrowed to fit: the header within the page and
+  // the footer clear of the page numbers.
+  const headerMaxWidth = fitText ? [w - 20] : [];
+  const footerMaxWidth = fitText ? [Math.floor(w * 0.72)] : [];
   // Precompute slice offsets so we know total page count.
   const ranges = Array.isArray(avoidRanges) ? avoidRanges.slice() : [];
   ranges.sort((a, b) => (a?.top ?? 0) - (b?.top ?? 0));
@@ -103,7 +132,7 @@ export async function sliceCanvasToA4JpegPages(
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = `${fontPx}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
-      ctx.fillText(String(header), w / 2, headerPx / 2);
+      ctx.fillText(String(header), w / 2, headerPx / 2, ...headerMaxWidth);
     }
 
     ctx.drawImage(canvas, 0, y0, w, sliceH, 0, headerPx, w, sliceH);
@@ -121,7 +150,7 @@ export async function sliceCanvasToA4JpegPages(
     ctx.font = `${fontPx}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
 
     ctx.textAlign = 'left';
-    ctx.fillText(String(footerText || ''), 8, top + footerPx / 2);
+    ctx.fillText(String(footerText || ''), 8, top + footerPx / 2, ...footerMaxWidth);
 
     ctx.textAlign = 'right';
     ctx.fillText(`Page ${i + 1} of ${totalPages}`, w - 8, top + footerPx / 2);

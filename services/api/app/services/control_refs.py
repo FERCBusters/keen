@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.references import try_uuid
-from app.db.models import ControlItem
+from app.core.references import (
+    control_justification,
+    control_upstream_url,
+    try_uuid,
+)
+from app.db.models import ControlItem, FrameworkClause
 from app.services.errors import DomainError
 
 # Framework clauses are also kept in the control catalogue as rows of this
@@ -67,3 +73,34 @@ def control_by_id_or_ref(
             .one_or_none()
         )
     return control_by_ref(db, framework, text, ignore_case=ignore_case)
+
+
+def control_summary(control: ControlItem | None) -> dict[str, Any]:
+    """Return the control fields shown wherever an entity lists its controls."""
+    if not control:
+        return {}
+    return {
+        "id": str(control.id),
+        "framework": control.framework_slug,
+        "type": control.type,
+        "ref": control.ref,
+        "title": control.title,
+        "in_scope": control.in_scope,
+        "justification": control_justification(control),
+        "upstream_url": control_upstream_url(control),
+    }
+
+
+def clause_summary(clause: FrameworkClause | None) -> dict[str, Any]:
+    """Return the clause fields shown wherever an entity lists its clauses."""
+    if not clause:
+        return {}
+    return {
+        "id": str(clause.id),
+        "framework": clause.framework_slug,
+        "ref": clause.ref,
+        "title": clause.title,
+        "parent_id": str(clause.parent_clause_id) if clause.parent_clause_id else None,
+        "parent_ref": clause.parent.ref if clause.parent else None,
+        "sort_order": clause.sort_order,
+    }

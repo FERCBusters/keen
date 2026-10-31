@@ -37,9 +37,7 @@ def user_email(user) -> str | None:
 
 
 def smtp_configured() -> bool:
-    return bool((settings.smtp_host or "").strip()) and bool(
-        (settings.smtp_from_email or "").strip()
-    )
+    return bool(settings.smtp_host.strip()) and bool(settings.smtp_from_email.strip())
 
 
 def _normalise_attachments(attachments: list[dict] | None) -> list[dict]:
@@ -88,13 +86,13 @@ def send_email(
     if not to_addr:
         return
 
-    host = (settings.smtp_host or "").strip()
-    port = int(getattr(settings, "smtp_port", 587) or 587)
-    user = (settings.smtp_username or "").strip() or None
-    pwd = (settings.smtp_password or "").strip() or None
-    use_tls = bool(getattr(settings, "smtp_use_tls", True))
-    use_ssl = bool(getattr(settings, "smtp_use_ssl", False))
-    timeout = int(getattr(settings, "smtp_timeout_seconds", 20) or 20)
+    host = settings.smtp_host.strip()
+    port = settings.smtp_port or 587
+    user = settings.smtp_username.strip() or None
+    pwd = settings.smtp_password.strip() or None
+    use_tls = settings.smtp_use_tls
+    use_ssl = settings.smtp_use_ssl
+    timeout = settings.smtp_timeout_seconds or 20
 
     if user and pwd and not (use_ssl or use_tls):
         # SMTP credentials are only sent after TLS verification succeeds.
@@ -102,7 +100,7 @@ def send_email(
             "SMTP credentials require KEEN_SMTP_USE_TLS or KEEN_SMTP_USE_SSL"
         )
 
-    from_email = (settings.smtp_from_email or "").strip()
+    from_email = settings.smtp_from_email.strip()
     from_name = (settings.smtp_from_name or "Keen").strip() or "Keen"
 
     msg = EmailMessage()

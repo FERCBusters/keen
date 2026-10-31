@@ -1,11 +1,12 @@
-"""Shared, stateless Forgejo/Gitea feed parsing and response diagnostics.
+"""Stateless feed parsing and response diagnostics for the git collectors.
 
-Authentication, fetching, cursors and event provenance belong to each collector.
+Authentication, fetching, cursors and event provenance belong to the
+collectors (gitea_compatible and gitlab).
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlparse
@@ -13,11 +14,7 @@ from xml.etree import ElementTree as ET
 
 import httpx
 
-
-def _to_utc_naive(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+from app.core.datetime_utils import to_utc_naive
 
 
 def _parse_iso_ts(value: str | None) -> datetime | None:
@@ -26,7 +23,7 @@ def _parse_iso_ts(value: str | None) -> datetime | None:
     v = value.strip()
     try:
         dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-        return _to_utc_naive(dt)
+        return to_utc_naive(dt)
     except Exception:
         return None
 
@@ -36,7 +33,7 @@ def _parse_rfc822_ts(value: str | None) -> datetime | None:
         return None
     try:
         dt = parsedate_to_datetime(value.strip())
-        return _to_utc_naive(dt)
+        return to_utc_naive(dt)
     except Exception:
         return None
 

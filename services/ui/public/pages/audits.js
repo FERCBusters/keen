@@ -22,6 +22,7 @@ import {
   syncRichTextEditor,
   syncRichTextEditors,
   userPillHtml,
+  auditStatusLabel,
 } from '/app.js';
 import { scheduleDateFields, scheduleSummary } from '/pages/schedule-fields.js';
 import { monthRange, renderMonthCalendar, wireMonthPicker } from '/pages/schedule-calendar.js';
@@ -172,12 +173,6 @@ function ensureAuditManage() {
   return false;
 }
 
-function statusLabel(s) {
-  const v = String(s || 'open');
-  if (v === 'in_progress') return 'In progress';
-  return v ? v.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase()) : 'Open';
-}
-
 function auditTypeLabel(v) {
   return String(v || 'internal').toLowerCase() === 'external' ? 'External' : 'Internal';
 }
@@ -213,7 +208,7 @@ function renderAudits(items) {
       <td>${esc(a.evidence_count ?? 0)}</td>
       <td><span title="${esc(scopeBreakdown)}">${esc(scope)}</span><div class="small-muted">${esc(scopeBreakdown)}</div></td>
       <td>${esc(a.finding_count ?? 0)}</td>
-      <td><span class="badge text-bg-light">${esc(statusLabel(a.status))}</span></td>
+      <td><span class="badge text-bg-light">${esc(auditStatusLabel(a.status))}</span></td>
       <td class="text-end">
         <div class="btn-group btn-group-sm">
           <a class="btn btn-outline-primary" href="${esc(url)}">Open</a>

@@ -173,7 +173,7 @@ def test_event_endpoints_keep_labels_and_provenance(catalogue, monkeypatch):
 
     db, controls, events, _ = catalogue
     user = User(id=uuid.uuid4(), username="test", is_active=True)
-    monkeypatch.setattr(routes, "_require_events_read", lambda db, request: user)
+    monkeypatch.setattr(routes, "require_events_read", lambda db, request: user)
     monkeypatch.setattr(settings, "aggregate_cache_ttl_seconds", 0)
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
     page = routes.list_events(request, framework="F0", limit=50, conditions=[], db=db)
@@ -319,7 +319,7 @@ def test_inherited_controls_name_the_rule_and_leave_out_shipped_boilerplate(
     )
     db.commit()
     user = User(id=uuid.uuid4(), username="test", is_active=True)
-    monkeypatch.setattr(routes, "_require_events_read", lambda db, request: user)
+    monkeypatch.setattr(routes, "require_events_read", lambda db, request: user)
     monkeypatch.setattr(settings, "aggregate_cache_ttl_seconds", 0)
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
     detail = routes.get_event(request, str(event.id), framework="F0", db=db)

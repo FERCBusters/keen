@@ -12,7 +12,11 @@ from app.db.models import (
     user_permissions,
 )
 from app.security.auth import ROLE_ADMIN
-from app.security.roles import compute_effective_role, is_effective_admin
+from app.security.roles import (
+    compute_effective_role,
+    is_active_user,
+    is_effective_admin,
+)
 from app.security.sessions import update_session_authz
 
 
@@ -35,22 +39,20 @@ def get_effective_permission_codes(
 
     Admin role implicitly has all permissions.
     """
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
+    if not is_active_user(user):
         return set()
 
     if use_cache:
-        cached = _normalise_cached_permission_codes(
-            getattr(user, "effective_permission_codes", None)
-        )
+        cached = _normalise_cached_permission_codes(user.effective_permission_codes)
         if cached is not None:
             return cached
 
-    eff = getattr(user, "effective_role", None) if use_cache else None
+    eff = user.effective_role if use_cache else None
     if not eff:
         eff = compute_effective_role(db, user)
         user.effective_role = eff
 
-    if (eff or "") == ROLE_ADMIN:
+    if eff == ROLE_ADMIN:
         # Admin is treated as 'allow all'. Return a sentinel-ish set.
         return {"*"}
 
@@ -89,15 +91,13 @@ def ensure_session_authorization_current(db: Session, user: User) -> None:
     Trusted REMOTE_USER deployments do not have a Keen session to cache into, so
     they fall back to the existing DB-backed behaviour.
     """
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
+    if not is_active_user(user):
         return
 
-    sid = getattr(user, "session_id", None)
-    cached_codes = _normalise_cached_permission_codes(
-        getattr(user, "effective_permission_codes", None)
-    )
-    cached_role = getattr(user, "effective_role", None)
-    cached_version = getattr(user, "session_authz_version", None)
+    sid = user.session_id
+    cached_codes = _normalise_cached_permission_codes(user.effective_permission_codes)
+    cached_role = user.effective_role
+    cached_version = user.session_authz_version
 
     if not sid:
         # No Keen-owned session (for example trusted remote-user auth). Compute the
@@ -106,7 +106,7 @@ def ensure_session_authorization_current(db: Session, user: User) -> None:
             user.effective_role = compute_effective_role(db, user)
         return
 
-    current_version = int(user.authz_version or 0)
+    current_version = user.authz_version
     if (
         cached_version is not None
         and int(cached_version) == current_version
@@ -122,39 +122,37 @@ def ensure_session_authorization_current(db: Session, user: User) -> None:
     _attach_permission_snapshot(user, role=role, codes=codes)
     try:
         r = get_valkey()
-        setattr(user, "session_authz_version", int(current_version))
+        user.session_authz_version = current_version
         update_session_authz(
             r,
             str(sid),
             effective_role=role,
             permission_codes=codes,
-            authz_version=int(current_version),
-            ttl_seconds=int(settings.session_ttl_seconds),
+            authz_version=current_version,
+            ttl_seconds=settings.session_ttl_seconds,
         )
     except Exception:
         pass
 
 
-def has_permission(db: Session, user: User, code: str) -> bool:
+def has_permission(db: Session, user: User | None, code: str) -> bool:
     """Check whether a user has a given permission code."""
-    c = (code or "").strip()
+    c = code.strip()
     if not c:
         return False
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
+    if not is_active_user(user):
         return False
 
-    cached = _normalise_cached_permission_codes(
-        getattr(user, "effective_permission_codes", None)
-    )
+    cached = _normalise_cached_permission_codes(user.effective_permission_codes)
     if cached is not None:
         return "*" in cached or c in cached
 
-    eff = getattr(user, "effective_role", None)
+    eff = user.effective_role
     if not eff:
         eff = compute_effective_role(db, user)
         user.effective_role = eff
 
-    if (eff or "") == ROLE_ADMIN:
+    if eff == ROLE_ADMIN:
         return True
 
     uid = user.id
@@ -182,12 +180,17 @@ def has_permission(db: Session, user: User, code: str) -> bool:
     return bool(hit2)
 
 
+def has_any_permission(db: Session, user: User | None, *codes: str) -> bool:
+    """Whether an active user holds at least one of ``codes`` (admins hold all)."""
+    return any(has_permission(db, user, code) for code in codes)
+
+
 EVENTS_READ_PERMISSION = "events.read"
 
 
 def can_read_events(db: Session, user: User | None) -> bool:
     """Evidence records, and aggregates derived from them, require events.read."""
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
+    if not is_active_user(user):
         return False
     return is_effective_admin(db, user) or has_permission(
         db, user, EVENTS_READ_PERMISSION

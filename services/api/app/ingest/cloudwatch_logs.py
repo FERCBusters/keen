@@ -7,16 +7,13 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import boto3
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import Artifact, Event, IngestionCursor
-from app.ingest.common import apply_rules
+from app.db.models import IngestionCursor
+from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import (
-    artifact_key,
     connection_runs,
-    identity,
     load_document,
     namespace,
     settings,
@@ -29,13 +26,7 @@ from app.ingest.log_pipeline import (
     try_parse_json_line,
 )
 from app.security.errors import collection_error
-from app.security.redaction import (
-    prepare_artifact_bytes,
-    prepare_event_fields,
-    redact_obj,
-)
 from app.services.ingestion_pause import pausable
-from app.storage.s3 import put_bytes
 
 
 def _cloudwatch_client(region: str | None = None):
@@ -313,89 +304,49 @@ def ingest_cloudwatch_logs_once(
                 }
             }
 
-            # Hardening: redact before persisting.
-            raw_pointer_r = redact_obj(raw_pointer) or {}
-            normalized_r = redact_obj(normalized) or {}
-
-            ev_id = uuid.uuid4()
-            sev = (
+            severity = (
                 int(event_defaults.get("severity", 3))
                 if event_defaults.get("severity") is not None
                 else None
             )
-
-            protected_fields = prepare_event_fields(
-                dict(
-                    system=event_defaults.get("system") or name,
-                    actor=actor,
-                    action=event_defaults.get("action") or "log_event",
-                    outcome=event_defaults.get("outcome"),
-                    severity=sev,
-                    summary=summary,
-                    raw_pointer=raw_pointer_r,
-                    normalized_payload=normalized_r,
+            ext = "json" if parsed is not None else "log"
+            ctype = (
+                "application/json"
+                if parsed is not None
+                else "text/plain; charset=utf-8"
+            )
+            stored = store_event_with_artifact(
+                db,
+                timestamp=ts.replace(tzinfo=None),
+                source="cloudwatch_logs",
+                system=event_defaults.get("system") or name,
+                actor=actor,
+                action=event_defaults.get("action") or "log_event",
+                outcome=event_defaults.get("outcome"),
+                severity=severity,
+                summary=summary,
+                raw_pointer=raw_pointer,
+                normalized_payload=normalized,
+                external_id=ext_id,
+                artifact_kind="log_event",
+                artifact_bytes=msg.encode("utf-8", errors="replace"),
+                artifact_content_type=ctype,
+                # Stored objects are never replaced, so each attempt writes a
+                # fresh key: a retry after a failed run must not collide with an
+                # object the rollback left behind. AWS event IDs can be long, so
+                # the key uses a digest of the identity.
+                artifact_key=(
+                    f"cloudwatch_logs/{name}/{ts.date().isoformat()}/"
+                    f"{make_fingerprint(ext_id)}-{uuid.uuid4().hex}.{ext}"
                 ),
-                mask=settings.event_data_masking == "true",
+                captured_by="keen:cloudwatch_logs",
+                # The run commits once, together with its cursor.
+                commit=False,
             )
-            stmt = (
-                pg_insert(Event)
-                .values(
-                    id=ev_id,
-                    timestamp=ts,
-                    source="cloudwatch_logs",
-                    **protected_fields,
-                    external_id=namespace(ext_id),
-                    **identity(),
-                )
-                .on_conflict_do_nothing(index_elements=["source", "external_id"])
-                .returning(Event.id)
-            )
-            inserted_id = db.execute(stmt).scalar()
-            if inserted_id is not None:
+            if not stored.get("deduped"):
                 created_events += 1
-
-                # Store artifact: raw message line.
-                ext = "json" if parsed is not None else "log"
-                ctype = (
-                    "application/json"
-                    if parsed is not None
-                    else "text/plain; charset=utf-8"
-                )
-                # Keep key safe and predictable.
-                safe_eid = re.sub(r"[^a-zA-Z0-9._-]+", "-", (event_id or ext_id))[:80]
-                key = f"cloudwatch_logs/{name}/{ts.date().isoformat()}/{inserted_id}-{safe_eid}.{ext}"
-                msg_bytes, redaction_status = prepare_artifact_bytes(
-                    msg.encode("utf-8", errors="replace"),
-                    ctype,
-                    mask=settings.event_data_masking == "true",
-                )
-                stored = put_bytes(
-                    key=artifact_key(key), data=msg_bytes, content_type=ctype
-                )
-                art = Artifact(
-                    event_id=inserted_id,
-                    kind="log_event",
-                    storage_uri=stored.uri,
-                    sha256=stored.sha256,
-                    content_type=ctype,
-                    size_bytes=stored.size_bytes,
-                    captured_by="keen:cloudwatch_logs",
-                    redaction_status=redaction_status,
-                )
-                db.add(art)
-                db.flush()
                 created_artifacts += 1
-
-                # Apply mapping rules.
-                ev_for_rules = Event(
-                    id=inserted_id,
-                    timestamp=ts,
-                    source="cloudwatch_logs",
-                    **protected_fields,
-                    external_id=namespace(ext_id),
-                    **identity(),
-                )
-                created_mappings += apply_rules(db, ev_for_rules)
+                created_mappings += stored["mappings"]
 
             # Advance max_seen_ts even for deduped events.
             if (max_seen_ts is None) or (ts > max_seen_ts):

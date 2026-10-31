@@ -9,8 +9,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.references import CONTROL_JUSTIFICATIONS
-from app.core.references import control_justification as _control_justification
-from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
 from app.db.models import (
     ControlClauseLink,
@@ -32,18 +30,17 @@ from app.db.models import (
     IsmsSwot,
     PestleBusinessProcess,
     PestleItem,
-    PestleRelevanceLevel,
     Risk,
     RiskAsset,
     RiskAssetSubcategory,
     RiskCategory,
     RiskControlLink,
-    User,
 )
-from app.security.permissions import has_permission
-from app.services.clauses import _clause_evidence_mappings
+from app.services.clauses import clause_with_evidence
+from app.services.control_refs import control_summary
 from app.services.features import state
-from app.services.isms.access import _can_read_isms
+from app.services.interested_parties import can_read_interested_parties
+from app.services.isms.access import can_read_isms
 from app.services.isms.serializers import (
     _asset_out,
     _attach_links,
@@ -55,71 +52,8 @@ from app.services.isms.serializers import (
     _objective_out,
 )
 from app.services.isms.swot import summary as swot_summary
-from app.services.risks import risk_owner_out
-
-RISK_READ_PERMISSION = "risk.read"
-RISK_MANAGE_PERMISSION = "risk.manage"
-PESTLE_READ_PERMISSION = "pestle.read"
-PESTLE_MANAGE_PERMISSION = "pestle.manage"
-INTERESTED_PARTIES_READ_PERMISSION = "interested_parties.read"
-INTERESTED_PARTIES_MANAGE_PERMISSION = "interested_parties.manage"
-
-
-def _can_view_risks(db: Session, user: User | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
-        return False
-    return has_permission(db, user, RISK_READ_PERMISSION) or has_permission(
-        db, user, RISK_MANAGE_PERMISSION
-    )
-
-
-def _can_view_pestle(db: Session, user: User | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
-        return False
-    return bool(
-        has_permission(db, user, PESTLE_READ_PERMISSION)
-        or has_permission(db, user, PESTLE_MANAGE_PERMISSION)
-        or _can_view_risks(db, user)
-    )
-
-
-def _can_view_interested_parties(db: Session, user: User | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
-        return False
-    return bool(
-        has_permission(db, user, INTERESTED_PARTIES_READ_PERMISSION)
-        or has_permission(db, user, INTERESTED_PARTIES_MANAGE_PERMISSION)
-        or _can_view_risks(db, user)
-    )
-
-
-def _control_summary(control: ControlItem) -> dict[str, Any]:
-    return {
-        "id": str(control.id),
-        "framework": control.framework_slug,
-        "type": control.type,
-        "ref": control.ref,
-        "title": control.title,
-        "in_scope": bool(control.in_scope),
-        "justification": _control_justification(control),
-        "upstream_url": _control_upstream_url(control),
-    }
-
-
-def _clause_summary(clause: FrameworkClause) -> dict[str, Any]:
-    evidence_mappings = _clause_evidence_mappings(clause)
-    return {
-        "id": str(clause.id),
-        "framework": clause.framework_slug,
-        "ref": clause.ref,
-        "title": clause.title,
-        "parent_id": str(clause.parent_clause_id) if clause.parent_clause_id else None,
-        "parent_ref": clause.parent.ref if getattr(clause, "parent", None) else None,
-        "sort_order": int(clause.sort_order or 0),
-        "upstream_url": _control_upstream_url(clause),
-        "evidence_mappings": evidence_mappings,
-        "evidence_count": len(evidence_mappings),
-    }
+from app.services.pestle import can_read_pestle, relevance_summary
+from app.services.risks import can_read_risks, risk_owner_out
 
 
 def _risk_controls(db: Session, risk_id, framework: str) -> list[dict[str, Any]]:
@@ -134,16 +68,7 @@ def _risk_controls(db: Session, risk_id, framework: str) -> list[dict[str, Any]]
         .all()
     )
     rows.sort(key=lambda c: (c.type, _ref_sort_key(c.ref)))
-    return [_control_summary(c) for c in rows]
-
-
-def _relevance_summary(row: PestleRelevanceLevel | None) -> dict[str, Any]:
-    return {
-        "id": str(row.id) if row else None,
-        "code": row.code if row else "na",
-        "label": row.label if row else "N/A",
-        "sort_order": int(row.sort_order or 0) if row else 0,
-    }
+    return [control_summary(c) for c in rows]
 
 
 def _business_process_summary(row: PestleBusinessProcess) -> dict[str, Any]:
@@ -179,19 +104,19 @@ def _pestle_summary(item: PestleItem) -> dict[str, Any]:
         "type": item.type,
         "lens": item.lens,
         "item": item.item or "",
-        "overall_relevance": _relevance_summary(item.overall_relevance),
+        "overall_relevance": relevance_summary(item.overall_relevance),
         "rationale": item.rationale or "",
         "business_processes": [
             {
                 "business_process": _business_process_summary(link.business_process),
-                "relevance": _relevance_summary(link.relevance),
+                "relevance": relevance_summary(link.relevance),
             }
             for link in business_links
         ],
         "clauses": [
             {
-                "clause": _clause_summary(link.clause),
-                "relevance": _relevance_summary(link.relevance),
+                "clause": clause_with_evidence(link.clause),
+                "relevance": relevance_summary(link.relevance),
             }
             for link in clause_links
         ],
@@ -215,7 +140,7 @@ def _interested_party_controls(
         .all()
     )
     rows.sort(key=lambda c: (c.type, _ref_sort_key(c.ref)))
-    return [_control_summary(c) for c in rows]
+    return [control_summary(c) for c in rows]
 
 
 def _communication_summary(row: InterestedPartyCommunication) -> dict[str, Any]:
@@ -311,20 +236,20 @@ def statement_of_applicability(
 
     control_rows = []
     for control in controls:
-        row = _control_summary(control)
+        row = control_summary(control)
         row["clauses"] = control_clause_map.get(str(control.id), {})
         control_rows.append(row)
 
     clause_rows = []
     for clause in clauses:
-        row = _clause_summary(clause)
+        row = clause_with_evidence(clause)
         row["controls"] = clause_control_map.get(str(clause.id), {})
         clause_rows.append(row)
 
-    can_view_risks = _can_view_risks(db, user)
-    can_view_pestle = _can_view_pestle(db, user)
-    can_view_interested_parties = _can_view_interested_parties(db, user)
-    can_view_isms = _can_read_isms(db, user)
+    can_view_risks = can_read_risks(db, user)
+    can_view_pestle = can_read_pestle(db, user)
+    can_view_interested_parties = can_read_interested_parties(db, user)
+    can_view_isms = can_read_isms(db, user)
     risk_rows: list[dict[str, Any]] = []
     if can_view_risks:
         risks = (

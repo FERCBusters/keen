@@ -26,11 +26,15 @@ from app.ingest.cloud.base import (
     Provider,
     ScopeResult,
     Unavailable,
+    api_timestamp,
     clip,
     guarded,
     inactive_check,
     mfa_check,
+    parse_time,
     plural,
+    split_list,
+    text_field,
     unknown,
 )
 
@@ -270,7 +274,7 @@ class Azure:
 
 
 def _split(value) -> list[str]:
-    return [v.lower() for v in re.split(r"[\s,]+", str(value or "").strip()) if v]
+    return [v.lower() for v in split_list(value)]
 
 
 def connect() -> Azure:
@@ -331,21 +335,6 @@ def subscriptions(api: Azure) -> list[tuple[str, str, str]]:
 
 
 # --- shared ------------------------------------------------------------------
-
-
-def _when(value) -> datetime | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    # Graph writes up to seven fractional digits; Python reads six.
-    text = re.sub(r"(\.\d{6})\d+", r"\1", text.replace("Z", "+00:00"))
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo:
-        parsed = parsed.astimezone(timezone.utc)
-    return parsed.replace(tzinfo=None)
 
 
 def _email(user: dict) -> str:
@@ -576,11 +565,11 @@ def sign_in_activity(api: Azure, people: dict, now: datetime) -> Check:
     for user in users:
         person = _person(people, user)
         activity = _dict(user.get("signInActivity"))
-        person.last_used = _when(
+        person.last_used = parse_time(
             activity.get("lastSuccessfulSignInDateTime")
             or activity.get("lastSignInDateTime")
         )
-        person.created = _when(user.get("createdDateTime"))
+        person.created = parse_time(user.get("createdDateTime"))
         found.append(person)
     return inactive_check(
         "identity.inactive",
@@ -614,13 +603,13 @@ def apps(api: Azure, now: datetime) -> Check:
             for c in app.get(field) or []
             if isinstance(c, dict)
         ]:
-            ends = _when(credential.get("endDateTime"))
+            ends = parse_time(credential.get("endDateTime"))
             if ends is not None and ends <= now:
                 continue
             total += 1
             if ends is not None and ends - now <= EXPIRING:
                 expiring += 1
-            started = _when(credential.get("startDateTime"))
+            started = parse_time(credential.get("startDateTime"))
             if started is not None and now - started >= limit:
                 old.append(name)
     if not total:
@@ -946,26 +935,20 @@ def collect() -> list[ScopeResult]:
 # --- activity ---------------------------------------------------------------------
 
 
-def _text(value, limit=128) -> str:
-    return value[:limit] if isinstance(value, str) else ""
-
-
-def _stamp(when: datetime) -> str:
-    return when.replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def sign_in_entry(item: dict, tenant: str) -> Activity | None:
-    when = _when(item.get("createdDateTime"))
-    ident = _text(item.get("id"))
+    when = parse_time(item.get("createdDateTime"))
+    ident = text_field(item.get("id"))
     if when is None or not ident:
         return None
     code = _dict(item.get("status")).get("errorCode")
     outcome = "success" if code == 0 else "failure" if isinstance(code, int) else "info"
-    who = _text(item.get("userPrincipalName"), 256) or _text(item.get("userId"))
+    who = text_field(item.get("userPrincipalName"), 256) or text_field(
+        item.get("userId")
+    )
     detail = {
         "service": "entra",
-        "application": _text(item.get("appDisplayName")),
-        "source_ip": _text(item.get("ipAddress"), 64),
+        "application": text_field(item.get("appDisplayName")),
+        "source_ip": text_field(item.get("ipAddress"), 64),
     }
     if isinstance(code, int) and code:
         detail["error_code"] = str(code)
@@ -986,9 +969,9 @@ def sign_in_entry(item: dict, tenant: str) -> Activity | None:
 
 
 def audit_entry(item: dict, tenant: str) -> Activity | None:
-    when = _when(item.get("activityDateTime"))
-    ident = _text(item.get("id"))
-    name = _text(item.get("activityDisplayName"))
+    when = parse_time(item.get("activityDateTime"))
+    ident = text_field(item.get("id"))
+    name = text_field(item.get("activityDisplayName"))
     if when is None or not ident or not name:
         return None
     outcome = {"success": "success", "failure": "failure", "timeout": "failure"}.get(
@@ -996,7 +979,9 @@ def audit_entry(item: dict, tenant: str) -> Activity | None:
     )
     initiated = _dict(item.get("initiatedBy"))
     user, app = _dict(initiated.get("user")), _dict(initiated.get("app"))
-    who = _text(user.get("userPrincipalName"), 256) or _text(app.get("displayName"))
+    who = text_field(user.get("userPrincipalName"), 256) or text_field(
+        app.get("displayName")
+    )
     return Activity(
         id="audit:" + ident,
         at=when,
@@ -1008,8 +993,8 @@ def audit_entry(item: dict, tenant: str) -> Activity | None:
         detail={
             k: v
             for k, v in {
-                "service": _text(item.get("loggedByService"), 64) or "entra",
-                "category": _text(item.get("category"), 64),
+                "service": text_field(item.get("loggedByService"), 64) or "entra",
+                "category": text_field(item.get("category"), 64),
             }.items()
             if v
         },
@@ -1018,9 +1003,9 @@ def audit_entry(item: dict, tenant: str) -> Activity | None:
 
 
 def activity_entry(item: dict, sub: str) -> Activity | None:
-    when = _when(item.get("eventTimestamp"))
-    ident = _text(item.get("eventDataId"))
-    name = _text(_dict(item.get("operationName")).get("value"), 256)
+    when = parse_time(item.get("eventTimestamp"))
+    ident = text_field(item.get("eventDataId"))
+    name = text_field(_dict(item.get("operationName")).get("value"), 256)
     state = _dict(item.get("status")).get("value")
     kind = _dict(item.get("category")).get("value")
     if when is None or not ident or not name or state not in ("Succeeded", "Failed"):
@@ -1029,7 +1014,7 @@ def activity_entry(item: dict, sub: str) -> Activity | None:
     if kind not in ("Administrative", "Security", "Policy"):
         return None
     outcome = "success" if state == "Succeeded" else "failure"
-    who = _text(item.get("caller"), 256)
+    who = text_field(item.get("caller"), 256)
     return Activity(
         id="activity:" + ident,
         at=when,
@@ -1045,7 +1030,7 @@ def activity_entry(item: dict, sub: str) -> Activity | None:
 
 def _graph_window(api, path, field, since, until):
     params = {
-        "$filter": f"{field} ge {_stamp(since)} and {field} lt {_stamp(until)}",
+        "$filter": f"{field} ge {api_timestamp(since)} and {field} lt {api_timestamp(until)}",
         "$top": "1000",
     }
     return api.listing("graph", path, params=params, limit=MAX_ACTIVITY // 1000 + 1)
@@ -1072,8 +1057,8 @@ def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
                 f"/subscriptions/{sub}/providers/Microsoft.Insights/eventtypes/management/values",
                 params={
                     "api-version": VERSIONS["activity"],
-                    "$filter": f"eventTimestamp ge '{_stamp(since)}' and "
-                    f"eventTimestamp le '{_stamp(until)}'",
+                    "$filter": f"eventTimestamp ge '{api_timestamp(since)}' and "
+                    f"eventTimestamp le '{api_timestamp(until)}'",
                 },
                 limit=MAX_ACTIVITY // 100 + 1,
             )

@@ -5,8 +5,7 @@ import subprocess
 import sys
 
 import httpx
-import pytest
-from app.ingest import bookstack, forgejo, gitea, google_workspace
+from app.ingest import bookstack, git_activity, google_workspace
 from app.ingest import http as ingestion_http
 
 
@@ -35,15 +34,14 @@ def test_google_sdk_does_not_log_invalid_response_body(caplog):
     assert not [r for r in caplog.records if r.name == "googleapiclient.http"]
 
 
-@pytest.mark.parametrize("collector", [forgejo, gitea])
-def test_redirect_cannot_reflect_credential_under_unrecognised_key(collector):
+def test_redirect_cannot_reflect_credential_under_unrecognised_key():
     response = httpx.Response(
         302,
         request=httpx.Request("GET", "https://example.test/SYNTHETIC_SECRET"),
         headers={"location": "https://example.test/?innocent=SYNTHETIC_SECRET"},
         extensions={"reason_phrase": b"SYNTHETIC_SECRET"},
     )
-    assert collector._response_status_error(response) == (
+    assert git_activity._response_status_error(response) == (
         "Collection failed: upstream returned HTTP 302"
     )
 

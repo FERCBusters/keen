@@ -20,18 +20,17 @@ from sqlalchemy import (
     Text,
     Time,
     UniqueConstraint,
+    cast,
+    exists,
+    literal,
+    select,
 )
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
 
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import utc_now_naive as utcnow
 from app.db.session import Base
-
-
-def utcnow() -> datetime:
-    return utc_now_naive()
-
 
 SCHEDULE_RECURRENCE_VALUES = "'once','weekly','monthly','quarterly','yearly'"
 SCHEDULE_DATE_RULE_VALUES = (
@@ -240,11 +239,9 @@ class OsaControlMapping(Base):
     nist_ref: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
 
 
-# Keep the original table writable. All evidence readers use this compact,
-# one-hop relation, so an inherited event never propagates transitively.
-from sqlalchemy import cast, exists, literal, select
-from sqlalchemy.orm import foreign
-
+# Effective cross-framework links: the explicit links table plus pairs derived
+# from shared NIST references. Evidence readers use this one-hop relation, so an
+# inherited event never propagates transitively.
 _osa_source = OsaControlMapping.__table__.alias("osa_source")
 _osa_target = OsaControlMapping.__table__.alias("osa_target")
 _source_control = ControlItem.__table__.alias("osa_source_control")
@@ -797,6 +794,8 @@ class Permission(Base):
 
 class User(Base):
     __tablename__ = "users"
+    # Lets the request-scoped attributes below be annotated without mapping them.
+    __allow_unmapped__ = True
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -890,6 +889,14 @@ class User(Base):
     pref_default_framework: Mapped[str | None] = mapped_column(
         String(64), nullable=True
     )
+
+    # Request-scoped authorisation state: session authentication attaches the
+    # session's snapshot (revalidated against authz_version) and sign-in attaches
+    # the effective role. Never persisted.
+    effective_role: str | None = None
+    effective_permission_codes: set[str] | None = None
+    session_id: str | None = None
+    session_authz_version: int | None = None
 
     # -------------------------------------------------------------------------
     # RBAC: groups + permissions

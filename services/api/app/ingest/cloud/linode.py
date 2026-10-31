@@ -28,7 +28,9 @@ from app.ingest.cloud.base import (
     guarded,
     inactive_check,
     mfa_check,
+    parse_time,
     plural,
+    text_field,
 )
 
 ORIGIN = "https://api.linode.com"
@@ -93,19 +95,6 @@ def connect() -> Linode:
     return Linode(ORIGIN, {"Authorization": f"Bearer {token}"})
 
 
-def _when(value) -> datetime | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo:
-        parsed = parsed.astimezone(timezone.utc)
-    return parsed.replace(tzinfo=None)
-
-
 def identity(api: Linode, now: datetime) -> tuple[list[Check], list[Identity]]:
     users = api.pages("/v4/account/users")
     if len(users) > MAX_IDENTITIES:
@@ -125,10 +114,12 @@ def identity(api: Linode, now: datetime) -> tuple[list[Check], list[Identity]]:
                 mfa=user.get("tfa_enabled") is True,
                 # The account reports only the latest attempt; a failed one
                 # leaves the last successful sign-in unknown.
-                last_used=_when(last.get("login_datetime"))
+                last_used=parse_time(last.get("login_datetime"))
                 if last and last.get("status") == "successful"
                 else None,
-                created=_when(user.get("password_created")) if last is None else None,
+                created=parse_time(user.get("password_created"))
+                if last is None
+                else None,
                 detail="Unrestricted" if unrestricted else "Restricted",
             )
         )
@@ -382,19 +373,15 @@ def _naive(when: datetime) -> str:
     return when.replace(tzinfo=None, microsecond=0).isoformat()
 
 
-def _text(value, limit=128) -> str:
-    return value[:limit] if isinstance(value, str) else ""
-
-
 def login_entry(login: dict, account: str) -> Activity | None:
-    when = _when(login.get("datetime"))
+    when = parse_time(login.get("datetime"))
     ident = login.get("id")
     if when is None or not isinstance(ident, int):
         return None
     outcome = {"successful": "success", "failed": "failure"}.get(
         login.get("status"), "info"
     )
-    who = _text(login.get("username"), 256)
+    who = text_field(login.get("username"), 256)
     return Activity(
         id=f"login:{ident}",
         at=when,
@@ -403,15 +390,15 @@ def login_entry(login: dict, account: str) -> Activity | None:
         actor=who,
         outcome=outcome,
         summary=f"Cloud Manager sign-in by {who or 'unknown'} ({outcome})",
-        detail={"service": "account", "source_ip": _text(login.get("ip"), 64)},
+        detail={"service": "account", "source_ip": text_field(login.get("ip"), 64)},
         raw=login,
     )
 
 
 def event_entry(event: dict, account: str) -> Activity | None:
-    when = _when(event.get("created"))
+    when = parse_time(event.get("created"))
     ident = event.get("id")
-    action = _text(event.get("action"))
+    action = text_field(event.get("action"))
     if when is None or not isinstance(ident, int) or not action:
         return None
     outcome = {
@@ -420,7 +407,7 @@ def event_entry(event: dict, account: str) -> Activity | None:
         "notification": "success",
     }.get(event.get("status"), "info")
     entity = event.get("entity") if isinstance(event.get("entity"), dict) else {}
-    who = _text(event.get("username"), 256)
+    who = text_field(event.get("username"), 256)
     return Activity(
         id=f"event:{ident}",
         at=when,
@@ -433,8 +420,8 @@ def event_entry(event: dict, account: str) -> Activity | None:
             k: v
             for k, v in {
                 "service": "account",
-                "resource_type": _text(entity.get("type"), 64),
-                "resource": _text(entity.get("label"), 128),
+                "resource_type": text_field(entity.get("type"), 64),
+                "resource": text_field(entity.get("label"), 128),
             }.items()
             if v
         },

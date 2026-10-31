@@ -28,7 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def migration():
     spec = importlib.util.spec_from_file_location(
-        "osa_migration", ROOT / "alembic/legacy_versions/0090_osa_catalogue.py"
+        "osa_migration",
+        ROOT / "tests/fixtures/historical_migrations/0090_osa_catalogue.py",
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

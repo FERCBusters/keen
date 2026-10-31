@@ -10,7 +10,7 @@ import httpx
 import pytest
 from app.core.config import settings
 from app.ingest.cloud import linode as ln
-from app.ingest.cloud.base import Unavailable
+from app.ingest.cloud.base import Unavailable, parse_time
 
 TOKEN = "synthetic0linode0token0value0000"
 EUUID = "a1b2c3d4-e5f6-4789-9abc-def012345678"
@@ -315,8 +315,8 @@ def test_refusals_carry_reasons_without_the_token(use):
 
 
 def test_times_ports_addresses_and_entities_are_read_strictly():
-    assert ln._when("") is None and ln._when("yesterday") is None
-    assert ln._when("2026-01-02T13:04:05+10:00") == datetime(2026, 1, 2, 3, 4, 5)
+    assert parse_time("") is None and parse_time("yesterday") is None
+    assert parse_time("2026-01-02T13:04:05+10:00") == datetime(2026, 1, 2, 3, 4, 5)
     anywhere = {"ipv4": ["not-an-address", "0.0.0.0/0"]}
 
     def wall(*rules):

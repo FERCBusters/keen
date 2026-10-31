@@ -182,14 +182,12 @@ export async function refreshFrameworkNavigation(savedCatalog = null, cfgOverrid
   const allowed = new Set(catalog.items.map((item) => item.slug));
   let selected = getCurrentFramework();
   window.mospFrameworkDefault = catalog.default || '';
-  window.keenFrameworkDefault = catalog.default || '';
   if (!allowed.has(selected) && catalog.default) {
     selected = catalog.default;
     const url = new URL(location.href);
     url.searchParams.set('framework', selected);
     history.replaceState(history.state, '', url.pathname + url.search + url.hash);
     window.mospFramework = selected;
-    window.keenFramework = selected;
     try {
       localStorage.setItem(cfg.storage.frameworkKey, selected);
     } catch {}
@@ -603,7 +601,8 @@ function _srgbToLinear(v) {
   return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
 }
 
-function _relativeLuminance({ r, g, b }) {
+// W3C relative luminance (0..1) of an { r, g, b } colour with 0-255 channels.
+export function relativeLuminance({ r, g, b }) {
   const R = _srgbToLinear(r);
   const G = _srgbToLinear(g);
   const B = _srgbToLinear(b);
@@ -614,7 +613,7 @@ function _relativeLuminance({ r, g, b }) {
 export function idealTextColor(bgHex) {
   const rgb = _hexToRgb(bgHex);
   if (!rgb) return '#111827'; // slate-900
-  const lum = _relativeLuminance(rgb);
+  const lum = relativeLuminance(rgb);
   // Threshold chosen to keep badges readable across our theme palette.
   return lum > 0.55 ? '#111827' : '#f8fafc'; // slate-900 / slate-50
 }
@@ -660,8 +659,8 @@ export function userPillHtml(
 export function userPillsHtml(items = [], opts = {}) {
   const rows = Array.isArray(items) ? items : items ? [items] : [];
   const html = rows
-    .map((item) => userPillHtml(item, { ...opts, empty: '' }))
-    .filter((value) => value && !value.includes('small-muted'))
+    .filter((item) => userDisplayName(item))
+    .map((item) => userPillHtml(item, opts))
     .join('');
   if (!html) return `<span class="small-muted">${esc(opts.empty || '-')}</span>`;
   return `<span class="user-pill-list">${html}</span>`;
@@ -1058,53 +1057,26 @@ export function upstreamLinkHtml(
   return arrowLinkHtml(safe, { className, title });
 }
 
-// Fetch the framework catalog for the account page's "default framework" dropdown.
+// A page's tab for a name taken from the address. Only the map's own keys
+// count, so a link such as ?tab=constructor gets the fallback rather than an
+// inherited property.
+export function lookupTab(tabs, name, fallback = null) {
+  return (Object.hasOwn(tabs, name) && tabs[name]) || fallback;
+}
+
+// Fetch the framework catalog for the navigation's framework picker, the
+// account page's default framework and the risk wizard.
 export async function getFrameworkCatalog(cfgOverrides = null) {
   const cfg = getUiConfig(cfgOverrides);
   const ep = cfg?.framework?.endpoint || '/api/v1/frameworks';
   return apiGet(ep, cfgOverrides);
 }
-export function uniqElements(items = []) {
-  const out = [];
-  const seen = new Set();
-  for (const item of items || []) {
-    if (!item || seen.has(item)) continue;
-    seen.add(item);
-    out.push(item);
-  }
-  return out;
-}
 
-function _selectAll(root, selector) {
-  if (!root || !selector || !root.querySelectorAll) return [];
-  return Array.from(root.querySelectorAll(selector));
-}
-
-function _byIds(root, ids = []) {
-  const out = [];
-  for (const id of ids || []) {
-    if (!id) continue;
-    let el = null;
-    if (root && typeof root.getElementById === 'function') el = root.getElementById(id);
-    if (!el && typeof document !== 'undefined' && typeof document.getElementById === 'function') {
-      el = document.getElementById(id);
-    }
-    if (el) out.push(el);
-  }
-  return out;
-}
-
-export function collectOffsetPagerButtons({
-  scope = typeof document !== 'undefined' ? document : null,
-  prevIds = ['prev', 'prevBottom'],
-  nextIds = ['next', 'nextBottom'],
-  prevSelector = '[data-pager="prev"], [data-offset-pager="prev"], .js-offset-page[data-direction="prev"]',
-  nextSelector = '[data-pager="next"], [data-offset-pager="next"], .js-offset-page[data-direction="next"]',
-} = {}) {
-  const root = scope || (typeof document !== 'undefined' ? document : null);
+// The pager buttons above and below a paged list, marked with data-pager.
+export function collectOffsetPagerButtons() {
   return {
-    prev: uniqElements([..._byIds(root, prevIds), ..._selectAll(root, prevSelector)]),
-    next: uniqElements([..._byIds(root, nextIds), ..._selectAll(root, nextSelector)]),
+    prev: [...document.querySelectorAll('[data-pager="prev"]')],
+    next: [...document.querySelectorAll('[data-pager="next"]')],
   };
 }
 
@@ -1136,32 +1108,6 @@ export function setOffsetPagerDisabled(pager, state = {}) {
   for (const btn of prev) btn.disabled = s.prevDisabled;
   for (const btn of next) btn.disabled = s.nextDisabled;
   return s;
-}
-
-export function offsetPaginationHtml({
-  kind = '',
-  total = 0,
-  offset = 0,
-  limit = 50,
-  wrapperClass = 'd-flex align-items-center gap-2',
-  buttonClass = 'btn btn-outline-secondary',
-  pageClass = 'js-offset-page',
-  previousLabel = '<i class="bi bi-chevron-left" aria-hidden="true"></i> Previous',
-  nextLabel = 'Next <i class="bi bi-chevron-right" aria-hidden="true"></i>',
-  summaryPrefix = '',
-  formatNumber = false,
-} = {}) {
-  const s = offsetPagerState({ total, offset, limit });
-  if (s.total <= s.limit) return '';
-  const fmt = (n) => (formatNumber ? Number(n || 0).toLocaleString() : String(n));
-  const kindAttr = kind ? ` data-kind="${esc(kind)}"` : '';
-  return `<div class="${esc(wrapperClass)}">
-    <div class="small-muted">${esc(summaryPrefix)}${fmt(s.start)}-${fmt(s.end)} of ${fmt(s.total)}</div>
-    <div class="btn-group btn-group-sm" role="group" aria-label="Pagination">
-      <button class="${esc(buttonClass)} ${esc(pageClass)}" type="button" data-pager="prev" data-direction="prev" data-offset-pager="prev" data-offset="${esc(String(s.prevOffset))}"${kindAttr} ${s.prevDisabled ? 'disabled' : ''}>${previousLabel}</button>
-      <button class="${esc(buttonClass)} ${esc(pageClass)}" type="button" data-pager="next" data-direction="next" data-offset-pager="next" data-offset="${esc(String(s.nextOffset))}"${kindAttr} ${s.nextDisabled ? 'disabled' : ''}>${nextLabel}</button>
-    </div>
-  </div>`;
 }
 
 export function wireOffsetPagerButtons(pager, onPage) {

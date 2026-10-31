@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Server-side rich-text HTML sanitisation.
 
 Keen stores a small amount of user-authored rich text (audit report notes,
@@ -23,6 +21,8 @@ client-side behaviour:
 The parser is deliberately conservative and fails closed: anything it does not
 explicitly recognise as safe is discarded.
 """
+
+from __future__ import annotations
 
 from html import escape
 from html.parser import HTMLParser

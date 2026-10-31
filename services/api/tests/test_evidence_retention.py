@@ -165,7 +165,7 @@ class RetentionDatabaseTests(unittest.TestCase):
             )
             path = (
                 Path(__file__).parents[1]
-                / "alembic/legacy_versions/0083_evidence_retention.py"
+                / "tests/fixtures/historical_migrations/0083_evidence_retention.py"
             )
             spec = importlib.util.spec_from_file_location("retention_migration", path)
             module = importlib.util.module_from_spec(spec)
@@ -179,7 +179,8 @@ class RetentionDatabaseTests(unittest.TestCase):
                 module.upgrade()
             spec = importlib.util.spec_from_file_location(
                 "override_migration",
-                path.parent.parent / "versions/0009_retention_overrides.py",
+                Path(__file__).parents[1]
+                / "alembic/versions/0009_retention_overrides.py",
             )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
@@ -334,7 +335,7 @@ class RetentionDatabaseTests(unittest.TestCase):
         )
 
     def test_source_override_with_disabled_global_and_audit_hold(self):
-        old, held, recent = self.event(90), self.event(90), self.event(1)
+        _old, held, recent = self.event(90), self.event(90), self.event(1)
         self.sample(self.audit(), held)
         self.override("source", "test", "age", 30)
         with self.session() as db:
@@ -372,7 +373,7 @@ class RetentionDatabaseTests(unittest.TestCase):
         self.assertEqual(self.left(), {str(new), str(held), str(other)})
 
     def test_global_count_excludes_overridden_groups(self):
-        old, new, special = self.event(90), self.event(1), self.event()
+        _old, new, special = self.event(90), self.event(1), self.event()
         self.rule_mapping(special, "saved")
         self.override("rule", "saved", "disabled")
         self.job("count", 1)
@@ -457,7 +458,7 @@ class RetentionDatabaseTests(unittest.TestCase):
         )
 
     def test_source_count_is_separate_from_global_and_rule_counts(self):
-        old, new, special = self.event(90), self.event(1), self.event()
+        _old, new, special = self.event(90), self.event(1), self.event()
         other_old, other_new = self.event(90), self.event()
         self.sql(
             "UPDATE events SET source='other' WHERE id IN (:a,:b)",
@@ -489,7 +490,7 @@ class RetentionDatabaseTests(unittest.TestCase):
         self.assertFalse(r.database_batch())
 
     def test_count_keeps_newest_plus_audit_holds(self):
-        old = self.event(90)
+        self.event(90)
         held = self.event(80)
         new = self.event(1)
         newest = self.event()
@@ -522,7 +523,7 @@ class RetentionDatabaseTests(unittest.TestCase):
         self.assertIn(str(e), self.left())
 
     def test_all_has_fixed_cutoff(self):
-        old = self.event()
+        self.event()
         self.job()
         new = self.event()
         r.database_batch()

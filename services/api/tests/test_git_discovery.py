@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime
 from unittest.mock import Mock, patch
 
-from app.ingest import forgejo, gitea, gitlab
+from app.ingest import forgejo, gitea, gitea_compatible, gitlab
 from app.mapping.collector import (
     collector_id,
     collector_pointer_filter,
@@ -22,8 +22,8 @@ class GitDiscoveryTests(unittest.TestCase):
         for module in (forgejo, gitea):
             with (
                 self.subTest(module=module.__name__),
-                patch.object(module, "is_safe_url", return_value=True),
-                patch.object(module, "ingestion_client") as factory,
+                patch.object(gitea_compatible, "is_safe_url", return_value=True),
+                patch.object(gitea_compatible, "ingestion_client") as factory,
             ):
                 client = factory.return_value.__enter__.return_value
                 client.get.side_effect = [
@@ -39,7 +39,7 @@ class GitDiscoveryTests(unittest.TestCase):
                 ]
                 self.assertEqual(
                     len(
-                        module._discover_repositories(
+                        module.collector._discover_repositories(
                             "https://git.example.org", "users", "mig5"
                         )
                     ),
@@ -52,22 +52,22 @@ class GitDiscoveryTests(unittest.TestCase):
 
     def test_repeated_page_fails(self):
         with (
-            patch.object(forgejo, "is_safe_url", return_value=True),
-            patch.object(forgejo, "ingestion_client") as factory,
+            patch.object(gitea_compatible, "is_safe_url", return_value=True),
+            patch.object(gitea_compatible, "ingestion_client") as factory,
         ):
             factory.return_value.__enter__.return_value.get.return_value = Mock(
                 status_code=200,
                 json=lambda: [{"owner": {"login": "mig5"}, "name": "one"}],
             )
             with self.assertRaisesRegex(ValueError, "repeated"):
-                forgejo._discover_repositories(
+                forgejo.collector._discover_repositories(
                     "https://git.example.org", "users", "mig5"
                 )
 
     def test_discovery_does_not_follow_repository_url(self):
         with (
-            patch.object(forgejo, "is_safe_url", return_value=True),
-            patch.object(forgejo, "ingestion_client") as factory,
+            patch.object(gitea_compatible, "is_safe_url", return_value=True),
+            patch.object(gitea_compatible, "ingestion_client") as factory,
         ):
             client = factory.return_value.__enter__.return_value
             client.get.side_effect = [
@@ -83,7 +83,7 @@ class GitDiscoveryTests(unittest.TestCase):
                 )
             ]
             with self.assertRaisesRegex(ValueError, "outside"):
-                forgejo._discover_repositories(
+                forgejo.collector._discover_repositories(
                     "https://git.example.org", "users", "mig5"
                 )
 
@@ -148,7 +148,7 @@ class GitDiscoveryTests(unittest.TestCase):
 
     def test_empty_configuration_is_explicit(self):
         with (
-            patch.object(forgejo.settings, "forgejo_enabled", True),
+            patch.object(gitea_compatible.settings, "forgejo_enabled", True),
             patch("app.ingest.connections.deployment_document", return_value={}),
         ):
             self.assertEqual(forgejo.ingest_forgejo_all(None), [])
@@ -205,22 +205,24 @@ class GitDiscoveryTests(unittest.TestCase):
         db = Mock()
         db.scalars.return_value.all.return_value = []
         with (
-            patch.object(forgejo.settings, "forgejo_enabled", True),
+            patch.object(gitea_compatible.settings, "forgejo_enabled", True),
             patch.object(
-                forgejo.settings, "forgejo_base_url", "https://git.example.org"
+                gitea_compatible.settings, "forgejo_base_url", "https://git.example.org"
             ),
             patch.object(
-                forgejo,
-                "load_forgejo_config",
+                forgejo.collector,
+                "load_config",
                 return_value={"users": [{"user": "mig5"}]},
             ),
             patch.object(
-                forgejo,
+                forgejo.collector,
                 "_discover_repositories",
                 return_value=[{"owner": {"login": "mig5"}, "name": "repo"}],
             ),
             patch.object(
-                forgejo, "ingest_forgejo_repo_feed", return_value={"created_events": 1}
+                forgejo.collector,
+                "ingest_repo_feed",
+                return_value={"created_events": 1},
             ) as ingest,
         ):
             result = forgejo.ingest_forgejo_all(db)

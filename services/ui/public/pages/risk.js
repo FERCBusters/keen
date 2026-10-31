@@ -22,6 +22,7 @@ import {
   treatmentStatusLabel,
   riskDisplayTitle,
   riskWizardHref,
+  scoreClass,
 } from '/pages/risk-common.js';
 
 const me = await initNavbar();
@@ -109,16 +110,9 @@ wireRiskTabs();
 const canViewRisks = !!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks);
 const canManageRisks = !!(me?.is_admin || me?.can_manage_risks);
 
-function riskScoreClass(score) {
-  const n = Number(score || 0);
-  if (n < 5) return 'text-bg-success';
-  if (n <= 12) return 'text-bg-warning';
-  return 'text-bg-danger';
-}
-
 function scoreBadge(score, title = '') {
   const n = Number(score || 0);
-  return `<span class="badge ${riskScoreClass(n)}"${title ? ` title="${esc(title)}"` : ''}>${esc(String(n))}</span>`;
+  return `<span class="badge ${scoreClass(n)}"${title ? ` title="${esc(title)}"` : ''}>${esc(String(n))}</span>`;
 }
 
 function setText(el, value, fallback = '-') {

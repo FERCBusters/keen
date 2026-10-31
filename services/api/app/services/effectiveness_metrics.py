@@ -11,7 +11,8 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import add_months
+from app.core.datetime_utils import utc_now_naive as utcnow
 from app.db.models import IsmsEffectivenessMeasure, IsmsEffectivenessMetricEntry
 from app.services.entity_changelog import record_entity_changelog
 
@@ -24,10 +25,6 @@ AUTO_ZERO_MAX_BACKFILL_MONTHS = 120
 ZERO_TARGET_OPERATORS = {"", "eq", "lte"}
 # "Not required", "No longer required", "Never required" and similar.
 _NEGATED_REQUIRED = re.compile(r"\b(?:not|no|never)\b.*\brequired\b")
-
-
-def utcnow() -> datetime:
-    return utc_now_naive()
 
 
 def _today_for_effectiveness_metrics() -> date:
@@ -55,14 +52,6 @@ def _month_start(d: date) -> date:
 
 def _month_end(d: date) -> date:
     return date(d.year, d.month, monthrange(d.year, d.month)[1])
-
-
-def _add_months(d: date, months: int) -> date:
-    month_idx = (d.month - 1) + months
-    year = d.year + month_idx // 12
-    month = month_idx % 12 + 1
-    day = min(d.day, monthrange(year, month)[1])
-    return date(year, month, day)
 
 
 def _is_monthly_zero_target(measure: IsmsEffectivenessMeasure) -> bool:
@@ -201,7 +190,7 @@ def materialize_missing_monthly_zero_metrics(
         return {"enabled": False, "created": 0}
     today = today or _today_for_effectiveness_metrics()
     current_month = _month_start(today)
-    last_closed_month = _add_months(current_month, -1)
+    last_closed_month = add_months(current_month, -1)
     last_closed_month_end = _month_end(last_closed_month)
     now = utcnow()
     max_months = max(1, int(max_backfill_months or AUTO_ZERO_MAX_BACKFILL_MONTHS))
@@ -227,7 +216,7 @@ def materialize_missing_monthly_zero_metrics(
             measure.created_at.date() if measure.created_at else last_closed_month
         )
         period_start = _month_start(created_at)
-        earliest_allowed = _add_months(last_closed_month, -(max_months - 1))
+        earliest_allowed = add_months(last_closed_month, -(max_months - 1))
         if period_start < earliest_allowed:
             period_start = earliest_allowed
 
@@ -236,7 +225,7 @@ def materialize_missing_monthly_zero_metrics(
             checked += 1
             if _entry_exists_for_period(db, measure.id, period_start, period_end):
                 skipped_existing += 1
-                period_start = _add_months(period_start, 1)
+                period_start = add_months(period_start, 1)
                 continue
 
             reference = _metric_reference_for_period(period_start)
@@ -294,7 +283,7 @@ def materialize_missing_monthly_zero_metrics(
             )
             entries.append(after)
             created += 1
-            period_start = _add_months(period_start, 1)
+            period_start = add_months(period_start, 1)
 
     db.commit()
     return {

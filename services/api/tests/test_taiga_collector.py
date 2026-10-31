@@ -1,11 +1,11 @@
 """Taiga collector contracts against mock logging/timeline endpoints."""
 
 import contextlib
-import httpx
-import pytest
 from datetime import datetime as _datetime
 from unittest.mock import MagicMock, patch
 
+import httpx
+import pytest
 from app.ingest import taiga as tg
 
 ENTRY = {

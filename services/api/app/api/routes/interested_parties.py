@@ -15,8 +15,8 @@ from app.services.interested_parties import (
     ControlLinksPayload,
     InterestedPartyPayload,
     LookupPayload,
-    _can_manage_interested_parties,
-    _can_read_interested_parties,
+    can_manage_interested_parties,
+    can_read_interested_parties,
 )
 
 router = Router()
@@ -26,7 +26,7 @@ def require_interested_parties_read(
     request: Request, db: Session = Depends(get_db)
 ) -> User:
     user = require_authenticated(request)
-    if not _can_read_interested_parties(db, user):
+    if not can_read_interested_parties(db, user):
         raise HTTPException(
             status_code=403, detail="interested_parties.read permission required"
         )
@@ -37,7 +37,7 @@ def require_interested_parties_manage(
     request: Request, db: Session = Depends(get_db)
 ) -> User:
     user = require_authenticated(request)
-    if not _can_manage_interested_parties(db, user):
+    if not can_manage_interested_parties(db, user):
         raise HTTPException(
             status_code=403, detail="interested_parties.manage permission required"
         )

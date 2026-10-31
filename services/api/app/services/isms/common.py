@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import ControlItem, FrameworkClause, User
 from app.security.rich_text import sanitize_rich_text_html

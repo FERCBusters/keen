@@ -1,10 +1,16 @@
 import { errorText, fmtTsFilename, sourceLabel, toast } from '/app.js';
 import { maskDomText } from './masking.js';
-import { parseContentDispositionFilename, extFromContentType, buildZipStore } from './archive.js';
+import {
+  parseContentDispositionFilename,
+  extFromContentType,
+  buildZipStore,
+  downloadBlob,
+} from './archive.js';
 import {
   sliceCanvasToA4JpegPages,
   buildPdfFromJpegPages,
   sliceCanvasToFirstA4PreviewBlob,
+  waitForImages,
 } from './pdf.js';
 
 // Bound actual downloaded bytes, including responses without trustworthy metadata.
@@ -153,43 +159,6 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     return `${base} ${stamp} - ${eventId}`;
   }
 
-  function _triggerDownload(blob, filename) {
-    const obj = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = obj;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => {
-      try {
-        URL.revokeObjectURL(obj);
-      } catch {}
-    }, 15_000);
-  }
-
-  async function _waitForImages(root, timeoutMs = 15_000) {
-    if (!root) return;
-    const imgs = Array.from(root.querySelectorAll('img'));
-    const pending = imgs
-      .filter((img) => img && img.src)
-      .map((img) => {
-        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-        return new Promise((resolve) => {
-          const done = () => {
-            img.removeEventListener('load', done);
-            img.removeEventListener('error', done);
-            resolve();
-          };
-          img.addEventListener('load', done);
-          img.addEventListener('error', done);
-        });
-      });
-
-    if (!pending.length) return;
-    await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, timeoutMs))]);
-  }
-
   function _makeExportContainer(nodes, widthPx) {
     const wrap = document.createElement('div');
     wrap.className = 'container container-tight py-4 export-capture';
@@ -245,7 +214,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     for (const seg of segments) {
       const wrap = _makeExportContainer(seg, w);
       try {
-        await _waitForImages(wrap);
+        await waitForImages(wrap);
 
         // Page breaks avoid cutting cards and evidence thumbnails when possible.
         const avoidRanges = _computeAvoidRangesForWrap(wrap, 2);
@@ -387,7 +356,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       if (signal?.aborted) throw new Error('Preview cancelled');
 
       // Shorter timeout for previews.
-      await _waitForImages(wrap, 8000);
+      await waitForImages(wrap, 8000);
       if (signal?.aborted) throw new Error('Preview cancelled');
 
       const scale = 0.85;
@@ -737,7 +706,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         img.loading = 'eager';
       } catch {}
     });
-    await _waitForImages(document.body, 20_000);
+    await waitForImages(document.body, 20_000);
 
     // Give the browser a tick to lay out fixed headers/footers.
     setTimeout(() => {
@@ -780,7 +749,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
 
       toast(status, 'Rendering evidence PDF', 'info');
       const pdfBlob = await buildEvidencePdfBlob(e, orientation);
-      _triggerDownload(pdfBlob, evidenceFileStem(e) + '.pdf');
+      downloadBlob(pdfBlob, evidenceFileStem(e) + '.pdf');
 
       toast(status, 'PDF download started', 'success', 2500);
       setTimeout(() => {

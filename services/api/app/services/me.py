@@ -25,9 +25,10 @@ from app.security.auth import ROLE_ADMIN
 from app.security.passwords import hash_password, verify_password
 from app.security.permissions import has_permission
 from app.security.rate_limit import fixed_window_allow
-from app.security.roles import compute_effective_role
+from app.security.roles import compute_effective_role, is_effective_admin
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
+from app.services.features import state
 from app.services.presentation import ALLOWED_THEMES
 from app.services.presentation import (
     normalize_saved_search_url as _normalize_saved_search_url,
@@ -248,92 +249,93 @@ def _validate_default_framework(raw: str | None) -> str | None:
     return v
 
 
-def me(*, context: ChangeContext, db: Session) -> dict:
-    user = context.actor
-    if not isinstance(user, User):
-        raise DomainError(status_code=401, detail="Not authenticated")
-
-    footer = (settings.sample_pdf_footer or "").strip()
-    header = (getattr(settings, "sample_pdf_header", "") or "").strip()
-    fname_prefix = (getattr(settings, "evidence_filename_prefix", "") or "").strip()
-
-    prefs = PreferencesOut(
-        use_local_timezone=bool(getattr(user, "pref_use_local_timezone", False)),
-        timezone=getattr(user, "pref_timezone", None),
-        theme=(getattr(user, "pref_theme", None) or "ink"),
-        date_format=_validate_date_format(getattr(user, "pref_date_format", None)),
-        auto_apply_filters=bool(getattr(user, "pref_auto_apply_filters", False)),
-        source_colors=(getattr(user, "pref_source_colors", None) or {}),
-        default_visualisation=(
-            getattr(user, "pref_default_visualisation", None) or None
-        ),
-        landing_page=(getattr(user, "pref_landing_page", None) or "/"),
-        default_framework=(getattr(user, "pref_default_framework", None) or None),
+def _preferences_out(user: User) -> PreferencesOut:
+    return PreferencesOut(
+        use_local_timezone=user.pref_use_local_timezone,
+        timezone=user.pref_timezone,
+        theme=user.pref_theme or "ink",
+        date_format=_validate_date_format(user.pref_date_format),
+        auto_apply_filters=user.pref_auto_apply_filters,
+        source_colors=user.pref_source_colors or {},
+        default_visualisation=user.pref_default_visualisation or None,
+        landing_page=user.pref_landing_page or "/",
+        default_framework=user.pref_default_framework or None,
     )
 
-    # Use effective role (accounts for group role inheritance). In most requests
-    # this will already be attached by middleware, but computing here ensures
-    # /v1/me remains correct even if called outside that path.
-    eff_role = (
-        getattr(user, "effective_role", None)
-        or compute_effective_role(db, user)
-        or user.role
-    )
-    user.effective_role = eff_role
-    is_admin = (eff_role or "") == ROLE_ADMIN
-    can_audit_trail = bool(is_admin or has_permission(db, user, "audittrail.read"))
-    can_admin_audits = has_permission(db, user, "audits.admin")
-    can_manage_audits = bool(
-        can_admin_audits or has_permission(db, user, "audits.manage")
-    )
-    can_view_audits = bool(can_manage_audits or has_permission(db, user, "audits.read"))
-    can_manage_risks = bool(is_admin or has_permission(db, user, "risk.manage"))
-    can_view_risks = bool(can_manage_risks or has_permission(db, user, "risk.read"))
-    can_manage_pestle = bool(
-        is_admin or has_permission(db, user, "pestle.manage") or can_manage_risks
-    )
-    can_view_pestle = bool(
-        can_manage_pestle or has_permission(db, user, "pestle.read") or can_view_risks
-    )
-    can_manage_interested_parties = bool(
-        is_admin
-        or has_permission(db, user, "interested_parties.manage")
-        or can_manage_risks
-    )
-    can_view_interested_parties = bool(
-        can_manage_interested_parties
-        or has_permission(db, user, "interested_parties.read")
-        or can_view_risks
-    )
-    can_manage_isms = bool(
-        is_admin or has_permission(db, user, "isms.manage") or can_manage_risks
-    )
-    can_view_isms = bool(
-        can_manage_isms or has_permission(db, user, "isms.read") or can_view_risks
-    )
-    can_view_events = bool(is_admin or has_permission(db, user, "events.read"))
-    can_admin_stories = bool(is_admin or has_permission(db, user, "stories.admin"))
-    can_manage_stories = bool(
-        can_admin_stories or has_permission(db, user, "stories.manage")
-    )
-    can_view_stories = bool(
-        can_manage_stories or has_permission(db, user, "stories.read")
-    )
-    can_manage_quizzes = bool(is_admin or has_permission(db, user, "quiz.manage"))
-    can_view_quizzes = bool(can_manage_quizzes or has_permission(db, user, "quiz.read"))
-    can_create_questions = bool(is_admin or has_permission(db, user, "question.create"))
-    can_question_events = can_create_questions
-    can_delete_questions = bool(is_admin or has_permission(db, user, "question.delete"))
-    incident_webhook_enabled = bool(
-        (getattr(settings, "incident_webhook_url", "") or "").strip()
-    )
-    can_create_incidents = bool(
-        incident_webhook_enabled
-        and (is_admin or has_permission(db, user, "incident.create"))
-    )
-    can_delete_incidents = bool(is_admin or has_permission(db, user, "incident.delete"))
 
-    unread_question_replies_count = int(
+def _capabilities(db: Session, user: User, *, is_admin: bool) -> dict[str, bool]:
+    """Navigation and page capabilities. API routes enforce permissions separately."""
+
+    def allowed(code: str) -> bool:
+        return is_admin or has_permission(db, user, code)
+
+    admin_audits = allowed("audits.admin")
+    manage_audits = admin_audits or allowed("audits.manage")
+    manage_risks = allowed("risk.manage")
+    view_risks = manage_risks or allowed("risk.read")
+    manage_pestle = manage_risks or allowed("pestle.manage")
+    manage_parties = manage_risks or allowed("interested_parties.manage")
+    manage_isms = manage_risks or allowed("isms.manage")
+    admin_stories = allowed("stories.admin")
+    manage_stories = admin_stories or allowed("stories.manage")
+    manage_quizzes = allowed("quiz.manage")
+    create_questions = allowed("question.create")
+    incident_webhook_enabled = bool(settings.incident_webhook_url.strip())
+    return {
+        "can_audit_trail": allowed("audittrail.read"),
+        "can_view_audits": manage_audits or allowed("audits.read"),
+        "can_manage_audits": manage_audits,
+        "can_admin_audits": admin_audits,
+        "can_sample_isms": allowed("isms.read"),
+        "can_view_risks": view_risks,
+        "can_manage_risks": manage_risks,
+        "can_view_pestle": manage_pestle or view_risks or allowed("pestle.read"),
+        "can_manage_pestle": manage_pestle,
+        "can_view_interested_parties": manage_parties
+        or view_risks
+        or allowed("interested_parties.read"),
+        "can_manage_interested_parties": manage_parties,
+        "can_view_isms": manage_isms or view_risks or allowed("isms.read"),
+        "can_manage_isms": manage_isms,
+        "can_view_events": allowed("events.read"),
+        "can_view_stories": manage_stories or allowed("stories.read"),
+        "can_manage_stories": manage_stories,
+        "can_admin_stories": admin_stories,
+        "can_view_quizzes": manage_quizzes or allowed("quiz.read"),
+        "can_manage_quizzes": manage_quizzes,
+        "can_create_questions": create_questions,
+        "can_question_events": create_questions,
+        "can_delete_questions": allowed("question.delete"),
+        "incident_webhook_enabled": incident_webhook_enabled,
+        "can_create_incidents": incident_webhook_enabled and allowed("incident.create"),
+        "can_delete_incidents": allowed("incident.delete"),
+    }
+
+
+# Capabilities hidden when their feature is switched off for this installation.
+_FEATURE_CAPABILITIES = {
+    "audits": ("can_view_audits", "can_manage_audits", "can_admin_audits"),
+    "risks": ("can_view_risks", "can_manage_risks"),
+    "pestle": ("can_view_pestle", "can_manage_pestle"),
+    "interested_parties": (
+        "can_view_interested_parties",
+        "can_manage_interested_parties",
+    ),
+    "isms": ("can_view_isms", "can_manage_isms"),
+    "evidence": ("can_view_events",),
+    "stories": ("can_view_stories", "can_manage_stories", "can_admin_stories"),
+    "quizzes": ("can_view_quizzes", "can_manage_quizzes"),
+    "questions": (
+        "can_create_questions",
+        "can_question_events",
+        "can_delete_questions",
+    ),
+    "incidents": ("can_create_incidents", "can_delete_incidents"),
+}
+
+
+def _unread_question_replies(db: Session, user: User) -> int:
+    return (
         db.query(EventQuestionThread)
         .filter(EventQuestionThread.created_by_user_id == user.id)
         .filter(EventQuestionThread.last_admin_reply_at.isnot(None))
@@ -347,63 +349,45 @@ def me(*, context: ChangeContext, db: Session) -> dict:
         .count()
     )
 
-    oidc_enabled = bool(getattr(settings, "oidc_enabled", False))
-    trust_remote = (
-        bool(getattr(settings, "trust_remote_user", False)) and not oidc_enabled
-    )
-    local_auth_enabled = bool(getattr(settings, "local_auth_enabled", True))
-    upstream_logout_url = (
-        getattr(settings, "upstream_logout_url", "") or ""
-    ).strip() or None
+
+def me(*, context: ChangeContext, db: Session) -> dict:
+    user = context.actor
+    if not isinstance(user, User):
+        raise DomainError(status_code=401, detail="Not authenticated")
+
+    # Middleware normally attaches the effective role (which accounts for group
+    # role inheritance); compute it when this runs outside that path.
+    if not user.effective_role:
+        user.effective_role = compute_effective_role(db, user)
+    is_admin = user.effective_role == ROLE_ADMIN
+
+    features = state(db)
+    capabilities = _capabilities(db, user, is_admin=is_admin)
+    for feature, keys in _FEATURE_CAPABILITIES.items():
+        if not features.enabled(feature):
+            capabilities.update(dict.fromkeys(keys, False))
+
+    oidc_enabled = settings.oidc_enabled
+    trust_remote = settings.trust_remote_user and not oidc_enabled
     logout_url = None
     if oidc_enabled:
         logout_url = "/api/v1/auth/oidc/logout"
-    elif trust_remote and upstream_logout_url:
-        logout_url = upstream_logout_url
+    elif trust_remote:
+        logout_url = settings.upstream_logout_url.strip() or None
 
-    from app.services.features import state
-
-    features = state(db)
-    enabled = features.enabled
     return {
         "features": features.public(),
         "user": user.username,
         "user_id": str(user.id),
         "role": user.role,
-        "effective_role": eff_role,
+        "effective_role": user.effective_role,
         "is_admin": is_admin,
-        "can_audit_trail": can_audit_trail,
-        "can_view_audits": can_view_audits and enabled("audits"),
-        "can_manage_audits": can_manage_audits and enabled("audits"),
-        "can_admin_audits": can_admin_audits and enabled("audits"),
-        "can_sample_isms": has_permission(db, user, "isms.read"),
-        "can_view_risks": can_view_risks and enabled("risks"),
-        "can_manage_risks": can_manage_risks and enabled("risks"),
-        "can_view_pestle": can_view_pestle and enabled("pestle"),
-        "can_manage_pestle": can_manage_pestle and enabled("pestle"),
-        "can_view_interested_parties": can_view_interested_parties
-        and enabled("interested_parties"),
-        "can_manage_interested_parties": can_manage_interested_parties
-        and enabled("interested_parties"),
-        "can_view_isms": can_view_isms and enabled("isms"),
-        "can_manage_isms": can_manage_isms and enabled("isms"),
-        "can_view_events": can_view_events and enabled("evidence"),
-        "can_view_stories": can_view_stories and enabled("stories"),
-        "can_manage_stories": can_manage_stories and enabled("stories"),
-        "can_admin_stories": can_admin_stories and enabled("stories"),
-        "can_view_quizzes": can_view_quizzes and enabled("quizzes"),
-        "can_manage_quizzes": can_manage_quizzes and enabled("quizzes"),
-        "can_create_questions": can_create_questions and enabled("questions"),
-        "can_question_events": can_question_events and enabled("questions"),
-        "can_delete_questions": can_delete_questions and enabled("questions"),
-        "incident_webhook_enabled": incident_webhook_enabled,
-        "can_create_incidents": can_create_incidents and enabled("incidents"),
-        "can_delete_incidents": can_delete_incidents and enabled("incidents"),
-        "unread_question_replies_count": unread_question_replies_count
-        if enabled("questions")
+        **capabilities,
+        "unread_question_replies_count": _unread_question_replies(db, user)
+        if features.enabled("questions")
         else 0,
         "password_change_enabled": bool(
-            local_auth_enabled
+            settings.local_auth_enabled
             and user.auth_backend != "ldap"
             and not trust_remote
             and not oidc_enabled
@@ -412,15 +396,15 @@ def me(*, context: ChangeContext, db: Session) -> dict:
         # RP-initiated logout when the provider end-session endpoint is configured.
         "logout_enabled": bool((not trust_remote) or logout_url),
         "logout_url": logout_url,
-        "sample_pdf_header": header or None,
-        "sample_pdf_footer": footer or None,
-        "evidence_filename_prefix": fname_prefix or None,
+        "sample_pdf_header": settings.sample_pdf_header.strip() or None,
+        "sample_pdf_footer": settings.sample_pdf_footer.strip() or None,
+        "evidence_filename_prefix": settings.evidence_filename_prefix.strip() or None,
         "event_data_masking": settings.event_data_masking,
-        "default_timezone": (settings.timezone or "Etc/UTC"),
+        "default_timezone": settings.timezone or "Etc/UTC",
         "default_date_format": _validate_date_format(settings.ui_date_format),
-        "preferences": prefs.model_dump(),
+        "preferences": _preferences_out(user).model_dump(),
         "available_themes": [{"id": t[0], "name": t[1]} for t in ALLOWED_THEMES],
-        "bookstack_enabled": bool(settings.bookstack_enabled),
+        "bookstack_enabled": settings.bookstack_enabled,
     }
 
 
@@ -429,19 +413,7 @@ def get_my_preferences(*, context: ChangeContext) -> PreferencesOut:
     if not isinstance(user, User):
         raise DomainError(status_code=401, detail="Not authenticated")
 
-    return PreferencesOut(
-        use_local_timezone=bool(getattr(user, "pref_use_local_timezone", False)),
-        timezone=getattr(user, "pref_timezone", None),
-        theme=(getattr(user, "pref_theme", None) or "ink"),
-        date_format=_validate_date_format(getattr(user, "pref_date_format", None)),
-        auto_apply_filters=bool(getattr(user, "pref_auto_apply_filters", False)),
-        source_colors=(getattr(user, "pref_source_colors", None) or {}),
-        default_visualisation=(
-            getattr(user, "pref_default_visualisation", None) or None
-        ),
-        landing_page=(getattr(user, "pref_landing_page", None) or "/"),
-        default_framework=(getattr(user, "pref_default_framework", None) or None),
-    )
+    return _preferences_out(user)
 
 
 def update_my_preferences(
@@ -486,14 +458,8 @@ def update_my_preferences(
         )
 
     if "landing_page" in fields:
-        eff_role = (
-            getattr(user, "effective_role", None)
-            or compute_effective_role(db, user)
-            or user.role
-        )
-        is_admin = (eff_role or "") == ROLE_ADMIN
         user.pref_landing_page = _validate_landing_page(
-            payload.landing_page, is_admin=is_admin
+            payload.landing_page, is_admin=is_effective_admin(db, user)
         )
 
     if "default_framework" in fields:
@@ -505,19 +471,7 @@ def update_my_preferences(
     db.commit()
     db.refresh(user)
 
-    return PreferencesOut(
-        use_local_timezone=bool(user.pref_use_local_timezone),
-        timezone=user.pref_timezone,
-        theme=(user.pref_theme or "ink"),
-        date_format=_validate_date_format(getattr(user, "pref_date_format", None)),
-        auto_apply_filters=bool(getattr(user, "pref_auto_apply_filters", False)),
-        source_colors=(getattr(user, "pref_source_colors", None) or {}),
-        default_visualisation=(
-            getattr(user, "pref_default_visualisation", None) or None
-        ),
-        landing_page=(getattr(user, "pref_landing_page", None) or "/"),
-        default_framework=(getattr(user, "pref_default_framework", None) or None),
-    )
+    return _preferences_out(user)
 
 
 def list_my_saved_searches(
@@ -630,14 +584,14 @@ def change_my_password(
     try:
         r = get_valkey()
         ip = context.client_ip or "unknown"
-        window = int(getattr(settings, "login_rate_limit_window_seconds", 300))
-        limit = int(getattr(settings, "login_rate_limit_per_ip", 30))
+        window = settings.login_rate_limit_window_seconds
+        limit = settings.login_rate_limit_per_ip
         ok, retry = fixed_window_allow(
             r, f"keen:rl:password_change:ip:{ip}", limit, window, fail_closed=True
         )
         # A session holder must not be able to test many current passwords by
         # spreading attempts across addresses.
-        per_user = int(getattr(settings, "login_rate_limit_per_username", 10))
+        per_user = settings.login_rate_limit_per_username
         if ok and per_user > 0:
             ok, retry = fixed_window_allow(
                 r,
@@ -665,7 +619,7 @@ def change_my_password(
 
     # In remote-user proxy mode, the upstream IdP/proxy is authoritative.
     # Disallow local password changes to avoid confusing users.
-    if bool(getattr(settings, "trust_remote_user", False)):
+    if settings.trust_remote_user:
         raise DomainError(
             status_code=403,
             detail="Password changes are disabled when KEEN_TRUST_REMOTE_USER is enabled",

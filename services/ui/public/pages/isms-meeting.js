@@ -14,6 +14,11 @@ import {
   userPillsHtml,
 } from '/app.js';
 import { mountStoryRelated } from '/pages/story-related.js';
+import {
+  activateTabFromHashOrQuery,
+  clauseBadges,
+  controlBadges,
+} from '/pages/isms-detail-common.js';
 
 const me = await initNavbar();
 const canManageIsms = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);
@@ -26,36 +31,6 @@ const $ = (id) => document.getElementById(id);
 
 function personBadges(list) {
   return userPillsHtml(list);
-}
-
-function badgeList(items, labelKey = 'ref', urlFn = null) {
-  const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">-</span>';
-  return arr
-    .map((it) => {
-      const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
-      const title = String(it?.title || it?.name || label);
-      const href = urlFn ? urlFn(it) : '';
-      if (href)
-        return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(title)}">${esc(label)}</a>`;
-      return `<span class="badge badge-soft me-1 mb-1" title="${esc(title)}">${esc(label)}</span>`;
-    })
-    .join('');
-}
-
-function controlBadges(items) {
-  return badgeList(items, 'ref', (c) =>
-    withFramework(
-      `/control.html?id=${encodeURIComponent(c.id)}&tab=governance`,
-      c.framework || framework,
-    ),
-  );
-}
-
-function clauseBadges(items) {
-  return badgeList(items, 'ref', (c) =>
-    withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework),
-  );
 }
 
 function linkHtml(link) {
@@ -93,8 +68,8 @@ function renderMeeting(meeting) {
   $('meetingLinks').innerHTML = (meeting.links || []).length
     ? `<ul class="mb-0">${(meeting.links || []).map(linkHtml).filter(Boolean).join('')}</ul>`
     : '<span class="small-muted">No supporting links recorded.</span>';
-  $('meetingControls').innerHTML = controlBadges(meeting.controls);
-  $('meetingClauses').innerHTML = clauseBadges(meeting.clauses);
+  $('meetingControls').innerHTML = controlBadges(meeting.controls, framework);
+  $('meetingClauses').innerHTML = clauseBadges(meeting.clauses, framework);
   const edit = $('editMeetingLink');
   if (edit) {
     edit.href = withFramework(
@@ -113,10 +88,8 @@ async function loadChangelog() {
   );
 }
 
-function activateTabFromHashOrQuery() {
-  const tab = String(params.get('tab') || location.hash.replace(/^#/, '') || '').toLowerCase();
-  const target = tab === 'changelog' ? $('meetingChangelogTab') : null;
-  if (target && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(target).show();
+function activateMeetingTab() {
+  activateTabFromHashOrQuery(params, { changelog: $('meetingChangelogTab') });
 }
 
 async function load() {
@@ -130,12 +103,12 @@ async function load() {
     );
     renderMeeting(meeting);
     await loadChangelog();
-    activateTabFromHashOrQuery();
+    activateMeetingTab();
   } catch (e) {
     toast(status, `Failed to load meeting minutes: ${errorText(e)}`, 'danger');
   }
 }
 
-window.addEventListener('hashchange', activateTabFromHashOrQuery);
+window.addEventListener('hashchange', activateMeetingTab);
 mountStoryRelated({ me, kind: 'meeting', id: meetingId, framework });
 load();

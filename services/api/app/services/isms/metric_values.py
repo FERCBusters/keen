@@ -10,6 +10,7 @@ import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.core.source_meta import apply_user_source_overrides, get_source_meta
 from app.db.models import (
     Event,
@@ -20,7 +21,6 @@ from app.db.models import (
 from app.services.errors import DomainError
 from app.services.text import clean_text
 
-from .common import _utcnow
 from .constants import (
     EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE,
     EFFECTIVENESS_THRESHOLD_OPERATORS,

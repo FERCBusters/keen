@@ -1,6 +1,7 @@
 // Shared vocabulary and helpers for the risk pages: the dashboard, the risk
-// wizard, the risk detail page and the Mitigator. Each page passes its own
-// framework so links keep the selected framework.
+// wizard, the risk detail page and the Mitigator. Other pages that list risks
+// use its score bands. Each page passes its own framework so links keep the
+// selected framework.
 import { esc, withFramework } from '/app.js';
 
 export const RISK_TYPES = ['Confidentiality', 'Integrity', 'Availability'];

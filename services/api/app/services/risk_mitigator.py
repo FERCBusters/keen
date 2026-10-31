@@ -16,7 +16,6 @@ from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
 from app.db.models import (
     ControlItem,
-    FrameworkClause,
     InterestedParty,
     InterestedPartyName,
     InterestedPartyNature,
@@ -30,6 +29,7 @@ from app.db.models import (
     RiskControlLink,
     RiskLibraryEntry,
 )
+from app.services.control_refs import clause_summary, control_summary
 from app.services.mitigator_catalogue import catalogue_tokens, rank_library
 
 _TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9+._/-]*", re.I)
@@ -217,21 +217,6 @@ def _control_doc(control: ControlItem) -> str:
     if tags:
         parts.append(str(tags))
     return " ".join(str(p or "") for p in parts)
-
-
-def _control_out(control: ControlItem | None) -> dict[str, Any]:
-    if not control:
-        return {}
-    return {
-        "id": str(control.id),
-        "framework": control.framework_slug,
-        "type": control.type,
-        "ref": control.ref,
-        "title": control.title,
-        "in_scope": control.in_scope,
-        "justification": _control_justification(control),
-        "upstream_url": _control_upstream_url(control),
-    }
 
 
 def _category_name(
@@ -464,20 +449,6 @@ def _detect_business_processes(
     return scored[:4], signals, terms
 
 
-def _clause_summary(row: FrameworkClause | None) -> dict[str, Any]:
-    if not row:
-        return {}
-    return {
-        "id": str(row.id),
-        "framework": row.framework_slug,
-        "ref": row.ref,
-        "title": row.title,
-        "parent_id": str(row.parent_clause_id) if row.parent_clause_id else None,
-        "parent_ref": row.parent.ref if getattr(row, "parent", None) else None,
-        "sort_order": int(row.sort_order or 0),
-    }
-
-
 def _pestle_item_doc(row: PestleItem) -> str:
     business_processes = " ".join(
         getattr(link.business_process, "name", "") or ""
@@ -541,7 +512,7 @@ def _pestle_item_out(
         ],
         "clauses": [
             {
-                "clause": _clause_summary(link.clause),
+                "clause": clause_summary(link.clause),
                 "relevance_code": getattr(
                     getattr(link, "relevance", None), "code", None
                 ),
@@ -944,10 +915,8 @@ def analyse_risk_mitigation(
                 break
 
     flag_rules = rules.get("impact_flags") or {}
-    active_flags = {str(k): bool(v) for k, v in (impact_flags or {}).items() if bool(v)}
-    for flag, enabled in active_flags.items():
-        if not enabled:
-            continue
+    active_flags = {str(k): True for k, v in (impact_flags or {}).items() if v}
+    for flag in active_flags:
         cfg = flag_rules.get(flag) or {}
         terms_for_matching.extend(cfg.get("mitigation_words") or [])
         for rt in cfg.get("risk_types") or []:
@@ -1142,7 +1111,7 @@ def analyse_risk_mitigation(
             )
         suggestions.append(
             {
-                "control": _control_out(control),
+                "control": control_summary(control),
                 "score": round(score, 2),
                 "confidence": _confidence(score),
                 "matched_terms": matched_terms,

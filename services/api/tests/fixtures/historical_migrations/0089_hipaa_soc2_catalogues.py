@@ -18,7 +18,7 @@ down_revision = "0088_ldap_risk_roles"
 branch_labels = None
 depends_on = None
 
-DATA = Path(__file__).resolve().parents[1] / "catalogues"
+DATA = Path(__file__).resolve().parents[3] / "alembic/catalogues"
 
 
 def seed_catalogues(bind):

@@ -10,9 +10,10 @@ shows both on the vendor's page.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # met: the setting meets the check; attention: it does not; info: reported
 # without a judgement; unknown: KEEN could not read it (see ``reason``).
@@ -42,6 +43,37 @@ class Unavailable(Exception):
 
 def clip(value, limit: int = TEXT_LIMIT) -> str:
     return str(value or "")[:limit]
+
+
+def text_field(value, limit: int = 128) -> str:
+    """A string field from a vendor response, clipped; other types read as empty."""
+    return value[:limit] if isinstance(value, str) else ""
+
+
+def split_list(value) -> list[str]:
+    """Split a comma- or space-separated setting into its values."""
+    return [v for v in re.split(r"[\s,]+", str(value or "").strip()) if v]
+
+
+def parse_time(value) -> datetime | None:
+    """Read a vendor timestamp as naive UTC; an unreadable value is None."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    # Some vendors (e.g. Microsoft Graph) write seven fractional digits.
+    text = re.sub(r"(\.\d{6})\d+", r"\1", text.replace("Z", "+00:00"))
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo:
+        parsed = parsed.astimezone(timezone.utc)
+    return parsed.replace(tzinfo=None)
+
+
+def api_timestamp(when: datetime) -> str:
+    """Format a time for a vendor query filter, e.g. ``2026-10-01T09:30:00Z``."""
+    return when.replace(tzinfo=None, microsecond=0).isoformat() + "Z"
 
 
 @dataclass

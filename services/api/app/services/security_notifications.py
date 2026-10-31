@@ -1,20 +1,17 @@
 """Transactional security-email outbox and per-user successful-login IP history."""
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive as now
 from app.db.models import SecurityNotification, UserLoginIP
 from app.db.session import SessionLocal
 from app.services.mailer import send_email, smtp_configured
 
 log = logging.getLogger(__name__)
-
-
-def now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def enqueue(db, user, event, *, ip=None):

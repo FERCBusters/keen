@@ -30,6 +30,25 @@ test('a disabled child hides its tab and link without hiding sibling navigation'
   }
 });
 
+test('an ISMS link names only its own sections, never inherited object keys', async () => {
+  const ui = await loadUi('pages/feature-availability.js', {
+    url: 'https://keen.example/admin.html',
+    html: '<a id="known" href="/isms.html?tab=objectives">Objectives</a><a id="odd" href="/isms.html?tab=constructor">Odd</a>',
+  });
+  try {
+    assert.equal(ui.api.hrefFeature('/isms.html?tab=objectives'), 'objectives');
+    assert.equal(ui.api.hrefFeature('/isms.html?tab=constructor'), 'isms');
+    assert.equal(ui.api.hrefFeature('/isms.html?tab=__proto__'), 'isms');
+    // The server reports a disabled parent's children as disabled too.
+    ui.api.applyFeatures({ features: { enabled: { isms: false, objectives: false } } });
+    const doc = ui.window.document;
+    assert.ok(doc.getElementById('odd').hasAttribute('data-feature-hidden'));
+    assert.ok(doc.getElementById('known').hasAttribute('data-feature-hidden'));
+  } finally {
+    ui.close();
+  }
+});
+
 test('direct disabled pages stop before feature page initialisation', async () => {
   const ui = await loadUi('pages/feature-availability.js', {
     url: 'https://keen.example/swot.html?id=1',

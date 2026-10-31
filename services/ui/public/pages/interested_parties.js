@@ -15,6 +15,7 @@ import {
   initCollapsibleFilterSections,
   canSampleIntoAudit,
   openAuditSampleModal,
+  lookupTab,
 } from '/app.js';
 import {
   enhanceFilterPillMultiSelect,
@@ -121,8 +122,7 @@ function setTabQuery(tabName) {
   history.replaceState({}, '', `${location.pathname}${p.toString() ? `?${p.toString()}` : ''}`);
 }
 function activateTab(tabName) {
-  // Own tab names only; inherited names such as "constructor" select Items.
-  const tab = (Object.hasOwn(tabs, tabName) && tabs[tabName]) || tabs.items;
+  const tab = lookupTab(tabs, tabName, tabs.items);
   if (tab && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
 function wireTabs() {

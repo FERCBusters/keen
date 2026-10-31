@@ -8,7 +8,6 @@ from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive
-from app.core.references import control_justification as _control_justification
 from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
 from app.db.models import (
@@ -24,6 +23,7 @@ from app.db.models import (
     RiskControlLink,
     User,
 )
+from app.services.control_refs import control_summary
 
 _CHANGE_FIELD_LABELS = {
     "agenda_minutes_notes": "Agenda/minutes/notes",
@@ -372,14 +372,7 @@ def control_changelog_state(
     if control is None:
         return None
     return {
-        "id": str(control.id),
-        "framework": control.framework_slug,
-        "type": control.type,
-        "ref": control.ref,
-        "title": control.title,
-        "in_scope": bool(control.in_scope),
-        "justification": _control_justification(control),
-        "upstream_url": _control_upstream_url(control),
+        **control_summary(control),
         "clauses": _control_clause_links(db, control.id),
         "created_at": control.created_at.isoformat() if control.created_at else None,
     }

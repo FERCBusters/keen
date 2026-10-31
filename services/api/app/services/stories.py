@@ -34,6 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.core.references import try_uuid
 from app.db.models import (
     ControlItem,
@@ -54,7 +55,7 @@ from app.services.entity_changelog import (
 )
 from app.services.errors import DomainError
 from app.services.frameworks import framework_parameter
-from app.services.isms.common import _by_id_or_404, _utcnow
+from app.services.isms.common import _by_id_or_404
 from app.services.isms.related_records import (
     resolve_target,
     search_targets,

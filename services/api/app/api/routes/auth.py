@@ -10,13 +10,13 @@ from starlette.responses import RedirectResponse
 from app.api.routing import Router
 from app.core.config import settings
 from app.core.valkey import get_valkey
-from app.db.models import User
 from app.db.session import get_db
 from app.schemas import LoginPayload
 from app.security.auth import (
     ROLE_ADMIN,
     authenticate_user,
     clear_session_cookie,
+    require_authenticated,
     set_session_cookie,
 )
 from app.security.csrf import (
@@ -50,12 +50,9 @@ def auth_methods() -> dict:
     providers = configured_sso_providers()
     return {
         "demo": demo_metadata(),
-        "local_enabled": bool(getattr(settings, "local_auth_enabled", True)),
+        "local_enabled": settings.local_auth_enabled,
         "ldap_enabled": settings.ldap_enabled,
-        "remote_user_enabled": bool(
-            getattr(settings, "trust_remote_user", False)
-            and not getattr(settings, "oidc_enabled", False)
-        ),
+        "remote_user_enabled": settings.trust_remote_user and not settings.oidc_enabled,
         # The hosted demo portal offers a demo once its OIDC sign-in works.
         "oidc_enabled": any(provider.key == "oidc" for provider in providers),
         "sso_enabled": bool(providers),
@@ -82,9 +79,9 @@ def login(
     # Fail closed on Redis unavailability to prevent brute force attacks.
     try:
         r = get_valkey()
-        window = int(settings.login_rate_limit_window_seconds)
-        per_ip = int(settings.login_rate_limit_per_ip)
-        per_user = int(settings.login_rate_limit_per_username)
+        window = settings.login_rate_limit_window_seconds
+        per_ip = settings.login_rate_limit_per_ip
+        per_user = settings.login_rate_limit_per_username
 
         ip = _client_ip(request) or "unknown"
         uname = (payload.username or "").strip().lower() or "unknown"
@@ -317,9 +314,7 @@ def auth_check(request: Request) -> Response:
     # Used by nginx auth_request to gate access to HTML pages.
     # auth_middleware has already authenticated the request (session cookie or
     # trusted REMOTE_USER header when native OIDC is disabled).
-    user = getattr(request.state, "user", None)
-    if not isinstance(user, User):
-        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = require_authenticated(request)
 
     resp = Response(status_code=204)
     # Optional metadata headers. Nginx *may* read these from the auth_request subrequest
@@ -327,7 +322,7 @@ def auth_check(request: Request) -> Response:
     # logging/diagnostics. Admin gating in this codebase uses the /v1/auth/check-admin
     # status code, not these headers.
     resp.headers["X-Keen-User"] = user.username
-    resp.headers["X-Keen-Role"] = getattr(user, "effective_role", None) or user.role
+    resp.headers["X-Keen-Role"] = user.effective_role or user.role
     return resp
 
 
@@ -341,12 +336,10 @@ def auth_check_admin(request: Request, db: Session = Depends(get_db)) -> Respons
       - 403 if authenticated but not allowed
     """
 
-    user = getattr(request.state, "user", None)
-    if not isinstance(user, User):
-        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = require_authenticated(request)
 
-    eff = getattr(user, "effective_role", None) or user.role
-    if (eff or "") != ROLE_ADMIN:
+    eff = user.effective_role or user.role
+    if eff != ROLE_ADMIN:
         if not has_permission(db, user, "audittrail.read"):
             raise HTTPException(
                 status_code=403, detail="Admin or audit access required"

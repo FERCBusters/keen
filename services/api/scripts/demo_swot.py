@@ -3,6 +3,7 @@
 from datetime import timedelta
 from uuid import NAMESPACE_URL, uuid5
 
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.db.models import (
     ControlItem,
     FrameworkClause,
@@ -16,7 +17,7 @@ from app.db.models import (
     IsmsVendor,
     Risk,
 )
-from app.services.isms.common import _record, _utcnow
+from app.services.isms.common import _record
 from app.services.isms.swot import summary
 
 # Each tuple explicitly reviews applicability in ISO, Keen Assurance, CE, SOC 2

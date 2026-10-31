@@ -48,9 +48,11 @@ export function wrapLabelLines(value, maxCharsPerLine, maxLines = 3) {
   if (line && lines.length < lineLimit) lines.push(line);
 
   if (tokens.join(' ').length > lines.join(' ').length && lines.length) {
-    lines[lines.length - 1] = truncateMiddleText(lines[lines.length - 1], Math.max(4, perLine - 1));
-    if (!lines[lines.length - 1].endsWith('…'))
-      lines[lines.length - 1] = `${lines[lines.length - 1]}…`;
+    // Text was dropped: shorten the end of the last line to make room for the ellipsis.
+    const room = Math.max(4, perLine - 1);
+    const last = lines[lines.length - 1];
+    const cut = last.length > room ? `${last.slice(0, room - 1)}…` : last;
+    lines[lines.length - 1] = cut.endsWith('…') ? cut : `${cut}…`;
   }
   return lines;
 }

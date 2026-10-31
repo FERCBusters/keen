@@ -1,6 +1,6 @@
 """Test-only database setup; production metadata is never modified."""
 
-from sqlalchemy import BigInteger
+from sqlalchemy import BigInteger, DefaultClause, MetaData, create_engine, event, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.compiler import compiles
 
@@ -22,9 +22,6 @@ def sqlite_bigint(_type, _compiler, **_kw):
     # SQLite integers are already 64-bit; only an INTEGER PRIMARY KEY receives
     # automatic row IDs, which PostgreSQL bigserial keys rely on.
     return "INTEGER"
-
-
-from sqlalchemy import DefaultClause, MetaData, create_engine, event, text
 
 
 def create_sqlite_schema(engine):

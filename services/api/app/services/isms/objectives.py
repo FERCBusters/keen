@@ -7,13 +7,14 @@ from datetime import date
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.db.models import IsmsObjective, User
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.frameworks import framework_parameter
 from app.services.text import clean_text
 
-from .common import _by_id_or_404, _list_response, _record, _utcnow
+from .common import _by_id_or_404, _list_response, _record
 from .constants import OBJECTIVE_STATUSES
 from .mutations import _apply_links, _delete_entity_links, _replace_objective_resources
 from .schemas import ObjectivePayload

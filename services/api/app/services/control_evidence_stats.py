@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app.core.cache import cache_delete_prefix, cache_get_json, cache_set_json
+from app.core.cache import (
+    cache_delete_prefix,
+    cache_get_json,
+    cache_set_json,
+    json_default,
+)
 from app.core.config import settings
 from app.core.valkey import get_valkey
 from app.db.models import (
@@ -22,12 +26,6 @@ _EMPTY_SENTINEL = "__empty__"
 _CACHE_PREFIX = "keen:stats:v1:control_evidence"
 _EVENT_COUNTS_CACHE_NAMESPACE = "stats:framework-event-counts"
 _EVENT_COUNTS_CACHE_VERSION = "celery-count-v1"
-
-
-def _json_default(value: Any) -> str:
-    if isinstance(value, (datetime, date)):
-        return value.isoformat()
-    return str(value)
 
 
 def _safe_framework_part(framework: str) -> str:
@@ -96,7 +94,7 @@ def _decode_cached_payload(
 
 
 def _load_from_cache(framework: str) -> dict[uuid.UUID, dict[str, Any]] | None:
-    ttl = int(getattr(settings, "aggregate_cache_ttl_seconds", 0) or 0)
+    ttl = settings.aggregate_cache_ttl_seconds
     if ttl <= 0:
         return None
     try:
@@ -108,7 +106,7 @@ def _load_from_cache(framework: str) -> dict[uuid.UUID, dict[str, Any]] | None:
 
 
 def _store_in_cache(framework: str, stats: dict[uuid.UUID, dict[str, Any]]) -> None:
-    ttl = int(getattr(settings, "aggregate_cache_ttl_seconds", 0) or 0)
+    ttl = settings.aggregate_cache_ttl_seconds
     if ttl <= 0:
         return
     try:
@@ -122,7 +120,7 @@ def _store_in_cache(framework: str, stats: dict[uuid.UUID, dict[str, Any]]) -> N
                 },
                 sort_keys=True,
                 separators=(",", ":"),
-                default=_json_default,
+                default=json_default,
             )
             for control_id, item in stats.items()
         }

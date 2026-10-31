@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Role resolution helpers.
 
 Each user holds an explicit role (admin or normal) or ``inherit``, which takes
@@ -7,11 +5,20 @@ the effective role from the roles of the user's groups. Among several group
 roles, admin wins over normal.
 """
 
+from __future__ import annotations
+
+from typing import TypeGuard
+
 from sqlalchemy import exists, select, text
 from sqlalchemy.orm import Session
 
 from app.db.models import Group, User, user_groups
 from app.security.auth import ROLE_ADMIN, ROLE_INHERIT, ROLE_NORMAL
+
+
+def is_active_user(user: object) -> TypeGuard[User]:
+    """Whether ``user`` is an active account (and not an anonymous request)."""
+    return isinstance(user, User) and user.is_active
 
 
 def normalize_role(raw: str | None) -> str | None:
@@ -28,10 +35,10 @@ def compute_effective_role(db: Session, user: User) -> str:
 
     If the user has role='inherit', resolve from group roles.
     """
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
+    if not is_active_user(user):
         return ROLE_NORMAL
 
-    explicit = normalize_role(getattr(user, "role", None)) or ROLE_NORMAL
+    explicit = normalize_role(user.role) or ROLE_NORMAL
     if explicit != ROLE_INHERIT:
         # Explicit admin/normal
         return ROLE_ADMIN if explicit == ROLE_ADMIN else ROLE_NORMAL
@@ -57,17 +64,13 @@ def compute_effective_role(db: Session, user: User) -> str:
 def attach_effective_role(db: Session, user: User) -> str:
     """Compute and attach user.effective_role (non-persisted attribute)."""
     eff = compute_effective_role(db, user)
-    try:
-        setattr(user, "effective_role", eff)
-    except Exception:
-        pass
+    user.effective_role = eff
     return eff
 
 
 def is_effective_admin(db: Session, user: User) -> bool:
-    eff = getattr(user, "effective_role", None)
-    if eff:
-        return (eff or "") == ROLE_ADMIN
+    if user.effective_role:
+        return user.effective_role == ROLE_ADMIN
     return compute_effective_role(db, user) == ROLE_ADMIN
 
 

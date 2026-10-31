@@ -33,7 +33,6 @@ _PREVIEW_CACHE_BYTES = 32 * 1024 * 1024
 _PREVIEW_CACHE_ENTRIES = 128
 # Each API process admits two renderers; deployment limits bound all workers.
 _PREVIEW_SLOTS = BoundedSemaphore(2)
-EVENTS_READ_PERMISSION = "events.read"
 
 
 def _run_preview(cmd):

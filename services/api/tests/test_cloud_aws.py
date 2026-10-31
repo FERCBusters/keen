@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from app.core.config import settings
 from app.ingest.cloud import aws
-from app.ingest.cloud.base import Unavailable
+from app.ingest.cloud.base import Unavailable, parse_time
 from botocore.exceptions import EndpointConnectionError, NoCredentialsError
 
 from tests.cloud_fakes import (
@@ -821,8 +821,8 @@ def test_help_documents_every_action_check_and_setting():
 
 
 def test_unreadable_report_values_and_documents_are_tolerated():
-    assert aws._when("not a date") is None
-    assert aws._when("2026-10-01T09:30:00+10:00") == datetime(2026, 9, 30, 23, 30)
+    assert parse_time("not a date") is None
+    assert parse_time("2026-10-01T09:30:00+10:00") == datetime(2026, 9, 30, 23, 30)
     iam = FakeIam()
     iam.content = report(default_rows()).decode()
     assert aws.credential_report(iam)
@@ -932,7 +932,7 @@ def test_password_events_and_incomplete_lookups():
         trail_event("ConsoleLogin", when.replace(tzinfo=None)), ACCOUNT
     )
     assert naive.at == datetime(2026, 10, 1, 9, 30)
-    assert aws._when("2026-10-01T09:30:00") == datetime(2026, 10, 1, 9, 30)
+    assert parse_time("2026-10-01T09:30:00") == datetime(2026, 10, 1, 9, 30)
     unnamed = trail_event("ConsoleLogin", when)
     unnamed["EventTime"] = "not a time"
     assert aws.trail_entry(unnamed, ACCOUNT) is None

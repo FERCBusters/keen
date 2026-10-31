@@ -15,6 +15,7 @@ import {
   effectivenessMetricValueHtml,
   effectivenessMetricThresholdBadgeHtml,
 } from '/app.js';
+import { effectivenessControlBadges } from '/pages/isms-detail-common.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -38,17 +39,6 @@ function metricHref(id = metricId) {
     `/isms-effectiveness-metric.html?id=${encodeURIComponent(id || '')}`,
     framework,
   );
-}
-
-function controlBadges(items) {
-  const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">No controls linked.</span>';
-  return arr
-    .map(
-      (c) =>
-        `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`,
-    )
-    .join('');
 }
 
 function linkOrDash(url, label) {
@@ -110,7 +100,7 @@ function renderMetric(row) {
   $('metricRecorded').textContent = fmtTs(entry.recorded_at) || '-';
   $('metricCreated').textContent = fmtTs(entry.created_at) || '-';
   $('metricUpdated').textContent = fmtTs(entry.updated_at) || '-';
-  $('metricControls').innerHTML = controlBadges(measure.controls);
+  $('metricControls').innerHTML = effectivenessControlBadges(measure.controls, framework);
 
   const parentTitle = measure.summary || 'Effectiveness measure';
   const parentHref = measureHref(measure.id || entry.measure_id);

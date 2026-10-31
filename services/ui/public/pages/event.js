@@ -28,6 +28,7 @@ import {
   isAuditActive,
   preselectSamplingAudit,
   rememberSamplingAudit,
+  lookupTab,
 } from '/app.js';
 
 const PRINT_MODE = (() => {
@@ -136,7 +137,7 @@ function inheritedRationaleHtml(c) {
 }
 
 function showEventTab(name) {
-  const id = Object.hasOwn(EVENT_TABS, name) ? EVENT_TABS[name] : EVENT_TABS.snapshot;
+  const id = lookupTab(EVENT_TABS, name, EVENT_TABS.snapshot);
   const tab = document.getElementById(id);
   if (!tab || tab.closest('li')?.hidden || !window.bootstrap?.Tab) return;
   window.bootstrap.Tab.getOrCreateInstance(tab).show();
@@ -1155,7 +1156,6 @@ async function openAuditSampleModal() {
         );
       }
     } catch (e) {
-      console.debug('DEBUG-1154', e, typeof errorText, errorText(e));
       auditSampleSelect.innerHTML = '<option value="">Failed to load audits</option>';
       if (auditSampleSubmit) auditSampleSubmit.disabled = true;
       if (auditSampleNotes) auditSampleNotes.disabled = true;

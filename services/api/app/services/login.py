@@ -5,20 +5,25 @@ from __future__ import annotations
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.core.valkey import get_valkey
-from app.security.auth import (
-    ROLE_ADMIN,
-)
-from app.security.permissions import get_effective_permission_codes, has_permission
+from app.security.permissions import get_effective_permission_codes
 from app.security.roles import attach_effective_role
 from app.security.sessions import create_session, delete_session
+from app.services import security_notifications
 
 
 def complete_local_login(
     db, user, *, existing_sid, client_ip, mfa_verified=False, verified_version=None
 ):
+    """Issue a fresh session after password (and any MFA) verification.
+
+    The browser loads its capabilities from /v1/me after signing in, so the
+    response identifies the account only.
+    """
     account_session_version = user.session_version
     session_version = user.mfa_version if verified_version is None else verified_version
-    # Delete any existing session for this user to prevent session fixation.
+    # Revoke the session the browser arrived with. This is best effort: a failed
+    # revocation does not block sign-in, and the new session always gets a
+    # fresh ID.
     if existing_sid:
         try:
             delete_session(get_valkey(), existing_sid)
@@ -35,14 +40,13 @@ def complete_local_login(
 
     eff = attach_effective_role(db, user)
     permission_codes = get_effective_permission_codes(db, user, use_cache=False)
-    authz_version = int(getattr(user, "authz_version", 0) or 0)
+    authz_version = user.authz_version
 
-    # Create new Valkey-backed session + set cookie.
-    # Always create a fresh session ID on login to prevent session fixation attacks.
+    # Always issue a fresh session ID on sign-in to prevent session fixation.
     sid = create_session(
         get_valkey(),
         user_id=str(user.id),
-        ttl_seconds=int(settings.session_ttl_seconds),
+        ttl_seconds=settings.session_ttl_seconds,
         auth_method=user.auth_backend or "local",
         mfa_version=session_version,
         session_version=account_session_version,
@@ -51,88 +55,24 @@ def complete_local_login(
         permission_codes=permission_codes,
         authz_version=authz_version,
     )
-    user.session_id = sid
-    user.session_authz_version = authz_version
-    user.effective_permission_codes = set(permission_codes)
 
-    from app.services.security_notifications import record_login
-
-    record_login(db, user, ip=client_ip)
+    security_notifications.record_login(db, user, ip=client_ip)
     db.commit()
 
-    can_admin_audits = has_permission(db, user, "audits.admin")
-    can_manage_audits = can_admin_audits or has_permission(db, user, "audits.manage")
-    can_view_audits = can_manage_audits or has_permission(db, user, "audits.read")
-    can_manage_risks = has_permission(db, user, "risk.manage")
-    can_view_risks = can_manage_risks or has_permission(db, user, "risk.read")
-    can_manage_interested_parties = bool(
-        has_permission(db, user, "interested_parties.manage") or can_manage_risks
-    )
-    can_view_interested_parties = bool(
-        can_manage_interested_parties
-        or has_permission(db, user, "interested_parties.read")
-        or can_view_risks
-    )
-    can_manage_isms = bool(has_permission(db, user, "isms.manage") or can_manage_risks)
-    can_view_isms = bool(
-        can_manage_isms or has_permission(db, user, "isms.read") or can_view_risks
-    )
-    can_view_events = bool(has_permission(db, user, "events.read"))
-    can_admin_stories = has_permission(db, user, "stories.admin")
-    can_manage_stories = can_admin_stories or has_permission(db, user, "stories.manage")
-    can_view_stories = can_manage_stories or has_permission(db, user, "stories.read")
-    can_create_questions = bool(has_permission(db, user, "question.create"))
-    can_delete_questions = bool(has_permission(db, user, "question.delete"))
-    incident_webhook_enabled = bool(
-        (getattr(settings, "incident_webhook_url", "") or "").strip()
-    )
-    can_create_incidents = bool(
-        incident_webhook_enabled and has_permission(db, user, "incident.create")
-    )
-    can_delete_incidents = bool(has_permission(db, user, "incident.delete"))
-
-    return sid, {
-        "user": user.username,
-        "user_id": str(user.id),
-        "role": user.role,
-        "effective_role": eff,
-        "is_admin": (eff or "") == ROLE_ADMIN,
-        "can_view_audits": can_view_audits,
-        "can_manage_audits": can_manage_audits,
-        "can_admin_audits": can_admin_audits,
-        "can_sample_isms": has_permission(db, user, "isms.read"),
-        "can_view_risks": can_view_risks,
-        "can_manage_risks": can_manage_risks,
-        "can_view_interested_parties": can_view_interested_parties,
-        "can_manage_interested_parties": can_manage_interested_parties,
-        "can_view_isms": can_view_isms,
-        "can_manage_isms": can_manage_isms,
-        "can_view_events": can_view_events,
-        "can_view_stories": can_view_stories,
-        "can_manage_stories": can_manage_stories,
-        "can_admin_stories": can_admin_stories,
-        "can_create_questions": can_create_questions,
-        "can_question_events": can_create_questions,
-        "can_delete_questions": can_delete_questions,
-        "incident_webhook_enabled": incident_webhook_enabled,
-        "can_create_incidents": can_create_incidents,
-        "can_delete_incidents": can_delete_incidents,
-        "sample_pdf_footer": (settings.sample_pdf_footer or "").strip() or None,
-        "event_data_masking": settings.event_data_masking,
-    }
+    return sid, {"user": user.username, "user_id": str(user.id)}
 
 
 def complete_sso_login(db, user, *, provider, id_token, existing_sid, client_ip):
     account_session_version = user.session_version
     eff = attach_effective_role(db, user)
     permission_codes = get_effective_permission_codes(db, user, use_cache=False)
-    authz_version = int(getattr(user, "authz_version", 0) or 0)
+    authz_version = user.authz_version
     if existing_sid:
         delete_session(get_valkey(), existing_sid)
     sid = create_session(
         get_valkey(),
         user_id=str(user.id),
-        ttl_seconds=int(settings.session_ttl_seconds),
+        ttl_seconds=settings.session_ttl_seconds,
         auth_method=provider.key,
         session_version=account_session_version,
         oidc_id_token=id_token,
@@ -141,9 +81,7 @@ def complete_sso_login(db, user, *, provider, id_token, existing_sid, client_ip)
         authz_version=authz_version,
     )
 
-    from app.services.security_notifications import record_login
-
-    record_login(db, user, ip=client_ip)
+    security_notifications.record_login(db, user, ip=client_ip)
     db.commit()
 
     return sid

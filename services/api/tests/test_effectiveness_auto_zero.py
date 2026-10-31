@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from app.core.config import settings
+from app.core.datetime_utils import add_months
 from app.db.models import (
     EntityChangelog,
     IsmsEffectivenessMeasure,
@@ -229,10 +230,10 @@ def test_today_follows_the_configured_timezone(monkeypatch):
 
 
 def test_month_arithmetic_clamps_to_the_last_day():
-    assert metrics._add_months(date(2026, 1, 31), 1) == date(2026, 2, 28)
-    assert metrics._add_months(date(2024, 1, 31), 1) == date(2024, 2, 29)
-    assert metrics._add_months(date(2026, 1, 15), -1) == date(2025, 12, 15)
-    assert metrics._add_months(date(2026, 11, 30), 14) == date(2028, 1, 30)
+    assert add_months(date(2026, 1, 31), 1) == date(2026, 2, 28)
+    assert add_months(date(2024, 1, 31), 1) == date(2024, 2, 29)
+    assert add_months(date(2026, 1, 15), -1) == date(2025, 12, 15)
+    assert add_months(date(2026, 11, 30), 14) == date(2028, 1, 30)
     assert metrics._month_end(date(2026, 2, 3)) == date(2026, 2, 28)
 
 

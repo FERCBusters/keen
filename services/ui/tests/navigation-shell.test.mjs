@@ -221,9 +221,9 @@ test('a framework no longer enabled gives way to the default, everywhere on the 
   assert.deepEqual(ui.seen.catalogRequests, ['/api/v1/frameworks']);
   assert.equal(ui.window.location.search, '?framework=A');
   assert.equal(ui.window.location.hash, '#evidence');
-  assert.equal(ui.window.keenFramework, 'A');
+  // The design system's getCurrentFramework reads these globals.
   assert.equal(ui.window.mospFramework, 'A');
-  assert.equal(ui.window.keenFrameworkDefault, 'A');
+  assert.equal(ui.window.mospFrameworkDefault, 'A');
   assert.equal(stored.get('keen_framework'), 'A');
   const hrefs = Object.fromEntries(
     [...ui.nav.querySelectorAll('ul.navbar-nav a')].map((a) => [

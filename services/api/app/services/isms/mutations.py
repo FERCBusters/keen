@@ -7,6 +7,7 @@ import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     IsmsAccessControlMatrixAwsAccount,
@@ -34,7 +35,7 @@ from app.db.models import (
 from app.services.errors import DomainError
 from app.services.text import clean_text
 
-from .common import _clause_by_ref_or_id, _control_by_ref_or_id, _utcnow
+from .common import _clause_by_ref_or_id, _control_by_ref_or_id
 from .constants import MEETING_LINK_TYPES
 from .link_diary import remove_entity_link_diary, sync_entity_link_diary
 from .schemas import AssetPayload, IsmsLinksPayload, LicensePayload, MeetingLinkPayload
@@ -49,7 +50,7 @@ def _asset_name_from_payload(payload: AssetPayload) -> str:
     )
 
 
-def _asset_category_by_id(db: Session, category_id: uuid.UUID) -> RiskCategory:
+def asset_category_by_id(db: Session, category_id: uuid.UUID) -> RiskCategory:
     row = db.query(RiskCategory).filter(RiskCategory.id == category_id).one_or_none()
     if not row:
         raise DomainError(status_code=400, detail="Unknown asset category")
@@ -60,7 +61,7 @@ def _asset_category_or_create(
     db: Session, *, category_id: uuid.UUID | None, category_name: str | None
 ) -> RiskCategory:
     if category_id:
-        return _asset_category_by_id(db, category_id)
+        return asset_category_by_id(db, category_id)
     name = clean_text(category_name, max_len=128, required=True, label="category")
     row = (
         db.query(RiskCategory)
@@ -120,7 +121,7 @@ def _asset_subcategory_or_create(
     return row
 
 
-def _license_or_404(db: Session, license_id: str | uuid.UUID) -> IsmsLicense:
+def license_or_404(db: Session, license_id: str | uuid.UUID) -> IsmsLicense:
     lid = (
         license_id if isinstance(license_id, uuid.UUID) else _try_uuid(str(license_id))
     )
@@ -132,7 +133,7 @@ def _license_or_404(db: Session, license_id: str | uuid.UUID) -> IsmsLicense:
     return row
 
 
-def _license_by_name(db: Session, name: str) -> IsmsLicense | None:
+def license_by_name(db: Session, name: str) -> IsmsLicense | None:
     cleaned = clean_text(name, max_len=256)
     if not cleaned:
         return None
@@ -143,13 +144,13 @@ def _license_by_name(db: Session, name: str) -> IsmsLicense | None:
     )
 
 
-def _license_or_create_by_name(
+def license_or_create_by_name(
     db: Session, name: str | None, user: User | None = None
 ) -> IsmsLicense | None:
     cleaned = clean_text(name, max_len=256)
     if not cleaned:
         return None
-    row = _license_by_name(db, cleaned)
+    row = license_by_name(db, cleaned)
     if row:
         return row
     row = IsmsLicense(
@@ -168,10 +169,10 @@ def _license_from_payload(
     db: Session, payload: AssetPayload, user: User | None = None
 ) -> IsmsLicense | None:
     if payload.license_id:
-        return _license_or_404(db, payload.license_id)
+        return license_or_404(db, payload.license_id)
     # ``license_name`` is useful for imports/API callers; the UI sends license_id.
     if payload.license_name:
-        return _license_or_create_by_name(db, payload.license_name, user)
+        return license_or_create_by_name(db, payload.license_name, user)
     return None
 
 
@@ -188,7 +189,7 @@ def org_node_or_400(db: Session, node_id: uuid.UUID | None) -> uuid.UUID | None:
     return node_id
 
 
-def _asset_or_404(db: Session, asset_id: str | uuid.UUID) -> RiskAsset:
+def asset_or_404(db: Session, asset_id: str | uuid.UUID) -> RiskAsset:
     aid = asset_id if isinstance(asset_id, uuid.UUID) else _try_uuid(str(asset_id))
     if not aid:
         raise DomainError(status_code=400, detail="asset_id must be a UUID")

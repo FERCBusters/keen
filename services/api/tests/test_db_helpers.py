@@ -3,9 +3,9 @@
 import uuid
 
 import pytest
+from app.db.models import Framework
 from sqlalchemy import create_engine, select, text
 
-from app.db.models import Framework
 from tests.db_helpers import create_sqlite_schema
 
 

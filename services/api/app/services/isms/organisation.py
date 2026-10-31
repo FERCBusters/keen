@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.db.models import IsmsOrgNode, IsmsOrgNodeUser, Risk, User
 from app.security.permissions import has_permission
 from app.services.context import ChangeContext
@@ -12,7 +13,7 @@ from app.services.frameworks import framework_parameter
 from app.services.hierarchy import validate_parent
 from app.services.text import clean_text
 
-from .common import _by_id_or_404, _record, _utcnow
+from .common import _by_id_or_404, _record
 from .mutations import _apply_links, _delete_entity_links, _replace_org_node_users
 from .schemas import OrgNodePayload
 from .serializers import _entity_out

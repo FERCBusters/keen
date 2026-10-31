@@ -1,4 +1,4 @@
-// Archive encoding and download filename metadata; no page state.
+// Archive encoding, download filename metadata and browser downloads; no page state.
 export function parseContentDispositionFilename(header) {
   const h = String(header || '');
   if (!h) return '';
@@ -21,6 +21,22 @@ export function parseContentDispositionFilename(header) {
   // Fallback: filename="..."
   const m = h.match(/filename\s*=\s*"?([^";]+)"?/i);
   return m ? m[1].trim() : '';
+}
+
+// Starts a browser download of a blob and releases its object URL afterwards.
+export function downloadBlob(blob, filename) {
+  const obj = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = obj;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => {
+    try {
+      URL.revokeObjectURL(obj);
+    } catch {}
+  }, 15_000);
 }
 
 export function extFromContentType(ct) {

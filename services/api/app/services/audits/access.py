@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Audit, AuditAttendee, Event, Risk, User
 from app.security.diary_visibility import is_diary_event_visible
 from app.security.permissions import has_permission
+from app.security.roles import is_active_user
 from app.services.audits.validation import try_uuid
 from app.services.errors import DomainError
 
@@ -18,7 +19,7 @@ AUDIT_READ_PERMISSION = "audits.read"
 
 
 def can_read_audits(db: Session, user: User | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
+    if not is_active_user(user):
         return False
     # Audit managers and administrators can read audits; application admins have all permissions.
     return can_manage_audits(db, user) or has_permission(
@@ -27,7 +28,7 @@ def can_read_audits(db: Session, user: User | None) -> bool:
 
 
 def can_manage_audits(db: Session, user: User | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
+    if not is_active_user(user):
         return False
     return has_permission(db, user, AUDIT_MANAGE_PERMISSION) or can_admin_audits(
         db, user
@@ -35,7 +36,7 @@ def can_manage_audits(db: Session, user: User | None) -> bool:
 
 
 def is_audit_attendee(db: Session, user: User | None, audit_id: uuid.UUID) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
+    if not is_active_user(user):
         return False
     return bool(
         db.query(AuditAttendee.id)
@@ -88,17 +89,17 @@ def require_sample_source_access(
 
         allowed = _can_read_specific_risk(db, user, db.get(Risk, entity_id))
     elif entity_type == "isms_swot":
-        from app.services.isms.access import _can_read_isms
+        from app.services.isms.access import can_read_isms
 
-        allowed = _can_read_isms(db, user)
+        allowed = can_read_isms(db, user)
     elif entity_type == "pestle_item":
-        from app.services.pestle import _can_read_pestle
+        from app.services.pestle import can_read_pestle
 
-        allowed = _can_read_pestle(db, user)
+        allowed = can_read_pestle(db, user)
     elif entity_type == "interested_party":
-        from app.services.interested_parties import _can_read_interested_parties
+        from app.services.interested_parties import can_read_interested_parties
 
-        allowed = _can_read_interested_parties(db, user)
+        allowed = can_read_interested_parties(db, user)
     elif entity_type == "story":
         from app.services.stories import can_read_stories
 

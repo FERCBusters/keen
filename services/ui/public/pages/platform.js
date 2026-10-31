@@ -6,10 +6,6 @@ const platforms = {
   linux: { icon: 'bi-tux', label: 'Linux' },
 };
 
-export function platformLabel(value) {
-  return Object.hasOwn(platforms, value) ? platforms[value].label : '';
-}
-
 export function platformIcon(value) {
   if (!Object.hasOwn(platforms, value)) return '';
   const p = platforms[value];

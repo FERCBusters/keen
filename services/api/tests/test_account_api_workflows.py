@@ -165,8 +165,13 @@ def test_landing_pages_are_normalised_to_a_keen_path(keen):  # noqa: F811
         (False, False, "https://sso.example/logout", None),
     ],
 )
-def test_sign_out_follows_the_sign_in_method(  # noqa: F811
-    keen, monkeypatch, oidc, proxy, upstream, expected
+def test_sign_out_follows_the_sign_in_method(
+    keen,  # noqa: F811 - fixture imported above
+    monkeypatch,
+    oidc,
+    proxy,
+    upstream,
+    expected,
 ):
     from app.services import me as me_service
 

@@ -1,6 +1,7 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { deleteQuestionThread, myQuestionRowHtml } from '/pages/question-threads.js';
 import { mountMyQuizzes } from '/pages/my-quizzes.js';
+import { scoreBadge } from '/pages/risk-common.js';
 import {
   isoDateToDisplay,
   errorText,
@@ -23,6 +24,7 @@ import {
   getFrameworkCatalog,
   userPillHtml,
   userPillsHtml,
+  auditStatusLabel,
 } from '/app.js';
 
 const status = document.getElementById('status');
@@ -685,12 +687,6 @@ document.getElementById('myQuestionsTbody')?.addEventListener('click', async (ev
 // My audits
 // ---------------------------------------------------------------------------
 
-function auditStatusLabel(s) {
-  const v = String(s || 'open');
-  if (v === 'in_progress') return 'In progress';
-  return v ? v.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase()) : 'Open';
-}
-
 function myAuditRow(a) {
   const url = withFramework(
     `/audit.html?id=${encodeURIComponent(a.id)}`,
@@ -720,18 +716,6 @@ function myAuditRow(a) {
 // My Risks
 // ---------------------------------------------------------------------------
 
-function riskScoreClass(score) {
-  const n = Number(score || 0);
-  if (n < 5) return 'text-bg-success';
-  if (n <= 12) return 'text-bg-warning';
-  return 'text-bg-danger';
-}
-
-function riskScoreBadge(score) {
-  const n = Number(score || 0);
-  return `<span class="badge ${riskScoreClass(n)}">${esc(String(n))}</span>`;
-}
-
 function myRiskRow(r) {
   const url = withFramework(
     `/risk.html?id=${encodeURIComponent(r.id || '')}`,
@@ -756,8 +740,8 @@ function myRiskRow(r) {
     </td>
     <td class="small-muted">${esc(category)}</td>
     <td>${typeHtml}</td>
-    <td class="text-end">${riskScoreBadge(r.risk_score)}</td>
-    <td class="text-end">${riskScoreBadge(r.residual_risk_score)}</td>
+    <td class="text-end">${scoreBadge(r.risk_score)}</td>
+    <td class="text-end">${scoreBadge(r.residual_risk_score)}</td>
     <td><span class="badge text-bg-light">${esc(controlsText)}</span></td>
     <td class="small-muted">${esc(updated)}</td>
     <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="${esc(url)}">Open</a></td>

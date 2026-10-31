@@ -1,14 +1,14 @@
-"""Contracts shared by both Gitea-compatible collectors."""
+"""Feed and timestamp helpers shared by the Gitea-compatible collectors."""
 
 from datetime import datetime
 
 import httpx
 import pytest
-from app.ingest import forgejo, gitea
+from app.core.datetime_utils import to_utc_naive
+from app.ingest import git_activity as collector
 
 
-@pytest.mark.parametrize("collector", [forgejo, gitea], ids=["forgejo", "gitea"])
-def test_feed_namespaces_content_and_item_limit(collector):
+def test_feed_namespaces_content_and_item_limit():
     xml = """<rss xmlns="urn:rss" xmlns:content="http://purl.org/rss/1.0/modules/content/">
       <channel><item><title> alice pushed </title><link>https://git.example/a/b</link>
       <guid>item-1</guid><author>alice</author><description>preview</description>
@@ -31,8 +31,7 @@ def test_feed_namespaces_content_and_item_limit(collector):
     assert collector._classify_from_title(items[0]["title"]) == ("push", "success", 2)
 
 
-@pytest.mark.parametrize("collector", [forgejo, gitea], ids=["forgejo", "gitea"])
-def test_timestamp_normalization_and_invalid_input(collector):
+def test_timestamp_normalization_and_invalid_input():
     assert collector._parse_iso_ts("2026-10-09T12:00:00+11:00") == datetime(
         2026, 10, 9, 1
     )
@@ -42,8 +41,7 @@ def test_timestamp_normalization_and_invalid_input(collector):
         assert collector._parse_rfc822_ts(value) is None
 
 
-@pytest.mark.parametrize("collector", [forgejo, gitea], ids=["forgejo", "gitea"])
-def test_redirect_diagnostics_redact_both_urls(collector):
+def test_redirect_diagnostics_redact_both_urls():
     response = httpx.Response(
         302,
         request=httpx.Request(
@@ -57,8 +55,7 @@ def test_redirect_diagnostics_redact_both_urls(collector):
     assert collector._response_status_error(httpx.Response(200)) is None
 
 
-@pytest.mark.parametrize("collector", [forgejo, gitea], ids=["forgejo", "gitea"])
-def test_repository_identity_and_rss_detection(collector):
+def test_repository_identity_and_rss_detection():
     assert collector._infer_owner_repo_from_feed_url(
         "https://git.example/team/repo.rss?token=x"
     ) == ("team", "repo")
@@ -77,7 +74,6 @@ def test_repository_identity_and_rss_detection(collector):
     )
 
 
-@pytest.mark.parametrize("collector", [forgejo, gitea], ids=["forgejo", "gitea"])
 @pytest.mark.parametrize(
     "title,expected",
     [
@@ -91,14 +87,13 @@ def test_repository_identity_and_rss_detection(collector):
         ("", ("activity", "info", 3)),
     ],
 )
-def test_feed_titles_classify_into_actions_and_outcomes(collector, title, expected):
+def test_feed_titles_classify_into_actions_and_outcomes(title, expected):
     # Review and merge titles carry success at a lower severity; anything the
     # collector cannot recognise stays an informational activity.
     assert collector._classify_from_title(title) == expected
 
 
-@pytest.mark.parametrize("collector", [forgejo, gitea], ids=["forgejo", "gitea"])
-def test_feeds_without_a_channel_or_a_parseable_url_yield_nothing(collector):
+def test_feeds_without_a_channel_or_a_parseable_url_yield_nothing():
     assert collector._parse_rss_items("<rss><title>bare</title></rss>") == []
     assert (
         collector._parse_rss_items("<rss><channel><title>t</title></channel></rss>")
@@ -110,10 +105,9 @@ def test_feeds_without_a_channel_or_a_parseable_url_yield_nothing(collector):
     )
 
 
-@pytest.mark.parametrize("collector", [forgejo, gitea], ids=["forgejo", "gitea"])
-def test_naive_timestamps_and_xml_content_types_are_accepted(collector):
+def test_naive_timestamps_and_xml_content_types_are_accepted():
     naive = datetime(2026, 10, 9, 1)
-    assert collector._to_utc_naive(naive) is naive
+    assert to_utc_naive(naive) is naive
     assert collector._is_probably_rss(
         httpx.Response(
             200, headers={"content-type": "application/rss+xml"}, text="<html/>"

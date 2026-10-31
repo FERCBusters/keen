@@ -3,41 +3,24 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Query, Request
+from fastapi import Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.context import change_context
+from app.api.dependencies.events import require_events_read
 from app.api.routing import Router
 from app.core.config import settings
-from app.db.models import (
-    User,
-)
 from app.db.session import get_db
 from app.outbound.incidents import (
     build_event_url,
 )
 from app.schemas import IncidentCreatePayload
-from app.security.permissions import has_permission
-from app.security.roles import is_effective_admin
 from app.services import events as service
 from app.services.event_filters import parse_event_filters
 from app.services.exports import Export
 
 router = Router()
-
-EVENTS_READ_PERMISSION = "events.read"
-
-
-def _require_events_read(db: Session, request: Request) -> User:
-    user = getattr(request.state, "user", None)
-    if not isinstance(user, User):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    if not is_effective_admin(db, user) and not has_permission(
-        db, user, EVENTS_READ_PERMISSION
-    ):
-        raise HTTPException(status_code=403, detail="events.read permission required")
-    return user
 
 
 @router.get("/v1/events")
@@ -61,7 +44,7 @@ def list_events(
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
-    user = _require_events_read(db, request)
+    user = require_events_read(db, request)
     filters = parse_event_filters(
         framework=framework,
         q=q,
@@ -105,7 +88,7 @@ def event_facets(
     db: Session = Depends(get_db),
 ):
     "Facet counts for the Events UI.\n\n    Counts are computed with other filters applied, but *exclude* the facet\n    itself so the UI can show meaningful alternatives for switching.\n\n    - sources: every filter except the source list\n    - controls: every filter except the control list\n    - rules: every filter except the rule list\n"
-    user = _require_events_read(db, request)
+    user = require_events_read(db, request)
     filters = parse_event_filters(
         framework=framework,
         q=q,
@@ -153,7 +136,7 @@ def export_events(
     db: Session = Depends(get_db),
 ):
     "Export events matching filters in CSV/JSON/NDJSON.\n\n    This is intended for audit/export workflows (e.g., export all events mapped to a control\n    over a time period). Exports are capped to avoid accidental huge downloads.\n"
-    user = _require_events_read(db, request)
+    user = require_events_read(db, request)
     filters = parse_event_filters(
         framework=framework,
         q=q,
@@ -188,7 +171,7 @@ def latest_evidence_event(
     db: Session = Depends(get_db),
 ):
     "Return the newest visible events by ingestion time, newest first.\n\n    The homepage ticker polls this endpoint. Visibility follows the normal event\n    listing rules. `after` is compared with Event.created_at because the ticker\n    shows the most recent arrivals in Keen, whatever their original event time.\n    `limit` accepts 1 to 25 events.\n"
-    user = _require_events_read(db, request)
+    user = require_events_read(db, request)
     return service.latest_evidence_event(user=user, after=after, limit=limit, db=db)
 
 
@@ -199,7 +182,7 @@ def create_event_incident(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    _require_events_read(db, request)
+    require_events_read(db, request)
     return service.create_event_incident(
         event_id=event_id,
         payload=payload,
@@ -216,7 +199,7 @@ def delete_event_incident(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    _require_events_read(db, request)
+    require_events_read(db, request)
     return service.delete_event_incident(
         event_id=event_id,
         incident_id=incident_id,
@@ -233,7 +216,7 @@ def event_control_suggestions(
     db: Session = Depends(get_db),
 ):
     "Rank in-scope controls against the event's wording, for proposing a rule."
-    user = _require_events_read(db, request)
+    user = require_events_read(db, request)
     return service.event_control_suggestions(
         user=user, event_id=event_id, framework=framework, db=db
     )
@@ -247,7 +230,7 @@ def get_event(
     sample_export: bool = False,
     db: Session = Depends(get_db),
 ):
-    user = _require_events_read(db, request)
+    user = require_events_read(db, request)
     return service.get_event(
         user=user,
         event_id=event_id,

@@ -5,7 +5,7 @@ import hashlib
 import json
 import secrets
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from urllib.parse import urlsplit
 
 import pyotp
@@ -13,6 +13,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException
 
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive as now
 from app.core.valkey import get_valkey
 from app.db.models import AuditLog, MfaChallenge, MfaCredential, MfaRecoveryCode, User
 from app.security.rate_limit import client_ip, fixed_window_allow
@@ -20,10 +21,6 @@ from app.security.roles import attach_effective_role
 
 COOKIE = "keen_mfa_pending"
 TTL = 300
-
-
-def now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def digest(value):

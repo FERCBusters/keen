@@ -3,7 +3,6 @@ import { csvEscape } from '../csv.js';
 import { ensureEmbeddedVisualisationMarkup } from './visualisation/embedded-markup.js';
 import { createWindowStory } from './visualisation/window-story.js';
 import {
-  MS_PER_DAY,
   histStepMs,
   histNextFinerInterval,
   histBucketToUtcMs,
@@ -33,6 +32,7 @@ import {
   showInlineLoading,
   showTableLoading,
   initCollapsibleFilterSections,
+  relativeLuminance,
 } from '/app.js';
 
 ensureEmbeddedVisualisationMarkup();
@@ -56,12 +56,7 @@ function scopedFilterParams() {
     .split(',')
     .map((name) => name.trim())
     .filter(Boolean);
-  let params;
-  try {
-    params = new URLSearchParams(location.search || '');
-  } catch {
-    return out;
-  }
+  const params = new URLSearchParams(location.search);
   for (const name of names) {
     for (const value of params.getAll(name)) if (value.trim()) out.push([name, value]);
   }
@@ -291,19 +286,6 @@ function _clamp01(x) {
   return Math.max(0, Math.min(1, n));
 }
 
-function _srgbToLinear(c) {
-  const v = c / 255;
-  return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-}
-
-function _relativeLuminance(rgb) {
-  // W3C relative luminance (0..1)
-  const r = _srgbToLinear(rgb.r);
-  const g = _srgbToLinear(rgb.g);
-  const b = _srgbToLinear(rgb.b);
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
 function _mixRgb(a, b, t) {
   // t=0 -> a, t=1 -> b
   const tt = _clamp01(t);
@@ -362,7 +344,7 @@ function _heatColorForBase(baseHex) {
 
   // Luminance-aware tuning: very light colours (eg yellow) need a tighter
   // "towards-white" range, otherwise low values disappear.
-  const lum = _relativeLuminance(baseRgb);
+  const lum = relativeLuminance(baseRgb);
 
   // How much to mix towards white for the low end.
   // Lower = closer to base (more saturated); higher = closer to white.
@@ -605,7 +587,6 @@ function updateHistogramZoomButtons() {
 }
 
 function updateHistogramBrushEnabled() {
-  // Update button appearance.
   if (histZoomModeBtn) {
     histZoomModeBtn.classList.toggle('active', !!histZoomModeOn);
     // Keep the label short; Bootstrap will apply the "active" styling.
@@ -613,11 +594,8 @@ function updateHistogramBrushEnabled() {
   }
 
   const enabled = vizMode === 'histogram' && (histZoomModeOn || histBrushShiftActive);
-  try {
-    if (typeof _setHistogramBrushEnabled === 'function') _setHistogramBrushEnabled(enabled);
-  } catch {
-    // ignore
-  }
+  // Set once the histogram has drawn its brush.
+  _setHistogramBrushEnabled?.(enabled);
 }
 
 function getActiveRange() {
@@ -1434,10 +1412,9 @@ function getWrapWidth(min = 680) {
   return Math.max(min, wrap?.clientWidth || 900);
 }
 
-function drawGraph(minW, topS = null, topC = null) {
-  clearSvg();
-  if (!graphData) return;
-
+// The Graph's edges of at least `minW`, between the top `topS` sources and
+// `topC` controls by volume, and the nodes they connect.
+function selectGraphEdges(minW, topS, topC) {
   const nodeById = new Map((graphData.nodes || []).map((n) => [n.id, n]));
   const linksAll = (graphData.links || [])
     .filter((l) => Number(l.value || 0) >= minW)
@@ -1492,6 +1469,72 @@ function drawGraph(minW, topS = null, topC = null) {
   }
   sources = sources.filter((n) => connected2.has(n.id));
   controls = controls.filter((n) => connected2.has(n.id));
+  return { links, sources, controls, totalById };
+}
+
+// Tile colours for each source and a gradient for its edges, both from the
+// source's badge colour.
+function appendSourceGradients(sources) {
+  const defs = svg.append('defs');
+
+  const _safeBaseColor = (hex) => {
+    const c = typeof hex === 'string' ? d3.color(hex.trim()) : null;
+    return c || d3.rgb(124, 58, 237);
+  };
+
+  const _idSafe = (s) => String(s || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  const sourceStyleById = new Map();
+  const sourceGradById = new Map();
+  for (const s of sources) {
+    const base = _safeBaseColor(s.color);
+    const lum = relativeLuminance(base);
+
+    // Dark tile fill with white labels: keep the source hue but add depth.
+    // We darken more for very light colours so white text stays readable.
+    let darken = 0.28;
+    if (lum > 0.78) darken = 0.52;
+    else if (lum > 0.62) darken = 0.4;
+    else if (lum < 0.25) darken = 0.18;
+
+    const fill = _mixRgb(base, d3.rgb(0, 0, 0), darken).formatHex();
+    // Border: a subtle lighter rim, still tied to the source hue.
+    const stroke = _mixRgb(base, d3.rgb(255, 255, 255), 0.16).formatHex();
+
+    sourceStyleById.set(s.id, { fill, stroke, base: base.formatHex() });
+
+    // Gradient for edges from this source → controls.
+    const gradId = `srcgrad_${_idSafe(s.id)}`;
+    const darker = _mixRgb(base, d3.rgb(0, 0, 0), 0.3);
+    const lighter = _mixRgb(base, d3.rgb(255, 255, 255), 0.52);
+
+    const g = defs
+      .append('linearGradient')
+      .attr('id', gradId)
+      .attr('x1', '0%')
+      .attr('y1', '0%')
+      .attr('x2', '100%')
+      .attr('y2', '0%');
+
+    g.append('stop')
+      .attr('offset', '0%')
+      .attr('stop-color', darker.formatHex())
+      .attr('stop-opacity', 0.62);
+    g.append('stop')
+      .attr('offset', '100%')
+      .attr('stop-color', lighter.formatHex())
+      .attr('stop-opacity', 0.52);
+
+    sourceGradById.set(s.id, `url(#${gradId})`);
+  }
+  return { sourceStyleById, sourceGradById };
+}
+
+function drawGraph(minW, topS = null, topC = null) {
+  clearSvg();
+  if (!graphData) return;
+
+  const { links, sources, controls, totalById } = selectGraphEdges(minW, topS, topC);
 
   if (links.length === 0) {
     const width = getWrapWidth(680);
@@ -1542,65 +1585,13 @@ function drawGraph(minW, topS = null, topC = null) {
   // Build per-source colour styling (respecting user overrides).
   // Note: SVG presentation attributes are overridden by CSS rules in styles.css,
   // so we use inline styles (.style) to ensure the per-source colours show.
-  const defs = svg.append('defs');
-
-  const _safeBaseColor = (hex) => {
-    const c = typeof hex === 'string' ? d3.color(hex.trim()) : null;
-    return c || d3.rgb(124, 58, 237);
-  };
-
-  const _idSafe = (s) => String(s || '').replace(/[^a-zA-Z0-9_-]/g, '_');
-
-  const sourceStyleById = new Map();
-  const sourceGradById = new Map();
-  for (const s of sources) {
-    const base = _safeBaseColor(s.color);
-    const lum = _relativeLuminance(base);
-
-    // Dark tile fill with white labels (requested): keep the source hue but add depth.
-    // We darken more for very light colours so white text stays readable.
-    let darken = 0.28;
-    if (lum > 0.78) darken = 0.52;
-    else if (lum > 0.62) darken = 0.4;
-    else if (lum < 0.25) darken = 0.18;
-
-    const fill = _mixRgb(base, d3.rgb(0, 0, 0), darken).formatHex();
-    // Border: a subtle lighter rim, still tied to the source hue.
-    const stroke = _mixRgb(base, d3.rgb(255, 255, 255), 0.16).formatHex();
-
-    sourceStyleById.set(s.id, { fill, stroke, base: base.formatHex() });
-
-    // Gradient for edges from this source → controls.
-    const gradId = `srcgrad_${_idSafe(s.id)}`;
-    const darker = _mixRgb(base, d3.rgb(0, 0, 0), 0.3);
-    const lighter = _mixRgb(base, d3.rgb(255, 255, 255), 0.52);
-
-    const g = defs
-      .append('linearGradient')
-      .attr('id', gradId)
-      .attr('x1', '0%')
-      .attr('y1', '0%')
-      .attr('x2', '100%')
-      .attr('y2', '0%');
-
-    g.append('stop')
-      .attr('offset', '0%')
-      .attr('stop-color', darker.formatHex())
-      .attr('stop-opacity', 0.62);
-    g.append('stop')
-      .attr('offset', '100%')
-      .attr('stop-color', lighter.formatHex())
-      .attr('stop-opacity', 0.52);
-
-    sourceGradById.set(s.id, `url(#${gradId})`);
-  }
+  const { sourceStyleById, sourceGradById } = appendSourceGradients(sources);
 
   const vals = links.map((l) => l.value);
   const vMin = d3.min(vals) || 1;
   const vMax = d3.max(vals) || 1;
   const wScale = d3.scaleSqrt().domain([vMin, vMax]).range([1.25, 10]);
 
-  // Links
   const gLinks = svg.append('g').attr('class', 'links');
   const link = gLinks
     .selectAll('path')
@@ -1645,7 +1636,6 @@ function drawGraph(minW, topS = null, topC = null) {
     return `${s} × ${c}\n${linkMetricLabel}: ${d.value}`;
   });
 
-  // Nodes
   const gNodes = svg.append('g').attr('class', 'nodes');
 
   const srcG = gNodes
@@ -1774,14 +1764,7 @@ function drawGraph(minW, topS = null, topC = null) {
     mode: 'graph',
     range: getActiveRange(),
     payload: {
-      edges: links.map((l) => ({
-        source: l.sourceNode?.source || '',
-        source_label: l.sourceNode?.label || l.sourceNode?.source || '',
-        control_id: l.targetNode?.control_id || '',
-        control_ref: l.targetNode?.label || '',
-        control_title: l.targetNode?.title || '',
-        mapped_events: l.value,
-      })),
+      edges: links.map((l) => exportEdge(l.sourceNode, l.targetNode, l.value)),
     },
   };
 }
@@ -2072,289 +2055,155 @@ function drawHeatmap() {
   };
 }
 
-function buildHierarchy(mode) {
-  if (!graphData) return { name: 'All', children: [] };
+// A sunburst keeps one "Other" wedge: top-level segments too small to read
+// are merged into it, which avoids clusters of hairline slices and smeared
+// labels. Each mode has its own thresholds.
+const SUNBURST_OTHER_OPTS = {
+  // "By source" is often skewed (one dominant source and many tiny ones), so it
+  // merges more aggressively. A source that is visually tiny in ring 1 joins
+  // "Other" rather than leaving thin slivers, and their fragmented ring-2
+  // leaves, beside it.
+  sunburst_source: {
+    min_frac: 0.01, // merge segments under 1% of the total
+    min_keep: 5, // keep at least this many of the largest that pass the size checks
+    max_keep: 10, // cap explicit segments; the remainder goes into Other
+    keep_upto: 0.98, // after min_keep, keep segments until they cover this fraction
+    min_merge: 2, // only create Other if at least this many segments are merged
+    min_angle_rad: 0.16, // also merge segments narrower than this angle
+  },
+  sunburst_control: {
+    min_frac: 0.006,
+    min_keep: 10,
+    max_keep: 26,
+    keep_upto: 0.992,
+    min_merge: 2,
+    min_angle_rad: 0.08,
+  },
+};
 
-  // Used to estimate *absolute* slice angle when deciding whether something is too small to
-  // render as its own segment. This must be based on the whole sunburst total, not the
-  // parent subtotal, otherwise we can dramatically overestimate angles for children of small
-  // top-level segments (which is what produces the hairline-slice clusters).
-  let ROOT_TOTAL_FOR_ANGLE = 0;
+// Merges the small top-level segments of a sunburst into one "Other" wedge.
+// `rootTotal` is the whole sunburst's total: slice angles must be measured
+// against it, not a parent subtotal, otherwise the children of small segments
+// look far larger than they are and are never merged.
+function mergeSmallSegmentsIntoOther(parent, opts, rootTotal) {
+  // Determine each child's total contribution:
+  //  - leaf nodes: use `value`
+  //  - internal nodes: sum direct children leaf `value`s
+  const childTotal = (n) => {
+    const v = Number(n?.value);
+    if (Number.isFinite(v) && v > 0) return v;
 
-  // Sunburst: merge very small sibling segments into a single "Other" slice.
-  // This reduces the hairline-slice problem (and unreadable label "smear")
-  // when a parent has many tiny children.
-  //
-  // We tune thresholds slightly differently for the two sunburst modes:
-  //  - by source: controls can get very fragmented; be more aggressive
-  //  - by control: sources are usually fewer; be less aggressive
-  const OTHER_DEFAULTS = {
-    min_frac: 0.006, // merge children <0.6% of the parent total (after keeping the largest few)
-    min_keep: 10, // always keep at least this many largest children
-    max_keep: 26, // cap visible children; remainder goes into Other
-    min_merge: 2, // only create Other if at least this many children are merged
-    keep_upto: 0.992, // keep explicit slices until we cover this fraction of the parent total
-    min_angle_rad: 0.0, // additional visual guardrail: merge if slice angle is too small
-    force_min_keep: false, // when true, keep the largest min_keep even if individually small
+    if (Array.isArray(n?.children) && n.children.length) {
+      let t = 0;
+      for (const c of n.children) {
+        const cv = Number(c?.value);
+        if (Number.isFinite(cv) && cv > 0) t += cv;
+      }
+      return t;
+    }
+    return 0;
   };
 
-  const OTHER_OPTS = {
-    // Ring 1 = sources, Ring 2 = controls mapped to that source
-    sunburst_source: {
-      // Root-level merging is the only place we create an "Other" bucket.
-      // This ensures the whole sundial has a *single* "Other" wedge.
-      // "By source" can be very skewed (one dominant source + lots of tiny ones).
-      // Be more aggressive at the root to avoid the "hairline cluster" that can appear
-      // even after we create a global "Other" slice.
-      // Root thresholds here are intentionally stricter than other charts.
-      // We use *absolute* slice angle (relative to the entire sunburst) so that
-      // small sources don't survive just because they are "large" within a tiny parent.
-      // Goal: if a source is visually tiny in ring-1, it should be folded into the single
-      // global "Other" wedge so it doesn't leave thin slivers (and their fragmented ring-2 leaves)
-      // floating after "Other".
-      root: {
-        min_frac: 0.01,
-        min_keep: 5,
-        max_keep: 10,
-        keep_upto: 0.98,
-        min_merge: 2,
-        min_angle_rad: 0.16,
-        extend_outer: true,
-      },
-      child: {
-        min_frac: 0.004,
-        min_keep: 6,
-        max_keep: 16,
-        keep_upto: 0.985,
-        min_merge: 2,
-        min_angle_rad: 0.05,
-      },
-    },
-    // Ring 1 = controls, Ring 2 = sources mapped to that control
-    sunburst_control: {
-      root: { ...OTHER_DEFAULTS, min_frac: 0.006, min_angle_rad: 0.08, extend_outer: true },
-      child: OTHER_DEFAULTS,
-    },
-  };
+  const kids = parent.children
+    .map((node) => ({ node, v: childTotal(node) }))
+    .filter((kv) => Number.isFinite(kv.v) && kv.v > 0);
 
-  function mergeChildrenIntoOther(parent, opts = OTHER_DEFAULTS) {
-    if (!parent || !Array.isArray(parent.children) || parent.children.length === 0) return;
+  if (kids.length === 0) return;
 
-    const OTHER_MIN_FRAC = Number.isFinite(opts.min_frac) ? opts.min_frac : OTHER_DEFAULTS.min_frac;
-    const OTHER_MIN_KEEP = Number.isFinite(opts.min_keep) ? opts.min_keep : OTHER_DEFAULTS.min_keep;
-    const OTHER_MAX_KEEP = Number.isFinite(opts.max_keep) ? opts.max_keep : OTHER_DEFAULTS.max_keep;
-    const OTHER_MIN_MERGE = Number.isFinite(opts.min_merge)
-      ? opts.min_merge
-      : OTHER_DEFAULTS.min_merge;
-    const KEEP_UPTO = Number.isFinite(opts.keep_upto) ? opts.keep_upto : OTHER_DEFAULTS.keep_upto;
-    const MIN_ANGLE = Number.isFinite(opts.min_angle_rad)
-      ? opts.min_angle_rad
-      : OTHER_DEFAULTS.min_angle_rad;
-    const FORCE_MIN_KEEP = !!opts.force_min_keep;
-    const EXTEND_OUTER = !!opts.extend_outer;
+  kids.sort((a, b) => Number(b.v || 0) - Number(a.v || 0));
+  const total = kids.reduce((acc, kv) => acc + Number(kv.v || 0), 0);
 
-    // Determine each child's total contribution:
-    //  - leaf nodes: use `value`
-    //  - internal nodes: sum direct children leaf `value`s
-    const childTotal = (n) => {
-      const v = Number(n?.value);
-      if (Number.isFinite(v) && v > 0) return v;
+  // Absolute total for the whole sunburst (the local total when it has none).
+  const ROOT_TOTAL = Math.max(1, Number(rootTotal || total));
 
-      if (Array.isArray(n?.children) && n.children.length) {
-        let t = 0;
-        for (const c of n.children) {
-          const cv = Number(c?.value);
-          if (Number.isFinite(cv) && cv > 0) t += cv;
-        }
-        return t;
-      }
-      return 0;
-    };
+  const keep = [];
+  const merged = [];
+  let keptFrac = 0;
 
-    const kids = parent.children
-      .map((node) => ({ node, v: childTotal(node) }))
-      .filter((kv) => Number.isFinite(kv.v) && kv.v > 0);
+  for (let i = 0; i < kids.length; i++) {
+    const kv = kids[i];
+    const frac = Number(kv.v || 0) / total;
+    const angle = 2 * Math.PI * (Number(kv.v || 0) / ROOT_TOTAL);
 
-    if (kids.length === 0) return;
+    // Size and angle gates prevent lots of hairline slices.
+    const bigEnough = frac >= opts.min_frac && angle >= opts.min_angle_rad;
+    // Keep the largest few to preserve recognisable structure, then keep
+    // segments until they cover most of the total.
+    const wanted = keep.length < opts.min_keep || keptFrac < opts.keep_upto;
 
-    kids.sort((a, b) => Number(b.v || 0) - Number(a.v || 0));
-    const total = kids.reduce((acc, kv) => acc + Number(kv.v || 0), 0);
-    if (!total) return;
-
-    // Absolute total for the whole sunburst (fallback to local total if not set yet).
-    const ROOT_TOTAL = Math.max(1, Number(ROOT_TOTAL_FOR_ANGLE || total));
-
-    const keep = [];
-    const merged = [];
-    let keptFrac = 0;
-
-    for (let i = 0; i < kids.length; i++) {
-      const kv = kids[i];
-      const frac = Number(kv.v || 0) / total;
-
-      // IMPORTANT: use *absolute* angle (relative to the whole sunburst), not angle within
-      // the parent wedge. Otherwise children of small top-level segments look far larger
-      // than they really are, and don't get merged.
-      const absFrac = Number(kv.v || 0) / ROOT_TOTAL;
-      const angle = 2 * Math.PI * absFrac;
-
-      // Keep the largest few to preserve recognisable structure, then rely on size thresholds.
-      const mustKeep =
-        keep.length < OTHER_MIN_KEEP &&
-        (FORCE_MIN_KEEP || (frac >= OTHER_MIN_FRAC && angle >= MIN_ANGLE));
-
-      // Visual + fraction gating (prevents lots of hairline slices).
-      const keepBySize = frac >= OTHER_MIN_FRAC;
-      const keepByAngle = angle >= MIN_ANGLE;
-
-      // Respect a maximum number of explicit slices; everything else gets merged.
-      const canKeepMore = keep.length < OTHER_MAX_KEEP;
-
-      // Also stop keeping once we've covered most of the parent total.
-      const withinCum = keptFrac < KEEP_UPTO;
-
-      if (canKeepMore && (mustKeep || (keepBySize && keepByAngle && withinCum))) {
-        keep.push(kv);
-        keptFrac += frac;
-      } else {
-        merged.push(kv);
-      }
-    }
-
-    if (merged.length < OTHER_MIN_MERGE) {
-      // Not enough to justify an "Other" bucket.
-      parent.children = kids.map((kv) => kv.node);
-      return;
-    }
-
-    const first = (keep[0] || merged[0] || {}).node || {};
-    const kind = String(first?.kind || '').trim() || 'control';
-    const mergedTotal = merged.reduce((acc, kv) => acc + Number(kv.v || 0), 0);
-
-    const otherItems = merged.map((kv) => {
-      const n = kv.node || {};
-      return {
-        name: n.name,
-        kind: n.kind || kind,
-        value: Number(kv.v || 0),
-        control_id: n.control_id,
-        control_ref: n.control_ref,
-        source_key: n.source_key,
-        source_node: n.source_node,
-        source_label: n.source_label,
-        clause_id: n.clause_id,
-        clause_ref: n.clause_ref,
-        color: n.color,
-      };
-    });
-
-    // Preserve the full node structures for drill-down.
-    // These nodes include their children (ring-2 leaves), allowing the UI to
-    // re-render a "fresh" sunburst when the user clicks the "Other" wedge.
-    const otherNodes = merged.map((kv) => kv.node).filter(Boolean);
-
-    const out = keep.map((kv) => kv.node);
-
-    // IMPORTANT:
-    // We only want one "Other" wedge for the whole sundial.
-    // When merging at the root, we also want the "Other" wedge to visually extend
-    // across both rings. To do that without double-counting (d3.hierarchy().sum()
-    // adds a node's own `value` *and* its children), we make the root-level "Other"
-    // an internal node with a single child that carries the numeric `value`.
-    const otherNode = {
-      name: 'Other',
-      kind,
-      is_other: true,
-      other_count: merged.length,
-      other_items: otherItems,
-      other_nodes: otherNodes,
-    };
-    if (EXTEND_OUTER) {
-      otherNode.children = [
-        {
-          name: 'Other',
-          kind,
-          is_other: true,
-          value: mergedTotal,
-          other_count: merged.length,
-          other_items: otherItems,
-          other_nodes: otherNodes,
-        },
-      ];
+    if (keep.length < opts.max_keep && bigEnough && wanted) {
+      keep.push(kv);
+      keptFrac += frac;
     } else {
-      otherNode.value = mergedTotal;
+      merged.push(kv);
     }
-
-    out.push(otherNode);
-
-    parent.children = out;
   }
 
-  const nodes = graphData.nodes || [];
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const root = { name: 'All', children: [] };
-
-  if (mode === 'sunburst_source') {
-    const srcMap = new Map();
-    let totalAll = 0;
-    for (const l of graphData.links || []) {
-      const s = byId.get(l.source);
-      const c = byId.get(l.target);
-      if (!s || !c) continue;
-      if (s.type !== 'source' || c.type !== 'control') continue;
-      const v = Number(l.value || 0);
-      if (!v) continue;
-
-      totalAll += v;
-
-      if (!srcMap.has(s.id)) {
-        srcMap.set(s.id, {
-          name: s.label,
-          kind: s.node_kind === 'clause' ? 'clause' : 'source',
-          source_label: s.label,
-          source_key: s.source,
-          source_node: s,
-          clause_id: s.clause_id,
-          clause_ref: s.ref || s.label,
-          color: s.color,
-          children: [],
-        });
-      }
-
-      srcMap.get(s.id).children.push({
-        name: c.label,
-        kind: c.node_kind === 'clause' ? 'clause' : 'control',
-        control_id: c.control_id,
-        control_ref: c.label,
-        clause_id: c.clause_id,
-        clause_ref: c.ref || c.label,
-        value: v,
-      });
-    }
-
-    // Set absolute total so merge thresholds based on slice angle are accurate.
-    ROOT_TOTAL_FOR_ANGLE = totalAll;
-
-    // Source/control sunbursts keep a single root-level "Other" bucket.
-    const modeOpts = OTHER_OPTS[mode] || OTHER_OPTS.sunburst_source;
-
-    root.children = Array.from(srcMap.values()).map((s) => {
-      s.children.sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
-      return s;
-    });
-    root.children.sort((a, b) => {
-      const sa = a.children.reduce((acc, x) => acc + Number(x.value || 0), 0);
-      const sb = b.children.reduce((acc, x) => acc + Number(x.value || 0), 0);
-      return sb - sa;
-    });
-    // Also merge very small top-level segments into a single "Other" slice.
-    mergeChildrenIntoOther(root, modeOpts.root);
-    return root;
+  if (merged.length < opts.min_merge) {
+    // Not enough to justify an "Other" bucket.
+    parent.children = kids.map((kv) => kv.node);
+    return;
   }
 
-  // sunburst_control
-  const ctrlMap = new Map();
-  let totalAll = 0;
+  const first = (keep[0] || merged[0] || {}).node || {};
+  const kind = String(first?.kind || '').trim() || 'control';
+  const mergedTotal = merged.reduce((acc, kv) => acc + Number(kv.v || 0), 0);
+
+  const otherItems = merged.map((kv) => {
+    const n = kv.node || {};
+    return {
+      name: n.name,
+      kind: n.kind || kind,
+      value: Number(kv.v || 0),
+      control_id: n.control_id,
+      control_ref: n.control_ref,
+      source_key: n.source_key,
+      source_node: n.source_node,
+      source_label: n.source_label,
+      clause_id: n.clause_id,
+      clause_ref: n.clause_ref,
+      color: n.color,
+    };
+  });
+
+  // Preserve the full node structures for drill-down.
+  // These nodes include their children (ring-2 leaves), allowing the UI to
+  // re-render a "fresh" sunburst when the user clicks the "Other" wedge.
+  const otherNodes = merged.map((kv) => kv.node).filter(Boolean);
+
+  const out = keep.map((kv) => kv.node);
+
+  // The "Other" wedge extends across both rings. To do that without
+  // double-counting (d3.hierarchy().sum() adds a node's own `value` *and* its
+  // children), it is an internal node with a single child that carries the
+  // numeric `value`.
+  out.push({
+    name: 'Other',
+    kind,
+    is_other: true,
+    other_count: merged.length,
+    other_items: otherItems,
+    other_nodes: otherNodes,
+    children: [
+      {
+        name: 'Other',
+        kind,
+        is_other: true,
+        value: mergedTotal,
+        other_count: merged.length,
+        other_items: otherItems,
+        other_nodes: otherNodes,
+      },
+    ],
+  });
+
+  parent.children = out;
+}
+
+// Ring 1 = sources, ring 2 = controls mapped to that source.
+function sunburstSegmentsBySource(byId) {
+  const srcMap = new Map();
+  let total = 0;
   for (const l of graphData.links || []) {
     const s = byId.get(l.source);
     const c = byId.get(l.target);
@@ -2363,7 +2212,48 @@ function buildHierarchy(mode) {
     const v = Number(l.value || 0);
     if (!v) continue;
 
-    totalAll += v;
+    total += v;
+
+    if (!srcMap.has(s.id)) {
+      srcMap.set(s.id, {
+        name: s.label,
+        kind: s.node_kind === 'clause' ? 'clause' : 'source',
+        source_label: s.label,
+        source_key: s.source,
+        source_node: s,
+        clause_id: s.clause_id,
+        clause_ref: s.ref || s.label,
+        color: s.color,
+        children: [],
+      });
+    }
+
+    srcMap.get(s.id).children.push({
+      name: c.label,
+      kind: c.node_kind === 'clause' ? 'clause' : 'control',
+      control_id: c.control_id,
+      control_ref: c.label,
+      clause_id: c.clause_id,
+      clause_ref: c.ref || c.label,
+      value: v,
+    });
+  }
+  return { segments: Array.from(srcMap.values()), total };
+}
+
+// Ring 1 = controls, ring 2 = sources mapped to that control.
+function sunburstSegmentsByControl(byId) {
+  const ctrlMap = new Map();
+  let total = 0;
+  for (const l of graphData.links || []) {
+    const s = byId.get(l.source);
+    const c = byId.get(l.target);
+    if (!s || !c) continue;
+    if (s.type !== 'source' || c.type !== 'control') continue;
+    const v = Number(l.value || 0);
+    if (!v) continue;
+
+    total += v;
 
     if (!ctrlMap.has(c.id)) {
       ctrlMap.set(c.id, {
@@ -2389,25 +2279,348 @@ function buildHierarchy(mode) {
       value: v,
     });
   }
+  return { segments: Array.from(ctrlMap.values()), total };
+}
 
-  // Set absolute total so merge thresholds based on slice angle are accurate.
-  ROOT_TOTAL_FOR_ANGLE = totalAll;
+function buildHierarchy(mode) {
+  if (!graphData) return { name: 'All', children: [] };
 
-  // Control/source sunbursts keep a single root-level "Other" bucket.
-  const modeOpts = OTHER_OPTS[mode] || OTHER_OPTS.sunburst_control;
+  const byId = new Map((graphData.nodes || []).map((n) => [n.id, n]));
+  const bySource = mode === 'sunburst_source';
+  const { segments, total } = bySource
+    ? sunburstSegmentsBySource(byId)
+    : sunburstSegmentsByControl(byId);
 
-  root.children = Array.from(ctrlMap.values()).map((c) => {
-    c.children.sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
-    return c;
+  const root = { name: 'All', children: [] };
+  root.children = segments.map((s) => {
+    s.children.sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
+    return s;
   });
   root.children.sort((a, b) => {
     const sa = a.children.reduce((acc, x) => acc + Number(x.value || 0), 0);
     const sb = b.children.reduce((acc, x) => acc + Number(x.value || 0), 0);
     return sb - sa;
   });
-  // Also merge very small top-level segments into a single "Other" slice.
-  mergeChildrenIntoOther(root, modeOpts.root);
+  // Merge very small top-level segments into a single "Other" slice.
+  mergeSmallSegmentsIntoOther(
+    root,
+    SUNBURST_OTHER_OPTS[bySource ? 'sunburst_source' : 'sunburst_control'],
+    total,
+  );
   return root;
+}
+
+// One source → control edge as CSV and JSON exports carry it.
+function exportEdge(source, control, mappedEvents) {
+  return {
+    source: source?.source || '',
+    source_label: source?.label || source?.source || '',
+    control_id: control?.control_id || '',
+    control_ref: control?.label || '',
+    control_title: control?.title || '',
+    mapped_events: mappedEvents,
+  };
+}
+
+// Colour strategy:
+//  - Source segments use the same badge colour as elsewhere (graphData node colour already respects user overrides)
+//  - Control segments use a separate neutral palette to avoid colliding with arbitrary source hues
+function _sunburstHashUnit(str) {
+  // FNV-1a 32-bit -> [0,1]
+  const s = String(str || '');
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 4294967295;
+}
+
+function _sunburstControlFill(d) {
+  const key = String(d?.data?.control_id || d?.data?.control_ref || d?.data?.name || '');
+  const u = _sunburstHashUnit(key);
+  const hue = 360 * u;
+
+  // Make controls bolder (less pastel): higher saturation + lower lightness,
+  // with a small deterministic jitter per control so neighbouring slices still differentiate.
+  // Also clamp lightness so labels can safely default to white.
+  const depth = Number(d?.depth || 1);
+  const sat = depth <= 1 ? 0.74 : 0.66;
+  const baseL = depth <= 1 ? 0.34 : 0.42;
+  const l = Math.max(0.26, Math.min(0.54, baseL + (u - 0.5) * 0.08));
+  return d3.hsl(hue, sat, l).formatHex();
+}
+
+function _sunburstSourceFill(d) {
+  const base = String(d?.data?.color || '').trim() || 'rgba(124, 58, 237, 0.95)';
+  // Add depth (less pastel) while keeping the badge hue as the reference.
+  try {
+    const rgb = d3.rgb(base);
+    const lum = relativeLuminance(rgb);
+    let darken = 0.18;
+    if (lum > 0.78) darken = 0.38;
+    else if (lum > 0.62) darken = 0.28;
+    else if (lum < 0.22) darken = 0.1;
+    return _mixRgb(rgb, d3.rgb(0, 0, 0), darken).formatHex();
+  } catch {
+    // ignore
+  }
+  return base;
+}
+
+function sunburstFill(d) {
+  // A slightly stronger neutral so "Other" doesn't look washed out next to bolder colours.
+  if (d?.data?.is_other) return 'rgba(31,31,42,0.28)';
+  return d?.data?.kind === 'source' ? _sunburstSourceFill(d) : _sunburstControlFill(d);
+}
+
+function sunburstLabelTransform(c) {
+  const x = (c.x0 + c.x1) / 2;
+  const y = (c.y0 + c.y1) / 2;
+  const rotate = (x * 180) / Math.PI - 90;
+  const flip = x < Math.PI ? 0 : 180;
+  return `rotate(${rotate}) translate(${y},0) rotate(${flip})`;
+}
+
+function sunburstLabelText(d) {
+  const name = String(d.data?.name || '');
+  if (!name) return '';
+  if (d?.data?.is_other && d.parent?.data?.is_other) return '';
+  if (name.length <= 18) return name;
+  return `${name.slice(0, 16)}…`;
+}
+
+function renderSunburstOtherPanel(node, mode) {
+  // Show breakdown when:
+  //  - focused on root (depth 0) and the root has an "Other" top-level slice, OR
+  //  - focused on a top-level segment (depth 1) and that segment has an "Other" child slice.
+  if (!node || (node.depth !== 0 && node.depth !== 1)) {
+    setSunburstOtherPanel('');
+    return;
+  }
+
+  const other = (node.children || []).find((c) => !!c?.data?.is_other) || null;
+  const items =
+    other && Array.isArray(other.data?.other_items) ? other.data.other_items.slice() : [];
+  if (!other || items.length === 0) {
+    setSunburstOtherPanel('');
+    return;
+  }
+
+  items.sort((a, b) => Number(b?.value || 0) - Number(a?.value || 0));
+
+  const r = getActiveRange();
+
+  const otherItemType = (() => {
+    if (node.depth === 0) {
+      if (mode === 'sunburst_source') return 'source';
+      if (mode === 'sunburst_control') return 'control';
+      return 'segment';
+    }
+    if (mode === 'sunburst_source') return 'control';
+    if (mode === 'sunburst_control') return 'source';
+    return 'segment';
+  })();
+
+  const labelForType = (t, plural = false) => {
+    const labels = {
+      source: ['Source', 'Sources'],
+      control: ['Control', 'Controls'],
+      clause: ['Clause', 'Clauses'],
+      segment: ['Segment', 'Segments'],
+    };
+    const pair = labels[t] || labels.segment;
+    return plural ? pair[1] : pair[0];
+  };
+
+  const title = `${labelForType(otherItemType, true)} merged into "Other"`;
+  const scopeName = node.depth === 0 ? 'All' : String(node.data?.name || '');
+  const header = labelForType(otherItemType, false);
+  const countLabel = 'events';
+  const itemActionLabel = 'open filtered events';
+
+  const hrefForOtherItem = (it) => {
+    const label = String(it?.name || '');
+
+    if (mode === 'sunburst_source') {
+      if (otherItemType === 'source')
+        return buildEventsHref(it?.source_node || String(it?.source_key || '').trim(), '');
+      const src = node.data?.source_node || String(node.data?.source_key || '').trim();
+      const control = String(it?.control_ref || label || it?.control_id || '').trim();
+      return buildEventsHref(src, control);
+    }
+
+    if (mode === 'sunburst_control') {
+      if (otherItemType === 'control') {
+        const control = String(it?.control_ref || label || it?.control_id || '').trim();
+        return buildEventsHref('', control);
+      }
+      const src = it?.source_node || String(it?.source_key || '').trim();
+      const control = String(
+        node.data?.control_ref || node.data?.name || node.data?.control_id || '',
+      ).trim();
+      return buildEventsHref(src, control);
+    }
+
+    return '#';
+  };
+
+  const rows = items
+    .map((it) => {
+      const v = Number(it?.value || 0);
+      const label = String(it?.name || '');
+      const href = hrefForOtherItem(it);
+      return `<tr>
+    <td><a class="link-dark text-decoration-none" href="${href}">${esc(label)}</a></td>
+    <td class="text-end" data-sort="${v}">${esc(String(Math.round(v)))}</td>
+  </tr>`;
+    })
+    .join('');
+
+  const total = Math.round(items.reduce((acc, it) => acc + Number(it?.value || 0), 0));
+  const rangeTxt =
+    r && r.from && r.to ? `${esc(isoDateToDisplay(r.from))} → ${esc(isoDateToDisplay(r.to))}` : '';
+
+  setSunburstOtherPanel(`
+  <div class="border rounded p-2" style="background: rgba(31,31,42,0.03)">
+    <div class="d-flex justify-content-between align-items-baseline">
+      <div class="small-muted fw-bold">${title}</div>
+      <div class="small-muted">${items.length} segments · ${esc(String(total))} ${countLabel}${rangeTxt ? ` · ${rangeTxt}` : ''}</div>
+    </div>
+    <div class="small-muted" style="margin-top:2px">Scope: <span class="fw-bold">${esc(scopeName)}</span> - click an item to ${itemActionLabel}.</div>
+    <div class="table-responsive" style="max-height: 210px; overflow:auto; margin-top:6px">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>${header}</th>
+            <th class="text-end">Mapped ${countLabel}</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>
+`);
+}
+
+// The centre of the sunburst: the focused segment's name, a breadcrumb and hints.
+function appendSunburstCentreText(g) {
+  const centerLabel = g
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('class', 'small-muted')
+    .style('font-size', '16px')
+    .style('font-weight', 700)
+    .style('pointer-events', 'none')
+    .text('All');
+
+  // Breadcrumb + hint (shown only when zoomed in)
+  const centerBreadcrumb = g
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('class', 'small-muted')
+    .attr('y', 18)
+    .style('font-size', '11.5px')
+    .style('pointer-events', 'none')
+    .style('opacity', 0)
+    .text('');
+
+  const centerHint = g
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('class', 'small-muted')
+    .attr('y', 4)
+    .style('font-size', '12.5px')
+    .style('pointer-events', 'none')
+    .style('opacity', 1)
+    .text('');
+
+  const centerHintZoom = g
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('class', 'small-muted')
+    .attr('y', 34)
+    .style('font-size', '11.5px')
+    .style('pointer-events', 'none')
+    .style('opacity', 0)
+    .text('Click center to zoom out');
+
+  // Wrapped centre hint: fits better in the smaller centre hole.
+  ['Click outer wedges for events,', 'click inners to zoom'].forEach((line, i) => {
+    centerHint
+      .append('tspan')
+      .attr('x', 0)
+      .attr('dy', i === 0 ? 0 : '1.18em')
+      .text(line);
+  });
+
+  return { centerLabel, centerBreadcrumb, centerHint, centerHintZoom };
+}
+
+function sunburstBreadcrumbs(node) {
+  const parts = node
+    .ancestors()
+    .reverse()
+    .map((a) => a.data?.name)
+    .filter(Boolean);
+  if (parts.length <= 1) return 'All';
+  return parts.join(' › ');
+}
+
+// The Events filters for a segment: the source, control and clause it sits under.
+function sunburstEventFilters(d) {
+  let sourceKey = '';
+  let controlRef = '';
+  let clauseRef = '';
+  let clauseId = '';
+  let controlId = '';
+  for (const a of d.ancestors()) {
+    if (!sourceKey && a.data?.kind === 'source' && a.data?.source_key)
+      sourceKey = a.data.source_node || String(a.data.source_key);
+    // Prefer human-friendly ref (e.g. A.8.6) over UUID for Events filtering.
+    if (!controlRef && a.data?.kind === 'control') {
+      const v = a.data?.control_ref || a.data?.name || '';
+      if (v) controlRef = String(v);
+      if (a.data?.control_id) controlId = String(a.data.control_id);
+    }
+    if (!clauseRef && a.data?.kind === 'clause') {
+      const v = a.data?.clause_ref || a.data?.name || '';
+      if (v) clauseRef = String(v);
+      if (a.data?.clause_id) clauseId = String(a.data.clause_id);
+    }
+  }
+  return { sourceKey, controlRef, clauseRef, clauseId, controlId };
+}
+
+// A segment's path below the root, for tooltips.
+function sunburstPathLabel(d) {
+  return d
+    .ancestors()
+    .reverse()
+    .map((a) => a.data?.name)
+    .filter(Boolean)
+    .slice(1)
+    .join(' → ');
+}
+
+// The top-level segment a saved focus names, if it is still drawn.
+function sunburstFocusNode(root, mode, initialFocus) {
+  if (!initialFocus || typeof initialFocus !== 'object') return null;
+  if (mode === 'sunburst_source') {
+    const key = String(initialFocus.source_key || '').trim();
+    if (!key) return null;
+    return (root.children || []).find((n) => String(n.data?.source_key || '') === key) || null;
+  }
+  if (mode === 'sunburst_control') {
+    const key = String(initialFocus.control_id || '').trim();
+    if (!key) return null;
+    return (root.children || []).find((n) => String(n.data?.control_id || '') === key) || null;
+  }
+  return null;
 }
 
 function drawSunburst(mode, initialFocus = null, drill = null) {
@@ -2420,18 +2633,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
   {
     const nodeById = new Map((graphData.nodes || []).map((n) => [n.id, n]));
     const edges = (graphData.links || [])
-      .map((l) => {
-        const s = nodeById.get(l.source);
-        const c = nodeById.get(l.target);
-        return {
-          source: s?.source || '',
-          source_label: s?.label || s?.source || '',
-          control_id: c?.control_id || '',
-          control_ref: c?.label || '',
-          control_title: c?.title || '',
-          mapped_events: Number(l.value || 0),
-        };
-      })
+      .map((l) => exportEdge(nodeById.get(l.source), nodeById.get(l.target), Number(l.value || 0)))
       .filter((e) => e.mapped_events > 0);
     lastView = { mode, range: getActiveRange(), payload: { edges } };
   }
@@ -2489,58 +2691,6 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
     d.y1 = Math.max(0, d.y1 - holeDelta);
     d.current = { x0: d.x0, x1: d.x1, y0: d.y0, y1: d.y1 };
   });
-
-  // Colour strategy:
-  //  - Source segments use the same badge colour as elsewhere (graphData node colour already respects user overrides)
-  //  - Control segments use a separate neutral palette to avoid colliding with arbitrary source hues
-  function _hashUnit(str) {
-    // FNV-1a 32-bit -> [0,1]
-    const s = String(str || '');
-    let h = 2166136261;
-    for (let i = 0; i < s.length; i++) {
-      h ^= s.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    return (h >>> 0) / 4294967295;
-  }
-
-  function _controlFill(d) {
-    const key = String(d?.data?.control_id || d?.data?.control_ref || d?.data?.name || '');
-    const u = _hashUnit(key);
-    const hue = 360 * u;
-
-    // Make controls bolder (less pastel): higher saturation + lower lightness,
-    // with a small deterministic jitter per control so neighbouring slices still differentiate.
-    // Also clamp lightness so labels can safely default to white.
-    const depth = Number(d?.depth || 1);
-    const sat = depth <= 1 ? 0.74 : 0.66;
-    const baseL = depth <= 1 ? 0.34 : 0.42;
-    const l = Math.max(0.26, Math.min(0.54, baseL + (u - 0.5) * 0.08));
-    return d3.hsl(hue, sat, l).formatHex();
-  }
-
-  function _sourceFill(d) {
-    const base = String(d?.data?.color || '').trim() || 'rgba(124, 58, 237, 0.95)';
-    // Add depth (less pastel) while keeping the badge hue as the reference.
-    try {
-      const rgb = d3.rgb(base);
-      const lum = _relativeLuminance(rgb);
-      let darken = 0.18;
-      if (lum > 0.78) darken = 0.38;
-      else if (lum > 0.62) darken = 0.28;
-      else if (lum < 0.22) darken = 0.1;
-      return _mixRgb(rgb, d3.rgb(0, 0, 0), darken).formatHex();
-    } catch {
-      // ignore
-    }
-    return base;
-  }
-
-  function _fillFor(d) {
-    // A slightly stronger neutral so "Other" doesn't look washed out next to bolder colours.
-    if (d?.data?.is_other) return 'rgba(31,31,42,0.28)';
-    return d?.data?.kind === 'source' ? _sourceFill(d) : _controlFill(d);
-  }
 
   const arc = d3
     .arc()
@@ -2610,21 +2760,6 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
 
     return radial >= minRadial && angle >= minAngle && arcLen >= minArc && frac >= minFrac;
   };
-  const labelTransform = (c) => {
-    const x = (c.x0 + c.x1) / 2;
-    const y = (c.y0 + c.y1) / 2;
-    const rotate = (x * 180) / Math.PI - 90;
-    const flip = x < Math.PI ? 0 : 180;
-    return `rotate(${rotate}) translate(${y},0) rotate(${flip})`;
-  };
-
-  const labelText = (d) => {
-    const name = String(d.data?.name || '');
-    if (!name) return '';
-    if (d?.data?.is_other && d.parent?.data?.is_other) return '';
-    if (name.length <= 18) return name;
-    return `${name.slice(0, 16)}…`;
-  };
 
   // Center click target for zoom-out.
   // IMPORTANT: the inner "hole" radius is ~root.y1 (and equals the first ring's inner radius).
@@ -2655,197 +2790,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
       if (d) clicked(d);
     });
 
-  function renderOtherPanel(node) {
-    // Show breakdown when:
-    //  - focused on root (depth 0) and the root has an "Other" top-level slice, OR
-    //  - focused on a top-level segment (depth 1) and that segment has an "Other" child slice.
-    if (!node || (node.depth !== 0 && node.depth !== 1)) {
-      setSunburstOtherPanel('');
-      return;
-    }
-
-    const other = (node.children || []).find((c) => !!c?.data?.is_other) || null;
-    const items =
-      other && Array.isArray(other.data?.other_items) ? other.data.other_items.slice() : [];
-    if (!other || items.length === 0) {
-      setSunburstOtherPanel('');
-      return;
-    }
-
-    items.sort((a, b) => Number(b?.value || 0) - Number(a?.value || 0));
-
-    const r = getActiveRange();
-
-    const otherItemType = (() => {
-      if (node.depth === 0) {
-        if (mode === 'sunburst_source') return 'source';
-        if (mode === 'sunburst_control') return 'control';
-        return 'segment';
-      }
-      if (mode === 'sunburst_source') return 'control';
-      if (mode === 'sunburst_control') return 'source';
-      return 'segment';
-    })();
-
-    const labelForType = (t, plural = false) => {
-      const labels = {
-        source: ['Source', 'Sources'],
-        control: ['Control', 'Controls'],
-        clause: ['Clause', 'Clauses'],
-        segment: ['Segment', 'Segments'],
-      };
-      const pair = labels[t] || labels.segment;
-      return plural ? pair[1] : pair[0];
-    };
-
-    const title = `${labelForType(otherItemType, true)} merged into "Other"`;
-    const scopeName = node.depth === 0 ? 'All' : String(node.data?.name || '');
-    const header = labelForType(otherItemType, false);
-    const countLabel = 'events';
-    const itemActionLabel = 'open filtered events';
-
-    const hrefForOtherItem = (it) => {
-      const label = String(it?.name || '');
-
-      if (mode === 'sunburst_source') {
-        if (otherItemType === 'source')
-          return buildEventsHref(it?.source_node || String(it?.source_key || '').trim(), '');
-        const src = node.data?.source_node || String(node.data?.source_key || '').trim();
-        const control = String(it?.control_ref || label || it?.control_id || '').trim();
-        return buildEventsHref(src, control);
-      }
-
-      if (mode === 'sunburst_control') {
-        if (otherItemType === 'control') {
-          const control = String(it?.control_ref || label || it?.control_id || '').trim();
-          return buildEventsHref('', control);
-        }
-        const src = it?.source_node || String(it?.source_key || '').trim();
-        const control = String(
-          node.data?.control_ref || node.data?.name || node.data?.control_id || '',
-        ).trim();
-        return buildEventsHref(src, control);
-      }
-
-      return '#';
-    };
-
-    const rows = items
-      .map((it) => {
-        const v = Number(it?.value || 0);
-        const label = String(it?.name || '');
-        const href = hrefForOtherItem(it);
-        return `<tr>
-      <td><a class="link-dark text-decoration-none" href="${href}">${esc(label)}</a></td>
-      <td class="text-end" data-sort="${v}">${esc(String(Math.round(v)))}</td>
-    </tr>`;
-      })
-      .join('');
-
-    const total = Math.round(items.reduce((acc, it) => acc + Number(it?.value || 0), 0));
-    const rangeTxt =
-      r && r.from && r.to
-        ? `${esc(isoDateToDisplay(r.from))} → ${esc(isoDateToDisplay(r.to))}`
-        : '';
-
-    setSunburstOtherPanel(`
-    <div class="border rounded p-2" style="background: rgba(31,31,42,0.03)">
-      <div class="d-flex justify-content-between align-items-baseline">
-        <div class="small-muted fw-bold">${title}</div>
-        <div class="small-muted">${items.length} segments · ${esc(String(total))} ${countLabel}${rangeTxt ? ` · ${rangeTxt}` : ''}</div>
-      </div>
-      <div class="small-muted" style="margin-top:2px">Scope: <span class="fw-bold">${esc(scopeName)}</span> - click an item to ${itemActionLabel}.</div>
-      <div class="table-responsive" style="max-height: 210px; overflow:auto; margin-top:6px">
-        <table class="table table-sm mb-0">
-          <thead>
-            <tr>
-              <th>${header}</th>
-              <th class="text-end">Mapped ${countLabel}</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>
-  `);
-  }
-
-  const centerLabel = g
-    .append('text')
-    .attr('text-anchor', 'middle')
-    .attr('dominant-baseline', 'middle')
-    .attr('class', 'small-muted')
-    .style('font-size', '16px')
-    .style('font-weight', 700)
-    .style('pointer-events', 'none')
-    .text('All');
-
-  // Breadcrumb + hint (shown only when zoomed in)
-  const centerBreadcrumb = g
-    .append('text')
-    .attr('text-anchor', 'middle')
-    .attr('dominant-baseline', 'middle')
-    .attr('class', 'small-muted')
-    .attr('y', 18)
-    .style('font-size', '11.5px')
-    .style('pointer-events', 'none')
-    .style('opacity', 0)
-    .text('');
-
-  const centerHint = g
-    .append('text')
-    .attr('text-anchor', 'middle')
-    .attr('dominant-baseline', 'middle')
-    .attr('class', 'small-muted')
-    .attr('y', 4)
-    .style('font-size', '12.5px')
-    .style('pointer-events', 'none')
-    .style('opacity', 1)
-    .text('');
-
-  const centerHintZoom = g
-    .append('text')
-    .attr('text-anchor', 'middle')
-    .attr('dominant-baseline', 'middle')
-    .attr('class', 'small-muted')
-    .attr('y', 34)
-    .style('font-size', '11.5px')
-    .style('pointer-events', 'none')
-    .style('opacity', 0)
-    .text('Click center to zoom out');
-
-  function setMultilineText(textSel, lines, lineDyEm = 1.18) {
-    if (!textSel) return;
-    textSel.text(null);
-    const ll = Array.isArray(lines) ? lines : [String(lines || '')];
-    ll.filter((x) => String(x || '').trim()).forEach((line, i) => {
-      textSel
-        .append('tspan')
-        .attr('x', 0)
-        .attr('dy', i === 0 ? 0 : `${lineDyEm}em`)
-        .text(String(line));
-    });
-  }
-
-  // Wrapped centre hint (requested): fits better in the smaller centre hole.
-  setMultilineText(centerHint, ['Click outer wedges for events,', 'click inners to zoom']);
-
-  function truncateMiddle(str, max = 56) {
-    const ss = String(str || '');
-    if (ss.length <= max) return ss;
-    const keep = Math.max(10, Math.floor((max - 1) / 2));
-    return `${ss.slice(0, keep)}…${ss.slice(-keep)}`;
-  }
-
-  function breadcrumbsFor(node) {
-    const parts = node
-      .ancestors()
-      .reverse()
-      .map((a) => a.data?.name)
-      .filter(Boolean);
-    if (parts.length <= 1) return 'All';
-    return parts.join(' › ');
-  }
+  const { centerLabel, centerBreadcrumb, centerHint, centerHintZoom } = appendSunburstCentreText(g);
 
   function updateCenterUI(node) {
     const isRoot = !node?.parent;
@@ -2865,7 +2810,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
       }
     } else {
       centerHint.style('opacity', 0);
-      centerBreadcrumb.style('opacity', 1).text(truncateMiddle(breadcrumbsFor(node)));
+      centerBreadcrumb.style('opacity', 1).text(truncateMiddleText(sunburstBreadcrumbs(node), 56));
       centerHintZoom.style('opacity', 1).text('Click center to zoom out');
     }
   }
@@ -2878,7 +2823,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
     .data(root.descendants().filter((d) => d.depth))
     .join('path')
     .attr('class', 'sunburst-arc')
-    .attr('fill', (d) => _fillFor(d))
+    .attr('fill', (d) => sunburstFill(d))
     // Less translucent = less "pastel" looking.
     .attr('fill-opacity', (d) => (arcVisible(d.current) ? (d.depth === 1 ? 0.97 : 0.9) : 0))
     .attr('pointer-events', (d) => (arcVisible(d.current) ? 'auto' : 'none'))
@@ -2895,7 +2840,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
         const p = d.parent || root;
         if (ev.shiftKey) {
           if (p && focus !== p) clicked(p);
-          else renderOtherPanel(p);
+          else renderSunburstOtherPanel(p, mode);
           return;
         }
 
@@ -2918,7 +2863,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
 
         // Fallback: if we don't have drill nodes for some reason, show the list.
         if (p && focus !== p) clicked(p);
-        else renderOtherPanel(p);
+        else renderSunburstOtherPanel(p, mode);
         return;
       }
 
@@ -2927,29 +2872,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
       const isLeaf = !d.children;
       const isFocused = focus === d;
 
-      const filters = (() => {
-        let sourceKey = '';
-        let controlRef = '';
-        let clauseRef = '';
-        let clauseId = '';
-        let controlId = '';
-        for (const a of d.ancestors()) {
-          if (!sourceKey && a.data?.kind === 'source' && a.data?.source_key)
-            sourceKey = a.data.source_node || String(a.data.source_key);
-          // Prefer human-friendly ref (e.g. A.8.6) over UUID for Events filtering.
-          if (!controlRef && a.data?.kind === 'control') {
-            const v = a.data?.control_ref || a.data?.name || '';
-            if (v) controlRef = String(v);
-            if (a.data?.control_id) controlId = String(a.data.control_id);
-          }
-          if (!clauseRef && a.data?.kind === 'clause') {
-            const v = a.data?.clause_ref || a.data?.name || '';
-            if (v) clauseRef = String(v);
-            if (a.data?.clause_id) clauseId = String(a.data.clause_id);
-          }
-        }
-        return { sourceKey, controlRef, clauseRef, clauseId, controlId };
-      })();
+      const filters = sunburstEventFilters(d);
 
       if (isLeaf || isFocused) {
         openEventsForLink(filters.sourceKey, filters.controlRef, ev, null, {
@@ -2972,13 +2895,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
   path.style('cursor', (d) => arcCursor(d));
 
   path.append('title').text((d) => {
-    const names = d
-      .ancestors()
-      .reverse()
-      .map((a) => a.data?.name)
-      .filter(Boolean)
-      .slice(1);
-    const label = names.join(' → ');
+    const label = sunburstPathLabel(d);
     if (d?.data?.is_other) {
       const n =
         Number(
@@ -3001,10 +2918,10 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
     .attr('dy', '0.32em')
     .attr('text-anchor', 'middle')
     .style('opacity', (d) => (labelVisible(d) ? 1 : 0))
-    .attr('transform', (d) => labelTransform(d.current))
-    .text(labelText);
+    .attr('transform', (d) => sunburstLabelTransform(d.current))
+    .text(sunburstLabelText);
 
-  // Labels: default to white (requested). With bolder segment colours and higher opacity,
+  // Labels: default to white. With bolder segment colours and higher opacity,
   // this stays readable without switching some labels to black.
   labels
     .style('fill', 'rgba(255,255,255,0.92)')
@@ -3013,32 +2930,25 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
     .style('stroke-width', (d) => (d?.depth === 1 ? '1.05px' : '0px'))
     .style('font-weight', (d) => (d?.data?.is_other ? '700' : '600'));
 
-  labels.append('title').text((d) => {
-    const names = d
-      .ancestors()
-      .reverse()
-      .map((a) => a.data?.name)
-      .filter(Boolean)
-      .slice(1);
-    const label = names.join(' → ');
-    return `${label}\nMapped events: ${Math.round(d.value || 0)}`;
-  });
+  labels
+    .append('title')
+    .text((d) => `${sunburstPathLabel(d)}\nMapped events: ${Math.round(d.value || 0)}`);
 
   // Ensure the center click target stays above arcs.
   // During zoom, some arcs can reach y0=0 and would otherwise intercept clicks.
   parent.raise();
   centerLabel.raise();
 
-  centerBreadcrumb?.raise?.();
-  centerHint?.raise?.();
-  centerHintZoom?.raise?.();
+  centerBreadcrumb.raise();
+  centerHint.raise();
+  centerHintZoom.raise();
 
   function clicked(p) {
     if (!p) return;
     focus = p;
 
     updateCenterUI(p);
-    renderOtherPanel(p);
+    renderSunburstOtherPanel(p, mode);
     parent
       .datum(p.parent || root)
       .style('cursor', p.parent ? 'pointer' : isDrill && drillBack ? 'pointer' : 'default');
@@ -3081,7 +2991,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
       .transition(t)
       // Use target geometry so labels don't get "stuck" visible after zoom.
       .style('opacity', (d) => (labelVisible(d, d.target) ? 1 : 0))
-      .attrTween('transform', (d) => () => labelTransform(d.current));
+      .attrTween('transform', (d) => () => sunburstLabelTransform(d.current));
 
     // Remember the current zoom level so it can be saved / restored.
     // In "Other" drill-down mode, don't overwrite the main-chart focus state.
@@ -3099,20 +3009,7 @@ function drawSunburst(mode, initialFocus = null, drill = null) {
   }
 
   // Apply saved initial focus (top-level segment) if provided.
-  const focusNode = (() => {
-    if (!initialFocus || typeof initialFocus !== 'object') return null;
-    if (mode === 'sunburst_source') {
-      const key = String(initialFocus.source_key || '').trim();
-      if (!key) return null;
-      return (root.children || []).find((n) => String(n.data?.source_key || '') === key) || null;
-    }
-    if (mode === 'sunburst_control') {
-      const key = String(initialFocus.control_id || '').trim();
-      if (!key) return null;
-      return (root.children || []).find((n) => String(n.data?.control_id || '') === key) || null;
-    }
-    return null;
-  })();
+  const focusNode = sunburstFocusNode(root, mode, initialFocus);
   if (focusNode) {
     // Clicking triggers the same transitions and state updates as user interaction.
     clicked(focusNode);
@@ -3154,6 +3051,186 @@ async function loadTimeseries(days, opts = null) {
   const res = await apiGet(u.pathname + u.search);
   timeseriesCache.set(key, res);
   return res;
+}
+
+// One row per bucket for d3.stack(): a count per shown source, with the
+// remaining sources summed under `otherKey` when there is one.
+function histogramStackRows(items, primary, labelByKey, otherKey) {
+  return items.map((it) => {
+    const bucket = String(it?.bucket || it?.date || '').trim();
+    const o = {
+      bucket,
+      total: Number(it.total || 0),
+      mapped: Number(it.mapped || 0),
+      unmapped: Number(it.unmapped || 0),
+    };
+
+    for (const k of primary) {
+      o[String(k.source)] = 0;
+    }
+
+    let other = 0;
+    const by = it && typeof it.by_source === 'object' && it.by_source ? it.by_source : {};
+    for (const [src, n] of Object.entries(by)) {
+      const key = String(src);
+      const v = Number(n || 0);
+      if (Number.isFinite(v) && v > 0) {
+        if (labelByKey.has(key)) o[key] = (o[key] || 0) + v;
+        else other += v;
+      }
+    }
+    if (otherKey) o[otherKey] = other;
+    return o;
+  });
+}
+
+// Legend (wrap across rows so it doesn't overlap)
+function drawHistogramLegend(stackKeys, labelByKey, colorByKey, width, margin) {
+  const legend = svg
+    .append('g')
+    .attr('class', 'viz-legend')
+    .attr('transform', `translate(${margin.left}, 16)`);
+
+  const maxLegendW = Math.max(180, width - margin.left - margin.right);
+  let lx = 0;
+  let ly = 0;
+  const rowH = 16;
+  const sw = 12;
+  const gap = 6;
+
+  for (const k of stackKeys) {
+    const label = labelByKey.get(k) || k;
+    const approxW = sw + gap + 6.2 * String(label).length + 18;
+    if (lx + approxW > maxLegendW) {
+      lx = 0;
+      ly += rowH;
+    }
+
+    const base = colorByKey.get(k) || accent(0.55);
+    const cs = _histFillStrokeForBase(base);
+
+    const g = legend.append('g').attr('transform', `translate(${lx}, ${ly})`);
+    g.append('rect')
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', sw)
+      .attr('height', sw)
+      .attr('rx', 3)
+      .attr('ry', 3)
+      .attr('fill', cs.fill)
+      .attr('stroke', cs.stroke)
+      .attr('stroke-width', 1)
+      .attr('vector-effect', 'non-scaling-stroke');
+    g.append('text')
+      .attr('x', sw + gap)
+      .attr('y', 10)
+      .text(label);
+
+    lx += approxW;
+  }
+}
+
+function setHistogramCaption(res, zoom, intervalEff, days) {
+  const r = getActiveRange();
+  const startLabel = String(res?.start_ts || zoom?.start_ts || '') || '';
+  const endLabel = String(res?.end_ts || zoom?.end_ts || '') || '';
+  const intervalLabel =
+    intervalEff === 'day' ? 'Daily' : intervalEff.charAt(0).toUpperCase() + intervalEff.slice(1);
+  const hint = 'Shift-drag (or toggle Zoom mode) on the chart to select a time window.';
+  if (zoom && startLabel && endLabel) {
+    setVizCaption(
+      vizMode,
+      `${intervalLabel} volume from ${isoDateToDisplay(startLabel.slice(0, 10))}${startLabel.slice(10)} to ${isoDateToDisplay(endLabel.slice(0, 10))}${endLabel.slice(10)} UTC. ${hint} Use Back to return.`,
+    );
+  } else if (r) {
+    setVizCaption(
+      vizMode,
+      `Daily volume from ${isoDateToDisplay(r.from)} to ${isoDateToDisplay(r.to)} (${days} days). ${hint}`,
+    );
+  } else {
+    setVizCaption(vizMode, `Daily volume for the last ${days} days. ${hint}`);
+  }
+}
+
+// Main-chart brush (Grafana/Kibana-style range selector)
+// Enabled via Shift (temporarily) or via the "Zoom mode" toggle.
+function attachHistogramBrush(x, buckets, intervalEff, extent) {
+  const bandIndexForPx = (px) => {
+    const x0 = x.range()[0];
+    const step = x.step();
+    const i = Math.floor((px - x0) / Math.max(1e-6, step));
+    return Math.max(0, Math.min(buckets.length - 1, i));
+  };
+
+  const brush = d3
+    .brushX()
+    .extent(extent)
+    .on('end', (ev) => {
+      const sel = ev?.selection;
+      if (!sel || !Array.isArray(sel)) return;
+      const [px0, px1] = sel;
+      if (!(px1 > px0)) return;
+
+      const i0 = bandIndexForPx(px0);
+      const i1 = Math.max(
+        i0,
+        Math.min(buckets.length - 1, Math.ceil((px1 - x.range()[0]) / x.step()) - 1),
+      );
+
+      // If we're already at second-level precision, require more than one bucket.
+      if (intervalEff === 'second' && i1 <= i0) {
+        return;
+      }
+
+      const b0 = buckets[i0];
+      const b1 = buckets[i1];
+      const startMs = histBucketToUtcMs(b0, intervalEff);
+      const endMs = histBucketToUtcMs(b1, intervalEff);
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return;
+      const endExclMs = endMs + histStepMs(intervalEff);
+
+      // Progressive drill-down: day -> hour -> minute -> second (when feasible).
+      const cand = histNextFinerInterval(intervalEff);
+      const candBuckets = Math.ceil((endExclMs - startMs) / histStepMs(cand));
+      const nextInterval = candBuckets > HIST_MAX_BUCKETS ? intervalEff : cand;
+
+      histZoomStack = Array.isArray(histZoomStack) ? histZoomStack : [];
+      histZoomStack.push({
+        start_ts: new Date(startMs).toISOString(),
+        end_ts: new Date(endExclMs).toISOString(),
+        interval: nextInterval,
+      });
+      updateHistogramZoomButtons();
+      syncAddressBarToShareState();
+
+      // Re-render histogram for the zoomed range.
+      drawHistogram().catch((err) => {
+        toast(status, `Failed to load histogram zoom: ${errorText(err)}`, 'danger');
+      });
+    });
+
+  const brushG = svg.append('g').attr('class', 'hist-main-brush').call(brush);
+
+  // Provide a setter so global keyboard / button handlers can enable/disable it
+  // without needing to re-render the chart.
+  _setHistogramBrushEnabled = (enabled) => {
+    const on = !!enabled;
+    brushG.classed('hist-brush-enabled', on);
+    // d3.brush attaches pointer-events to the overlay rect explicitly.
+    // So disabling the parent <g> is not enough; we must turn off pointer-events
+    // on the brush primitives themselves, otherwise they will steal clicks from bars.
+    brushG.selectAll('.overlay,.selection,.handle').style('pointer-events', on ? 'all' : 'none');
+    brushG.selectAll('.overlay').style('cursor', on ? 'crosshair' : 'default');
+    if (!on) {
+      try {
+        brushG.call(brush.move, null);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  updateHistogramBrushEnabled();
 }
 
 async function drawHistogram() {
@@ -3273,32 +3350,7 @@ async function drawHistogram() {
   };
 
   // Convert API items into a form d3.stack() can consume.
-  const stackedData = items.map((it) => {
-    const bucket = String(it?.bucket || it?.date || '').trim();
-    const o = {
-      bucket,
-      total: Number(it.total || 0),
-      mapped: Number(it.mapped || 0),
-      unmapped: Number(it.unmapped || 0),
-    };
-
-    for (const k of primary) {
-      o[String(k.source)] = 0;
-    }
-
-    let other = 0;
-    const by = it && typeof it.by_source === 'object' && it.by_source ? it.by_source : {};
-    for (const [src, n] of Object.entries(by)) {
-      const key = String(src);
-      const v = Number(n || 0);
-      if (Number.isFinite(v) && v > 0) {
-        if (labelByKey.has(key)) o[key] = (o[key] || 0) + v;
-        else other += v;
-      }
-    }
-    if (showOther) o[OTHER_KEY] = other;
-    return o;
-  });
+  const stackedData = histogramStackRows(items, primary, labelByKey, showOther ? OTHER_KEY : null);
 
   const yMax = d3.max(stackedData, (d) => d3.sum(stackKeys, (k) => Number(d[k] || 0))) || 1;
   const y = d3
@@ -3423,155 +3475,14 @@ async function drawHistogram() {
       return `${isoDateToDisplay(String(t.bucket).slice(0, 10))}${String(t.bucket).slice(10)} UTC\n${label}: ${n}\nTotal: ${t.total}\nMapped: ${t.mapped}\nUnmapped: ${t.unmapped}`;
     });
 
-  // Legend (wrap across rows so it doesn't overlap)
-  const legend = svg
-    .append('g')
-    .attr('class', 'viz-legend')
-    .attr('transform', `translate(${margin.left}, 16)`);
+  drawHistogramLegend(stackKeys, labelByKey, colorByKey, width, margin);
 
-  const maxLegendW = Math.max(180, width - margin.left - margin.right);
-  let lx = 0;
-  let ly = 0;
-  const rowH = 16;
-  const sw = 12;
-  const gap = 6;
+  setHistogramCaption(res, zoom, intervalEff, days);
 
-  for (const k of stackKeys) {
-    const label = labelByKey.get(k) || k;
-    const approxW = sw + gap + 6.2 * String(label).length + 18;
-    if (lx + approxW > maxLegendW) {
-      lx = 0;
-      ly += rowH;
-    }
-
-    const base = colorByKey.get(k) || accent(0.55);
-    const cs = _histFillStrokeForBase(base);
-
-    const g = legend.append('g').attr('transform', `translate(${lx}, ${ly})`);
-    g.append('rect')
-      .attr('x', 0)
-      .attr('y', 0)
-      .attr('width', sw)
-      .attr('height', sw)
-      .attr('rx', 3)
-      .attr('ry', 3)
-      .attr('fill', cs.fill)
-      .attr('stroke', cs.stroke)
-      .attr('stroke-width', 1)
-      .attr('vector-effect', 'non-scaling-stroke');
-    g.append('text')
-      .attr('x', sw + gap)
-      .attr('y', 10)
-      .text(label);
-
-    lx += approxW;
-  }
-
-  {
-    const r = getActiveRange();
-    const startLabel = String(res?.start_ts || zoom?.start_ts || '') || '';
-    const endLabel = String(res?.end_ts || zoom?.end_ts || '') || '';
-    const intervalLabel =
-      intervalEff === 'day' ? 'Daily' : intervalEff.charAt(0).toUpperCase() + intervalEff.slice(1);
-    const hint = 'Shift-drag (or toggle Zoom mode) on the chart to select a time window.';
-    if (zoom && startLabel && endLabel) {
-      setVizCaption(
-        vizMode,
-        `${intervalLabel} volume from ${isoDateToDisplay(startLabel.slice(0, 10))}${startLabel.slice(10)} to ${isoDateToDisplay(endLabel.slice(0, 10))}${endLabel.slice(10)} UTC. ${hint} Use Back to return.`,
-      );
-    } else if (r) {
-      setVizCaption(
-        vizMode,
-        `Daily volume from ${isoDateToDisplay(r.from)} to ${isoDateToDisplay(r.to)} (${days} days). ${hint}`,
-      );
-    } else {
-      setVizCaption(vizMode, `Daily volume for the last ${days} days. ${hint}`);
-    }
-  }
-
-  // Main-chart brush (Grafana/Kibana-style range selector)
-  // Enabled via Shift (temporarily) or via the "Zoom mode" toggle.
-  {
-    const bandIndexForPx = (px) => {
-      const x0 = x.range()[0];
-      const step = x.step();
-      const i = Math.floor((px - x0) / Math.max(1e-6, step));
-      return Math.max(0, Math.min(buckets.length - 1, i));
-    };
-
-    const brush = d3
-      .brushX()
-      .extent([
-        [margin.left, margin.top],
-        [width - margin.right, mainBottom],
-      ])
-      .on('end', (ev) => {
-        const sel = ev?.selection;
-        if (!sel || !Array.isArray(sel)) return;
-        const [px0, px1] = sel;
-        if (!(px1 > px0)) return;
-
-        const i0 = bandIndexForPx(px0);
-        const i1 = Math.max(
-          i0,
-          Math.min(buckets.length - 1, Math.ceil((px1 - x.range()[0]) / x.step()) - 1),
-        );
-
-        // If we're already at second-level precision, require more than one bucket.
-        if (intervalEff === 'second' && i1 <= i0) {
-          return;
-        }
-
-        const b0 = buckets[i0];
-        const b1 = buckets[i1];
-        const startMs = histBucketToUtcMs(b0, intervalEff);
-        const endMs = histBucketToUtcMs(b1, intervalEff);
-        if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return;
-        const endExclMs = endMs + histStepMs(intervalEff);
-
-        // Progressive drill-down: day -> hour -> minute -> second (when feasible).
-        const cand = histNextFinerInterval(intervalEff);
-        const candBuckets = Math.ceil((endExclMs - startMs) / histStepMs(cand));
-        const nextInterval = candBuckets > HIST_MAX_BUCKETS ? intervalEff : cand;
-
-        histZoomStack = Array.isArray(histZoomStack) ? histZoomStack : [];
-        histZoomStack.push({
-          start_ts: new Date(startMs).toISOString(),
-          end_ts: new Date(endExclMs).toISOString(),
-          interval: nextInterval,
-        });
-        updateHistogramZoomButtons();
-        syncAddressBarToShareState();
-
-        // Re-render histogram for the zoomed range.
-        drawHistogram().catch((err) => {
-          toast(status, `Failed to load histogram zoom: ${errorText(err)}`, 'danger');
-        });
-      });
-
-    const brushG = svg.append('g').attr('class', 'hist-main-brush').call(brush);
-
-    // Provide a setter so global keyboard / button handlers can enable/disable it
-    // without needing to re-render the chart.
-    _setHistogramBrushEnabled = (enabled) => {
-      const on = !!enabled;
-      brushG.classed('hist-brush-enabled', on);
-      // d3.brush attaches pointer-events to the overlay rect explicitly.
-      // So disabling the parent <g> is not enough; we must turn off pointer-events
-      // on the brush primitives themselves, otherwise they will steal clicks from bars.
-      brushG.selectAll('.overlay,.selection,.handle').style('pointer-events', on ? 'all' : 'none');
-      brushG.selectAll('.overlay').style('cursor', on ? 'crosshair' : 'default');
-      if (!on) {
-        try {
-          brushG.call(brush.move, null);
-        } catch {
-          /* ignore */
-        }
-      }
-    };
-
-    updateHistogramBrushEnabled();
-  }
+  attachHistogramBrush(x, buckets, intervalEff, [
+    [margin.left, margin.top],
+    [width - margin.right, mainBottom],
+  ]);
 }
 
 function drawActive() {

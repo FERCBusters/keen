@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import add_months, utc_now_naive
 from app.services.errors import DomainError
 from app.services.mailer import smtp_configured
 
@@ -96,14 +96,6 @@ def schedule_date(moment: datetime) -> date:
     return moment.replace(tzinfo=timezone.utc).astimezone(zone).date()
 
 
-def _add_months(d: date, months: int) -> date:
-    month_idx = (d.month - 1) + months
-    year = d.year + month_idx // 12
-    month = month_idx % 12 + 1
-    day = min(d.day, monthrange(year, month)[1])
-    return date(year, month, day)
-
-
 def _weekday_within_month(d: date) -> date:
     """Move a weekend date to the Friday before it, staying inside its month.
 
@@ -173,10 +165,10 @@ def _fuzzy_month_rule_next(
     recur = str(recurrence or "once").strip().lower()
     step = max(1, int(interval or 1))
     if recur == "monthly":
-        candidate = _add_months(date(current.year, current.month, 1), step)
+        candidate = add_months(date(current.year, current.month, 1), step)
         return first_scheduled_rule_date(candidate.year, candidate.month, rule)
     if recur == "quarterly":
-        candidate = _add_months(date(current.year, current.month, 1), 3 * step)
+        candidate = add_months(date(current.year, current.month, 1), 3 * step)
         return first_scheduled_rule_date(candidate.year, candidate.month, rule)
     if recur == "yearly":
         month = max(1, min(12, int(anchor_month or current.month)))
@@ -220,7 +212,7 @@ def next_occurrence_after(
     elif recur == "weekly":
         nxt = current + timedelta(days=7 * step)
     elif recur in _MONTHS_PER_STEP:
-        month = _add_months(
+        month = add_months(
             date(current.year, current.month, 1), _MONTHS_PER_STEP[recur] * step
         )
         nxt = anchored_month_date(month.year, month.month, anchor_day or current.day)

@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive as utcnow
 from app.db.models import Audit, AuditAttendee, User
 from app.services.audits.access import (
     audit_or_404,
@@ -25,7 +26,6 @@ from app.services.audits.validation import (
     clean_email,
     clean_framework,
     clean_rich_text,
-    utcnow,
     validate_dates,
 )
 from app.services.errors import DomainError

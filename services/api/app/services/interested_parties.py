@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -12,8 +11,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive as _utcnow
-from app.core.references import control_justification as _control_justification
-from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
@@ -25,9 +22,9 @@ from app.db.models import (
     InterestedPartyNature,
     User,
 )
-from app.security.permissions import has_permission
+from app.security.permissions import has_any_permission
 from app.services.context import ChangeContext
-from app.services.control_refs import control_by_id_or_ref
+from app.services.control_refs import control_by_id_or_ref, control_summary
 from app.services.entity_changelog import (
     list_entity_changelogs,
     record_entity_changelog,
@@ -38,7 +35,7 @@ from app.services.isms.link_diary import (
     remove_entity_link_diary,
     sync_entity_link_diary,
 )
-from app.services.text import clean_text
+from app.services.text import clean_text, uuid_filter_values
 
 INTERESTED_PARTIES_READ_PERMISSION = "interested_parties.read"
 INTERESTED_PARTIES_MANAGE_PERMISSION = "interested_parties.manage"
@@ -79,22 +76,6 @@ COMMUNICATION_METHODS = [
 ]
 
 
-def _split_filter_values(value: str | None) -> list[str]:
-    return [part.strip() for part in str(value or "").split(",") if part.strip()]
-
-
-def _uuid_filter_values(value: str | None, *, label: str) -> list[uuid.UUID]:
-    out: list[uuid.UUID] = []
-    for part in _split_filter_values(value):
-        parsed = _try_uuid(part)
-        if not parsed:
-            raise DomainError(
-                status_code=400, detail=f"{label} must contain UUID values"
-            )
-        out.append(parsed)
-    return out
-
-
 class LookupPayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=256)
 
@@ -125,25 +106,21 @@ class CommunicationsPayload(BaseModel):
     items: list[CommunicationPayload] = Field(default_factory=list)
 
 
-def _can_read_interested_parties(db: Session, user: User | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
-        return False
-    return bool(
-        has_permission(db, user, INTERESTED_PARTIES_MANAGE_PERMISSION)
-        or has_permission(db, user, INTERESTED_PARTIES_READ_PERMISSION)
-        # Backwards-compatible with current risk deployments until the new
-        # permission pair is explicitly assigned.
-        or has_permission(db, user, RISK_MANAGE_PERMISSION)
-        or has_permission(db, user, RISK_READ_PERMISSION)
+def can_read_interested_parties(db: Session, user: User | None) -> bool:
+    # Risk viewers can also read interested parties.
+    return has_any_permission(
+        db,
+        user,
+        INTERESTED_PARTIES_MANAGE_PERMISSION,
+        INTERESTED_PARTIES_READ_PERMISSION,
+        RISK_MANAGE_PERMISSION,
+        RISK_READ_PERMISSION,
     )
 
 
-def _can_manage_interested_parties(db: Session, user: User | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
-        return False
-    return bool(
-        has_permission(db, user, INTERESTED_PARTIES_MANAGE_PERMISSION)
-        or has_permission(db, user, RISK_MANAGE_PERMISSION)
+def can_manage_interested_parties(db: Session, user: User | None) -> bool:
+    return has_any_permission(
+        db, user, INTERESTED_PARTIES_MANAGE_PERMISSION, RISK_MANAGE_PERMISSION
     )
 
 
@@ -167,21 +144,6 @@ def _methods(raw: list[str] | None) -> list[str]:
     if not out:
         raise DomainError(status_code=400, detail="At least one method is required")
     return out
-
-
-def _control_out(control: ControlItem | None) -> dict[str, Any]:
-    if not control:
-        return {}
-    return {
-        "id": str(control.id),
-        "framework": control.framework_slug,
-        "type": control.type,
-        "ref": control.ref,
-        "title": control.title,
-        "in_scope": control.in_scope,
-        "justification": _control_justification(control),
-        "upstream_url": _control_upstream_url(control),
-    }
 
 
 def _name_out(row: InterestedPartyName | None) -> dict[str, Any]:
@@ -255,7 +217,7 @@ def _party_out(
         "nature_id": str(row.nature_id),
         "note": row.note or "",
         "label": f"{row.name.name if row.name else 'Interested party'} - {row.nature.name if row.nature else 'Nature of interest'}",
-        "controls": [_control_out(c) for c in controls],
+        "controls": [control_summary(c) for c in controls],
         "communications": [_communication_out(c) for c in comms],
         "control_count": len(controls),
         "communication_count": len(comms),
@@ -860,10 +822,10 @@ def list_interested_parties(
                 InterestedParty.note.ilike(needle),
             )
         )
-    name_ids = _uuid_filter_values(name_id, label="name_id")
+    name_ids = uuid_filter_values(name_id, label="name_id")
     if name_ids:
         qry = qry.filter(InterestedParty.name_id.in_(name_ids))
-    nature_ids = _uuid_filter_values(nature_id, label="nature_id")
+    nature_ids = uuid_filter_values(nature_id, label="nature_id")
     if nature_ids:
         qry = qry.filter(InterestedParty.nature_id.in_(nature_ids))
     if control:
@@ -1082,7 +1044,7 @@ def interested_party_controls(
     return {
         "id": str(row.id),
         "framework": fw,
-        "controls": [_control_out(c) for c in _party_controls(db, row.id, fw)],
+        "controls": [control_summary(c) for c in _party_controls(db, row.id, fw)],
     }
 
 
@@ -1207,7 +1169,7 @@ def control_interested_parties(
         .all()
     )
     return {
-        "control": _control_out(control),
+        "control": control_summary(control),
         "framework": fw,
         "items": [
             _party_out(
@@ -1221,8 +1183,8 @@ def control_interested_parties(
 def interested_parties_meta(*, framework: str, db: Session, user):
     return {
         "framework": framework_parameter(framework),
-        "can_view": _can_read_interested_parties(db, user),
-        "can_manage": _can_manage_interested_parties(db, user),
+        "can_view": can_read_interested_parties(db, user),
+        "can_manage": can_manage_interested_parties(db, user),
         "events": COMMUNICATION_EVENTS,
         "when": COMMUNICATION_WHEN,
         "with_whom": COMMUNICATION_WITH_WHOM,

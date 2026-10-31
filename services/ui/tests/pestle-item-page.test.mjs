@@ -437,6 +437,22 @@ test('audit managers without event access can sample a PESTLE(E) item', async (t
   await settle(() => ui.el('samplePestleAudit').style.display === '');
 });
 
+test('inherited object names in the tab parameter open the details tab', async (t) => {
+  for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    const shown = [];
+    await pestleItem(t, {
+      query: `&tab=${name}`,
+      item: null,
+      setup(window) {
+        window.bootstrap = {
+          Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+        };
+      },
+    });
+    assert.deepEqual(shown, ['pestleDetailsTab'], name);
+  }
+});
+
 test('a new item opens its deep-linked tab and every pane asks for a save first', async (t) => {
   const shown = [];
   const { ui } = await pestleItem(t, {

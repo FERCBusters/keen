@@ -22,6 +22,10 @@ import {
 } from '/app.js';
 import { mountStoryRelated } from '/pages/story-related.js';
 import { mountMeasurementExamples } from '/pages/measurement-examples.js';
+import {
+  activateTabFromHashOrQuery,
+  effectivenessControlBadges,
+} from '/pages/isms-detail-common.js';
 
 const me = await initNavbar();
 enableTableSorting();
@@ -49,17 +53,6 @@ function metricHref(id) {
     `/isms-effectiveness-metric.html?id=${encodeURIComponent(id || '')}`,
     framework,
   );
-}
-
-function controlBadges(items) {
-  const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">No controls linked.</span>';
-  return arr
-    .map(
-      (c) =>
-        `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`,
-    )
-    .join('');
 }
 
 function sourceHtml(entry) {
@@ -148,7 +141,7 @@ function renderMeasure(row) {
   }
   $('metricKey').innerHTML = measure.metric_key ? `<code>${esc(measure.metric_key)}</code>` : '-';
   $('measureUpdated').textContent = fmtTs(measure.updated_at) || '-';
-  $('linkedControls').innerHTML = controlBadges(measure.controls);
+  $('linkedControls').innerHTML = effectivenessControlBadges(measure.controls, framework);
   // A quiz's measure records the quiz's results and changes from the quiz.
   const quiz = measure.quiz;
   const editable = canManageIsms && !quiz;
@@ -445,17 +438,13 @@ async function loadChangelog() {
   );
 }
 
-function activateTabFromHashOrQuery() {
-  const tab = String(params.get('tab') || location.hash.replace(/^#/, '') || '').toLowerCase();
-  const target =
-    tab === 'metrics'
-      ? $('measureMetricsTab')
-      : tab === 'visualisations' || tab === 'visualizations'
-        ? $('measureVisualisationsTab')
-        : tab === 'changelog'
-          ? $('measureChangelogTab')
-          : null;
-  if (target && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(target).show();
+function activateMeasureTab() {
+  activateTabFromHashOrQuery(params, {
+    metrics: $('measureMetricsTab'),
+    visualisations: $('measureVisualisationsTab'),
+    visualizations: $('measureVisualisationsTab'),
+    changelog: $('measureChangelogTab'),
+  });
 }
 
 async function load() {
@@ -478,13 +467,13 @@ async function load() {
     resetTrendRangeToData();
     renderMetricTrend();
     await loadChangelog();
-    activateTabFromHashOrQuery();
+    activateMeasureTab();
   } catch (e) {
     toast(status, `Failed to load effectiveness measure: ${errorText(e)}`, 'danger');
   }
 }
 
-window.addEventListener('hashchange', activateTabFromHashOrQuery);
+window.addEventListener('hashchange', activateMeasureTab);
 $('metricsFilter')?.addEventListener('input', renderMetrics);
 $('trendSource')?.addEventListener('change', renderMetricTrend);
 $('trendApply')?.addEventListener('click', renderMetricTrend);

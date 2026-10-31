@@ -316,9 +316,9 @@ def _iso(value):
 
 def person_posture(*, db, user, person_id, offset=0):
     # Posture is derived evidence; People access alone never discloses it.
-    from app.services.isms.access import _can_read_isms
+    from app.services.isms.access import can_read_isms
 
-    if not _can_read_isms(db, user) or not has_permission(db, user, "events.read"):
+    if not can_read_isms(db, user) or not has_permission(db, user, "events.read"):
         raise DomainError(403, "ISMS read access and events.read are required")
     feature_state(db).require("people", "evidence")
     if offset < 0 or offset > 100000:
@@ -478,9 +478,9 @@ def _workstation_asset(db, agent, person):
 
 def create_workstation_risk(*, db, user, person_id, body: WorkstationRiskInput):
     """Record a risk for one of a person's workstation checks."""
-    from app.services.isms.access import _can_read_isms
+    from app.services.isms.access import can_read_isms
 
-    if not _can_read_isms(db, user) or not has_permission(db, user, "events.read"):
+    if not can_read_isms(db, user) or not has_permission(db, user, "events.read"):
         raise DomainError(403, "ISMS read access and events.read are required")
     if not posture_risks.can_record(db, user):
         raise DomainError(403, "risk.manage is required to record a risk")

@@ -9,7 +9,7 @@ import httpx
 import pytest
 from app.core.config import settings
 from app.ingest.cloud import scaleway as scw
-from app.ingest.cloud.base import Unavailable
+from app.ingest.cloud.base import Unavailable, parse_time
 
 SECRET = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
 ORG = "6a7b8c9d-0e1f-4a2b-9c3d-4e5f6a7b8c9d"
@@ -509,8 +509,8 @@ def test_activity_reports_truncation(use, monkeypatch):
 
 
 def test_times_identifiers_and_addresses_are_read_strictly():
-    assert scw._when("yesterday") is None
-    assert scw._when("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
+    assert parse_time("yesterday") is None
+    assert parse_time("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
     with pytest.raises(Unavailable):
         scw._uuid("../iam")
     assert scw.everywhere("not-a-range") is False

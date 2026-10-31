@@ -25,6 +25,7 @@ from app.ingest.cloud.base import (
     clip,
     inactive_check,
     mfa_check,
+    parse_time,
     plural,
 )
 
@@ -33,6 +34,7 @@ DIRECTORY = "https://www.googleapis.com/auth/admin.directory.user.readonly"
 USER_PAGE = 500
 USER_PAGES = 60
 NEVER = "1970-01-01T00:00:00.000Z"
+
 USER_FIELDS = (
     "nextPageToken,users(id,primaryEmail,isAdmin,isDelegatedAdmin,"
     "isEnrolledIn2Sv,isEnforcedIn2Sv,suspended,archived,lastLoginTime,"
@@ -48,16 +50,8 @@ CHECKS = {
 
 
 def _when(value) -> datetime | None:
-    text = str(value or "").strip()
-    if not text or text == NEVER:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo:
-        parsed = parsed.astimezone(timezone.utc)
-    return parsed.replace(tzinfo=None)
+    # Google reports "never" (e.g. never signed in) as the epoch.
+    return None if str(value or "").strip() == NEVER else parse_time(value)
 
 
 def users() -> list[dict]:

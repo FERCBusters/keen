@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session, load_only
 
 from app.core.cache import cached_json, user_cache_scope
 from app.core.config import settings
-from app.core.references import control_justification as _control_justification
 from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
 from app.core.references import try_uuid as _try_uuid
@@ -29,12 +28,11 @@ from app.security.diary_visibility import (
 from app.security.redaction import redact_obj as _redact_obj
 from app.security.redaction import redact_str as _redact_str
 from app.services.control_inheritance import inherited_control_ids
+from app.services.control_refs import control_summary
 from app.services.entity_changelog import list_entity_changelogs
 from app.services.errors import DomainError
 from app.services.event_filters import event_predicates, parse_event_filters
 from app.services.presentation import extract_source_url as _extract_source_url
-
-EVENTS_READ_PERMISSION = "events.read"
 
 
 def _clause_link_out(link: ControlClauseLink) -> dict:
@@ -60,19 +58,7 @@ def list_controls(
     limit = max(1, min(int(limit or 500), 5000))
     offset = max(0, int(offset or 0))
     rows = db.query(ControlItem).filter(ControlItem.framework_slug == framework).all()
-    items = [
-        {
-            "id": str(c.id),
-            "framework": c.framework_slug,
-            "type": c.type,
-            "ref": c.ref,
-            "title": c.title,
-            "in_scope": c.in_scope,
-            "justification": _control_justification(c),
-            "upstream_url": _control_upstream_url(c),
-        }
-        for c in rows
-    ]
+    items = [control_summary(c) for c in rows]
     items.sort(key=lambda it: (it["type"], _ref_sort_key(it["ref"])))
     total = len(items)
     return {
@@ -108,14 +94,7 @@ def get_control(*, control_id: str, db: Session):
     )
 
     return {
-        "id": str(c.id),
-        "framework": c.framework_slug,
-        "type": c.type,
-        "ref": c.ref,
-        "title": c.title,
-        "in_scope": c.in_scope,
-        "justification": _control_justification(c),
-        "upstream_url": _control_upstream_url(c),
+        **control_summary(c),
         "tags": c.tags,
         "metadata": c.meta,
         "clauses": clauses,

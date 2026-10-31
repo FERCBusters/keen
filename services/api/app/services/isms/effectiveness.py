@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.db.models import (
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry,
@@ -17,7 +18,7 @@ from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
 from app.services.frameworks import framework_parameter
 
-from .common import _by_id_or_404, _record, _utcnow
+from .common import _by_id_or_404, _record
 from .metric_values import (
     _apply_effectiveness_measure_payload,
     _apply_metric_entry_payload,

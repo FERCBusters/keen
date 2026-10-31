@@ -8,12 +8,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, text
 
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.db.models import AuditSwotScope, IsmsSwot, IsmsSwotLink, User
 from app.services.errors import DomainError
 from app.services.frameworks import framework_parameter
 
-from .access import _can_manage_isms, _can_read_isms
-from .common import _by_id_or_404, _record, _utcnow
+from .access import can_manage_isms, can_read_isms
+from .common import _by_id_or_404, _record
 from .link_diary import remove_entity_link_diary
 from .mutations import _apply_links
 from .related_records import resolve_target as _target
@@ -78,7 +79,7 @@ class LinkPayload(BaseModel):
 
 
 def require_access(db, user, *, write=False):
-    if not (_can_manage_isms(db, user) if write else _can_read_isms(db, user)):
+    if not (can_manage_isms(db, user) if write else can_read_isms(db, user)):
         raise DomainError(403, "ISMS access required")
 
 

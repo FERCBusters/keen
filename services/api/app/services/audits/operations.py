@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive as utcnow
 from app.db.models import (
     Audit,
     AuditAttendee,
@@ -66,7 +67,6 @@ from app.services.audits.validation import (
     is_locked_audit,
     require_mutable_audit,
     try_uuid,
-    utcnow,
     validate_dates,
 )
 from app.services.errors import DomainError

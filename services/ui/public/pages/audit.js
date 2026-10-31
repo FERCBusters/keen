@@ -1,5 +1,17 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { maskDomText, maskEventDataString } from '/pages/evidence-export/masking.js';
+import {
+  buildZipStore,
+  downloadBlob,
+  extFromContentType,
+  parseContentDispositionFilename,
+} from '/pages/evidence-export/archive.js';
+import {
+  buildPdfFromJpegPages,
+  sliceCanvasToA4JpegPages,
+  waitForImages,
+} from '/pages/evidence-export/pdf.js';
+import { renderWrappedNodeLabel } from '/pages/visualisation/labels.js';
 import { isoYearMonth, scheduleDateFields } from '/pages/schedule-fields.js';
 import { createEvidenceSelection } from '/pages/evidence-selection.js';
 let selectedSwotIds = new Set(),
@@ -290,10 +302,10 @@ function kindLabel(k) {
   return v || 'Finding';
 }
 
-function statusLabel(s) {
-  const v = String(s || 'open');
-  if (v === 'in_progress') return 'In progress';
-  return v.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
+function findingStatusLabel(s) {
+  return String(s || 'open')
+    .replaceAll('_', ' ')
+    .replace(/^./, (c) => c.toUpperCase());
 }
 
 function auditTypeLabel(v) {
@@ -314,7 +326,7 @@ function showMeta(a) {
       .map((d) => isoDateToDisplay(d))
       .join(' → ') || 'No dates set';
   document.getElementById('meta').innerHTML =
-    `${esc(a?.framework_slug || '')} · ${esc(auditTypeLabel(a?.audit_type))} · ${esc(statusLabel(a?.status))} · ${esc(dates)} · Author: ${userPillHtml(a?.created_by_username)}`;
+    `${esc(a?.framework_slug || '')} · ${esc(auditTypeLabel(a?.audit_type))} · ${esc(auditStatusLabel(a?.status))} · ${esc(dates)} · Author: ${userPillHtml(a?.created_by_username)}`;
   document.getElementById('sampleEventLink').href = withFramework(
     '/events.html',
     a?.framework_slug || getCurrentFramework(),
@@ -496,13 +508,6 @@ function renderKpis(a) {
 // Audit ZIP/PDF export helpers
 // ------------------------------------------------------------------
 
-const _A4_PORTRAIT = { w: 595.28, h: 841.89 };
-const _utf8 = new TextEncoder();
-
-function _pageSize() {
-  return _A4_PORTRAIT;
-}
-
 function _sanitizeFilename(s) {
   const str = String(s || '');
   return str
@@ -517,39 +522,12 @@ function _safeZipPathSegment(s, fallback = 'file') {
   return (v || fallback).slice(0, 180).trim() || fallback;
 }
 
+// Audit downloads can also be ZIP archives, which the evidence export does not name.
 function _extFromContentType(ct) {
-  const t = String(ct || '').toLowerCase();
-  if (t.includes('application/pdf')) return '.pdf';
-  if (t.includes('application/json')) return '.json';
-  if (t.includes('text/plain')) return '.txt';
-  if (t.includes('text/html')) return '.html';
-  if (t.includes('text/csv')) return '.csv';
-  if (t.includes('image/jpeg')) return '.jpg';
-  if (t.includes('image/png')) return '.png';
-  if (t.includes('image/gif')) return '.gif';
-  if (t.includes('image/webp')) return '.webp';
-  if (t.includes('application/zip')) return '.zip';
-  return '';
-}
-
-function _parseContentDispositionFilename(header) {
-  const h = String(header || '');
-  if (!h) return '';
-  const mStar = h.match(/filename\*\s*=\s*([^;]+)/i);
-  if (mStar) {
-    let v = mStar[1].trim().replace(/^"|"$/g, '');
-    const parts = v.split("''");
-    if (parts.length === 2) {
-      try {
-        return decodeURIComponent(parts[1]);
-      } catch {
-        return parts[1];
-      }
-    }
-    return v;
-  }
-  const m = h.match(/filename\s*=\s*"?([^";]+)"?/i);
-  return m ? m[1].trim() : '';
+  const ext = extFromContentType(ct);
+  if (ext) return ext;
+  const type = String(ct || '').toLowerCase();
+  return type.includes('application/zip') ? '.zip' : '';
 }
 
 function _uniqueZipName(name, seen) {
@@ -586,27 +564,6 @@ function auditFileStem(a) {
   if (a?.updated_at || a?.created_at) parts.push(fmtTsFilename(a.updated_at || a.created_at));
   const stem = _sanitizeFilename(parts.filter(Boolean).join(' - '));
   return stem.slice(0, 180).trim() || 'Keen Audit';
-}
-
-async function _waitForImages(root, timeoutMs = 15_000) {
-  if (!root) return;
-  const imgs = Array.from(root.querySelectorAll('img'));
-  const pending = imgs
-    .filter((img) => img && img.src)
-    .map((img) => {
-      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-      return new Promise((resolve) => {
-        const done = () => {
-          img.removeEventListener('load', done);
-          img.removeEventListener('error', done);
-          resolve();
-        };
-        img.addEventListener('load', done);
-        img.addEventListener('error', done);
-      });
-    });
-  if (!pending.length) return;
-  await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, timeoutMs))]);
 }
 
 function _lookupOriginalControlValue(cloned) {
@@ -794,162 +751,6 @@ function _makeAuditExportContainer(widthPx) {
   return wrap;
 }
 
-async function _canvasToJpegBytes(canvas, quality = 0.92) {
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
-  if (!blob) throw new Error('Failed to encode PDF page image');
-  return new Uint8Array(await blob.arrayBuffer());
-}
-
-async function _sliceCanvasToA4JpegPages(canvas, header, footerText) {
-  const { w: pageW, h: pageH } = _pageSize();
-  const pages = [];
-  const w = canvas.width;
-  const ratio = pageW / w;
-  const pageHeightPx = Math.max(1, Math.round(pageH / ratio));
-  const headerPt = header ? 24 : 0;
-  const footerPt = 24;
-  const headerPx = Math.round(headerPt / ratio);
-  const footerPx = Math.round(footerPt / ratio);
-  const contentHeightPx = Math.max(1, pageHeightPx - headerPx - footerPx);
-  const fontPx = Math.max(10, Math.round(10 / ratio));
-
-  const cuts = [];
-  for (let y = 0; y < canvas.height; y += contentHeightPx) {
-    cuts.push({ y, h: Math.min(contentHeightPx, canvas.height - y) });
-  }
-  const totalPages = cuts.length || 1;
-
-  for (let i = 0; i < cuts.length; i++) {
-    const { y: y0, h: sliceH } = cuts[i];
-    const page = document.createElement('canvas');
-    page.width = w;
-    page.height = pageHeightPx;
-    const ctx = page.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, w, pageHeightPx);
-
-    if (headerPx > 0) {
-      ctx.strokeStyle = '#ddd';
-      ctx.beginPath();
-      ctx.moveTo(0, headerPx - 0.5);
-      ctx.lineTo(w, headerPx - 0.5);
-      ctx.stroke();
-      ctx.fillStyle = '#666';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = `${fontPx}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
-      ctx.fillText(String(header), w / 2, headerPx / 2, w - 20);
-    }
-
-    ctx.drawImage(canvas, 0, y0, w, sliceH, 0, headerPx, w, sliceH);
-
-    const top = pageHeightPx - footerPx;
-    ctx.strokeStyle = '#ddd';
-    ctx.beginPath();
-    ctx.moveTo(0, top + 0.5);
-    ctx.lineTo(w, top + 0.5);
-    ctx.stroke();
-    ctx.fillStyle = '#666';
-    ctx.textBaseline = 'middle';
-    ctx.font = `${fontPx}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
-    ctx.textAlign = 'left';
-    ctx.fillText(String(footerText || ''), 8, top + footerPx / 2, Math.floor(w * 0.72));
-    ctx.textAlign = 'right';
-    ctx.fillText(`Page ${i + 1} of ${totalPages}`, w - 8, top + footerPx / 2);
-
-    pages.push({ bytes: await _canvasToJpegBytes(page, 0.92), w, h: pageHeightPx });
-  }
-  return pages;
-}
-
-function _buildPdfFromJpegPages(pages) {
-  if (!pages.length) throw new Error('No pages to export');
-  const { w: pageW, h: pageH } = _pageSize();
-  const parts = [];
-  let offset = 0;
-  const offsets = [0];
-  const push = (u8) => {
-    parts.push(u8);
-    offset += u8.length;
-  };
-  const pushStr = (str) => push(_utf8.encode(str));
-
-  pushStr('%PDF-1.4\n');
-  push(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
-
-  let nextObj = 1;
-  const beginObj = (id) => {
-    offsets[id] = offset;
-    pushStr(`${id} 0 obj\n`);
-  };
-  const endObj = () => pushStr('\nendobj\n');
-  const catalogObj = nextObj++;
-  const pagesObj = nextObj++;
-  const pageObjs = [];
-  const imgObjs = [];
-  const contentObjs = [];
-  for (let i = 0; i < pages.length; i++) {
-    pageObjs.push(nextObj++);
-    imgObjs.push(nextObj++);
-    contentObjs.push(nextObj++);
-  }
-
-  beginObj(catalogObj);
-  pushStr(`<< /Type /Catalog /Pages ${pagesObj} 0 R >>`);
-  endObj();
-
-  beginObj(pagesObj);
-  pushStr(`<< /Type /Pages /Count ${pages.length} /Kids [`);
-  for (const po of pageObjs) pushStr(` ${po} 0 R`);
-  pushStr(' ] >>');
-  endObj();
-
-  for (let i = 0; i < pages.length; i++) {
-    const p = pages[i];
-    const pageObj = pageObjs[i];
-    const imgObj = imgObjs[i];
-    const contentObj = contentObjs[i];
-    const imgName = `Im${i + 1}`;
-
-    beginObj(imgObj);
-    pushStr(`<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} `);
-    pushStr(
-      `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.bytes.length} >>\n`,
-    );
-    pushStr('stream\n');
-    push(p.bytes);
-    pushStr('\nendstream');
-    endObj();
-
-    const content = `q ${pageW} 0 0 ${pageH} 0 0 cm /${imgName} Do Q`;
-    const contentBytes = _utf8.encode(content);
-    beginObj(contentObj);
-    pushStr(`<< /Length ${contentBytes.length} >>\nstream\n`);
-    push(contentBytes);
-    pushStr('\nendstream');
-    endObj();
-
-    beginObj(pageObj);
-    pushStr(`<< /Type /Page /Parent ${pagesObj} 0 R `);
-    pushStr(`/Resources << /XObject << /${imgName} ${imgObj} 0 R >> >> `);
-    pushStr(`/MediaBox [0 0 ${pageW} ${pageH}] /Contents ${contentObj} 0 R >>`);
-    endObj();
-  }
-
-  const xrefOffset = offset;
-  pushStr('xref\n');
-  pushStr(`0 ${nextObj}\n`);
-  pushStr('0000000000 65535 f \n');
-  for (let i = 1; i < nextObj; i++) {
-    pushStr(`${String(offsets[i] || 0).padStart(10, '0')} 00000 n \n`);
-  }
-  pushStr('trailer\n');
-  pushStr(`<< /Size ${nextObj} /Root ${catalogObj} 0 R >>\n`);
-  pushStr('startxref\n');
-  pushStr(`${xrefOffset}\n%%EOF`);
-  return new Blob(parts, { type: 'application/pdf' });
-}
-
 async function buildAuditPagePdfBlob(a) {
   const main = document.querySelector('main');
   if (!main) throw new Error('Page layout missing');
@@ -967,7 +768,7 @@ async function buildAuditPagePdfBlob(a) {
   const footer = (me?.sample_pdf_footer || '').trim();
   const wrap = _makeAuditExportContainer(width);
   try {
-    await _waitForImages(wrap);
+    await waitForImages(wrap);
     const canvas = await h2c(wrap, {
       scale: 2,
       backgroundColor: '#fff',
@@ -975,8 +776,10 @@ async function buildAuditPagePdfBlob(a) {
       windowWidth: exportWindowWidth,
       windowHeight: Math.max(900, Math.ceil(wrap.scrollHeight || 0) + 120),
     });
-    const pages = await _sliceCanvasToA4JpegPages(canvas, header, footer);
-    return _buildPdfFromJpegPages(pages);
+    const pages = await sliceCanvasToA4JpegPages(canvas, header, footer, 'portrait', [], {
+      fitText: true,
+    });
+    return buildPdfFromJpegPages(pages, 'portrait');
   } finally {
     try {
       wrap.remove();
@@ -984,146 +787,16 @@ async function buildAuditPagePdfBlob(a) {
   }
 }
 
-const _crcTable = (() => {
-  const tbl = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    tbl[n] = c >>> 0;
-  }
-  return tbl;
-})();
-
-function _crc32(buf) {
-  let c = 0xffffffff;
-  for (let i = 0; i < buf.length; i++) c = _crcTable[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-function _dosTimeDate(d) {
-  const dt = d instanceof Date && !Number.isNaN(d.valueOf()) ? d : new Date();
-  let year = dt.getFullYear();
-  if (year < 1980) year = 1980;
-  const month = dt.getMonth() + 1;
-  const day = dt.getDate();
-  const hours = dt.getHours();
-  const minutes = dt.getMinutes();
-  const seconds = Math.floor(dt.getSeconds() / 2);
-  return {
-    time: (hours << 11) | (minutes << 5) | seconds,
-    date: ((year - 1980) << 9) | (month << 5) | day,
-  };
-}
-
-function _u8(viewBuf) {
-  return new Uint8Array(viewBuf);
-}
-
-function _zipLocalHeader(nameLen, crc, size, time, date) {
-  const buf = new ArrayBuffer(30);
-  const dv = new DataView(buf);
-  dv.setUint32(0, 0x04034b50, true);
-  dv.setUint16(4, 20, true);
-  dv.setUint16(6, 0x0800, true);
-  dv.setUint16(8, 0, true);
-  dv.setUint16(10, time, true);
-  dv.setUint16(12, date, true);
-  dv.setUint32(14, crc, true);
-  dv.setUint32(18, size, true);
-  dv.setUint32(22, size, true);
-  dv.setUint16(26, nameLen, true);
-  dv.setUint16(28, 0, true);
-  return _u8(buf);
-}
-
-function _zipCentralHeader(nameLen, crc, size, time, date, localOffset) {
-  const buf = new ArrayBuffer(46);
-  const dv = new DataView(buf);
-  dv.setUint32(0, 0x02014b50, true);
-  dv.setUint16(4, 20, true);
-  dv.setUint16(6, 20, true);
-  dv.setUint16(8, 0x0800, true);
-  dv.setUint16(10, 0, true);
-  dv.setUint16(12, time, true);
-  dv.setUint16(14, date, true);
-  dv.setUint32(16, crc, true);
-  dv.setUint32(20, size, true);
-  dv.setUint32(24, size, true);
-  dv.setUint16(28, nameLen, true);
-  dv.setUint16(30, 0, true);
-  dv.setUint16(32, 0, true);
-  dv.setUint16(34, 0, true);
-  dv.setUint16(36, 0, true);
-  dv.setUint32(38, 0, true);
-  dv.setUint32(42, localOffset, true);
-  return _u8(buf);
-}
-
-function _zipEndRecord(count, cdSize, cdOffset) {
-  const buf = new ArrayBuffer(22);
-  const dv = new DataView(buf);
-  dv.setUint32(0, 0x06054b50, true);
-  dv.setUint16(4, 0, true);
-  dv.setUint16(6, 0, true);
-  dv.setUint16(8, count, true);
-  dv.setUint16(10, count, true);
-  dv.setUint32(12, cdSize, true);
-  dv.setUint32(16, cdOffset, true);
-  dv.setUint16(20, 0, true);
-  return _u8(buf);
-}
-
-function buildZipStore(files) {
-  const parts = [];
-  const central = [];
-  let offset = 0;
-  let cdSize = 0;
-
-  for (const f of files) {
-    const nameBytes = _utf8.encode(String(f.name || 'file'));
-    const data = f.data instanceof Uint8Array ? f.data : new Uint8Array(f.data || []);
-    const crc = _crc32(data);
-    const { time, date } = _dosTimeDate(f.mtime);
-    const local = _zipLocalHeader(nameBytes.length, crc, data.length, time, date);
-    parts.push(local, nameBytes, data);
-    const localOffset = offset;
-    offset += local.length + nameBytes.length + data.length;
-    const cd = _zipCentralHeader(nameBytes.length, crc, data.length, time, date, localOffset);
-    central.push(cd, nameBytes);
-    cdSize += cd.length + nameBytes.length;
-  }
-
-  const cdOffset = offset;
-  parts.push(...central);
-  parts.push(_zipEndRecord(files.length, cdSize, cdOffset));
-  return new Blob(parts, { type: 'application/zip' });
-}
-
 async function _fetchBytes(url) {
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`Failed to download ${url} (HTTP ${res.status})`);
-  const dispName = _parseContentDispositionFilename(res.headers.get('Content-Disposition') || '');
+  const dispName = parseContentDispositionFilename(res.headers.get('Content-Disposition') || '');
   const contentType = res.headers.get('Content-Type') || '';
   return {
     data: new Uint8Array(await res.arrayBuffer()),
     filename: dispName,
     contentType,
   };
-}
-
-function _downloadBlob(blob, filename) {
-  const obj = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = obj;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => {
-    try {
-      URL.revokeObjectURL(obj);
-    } catch {}
-  }, 15_000);
 }
 
 async function exportAuditZip() {
@@ -1212,7 +885,7 @@ async function exportAuditZip() {
 
     toast(status, 'Building ZIP', 'info');
     const zipBlob = buildZipStore(files);
-    _downloadBlob(zipBlob, `${stem}.zip`);
+    downloadBlob(zipBlob, `${stem}.zip`);
     const extra = [];
     if (audit.final_report?.download_url) extra.push('final report');
     if (artifactCount)
@@ -1574,84 +1247,6 @@ function _scopeApplicabilityColor(value) {
   return base;
 }
 
-function _truncateText(value, maxChars = 64) {
-  const s = String(value || '').trim();
-  const n = Math.max(4, Number(maxChars || 0));
-  if (s.length <= n) return s;
-  return `${s.slice(0, Math.max(1, n - 1))}…`;
-}
-
-function _splitLongToken(token, maxChars) {
-  const out = [];
-  let s = String(token || '');
-  const n = Math.max(4, Number(maxChars || 12));
-  while (s.length > n) {
-    out.push(s.slice(0, n));
-    s = s.slice(n);
-  }
-  if (s) out.push(s);
-  return out;
-}
-
-function _scopeLabelLines(value, maxCharsPerLine, maxLines = 3) {
-  const raw = String(value || '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const perLine = Math.max(4, Number(maxCharsPerLine || 18));
-  const lineLimit = Math.max(1, Number(maxLines || 1));
-  if (!raw) return [];
-
-  const tokens = raw
-    .split(' ')
-    .flatMap((w) => (w.length > perLine ? _splitLongToken(w, perLine) : [w]));
-  const lines = [];
-  let line = '';
-  for (const token of tokens) {
-    const next = line ? `${line} ${token}` : token;
-    if (next.length <= perLine) {
-      line = next;
-      continue;
-    }
-    if (line) lines.push(line);
-    line = token;
-    if (lines.length >= lineLimit) break;
-  }
-  if (line && lines.length < lineLimit) lines.push(line);
-
-  if (raw.length > lines.join(' ').length && lines.length) {
-    const last = _truncateText(lines[lines.length - 1], Math.max(4, perLine - 1));
-    lines[lines.length - 1] = last.endsWith('…') ? last : `${last}…`;
-  }
-  return lines;
-}
-
-function _renderScopeNodeLabel(textSel, value, opts = {}) {
-  if (!textSel) return;
-  const width = Number(opts.width || 180);
-  const height = Number(opts.height || 32);
-  const x = Number(opts.x ?? width / 2);
-  const y = Number(opts.y ?? height / 2);
-  const linePx = Number(opts.linePx || 13);
-  const charPx = Number(opts.charPx || 7);
-  const maxLines = Math.max(
-    1,
-    Math.min(Number(opts.maxLines || 3), Math.floor(Math.max(1, height - 8) / linePx) || 1),
-  );
-  const maxChars = Math.max(4, Math.floor(Math.max(20, width - 16) / charPx));
-  const lines = _scopeLabelLines(value, maxChars, maxLines);
-  const totalHeight = Math.max(linePx, lines.length * linePx);
-  const startY = y - totalHeight / 2 + linePx / 2 - 1;
-
-  textSel.text(null);
-  lines.forEach((line, idx) => {
-    textSel
-      .append('tspan')
-      .attr('x', x)
-      .attr('y', startY + idx * linePx)
-      .text(line);
-  });
-}
-
 function _openScopeHref(href, ev) {
   if (!href || href === '#') return;
   if (ev && (ev.metaKey || ev.ctrlKey)) {
@@ -1896,11 +1491,12 @@ function renderScopeBipartiteGraph(data) {
         .style('fill', 'rgba(255,255,255,0.94)')
         .style('pointer-events', 'none')
         .each(function () {
-          _renderScopeNodeLabel(d3.select(this), label, {
+          // Scope labels sit a pixel above the middle of their tile.
+          renderWrappedNodeLabel(d3.select(this), label, {
             width: leftW,
             height: yClauses.bandwidth(),
             x: leftW / 2,
-            y: yClauses.bandwidth() / 2,
+            y: yClauses.bandwidth() / 2 - 1,
             linePx: orderedClauses.length > 50 ? 11 : 13,
             charPx: 6.8,
             maxLines: 3,
@@ -1955,11 +1551,11 @@ function renderScopeBipartiteGraph(data) {
         .style('fill', 'rgba(255,255,255,0.94)')
         .style('pointer-events', 'none')
         .each(function () {
-          _renderScopeNodeLabel(d3.select(this), label, {
+          renderWrappedNodeLabel(d3.select(this), label, {
             width: rightW - 18,
             height: yControls.bandwidth(),
             x: 10,
-            y: yControls.bandwidth() / 2,
+            y: yControls.bandwidth() / 2 - 1,
             linePx: orderedControls.length > 50 ? 11 : 13,
             charPx: 6.4,
             maxLines: 3,
@@ -2203,7 +1799,7 @@ function renderFindings(items) {
     <div class="d-flex justify-content-between gap-2 align-items-start">
       <div>
         <span class="badge text-bg-light me-2">${esc(kindLabel(f.kind))}</span>
-        <span class="badge badge-soft me-2">${esc(statusLabel(f.status))}</span>
+        <span class="badge badge-soft me-2">${esc(findingStatusLabel(f.status))}</span>
         <span class="fw-semibold">${esc(f.title)}</span>
       </div>
       ${canEditAudit() ? `<div class="d-flex gap-2"><button class="btn btn-sm btn-outline-primary" data-edit-finding="${esc(f.id)}">Edit</button><button class="btn btn-sm btn-outline-danger" data-del-finding="${esc(f.id)}">Remove</button></div>` : ''}

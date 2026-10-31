@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Event, User
 from app.security.permissions import has_permission
+from app.security.roles import is_active_user
 
 DIARY_SOURCE = "diary"
 # Automatic framework-link entries use this system name and an external ID of
@@ -35,16 +36,12 @@ def link_entry_external_id(record_type: str, record_id: uuid.UUID) -> str:
     return f"{LINK_ENTRY_PREFIX}{record_type}:{record_id}"
 
 
-def _active(user) -> bool:
-    return isinstance(user, User) and bool(getattr(user, "is_active", False))
-
-
 def _link_entry_access(db: Session, user: User) -> tuple[bool, bool, bool]:
     """Return whether the caller may read risk, ISMS and interested-party entries.
 
     These mirror the domain read predicates (services/risks.py
-    ``_can_read_risks``, services/isms/access.py ``_can_read_isms`` and
-    services/interested_parties.py ``_can_read_interested_parties``); the tests
+    ``can_read_risks``, services/isms/access.py ``can_read_isms`` and
+    services/interested_parties.py ``can_read_interested_parties``); the tests
     hold them in step.
     """
 
@@ -67,7 +64,7 @@ def _link_entry_access(db: Session, user: User) -> tuple[bool, bool, bool]:
 def diary_filter_condition(db: Session, user: User):
     """Return the SQLAlchemy condition for diary-event visibility."""
 
-    if not _active(user):
+    if not is_active_user(user):
         return Event.source != DIARY_SOURCE
     risks, isms, parties = _link_entry_access(db, user)
     if risks:
@@ -95,7 +92,7 @@ def diary_filter_condition(db: Session, user: User):
 def is_diary_event_visible(db: Session, user: User, event_id: uuid.UUID) -> bool:
     """Return whether a caller can see a diary event."""
 
-    if not _active(user):
+    if not is_active_user(user):
         return False
     row = (
         db.query(Event.source, Event.system, Event.external_id)

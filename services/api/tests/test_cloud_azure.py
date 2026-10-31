@@ -10,7 +10,7 @@ import httpx
 import pytest
 from app.core.config import settings
 from app.ingest.cloud import azure as az
-from app.ingest.cloud.base import Unavailable
+from app.ingest.cloud.base import Unavailable, parse_time
 
 TENANT = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
 SUB = "11111111-2222-4333-8444-555555555555"
@@ -945,7 +945,7 @@ def test_connect_hands_the_settings_to_one_session(monkeypatch, credentials):
 def test_unreadable_errors_and_tokens_are_unavailable():
     assert az._error(httpx.Response(403, content=b"<html>")) == ("", "")
     assert az._error(httpx.Response(403, json={"error": "denied"})) == ("", "")
-    assert az._when("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
+    assert parse_time("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
     assert az.audit_entry({"id": "a1"}, TENANT) is None
 
     def refuse(request):

@@ -15,6 +15,7 @@ from app.security import passwords, permissions
 from app.security.permissions import (
     ensure_session_authorization_current,
     get_effective_permission_codes,
+    has_any_permission,
     has_permission,
 )
 from app.security.roles import compute_effective_role, count_effective_admins
@@ -86,6 +87,16 @@ def test_direct_and_group_permission_union_and_user_isolation(people):
     assert not has_permission(db, users["inactive"], "events.read")
     assert not has_permission(db, users["reader"], "admin.secret")
     assert not has_permission(db, users["admin"], "")
+
+
+def test_any_permission_requires_an_active_holder_of_one_code(people):
+    db, users = people
+    assert has_any_permission(db, users["reader"], "risk.read", "events.read")
+    assert not has_any_permission(db, users["reader"], "risk.read", "risk.manage")
+    assert has_any_permission(db, users["admin"], "risk.read")
+    assert not has_any_permission(db, users["inactive"], "events.read")
+    assert not has_any_permission(db, None, "events.read")
+    assert not has_any_permission(db, users["admin"])
 
 
 def test_stale_snapshot_recomputed_from_database(people, monkeypatch):

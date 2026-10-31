@@ -5,9 +5,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
-
+from app.core.datetime_utils import to_utc_naive
 from app.ingest import google_workspace as gws
 
 
@@ -190,7 +189,6 @@ def test_iter_activities_follows_pagination():
         calls.append(1)
         return None if req.page >= len(pages) else MagicMock(page=req.page + 1)
 
-    holder = MagicMock(page=0)
     service.activities.return_value.list.side_effect = lambda *a, **kw: MagicMock(
         page=0
     )
@@ -496,7 +494,7 @@ def _service(*pages):
 
 def test_naive_timestamps_pass_through_unchanged():
     naive = datetime(2026, 10, 9, 12)
-    assert gws._to_utc_naive(naive) is naive
+    assert to_utc_naive(naive) is naive
 
 
 def test_a_zone_aware_cursor_sets_the_start_time_and_floor(db):

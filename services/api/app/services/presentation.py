@@ -29,7 +29,7 @@ def rss_labels_by_feed_url() -> dict[str, str]:
     human-friendly identifier in the UI, we look up the configured label.
     """
 
-    path = (settings.rss_config_path or "").strip()
+    path = settings.rss_config_path.strip()
     if not path:
         return {}
 

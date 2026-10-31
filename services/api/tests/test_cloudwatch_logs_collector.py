@@ -19,21 +19,25 @@ MS = 1_760_000_000_000
 
 
 @contextlib.contextmanager
-def configured(region="ap-southeast-2", masking="false"):
+def configured(region="ap-southeast-2", masking="false", stored=None):
+    """Configure the collector; ``stored`` decides each shared-storage result.
+
+    Yields the keyword arguments of every event handed to shared storage, which
+    redacts, masks, bounds and persists it (covered by its own tests).
+    """
+    calls = []
+
+    def store(db, **event):
+        calls.append(event)
+        if stored is not None:
+            return stored(event)
+        return {"ok": True, "event_id": f"ev-{len(calls)}", "mappings": 0}
+
     with contextlib.ExitStack() as stack:
         stack.enter_context(patch.object(cl.settings, "cloudwatch_logs_region", region))
         stack.enter_context(patch.object(cl.settings, "event_data_masking", masking))
-        stack.enter_context(patch.object(cl, "prepare_event_fields", lambda f, mask: f))
-        stack.enter_context(
-            patch.object(
-                cl,
-                "prepare_artifact_bytes",
-                lambda data, ctype, mask: (data, "stored"),
-            )
-        )
-        stack.enter_context(patch.object(cl, "put_bytes"))
-        stack.enter_context(patch.object(cl, "apply_rules", return_value=0))
-        yield
+        stack.enter_context(patch.object(cl, "store_event_with_artifact", store))
+        yield calls
 
 
 def test_ensure_utc_and_helpers():
@@ -184,15 +188,6 @@ def test_once_streams_events_and_paginates(db):
 
     fake = fake_boto_client()
     fake["client"].filter_log_events.side_effect = paginate
-    inserted = {"next": 100}
-
-    def execute(stmt):
-        result = MagicMock()
-        result.scalar.return_value = inserted["next"]
-        inserted["next"] += 1
-        return result
-
-    db.execute.side_effect = execute
     cursor = MagicMock(last_ts=None)
     set_cursor(db, cursor)
     q = {
@@ -207,7 +202,7 @@ def test_once_streams_events_and_paginates(db):
             "severity": 5,
         },
     }
-    with configured(), fake["factory"]:
+    with configured() as stored, fake["factory"]:
         result = cl.ingest_cloudwatch_logs_once(db, "prod-logs", q, {"limit": 10})
 
     assert result["created_events"] == 4
@@ -224,7 +219,13 @@ def test_once_streams_events_and_paginates(db):
     assert calls[0]["logStreamNames"] == ["s1"]
     assert calls[1]["nextToken"] == "tok-2"
     assert "nextToken" not in calls[0]
-    assert db.add.call_count >= 4
+    assert len(stored) == 4
+    assert {e["source"] for e in stored} == {"cloudwatch_logs"}
+    assert {e["system"] for e in stored} == {"prod"}
+    assert stored[0]["severity"] == 5
+    # The run commits once, with its cursor, rather than per event.
+    assert {e["commit"] for e in stored} == {False}
+    assert all(e["timestamp"].tzinfo is None for e in stored)
     assert result["cursor_last_ts"].startswith("2025-10-09T")
 
 
@@ -250,18 +251,10 @@ def test_events_without_an_aws_event_id_keep_distinct_identities(db):
     ]
     fake = fake_boto_client()
     fake["client"].filter_log_events.return_value = {"events": events}
-    identities = []
-
-    def execute(stmt):
-        identities.append(stmt.compile().params["external_id"])
-        result = MagicMock()
-        result.scalar.return_value = None
-        return result
-
-    db.execute.side_effect = execute
     set_cursor(db, MagicMock(last_ts=None))
-    with configured(), fake["factory"]:
+    with configured(stored=lambda event: {"deduped": True}) as stored, fake["factory"]:
         cl.ingest_cloudwatch_logs_once(db, "prod-logs", {"log_group": "/prod/app"}, {})
+    identities = [event["external_id"] for event in stored]
 
     # Events are stored in time order, so compare the keys as a multiset.
     def key(stream, ts, message):
@@ -278,6 +271,9 @@ def test_events_without_an_aws_event_id_keep_distinct_identities(db):
         ]
     )
     assert len(set(identities)) == 4
+    # Every attempt writes its own artifact key, even for a repeated identity,
+    # because stored objects are never replaced.
+    assert len({event["artifact_key"] for event in stored}) == len(stored)
 
 
 def test_once_deduped_event_still_advances_cursor_and_skips_bad_timestamps(db):
@@ -293,15 +289,9 @@ def test_once_deduped_event_still_advances_cursor_and_skips_bad_timestamps(db):
     fake = fake_boto_client()
     fake["client"].filter_log_events.side_effect = pages[:1]
 
-    def execute(stmt):
-        result = MagicMock()
-        result.scalar.return_value = None
-        return result
-
-    db.execute.side_effect = execute
     cursor = MagicMock(last_ts=None)
     set_cursor(db, cursor)
-    with configured(), fake["factory"]:
+    with configured(stored=lambda event: {"deduped": True}), fake["factory"]:
         result = cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
     assert result["created_events"] == 0
     assert result["created_artifacts"] == 0
@@ -320,7 +310,6 @@ def test_once_repeated_token_stops(db):
     with (
         configured(),
         fake["factory"],
-        patch.object(cl, "store_event_with_artifact", create=True),
     ):
         result = cl.ingest_cloudwatch_logs_once(
             db, "name", {"log_group": "g"}, {"max_pages": 50}
@@ -356,32 +345,27 @@ def test_once_severity_default_and_masking_flags(db):
         cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
 
 
-def test_ingested_aws_logs_apply_rules_with_the_persisted_event(db):
-    # The collector persists each event and then applies mapping rules to the
-    # stored row, so rule provenance records the event that was ingested.
-    seen = []
-
-    def aware_rules(_db, ev):
-        seen.append(ev)
-        return 2
-
+def test_ingested_aws_logs_count_the_mappings_shared_storage_applied(db):
+    # Shared storage persists each event and applies mapping rules to the stored
+    # row; the collector reports the mappings it created.
     fake = fake_boto_client()
     fake["client"].filter_log_events.return_value = {
         "events": [{"timestamp": MS, "eventId": "ev1", "message": "hello"}]
     }
-    db.execute.side_effect = lambda stmt: MagicMock(scalar=lambda: "ev-row")
     set_cursor(db, MagicMock(last_ts=None))
     with (
-        configured(),
+        configured(
+            stored=lambda event: {"event_id": "ev-row", "mappings": 2}
+        ) as stored,
         fake["factory"],
-        patch.object(cl, "apply_rules", side_effect=aware_rules),
     ):
         result = cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
 
     assert result["created_mappings"] == 2
-    (applied,) = seen
-    assert applied.id == "ev-row"
-    assert applied.source == "cloudwatch_logs"
+    (event,) = stored
+    assert event["source"] == "cloudwatch_logs"
+    assert event["artifact_kind"] == "log_event"
+    assert event["captured_by"] == "keen:cloudwatch_logs"
 
 
 def test_all_config_variants(db):
@@ -442,17 +426,8 @@ def test_once_ignores_malformed_event_defaults_and_keeps_ingestion_time(db):
             }
         ]
     }
-    inserted = []
-
-    def execute(stmt):
-        inserted.append({k: v.value for k, v in stmt.compile().binds.items()})
-        result = MagicMock()
-        result.scalar.return_value = "ev-row"
-        return result
-
-    db.execute.side_effect = execute
     set_cursor(db, MagicMock(last_ts=None))
-    with configured(), fake["factory"]:
+    with configured() as inserted, fake["factory"]:
         result = cl.ingest_cloudwatch_logs_once(
             db, "named-query", {"log_group": "g", "event": "system=prod"}, {}
         )
@@ -508,12 +483,10 @@ def test_unresolved_or_conflicting_mappings_are_not_counted(db):
     fake["client"].filter_log_events.return_value = {
         "events": [{"timestamp": MS, "eventId": "ev1", "message": "hello"}]
     }
-    db.execute.side_effect = lambda stmt: MagicMock(scalar=lambda: None)
     set_cursor(db, MagicMock(last_ts=None))
     with (
-        configured(),
+        configured(stored=lambda event: {"event_id": "ev-row", "mappings": 0}),
         fake["factory"],
-        patch.object(cl, "apply_rules", return_value=0),
     ):
         result = cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
 

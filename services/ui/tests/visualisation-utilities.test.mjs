@@ -37,7 +37,7 @@ test('histogram drill-down preserves UTC bucket boundaries', () => {
   assert.ok(Number.isNaN(histBucketToUtcMs('', 'day')));
 });
 
-test('graph labels retain useful ends and bound wrapped line counts', () => {
+test('long labels are middle-truncated, and wrapped labels end in one ellipsis', () => {
   assert.equal(truncateMiddleText('abcdefghijk', 7), 'abc…ijk');
   assert.equal(truncateMiddleText('abc', 7), 'abc');
   assert.deepEqual(wrapLabelLines('  alpha   beta ', 10, 3), ['alpha beta']);
@@ -45,6 +45,11 @@ test('graph labels retain useful ends and bound wrapped line counts', () => {
   const lines = wrapLabelLines('averylongunbrokentoken followed by more words', 8, 2);
   assert.equal(lines.length, 2);
   assert.ok(lines.at(-1).endsWith('…'));
+  // A full last line loses its end to the single ellipsis.
+  assert.deepEqual(lines, ['averylon', 'gunbro…']);
+  // Dropping the tail of a split token is marked even though the shown text is
+  // longer than the original once the split adds spaces.
+  assert.deepEqual(wrapLabelLines('aaaabbbbccccd', 4, 3), ['aaaa', 'bbbb', 'cccc…']);
 });
 
 test('embedded markup honors allowed modes, escapes titles, and mounts only once', async (t) => {

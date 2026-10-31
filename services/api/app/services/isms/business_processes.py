@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.db.models import IsmsBusinessProcess, User
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
 from app.services.text import clean_text
 
-from .common import _utcnow
 from .schemas import BusinessProcessPayload
 from .serializers import _business_process_out
 

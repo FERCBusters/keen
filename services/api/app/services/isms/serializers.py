@@ -31,6 +31,7 @@ from app.db.models import (
     RiskCategory,
     User,
 )
+from app.services.control_refs import control_summary
 from app.services.errors import DomainError
 
 from .constants import EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
@@ -41,19 +42,6 @@ def _user_summary(u: User | None) -> dict[str, Any] | None:
     if not u:
         return None
     return {"id": str(u.id), "username": u.username, "email": getattr(u, "email", None)}
-
-
-def _control_out(c: ControlItem | None) -> dict[str, Any]:
-    if not c:
-        return {}
-    return {
-        "id": str(c.id),
-        "framework": c.framework_slug,
-        "type": c.type,
-        "ref": c.ref,
-        "title": c.title,
-        "in_scope": bool(c.in_scope),
-    }
 
 
 def _clause_out(c: FrameworkClause | None) -> dict[str, Any]:
@@ -130,7 +118,7 @@ def _linked_controls(
         .all()
     )
     rows.sort(key=lambda c: (c.type, _ref_sort_key(c.ref)))
-    return [_control_out(c) for c in rows]
+    return [control_summary(c) for c in rows]
 
 
 def _linked_clauses(

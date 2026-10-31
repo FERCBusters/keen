@@ -1,6 +1,5 @@
-from .errors import IntegrationError
-
 """HTTPS with validated/pinned DNS, no redirects/proxies, bounded responses."""
+
 import base64
 import http.client
 import ipaddress
@@ -12,6 +11,8 @@ import time
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from cryptography.fernet import Fernet
+
+from .errors import IntegrationError
 
 MAX_BYTES = 4 * 1024 * 1024
 

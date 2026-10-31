@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -12,8 +12,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive as _utcnow
-from app.core.references import control_justification as _control_justification
-from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
@@ -35,9 +33,14 @@ from app.db.models import (
     RiskLibraryEntry,
     User,
 )
-from app.security.permissions import has_permission
+from app.security.permissions import has_any_permission, has_permission
+from app.security.roles import is_active_user
 from app.services.context import ChangeContext
-from app.services.control_refs import CLAUSE_ROW_TYPE, control_by_id_or_ref
+from app.services.control_refs import (
+    CLAUSE_ROW_TYPE,
+    control_by_id_or_ref,
+    control_summary,
+)
 from app.services.entity_changelog import (
     list_entity_changelogs,
     record_entity_changelog,
@@ -50,9 +53,16 @@ from app.services.isms.link_diary import (
     remove_entity_link_diary,
     sync_entity_link_diary,
 )
-from app.services.isms.mutations import _delete_entity_links, org_node_or_400
+from app.services.isms.mutations import (
+    _delete_entity_links,
+    asset_category_by_id,
+    asset_or_404,
+    license_or_404,
+    license_or_create_by_name,
+    org_node_or_400,
+)
 from app.services.risk_mitigator import analyse_risk_mitigation
-from app.services.text import clean_text
+from app.services.text import clean_text, split_filter_values, uuid_filter_values
 
 RISK_READ_PERMISSION = "risk.read"
 RISK_MANAGE_PERMISSION = "risk.manage"
@@ -60,22 +70,6 @@ _RISK_TYPES = {"Confidentiality", "Integrity", "Availability"}
 _RISK_TYPE_CANON = {x.lower(): x for x in _RISK_TYPES}
 TREATMENT_STRATEGIES = {"", "mitigate", "accept", "avoid", "transfer"}
 TREATMENT_STATUSES = {"open", "in_progress", "awaiting_review", "closed"}
-
-
-def _split_filter_values(value: str | None) -> list[str]:
-    return [part.strip() for part in str(value or "").split(",") if part.strip()]
-
-
-def _uuid_filter_values(value: str | None, *, label: str) -> list[uuid.UUID]:
-    out: list[uuid.UUID] = []
-    for part in _split_filter_values(value):
-        parsed = _try_uuid(part)
-        if not parsed:
-            raise DomainError(
-                status_code=400, detail=f"{label} must contain UUID values"
-            )
-        out.append(parsed)
-    return out
 
 
 class RiskCategoryPayload(BaseModel):
@@ -163,17 +157,11 @@ class RiskUpsertPayload(BaseModel):
     library_template_id: uuid.UUID | None = None
 
 
-def _can_read_risks(db: Session, user: User | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
-        return False
-    return has_permission(db, user, RISK_MANAGE_PERMISSION) or has_permission(
-        db, user, RISK_READ_PERMISSION
-    )
+def can_read_risks(db: Session, user: User | None) -> bool:
+    return has_any_permission(db, user, RISK_MANAGE_PERMISSION, RISK_READ_PERMISSION)
 
 
-def _can_manage_risks(db: Session, user: User | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
-        return False
+def can_manage_risks(db: Session, user: User | None) -> bool:
     return has_permission(db, user, RISK_MANAGE_PERMISSION)
 
 
@@ -194,7 +182,7 @@ def risk_owner_out(risk):
 
 
 def _is_risk_owner(user: User | None, risk: Risk | None) -> bool:
-    if not isinstance(user, User) or not getattr(user, "is_active", False):
+    if not is_active_user(user):
         return False
     if risk is None:
         return False
@@ -205,7 +193,7 @@ def _is_risk_owner(user: User | None, risk: Risk | None) -> bool:
 
 
 def _can_read_specific_risk(db: Session, user: User | None, risk: Risk | None) -> bool:
-    return _can_read_risks(db, user) or _is_risk_owner(user, risk)
+    return can_read_risks(db, user) or _is_risk_owner(user, risk)
 
 
 def _require_risk_read_or_owner(db: Session, user: User, risk: Risk) -> None:
@@ -255,13 +243,6 @@ def _risk_or_404(db: Session, risk_id: str) -> Risk:
     return row
 
 
-def _category_by_id(db: Session, category_id: uuid.UUID) -> RiskCategory:
-    row = db.query(RiskCategory).filter(RiskCategory.id == category_id).one_or_none()
-    if not row:
-        raise DomainError(status_code=400, detail="Unknown asset category")
-    return row
-
-
 def _category_or_create(
     db: Session,
     *,
@@ -271,7 +252,7 @@ def _category_or_create(
     required: bool = True,
 ) -> RiskCategory | None:
     if category_id:
-        return _category_by_id(db, category_id)
+        return asset_category_by_id(db, category_id)
 
     name = clean_text(category_name, max_len=128, required=False, label="category")
     if name:
@@ -347,63 +328,15 @@ def _subcategory_or_create(
     return None
 
 
-def _asset_or_404(db: Session, asset_id: str | uuid.UUID) -> RiskAsset:
-    aid = asset_id if isinstance(asset_id, uuid.UUID) else _try_uuid(str(asset_id))
-    if not aid:
-        raise DomainError(status_code=400, detail="asset_id must be a UUID")
-    row = db.query(RiskAsset).filter(RiskAsset.id == aid).one_or_none()
-    if not row:
-        raise DomainError(status_code=404, detail="Asset not found")
-    return row
-
-
-def _license_or_404(db: Session, license_id: str | uuid.UUID) -> IsmsLicense:
-    lid = (
-        license_id if isinstance(license_id, uuid.UUID) else _try_uuid(str(license_id))
-    )
-    if not lid:
-        raise DomainError(status_code=400, detail="license_id must be a UUID")
-    row = db.query(IsmsLicense).filter(IsmsLicense.id == lid).one_or_none()
-    if not row:
-        raise DomainError(status_code=404, detail="License not found")
-    return row
-
-
-def _license_by_name(db: Session, name: str) -> IsmsLicense | None:
-    cleaned = clean_text(name, max_len=256)
-    if not cleaned:
-        return None
-    return (
-        db.query(IsmsLicense)
-        .filter(func.lower(IsmsLicense.name) == cleaned.lower())
-        .one_or_none()
-    )
-
-
-def _license_or_create_by_name(db: Session, name: str | None) -> IsmsLicense | None:
-    cleaned = clean_text(name, max_len=256)
-    if not cleaned:
-        return None
-    row = _license_by_name(db, cleaned)
-    if row:
-        return row
-    row = IsmsLicense(
-        name=cleaned, description="", created_at=_utcnow(), updated_at=_utcnow()
-    )
-    db.add(row)
-    db.flush()
-    return row
-
-
 def _license_from_payload(
     db: Session, payload: RiskUpsertPayload | RiskAssetPayload
 ) -> IsmsLicense | None:
     license_id = getattr(payload, "license_id", None)
     if license_id:
-        return _license_or_404(db, license_id)
+        return license_or_404(db, license_id)
     license_name = getattr(payload, "license_name", None)
     if license_name:
-        return _license_or_create_by_name(db, license_name)
+        return license_or_create_by_name(db, license_name)
     return None
 
 
@@ -453,9 +386,9 @@ def _asset_or_create(
             "license_name",
         }
     ):
-        return _asset_or_404(db, asset_id)
+        return asset_or_404(db, asset_id)
 
-    base_asset = _asset_or_404(db, asset_id) if asset_id else existing
+    base_asset = asset_or_404(db, asset_id) if asset_id else existing
     name = clean_text(
         _asset_name_from_payload(payload) or (base_asset.name if base_asset else None),
         max_len=256,
@@ -611,19 +544,6 @@ def _score_class(score: int | None) -> str:
     if n <= 12:
         return "medium"
     return "high"
-
-
-def _control_out(control: ControlItem) -> dict[str, Any]:
-    return {
-        "id": str(control.id),
-        "framework": control.framework_slug,
-        "type": control.type,
-        "ref": control.ref,
-        "title": control.title,
-        "in_scope": control.in_scope,
-        "justification": _control_justification(control),
-        "upstream_url": _control_upstream_url(control),
-    }
 
 
 def _category_out(category: RiskCategory | None) -> dict[str, Any]:
@@ -955,7 +875,9 @@ def _risk_out(
         "updated_at": risk.updated_at.isoformat() if risk.updated_at else None,
         "framework": fw,
         "control_count": control_count,
-        "controls": [_control_out(c) for c in controls] if include_controls else None,
+        "controls": [control_summary(c) for c in controls]
+        if include_controls
+        else None,
     }
 
 
@@ -1288,7 +1210,7 @@ def update_risk_subcategory(
     row = _subcategory_or_404(db, subcategory_id)
     category = row.category
     if payload.category_id and payload.category_id != row.category_id:
-        category = _category_by_id(db, payload.category_id)
+        category = asset_category_by_id(db, payload.category_id)
     name = clean_text(payload.name, max_len=128, required=True, label="name")
     conflict = (
         db.query(RiskAssetSubcategory)
@@ -1364,7 +1286,7 @@ def create_risk_asset(*, payload: RiskAssetPayload, user, db: Session):
 
 
 def update_risk_asset(*, asset_id: str, payload: RiskAssetPayload, user, db: Session):
-    row = _asset_or_404(db, asset_id)
+    row = asset_or_404(db, asset_id)
     category = _category_or_create(
         db,
         category_id=payload.category_id,
@@ -1418,7 +1340,7 @@ def update_risk_asset(*, asset_id: str, payload: RiskAssetPayload, user, db: Ses
 
 
 def delete_risk_asset(*, asset_id: str, user, db: Session):
-    row = _asset_or_404(db, asset_id)
+    row = asset_or_404(db, asset_id)
     in_use = db.query(Risk.id).filter(Risk.asset_id == row.id).first()
     if in_use:
         raise DomainError(
@@ -1603,14 +1525,14 @@ def list_risks(
                 func.lower(RiskAssetSubcategory.name).like(like),
             )
         )
-    cids = _uuid_filter_values(category_id, label="category_id")
+    cids = uuid_filter_values(category_id, label="category_id")
     if cids:
         qry = qry.filter(RiskAsset.category_id.in_(cids))
-    sids = _uuid_filter_values(subcategory_id, label="subcategory_id")
+    sids = uuid_filter_values(subcategory_id, label="subcategory_id")
     if sids:
         qry = qry.filter(RiskAsset.subcategory_id.in_(sids))
     risk_types = []
-    for rt in _split_filter_values(risk_type):
+    for rt in split_filter_values(risk_type):
         canon = _RISK_TYPE_CANON.get(rt.lower())
         if not canon:
             raise DomainError(status_code=400, detail="Invalid risk_type")
@@ -1698,7 +1620,7 @@ def list_controls_without_risks(
             )
         )
 
-    items = [_control_out(c) for c in qry.all()]
+    items = [control_summary(c) for c in qry.all()]
     items.sort(
         key=lambda it: (
             it.get("type") or "",
@@ -1722,7 +1644,7 @@ def analyse_mitigator_risk(*, payload: RiskMitigatorAnalysePayload, user, db: Se
     # possible, but do not create assets/categories merely to run an analysis.
     category = None
     if payload.category_id:
-        category = _category_by_id(db, payload.category_id)
+        category = asset_category_by_id(db, payload.category_id)
     if payload.subcategory_id:
         _subcategory_by_id(db, payload.subcategory_id, category=category)
     risk_types = None
@@ -1938,7 +1860,7 @@ def get_risk_controls(
     return {
         "risk_id": str(risk.id),
         "framework": fw,
-        "items": [_control_out(c) for c in controls],
+        "items": [control_summary(c) for c in controls],
     }
 
 
@@ -1975,7 +1897,7 @@ def update_risk_controls(
         "ok": True,
         "risk_id": str(risk.id),
         "framework": fw,
-        "controls": [_control_out(c) for c in controls],
+        "controls": [control_summary(c) for c in controls],
     }
 
 
@@ -2011,7 +1933,7 @@ def control_risks(
         .all()
     )
     return {
-        "control": _control_out(control),
+        "control": control_summary(control),
         "framework": fw,
         "items": [_risk_out(db, r, framework=fw, include_controls=False) for r in rows],
     }

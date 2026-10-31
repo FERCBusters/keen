@@ -1,32 +1,19 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import Any
 
 import httpx
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import utc_from_timestamp_naive
+from app.core.datetime_utils import to_utc_naive, utc_from_timestamp_naive
 from app.db.models import IngestionCursor, utcnow
 from app.ingest.common import fingerprint, is_safe_url, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
 from app.security.errors import collection_error
 from app.services.ingestion_pause import pausable
-
-
-def _to_utc_naive(dt: datetime | None) -> datetime | None:
-    """Normalize timestamps for comparisons.
-
-    Keen stores timestamps in Postgres as naive UTC datetimes.
-    If we ever receive tz-aware datetimes, strip tzinfo to avoid
-    "can't compare offset-naive and offset-aware" errors.
-    """
-    if dt is None:
-        return None
-    return dt.replace(tzinfo=None)
 
 
 def _get_or_create_cursor(db: Session, name: str) -> IngestionCursor:
@@ -93,7 +80,7 @@ def ingest_jenkins_job(
 
     builds = job.get("builds", []) or []
     created = 0
-    newest_ts = _to_utc_naive(cur.last_ts)
+    newest_ts = to_utc_naive(cur.last_ts) if cur.last_ts else None
 
     # builds are newest-first; process oldest-first
     for b in reversed(builds[:50]):
@@ -102,7 +89,7 @@ def ingest_jenkins_job(
             continue
         # Jenkins gives epoch milliseconds. Store as naive UTC to match DB.
         ts = utc_from_timestamp_naive(ts_ms / 1000.0)
-        last_ts = _to_utc_naive(cur.last_ts)
+        last_ts = to_utc_naive(cur.last_ts) if cur.last_ts else None
         if last_ts and ts <= last_ts:
             continue
 

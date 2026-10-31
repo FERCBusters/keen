@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import logging
 import re
@@ -13,6 +11,7 @@ import httpx
 
 from app.core.config import settings
 from app.ingest.http import client as secure_http_client
+from app.outbound.signing import sign_body
 
 log = logging.getLogger(__name__)
 
@@ -57,13 +56,8 @@ def _parse_json_headers(raw: str | None) -> dict[str, str]:
         return {}
 
 
-def _hmac_sha256(secret: str, body: bytes) -> str:
-    mac = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
-    return f"sha256={mac}"
-
-
 def incident_webhook_enabled() -> bool:
-    return bool((settings.incident_webhook_url or "").strip())
+    return bool(settings.incident_webhook_url.strip())
 
 
 def build_event_url(event_id: str) -> str:
@@ -86,9 +80,9 @@ class IncidentWebhookConfig:
     @classmethod
     def from_settings(cls) -> "IncidentWebhookConfig":
         return cls(
-            url=(settings.incident_webhook_url or "").strip(),
+            url=settings.incident_webhook_url.strip(),
             headers=_parse_json_headers(settings.incident_webhook_headers_json),
-            signing_secret=(settings.incident_webhook_signing_secret or "").strip(),
+            signing_secret=settings.incident_webhook_signing_secret.strip(),
             signature_header=(
                 settings.incident_webhook_signature_header or "X-Keen-Signature"
             ).strip()
@@ -151,7 +145,7 @@ def post_incident_webhook(
     headers.setdefault("Content-Type", "application/json")
     headers.setdefault("User-Agent", "Keen Incident Webhook")
     if config.signing_secret:
-        headers[config.signature_header] = _hmac_sha256(config.signing_secret, body)
+        headers[config.signature_header] = sign_body(config.signing_secret, body)
 
     with secure_http_client(
         timeout=timeout, follow_redirects=False, verify=True, trust_env=False

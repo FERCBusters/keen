@@ -1,21 +1,108 @@
 """Final starter data and installation-specific configuration for KEEN 1.0."""
 
 import gzip
-import importlib.util
 import json
 import uuid
 from pathlib import Path
 
 import sqlalchemy as sa
+import yaml
 from alembic import op
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
+from app.core.evidence_migration import unify
 
 revision = "0002_release_seed"
 down_revision = "0001_release_schema"
 branch_labels = None
 depends_on = None
 ROOT = Path(__file__).resolve().parents[1]
+
+# Managed configuration documents seeded from the deployment's YAML files.
+CONFIG_PATHS = {
+    "jenkins": "jenkins_config_path",
+    "loki": "loki_queries_path",
+    "rss": "rss_config_path",
+    "github": "github_config_path",
+    "forgejo": "forgejo_config_path",
+    "cloudwatch_logs": "cloudwatch_logs_config_path",
+    "taiga": "taiga_config_path",
+    "bookstack": "bookstack_config_path",
+    "google_workspace": "google_workspace_config_path",
+    "webhooks": "webhooks_path",
+    "rules": "rules_path",
+}
+
+
+def _seed_managed_configurations(bind):
+    """Store each deployment YAML document, converted to unified evidence rules.
+
+    All writes occur in Alembic's transaction, so a conversion error rolls back
+    the whole upgrade.
+    """
+    docs, old_versions = {}, {}
+    for name, path_setting in CONFIG_PATHS.items():
+        existing = (
+            bind.execute(
+                sa.text(
+                    "SELECT document, version FROM managed_configurations "
+                    "WHERE name=:name FOR UPDATE"
+                ),
+                {"name": name},
+            )
+            .mappings()
+            .first()
+        )
+        if existing:
+            docs[name] = existing["document"]
+            old_versions[name] = int(existing["version"])
+        else:
+            path = Path(getattr(settings, path_setting))
+            if not path.is_file():
+                raise RuntimeError(
+                    f"Cannot seed {name}: missing {path}. "
+                    "Restore the config mount before migrating."
+                )
+            docs[name] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            old_versions[name] = 0
+    converted, _ = unify(docs, settings.default_framework_slug)
+    now = utc_now_naive()
+    for name, document in converted.items():
+        # Copy every source into Postgres so first boot and later restarts use
+        # the same preset definitions regardless of mounted files.
+        version = old_versions[name] + 1
+        values = {
+            "name": name,
+            "document": json.dumps(document),
+            "version": version,
+            "at": now,
+        }
+        if old_versions[name]:
+            bind.execute(
+                sa.text(
+                    "UPDATE managed_configurations SET "
+                    "document=CAST(:document AS jsonb), version=:version, "
+                    "updated_at=:at WHERE name=:name"
+                ),
+                values,
+            )
+        else:
+            bind.execute(
+                sa.text(
+                    "INSERT INTO managed_configurations "
+                    "(name,document,version,updated_at) "
+                    "VALUES (:name,CAST(:document AS jsonb),:version,:at)"
+                ),
+                values,
+            )
+        bind.execute(
+            sa.text(
+                "INSERT INTO managed_configuration_revisions "
+                "(id,name,version,document,updated_at) "
+                "VALUES (:id,:name,:version,CAST(:document AS jsonb),:at)"
+            ),
+            {**values, "id": uuid.uuid4()},
+        )
 
 
 def upgrade():
@@ -49,15 +136,11 @@ def upgrade():
             ),
             {"rows": json.dumps(seeds[table])},
         )
-    # Preserve the historical deployment-YAML conversion rather than freezing
-    # the developer machine's connector settings in the release seed snapshot.
-    spec = importlib.util.spec_from_file_location(
-        "release_config_seed",
-        ROOT / "legacy_versions/0068_unified_evidence_definitions.py",
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    module.upgrade()
+    # Convert this installation's deployment YAML at migration time rather than
+    # freezing a developer machine's connector settings in the seed snapshot.
+    _seed_managed_configurations(bind)
+    # Rules files written before framework slugs were normalised name ISO/IEC
+    # 27001 by its old slug.
     bind.execute(
         sa.text(
             "UPDATE managed_configurations SET document=replace(document::text, 'ISO27001:2022', 'iso_27001_2022')::jsonb WHERE name='rules'"

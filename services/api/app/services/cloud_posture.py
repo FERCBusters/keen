@@ -49,9 +49,9 @@ def _iso(value):
 
 def _require_read(db, user):
     # Posture is derived evidence; Vendor access alone never discloses it.
-    from app.services.isms.access import _can_read_isms
+    from app.services.isms.access import can_read_isms
 
-    if not _can_read_isms(db, user) or not has_permission(db, user, "events.read"):
+    if not can_read_isms(db, user) or not has_permission(db, user, "events.read"):
         raise DomainError(403, "ISMS read access and events.read are required")
     feature_state(db).require("vendors", "evidence")
 

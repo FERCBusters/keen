@@ -94,7 +94,7 @@ class LocalMfaTests(unittest.TestCase):
                 spec = importlib.util.spec_from_file_location(
                     "mfa_migration",
                     Path(__file__).parents[1]
-                    / "alembic/legacy_versions/0084_local_mfa.py",
+                    / "tests/fixtures/historical_migrations/0084_local_mfa.py",
                 )
                 migration = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(migration)
@@ -105,7 +105,7 @@ class LocalMfaTests(unittest.TestCase):
                 spec = importlib.util.spec_from_file_location(
                     "notification_migration",
                     Path(__file__).parents[1]
-                    / "alembic/legacy_versions/0085_security_notifications.py",
+                    / "tests/fixtures/historical_migrations/0085_security_notifications.py",
                 )
                 migration = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(migration)

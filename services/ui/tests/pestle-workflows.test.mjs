@@ -354,6 +354,14 @@ test('tabs follow the tab query parameter and record the active tab', async (t) 
   assert.deepEqual(unknown.shown, ['pestleItemsTab']);
 });
 
+test('inherited object names in the tab parameter open the item list', async (t) => {
+  for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    const tabs = fakeTabs();
+    await pestlePage(t, { query: `&tab=${name}`, tabs });
+    assert.deepEqual(tabs.shown, ['pestleItemsTab'], name);
+  }
+});
+
 test('visualisations draw the lens/type heatmap, relevance circles and clause network', async (t) => {
   const tabs = fakeTabs();
   const { ui } = await pestlePage(t, { query: '&tab=visualisations', tabs });

@@ -46,9 +46,10 @@ def test_release_schema_and_final_seed_data(monkeypatch):
                 actual = list(
                     conn.scalars(text(f"SELECT row_to_json(t) FROM {table} t"))
                 )
-                canonical = lambda items: sorted(
-                    json.dumps(row, sort_keys=True) for row in items
-                )
+
+                def canonical(items):
+                    return sorted(json.dumps(row, sort_keys=True) for row in items)
+
                 assert canonical(actual) == canonical(rows), table
             assert conn.scalar(text("SELECT count(*) FROM frameworks")) == 94
             assert (

@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-
 from app.ingest import forgejo as fg
 from app.ingest import gitea as gt
+from app.ingest import gitea_compatible as gc
 
 ACTIVITY = {
     "id": 9,
@@ -37,20 +37,17 @@ NOW = datetime(2026, 10, 10, 12, 0, 0)
 
 @pytest.fixture(autouse=True)
 def pinned_clock():
-    with (
-        patch.object(fg, "utc_now_naive", return_value=NOW),
-        patch.object(gt, "utc_now_naive", return_value=NOW),
-    ):
+    with patch.object(gc, "utc_now_naive", return_value=NOW):
         yield
 
 
 @pytest.fixture(params=[fg, gt], ids=["forgejo", "gitea"])
 def collector(request):
-    return request.param
+    return request.param.collector
 
 
 def prefix(collector):
-    return "forgejo_" if collector is fg else "gitea_"
+    return collector.name + "_"
 
 
 def source(collector):
@@ -58,11 +55,13 @@ def source(collector):
 
 
 def feed_fn(collector):
-    return getattr(collector, "ingest_" + prefix(collector) + "repo_feed")
+    return collector.ingest_repo_feed
 
 
 def all_fn(collector):
-    return getattr(collector, "ingest_" + prefix(collector) + "all")
+    return {"forgejo": fg.ingest_forgejo_all, "gitea": gt.ingest_gitea_all}[
+        collector.name
+    ]
 
 
 @contextlib.contextmanager
@@ -70,7 +69,7 @@ def configured(collector, **values):
     with contextlib.ExitStack() as stack:
         for key, value in values.items():
             attribute = key if key == "demo_mode" else prefix(collector) + key
-            stack.enter_context(patch.object(collector.settings, attribute, value))
+            stack.enter_context(patch.object(gc.settings, attribute, value))
         yield
 
 
@@ -88,8 +87,8 @@ def serving(collector, handler, safe=True):
         )
 
     with contextlib.ExitStack() as stack:
-        stack.enter_context(patch.object(collector, "ingestion_client", fake_client))
-        stack.enter_context(patch.object(collector, "is_safe_url", return_value=safe))
+        stack.enter_context(patch.object(gc, "ingestion_client", fake_client))
+        stack.enter_context(patch.object(gc, "is_safe_url", return_value=safe))
         yield
 
 
@@ -258,7 +257,7 @@ def test_store_api_activity_items_sorts_deduplicates_and_updates_cursor(collecto
         dict(ACTIVITY, id=5, created="2026-10-09T09:00:00Z"),
     ]
     with patch.object(
-        collector,
+        gc,
         "store_event_with_artifact",
         side_effect=lambda db, **kw: {"deduped": False},
     ) as store:
@@ -311,7 +310,7 @@ def test_store_api_activity_items_label_and_content_summary(collector):
     )
     assert item["user"] == {"name": "carl"}
     with patch.object(
-        collector,
+        gc,
         "store_event_with_artifact",
         return_value={"deduped": True},
     ) as store:
@@ -348,7 +347,7 @@ def test_repo_feed_api_success(collector):
         configured(collector),
         serving(collector, handler),
         patch.object(
-            collector, "store_event_with_artifact", return_value={"deduped": False}
+            gc, "store_event_with_artifact", return_value={"deduped": False}
         ) as store,
     ):
         result = feed_fn(collector)(
@@ -382,7 +381,7 @@ def test_repo_feed_rss_fallback(collector):
         configured(collector),
         serving(collector, handler),
         patch.object(
-            collector,
+            gc,
             "store_event_with_artifact",
             side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
         ),
@@ -443,7 +442,7 @@ def test_repo_feed_uses_cursor_and_skips_seen_items(collector):
     with (
         configured(collector),
         serving(collector, handler),
-        patch.object(collector, "store_event_with_artifact") as store,
+        patch.object(gc, "store_event_with_artifact") as store,
     ):
         result = feed_fn(collector)(db, feed_url="https://host.example/team/repo.rss")
     assert result["created_events"] == 0
@@ -495,7 +494,7 @@ def test_discover_repositories_rejects_hostile_accounts(collector):
 
 
 def test_discover_repositories_requires_safe_base_url(collector):
-    with patch.object(collector, "is_safe_url", return_value=False):
+    with patch.object(gc, "is_safe_url", return_value=False):
         with pytest.raises(ValueError):
             collector._discover_repositories("http://host.example", "users", "team")
 
@@ -588,7 +587,7 @@ def test_ingest_all_discovers_and_deduplicates_feeds(collector):
         ),
         connections_env(collector),
         patch.object(
-            collector,
+            gc,
             "load_document",
             return_value={
                 "organizations": [{"org": "team", "label": "Team label"}],
@@ -621,7 +620,7 @@ def test_ingest_all_handles_discovery_and_feed_failures(collector):
         ),
         connections_env(collector),
         patch.object(
-            collector,
+            gc,
             "load_document",
             return_value={"feeds": [{"url": "https://h.example/a.rss", "label": "A"}]},
         ),
@@ -642,14 +641,14 @@ def test_ingest_all_handles_discovery_and_feed_failures(collector):
 
 def test_ingest_all_skips_and_empty_configuration(collector):
     db = MagicMock()
-    with patch.object(collector.settings, prefix(collector) + "enabled", False):
+    with patch.object(gc.settings, prefix(collector) + "enabled", False):
         result = all_fn(collector)(db)
         assert result[0]["skipped"]
         assert "disabled" in result[0]["reason"]
     with (
         configured(collector, enabled=True, config_path="fixture.yml", demo_mode=True),
         connections_env(collector),
-        patch.object(collector, "load_document", return_value={}),
+        patch.object(gc, "load_document", return_value={}),
     ):
         results = all_fn(collector)(db)
     assert results and results[0]["skipped"]
@@ -657,9 +656,8 @@ def test_ingest_all_skips_and_empty_configuration(collector):
 
 
 def test_load_config(collector):
-    with patch.object(collector, "load_document", return_value={"feeds": [1]}) as doc:
-        name = "load_" + prefix(collector) + "config"
-        assert getattr(collector, name)("fixture.yml") == {"feeds": [1]}
+    with patch.object(gc, "load_document", return_value={"feeds": [1]}) as doc:
+        assert collector.load_config("fixture.yml") == {"feeds": [1]}
     doc.assert_called_once_with(source(collector), "fixture.yml")
 
 
@@ -737,7 +735,7 @@ def test_rss_fallback_honours_the_cursor_and_labels_summaries(collector):
         configured(collector, token="", auth_mode=""),
         serving(collector, handler),
         patch.object(
-            collector,
+            gc,
             "store_event_with_artifact",
             side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
         ),
@@ -792,7 +790,7 @@ def test_ingest_all_reports_failed_discovery_and_skips_unusable_feeds(collector)
         ),
         connections_env(collector),
         patch.object(
-            collector,
+            gc,
             "load_document",
             return_value={
                 "organizations": [{"org": "team"}],
@@ -843,7 +841,7 @@ def test_store_api_activity_items_without_actor_or_text_and_deduplicated(collect
         ),
     ]
     with patch.object(
-        collector,
+        gc,
         "store_event_with_artifact",
         side_effect=[{"deduped": True}, {"deduped": False}, {"deduped": False}],
     ) as store:
@@ -892,7 +890,7 @@ def test_rss_fallback_counts_only_new_rows_and_keeps_the_newest_time(collector):
         configured(collector, token="", auth_mode=""),
         serving(collector, handler),
         patch.object(
-            collector,
+            gc,
             "store_event_with_artifact",
             side_effect=[{"deduped": False}, {"deduped": True}],
         ),

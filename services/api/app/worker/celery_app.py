@@ -7,11 +7,7 @@ from app.core.config import settings
 
 
 def _event_counter_refresh_seconds() -> int:
-    try:
-        ttl = int(getattr(settings, "aggregate_cache_ttl_seconds", 0) or 0)
-    except Exception:
-        ttl = 0
-    return max(1, ttl or 60)
+    return max(1, settings.aggregate_cache_ttl_seconds or 60)
 
 
 celery_app = Celery(

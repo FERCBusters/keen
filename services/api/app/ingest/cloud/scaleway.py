@@ -24,11 +24,15 @@ from app.ingest.cloud.base import (
     Provider,
     ScopeResult,
     Unavailable,
+    api_timestamp,
     clip,
     guarded,
     inactive_check,
     mfa_check,
+    parse_time,
     plural,
+    split_list,
+    text_field,
 )
 
 ORIGIN = "https://api.scaleway.com"
@@ -115,14 +119,10 @@ class Scaleway(JsonApi):
         )
 
 
-def _split(value) -> list[str]:
-    return [v for v in re.split(r"[\s,]+", str(value or "").strip()) if v]
-
-
 def connect() -> Scaleway:
     secret = str(settings.scaleway_secret_key or "").strip().lower()
     organisation = str(settings.scaleway_organization_id or "").strip().lower()
-    zones = _split(settings.scaleway_zones or DEFAULT_ZONES)
+    zones = split_list(settings.scaleway_zones or DEFAULT_ZONES)
     if (
         not UUID.fullmatch(secret)
         or not UUID.fullmatch(organisation)
@@ -133,21 +133,6 @@ def connect() -> Scaleway:
     ):
         raise Unavailable("not_configured")
     return Scaleway(secret, organisation, zones)
-
-
-def _when(value) -> datetime | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    # Python reads at most six fractional digits.
-    text = re.sub(r"(\.\d{6})\d+", r"\1", text.replace("Z", "+00:00"))
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo:
-        parsed = parsed.astimezone(timezone.utc)
-    return parsed.replace(tzinfo=None)
 
 
 def _uuid(value) -> str:
@@ -246,8 +231,8 @@ def identity(
             email=email if EMAIL.fullmatch(email) else "",
             admin=user.get("id") in held,
             mfa=mfa if isinstance(mfa, bool) else None,
-            last_used=_when(user.get("last_login_at")),
-            created=_when(user.get("created_at")),
+            last_used=parse_time(user.get("last_login_at")),
+            created=parse_time(user.get("created_at")),
             detail=", ".join(
                 d
                 for d in (
@@ -316,7 +301,7 @@ def keys(api: Scaleway, named: dict, now: datetime) -> Check:
     limit = timedelta(days=settings.cloud_key_age_days)
     old = set()
     for key in found:
-        created = _when(key.get("created_at"))
+        created = parse_time(key.get("created_at"))
         if created is None or now - created < limit:
             continue
         bearer = key.get("user_id") or key.get("application_id")
@@ -534,14 +519,6 @@ def collect() -> list[ScopeResult]:
 # --- activity ----------------------------------------------------------------------
 
 
-def _stamp(when: datetime) -> str:
-    return when.replace(tzinfo=None, microsecond=0).isoformat() + "Z"
-
-
-def _text(value, limit=128) -> str:
-    return value[:limit] if isinstance(value, str) else ""
-
-
 def _resources(event: dict) -> list[dict]:
     return [r for r in event.get("resources") or [] if isinstance(r, dict)]
 
@@ -565,9 +542,9 @@ def _raw(event: dict) -> dict:
 
 def event_entry(event: dict, organisation: str, named: dict) -> Activity | None:
     """One Audit Trail API event."""
-    when = _when(event.get("recorded_at"))
-    ident = _text(event.get("id"), 64)
-    method = _text(event.get("method_name"))
+    when = parse_time(event.get("recorded_at"))
+    ident = text_field(event.get("id"), 64)
+    method = text_field(event.get("method_name"))
     if when is None or not ident or not method:
         return None
     status = event.get("status_code")
@@ -575,9 +552,9 @@ def event_entry(event: dict, organisation: str, named: dict) -> Activity | None:
     outcome = "info" if status is None else "failure" if status >= 400 else "success"
     principal = event.get("principal")
     principal = principal if isinstance(principal, dict) else {}
-    who = named.get(principal.get("id")) or _text(principal.get("id"), 64)
-    product = _text(event.get("product_name"), 64)
-    resources = [_text(r.get("name") or r.get("id")) for r in _resources(event)]
+    who = named.get(principal.get("id")) or text_field(principal.get("id"), 64)
+    product = text_field(event.get("product_name"), 64)
+    resources = [text_field(r.get("name") or r.get("id")) for r in _resources(event)]
     return Activity(
         id=ident,
         at=when,
@@ -590,11 +567,11 @@ def event_entry(event: dict, organisation: str, named: dict) -> Activity | None:
             k: v
             for k, v in {
                 "product": product,
-                "service": _text(event.get("service_name")),
-                "source_ip": _text(event.get("source_ip"), 64),
+                "service": text_field(event.get("service_name")),
+                "source_ip": text_field(event.get("source_ip"), 64),
                 "status_code": status,
                 "resources": [r for r in resources if r][:10],
-                "region": _text(event.get("locality"), 32),
+                "region": text_field(event.get("locality"), 32),
             }.items()
             if v not in ("", None, [])
         },
@@ -604,8 +581,8 @@ def event_entry(event: dict, organisation: str, named: dict) -> Activity | None:
 
 def sign_in_entry(event: dict, organisation: str) -> Activity | None:
     """One Audit Trail authentication event."""
-    when = _when(event.get("recorded_at"))
-    ident = _text(event.get("id"), 64)
+    when = parse_time(event.get("recorded_at"))
+    ident = text_field(event.get("id"), 64)
     if when is None or not ident:
         return None
     outcome = {"success": "success", "failure": "failure"}.get(
@@ -613,7 +590,7 @@ def sign_in_entry(event: dict, organisation: str) -> Activity | None:
     )
     who = next(
         (
-            _text(r["account_user_info"].get("email"))
+            text_field(r["account_user_info"].get("email"))
             for r in _resources(event)
             if isinstance(r.get("account_user_info"), dict)
         ),
@@ -630,11 +607,11 @@ def sign_in_entry(event: dict, organisation: str) -> Activity | None:
         detail={
             k: v
             for k, v in {
-                "method": _text(event.get("method"), 32),
-                "source_ip": _text(event.get("source_ip"), 64),
-                "country": _text(event.get("country_code"), 8),
-                "failure_reason": _text(event.get("failure_reason"), 64),
-                "mfa": _text(event.get("mfa_type"), 32),
+                "method": text_field(event.get("method"), 32),
+                "source_ip": text_field(event.get("source_ip"), 64),
+                "country": text_field(event.get("country_code"), 8),
+                "failure_reason": text_field(event.get("failure_reason"), 64),
+                "mfa": text_field(event.get("mfa_type"), 32),
             }.items()
             if v
         },
@@ -651,8 +628,8 @@ def _events(api: Scaleway, path: str, since: datetime, until: datetime):
             path,
             params={
                 "organization_id": api.organisation,
-                "recorded_after": _stamp(since),
-                "recorded_before": _stamp(until),
+                "recorded_after": api_timestamp(since),
+                "recorded_before": api_timestamp(until),
                 "order_by": "recorded_at_desc",
                 "page_size": PAGE_SIZE,
                 **({"page_token": token} if token else {}),

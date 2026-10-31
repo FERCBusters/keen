@@ -25,9 +25,13 @@ from app.ingest.cloud.base import (
     Provider,
     ScopeResult,
     Unavailable,
+    api_timestamp,
     clip,
     guarded,
+    parse_time,
     plural,
+    split_list,
+    text_field,
 )
 
 ORGANISATION = re.compile(r"[1-9][0-9]{0,19}")
@@ -104,10 +108,6 @@ class Api:
         return google.client(api, version, self.info, scopes)
 
 
-def _split(value) -> list[str]:
-    return [v for v in re.split(r"[\s,]+", str(value or "").strip()) if v]
-
-
 def connect() -> Api:
     organisation = str(settings.google_cloud_organization or "").strip()
     project = str(settings.google_cloud_project or "").strip()
@@ -149,20 +149,6 @@ def _assets(api: Api, asset_type: str) -> list[dict]:
         data = resource.get("data") if isinstance(resource.get("data"), dict) else {}
         out.append({"_name": str(asset.get("name") or ""), **data})
     return out
-
-
-def _when(value) -> datetime | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    text = re.sub(r"(\.\d{6})\d+", r"\1", text.replace("Z", "+00:00"))
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo:
-        parsed = parsed.astimezone(timezone.utc)
-    return parsed.replace(tzinfo=None)
 
 
 # --- IAM -------------------------------------------------------------------------
@@ -240,7 +226,7 @@ def keys(api: Api, now: datetime) -> Check:
     for key in _assets(api, KEY_ASSET):
         if key.get("keyType") != "USER_MANAGED" or key.get("disabled") is True:
             continue
-        ends = _when(key.get("validBeforeTime"))
+        ends = parse_time(key.get("validBeforeTime"))
         if ends is not None and ends <= now and ends.year < 9999:
             continue
         match = re.search(
@@ -249,7 +235,7 @@ def keys(api: Api, now: datetime) -> Check:
         if not match:
             continue
         total += 1
-        starts = _when(key.get("validAfterTime"))
+        starts = parse_time(key.get("validAfterTime"))
         if starts is not None and now - starts >= limit:
             old.add(clip(match.group(1)))
     if not total:
@@ -577,21 +563,13 @@ def collect() -> list[ScopeResult]:
 # --- activity -------------------------------------------------------------------
 
 
-def _stamp(when: datetime) -> str:
-    return when.replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _text(value, limit=128) -> str:
-    return value[:limit] if isinstance(value, str) else ""
-
-
 def activity_entry(entry: dict, scope: str) -> Activity | None:
-    when = _when(entry.get("timestamp"))
-    ident = _text(entry.get("insertId"))
+    when = parse_time(entry.get("timestamp"))
+    ident = text_field(entry.get("insertId"))
     payload = (
         entry.get("protoPayload") if isinstance(entry.get("protoPayload"), dict) else {}
     )
-    method = _text(payload.get("methodName"), 256)
+    method = text_field(payload.get("methodName"), 256)
     if when is None or not ident or not method:
         return None
     short = method.rsplit(".", 1)[-1]
@@ -599,11 +577,13 @@ def activity_entry(entry: dict, scope: str) -> Activity | None:
     code = status.get("code")
     outcome = "failure" if isinstance(code, int) and code != 0 else "success"
     auth = payload.get("authenticationInfo")
-    who = _text((auth if isinstance(auth, dict) else {}).get("principalEmail"), 256)
+    who = text_field(
+        (auth if isinstance(auth, dict) else {}).get("principalEmail"), 256
+    )
     resource = entry.get("resource") if isinstance(entry.get("resource"), dict) else {}
     return Activity(
         # Insert IDs are unique within a log; the time keeps them apart across logs.
-        id=f"{_stamp(when)}|{ident}",
+        id=f"{api_timestamp(when)}|{ident}",
         at=when,
         scope=scope,
         action=short,
@@ -613,10 +593,10 @@ def activity_entry(entry: dict, scope: str) -> Activity | None:
         detail={
             k: v
             for k, v in {
-                "service": _text(payload.get("serviceName"), 64),
-                "resource_type": _text(resource.get("type"), 64),
+                "service": text_field(payload.get("serviceName"), 64),
+                "resource_type": text_field(resource.get("type"), 64),
                 "method": method,
-                "resource": _text(payload.get("resourceName"), 256),
+                "resource": text_field(payload.get("resourceName"), 256),
             }.items()
             if v
         },
@@ -629,13 +609,13 @@ def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
     organisation policy changes, from the parent and any projects listed in
     KEEN_GOOGLE_CLOUD_PROJECTS."""
     api = connect()
-    projects = _split(settings.google_cloud_projects)
+    projects = split_list(settings.google_cloud_projects)
     if len(projects) > MAX_PROJECTS or any(not PROJECT.fullmatch(p) for p in projects):
         raise Unavailable("not_configured")
     methods = " OR ".join(f'protoPayload.methodName:"{m}"' for m in METHODS)
     query = (
         'logName:"cloudaudit.googleapis.com%2Factivity" '
-        f'AND timestamp>="{_stamp(since)}" AND timestamp<"{_stamp(until)}" '
+        f'AND timestamp>="{api_timestamp(since)}" AND timestamp<"{api_timestamp(until)}" '
         f"AND ({methods})"
     )
     entries = api.client("logging", "v2", [READ_ONLY]).entries()

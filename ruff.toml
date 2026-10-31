@@ -7,3 +7,9 @@ select = [
     "F",              # Undefined names, unused imports, etc.
     "I",              # Import sorting
 ]
+
+[lint.per-file-ignores]
+# These modules set default environment values and the scripts path before
+# importing the application, so they also run on their own outside tests.sh.
+"services/api/tests/test_demo_seed_crosswalk.py" = ["E402"]
+"services/api/tests/test_mitigator_catalogue.py" = ["E402"]

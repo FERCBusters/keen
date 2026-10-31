@@ -1,10 +1,11 @@
 """Jenkins collector contracts against a mock upstream REST API."""
 
 import contextlib
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from app.core.datetime_utils import to_utc_naive
 from app.ingest import jenkins as jk
 from sqlalchemy.dialects import postgresql
 
@@ -45,9 +46,10 @@ def test_job_api_path():
 
 
 def test_timestamp_normalisation():
-    assert jk._to_utc_naive(None) is None
-    aware = datetime(2026, 10, 9, 12, tzinfo=None)
-    assert jk._to_utc_naive(aware) == aware
+    naive = datetime(2026, 10, 9, 12)
+    assert to_utc_naive(naive) is naive
+    aware = datetime(2026, 10, 9, 23, tzinfo=timezone(timedelta(hours=11)))
+    assert to_utc_naive(aware) == naive
 
 
 def test_client_configuration_and_monitored_auth():

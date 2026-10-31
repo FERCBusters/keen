@@ -1,4 +1,4 @@
-import { esc, withFramework } from '/app.js';
+import { esc, lookupTab, withFramework } from '/app.js';
 
 export function badgeList(items, labelKey = 'ref', urlFn = null) {
   const arr = Array.isArray(items) ? items : [];
@@ -27,6 +27,18 @@ export function controlBadges(items, framework, { tab = 'governance' } = {}) {
   );
 }
 
+// Controls linked to an effectiveness measure, opening each control's default tab.
+export function effectivenessControlBadges(items, framework) {
+  const arr = Array.isArray(items) ? items : [];
+  if (!arr.length) return '<span class="small-muted">No controls linked.</span>';
+  return arr
+    .map(
+      (c) =>
+        `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`,
+    )
+    .join('');
+}
+
 export function clauseBadges(items, framework) {
   return badgeList(items, 'ref', (c) =>
     withFramework(`/clause.html?id=${encodeURIComponent(c.id)}&tab=isms`, c.framework || framework),
@@ -37,7 +49,6 @@ export function activateTabFromHashOrQuery(params, map, defaultKey = '') {
   const key = String(
     params.get('tab') || window.location.hash.replace(/^#/, '') || defaultKey || '',
   ).toLowerCase();
-  // Own keys only, so a link such as ?tab=constructor selects no tab.
-  const target = Object.hasOwn(map, key) ? map[key] : null;
+  const target = lookupTab(map, key);
   if (target && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(target).show();
 }

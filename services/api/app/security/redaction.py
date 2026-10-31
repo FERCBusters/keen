@@ -543,16 +543,6 @@ def storable(value: Any) -> Any:
 
 
 def prepare_event_fields(fields: dict, *, mask: bool = False) -> dict:
-    """Protect event columns and payloads equally in ORM and bulk insert paths."""
+    """Redact (and optionally mask) event fields, then make them storable."""
     result = redact_obj(fields)
     return storable(mask_event_data_obj(result) if mask else result)
-
-
-def prepare_artifact_bytes(
-    data: bytes, content_type: str | None, *, mask: bool = False
-):
-    data, status = redact_bytes(data, content_type)
-    if mask:
-        data, masked = mask_event_data_bytes(data, content_type)
-        status = combine_redaction_status(status, masked)
-    return data, status

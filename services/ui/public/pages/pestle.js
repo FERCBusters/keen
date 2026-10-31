@@ -3,7 +3,6 @@ import {
   initNavbar,
   apiGet,
   apiPost,
-  apiPatch,
   apiDelete,
   confirmAction,
   esc,
@@ -17,6 +16,7 @@ import {
   initCollapsibleFilterSections,
   canSampleIntoAudit,
   openAuditSampleModal,
+  lookupTab,
 } from '/app.js';
 import {
   enhanceFilterPillMultiSelect,
@@ -132,12 +132,15 @@ function setTabQuery(tabName) {
 }
 
 function activateTab(tabName) {
-  const tab =
+  const tab = lookupTab(
     {
       items: pestleItemsTab,
       processes: businessProcessesTab,
       visualisations: pestleVisualisationsTab,
-    }[tabName || 'items'] || pestleItemsTab;
+    },
+    tabName || 'items',
+    pestleItemsTab,
+  );
   if (!tab || !window.bootstrap?.Tab) return;
   window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }

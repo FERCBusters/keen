@@ -6,7 +6,6 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from app.worker import tasks as wt
 
 RESULT = [{"ok": True}]
@@ -653,7 +652,7 @@ def test_dispatch_imap_task_gates_and_queues():
         patch("app.services.ingestion_pause.is_paused", lambda db, source: False),
         patch(
             "app.ingest.connections.connections", return_value=[manageable, environment]
-        ) as connections,
+        ),
         patch("app.ingest.connections.deployment_settings.demo_mode", False),
         patch("app.ingest.connections.deployment_settings.imap_enabled", True),
         running_session(dbs),

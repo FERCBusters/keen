@@ -3,7 +3,7 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from app.ingest.forgejo import _store_api_activity_items
+from app.ingest.forgejo import collector
 from app.mapping.collector import collector_id, event_collector
 
 
@@ -13,10 +13,10 @@ class ForgejoProvenanceTests(unittest.TestCase):
         db = Mock()
         cur = SimpleNamespace(last_ts=None)
         with patch(
-            "app.ingest.forgejo.store_event_with_artifact",
+            "app.ingest.gitea_compatible.store_event_with_artifact",
             return_value={"deduped": False},
         ) as store:
-            result = _store_api_activity_items(
+            result = collector._store_api_activity_items(
                 db,
                 cur,
                 all_items=[

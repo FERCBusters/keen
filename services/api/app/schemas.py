@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.security.auth import ROLE_NORMAL
+from app.services.framework_catalogue import FrameworkListItem as FrameworkListItem
 
 
 class LoginPayload(BaseModel):
@@ -151,9 +152,6 @@ class ClauseEvidenceMappingItem(BaseModel):
 class ClauseEvidenceUrlsPayload(BaseModel):
     # The list replaces the clause's evidence mappings.
     evidence_mappings: list[ClauseEvidenceMappingItem] = Field(default_factory=list)
-
-
-from app.services.framework_catalogue import FrameworkListItem as FrameworkListItem
 
 
 class FrameworkUpsert(BaseModel):

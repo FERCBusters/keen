@@ -18,6 +18,7 @@ from app.core.source_meta import apply_user_source_overrides, get_source_meta
 from app.db.models import ControlItem, Event, Mapping, User
 from app.security.diary_visibility import diary_filter_condition
 from app.security.permissions import can_read_events
+from app.security.roles import is_active_user
 from app.services.context import ChangeContext
 from app.services.control_evidence_stats import (
     get_control_evidence_stats_by_id,
@@ -34,13 +35,9 @@ from app.services.errors import DomainError
 from app.services.event_filters import EventFilters, event_predicates
 
 
-def _active_user(user) -> bool:
-    return isinstance(user, User) and bool(getattr(user, "is_active", False))
-
-
 def _event_visibility_cache_scope(user) -> str:
     """Cache scope for event/count endpoints after global diary visibility."""
-    if _active_user(user):
+    if is_active_user(user):
         return "authenticated"
     return "anonymous"
 
@@ -77,7 +74,7 @@ def stats_event_counts(
         )
         # The same paths as stats_summary: without inheritance, active users
         # read the global framework event-count cache.
-        if not has_inheritance and _active_user(user):
+        if not has_inheritance and is_active_user(user):
             counts = get_framework_event_counts(db, framework)
             total, mapped = counts["total_events"], counts["mapped_events"]
         else:
@@ -187,7 +184,7 @@ def stats_summary(
         # Fast path for authenticated users: diary events are visible to every
         # active user, so these dashboard counters use the global framework
         # event-count cache.
-        if not has_inherited_evidence(db, framework) and _active_user(user):
+        if not has_inherited_evidence(db, framework) and is_active_user(user):
             controls = (
                 db.query(ControlItem.id, ControlItem.in_scope)
                 .filter(ControlItem.framework_slug == framework)
@@ -343,8 +340,7 @@ def _stats_controls(
             start_date is None
             and end_date is None
             and not has_inheritance
-            and isinstance(user, User)
-            and getattr(user, "is_active", False)
+            and is_active_user(user)
         ):
             stats_by_id = get_control_evidence_stats_by_id(db, framework)
             controls = (

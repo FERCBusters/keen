@@ -9,7 +9,7 @@ import httpx
 import pytest
 from app.core.config import settings
 from app.ingest.cloud import digitalocean as do
-from app.ingest.cloud.base import Unavailable
+from app.ingest.cloud.base import Unavailable, parse_time
 
 TOKEN = "dop_v1_synthetic0token0value0000"
 # DigitalOcean team and account IDs are 40 hexadecimal digits.
@@ -317,8 +317,8 @@ def test_clusters_without_upgrades_and_clean_scans(use):
 
 
 def test_unreadable_actions_are_skipped_and_activity_is_bounded(use, monkeypatch):
-    assert do._when("") is None and do._when("yesterday") is None
-    assert do._when("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
+    assert parse_time("") is None and parse_time("yesterday") is None
+    assert parse_time("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
     assert do.action_entry({"id": "9", "type": "x", "started_at": ago(1)}, TEAM) is None
     monkeypatch.setattr(do, "MAX_ACTIVITY", 1)
     use(Api(page_size=2))

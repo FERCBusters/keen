@@ -507,8 +507,9 @@ def test_party_requests_need_a_framework_when_no_default_is_configured(
 def test_serialisers_and_graph_links_tolerate_missing_records(parties):
     """Missing rows serialise as empty objects and never enter a graph."""
     from app.services import interested_parties as service
+    from app.services.control_refs import control_summary
 
-    assert service._control_out(None) == {}
+    assert control_summary(None) == {}
     assert service._communication_out(None) == {}
     assert service._party_changelog_state(parties.db, uuid.uuid4()) is None
     assert service._party_changelog_state(parties.db, str(uuid.uuid4())) is None

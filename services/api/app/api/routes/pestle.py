@@ -14,8 +14,8 @@ from app.services.pestle import (
     BusinessProcessPayload,
     ClauseLinksPayload,
     PestleItemPayload,
-    _can_manage_pestle,
-    _can_read_pestle,
+    can_manage_pestle,
+    can_read_pestle,
 )
 
 router = Router()
@@ -23,14 +23,14 @@ router = Router()
 
 def require_pestle_read(request: Request, db: Session = Depends(get_db)) -> User:
     user = require_authenticated(request)
-    if not _can_read_pestle(db, user):
+    if not can_read_pestle(db, user):
         raise HTTPException(status_code=403, detail="pestle.read permission required")
     return user
 
 
 def require_pestle_manage(request: Request, db: Session = Depends(get_db)) -> User:
     user = require_authenticated(request)
-    if not _can_manage_pestle(db, user):
+    if not can_manage_pestle(db, user):
         raise HTTPException(status_code=403, detail="pestle.manage permission required")
     return user
 

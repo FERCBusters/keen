@@ -1,8 +1,8 @@
 """Loki collection: the query window, cursor, stored evidence and failures.
 
 The Loki server is faked at the HTTP transport, so Keen's own client sends each
-request with its configured authentication. Collection writes with PostgreSQL
-upserts and stores artifacts in a local test bucket.
+request with its configured authentication. Events go through the shared
+event storage path into PostgreSQL, with artifacts in a local test bucket.
 """
 
 import base64
@@ -24,7 +24,7 @@ from app.db.models import (
     Mapping,
     SourceIngestionState,
 )
-from app.ingest import log_pipeline, loki
+from app.ingest import common, log_pipeline, loki
 from app.ingest.connections import connection_scope, connections
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri
 from sqlalchemy.orm import sessionmaker
@@ -71,7 +71,7 @@ class Upstream:
 @pytest.fixture
 def lk(contract_db, monkeypatch, tmp_path):
     if contract_db.get_bind().dialect.name != "postgresql":
-        pytest.skip("Loki collection writes with PostgreSQL upserts")
+        pytest.skip("Loki collection contracts run against PostgreSQL")
     clock = SimpleNamespace(now=NOW)
 
     class Clock(datetime):
@@ -581,3 +581,66 @@ def test_unusable_numeric_settings_fall_back_to_the_configured_default():
     assert loki._positive_int(None, 7, minimum=1) == 7
     assert loki._positive_int(-3, 0, minimum=1) == 1
     assert loki._positive_int("12", 5000) == 12
+
+
+def test_long_labels_are_bounded_to_the_event_columns(lk):
+    # Log lines go through the same storage path as every other collector, so
+    # an oversized system label or extracted user is bounded, not rejected.
+    lk.configure(
+        lk.query(
+            event={
+                "system": "s" * 300,
+                "action": "login",
+                "outcome": "success",
+                "severity": 4,
+            }
+        )
+    )
+    line = json.dumps({**OSSEC, "srcuser": "u" * 300})
+    lk.upstream.replies.append(
+        [
+            {
+                "stream": {"app": "sshd"},
+                "values": [_line(NOW - timedelta(minutes=5), line)],
+            }
+        ]
+    )
+
+    (result,) = lk.run()
+
+    assert result["created_events"] == 1
+    (event,) = lk.events()
+    assert len(event.system) == Event.__table__.c.system.type.length
+    assert len(event.actor) == Event.__table__.c.actor.type.length
+
+
+def test_a_retry_after_a_failed_chunk_stores_every_line(lk, monkeypatch):
+    # A chunk commits once, with its cursor. When it fails after storing one
+    # line's artifact, the rollback leaves that object behind; stored objects
+    # are never replaced, so the retry must not reuse its key.
+    lines = [
+        _line(NOW - timedelta(minutes=9), json.dumps(OSSEC)),
+        _line(NOW - timedelta(minutes=7), "second line"),
+    ]
+    stream = [{"stream": {"app": "sshd"}, "values": lines}]
+    real_rules = common.apply_rules
+    calls = []
+
+    def failing_second_line(db, event):
+        calls.append(event)
+        if len(calls) == 2:
+            raise RuntimeError("synthetic failure")
+        return real_rules(db, event)
+
+    monkeypatch.setattr(common, "apply_rules", failing_second_line)
+    lk.upstream.replies.append(stream)
+    (first,) = lk.run()
+    assert "error" in first
+    assert lk.events() == []
+
+    monkeypatch.setattr(common, "apply_rules", real_rules)
+    lk.upstream.replies.append(stream)
+    (second,) = lk.run()
+    assert "error" not in second, second
+    assert second["created_events"] == 2
+    assert len(lk.events()) == 2

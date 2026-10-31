@@ -155,6 +155,21 @@ test('inherited object names in the tab parameter open the overview', async (t) 
     assert.deepEqual(sections, ['overview'], name);
   }
 });
+test('tab and edit parameters never resolve through Object.prototype', async (t) => {
+  // Inherited names such as "constructor" happen to match no section; a
+  // property another script adds to Object.prototype would, without the
+  // own-key checks.
+  const scripts = [
+    "Object.defineProperty(Object.prototype, 'polluted', { value: 'documents', configurable: true });",
+  ];
+  for (const query of ['&tab=polluted', '&edit=polluted:d1']) {
+    const ui = await fixture(t, { query, scripts });
+    const sections = ui.calls
+      .filter((c) => c.url.includes('/isms/summary?'))
+      .map((c) => new URL(c.url, 'https://keen.example').searchParams.get('section'));
+    assert.deepEqual(sections, ['overview'], query);
+  }
+});
 test('ISMS overview does not eagerly fetch all sections', async (t) => {
   const ui = await fixture(t);
   assert.equal(ui.calls.filter((c) => c.url.includes('/isms/summary?')).length, 1);

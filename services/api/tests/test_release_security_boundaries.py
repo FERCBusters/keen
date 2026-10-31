@@ -12,7 +12,7 @@ import app.services.artifacts as artifacts_operations
 import httpx
 import pytest
 from app.core.config import settings
-from app.ingest import forgejo, gitea, github, http
+from app.ingest import forgejo, gitea, gitea_compatible, github, http
 from app.security.request_limits import RequestBodyLimitMiddleware
 from app.services.errors import DomainError
 from app.services.isms.schemas import (
@@ -184,9 +184,9 @@ def test_git_feed_cannot_send_connection_credentials_elsewhere(
     monkeypatch.setattr(settings, name + "_base_url", "https://git.example")
     monkeypatch.setattr(settings, name + "_token", "synthetic-secret")
     network = Mock()
-    monkeypatch.setattr(module, "ingestion_client", network)
+    monkeypatch.setattr(gitea_compatible, "ingestion_client", network)
     with pytest.raises(ValueError):
-        module._fetch_rss(feed)
+        module.collector._fetch_rss(feed)
     network.assert_not_called()
 
 
@@ -265,7 +265,7 @@ def test_pdf_renderer_has_time_and_pixel_limits(contract_db, monkeypatch, tmp_pa
     )
     contract_db.add(art)
     contract_db.commit()
-    monkeypatch.setattr(artifacts, "_require_events_read", lambda *a: None)
+    monkeypatch.setattr(artifacts, "require_events_read", lambda *a: None)
     monkeypatch.setattr(
         artifacts_operations, "_PREVIEW_CACHE", __import__("collections").OrderedDict()
     )

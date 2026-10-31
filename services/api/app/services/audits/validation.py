@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date, datetime
+from datetime import date
 from urllib.parse import parse_qs, urlsplit
 
 from sqlalchemy import func
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import Audit
 from app.security.rich_text import sanitize_rich_text_html
 from app.services.errors import DomainError
@@ -52,10 +51,6 @@ AUDIT_STATUSES = {"open", "in_progress", "completed", "archived", "template"}
 
 
 FINDING_KINDS = {"major_nc", "minor_nc", "ofi", "best_practice"}
-
-
-def utcnow() -> datetime:
-    return utc_now_naive()
 
 
 def clean_rich_text(raw: str | None, *, max_len: int, label: str = "value") -> str:

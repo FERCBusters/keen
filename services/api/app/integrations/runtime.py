@@ -321,7 +321,7 @@ def tick():
             )
         collectors = db.scalars(
             select(Collector)
-            .where(Collector.enabled == True, Collector.next_run <= now)
+            .where(Collector.enabled.is_(True), Collector.next_run <= now)
             .with_for_update(skip_locked=True)
         ).all()
         pending = []

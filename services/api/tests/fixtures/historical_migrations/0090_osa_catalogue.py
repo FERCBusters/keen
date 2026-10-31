@@ -16,7 +16,7 @@ revision = "0090_osa_catalogue"
 down_revision = "0089_hipaa_soc2"
 branch_labels = None
 depends_on = None
-DATA = Path(__file__).resolve().parents[1] / "catalogues/osa-2026-10-08.json"
+DATA = Path(__file__).resolve().parents[3] / "alembic/catalogues/osa-2026-10-08.json"
 KEEP = ("KEEN-AF:1.0", "UK-DVSTF:1.0", "CYBER-ESSENTIALS:2026")
 
 
@@ -210,7 +210,9 @@ def seed_catalogue(bind):
             sa.select(links.c.source_control_id, links.c.target_control_id)
         ).all()
     )
-    starter = json.loads((DATA.parents[1] / "seed_control_links.json").read_text())
+    starter = json.loads(
+        (Path(__file__).resolve().parent / "seed_control_links.json").read_text()
+    )
     additions = []
     for link in starter["links"]:
         pair = []

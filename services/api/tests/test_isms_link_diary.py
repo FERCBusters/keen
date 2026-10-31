@@ -586,9 +586,9 @@ def test_link_entries_follow_the_source_record_read_rules(db, codes):
         diary_filter_condition,
         is_diary_event_visible,
     )
-    from app.services.interested_parties import _can_read_interested_parties
-    from app.services.isms.access import _can_read_isms
-    from app.services.risks import _can_read_risks
+    from app.services.interested_parties import can_read_interested_parties
+    from app.services.isms.access import can_read_isms
+    from app.services.risks import can_read_risks
 
     editor = _user(db, "editor")
     document, risk, party = _document(db), _risk(db), _party(db)
@@ -617,9 +617,9 @@ def test_link_entries_follow_the_source_record_read_rules(db, codes):
         "manual": manual.id,
     }
     expected = {
-        "document": _can_read_isms(db, reader),
-        "risk": _can_read_risks(db, reader),
-        "interested_party": _can_read_interested_parties(db, reader),
+        "document": can_read_isms(db, reader),
+        "risk": can_read_risks(db, reader),
+        "interested_party": can_read_interested_parties(db, reader),
         "manual": True,
     }
     listed = {

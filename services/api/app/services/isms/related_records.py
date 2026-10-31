@@ -22,7 +22,7 @@ from app.db.models import (
 )
 from app.services.errors import DomainError
 
-from .access import _can_read_isms
+from .access import can_read_isms
 
 TARGETS = {
     "objective": IsmsObjective,
@@ -67,7 +67,7 @@ def resolve_target(db, user, kind, target_id, *, required=True):
             raise DomainError(404, "Related feature is disabled")
         return None
     row = db.get(TARGETS[kind], target_id)
-    allowed = _can_read_isms(db, user)
+    allowed = can_read_isms(db, user)
     if kind == "risk":
         from app.services.risks import _can_read_specific_risk
 

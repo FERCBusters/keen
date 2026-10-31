@@ -307,7 +307,7 @@ def test_cloudwatch_direct_insert_scopes_events_cursors_and_artifacts(
         keys.append(kw["key"])
         return SimpleNamespace(uri="test://" + kw["key"], sha256="0" * 64, size_bytes=9)
 
-    monkeypatch.setattr(cw, "put_bytes", store)
+    monkeypatch.setattr(common, "put_bytes", store)
     for key in ("one", "two"):
         with sc.connection_scope(connection(key, "cloudwatch_logs")):
             assert (
@@ -338,7 +338,7 @@ def test_cloudwatch_direct_insert_scopes_events_cursors_and_artifacts(
     )
 
 
-def test_loki_direct_insert_and_http_credentials_are_connection_scoped(
+def test_loki_events_and_http_credentials_are_connection_scoped(
     contract_db, monkeypatch
 ):
     import base64
@@ -387,7 +387,7 @@ def test_loki_direct_insert_and_http_credentials_are_connection_scoped(
     monkeypatch.setattr(loki, "is_safe_url", lambda url: True)
     monkeypatch.setattr(common, "apply_rules", lambda *a: 0)
     monkeypatch.setattr(
-        loki,
+        common,
         "put_bytes",
         lambda **kw: SimpleNamespace(
             uri="test://" + kw["key"], sha256="0" * 64, size_bytes=9

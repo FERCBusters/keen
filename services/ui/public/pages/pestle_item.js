@@ -17,6 +17,7 @@ import {
   shorten,
   canSampleIntoAudit,
   openAuditSampleModal,
+  lookupTab,
 } from '/app.js';
 
 const me = await initNavbar();
@@ -93,13 +94,16 @@ function setTabQuery(tabName) {
 }
 
 function activateTab(tabName) {
-  const tab =
+  const tab = lookupTab(
     {
       details: pestleDetailsTab,
       relevance: pestleRelevanceTab,
       questions: pestleQuestionsTab,
       changelog: pestleChangelogTab,
-    }[tabName || 'details'] || pestleDetailsTab;
+    },
+    tabName || 'details',
+    pestleDetailsTab,
+  );
   if (!tab || !window.bootstrap?.Tab) return;
   window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }

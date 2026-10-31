@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import logging
 import re
@@ -13,6 +11,7 @@ import httpx
 
 from app.core.config import settings
 from app.ingest.http import client as secure_http_client
+from app.outbound.signing import sign_body
 
 log = logging.getLogger(__name__)
 
@@ -67,11 +66,6 @@ def _parse_json_headers(raw: str | None) -> dict[str, str]:
         return out
     except Exception:
         return {}
-
-
-def _hmac_sha256(secret: str, body: bytes) -> str:
-    mac = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
-    return f"sha256={mac}"
 
 
 def _abs_url(path: str) -> str:
@@ -399,7 +393,7 @@ def send_question_created_webhooks(
         ).encode("utf-8")
         generic_headers.setdefault("Content-Type", "application/json")
         if config.generic_signing_secret:
-            generic_headers[config.generic_signature_header] = _hmac_sha256(
+            generic_headers[config.generic_signature_header] = sign_body(
                 config.generic_signing_secret, body
             )
 

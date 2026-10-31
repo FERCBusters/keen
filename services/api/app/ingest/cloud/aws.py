@@ -36,7 +36,10 @@ from app.ingest.cloud.base import (
     guarded,
     inactive_check,
     mfa_check,
+    parse_time,
     plural,
+    split_list,
+    text_field,
     unknown,
 )
 
@@ -190,10 +193,6 @@ class Session:
         )
 
 
-def _split(value) -> list[str]:
-    return [v for v in re.split(r"[\s,]+", str(value or "").strip()) if v]
-
-
 def region() -> str:
     value = str(settings.aws_region or "").strip() or "us-east-1"
     if not REGION.fullmatch(value):
@@ -202,7 +201,7 @@ def region() -> str:
 
 
 def roles() -> list[str]:
-    found = _split(settings.aws_role_arns)
+    found = split_list(settings.aws_role_arns)
     if (
         len(found) > MAX_SCOPES
         or len(set(found)) != len(found)
@@ -213,7 +212,7 @@ def roles() -> list[str]:
 
 
 def network_regions_setting() -> list[str]:
-    found = _split(settings.aws_regions)
+    found = split_list(settings.aws_regions)
     if len(found) > MAX_REGIONS or any(not REGION.fullmatch(r) for r in found):
         raise Unavailable("not_configured")
     return sorted(set(found))
@@ -279,19 +278,6 @@ def account_session(base, role: str | None) -> Session:
 def _flag(value) -> bool | None:
     text = str(value or "").strip().upper()
     return True if text == "TRUE" else False if text == "FALSE" else None
-
-
-def _when(value) -> datetime | None:
-    text = str(value or "").strip()
-    if text in NEVER:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo:
-        parsed = parsed.astimezone(timezone.utc)
-    return parsed.replace(tzinfo=None)
 
 
 def credential_report(iam, *, deadline: float = REPORT_DEADLINE) -> list[dict]:
@@ -451,8 +437,8 @@ def _active_keys(row: dict) -> list[tuple[datetime | None, datetime | None]]:
     """(rotated, last used) for each active access key."""
     return [
         (
-            _when(row.get(f"access_key_{slot}_last_rotated")),
-            _when(row.get(f"access_key_{slot}_last_used_date")),
+            parse_time(row.get(f"access_key_{slot}_last_rotated")),
+            parse_time(row.get(f"access_key_{slot}_last_used_date")),
         )
         for slot in ("1", "2")
         if _flag(row.get(f"access_key_{slot}_active"))
@@ -479,7 +465,7 @@ def identity_checks(aws: Session, now: datetime) -> tuple[list[Check], list[Iden
         arn = str(row.get("arn") or name)
         console = bool(_flag(row.get("password_enabled")))
         keys = _active_keys(row)
-        uses = [_when(row.get("password_last_used"))] + [used for _, used in keys]
+        uses = [parse_time(row.get("password_last_used"))] + [used for _, used in keys]
         access = ["console"] if console else []
         if keys:
             access.append(plural(len(keys), "access key"))
@@ -491,7 +477,7 @@ def identity_checks(aws: Session, now: datetime) -> tuple[list[Check], list[Iden
                 admin=arn in admin_users,
                 mfa=bool(_flag(row.get("mfa_active"))) if console else None,
                 last_used=max((u for u in uses if u), default=None),
-                created=_when(row.get("user_creation_time")),
+                created=parse_time(row.get("user_creation_time")),
                 detail=(" and ".join(access) or "No console or keys").capitalize(),
             )
         )
@@ -576,8 +562,8 @@ def identity_checks(aws: Session, now: datetime) -> tuple[list[Check], list[Iden
                 kind="root",
                 admin=True,
                 mfa=bool(summary.get("AccountMFAEnabled")),
-                last_used=_when(root.get("password_last_used")),
-                created=_when(root.get("user_creation_time")),
+                last_used=parse_time(root.get("password_last_used")),
+                created=parse_time(root.get("user_creation_time")),
                 detail="The account's root user",
             ),
         )
@@ -1026,31 +1012,27 @@ def _trail_detail(raw) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def _text(value, limit=128) -> str:
-    return value[:limit] if isinstance(value, str) else ""
-
-
 def trail_entry(event: dict, account: str) -> Activity | None:
     """One LookupEvents entry: console sign-ins, password changes and IAM
     writes are kept; anything else is skipped."""
     detail = _trail_detail(event.get("CloudTrailEvent"))
-    name = _text(event.get("EventName") or detail.get("eventName"))
-    source = _text(detail.get("eventSource") or event.get("EventSource"))
+    name = text_field(event.get("EventName") or detail.get("eventName"))
+    source = text_field(detail.get("eventSource") or event.get("EventSource"))
     who = (
         detail.get("userIdentity")
         if isinstance(detail.get("userIdentity"), dict)
         else {}
     )
-    kind = _text(who.get("type"), 32)
-    actor = _text(who.get("arn"), 512)
+    kind = text_field(who.get("type"), 32)
+    actor = text_field(who.get("arn"), 512)
     if not actor and kind == "Root":
         actor = f"arn:aws:iam::{account}:root"
-    error = _text(detail.get("errorCode"), 128)
+    error = text_field(detail.get("errorCode"), 128)
     facts = {
         "service": source.split(".", 1)[0],
-        "region": _text(detail.get("awsRegion"), 32),
+        "region": text_field(detail.get("awsRegion"), 32),
         "identity_type": kind,
-        "source_ip": _text(detail.get("sourceIPAddress"), 64),
+        "source_ip": text_field(detail.get("sourceIPAddress"), 64),
     }
     if source == "signin.amazonaws.com":
         if name in ("ConsoleLogin", "SwitchRole"):
@@ -1074,7 +1056,7 @@ def trail_entry(event: dict, account: str) -> Activity | None:
     else:
         return None
     when = event.get("EventTime")
-    ident = _text(event.get("EventId"), 64)
+    ident = text_field(event.get("EventId"), 64)
     if not isinstance(when, datetime) or not name or not ident:
         return None
     if when.tzinfo:

@@ -35,7 +35,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import to_utc_naive, utc_now_naive
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
@@ -53,13 +53,6 @@ def load_google_workspace_config(path: str) -> dict[str, Any]:
     return load_document("google_workspace", path)
 
 
-def _to_utc_naive(dt: datetime) -> datetime:
-    """Convert to UTC naive (DB stores TIMESTAMP WITHOUT TIME ZONE)."""
-    if dt.tzinfo is None:
-        return dt
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
-
-
 def _parse_rfc3339(ts: str | None) -> datetime | None:
     if not ts:
         return None
@@ -69,7 +62,7 @@ def _parse_rfc3339(ts: str | None) -> datetime | None:
     try:
         # e.g. 2010-10-28T10:26:35.000Z
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-        return _to_utc_naive(dt)
+        return to_utc_naive(dt)
     except Exception:
         return None
 
@@ -393,7 +386,7 @@ def ingest_google_workspace_stream(
             t = a.get("id", {}).get("time")
         dt = _parse_rfc3339(t)
         if dt is None:
-            dt = _to_utc_naive(datetime.now(timezone.utc))
+            dt = utc_now_naive()
         return dt
 
     # If we hit the cap, keep the newest max_items by timestamp.
@@ -467,7 +460,7 @@ def ingest_google_workspace_stream(
                 "event_names": names,
                 "params": params,
             },
-            "fetched_at": _to_utc_naive(datetime.now(timezone.utc)).isoformat(),
+            "fetched_at": utc_now_naive().isoformat(),
         }
         payload_bytes = json.dumps(
             payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False

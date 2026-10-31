@@ -10,9 +10,9 @@ from app.db.session import get_db
 from app.security.auth import require_admin
 from app.services import retention_management as service
 from app.services.retention_management import (
-    SettingsPayload,
     PreviewPayload,
     PurgePayload,
+    SettingsPayload,
 )
 
 router = Router(

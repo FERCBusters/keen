@@ -26,18 +26,28 @@ from app.realtime.notifications import (
     stop_notification_listener,
 )
 from app.security.auth import ROLE_ADMIN, create_user, get_current_user_from_request
+from app.security.client_ip import request_ip as _client_ip
 from app.security.csrf import (
     csrf_valid,
     generate_csrf_token,
     get_csrf_token_from_request,
     set_csrf_cookie,
 )
+from app.security.demo import DemoExpiryMiddleware
+from app.security.headers import SecurityHeadersMiddleware
 from app.security.permissions import (
     ensure_session_authorization_current,
     has_permission,
 )
 from app.security.redaction import redact_query_string
+from app.security.request_limits import RequestBodyLimitMiddleware
 from app.security.roles import attach_effective_role
+from app.security.route_policy import (
+    gated_write_permission,
+    is_permission_checked_write,
+    is_public_request,
+    policy_path,
+)
 from app.services.errors import DomainError
 
 
@@ -106,9 +116,6 @@ async def _shutdown_realtime_notifications() -> None:
         pass
 
 
-from app.security.client_ip import request_ip as _client_ip
-
-
 def bootstrap_initial_admin():
     """Create the first admin user on fresh installs.
 
@@ -117,8 +124,8 @@ def bootstrap_initial_admin():
     """
     if settings.hosted_mode:
         return  # Owner is created explicitly before API startup.
-    uname = (settings.bootstrap_admin_username or "").strip()
-    pwd = (settings.bootstrap_admin_password or "").strip()
+    uname = settings.bootstrap_admin_username.strip()
+    pwd = settings.bootstrap_admin_password.strip()
     if not uname and not pwd:
         return  # Explicit bootstrap is optional; no account is created.
 
@@ -149,14 +156,6 @@ def bootstrap_initial_admin():
 # -----------------------------------------------------------------------------
 # Authentication middleware
 # -----------------------------------------------------------------------------
-
-
-from app.security.route_policy import (
-    gated_write_permission,
-    is_permission_checked_write,
-    is_public_request,
-    policy_path,
-)
 
 
 @app.middleware("http")
@@ -231,26 +230,24 @@ async def auth_middleware(request: Request, call_next):
         # navbar/page rendering from querying RBAC tables on every navigation while
         # remaining invalidatable by admin RBAC changes.
         ensure_session_authorization_current(db, user)
-        effective_role = getattr(user, "effective_role", None) or attach_effective_role(
-            db, user
-        )
+        effective_role = user.effective_role or attach_effective_role(db, user)
 
         # Admin-only namespaces
         if path.startswith("/v1/users"):
-            if (effective_role or "") != ROLE_ADMIN:
+            if effective_role != ROLE_ADMIN:
                 return JSONResponse({"detail": "Admin role required"}, status_code=403)
 
         if path.startswith("/v1/admin"):
             # Special-case audit trail: allow users with audittrail.read.
             if path in {"/v1/admin/audit", "/v1/admin/entity-changelog"}:
-                if (effective_role or "") != ROLE_ADMIN and not has_permission(
+                if effective_role != ROLE_ADMIN and not has_permission(
                     db, user, "audittrail.read"
                 ):
                     return JSONResponse(
                         {"detail": "Audit access required"}, status_code=403
                     )
             else:
-                if (effective_role or "") != ROLE_ADMIN:
+                if effective_role != ROLE_ADMIN:
                     return JSONResponse(
                         {"detail": "Admin role required"}, status_code=403
                     )
@@ -319,7 +316,7 @@ async def auth_middleware(request: Request, call_next):
                         {"detail": "isms.manage permission required"},
                         status_code=403,
                     )
-            elif (effective_role or "") != ROLE_ADMIN:
+            elif effective_role != ROLE_ADMIN:
                 return JSONResponse(
                     {"detail": "Read-only users cannot perform write actions"},
                     status_code=403,
@@ -476,17 +473,11 @@ def redoc_v1():
 app.include_router(api_router, prefix="")
 
 # Outermost guard also covers auth-exempt integrations and WebSockets.
-from app.security.demo import DemoExpiryMiddleware
-
 app.add_middleware(DemoExpiryMiddleware)
 
 
 # Enforce byte limits before JSON/form parsing, including chunked requests.
-from app.security.request_limits import RequestBodyLimitMiddleware
-
 app.add_middleware(RequestBodyLimitMiddleware)
 
 # Response policy also covers rejections from every inner middleware.
-from app.security.headers import SecurityHeadersMiddleware
-
 app.add_middleware(SecurityHeadersMiddleware)

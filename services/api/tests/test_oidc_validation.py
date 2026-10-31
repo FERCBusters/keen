@@ -191,9 +191,11 @@ def test_wrong_signature_cannot_provision(callback):
 
 
 def test_unsigned_token_cannot_provision(callback):
-    encode = lambda value: (
-        base64.urlsafe_b64encode(json.dumps(value).encode()).rstrip(b"=").decode()
-    )
+    def encode(value):
+        return (
+            base64.urlsafe_b64encode(json.dumps(value).encode()).rstrip(b"=").decode()
+        )
+
     token = encode({"alg": "none"}) + "." + encode(callback.claims) + "."
     with pytest.raises(JoseError):
         callback.run(raw=token)

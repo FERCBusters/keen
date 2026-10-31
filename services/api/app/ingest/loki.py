@@ -6,16 +6,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import Artifact, Event, IngestionCursor
-from app.ingest.common import apply_rules, is_safe_url
+from app.db.models import IngestionCursor
+from app.ingest.common import is_safe_url, store_event_with_artifact
 from app.ingest.connections import (
-    artifact_key,
     connection_runs,
-    identity,
     load_document,
     namespace,
     settings,
@@ -29,13 +26,7 @@ from app.ingest.log_pipeline import (
     try_parse_json_line,
 )
 from app.security.errors import collection_error
-from app.security.redaction import (
-    prepare_artifact_bytes,
-    prepare_event_fields,
-    redact_obj,
-)
 from app.services.ingestion_pause import pausable
-from app.storage.s3 import put_bytes
 
 
 def _loki_client() -> httpx.Client:
@@ -393,100 +384,51 @@ def ingest_loki_once(
                         }
                     }
 
-                    # Hardening: redact before persist
-                    raw_pointer_r = redact_obj(raw_pointer) or {}
-                    normalized_r = redact_obj(normalized) or {}
-
-                    # Insert event with ON CONFLICT DO NOTHING to avoid noisy duplicate-key logs.
-                    ev_id = uuid.uuid4()
-                    sev = (
+                    severity = (
                         int(event_defaults.get("severity", 3))
                         if event_defaults.get("severity") is not None
                         else None
                     )
-                    protected_fields = prepare_event_fields(
-                        dict(
-                            system=event_defaults.get("system"),
-                            actor=actor,
-                            action=event_defaults.get("action"),
-                            outcome=event_defaults.get("outcome"),
-                            severity=sev,
-                            summary=summary,
-                            raw_pointer=raw_pointer_r,
-                            normalized_payload=normalized_r,
-                        ),
-                        mask=settings.event_data_masking == "true",
-                    )
-                    stmt = (
-                        pg_insert(Event)
-                        .values(
-                            id=ev_id,
-                            timestamp=ts,
-                            source="loki",
-                            **protected_fields,
-                            external_id=namespace(external_id),
-                            **identity(),
-                        )
-                        .on_conflict_do_nothing(
-                            index_elements=["source", "external_id"]
-                        )
-                        .returning(Event.id)
-                    )
-                    inserted_id = db.execute(stmt).scalar()
-                    if inserted_id is None:
-                        # deduped
-                        if (chunk_max_seen_ts is None) or (ts > chunk_max_seen_ts):
-                            chunk_max_seen_ts = ts
-                        continue
-
-                    created_events += 1
-                    chunk_created_events += 1
-
-                    # Store artifact (raw log line) as immutable object
                     ext = "json" if parsed is not None else "log"
                     ctype = (
                         "application/json"
                         if parsed is not None
                         else "text/plain; charset=utf-8"
                     )
-                    key = (
-                        f"loki/{query_name}/{ts.date().isoformat()}/{inserted_id}.{ext}"
-                    )
-                    line_bytes, redaction_status = prepare_artifact_bytes(
-                        line.encode("utf-8", errors="replace"),
-                        ctype,
-                        mask=settings.event_data_masking == "true",
-                    )
-                    stored = put_bytes(
-                        key=artifact_key(key), data=line_bytes, content_type=ctype
-                    )
-                    art = Artifact(
-                        event_id=inserted_id,
-                        kind="log_line",
-                        storage_uri=stored.uri,
-                        sha256=stored.sha256,
-                        content_type=ctype,
-                        size_bytes=stored.size_bytes,
-                        captured_by="keen:loki",
-                        redaction_status=redaction_status,
-                    )
-                    db.add(art)
-                    db.flush()
-                    created_artifacts += 1
-                    chunk_created_artifacts += 1
-
-                    # Apply mapping rules
-                    ev_for_rules = Event(
-                        id=inserted_id,
-                        timestamp=ts,
+                    stored = store_event_with_artifact(
+                        db,
+                        timestamp=ts.replace(tzinfo=None),
                         source="loki",
-                        **protected_fields,
-                        external_id=namespace(external_id),
-                        **identity(),
+                        system=event_defaults.get("system"),
+                        actor=actor,
+                        action=event_defaults.get("action"),
+                        outcome=event_defaults.get("outcome"),
+                        severity=severity,
+                        summary=summary,
+                        raw_pointer=raw_pointer,
+                        normalized_payload=normalized,
+                        external_id=external_id,
+                        artifact_kind="log_line",
+                        artifact_bytes=line.encode("utf-8", errors="replace"),
+                        artifact_content_type=ctype,
+                        # Stored objects are never replaced, so each attempt
+                        # writes a fresh key: a retry after a failed chunk must
+                        # not collide with an object the rollback left behind.
+                        artifact_key=(
+                            f"loki/{query_name}/{ts.date().isoformat()}/"
+                            f"{external_id}-{uuid.uuid4().hex}.{ext}"
+                        ),
+                        captured_by="keen:loki",
+                        # The chunk commits once, together with its cursor.
+                        commit=False,
                     )
-                    mapped = apply_rules(db, ev_for_rules)
-                    created_mappings += mapped
-                    chunk_created_mappings += mapped
+                    if not stored.get("deduped"):
+                        created_events += 1
+                        chunk_created_events += 1
+                        created_artifacts += 1
+                        chunk_created_artifacts += 1
+                        created_mappings += stored["mappings"]
+                        chunk_created_mappings += stored["mappings"]
 
                     if (chunk_max_seen_ts is None) or (ts > chunk_max_seen_ts):
                         chunk_max_seen_ts = ts

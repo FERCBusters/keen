@@ -95,11 +95,11 @@ def _humanize_source(source: str) -> str:
     return joined.strip() or source
 
 
-def _hsl_to_rgb(h: float, s: float, l: float) -> tuple[int, int, int]:
-    # h: 0-360, s/l: 0-1
-    c = (1 - abs(2 * l - 1)) * s
+def _hsl_to_rgb(h: float, s: float, light: float) -> tuple[int, int, int]:
+    # h: 0-360, s/light: 0-1
+    c = (1 - abs(2 * light - 1)) * s
     x = c * (1 - abs(((h / 60) % 2) - 1))
-    m = l - c / 2
+    m = light - c / 2
     if 0 <= h < 60:
         r1, g1, b1 = c, x, 0
     elif 60 <= h < 120:

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from app.core.config import settings
 from app.ingest.cloud import google_cloud as gc
-from app.ingest.cloud.base import Unavailable
+from app.ingest.cloud.base import Unavailable, parse_time
 
 from tests.google_fakes import Service, http_error
 
@@ -497,7 +497,7 @@ def test_clients_carry_the_key_and_unknown_members_are_left_out(monkeypatch):
         [gc.READ_ONLY],
     )
     assert gc._member("principalSet:x") is None
-    assert gc._when("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
+    assert parse_time("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
 
 
 def test_project_administrators_and_repeated_bindings(monkeypatch, configured):

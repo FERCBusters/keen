@@ -583,7 +583,7 @@ def test_migration_upgrade_and_downgrade():
         connection.execute(text("CREATE TABLE users (id UUID PRIMARY KEY)"))
         path = (
             Path(__file__).parents[1]
-            / "alembic/legacy_versions/0087_sso_verified_emails.py"
+            / "tests/fixtures/historical_migrations/0087_sso_verified_emails.py"
         )
         spec = importlib.util.spec_from_file_location("sso_email_migration", path)
         migration = importlib.util.module_from_spec(spec)

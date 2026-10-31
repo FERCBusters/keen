@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.services.ingestion_pause import POLLING_SOURCES
 from app.worker import tasks
 from app.worker.celery_app import HTTP_INGEST_SOURCES, celery_app
+from pydantic import ValidationError
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe
@@ -123,16 +124,20 @@ def test_compose_workers_and_python_capability_policy():
     assert builds["keen-http-worker"]["build"] == builds["keen-api"]["build"]
 
 
-@pytest.mark.parametrize(
-    "configured,expected",
-    [(120, 120), (0, 60), (None, 60), ("", 60), ("many", 60), (-5, 1)],
-)
-def test_event_counter_refresh_interval_tolerates_bad_settings(
+@pytest.mark.parametrize("configured,expected", [(120, 120), (0, 60), (-5, 1)])
+def test_event_counter_refresh_interval_follows_the_cache_ttl(
     monkeypatch, configured, expected
 ):
-    # The beat interval falls back to a minute when the cache TTL is unset or
-    # unusable and never drops below one second.
+    # The beat interval falls back to a minute when caching is off and never
+    # drops below one second.
     from app.worker.celery_app import _event_counter_refresh_seconds
 
     monkeypatch.setattr(settings, "aggregate_cache_ttl_seconds", configured)
     assert _event_counter_refresh_seconds() == expected
+
+
+@pytest.mark.parametrize("configured", ["many", ""])
+def test_a_non_integer_cache_ttl_is_refused_at_start_up(configured):
+    # Settings validation rejects the value before any worker schedule reads it.
+    with pytest.raises(ValidationError):
+        type(settings)(aggregate_cache_ttl_seconds=configured)

@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive as now
 from app.core.valkey import get_valkey
 from app.db.models import SsoEmailChallenge, User, UserSsoEmail
 from app.security.rate_limit import fixed_window_allow
@@ -26,10 +27,6 @@ class Address(BaseModel):
 
 class Proof(BaseModel):
     token: str = Field(min_length=20, max_length=128)
-
-
-def now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def digest(value):

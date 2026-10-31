@@ -16,7 +16,7 @@ depends_on = None
 def seed_legacy_crosswalk():
     bind = op.get_bind()
     seed = json.loads(
-        (Path(__file__).resolve().parents[1] / "seed_control_links.json").read_text()
+        (Path(__file__).resolve().parent / "seed_control_links.json").read_text()
     )
     for link in seed["links"]:
         # Ref+type+title/description guards avoid silently linking repurposed catalogue entries.

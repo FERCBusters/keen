@@ -32,20 +32,16 @@ def _remote_user_from_headers(headers: Mapping[str, str], *, peer=None) -> str |
     header and injects its own.
     """
 
-    if not bool(getattr(settings, "trust_remote_user", False)):
+    if not settings.trust_remote_user:
         return None
 
     # Native OIDC must not be bypassable by a request header. If OIDC is enabled,
     # ignore REMOTE_USER-style headers entirely and require Keen's own session
     # cookie that was minted after validating the configured SSO identity.
-    if bool(getattr(settings, "oidc_enabled", False)):
+    if settings.oidc_enabled:
         return None
 
-    header_name = (
-        getattr(settings, "remote_user_header_name", "") or "REMOTE_USER"
-    ).strip()
-    if not header_name:
-        header_name = "REMOTE_USER"
+    header_name = settings.remote_user_header_name.strip() or "REMOTE_USER"
 
     from app.security.client_ip import normalise_ip
 
@@ -175,8 +171,7 @@ def require_authenticated(request: Request) -> User:
 
 def require_admin(request: Request) -> User:
     user = require_authenticated(request)
-    eff = getattr(user, "effective_role", None) or getattr(user, "role", None)
-    if (eff or "") != ROLE_ADMIN:
+    if (user.effective_role or user.role) != ROLE_ADMIN:
         raise HTTPException(status_code=403, detail="Admin role required")
     return user
 
@@ -187,14 +182,14 @@ def set_session_cookie(response: Response, session_id: str) -> None:
     if samesite not in ("lax", "strict", "none"):
         samesite = "lax"
 
-    domain = (settings.cookie_domain or "").strip() or None
+    domain = settings.cookie_domain.strip() or None
 
     response.set_cookie(
         key=cookie_name(),
         value=session_id,
-        max_age=int(settings.session_ttl_seconds),
+        max_age=settings.session_ttl_seconds,
         httponly=True,
-        secure=bool(settings.cookie_secure),
+        secure=settings.cookie_secure,
         samesite=samesite,
         domain=domain,
         path="/",
@@ -202,7 +197,7 @@ def set_session_cookie(response: Response, session_id: str) -> None:
 
 
 def clear_session_cookie(response: Response) -> None:
-    domain = (settings.cookie_domain or "").strip() or None
+    domain = settings.cookie_domain.strip() or None
     response.delete_cookie(key=cookie_name(), domain=domain, path="/")
 
 

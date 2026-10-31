@@ -556,15 +556,15 @@ def test_pestle_access_and_text_helpers_guard_their_bounds(pestle, monkeypatch):
     from app.services.frameworks import framework_parameter
     from app.services.text import clean_text
 
-    assert service._can_read_pestle(pestle.db, None) is False
-    assert service._can_manage_pestle(pestle.db, None) is False
+    assert service.can_read_pestle(pestle.db, None) is False
+    assert service.can_manage_pestle(pestle.db, None) is False
     pestle.manager.is_active = False
     pestle.db.commit()
-    assert service._can_read_pestle(pestle.db, pestle.manager) is False
-    assert service._can_manage_pestle(pestle.db, pestle.manager) is False
+    assert service.can_read_pestle(pestle.db, pestle.manager) is False
+    assert service.can_manage_pestle(pestle.db, pestle.manager) is False
     pestle.manager.is_active = True
     pestle.db.commit()
-    assert service._can_manage_pestle(pestle.db, pestle.manager) is True
+    assert service.can_manage_pestle(pestle.db, pestle.manager) is True
     with pytest.raises(DomainError, match="item is too long"):
         clean_text("x" * 11, max_len=10, label="item")
     monkeypatch.setattr(settings, "default_framework_slug", "")

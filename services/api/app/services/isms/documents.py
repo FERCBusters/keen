@@ -10,6 +10,7 @@ from typing import BinaryIO
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.db.models import (
     BookStackSectionEvidence,
     IsmsDocument,
@@ -29,7 +30,7 @@ from app.services.uploads import upload_size
 from app.storage.filenames import safe_download_ext
 from app.storage.s3 import put_file
 
-from .common import _by_id_or_404, _list_response, _record, _utcnow
+from .common import _by_id_or_404, _list_response, _record
 from .constants import DOCUMENT_TYPES
 from .mutations import _apply_links, _delete_entity_links
 from .schemas import DocumentCommentPayload, DocumentFolderPayload, DocumentPayload

@@ -14,7 +14,6 @@ from types import SimpleNamespace
 
 import pytest
 from app.core.datetime_utils import utc_now_naive
-from app.mapping.rules import rule_rationale
 from app.db.models import (
     ControlClauseLink,
     ControlItem,
@@ -23,6 +22,7 @@ from app.db.models import (
     FrameworkClause,
     Mapping,
 )
+from app.mapping.rules import rule_rationale
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import keen, unsafe  # noqa: F401
@@ -413,9 +413,8 @@ def test_filter_lists_are_bounded(events):
 
 
 def test_a_regular_expression_scan_runs_with_a_time_budget(events):
-    from sqlalchemy import text
-
     from app.services.event_filters import parse_event_filters, scan_budget
+    from sqlalchemy import text
 
     db = events.db
     without = parse_event_filters(framework=FW, conditions=["summary:contains:x"])
@@ -431,11 +430,10 @@ def test_a_regular_expression_scan_runs_with_a_time_budget(events):
 
 
 def test_a_cancelled_scan_is_reported_as_the_pattern_taking_too_long(events):
-    from psycopg2 import errors
-    from sqlalchemy.exc import OperationalError
-
     from app.services.errors import DomainError
     from app.services.event_filters import parse_event_filters, run_scan
+    from psycopg2 import errors
+    from sqlalchemy.exc import OperationalError
 
     filters = parse_event_filters(framework=FW, conditions=["summary:regex:x"])
     cancelled = OperationalError(
@@ -455,9 +453,8 @@ def test_a_cancelled_scan_is_reported_as_the_pattern_taking_too_long(events):
         "or simplify the pattern",
     )
     # A scan the database itself cancels under the budget reports the same way.
-    from sqlalchemy import text
-
     from app.services import event_filters
+    from sqlalchemy import text
 
     event_filters.REGEX_SCAN_TIMEOUT_MS = 1
     try:

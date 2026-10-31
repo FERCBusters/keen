@@ -4,7 +4,6 @@ from unittest.mock import Mock
 
 import fakeredis
 import pytest
-from app.core.config import settings
 from app.ingest import webhooks
 
 

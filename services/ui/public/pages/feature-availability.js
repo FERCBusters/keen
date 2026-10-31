@@ -64,7 +64,10 @@ export function hrefFeature(href) {
     return null;
   }
   if (url.origin !== window.location.origin) return null;
-  if (url.pathname === '/isms.html') return sectionFeatures[url.searchParams.get('tab')] || 'isms';
+  if (url.pathname === '/isms.html') {
+    const tab = url.searchParams.get('tab');
+    return (Object.hasOwn(sectionFeatures, tab) && sectionFeatures[tab]) || 'isms';
+  }
   return pages[url.pathname];
 }
 let observer;

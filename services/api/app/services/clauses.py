@@ -9,7 +9,9 @@ from app.core.config import settings
 from app.core.references import control_justification as _control_justification
 from app.core.references import control_upstream_url as _upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
+from app.core.references import try_uuid
 from app.db.models import ControlClauseLink, ControlItem, FrameworkClause
+from app.services.control_refs import clause_summary
 from app.services.entity_changelog import list_entity_changelogs
 from app.services.errors import DomainError
 
@@ -37,22 +39,22 @@ def _clause_evidence_mappings(c: FrameworkClause) -> list[dict]:
     return out
 
 
-def _clause_out(c: FrameworkClause, link_count: int | None = None) -> dict:
+def clause_with_evidence(c: FrameworkClause) -> dict:
     evidence_mappings = _clause_evidence_mappings(c)
     return {
-        "id": str(c.id),
-        "framework": c.framework_slug,
-        "ref": c.ref,
-        "title": c.title,
-        "parent_id": str(c.parent_clause_id) if c.parent_clause_id else None,
-        "parent_ref": c.parent.ref if getattr(c, "parent", None) else None,
-        "sort_order": int(c.sort_order or 0),
+        **clause_summary(c),
         "upstream_url": _upstream_url(c),
         "evidence_mappings": evidence_mappings,
         "evidence_count": len(evidence_mappings),
+    }
+
+
+def _clause_out(c: FrameworkClause, link_count: int | None = None) -> dict:
+    return {
+        **clause_with_evidence(c),
         "metadata": c.meta or {},
         "control_link_count": int(link_count or 0),
-        "child_count": len(getattr(c, "children", None) or []),
+        "child_count": len(c.children),
     }
 
 
@@ -138,11 +140,8 @@ def get_clause(*, clause_id: str, db: Session):
 
 
 def clause_changelog(*, clause_id: str, limit: int = 50, offset: int = 0, db: Session):
-    try:
-        import uuid as _uuid
-
-        cid = _uuid.UUID(str(clause_id))
-    except Exception:
+    cid = try_uuid(clause_id)
+    if cid is None:
         raise DomainError(status_code=400, detail="clause_id must be a UUID")
     exists = db.query(FrameworkClause.id).filter(FrameworkClause.id == cid).first()
     if not exists:

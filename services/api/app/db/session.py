@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
 
@@ -19,10 +19,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
-
-from sqlalchemy import event, text
-from sqlalchemy.orm import Session
 
 
 @event.listens_for(Session, "after_begin")

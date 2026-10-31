@@ -24,9 +24,10 @@ from app.db.models import (
     RiskAsset,
     User,
 )
+from app.services.control_refs import control_summary
 from app.services.frameworks import framework_parameter
 
-from .access import _can_manage_isms, _can_read_isms
+from .access import can_manage_isms, can_read_isms
 from .common import _clean_isms_section
 from .constants import APP_SOURCE_TYPES, DOCUMENT_TYPES, OBJECTIVE_STATUSES
 from .metric_values import _effectiveness_metric_sources_out
@@ -36,7 +37,6 @@ from .serializers import (
     _asset_out,
     _aws_account_out,
     _clause_out,
-    _control_out,
     _document_out,
     _effectiveness_measure_out,
     _entity_out,
@@ -69,8 +69,8 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
     payload: dict[str, Any] = {
         "framework": fw,
         "section": section_key or "all",
-        "can_view": _can_read_isms(db, user),
-        "can_manage": _can_manage_isms(db, user),
+        "can_view": can_read_isms(db, user),
+        "can_manage": can_manage_isms(db, user),
         "document_types": sorted(DOCUMENT_TYPES),
         "objective_statuses": sorted(OBJECTIVE_STATUSES),
         "application_values": ["Low", "Medium", "High"],
@@ -137,7 +137,7 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
             .all()
         )
         controls.sort(key=lambda c: (c.type, _ref_sort_key(c.ref)))
-        payload["controls"] = [_control_out(c) for c in controls]
+        payload["controls"] = [control_summary(c) for c in controls]
 
     if wants("objectives", "documents", "org", "assets", "meetings"):
         clauses = (
@@ -228,7 +228,7 @@ def isms_summary(*, framework: str, section: str | None, user: User, db: Session
     payload: dict[str, Any] = {
         "framework": fw,
         "section": section_key or "all",
-        "can_manage": _can_manage_isms(db, user),
+        "can_manage": can_manage_isms(db, user),
         "counts": counts,
     }
 

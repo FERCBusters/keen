@@ -7,10 +7,11 @@ when no retained record references it. Object Lock is never bypassed.
 import json
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from sqlalchemy import text
 
+from app.core.datetime_utils import utc_now_naive as now
 from app.db.session import SessionLocal
 from app.services.control_evidence_stats import clear_stats_caches
 from app.storage.s3 import delete_stored_object
@@ -55,10 +56,6 @@ def is_referenced(db, event_id) -> bool:
         f"SELECT 1 FROM events e WHERE e.id = :event_id AND NOT ({UNREFERENCED})"
     ).bindparams(bindparam("event_id", type_=Event.__table__.c.id.type))
     return db.execute(statement, {"event_id": event_id}).first() is not None
-
-
-def now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def lock(db):

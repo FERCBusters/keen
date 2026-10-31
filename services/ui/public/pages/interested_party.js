@@ -14,9 +14,9 @@ import {
   getCurrentFramework,
   withFramework,
   loadEntityChangelog,
-  shorten,
   canSampleIntoAudit,
   openAuditSampleModal,
+  lookupTab,
 } from '/app.js';
 
 const me = await initNavbar();
@@ -71,8 +71,7 @@ function setTabQuery(tabName) {
 }
 function activateTab(tabName) {
   const tabs = { details: detailsTab, communications: communicationsTab, changelog: changelogTab };
-  // Own tab names only; inherited names such as "constructor" select Details.
-  const tab = (Object.hasOwn(tabs, tabName) && tabs[tabName]) || detailsTab;
+  const tab = lookupTab(tabs, tabName, detailsTab);
   if (tab && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
 function wireTabs() {

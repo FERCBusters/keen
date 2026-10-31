@@ -11,7 +11,7 @@ from app.core.valkey import get_valkey
 T = TypeVar("T")
 
 
-def _json_default(value: Any) -> str:
+def json_default(value: Any) -> str:
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     return str(value)
@@ -41,7 +41,7 @@ def user_cache_scope(user: Any) -> str:
 def make_cache_key(namespace: str, parts: dict[str, Any] | None = None) -> str:
     payload = _normalise_part(parts or {})
     raw = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), default=_json_default
+        payload, sort_keys=True, separators=(",", ":"), default=json_default
     )
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
     ns = "".join(
@@ -51,7 +51,7 @@ def make_cache_key(namespace: str, parts: dict[str, Any] | None = None) -> str:
 
 
 def cache_get_json(namespace: str, parts: dict[str, Any] | None = None) -> Any | None:
-    ttl = int(getattr(settings, "aggregate_cache_ttl_seconds", 0) or 0)
+    ttl = settings.aggregate_cache_ttl_seconds
     if ttl <= 0:
         return None
     try:
@@ -66,16 +66,12 @@ def cache_get_json(namespace: str, parts: dict[str, Any] | None = None) -> Any |
 def cache_set_json(
     namespace: str, parts: dict[str, Any] | None, value: Any, *, ttl: int | None = None
 ) -> None:
-    ttl_eff = int(
-        ttl
-        if ttl is not None
-        else getattr(settings, "aggregate_cache_ttl_seconds", 0) or 0
-    )
+    ttl_eff = ttl if ttl is not None else settings.aggregate_cache_ttl_seconds
     if ttl_eff <= 0:
         return
     try:
         raw = json.dumps(
-            value, sort_keys=True, separators=(",", ":"), default=_json_default
+            value, sort_keys=True, separators=(",", ":"), default=json_default
         )
         get_valkey().set(make_cache_key(namespace, parts), raw, ex=ttl_eff)
     except Exception:
@@ -89,11 +85,7 @@ def cached_json(
     *,
     ttl: int | None = None,
 ) -> T:
-    ttl_eff = int(
-        ttl
-        if ttl is not None
-        else getattr(settings, "aggregate_cache_ttl_seconds", 0) or 0
-    )
+    ttl_eff = ttl if ttl is not None else settings.aggregate_cache_ttl_seconds
     if ttl_eff <= 0:
         return factory()
 
@@ -109,7 +101,7 @@ def cached_json(
 
     try:
         raw = json.dumps(
-            value, sort_keys=True, separators=(",", ":"), default=_json_default
+            value, sort_keys=True, separators=(",", ":"), default=json_default
         )
         get_valkey().set(make_cache_key(namespace, key_parts), raw, ex=ttl_eff)
     except Exception:

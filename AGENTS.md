@@ -7,6 +7,8 @@
 - Use the design system and shared UI helpers. Ask for the design system if you do not have that codebase to hand. Keep API authorization authoritative even when the UI hides an action.
 - Preserve connection identity through credentials, inputs, cursors, caches, artifacts, events and mapping rules. Connection-local state must live inside `connection_scope`; process-global authentication caches are prohibited.
 - Remove code only after checking all callers, configuration references and runtime entry points. Do not introduce compatibility machinery without a concrete supported use case.
+- Before writing a helper, search for an existing one and reuse or extend it. Shared homes include `security/permissions.py` and `security/roles.py` (permission and role checks), `api/dependencies/` (route guards), `services/control_refs.py` (control and clause summaries), `services/text.py`, `core/datetime_utils.py`, `ingest/common.py` (event storage), `ingest/cloud/base.py` and, in the UI, `app.js` and the shared `pages/*-common.js` modules. A second copy of a helper is a defect even when it starts out identical.
+- Trust declared types. Read typed settings, ORM columns and values the code has just built directly, without `getattr`, `isinstance`, `or ""` or `bool()`/`int()` wrappers. Keep such guards where data is untrusted or genuinely optional: upstream responses, evidence, request payloads, connection-scoped collector settings and nullable columns.
 
 ## Security invariants
 
@@ -34,6 +36,7 @@
 - Run the assembled-application contracts in `tests/test_security_design_contracts.py` after route, middleware, session or policy changes. Preserve the local TLS hostname verification regression.
 - Test UI rendering and navigation with hostile strings as well as ordinary values. For CSP or vendor changes, verify actual vendor behavior and report any missing browser coverage.
 - Update `pyproject.toml` and `poetry.lock` together for Python dependencies. Keep unrelated locked versions unchanged. Preserve pinned third-party Actions, image digests and design-system revisions. Pin a new third-party image with `python3 tools/docker_image_pins.py update`.
+- Keep `poetry run ruff check ../..` and `poetry run ruff format --check ../..` (from `services/api`) clean; CI and the pre-commit hooks run both. Keep imports at the top of each module.
 - Validate the exact final working tree after formatter or lint fixes. Include a fresh-process application import and the lifespan tests; earlier results from a different tree do not validate the delivered code. Imported fixtures and public re-exports may be used indirectly: mark them explicitly and preserve their contracts.
 - Report what passed, what failed and what could not run. Do not equate a green SQLite or mocked UI suite with full PostgreSQL CI, production-browser validation or a penetration test.
 
@@ -100,5 +103,6 @@ Be as comprehensive in any security review of your completed work as you possibl
 - Evidence export code belongs in `pages/evidence-export/`; give page-specific
   preferences and state to its factory explicitly. Preserve masking, cleanup,
   filename handling and export cancellation when changing it.
-- Keep Forgejo and Gitea collectors separate so their upstream APIs can evolve
-  independently. Shared stateless utilities remain appropriate.
+- Forgejo and Gitea share one collector, `ingest/gitea_compatible.py`, with
+  their own source names, settings, cursors and evidence. Give a product its
+  own code only where its API actually differs.

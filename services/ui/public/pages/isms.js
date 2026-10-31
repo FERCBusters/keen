@@ -27,6 +27,7 @@ import {
   openAuditSampleModal,
   effectivenessMetricValueHtml,
   effectivenessMetricThresholdBadgeHtml,
+  lookupTab,
 } from '/app.js';
 
 import { featureEnabled, sectionFeatures } from '/pages/feature-availability.js';
@@ -190,6 +191,11 @@ const sectionByKind = {
   effectiveness: 'effectiveness',
   meeting: 'meetings',
 };
+// The section that lists records of an edit or add kind. Own keys only, so
+// ?edit=constructor:… selects no section.
+function sectionForKind(kind) {
+  return Object.hasOwn(sectionByKind, kind) ? sectionByKind[kind] : null;
+}
 const tabIdBySection = {
   swot: 'swotTab',
   overview: 'overviewTab',
@@ -776,7 +782,7 @@ function emptyRow(colspan, message) {
   return `<tr><td colspan="${colspan}" class="p-4 small-muted">${esc(message)}</td></tr>`;
 }
 function findItem(kind, id) {
-  const key = {
+  const keys = {
     objective: 'objectives',
     document: 'documents',
     org: 'org_nodes',
@@ -784,8 +790,9 @@ function findItem(kind, id) {
     access: 'access_control_matrix',
     effectiveness: 'effectiveness_measures',
     meeting: 'meetings',
-  }[kind];
-  return (data?.[key] || []).find((x) => String(x.id) === String(id)) || null;
+  };
+  if (!Object.hasOwn(keys, kind)) return null;
+  return (data?.[keys[kind]] || []).find((x) => String(x.id) === String(id)) || null;
 }
 
 const auditSampleEntityTypes = {
@@ -2118,7 +2125,8 @@ function normaliseIsmsSection(value) {
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, '_');
-  const section = sectionAliases[key] || sectionAliases[key.replace(/_/g, '')] || null;
+  const section =
+    lookupTab(sectionAliases, key) || lookupTab(sectionAliases, key.replace(/_/g, ''));
   return sectionFeatures[section] && !featureEnabled(me, sectionFeatures[section])
     ? 'overview'
     : section;
@@ -2417,31 +2425,31 @@ $('docNewFolder')?.addEventListener('keydown', (event) => {
     $('docAddFolder').click();
   }
 });
-$('docTags')?.addEventListener('keydown', (event) => {
+$('docTags').addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ',') {
     event.preventDefault();
     addDocumentTag(event.target.value.replace(/,$/, ''));
     event.target.value = '';
   }
 });
-$('docTags')?.addEventListener('blur', (event) => {
+$('docTags').addEventListener('blur', (event) => {
   if (event.target.value.trim()) {
     addDocumentTag(event.target.value);
     event.target.value = '';
   }
 });
-$('docTagChoices')?.addEventListener('click', (event) => {
+$('docTagChoices').addEventListener('click', (event) => {
   const button = event.target.closest('[data-add-doc-tag]');
   if (button) addDocumentTag(button.dataset.addDocTag);
 });
-$('docSelectedTags')?.addEventListener('click', (event) => {
+$('docSelectedTags').addEventListener('click', (event) => {
   const button = event.target.closest('[data-remove-doc-tag]');
   if (button) {
     documentTags = documentTags.filter((tag) => tag !== button.dataset.removeDocTag);
     renderDocumentTags();
   }
 });
-$('docTagCloud')?.addEventListener('click', (event) => {
+$('docTagCloud').addEventListener('click', (event) => {
   const button = event.target.closest('[data-filter-doc-tag]');
   if (button) {
     documentTagFilter = button.dataset.filterDocTag;
@@ -2615,7 +2623,7 @@ document.addEventListener('click', async (ev) => {
   try {
     if (addBtn) {
       const kind = addBtn.getAttribute('data-isms-add');
-      await ensureSection(sectionByKind[kind] || currentIsmsSection());
+      await ensureSection(sectionForKind(kind) || currentIsmsSection());
       showNewIsmsForm(kind);
       return;
     }
@@ -2732,13 +2740,13 @@ async function activateInitialTab() {
   let section = normaliseIsmsSection(params.get('tab')) || 'overview';
   if (edit && !params.get('tab')) {
     const [kind] = String(edit).split(':', 2);
-    section = sectionByKind[kind] || section;
+    section = sectionForKind(kind) || section;
   }
   const measureId = params.get('measure') || params.get('effectiveness_measure');
   const recordId = params.get('record') || params.get('record_metric');
   if ((measureId || recordId) && !params.get('tab')) section = 'effectiveness';
 
-  const target = document.getElementById(tabIdBySection[section] || 'overviewTab');
+  const target = document.getElementById(lookupTab(tabIdBySection, section, 'overviewTab'));
   if (target && window.bootstrap?.Tab && !target.classList.contains('active')) {
     window.bootstrap.Tab.getOrCreateInstance(target).show();
   }

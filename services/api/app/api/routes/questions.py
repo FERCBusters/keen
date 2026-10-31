@@ -2,19 +2,16 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import Depends, HTTPException, Request, WebSocket
+from fastapi import Depends, Request, WebSocket
 from sqlalchemy.orm import Session
 
 from app.api.context import change_context
 from app.api.errors import json_object
 from app.api.routing import Router
 from app.api.uploads import upload_inputs
-from app.db.models import (
-    User,
-)
 from app.db.session import get_db
 from app.realtime.notifications import notification_hub
-from app.security.auth import require_admin
+from app.security.auth import require_admin, require_authenticated
 from app.security.redaction import storable
 from app.services import questions as service
 from app.services.questions import (
@@ -27,18 +24,11 @@ router = Router()
 _NOTIFICATION_RECHECK_SECONDS = 30
 
 
-def _get_user(request: Request) -> User:
-    user = getattr(request.state, "user", None)
-    if not isinstance(user, User):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return user
-
-
 @router.get("/v1/events/{event_id}/questions")
 def list_event_questions(
     event_id: str, request: Request, db: Session = Depends(get_db)
 ):
-    _get_user(request)
+    require_authenticated(request)
     return service.list_event_questions(
         event_id=event_id, context=change_context(request), db=db
     )
@@ -48,7 +38,7 @@ def list_event_questions(
 async def create_event_question(
     event_id: str, request: Request, db: Session = Depends(get_db)
 ):
-    _get_user(request)
+    require_authenticated(request)
     body_text, files = await question_input(request)
     return await service.create_event_question(
         event_id=event_id,
@@ -63,7 +53,7 @@ async def create_event_question(
 async def reply_to_question(
     thread_id: str, request: Request, db: Session = Depends(get_db)
 ):
-    _get_user(request)
+    require_authenticated(request)
     body_text, files = await question_input(request)
     return await service.reply_to_question(
         thread_id=thread_id,
@@ -78,7 +68,7 @@ async def reply_to_question(
 async def delete_question_thread(
     thread_id: str, request: Request, db: Session = Depends(get_db)
 ):
-    _get_user(request)
+    require_authenticated(request)
     return await service.delete_question_thread(
         thread_id=thread_id, context=change_context(request), db=db
     )
@@ -86,13 +76,13 @@ async def delete_question_thread(
 
 @router.get("/v1/me/questions/summary")
 def my_questions_summary(request: Request, db: Session = Depends(get_db)):
-    user = _get_user(request)
+    user = require_authenticated(request)
     return {"unread_count": _count_unread_replies_for_user(db, user.id)}
 
 
 @router.get("/v1/me/questions")
 def my_questions_list(request: Request, db: Session = Depends(get_db)):
-    _get_user(request)
+    require_authenticated(request)
     return service.my_questions_list(context=change_context(request), db=db)
 
 
@@ -100,7 +90,7 @@ def my_questions_list(request: Request, db: Session = Depends(get_db)):
 def list_entity_questions(
     entity_type: str, entity_id: str, request: Request, db: Session = Depends(get_db)
 ):
-    _get_user(request)
+    require_authenticated(request)
     return service.list_entity_questions(
         entity_type=entity_type,
         entity_id=entity_id,
@@ -113,7 +103,7 @@ def list_entity_questions(
 async def create_entity_question(
     entity_type: str, entity_id: str, request: Request, db: Session = Depends(get_db)
 ):
-    _get_user(request)
+    require_authenticated(request)
     body_text, files = await question_input(request)
     return await service.create_entity_question(
         entity_type=entity_type,
@@ -129,7 +119,7 @@ async def create_entity_question(
 async def mark_entity_questions_seen(
     entity_type: str, entity_id: str, request: Request, db: Session = Depends(get_db)
 ):
-    _get_user(request)
+    require_authenticated(request)
     return await service.mark_entity_questions_seen(
         entity_type=entity_type,
         entity_id=entity_id,
@@ -143,7 +133,7 @@ async def mark_event_questions_seen(
     event_id: str, request: Request, db: Session = Depends(get_db)
 ):
     "Mark all questions for this event as seen by the current user (thread author)."
-    _get_user(request)
+    require_authenticated(request)
     return await service.mark_event_questions_seen(
         event_id=event_id, context=change_context(request), db=db
     )

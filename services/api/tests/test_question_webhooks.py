@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 from app.outbound import question_webhooks as qw
+from app.outbound.signing import sign_body
 
 PAYLOAD = {
     "type": "keen.question.created",
@@ -58,7 +59,7 @@ def test_parse_json_headers():
 
 def test_hmac_signature_format():
     expected = hashlib.sha256(b"").hexdigest()
-    mac = qw._hmac_sha256("secret", b"")
+    mac = sign_body("secret", b"")
     assert mac == f"sha256={hmac.new(b'secret', b'', hashlib.sha256).hexdigest()}"
     assert mac.split("=", 1)[0] == "sha256"
     assert expected != mac.split("=", 1)[1]
@@ -305,7 +306,7 @@ def test_send_created_webhooks_success_and_signature():
     generic_post = next(entry for entry in seen if "gw.example" in entry.get("url", ""))
     assert generic_post["headers"]["content-type"] == "application/json"
     assert generic_post["headers"]["x-instance"] == "corp"
-    assert generic_post["headers"]["x-keen-signature"] == qw._hmac_sha256(
+    assert generic_post["headers"]["x-keen-signature"] == sign_body(
         "fixture-secret", generic_post["body"]
     )
     expected_body = json.dumps(PAYLOAD, separators=(",", ":"), sort_keys=True).encode()

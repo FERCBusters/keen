@@ -26,6 +26,8 @@ from app.services import agents as service
 from app.services.agents import Assignment, EvidencePolicy, Registration, Rotation
 from app.services.errors import DomainError
 
+from .agent_enrollment import router as enrollment_router
+
 
 class AgentRoute(DomainRoute):
     def get_route_handler(self):
@@ -241,6 +243,5 @@ async def heartbeat(
 
 router.include_router(admin)
 
-from .agent_enrollment import router as enrollment_router
 
 router.include_router(enrollment_router)

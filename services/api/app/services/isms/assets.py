@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     IsmsLicense,
@@ -19,18 +20,18 @@ from app.services.errors import DomainError
 from app.services.frameworks import framework_parameter
 from app.services.text import clean_text
 
-from .common import _list_response, _record, _utcnow
+from .common import _list_response, _record
 from .mutations import (
     _apply_license_payload,
     _apply_links,
     _asset_category_or_create,
     _asset_name_from_payload,
-    _asset_or_404,
     _asset_subcategory_or_create,
     _delete_entity_links,
-    _license_by_name,
     _license_from_payload,
-    _license_or_404,
+    asset_or_404,
+    license_by_name,
+    license_or_404,
     org_node_or_400,
 )
 from .schemas import (
@@ -141,7 +142,7 @@ def create_license(
 ):
     framework_parameter(framework)
     name = clean_text(payload.name, max_len=256, required=True, label="license")
-    existing = _license_by_name(db, name)
+    existing = license_by_name(db, name)
     if existing:
         raise DomainError(status_code=400, detail="License already exists")
     row = IsmsLicense(
@@ -170,7 +171,7 @@ def update_license(
     db: Session,
 ):
     framework_parameter(framework)
-    row = _license_or_404(db, license_id)
+    row = license_or_404(db, license_id)
     before = _license_out(row, include_asset_count=True)
     new_name = clean_text(payload.name, max_len=256, required=True, label="license")
     conflict = (
@@ -201,7 +202,7 @@ def delete_license(
     *, license_id: str, context: ChangeContext, framework: str, user: User, db: Session
 ):
     framework_parameter(framework)
-    row = _license_or_404(db, license_id)
+    row = license_or_404(db, license_id)
     in_use = db.query(RiskAsset.id).filter(RiskAsset.license_id == row.id).first()
     if in_use:
         raise DomainError(
@@ -326,7 +327,7 @@ def list_assets(
 
 
 def get_asset(*, asset_id: str, framework: str, user: User, db: Session):
-    return _asset_out(db, _asset_or_404(db, asset_id), framework_parameter(framework))
+    return _asset_out(db, asset_or_404(db, asset_id), framework_parameter(framework))
 
 
 def update_asset(
@@ -339,7 +340,7 @@ def update_asset(
     db: Session,
 ):
     fw = framework_parameter(framework)
-    row = _asset_or_404(db, asset_id)
+    row = asset_or_404(db, asset_id)
     before = _asset_out(db, row, fw)
     fields = set(payload.model_fields_set or set())
     category = row.category
@@ -408,7 +409,7 @@ def delete_asset(
     *, asset_id: str, context: ChangeContext, framework: str, user: User, db: Session
 ):
     fw = framework_parameter(framework)
-    row = _asset_or_404(db, asset_id)
+    row = asset_or_404(db, asset_id)
     in_use = db.query(Risk.id).filter(Risk.asset_id == row.id).first()
     if in_use:
         raise DomainError(

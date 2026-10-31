@@ -23,7 +23,7 @@ from dateutil import parser as dtparser
 from sqlalchemy.orm import Session
 
 from app.core.config import settings as deployment_settings
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import to_utc_naive, utc_now_naive
 from app.db.models import IngestionCursor
 from app.ingest.common import is_safe_url, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
@@ -37,11 +37,6 @@ def load_rss_config(path: str) -> dict[str, Any]:
     return load_document("rss", path)
 
 
-def _to_utc_naive(dt: datetime) -> datetime:
-    """Normalize an aware time to UTC naive (DB stores TIMESTAMP WITHOUT TIME ZONE)."""
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
-
-
 def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -50,7 +45,7 @@ def _parse_dt(value: str | None) -> datetime | None:
         # If the parsed datetime is naive, assume UTC.
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        return _to_utc_naive(dt)
+        return to_utc_naive(dt)
     except Exception:
         return None
 
@@ -399,7 +394,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
     # Process oldest-first for cursor stability
     def _entry_ts(e: dict[str, Any]) -> datetime:
         dt = _parse_dt(e.get("timestamp") or e.get("published") or e.get("updated"))
-        return dt or _to_utc_naive(datetime.now(timezone.utc))
+        return dt or utc_now_naive()
 
     entries_sorted = sorted(entries, key=_entry_ts)
     if max_items and len(entries_sorted) > max_items:
@@ -442,7 +437,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
                 **{k: v for k, v in e.items() if k != "timestamp"},
                 "timestamp": ts.isoformat(),
             },
-            "fetched_at": _to_utc_naive(datetime.now(timezone.utc)).isoformat(),
+            "fetched_at": utc_now_naive().isoformat(),
         }
         payload_bytes = json.dumps(
             payload, sort_keys=True, separators=(",", ":")

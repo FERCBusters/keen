@@ -67,7 +67,6 @@ from app.services.ueu_evidence import display_payload, evidence_record
 
 INCIDENT_CREATE_PERMISSION = "incident.create"
 INCIDENT_DELETE_PERMISSION = "incident.delete"
-EVENTS_READ_PERMISSION = "events.read"
 # Question attachments are discussion material uploaded by Keen users. They stay
 # with their question thread and never appear as the event's collected evidence.
 QUESTION_ATTACHMENT_KIND = "question_attachment"

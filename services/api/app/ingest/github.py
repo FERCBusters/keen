@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
@@ -9,7 +9,7 @@ from xml.etree import ElementTree as ET
 import httpx
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import to_utc_naive, utc_now_naive
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
@@ -50,20 +50,6 @@ def _basic_auth() -> tuple[str, str] | None:
     return None
 
 
-def _to_utc_naive(dt: datetime) -> datetime:
-    """Convert a datetime to *UTC naive*.
-
-    Our DB columns are TIMESTAMP WITHOUT TIME ZONE. We therefore normalize
-    ingester comparisons and cursor storage to naive UTC to avoid
-    offset-aware vs offset-naive comparison errors.
-    """
-
-    if dt.tzinfo is None:
-        # Treat naive values as UTC.
-        return dt
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
-
-
 def _parse_iso_ts(value: str | None) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
@@ -71,7 +57,7 @@ def _parse_iso_ts(value: str | None) -> datetime | None:
     # Common GitHub forms: 2026-01-07T00:09:08Z or with offset
     try:
         dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-        return _to_utc_naive(dt)
+        return to_utc_naive(dt)
     except Exception:
         return None
 
@@ -265,7 +251,7 @@ def ingest_github_repo(
         )
 
     created = 0
-    cursor_last = _to_utc_naive(cur.last_ts) if cur.last_ts else None
+    cursor_last = to_utc_naive(cur.last_ts) if cur.last_ts else None
     newest_ts = cursor_last
 
     # GitHub returns newest-first; process oldest-first for cursor stability
@@ -407,7 +393,7 @@ def ingest_github_org_events(
         events = _fetch_pages(c, endpoint_path, per_page=per_page, max_pages=max_pages)
 
     created = 0
-    cursor_last = _to_utc_naive(cur.last_ts) if cur.last_ts else None
+    cursor_last = to_utc_naive(cur.last_ts) if cur.last_ts else None
     newest_ts = cursor_last
 
     for e in reversed(events):
@@ -595,7 +581,7 @@ def ingest_github_org_auditlog(
 
     now = utc_now_naive()
     since = (
-        _to_utc_naive(cur.last_ts)
+        to_utc_naive(cur.last_ts)
         if cur.last_ts
         else (now - timedelta(days=lookback_days))
     )
@@ -606,7 +592,7 @@ def ingest_github_org_auditlog(
     created = 0
     seen = 0
     pages = 0
-    cursor_last = _to_utc_naive(cur.last_ts) if cur.last_ts else None
+    cursor_last = to_utc_naive(cur.last_ts) if cur.last_ts else None
     newest_ts = cursor_last
 
     with _client() as c:
@@ -755,7 +741,7 @@ def ingest_github_atom_feed(
 
     now = utc_now_naive()
     since = (
-        _to_utc_naive(cur.last_ts)
+        to_utc_naive(cur.last_ts)
         if cur.last_ts
         else (now - timedelta(days=lookback_days))
     )
@@ -773,7 +759,7 @@ def ingest_github_atom_feed(
     entries = root.findall("a:entry", ns)[:max_entries]
 
     created = 0
-    cursor_last = _to_utc_naive(cur.last_ts) if cur.last_ts else None
+    cursor_last = to_utc_naive(cur.last_ts) if cur.last_ts else None
     newest_ts = cursor_last
     newest_in_feed: datetime | None = None
 
@@ -816,8 +802,8 @@ def ingest_github_atom_feed(
 
         title = (entry.findtext("a:title", default="", namespaces=ns) or "").strip()
         link = None
-        for l in entry.findall("a:link", ns):
-            href = l.attrib.get("href")
+        for link_el in entry.findall("a:link", ns):
+            href = link_el.attrib.get("href")
             if href:
                 link = href
                 break

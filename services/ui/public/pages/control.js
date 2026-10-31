@@ -1,6 +1,7 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { createRelatedControlsBrowser } from './related-controls.js';
 import { createControlRequirements } from './control-requirements.js';
+import { scoreBadge } from '/pages/risk-common.js';
 import {
   errorText,
   initNavbar,
@@ -505,12 +506,6 @@ function renderLinkedClauses() {
     </div>`;
 }
 
-function riskScoreBadge(score) {
-  const n = Number(score || 0);
-  const cls = n < 5 ? 'text-bg-success' : n <= 12 ? 'text-bg-warning' : 'text-bg-danger';
-  return `<span class="badge ${cls}">${esc(String(n))}</span>`;
-}
-
 let risksLoaded = false;
 async function loadLinkedRisks({ force = false } = {}) {
   if (!featureEnabled(me, 'risk_cia')) return;
@@ -562,8 +557,8 @@ async function loadLinkedRisks({ force = false } = {}) {
                 <td>${esc(r.category?.name || '')}</td>
                 <td>${esc(r.subcategory?.name || '')}</td>
                 <td>${types || '<span class="small-muted">-</span>'}</td>
-                <td class="text-end">${riskScoreBadge(r.risk_score)}</td>
-                <td class="text-end">${riskScoreBadge(r.residual_risk_score)}</td>
+                <td class="text-end">${scoreBadge(r.risk_score)}</td>
+                <td class="text-end">${scoreBadge(r.residual_risk_score)}</td>
                 <td>${userPillHtml(r.risk_owner)}</td>
               </tr>`;
               })
@@ -1011,7 +1006,7 @@ wireOffsetPagerButtons(pagerButtons, (direction) => {
   loadEvents();
 });
 
-// Save search
+// Toggle editing of the control's clause applicability.
 editClauseApplicabilityBtn?.addEventListener('click', async () => {
   if (!me?.is_admin) return;
   clauseApplicabilityEditMode = !clauseApplicabilityEditMode;

@@ -17,8 +17,8 @@ from app.services.risks import (
     RiskMitigatorAnalysePayload,
     RiskSubcategoryPayload,
     RiskUpsertPayload,
-    _can_manage_risks,
-    _can_read_risks,
+    can_manage_risks,
+    can_read_risks,
 )
 
 router = Router()
@@ -28,14 +28,14 @@ _RISK_TYPES = {"Confidentiality", "Integrity", "Availability"}
 
 def require_risk_read(request: Request, db: Session = Depends(get_db)) -> User:
     user = require_authenticated(request)
-    if not _can_read_risks(db, user):
+    if not can_read_risks(db, user):
         raise HTTPException(status_code=403, detail="risk.read permission required")
     return user
 
 
 def require_risk_manage(request: Request, db: Session = Depends(get_db)) -> User:
     user = require_authenticated(request)
-    if not _can_manage_risks(db, user):
+    if not can_manage_risks(db, user):
         raise HTTPException(status_code=403, detail="risk.manage permission required")
     return user
 

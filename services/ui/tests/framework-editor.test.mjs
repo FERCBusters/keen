@@ -180,7 +180,7 @@ test('organisation framework selection respects environment restrictions and sav
   await settle(() => state.put.length === 2);
   assert.equal(state.put[1].body.version, 4);
   await settle(() => $('save-selection').disabled === false);
-  assert.equal(ui.window.keenFrameworkDefault, 'B');
+  assert.equal(ui.window.mospFrameworkDefault, 'B');
 });
 
 test('saving an empty organisation selection is refused locally', async (t) => {

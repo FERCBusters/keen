@@ -854,10 +854,11 @@ def test_control_relationship_view_skips_orphaned_and_unlisted_links(api):
 def test_serializers_tolerate_missing_rows_and_refuse_unknown_entity_types():
     # Optional relations serialise to an empty value, and the entity dispatcher
     # refuses a type it does not know.
+    from app.services.control_refs import control_summary
     from app.services.errors import DomainError
     from app.services.isms import serializers
 
-    assert serializers._control_out(None) == {}
+    assert control_summary(None) == {}
     assert serializers._clause_out(None) == {}
     assert serializers._business_process_out(None) is None
     assert serializers._asset_category_out(None) is None
@@ -873,17 +874,17 @@ def test_serializers_tolerate_missing_rows_and_refuse_unknown_entity_types():
 def test_isms_access_requires_an_active_user_record(api):
     # Anonymous callers and deactivated accounts have no ISMS access, whatever
     # permissions the account once held.
-    from app.services.isms.access import _can_manage_isms, _can_read_isms
+    from app.services.isms.access import can_manage_isms, can_read_isms
 
-    assert _can_read_isms(api.db, None) is False
-    assert _can_manage_isms(api.db, None) is False
+    assert can_read_isms(api.db, None) is False
+    assert can_manage_isms(api.db, None) is False
     api.admin.is_active = False
     api.db.commit()
-    assert _can_read_isms(api.db, api.admin) is False
-    assert _can_manage_isms(api.db, api.admin) is False
+    assert can_read_isms(api.db, api.admin) is False
+    assert can_manage_isms(api.db, api.admin) is False
     api.admin.is_active = True
     api.db.commit()
-    assert _can_manage_isms(api.db, api.admin) is True
+    assert can_manage_isms(api.db, api.admin) is True
 
 
 def test_link_helpers_deduplicate_references_and_ignore_blank_names(api):
@@ -917,9 +918,9 @@ def test_link_helpers_deduplicate_references_and_ignore_blank_names(api):
     )
     assert api.db.query(IsmsEntityControlLink).filter_by(entity_id=oid).count() == 1
     assert api.db.query(IsmsEntityClauseLink).filter_by(entity_id=oid).count() == 1
-    assert mutations._license_by_name(api.db, "   ") is None
-    assert mutations._license_or_create_by_name(api.db, "") is None
-    assert mutations._license_or_create_by_name(api.db, None) is None
+    assert mutations.license_by_name(api.db, "   ") is None
+    assert mutations.license_or_create_by_name(api.db, "") is None
+    assert mutations.license_or_create_by_name(api.db, None) is None
     assert api.db.query(IsmsLicense).count() == 0
     row = api.db.get(IsmsObjective, oid)
     mutations._replace_objective_resources(api.db, row, [api.admin.id])

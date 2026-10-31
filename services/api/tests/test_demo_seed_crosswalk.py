@@ -106,7 +106,8 @@ def db():
 
 def migrate(db, monkeypatch):
     spec = importlib.util.spec_from_file_location(
-        "crosswalk", ROOT / "alembic/legacy_versions/0079_seed_control_crosswalk.py"
+        "crosswalk",
+        ROOT / "tests/fixtures/historical_migrations/0079_seed_control_crosswalk.py",
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -343,7 +344,7 @@ def test_swot_demo_relationships_frameworks_and_soa_visibility(db, monkeypatch):
             for r in result["swot_items"]
             for c in r["controls"]
         )
-    monkeypatch.setattr(soa, "_can_read_isms", lambda *args: False)
+    monkeypatch.setattr(soa, "can_read_isms", lambda *args: False)
     assert soa.statement_of_applicability(user=user, db=db)["swot_items"] == []
     monkeypatch.undo()
     from app.services.features import state

@@ -13,7 +13,7 @@ from app.db.models import (
 )
 from app.services.errors import DomainError
 from app.services.features import state as feature_state
-from app.services.isms.access import _can_read_isms
+from app.services.isms.access import can_read_isms
 from app.services.quizzes.access import require_manage
 from app.services.quizzes.scoring import passed
 
@@ -23,7 +23,7 @@ PAGE_SIZE = 50
 def person_quizzes(*, db, user, person_id, offset=0, assignments_offset=0):
     # quiz.read exposes cohort results, not named individual results. Do not
     # weaken that boundary by embedding them in a People page.
-    if not _can_read_isms(db, user):
+    if not can_read_isms(db, user):
         raise DomainError(403, "ISMS read access required")
     require_manage(db, user)
     feature_state(db).require("people", "quizzes")

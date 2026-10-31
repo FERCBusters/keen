@@ -101,7 +101,9 @@ def test_state_endpoint_requires_admin_and_persists_upsert(db):
         )
 
 
-def test_agents_retry_without_losing_records_or_revoking_credentials(agent_setup):
+def test_agents_retry_without_losing_records_or_revoking_credentials(
+    agent_setup,  # noqa: F811 - fixture imported above
+):
     client, factory, headers, info, stored, _ = agent_setup
     with factory() as db:
         pause(db, "keen-agent")

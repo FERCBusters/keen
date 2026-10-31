@@ -24,6 +24,7 @@ from app.security.permissions import (
 from app.security.roles import (
     compute_effective_role,
     count_effective_admins,
+    is_effective_admin,
     lock_admin_changes,
     normalize_role,
 )
@@ -55,11 +56,15 @@ def _clean_email(raw: str | None) -> str | None:
     return value
 
 
-def list_users(*, context: ChangeContext, db: Session) -> list[UserOut]:
-    u = context.actor
-    eff = getattr(u, "effective_role", None) if isinstance(u, User) else None
-    if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
+def _require_admin_actor(context: ChangeContext, db: Session) -> User:
+    actor = context.actor
+    if not isinstance(actor, User) or not is_effective_admin(db, actor):
         raise DomainError(status_code=403, detail="Admin role required")
+    return actor
+
+
+def list_users(*, context: ChangeContext, db: Session) -> list[UserOut]:
+    _require_admin_actor(context, db)
 
     users = db.query(User).order_by(User.username.asc()).all()
 
@@ -113,10 +118,7 @@ def list_users(*, context: ChangeContext, db: Session) -> list[UserOut]:
 def create_user_admin(
     *, payload: UserCreatePayload, context: ChangeContext, db: Session
 ) -> UserOut:
-    u = context.actor
-    eff = getattr(u, "effective_role", None) if isinstance(u, User) else None
-    if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
-        raise DomainError(status_code=403, detail="Admin role required")
+    _require_admin_actor(context, db)
 
     try:
         created = create_user(
@@ -154,10 +156,7 @@ def update_user_admin(
     context: ChangeContext,
     db: Session,
 ) -> UserOut:
-    u = context.actor
-    eff = getattr(u, "effective_role", None) if isinstance(u, User) else None
-    if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
-        raise DomainError(status_code=403, detail="Admin role required")
+    u = _require_admin_actor(context, db)
 
     lock_admin_changes(db)
 
@@ -239,10 +238,7 @@ def update_user_admin(
 def delete_user_admin(
     *, user_id: uuid.UUID, context: ChangeContext, db: Session
 ) -> dict:
-    u = context.actor
-    eff = getattr(u, "effective_role", None) if isinstance(u, User) else None
-    if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
-        raise DomainError(status_code=403, detail="Admin role required")
+    u = _require_admin_actor(context, db)
 
     lock_admin_changes(db)
 
@@ -268,10 +264,7 @@ def delete_user_admin(
 def get_user_access_admin(
     *, user_id: uuid.UUID, context: ChangeContext, db: Session
 ) -> UserAccessOut:
-    u = context.actor
-    eff = getattr(u, "effective_role", None) if isinstance(u, User) else None
-    if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
-        raise DomainError(status_code=403, detail="Admin role required")
+    _require_admin_actor(context, db)
 
     target = db.query(User).filter(User.id == user_id).one_or_none()
     if not target:
@@ -314,10 +307,7 @@ def set_user_access_admin(
     context: ChangeContext,
     db: Session,
 ) -> UserAccessOut:
-    u = context.actor
-    eff = getattr(u, "effective_role", None) if isinstance(u, User) else None
-    if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
-        raise DomainError(status_code=403, detail="Admin role required")
+    _require_admin_actor(context, db)
 
     lock_admin_changes(db)
 
@@ -383,10 +373,7 @@ def set_user_password_admin(
     context: ChangeContext,
     db: Session,
 ) -> dict:
-    u = context.actor
-    eff = getattr(u, "effective_role", None) if isinstance(u, User) else None
-    if not isinstance(u, User) or (eff or u.role or "") != ROLE_ADMIN:
-        raise DomainError(status_code=403, detail="Admin role required")
+    _require_admin_actor(context, db)
 
     target = (
         db.query(User)

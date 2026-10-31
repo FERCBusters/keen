@@ -13,8 +13,10 @@ import {
   withFramework,
   userPillHtml,
   userPillsHtml,
+  lookupTab,
 } from '/app.js';
 import { clauseBadges, controlBadges } from '/pages/isms-detail-common.js';
+import { scoreBadge } from '/pages/risk-common.js';
 
 await initNavbar();
 enableTableSorting();
@@ -250,14 +252,6 @@ function renderClauses() {
   }
 }
 
-function riskScoreBadge(value) {
-  const n = Number(value || 0);
-  let cls = 'text-bg-success';
-  if (n >= 13) cls = 'text-bg-danger';
-  else if (n >= 5) cls = 'text-bg-warning';
-  return `<span class="badge ${cls}">${esc(String(n))}</span>`;
-}
-
 function renderRisks() {
   const risks = Array.isArray(soa.risks) ? soa.risks : [];
   const q = filterText(risksFilter);
@@ -291,8 +285,8 @@ function renderRisks() {
       <td>${esc(r.subcategory?.name || '-')}</td>
       <td>${esc((r.risk_types || []).join(', ') || '-')}</td>
       <td class="wrap">${esc(shorten(r.threat_summary || '', 220))}</td>
-      <td class="text-end">${riskScoreBadge(r.risk_score)}</td>
-      <td class="text-end">${riskScoreBadge(r.residual_risk_score)}</td>
+      <td class="text-end">${scoreBadge(r.risk_score)}</td>
+      <td class="text-end">${scoreBadge(r.residual_risk_score)}</td>
       <td>${userPillHtml(r.risk_owner)}</td>
       <td>${controls}</td>
     </tr>`;
@@ -618,17 +612,20 @@ ismsEffectivenessFilter?.addEventListener('input', renderIsmsEffectiveness);
 function activateInitialTab() {
   const tab = new URLSearchParams(window.location.search || '').get('tab');
   if (!tab) return;
-  const mapped = {
-    interestedparties: 'soaInterestedPartiesTab',
-    isms: 'soaIsmsObjectivesTab',
-    ismsobjectives: 'soaIsmsObjectivesTab',
-    ismsdocuments: 'soaIsmsDocumentsTab',
-    effectiveness: 'soaIsmsEffectivenessTab',
-    ismseffectiveness: 'soaIsmsEffectivenessTab',
-    ismseffectivenessmeasures: 'soaIsmsEffectivenessTab',
-    orgassets: 'soaIsmsOrgAssetsTab',
-    ismsorgassets: 'soaIsmsOrgAssetsTab',
-  }[String(tab || '').toLowerCase()];
+  const mapped = lookupTab(
+    {
+      interestedparties: 'soaInterestedPartiesTab',
+      isms: 'soaIsmsObjectivesTab',
+      ismsobjectives: 'soaIsmsObjectivesTab',
+      ismsdocuments: 'soaIsmsDocumentsTab',
+      effectiveness: 'soaIsmsEffectivenessTab',
+      ismseffectiveness: 'soaIsmsEffectivenessTab',
+      ismseffectivenessmeasures: 'soaIsmsEffectivenessTab',
+      orgassets: 'soaIsmsOrgAssetsTab',
+      ismsorgassets: 'soaIsmsOrgAssetsTab',
+    },
+    tab.toLowerCase(),
+  );
   const target = document.getElementById(
     mapped || `soa${tab.charAt(0).toUpperCase()}${tab.slice(1)}Tab`,
   );
