@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 30
     # Images are pinned by digest; tools/docker_image_pins.py keeps them current.
     container:
-      image: docker.io/library/debian:13@sha256:8c4733a92aacd0bcff3779eadc35a4a5147f36cb20a5fcb56504cbc740212259
+      image: docker.io/library/debian:13@sha256:2dc419c6d7fe3dad0a2f9fd469c34cc90b0f9ba642d8fde837fe3d7d34a0e7f1
     services:
       postgres:
         image: docker.io/library/postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
