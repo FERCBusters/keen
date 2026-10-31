@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -13,8 +11,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import Artifact, ControlItem, Event, IngestionCursor, Mapping
-from app.ingest.common import ensure_controls
+from app.db.models import Artifact, Event, IngestionCursor
+from app.ingest.common import apply_rules
 from app.ingest.connections import (
     artifact_key,
     connection_runs,
@@ -23,7 +21,13 @@ from app.ingest.connections import (
     namespace,
     settings,
 )
-from app.mapping.rules import TARGET_KINDS, evaluate_by_framework, load_rules
+from app.ingest.log_pipeline import (
+    brief_http_request,
+    ensure_utc,
+    make_fingerprint,
+    truncate,
+    try_parse_json_line,
+)
 from app.security.errors import collection_error
 from app.security.redaction import (
     prepare_artifact_bytes,
@@ -32,21 +36,6 @@ from app.security.redaction import (
 )
 from app.services.ingestion_pause import pausable
 from app.storage.s3 import put_bytes
-
-
-def _ensure_utc(dt: datetime | None) -> datetime | None:
-    """Return a timezone-aware UTC datetime.
-
-    Some deployments store cursor timestamps as TIMESTAMP WITHOUT TIME ZONE.
-    SQLAlchemy then returns offset-naive datetimes, which cannot be compared to
-    timezone-aware values.
-    """
-
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
 
 
 def _cloudwatch_client(region: str | None = None):
@@ -78,46 +67,6 @@ def _cloudwatch_client(region: str | None = None):
 
 def load_cloudwatch_logs_config(path: str) -> dict[str, Any]:
     return load_document("cloudwatch_logs", path)
-
-
-def _fingerprint(*parts: str) -> str:
-    h = hashlib.sha256()
-    for p in parts:
-        h.update((p or "").encode("utf-8", errors="replace"))
-        h.update(b"|")
-    return h.hexdigest()[:32]
-
-
-def _try_parse_json_line(line: str) -> Any | None:
-    s = (line or "").strip()
-    if not s:
-        return None
-    if s[0] not in "{[":
-        return None
-    try:
-        return json.loads(s)
-    except Exception:
-        return None
-
-
-def _truncate(s: str, limit: int = 220) -> str:
-    s2 = " ".join((s or "").split())
-    if len(s2) <= limit:
-        return s2
-    return s2[: limit - 1] + "…"
-
-
-def _brief_http_request(log_line: str) -> str:
-    """Extract a compact HTTP request from common access-log formats."""
-
-    s = str(log_line or "")
-    m = re.search(r'"(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+([^\s\"]+)', s)
-    if not m:
-        return ""
-    method = m.group(1)
-    path = m.group(2).split("?", 1)[0]
-    path = _truncate(path, 120)
-    return f"{method} {path}"
 
 
 def _extract_actor(parsed: Any) -> str | None:
@@ -192,109 +141,15 @@ def _summarize_json(parsed: Any, line: str) -> tuple[str, dict[str, Any]]:
             parts.append(f"by {actor}")
 
         if isinstance(msg, str) and msg.strip():
-            brief = _brief_http_request(msg)
+            brief = brief_http_request(msg)
             parts.append("-")
-            parts.append(brief or _truncate(msg, 140))
+            parts.append(brief or truncate(msg, 140))
 
         summary = " ".join([p for p in parts if p]).strip()
         if summary:
             return summary, extracted
 
-    return _truncate(line, 340), extracted
-
-
-def _ensure_control_items(
-    db: Session, framework_slug: str, targets: list[tuple[str, str | None]]
-) -> dict[tuple[str, str | None], ControlItem]:
-    return ensure_controls(db, framework_slug, targets, require_framework=False)
-
-
-def _apply_rules_and_store_mappings(db: Session, ev: Event) -> int:
-    rules = load_rules(settings.rules_path, db=db)
-    event_dict = {
-        "source": ev.source,
-        "connection_id": ev.connection_id,
-        "system": ev.system,
-        "actor": ev.actor,
-        "action": ev.action,
-        "outcome": ev.outcome,
-        "severity": ev.severity,
-        "summary": ev.summary,
-        "raw_pointer": ev.raw_pointer,
-        "normalized_payload": ev.normalized_payload,
-    }
-    matched = evaluate_by_framework(event_dict, rules, details=True)
-    if not matched:
-        return 0
-
-    created = 0
-    for framework_slug, entries in matched.items():
-        normalized: list[dict[str, Any]] = []
-        for it in entries or []:
-            if isinstance(it, str):
-                ref = it.strip()
-                if not ref:
-                    continue
-                normalized.append(
-                    {
-                        "ref": ref,
-                        "kind": None,
-                        "confidence": 0.8,
-                        "rationale": f"auto by rules ({framework_slug})",
-                    }
-                )
-                continue
-
-            if isinstance(it, dict):
-                ref = str(it.get("ref") or "").strip()
-                kind = it.get("kind")
-                if not ref or (kind is not None and kind not in TARGET_KINDS):
-                    continue
-                conf_raw = it.get("confidence")
-                try:
-                    conf = float(conf_raw) if conf_raw is not None else 0.8
-                except Exception:
-                    conf = 0.8
-                conf = max(0.0, min(1.0, conf))
-                rationale = str(it.get("rationale") or "").strip() or (
-                    f"auto by rules ({framework_slug})"
-                )
-                normalized.append(
-                    {
-                        "ref": ref,
-                        "kind": kind,
-                        "confidence": conf,
-                        "rationale": rationale,
-                    }
-                )
-
-        if not normalized:
-            continue
-
-        targets = [(x["ref"], x["kind"]) for x in normalized]
-        controls = _ensure_control_items(db, framework_slug, targets)
-
-        for item in normalized:
-            ci = controls.get((item["ref"], item["kind"]))
-            if not ci:
-                continue
-            stmt = (
-                pg_insert(Mapping)
-                .values(
-                    id=uuid.uuid4(),
-                    event_id=ev.id,
-                    control_item_id=ci.id,
-                    confidence=item["confidence"],
-                    method="rule",
-                    rationale=item["rationale"],
-                    mapped_by="system",
-                )
-                .on_conflict_do_nothing(index_elements=["event_id", "control_item_id"])
-                .returning(Mapping.id)
-            )
-            if db.execute(stmt).scalar() is not None:
-                created += 1
-    return created
+    return truncate(line, 340), extracted
 
 
 def ingest_cloudwatch_logs_once(
@@ -321,7 +176,7 @@ def ingest_cloudwatch_logs_once(
         db.add(cur)
         db.flush()
 
-    cur_last_ts = _ensure_utc(cur.last_ts)
+    cur_last_ts = ensure_utc(cur.last_ts)
     if cur_last_ts is not cur.last_ts:
         cur.last_ts = cur_last_ts
 
@@ -414,16 +269,16 @@ def ingest_cloudwatch_logs_once(
             # of a long one, and for an event without one, a digest of where and
             # when it was logged and what it said.
             if not event_id:
-                ext_id = _fingerprint(log_group, log_stream, str(ts_ms), msg)
+                ext_id = make_fingerprint(log_group, log_stream, str(ts_ms), msg)
             elif len(event_id) <= 120:
                 ext_id = event_id
             else:
-                ext_id = _fingerprint(log_group, event_id)
+                ext_id = make_fingerprint(log_group, event_id)
 
-            parsed = _try_parse_json_line(msg)
+            parsed = try_parse_json_line(msg)
             actor = _extract_actor(parsed) if parsed is not None else None
 
-            summary = _truncate(msg, 340)
+            summary = truncate(msg, 340)
             normalized: dict[str, Any] = {
                 "cloudwatch": {
                     "log_group": log_group,
@@ -540,7 +395,7 @@ def ingest_cloudwatch_logs_once(
                     external_id=namespace(ext_id),
                     **identity(),
                 )
-                created_mappings += _apply_rules_and_store_mappings(db, ev_for_rules)
+                created_mappings += apply_rules(db, ev_for_rules)
 
             # Advance max_seen_ts even for deduped events.
             if (max_seen_ts is None) or (ts > max_seen_ts):

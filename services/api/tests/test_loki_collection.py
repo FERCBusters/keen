@@ -24,7 +24,7 @@ from app.db.models import (
     Mapping,
     SourceIngestionState,
 )
-from app.ingest import loki
+from app.ingest import log_pipeline, loki
 from app.ingest.connections import connection_scope, connections
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri
 from sqlalchemy.orm import sessionmaker
@@ -568,10 +568,10 @@ def test_naive_timestamps_are_read_as_utc_for_loki_windows():
 
 
 def test_blank_and_non_json_lines_are_never_parsed_as_structured():
-    assert loki._try_parse_json_line("") is None
-    assert loki._try_parse_json_line("   \n") is None
-    assert loki._try_parse_json_line("plain text {not json}") is None
-    assert loki._try_parse_json_line(' {"a": 1} ') == {"a": 1}
+    assert log_pipeline.try_parse_json_line("") is None
+    assert log_pipeline.try_parse_json_line("   \n") is None
+    assert log_pipeline.try_parse_json_line("plain text {not json}") is None
+    assert log_pipeline.try_parse_json_line(' {"a": 1} ') == {"a": 1}
 
 
 def test_unusable_numeric_settings_fall_back_to_the_configured_default():
@@ -581,117 +581,3 @@ def test_unusable_numeric_settings_fall_back_to_the_configured_default():
     assert loki._positive_int(None, 7, minimum=1) == 7
     assert loki._positive_int(-3, 0, minimum=1) == 1
     assert loki._positive_int("12", 5000) == 12
-
-
-def _event():
-    return SimpleNamespace(
-        id="ev-1",
-        source="loki",
-        connection_id="env:loki",
-        system="bastion",
-        actor=None,
-        action="login",
-        outcome="success",
-        severity=4,
-        summary="Accepted publickey",
-        raw_pointer={},
-        normalized_payload={},
-    )
-
-
-class _Executes:
-    """A session that records mapping inserts and reports each as new."""
-
-    def __init__(self):
-        self.statements = []
-
-    def execute(self, stmt):
-        self.statements.append(stmt)
-        return SimpleNamespace(scalar=lambda: "mapping-id")
-
-
-def test_rule_matches_without_usable_targets_store_no_mappings(monkeypatch):
-    # Blank references, unknown kinds, entries that are neither text nor
-    # objects, and frameworks whose entries are all unusable never reach the
-    # control catalogue or the mapping table.
-    monkeypatch.setattr(loki, "load_rules", lambda *a, **k: [])
-    monkeypatch.setattr(
-        loki,
-        "evaluate_by_framework",
-        lambda *a, **k: {
-            FW: ["  ", {"ref": ""}, {"ref": "A.8.5", "kind": "chapter"}, 42],
-            "OTHER": [],
-        },
-    )
-    ensured = []
-
-    def ensure(db, framework, targets):
-        ensured.append((framework, targets))
-        return {}
-
-    monkeypatch.setattr(loki, "_ensure_control_items", ensure)
-    db = _Executes()
-    assert loki._apply_rules_and_store_mappings(db, _event()) == 0
-    assert ensured == [] and db.statements == []
-
-
-def test_no_rule_match_stores_nothing(monkeypatch):
-    monkeypatch.setattr(loki, "load_rules", lambda *a, **k: [])
-    monkeypatch.setattr(loki, "evaluate_by_framework", lambda *a, **k: {})
-    monkeypatch.setattr(
-        loki,
-        "_ensure_control_items",
-        lambda *a: pytest.fail("no catalogue lookup without a match"),
-    )
-    db = _Executes()
-    assert loki._apply_rules_and_store_mappings(db, _event()) == 0
-    assert db.statements == []
-
-
-def test_plain_references_and_odd_confidences_become_bounded_mappings(monkeypatch):
-    # A bare reference maps at the default confidence; a confidence that is no
-    # number falls back and numbers are clamped to the unit interval.
-    monkeypatch.setattr(loki, "load_rules", lambda *a, **k: [])
-    monkeypatch.setattr(
-        loki,
-        "evaluate_by_framework",
-        lambda *a, **k: {
-            FW: [
-                " A.8.5 ",
-                {"ref": "A.5.1", "kind": "control", "confidence": "high"},
-                {"ref": "A.5.2", "confidence": 7, "rationale": " why "},
-                {"ref": "A.9.9"},
-            ]
-        },
-    )
-    controls = {
-        ("A.8.5", None): SimpleNamespace(id="c1"),
-        ("A.5.1", "control"): SimpleNamespace(id="c2"),
-        ("A.5.2", None): SimpleNamespace(id="c3"),
-    }
-    ensured = []
-
-    def ensure(db, framework, targets):
-        ensured.append((framework, targets))
-        return controls
-
-    monkeypatch.setattr(loki, "_ensure_control_items", ensure)
-    db = _Executes()
-    created = loki._apply_rules_and_store_mappings(db, _event())
-    # The unresolved A.9.9 target attaches nothing.
-    assert created == 3 and len(db.statements) == 3
-    assert ensured == [
-        (FW, [("A.8.5", None), ("A.5.1", "control"), ("A.5.2", None), ("A.9.9", None)])
-    ]
-    values = [
-        {
-            k: v.value
-            for k, v in stmt.compile().binds.items()
-            if k in {"confidence", "rationale", "control_item_id"}
-        }
-        for stmt in db.statements
-    ]
-    assert [v["control_item_id"] for v in values] == ["c1", "c2", "c3"]
-    assert [v["confidence"] for v in values] == [0.8, 0.8, 1.0]
-    assert values[0]["rationale"] == f"auto by rules ({FW})"
-    assert values[2]["rationale"] == "why"

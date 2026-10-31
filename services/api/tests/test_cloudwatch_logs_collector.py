@@ -6,8 +6,14 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from app.ingest import cloudwatch_logs as cl
+from app.ingest.log_pipeline import (
+    brief_http_request,
+    ensure_utc,
+    make_fingerprint,
+    truncate,
+    try_parse_json_line,
+)
 
 MS = 1_760_000_000_000
 
@@ -26,34 +32,34 @@ def configured(region="ap-southeast-2", masking="false"):
             )
         )
         stack.enter_context(patch.object(cl, "put_bytes"))
-        stack.enter_context(patch.object(cl, "load_rules", return_value={}))
+        stack.enter_context(patch.object(cl, "apply_rules", return_value=0))
         yield
 
 
 def test_ensure_utc_and_helpers():
     naive = datetime(2026, 10, 9, 12, 0, 0)
-    assert cl._ensure_utc(naive) == naive.replace(tzinfo=timezone.utc)
-    assert cl._ensure_utc(None) is None
-    assert cl._ensure_utc(naive.replace(tzinfo=timezone.utc)) == naive.replace(
+    assert ensure_utc(naive) == naive.replace(tzinfo=timezone.utc)
+    assert ensure_utc(None) is None
+    assert ensure_utc(naive.replace(tzinfo=timezone.utc)) == naive.replace(
         tzinfo=timezone.utc
     )
-    assert cl._try_parse_json_line('{"a": 1}') == {"a": 1}
-    assert cl._try_parse_json_line("[1]") == [1]
-    for bad in ["", "x", "{", None, "not json"]:
-        assert cl._try_parse_json_line(bad) is None
-    assert cl._truncate("  a   b  ") == "a b"
-    assert len(cl._truncate("x" * 400)) == 220
-    assert cl._fingerprint("a", "b") == cl._fingerprint("a", "b")
-    assert cl._fingerprint("a", "b") != cl._fingerprint("a", "c")
-    assert cl._fingerprint("a", None) == cl._fingerprint("a", "")
+    assert try_parse_json_line('{"a": 1}') == {"a": 1}
+    assert try_parse_json_line("[1]") == [1]
+    for bad in ["", "x", "{", "not json"]:
+        assert try_parse_json_line(bad) is None
+    assert truncate("  a   b  ") == "a b"
+    assert len(truncate("x" * 400)) == 220
+    assert make_fingerprint("a", "b") == make_fingerprint("a", "b")
+    assert make_fingerprint("a", "b") != make_fingerprint("a", "c")
+    assert make_fingerprint("a", None) == make_fingerprint("a", "")
 
 
 def test_brief_http_request():
-    assert cl._brief_http_request('"GET /api/x?secret=y HTTP/1.1" 200') == "GET /api/x"
-    assert cl._brief_http_request('"POST /login HTTP/1.1" 401') == "POST /login"
-    assert cl._brief_http_request("no request here") == ""
+    assert brief_http_request('"GET /api/x?secret=y HTTP/1.1" 200') == "GET /api/x"
+    assert brief_http_request('"POST /login HTTP/1.1" 401') == "POST /login"
+    assert brief_http_request("no request here") == ""
     query = '"' + "GET /" + "?" + "token=fixture-secret" + '"'
-    brief = cl._brief_http_request(query)
+    brief = brief_http_request(query)
     assert "fixture-secret" not in brief
 
 
@@ -259,7 +265,7 @@ def test_events_without_an_aws_event_id_keep_distinct_identities(db):
 
     # Events are stored in time order, so compare the keys as a multiset.
     def key(stream, ts, message):
-        return cl._fingerprint("/prod/app", stream, str(ts), message)
+        return make_fingerprint("/prod/app", stream, str(ts), message)
 
     assert sorted(identities) == sorted(
         [
@@ -268,7 +274,7 @@ def test_events_without_an_aws_event_id_keep_distinct_identities(db):
             key("web-2", MS, "one"),
             key("web-1", MS + 1, "two"),
             # A long AWS id is digested to a fixed-length key.
-            cl._fingerprint("/prod/app", "x" * 121),
+            make_fingerprint("/prod/app", "x" * 121),
         ]
     )
     assert len(set(identities)) == 4
@@ -350,51 +356,32 @@ def test_once_severity_default_and_masking_flags(db):
         cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
 
 
-def test_apply_rules_and_store_mappings_branches(db):
-    control = MagicMock()
-    control.ref = "A.1"
-    ev = MagicMock(
-        source="cloudwatch_logs",
-        connection_id="conn",
-        system="s",
-        actor="a",
-        action="log_event",
-        outcome="info",
-        severity=3,
-        summary="s",
-        raw_pointer={},
-        normalized_payload={},
-    )
+def test_ingested_aws_logs_apply_rules_with_the_persisted_event(db):
+    # The collector persists each event and then applies mapping rules to the
+    # stored row, so rule provenance records the event that was ingested.
+    seen = []
 
-    # no matches -> zero mappings and no queries
-    with (
-        patch.object(cl, "load_rules", return_value={}, create=False),
-        patch.object(cl, "evaluate_by_framework", return_value={}),
-    ):
-        assert cl._apply_rules_and_store_mappings(db, ev) == 0
+    def aware_rules(_db, ev):
+        seen.append(ev)
+        return 2
 
-    matched = {
-        "soc2": [
-            "A.1",
-            {"ref": "B.2", "confidence": "x"},
-            {"ref": "C.3", "confidence": 5},
-            {"ref": "  "},
-            {"confidence": 1},
-        ]
+    fake = fake_boto_client()
+    fake["client"].filter_log_events.return_value = {
+        "events": [{"timestamp": MS, "eventId": "ev1", "message": "hello"}]
     }
-    db.query.return_value.filter.return_value.all = MagicMock(return_value=[control])
-
-    def execute(stmt):
-        result = MagicMock()
-        result.scalar.return_value = 1
-        return result
-
-    db.execute.side_effect = execute
+    db.execute.side_effect = lambda stmt: MagicMock(scalar=lambda: "ev-row")
+    set_cursor(db, MagicMock(last_ts=None))
     with (
-        patch.object(cl, "load_rules", return_value={"rules": True}, create=False),
-        patch.object(cl, "evaluate_by_framework", return_value=matched),
+        configured(),
+        fake["factory"],
+        patch.object(cl, "apply_rules", side_effect=aware_rules),
     ):
-        assert cl._apply_rules_and_store_mappings(db, ev) == 3
+        result = cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
+
+    assert result["created_mappings"] == 2
+    (applied,) = seen
+    assert applied.id == "ev-row"
+    assert applied.source == "cloudwatch_logs"
 
 
 def test_all_config_variants(db):
@@ -439,35 +426,6 @@ def test_load_config_reads_the_managed_document():
     with patch.object(cl, "load_document", return_value={"queries": []}) as document:
         assert cl.load_cloudwatch_logs_config("fixture.yml") == {"queries": []}
     document.assert_called_once_with("cloudwatch_logs", "fixture.yml")
-
-
-def test_rule_matches_without_usable_targets_touch_no_catalogue(db):
-    # Blank plain references and frameworks whose entries are all unusable are
-    # dropped before any control lookup or mapping insert.
-    ev = MagicMock(
-        source="cloudwatch_logs",
-        connection_id="conn",
-        system="s",
-        actor="a",
-        action="log_event",
-        outcome="info",
-        severity=3,
-        summary="s",
-        raw_pointer={},
-        normalized_payload={},
-    )
-    with (
-        patch.object(cl, "load_rules", return_value={"rules": True}),
-        patch.object(
-            cl,
-            "evaluate_by_framework",
-            return_value={"soc2": ["   ", {"ref": "A.1", "kind": "chapter"}, 7]},
-        ),
-        patch.object(cl, "_ensure_control_items") as ensure,
-    ):
-        assert cl._apply_rules_and_store_mappings(db, ev) == 0
-    ensure.assert_not_called()
-    db.execute.assert_not_called()
 
 
 def test_once_ignores_malformed_event_defaults_and_keeps_ingestion_time(db):
@@ -544,39 +502,19 @@ def test_once_continues_from_a_naive_cursor_with_overlap(db):
 
 
 def test_unresolved_or_conflicting_mappings_are_not_counted(db):
-    ev = MagicMock(
-        source="cloudwatch_logs",
-        connection_id="conn",
-        system="s",
-        actor="a",
-        action="log_event",
-        outcome="info",
-        severity=3,
-        summary="s",
-        raw_pointer={},
-        normalized_payload={},
-    )
-    control = MagicMock(id="ci-1")
-    executed = []
-
-    def execute(stmt):
-        executed.append(stmt)
-        result = MagicMock()
-        result.scalar.return_value = None  # the mapping exists already
-        return result
-
-    db.execute.side_effect = execute
+    # A mapping whose target resolves but exists already adds nothing: rule
+    # application is idempotent, so repeat collections never duplicate mappings.
+    fake = fake_boto_client()
+    fake["client"].filter_log_events.return_value = {
+        "events": [{"timestamp": MS, "eventId": "ev1", "message": "hello"}]
+    }
+    db.execute.side_effect = lambda stmt: MagicMock(scalar=lambda: None)
+    set_cursor(db, MagicMock(last_ts=None))
     with (
-        patch.object(cl, "load_rules", return_value={"rules": True}),
-        patch.object(
-            cl,
-            "evaluate_by_framework",
-            return_value={"soc2": ["A.1", {"ref": "A.9", "kind": "clause"}]},
-        ),
-        patch.object(
-            cl, "_ensure_control_items", return_value={("A.1", None): control}
-        ),
+        configured(),
+        fake["factory"],
+        patch.object(cl, "apply_rules", return_value=0),
     ):
-        assert cl._apply_rules_and_store_mappings(db, ev) == 0
-    # Only the resolved target reaches the insert; the conflict adds nothing.
-    assert len(executed) == 1
+        result = cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
+
+    assert result["created_mappings"] == 0

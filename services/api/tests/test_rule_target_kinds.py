@@ -24,7 +24,7 @@ from app.db.models import (
     Mapping,
     RuleBackfillJob,
 )
-from app.ingest import cloudwatch_logs, common, loki
+from app.ingest import common
 from app.mapping.rules import evaluate_by_framework, parse_rules
 from app.services import managed_configurations
 from app.worker import rule_backfill
@@ -217,20 +217,6 @@ def test_rules_for_a_removed_framework_add_no_placeholders(catalogue, monkeypatc
     event = _event(catalogue.db)
     assert common.apply_rules(catalogue.db, event) == 0
     assert not catalogue.db.query(ControlItem).filter_by(framework_slug="GONE").count()
-
-
-@pytest.mark.parametrize("collector", [loki, cloudwatch_logs])
-def test_log_collectors_attach_by_target_kind(catalogue, monkeypatch, collector):
-    if catalogue.db.get_bind().dialect.name != "postgresql":
-        pytest.skip("The log collectors insert mappings with PostgreSQL upserts")
-    clause = catalogue.add("5.1", "clause")
-    control = catalogue.add("5.1", "annex_control")
-    rules = _rules({"ref": "5.1", "kind": "clause"}, {"ref": "9.9", "kind": "clause"})
-    monkeypatch.setattr(collector, "load_rules", lambda *a, **k: rules)
-    event = _event(catalogue.db)
-    assert collector._apply_rules_and_store_mappings(catalogue.db, event) == 1
-    assert _mapped(catalogue.db, event) == {clause.id}
-    assert control.id not in _mapped(catalogue.db, event)
 
 
 # --- Rule backfill -------------------------------------------------------------------

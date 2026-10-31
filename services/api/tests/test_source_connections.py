@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 from app.api.routes import source_connections as api
 from app.db.models import Event, SourceConnection
+from app.ingest import common
 from app.ingest import connections as sc
 from app.ingest.common import store_event_with_artifact
 from app.mapping.rules import evaluate_by_framework, parse_rules
@@ -296,7 +297,7 @@ def test_cloudwatch_direct_insert_scopes_events_cursors_and_artifacts(
         }
     )
     monkeypatch.setattr(cw, "_cloudwatch_client", lambda region: client)
-    monkeypatch.setattr(cw, "_apply_rules_and_store_mappings", lambda *a: 0)
+    monkeypatch.setattr(common, "apply_rules", lambda *a: 0)
     keys = []
 
     def store(**kw):
@@ -384,7 +385,7 @@ def test_loki_direct_insert_and_http_credentials_are_connection_scoped(
         ),
     )
     monkeypatch.setattr(loki, "is_safe_url", lambda url: True)
-    monkeypatch.setattr(loki, "_apply_rules_and_store_mappings", lambda *a: 0)
+    monkeypatch.setattr(common, "apply_rules", lambda *a: 0)
     monkeypatch.setattr(
         loki,
         "put_bytes",
