@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import ControlItem, FrameworkClause, User
 from app.security.rich_text import sanitize_rich_text_html
@@ -33,10 +33,6 @@ def _clean_isms_section(section: str | None) -> str | None:
     if not value:
         raise DomainError(status_code=400, detail="Unknown ISMS section")
     return value
-
-
-def _utcnow() -> datetime:
-    return utc_now_naive()
 
 
 def _clean_minutes_html(raw: str | None) -> str:

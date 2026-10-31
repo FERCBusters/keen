@@ -11,7 +11,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.core.references import control_justification as _control_justification
 from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
@@ -123,10 +123,6 @@ class ControlLinksPayload(BaseModel):
 
 class CommunicationsPayload(BaseModel):
     items: list[CommunicationPayload] = Field(default_factory=list)
-
-
-def _utcnow() -> datetime:
-    return utc_now_naive()
 
 
 def _can_read_interested_parties(db: Session, user: User | None) -> bool:

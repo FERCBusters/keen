@@ -11,7 +11,7 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.core.references import control_justification as _control_justification
 from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
@@ -161,10 +161,6 @@ class RiskUpsertPayload(BaseModel):
     framework: str | None = Field(default=None, max_length=64)
     controls: list[str] | None = None
     library_template_id: uuid.UUID | None = None
-
-
-def _utcnow() -> datetime:
-    return utc_now_naive()
 
 
 def _can_read_risks(db: Session, user: User | None) -> bool:
