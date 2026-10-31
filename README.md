@@ -89,13 +89,14 @@ Supported sources include GitHub, GitLab, Forgejo, Gitea, Jenkins, Loki, Elastic
 
 ### Keen Agent
 
-[Keen Agent](https://github.com/FERCBusters/keen-agent) sends signed evidence from servers and workstations in Keen's profile of the draft Universal Evidence Utility (UEU) format, over OTLP/HTTP JSON. Each agent holds its own Ed25519 key: register a persistent host to receive a single-use enrolment code, or create an enrollment profile for a fleet, whose shared bootstrap key lets each machine bind its own key. Keen verifies every request, batch signature, envelope and chain position, checks typed fields against the event catalogue, records any redaction in a custody record and keeps each envelope's provenance. Each event page shows its verification results. Other OpenTelemetry collectors can send logs with a bearer token.
+[Keen Agent](https://github.com/FERCBusters/keen-agent) sends signed evidence such as logs and other security events from servers (with support for common fleet enrollments to aid auto-connection from autoscale clusters).
 
-Workstation agents link each device to a Person. People & vendors shows current posture checks per registered hostname, judged by versioned rules and, where set, the organisation's own targets from effectiveness measures, with links to the underlying evidence. A check that needs attention can be recorded as a risk against the workstation's asset, and an accepted risk marks the check as accepted until its review date. Each new Keen account receives a linked Person record; people can also exist without accounts.
+Keen Agent also supports being run on Linux, Mac and Windows workstations in the background, wherein it sends attestations as to correct security posture (workstation antivirus, disk encryption, screen locks, automatic updates, and so on). This works over over OTLP/HTTP JSON formats. Keen verifies every request, batch signature, envelope and chain position, checks typed fields against the event catalogue, records any redaction in a custody record and keeps each envelope's provenance.
 
-People and Vendors have dedicated detail pages with editing, assets and related-item tabs. Person pages also show workstation posture, personnel assurance and, for quiz managers with ISMS read access, named quiz assignments and round results.
+A check that needs attention can be recorded as a risk against the workstation's asset, and an accepted risk marks the check as accepted until its review date.
 
-The agent setup and enrollment instructions are in **Help**. Install and configure the agent from its own repository.
+See more about Keen Agent and how to install it on workstations at https://keen.cloud/agent
+
 
 ## Access and authentication
 
