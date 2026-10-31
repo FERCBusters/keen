@@ -183,7 +183,9 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
     enabled,
     columns: enabled ? 1 : 0,
     cellHtml(event) {
-      if (!enabled) return '';
+      // Header sorting reads each row's cells by header position, and the
+      // hidden selection header still holds the first one.
+      if (!enabled) return '<td class="story-select-cell" hidden></td>';
       const summary = String(event.summary || '');
       return `<td class="story-select-cell"><input class="form-check-input" type="checkbox" data-select-event value="${esc(event.id)}" aria-label="Select ${esc(summary.slice(0, 80) || 'event')}"></td>`;
     },

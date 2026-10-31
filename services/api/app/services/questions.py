@@ -23,6 +23,7 @@ from app.db.models import (
     Risk,
     User,
 )
+from app.db.session import track_unpublished_object
 from app.realtime.notifications import notification_bus, notification_hub
 from app.security.auth import get_current_user_from_headers_cookies
 from app.security.diary_visibility import is_diary_event_visible
@@ -551,6 +552,7 @@ async def _store_attachments(
                 f"questions/{day}/{event_id}/{thread_id}/{post_id}/{uuid.uuid4()}{ext}"
             )
             stored = put_bytes(key, data, content_type)
+            track_unpublished_object(db, stored.uri)
 
             a = Artifact(
                 event_id=event_id,

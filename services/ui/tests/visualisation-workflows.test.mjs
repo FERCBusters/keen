@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { page, settle } from './support/page-fixture.mjs';
+import { designSystemDates } from './support/design-system-dates.mjs';
 
 const d3 = await readFile(new URL('./node_modules/d3/dist/d3.min.js', import.meta.url), 'utf8');
 const DAY = 864e5;
@@ -149,7 +150,8 @@ async function viz(t, options = {}) {
       // Bodies come from the page's realm; compare them as plain data.
       patches.push(JSON.parse(JSON.stringify(body)));
       if (options.patchFail) throw new Error(options.patchFail);
-      return body;
+      // The API answers with the account's full preferences.
+      return options.patchResult ? options.patchResult(body) : body;
     },
   });
   await settle(() => /Loaded\.|Failed/.test(ui.el('status').textContent));
@@ -557,6 +559,29 @@ test('the histogram exports what it shows, and saves a relative default range', 
     start_date: '2026-09-01',
     end_date: '2026-09-15',
   });
+});
+
+test('after saving a default, dates follow the preferences the server returns', async (t) => {
+  const ui = await viz(t, {
+    mode: 'histogram',
+    series: daySeries,
+    patchResult: (body) => ({
+      ...body,
+      date_format: 'dmy',
+      use_local_timezone: true,
+      timezone: 'Asia/Tokyo',
+    }),
+  });
+  await settle(() => ui.series.length === 1);
+  // As the navbar leaves them: the design system's date helpers read these.
+  ui.window.mospDefaultTimezone = 'Etc/UTC';
+  ui.window.mospPreferences = { date_format: 'ymd' };
+  const dates = designSystemDates(() => ui.window);
+  assert.equal(dates.fmtTs('2026-01-01T23:30:00Z'), '2026-01-01 23:30:00');
+
+  ui.el('saveDefaultViz').click();
+  await settle(() => ui.el('status').textContent === 'Saved as your default visualisation.');
+  assert.equal(dates.fmtTs('2026-01-01T23:30:00Z'), '02/01/2026 08:30:00');
 });
 
 test('a default needs a whole date range, and a refused save is reported', async (t) => {

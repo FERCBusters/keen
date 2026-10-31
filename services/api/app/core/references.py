@@ -35,7 +35,6 @@ CONTROL_JUSTIFICATION_IDS: dict[str, str] = {
 
 def control_justification(control: Any) -> str | None:
     """Return a validated display label for a control justification, if present."""
-    meta = {}
     try:
         meta = getattr(control, "meta", None) or {}
     except Exception:

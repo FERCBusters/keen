@@ -34,6 +34,7 @@ from app.db.models import (
     RiskControlLink,
     User,
 )
+from app.db.session import track_unpublished_object
 from app.ingest.common import normalise_ingested_fields, store_event_with_artifact
 from app.ingest.connections import outside_connection
 from app.security.diary_visibility import (
@@ -301,6 +302,7 @@ def _store_revision(
         f"edit-{stamp}-{uuid.uuid4().hex}.json"
     )
     stored = put_bytes(key=key, data=data, content_type="application/json")
+    track_unpublished_object(db, stored.uri)
     db.add(
         Artifact(
             event_id=event.id,

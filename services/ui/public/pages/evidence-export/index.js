@@ -5,6 +5,9 @@ import {
   extFromContentType,
   buildZipStore,
   downloadBlob,
+  MAX_ZIP_EXPORT_ARTIFACTS,
+  MAX_ZIP_EXPORT_BYTES,
+  readBoundedExportResponse,
 } from './archive.js';
 import {
   sliceCanvasToA4JpegPages,
@@ -12,50 +15,6 @@ import {
   sliceCanvasToFirstA4PreviewBlob,
   waitForImages,
 } from './pdf.js';
-
-// Bound actual downloaded bytes, including responses without trustworthy metadata.
-export const MAX_ZIP_EXPORT_BYTES = 100 * 1024 * 1024;
-export const MAX_ZIP_EXPORT_ARTIFACTS = 100;
-
-export async function readBoundedExportResponse(response, remainingBytes) {
-  const declared = Number(response.headers.get('Content-Length'));
-  if (Number.isFinite(declared) && declared > remainingBytes) {
-    await response.body?.cancel();
-    throw new Error('ZIP export exceeds the 100 MiB limit. Download artifacts individually.');
-  }
-  if (!response.body) throw new Error('Artifact response has no readable body');
-  const reader = response.body.getReader();
-  const chunks = [];
-  let size = 0;
-  let complete = false;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        complete = true;
-        break;
-      }
-      size += value.byteLength;
-      if (size > remainingBytes)
-        throw new Error('ZIP export exceeds the 100 MiB limit. Download artifacts individually.');
-      chunks.push(value);
-    }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return bytes;
-  } finally {
-    if (!complete) {
-      try {
-        await reader.cancel();
-      } catch {}
-    }
-    reader.releaseLock();
-  }
-}
 
 // Export preferences and preview state belong to this page instance.
 export function createEvidenceExporter({ preferences: me, getSourceMeta, status }) {

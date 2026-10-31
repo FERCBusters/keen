@@ -75,11 +75,11 @@ app = FastAPI(
     openapi_url=None,
     root_path_in_servers=False,
     openapi_tags=OPENAPI_TAGS,
+    exception_handlers={
+        DomainError: domain_error_response,
+        RequestValidationError: validation_error_response,
+    },
 )
-
-
-app.add_exception_handler(DomainError, domain_error_response)
-app.add_exception_handler(RequestValidationError, validation_error_response)
 
 
 def custom_openapi():
@@ -97,7 +97,7 @@ def custom_openapi():
     return app.openapi_schema
 
 
-app.openapi = custom_openapi
+app.openapi = custom_openapi  # type: ignore[method-assign]  # FastAPI's documented override
 
 
 async def _startup_realtime_notifications() -> None:

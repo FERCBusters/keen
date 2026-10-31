@@ -972,14 +972,14 @@ if (prefsForm) {
 
     try {
       const updated = await apiPatch('/api/v1/me/preferences', payload);
-      // Keep globals up to date for other pages in this tab.
-      window.keenPreferences = updated || {};
+      // The design system's date and framework helpers read these globals on
+      // every call, so the new preferences apply without a reload.
       window.mospPreferences = updated || {};
       if (updated?.landing_page) {
         currentLandingPagePref = String(updated.landing_page).trim() || '/';
       }
       currentDefaultFrameworkPref = String(updated?.default_framework || '').trim();
-      window.keenPreferredFramework = currentDefaultFrameworkPref;
+      window.mospPreferredFramework = currentDefaultFrameworkPref;
       try {
         if (currentDefaultFrameworkPref)
           localStorage.setItem('keen_framework', currentDefaultFrameworkPref);

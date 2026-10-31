@@ -19,6 +19,7 @@ from app.db.models import (
     IsmsDocumentRevision,
     User,
 )
+from app.db.session import track_unpublished_object
 from app.security.request_limits import MAX_FILE_UPLOAD
 from app.security.rich_text import sanitize_rich_text_html
 from app.services.context import ChangeContext
@@ -344,7 +345,7 @@ def upload_document_file(
     *,
     document_id: str,
     content: BinaryIO,
-    filename: str,
+    filename: str | None,
     content_type: str,
     framework: str,
     user: User,
@@ -365,6 +366,7 @@ def upload_document_file(
     stored = put_file(
         f"isms-documents/{row.id}/{uuid.uuid4()}{ext}", content, content_type
     )
+    track_unpublished_object(db, stored.uri)
     from app.services.evidence_retention import queue_object
 
     queue_object(db, row.storage_uri)  # the replaced file is no longer reachable

@@ -44,3 +44,31 @@ cbor2 = "^5.6"
 pytest-cov = ">=7,<8"
 pre-commit = "^4.6.2"
 ruff = "0.17.0"
+mypy = "2.4.1"
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+python_version = "3.11"
+files = ["app"]
+# Function bodies without annotations are checked too.
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+# Third-party packages that ship no type information.
+[[tool.mypy.overrides]]
+module = [
+    "authlib.*",
+    "boto3.*",
+    "botocore.*",
+    "celery.*",
+    "dateutil.*",
+    "google_auth_httplib2",
+    "googleapiclient.*",
+    "httplib2",
+    "ldap3.*",
+    "qrcode.*",
+    "regex.*",
+    "yaml.*",
+]
+ignore_missing_imports = true

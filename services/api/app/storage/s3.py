@@ -4,6 +4,7 @@ import hashlib
 import os
 import shutil
 import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Generator, Tuple
@@ -147,6 +148,23 @@ def put_bytes(key: str, data: bytes, content_type: str) -> StoredObject:
     return _store(key, data, content_type, hashlib.sha256(data).hexdigest(), len(data))
 
 
+def attempt_key(key: str) -> str:
+    """Give an object key a suffix unique to this storage attempt.
+
+    Local and hosted storage refuse to replace an object and other S3 storage
+    overwrites it, so two writes under one key collide: a retry after a rolled
+    back transaction, or two requests at once. A fresh suffix keeps each
+    attempt's object separate and leaves the extension in place.
+    """
+    folder, _, name = key.rpartition("/")
+    stem, dot, extension = name.rpartition(".")
+    if not dot or not stem:
+        stem, extension = name, ""
+    token = uuid.uuid4().hex[:16]
+    unique = f"{stem}-{token}" + (f".{extension}" if extension else "")
+    return f"{folder}/{unique}" if folder else unique
+
+
 def put_file(key: str, content: BinaryIO, content_type: str) -> StoredObject:
     """Store a seekable file, reading it in bounded chunks rather than at once."""
     _validate_key(key)
@@ -211,6 +229,8 @@ class ArtifactKey(str):
     As a string it is the object key, so callers hand it straight to the read
     and presign helpers, which use the version when one is present.
     """
+
+    version_id: str | None
 
     def __new__(cls, key, version_id=None):
         obj = super().__new__(cls, key)

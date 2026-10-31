@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.valkey import get_valkey
 from app.db.models import User
+from app.security.csrf import samesite_policy
 from app.security.passwords import hash_password, verify_password
 from app.security.sessions import delete_session, get_session
 
@@ -177,11 +178,6 @@ def require_admin(request: Request) -> User:
 
 
 def set_session_cookie(response: Response, session_id: str) -> None:
-    # NOTE: cookie_samesite must be one of: lax|strict|none
-    samesite = (settings.cookie_samesite or "lax").lower()
-    if samesite not in ("lax", "strict", "none"):
-        samesite = "lax"
-
     domain = settings.cookie_domain.strip() or None
 
     response.set_cookie(
@@ -190,7 +186,7 @@ def set_session_cookie(response: Response, session_id: str) -> None:
         max_age=settings.session_ttl_seconds,
         httponly=True,
         secure=settings.cookie_secure,
-        samesite=samesite,
+        samesite=samesite_policy(settings.cookie_samesite, "lax"),
         domain=domain,
         path="/",
     )
@@ -204,10 +200,10 @@ def clear_session_cookie(response: Response) -> None:
 def authenticate_user(db: Session, username: str, password: str) -> User | None:
     u = (username or "").strip()
     user = db.query(User).filter(User.username == u).one_or_none()
-    eligible = bool(user and user.is_active and user.auth_backend != "ldap")
-    password_hash = user.password_hash if eligible else _DUMMY_PASSWORD_HASH
-    valid = verify_password(password or "", password_hash)
-    return user if eligible and valid else None
+    if user is None or not user.is_active or user.auth_backend == "ldap":
+        verify_password(password or "", _DUMMY_PASSWORD_HASH)
+        return None
+    return user if verify_password(password or "", user.password_hash) else None
 
 
 def create_user(

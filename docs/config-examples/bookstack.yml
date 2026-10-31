@@ -8,7 +8,10 @@
 label: "bookstack"
 
 # Optional scope: If your ISMS lives in a single BookStack book, set one of the
-# below to restrict ingestion to that book only.
+# below to restrict ingestion to that book only. Use `books:` (a list of slugs,
+# or of entries with `slug` and/or `id`) to collect from several books. Each
+# scope setting must name a book: a blank, empty or unusable one is refused
+# when saved, and a run that reads one fails before collecting anything.
 #
 # book:
 #   slug: "my-isms-book"   # preferred (visible in URLs)

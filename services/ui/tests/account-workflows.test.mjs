@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, settle } from './support/page-fixture.mjs';
+import { designSystemDates } from './support/design-system-dates.mjs';
 
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const HOSTILE = '<img src=x onerror="globalThis.pwned=1">';
@@ -598,8 +599,13 @@ test('preferences load defaults, toggle the timezone and save the chosen setting
     },
   });
   assert.equal(ui.el('prefsSaveToast').className, 'badge text-bg-success');
-  assert.equal(ui.window.keenPreferences.theme, 'ink');
-  assert.equal(ui.window.keenPreferredFramework, '');
+  // The design system reads these globals on every call, so dates and the
+  // default framework follow the saved preferences without a reload.
+  assert.equal(ui.window.mospPreferences.theme, 'ink');
+  assert.equal(ui.window.mospPreferredFramework, '');
+  const dates = designSystemDates(() => ui.window);
+  assert.equal(dates.fmtTs('2026-01-01T23:30:00Z'), '02/01/2026 12:30:00');
+  assert.equal(dates.isoDateToDisplay('2026-03-04'), '04/03/2026');
 });
 
 test('a rejected preference save is reported beside the button', async (t) => {

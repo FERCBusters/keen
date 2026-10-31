@@ -16,7 +16,7 @@ from authlib.oidc.core import CodeIDToken
 from fastapi import HTTPException, Request
 from joserfc import jwt
 from joserfc.errors import InvalidClaimError, JoseError
-from joserfc.jwk import KeySet
+from joserfc.jwk import KeySet, KeySetSerialization
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -336,7 +336,7 @@ def _require_provider_config(provider_key: str | None) -> SsoProvider:
     return provider
 
 
-_JWKS_CACHE: dict[str, tuple[dict[str, Any], datetime]] = {}
+_JWKS_CACHE: dict[str, tuple[KeySetSerialization, datetime]] = {}
 
 
 def _new_client(provider: SsoProvider, *, redirect_uri: str) -> AsyncOAuth2Client:
@@ -354,7 +354,7 @@ def _new_client(provider: SsoProvider, *, redirect_uri: str) -> AsyncOAuth2Clien
     )
 
 
-async def _get_jwks(jwks_uri: str) -> dict[str, Any]:
+async def _get_jwks(jwks_uri: str) -> KeySetSerialization:
     now = _now()
     cached = _JWKS_CACHE.get(jwks_uri)
     if cached:

@@ -101,17 +101,17 @@ def _hsl_to_rgb(h: float, s: float, light: float) -> tuple[int, int, int]:
     x = c * (1 - abs(((h / 60) % 2) - 1))
     m = light - c / 2
     if 0 <= h < 60:
-        r1, g1, b1 = c, x, 0
+        r1, g1, b1 = c, x, 0.0
     elif 60 <= h < 120:
-        r1, g1, b1 = x, c, 0
+        r1, g1, b1 = x, c, 0.0
     elif 120 <= h < 180:
-        r1, g1, b1 = 0, c, x
+        r1, g1, b1 = 0.0, c, x
     elif 180 <= h < 240:
-        r1, g1, b1 = 0, x, c
+        r1, g1, b1 = 0.0, x, c
     elif 240 <= h < 300:
-        r1, g1, b1 = x, 0, c
+        r1, g1, b1 = x, 0.0, c
     else:
-        r1, g1, b1 = c, 0, x
+        r1, g1, b1 = c, 0.0, x
     r = int(round((r1 + m) * 255))
     g = int(round((g1 + m) * 255))
     b = int(round((b1 + m) * 255))

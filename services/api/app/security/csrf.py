@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 import secrets
+from typing import Literal
 
 from fastapi import Request, Response
 
 from app.core.config import settings
+
+SameSite = Literal["lax", "strict", "none"]
+_SAMESITE: dict[str, SameSite] = {"lax": "lax", "strict": "strict", "none": "none"}
+
+
+def samesite_policy(value: str, default: SameSite) -> SameSite:
+    """A cookie's SameSite setting, falling back to the default when unrecognised."""
+    return _SAMESITE.get((value or "").lower(), default)
 
 
 def csrf_cookie_name() -> str:
@@ -44,17 +53,13 @@ def set_csrf_cookie(response: Response, token: str) -> None:
 
     # CSRF cookies should be readable by JS so the UI can echo the token
     # in a header.
-    samesite = (settings.csrf_cookie_samesite or "strict").lower()
-    if samesite not in ("lax", "strict", "none"):
-        samesite = "strict"
-
     response.set_cookie(
         key=csrf_cookie_name(),
         value=token,
         max_age=settings.session_ttl_seconds,
         httponly=False,
         secure=settings.cookie_secure,
-        samesite=samesite,
+        samesite=samesite_policy(settings.csrf_cookie_samesite, "strict"),
         domain=domain,
         path="/",
     )

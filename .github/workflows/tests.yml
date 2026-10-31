@@ -96,6 +96,12 @@ jobs:
           cd services/api
           poetry run ruff check ../..
 
+      - name: Check Python types
+        run: |
+          if [ -f keen/services/api/pyproject.toml ]; then cd keen; fi
+          cd services/api
+          poetry run python ../../tools/mypy_baseline.py check
+
       - name: Check frontend formatting
         run: |
           if [ -f keen/format-ui.sh ]; then cd keen; fi

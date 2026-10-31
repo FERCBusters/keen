@@ -1136,6 +1136,158 @@ test('audit ZIP export reports a missing renderer without leaving the button dis
   assert.equal(ui.document.querySelector('.export-capture'), null);
 });
 
+// An audit page ready to export, recording object URLs and page renders.
+async function auditZipRun(t, { fetch, artifacts } = {}) {
+  const created = [];
+  const renders = [];
+  const ctx = new Proxy({}, { get: (_, k) => (k in {} ? undefined : () => {}), set: () => true });
+  class CaptureUrl extends URL {
+    static createObjectURL(blob) {
+      created.push(blob);
+      return 'blob:keen';
+    }
+    static revokeObjectURL() {}
+  }
+  const { ui } = await auditPage(t, {
+    artifacts,
+    globals: { URL: CaptureUrl, fetch },
+    setup(window) {
+      window.HTMLCanvasElement.prototype.getContext = () => ctx;
+      window.HTMLCanvasElement.prototype.toBlob = (cb) =>
+        cb(new Blob([new Uint8Array([0xff, 0xd8, 0xff])]));
+      window.html2canvas = async () => {
+        renders.push(true);
+        return { width: 1000, height: 3000 };
+      };
+    },
+  });
+  return { ui, created, renders };
+}
+
+test('an audit ZIP over the attachment limit stops before rendering or downloading', async (t) => {
+  const many = (n) =>
+    Array.from({ length: n }, (_, i) => ({ id: `art${i}`, content_type: 'text/plain' }));
+  const fetched = [];
+  const fetch = async (url) => {
+    fetched.push(url);
+    return new Response('x');
+  };
+  const over = await auditZipRun(t, { artifacts: many(101), fetch });
+  over.ui.el('btnAuditZip').click();
+  await settle(() => /at most 100 sampled evidence/.test(over.ui.el('status').textContent));
+  assert.equal(
+    over.ui.el('status').textContent,
+    'Audit ZIP export supports at most 100 sampled evidence attachments. Download them individually.',
+  );
+  assert.equal(over.ui.el('status').dataset.alert, 'danger');
+  assert.deepEqual([fetched, over.renders, over.created], [[], [], []]);
+  assert.equal(over.ui.el('btnAuditZip').disabled, false);
+  assert.equal(over.ui.el('btnAuditZipCancel').hidden, true);
+
+  // The limit itself is allowed.
+  const limit = await auditZipRun(t, { artifacts: many(100), fetch });
+  limit.ui.el('btnAuditZip').click();
+  await settle(() => limit.created.length === 1);
+  const names = readZip(new Uint8Array(await limit.created[0].arrayBuffer())).map((f) => f.name);
+  assert.equal(names.length, 102);
+  assert.match(limit.ui.el('status').textContent, /100 sampled evidence attachments/);
+});
+
+test('an audit ZIP over 100 MiB stops reading and produces no file', async (t) => {
+  const chunk = new Uint8Array(8 * 1024 * 1024);
+  const stream = (count, cancelled) => {
+    let sent = 0;
+    return new ReadableStream({
+      pull(controller) {
+        if (sent++ < count) controller.enqueue(chunk);
+        else controller.close();
+      },
+      cancel() {
+        cancelled.push(true);
+      },
+    });
+  };
+
+  // Actual bytes count even when the size is not declared; the rest of a body
+  // that is still arriving is cancelled.
+  const cancelledReport = [];
+  const actual = await auditZipRun(t, {
+    fetch: async () => new Response(stream(Infinity, cancelledReport)),
+  });
+  actual.ui.el('btnAuditZip').click();
+  await settle(() => /100 MiB/.test(actual.ui.el('status').textContent));
+  assert.equal(
+    actual.ui.el('status').textContent,
+    'ZIP export exceeds the 100 MiB limit. Download artifacts individually.',
+  );
+  assert.deepEqual(cancelledReport, [true]);
+  assert.deepEqual(actual.created, []);
+  assert.equal(actual.ui.el('btnAuditZip').disabled, false);
+
+  // The final report and attachments share one budget: an attachment that fits
+  // on its own is refused once the report has used part of it.
+  const fetched = [];
+  const cancelledArtifact = [];
+  const shared = await auditZipRun(t, {
+    fetch: async (url) => {
+      fetched.push(url);
+      if (url.endsWith('/report/download')) return new Response(stream(1, []));
+      return new Response(stream(1, cancelledArtifact), {
+        headers: { 'Content-Length': String(95 * 1024 * 1024) },
+      });
+    },
+  });
+  shared.ui.el('btnAuditZip').click();
+  await settle(() => /100 MiB/.test(shared.ui.el('status').textContent));
+  assert.deepEqual(fetched, [
+    '/api/v1/audits/a1/report/download',
+    '/api/v1/artifacts/art1/download',
+  ]);
+  assert.deepEqual(cancelledArtifact, [true]);
+  assert.deepEqual(shared.created, []);
+});
+
+test('cancelling an audit ZIP export aborts the download and restores the controls', async (t) => {
+  let signal = null;
+  const run = await auditZipRun(t, {
+    fetch: async (url, init) => {
+      if (url.endsWith('/report/download')) return new Response('final');
+      signal = init.signal;
+      // As in the browser, aborting errors a body that is still arriving.
+      const body = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1]));
+          init.signal.addEventListener('abort', () =>
+            controller.error(new DOMException('The operation was aborted.', 'AbortError')),
+          );
+        },
+      });
+      return new Response(body);
+    },
+  });
+  const button = run.ui.el('btnAuditZip');
+  const cancel = run.ui.el('btnAuditZipCancel');
+  assert.equal(cancel.hidden, true);
+  button.focus();
+  button.click();
+  await settle(() => signal);
+  assert.equal(button.disabled, true);
+  assert.equal(cancel.hidden, false);
+  // The disabled export button hands focus to Cancel.
+  assert.equal(run.ui.document.activeElement, cancel);
+
+  cancel.click();
+  await settle(() => run.ui.el('status').textContent === 'Audit ZIP export cancelled.');
+  assert.equal(signal.aborted, true);
+  assert.equal(run.ui.el('status').dataset.alert, 'info');
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent.trim(), 'Export audit ZIP');
+  assert.equal(cancel.hidden, true);
+  assert.equal(run.ui.document.activeElement, button);
+  assert.deepEqual(run.created, []);
+  assert.equal(run.ui.document.querySelector('.export-capture'), null);
+});
+
 test('an audit with nothing attached yet says so in every section', async (t) => {
   const { ui } = await auditPage(t, {
     audit: baseAudit({

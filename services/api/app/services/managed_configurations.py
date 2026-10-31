@@ -25,6 +25,7 @@ from app.db.models import (
     ManagedConfigurationRevision,
     SourceConnection,
 )
+from app.ingest.bookstack import book_scope
 from app.ingest.connections import FIELDS as CONNECTION_FIELDS
 from app.mapping.collector import collector_id, collector_pointer_filter
 from app.mapping.fields import observed_fields, validate_fields
@@ -369,6 +370,10 @@ def _validate_connector(name: str, document: dict):
     ):
         raise DomainError(400, "Jenkins job names must be simple top-level names")
     if name == "bookstack":
+        try:
+            book_scope(document)
+        except ValueError as exc:
+            raise DomainError(400, str(exc)) from None
         selected = document.get("selected_pages", [])
         if (
             not isinstance(selected, list)

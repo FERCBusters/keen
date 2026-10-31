@@ -321,6 +321,12 @@ def admin_set_group_permissions(
     )
 
 
+def _form_text(form, name: str) -> str | None:
+    """A text form field, ignoring a file sent under the same name."""
+    value = form.get(name)
+    return value if isinstance(value, str) else None
+
+
 @router.post("/v1/admin/diary")
 async def admin_diary(
     request: Request,
@@ -366,22 +372,26 @@ async def admin_diary(
             framework = raw_framework.strip()
     else:
         form = await request.form()
-        summary = (form.get("summary") or "").strip()
+        summary = (_form_text(form, "summary") or "").strip()
         # details can be JSON or plain text
-        details_obj = _normalize_diary_details(form.get("details"))
+        details_obj = _normalize_diary_details(_form_text(form, "details"))
 
-        ts = _parse_iso_dt(form.get("timestamp"))
+        ts = _parse_iso_dt(_form_text(form, "timestamp"))
 
-        controls = [str(c).strip() for c in form.getlist("controls") if str(c).strip()]
+        controls = [
+            c.strip()
+            for c in form.getlist("controls")
+            if isinstance(c, str) and c.strip()
+        ]
 
         raw_framework = form.get("framework")
         if isinstance(raw_framework, str) and raw_framework.strip():
             framework = raw_framework.strip()
 
         # links (optional): a JSON list of {url, text}
-        links_raw = form.get("links")
+        links_raw = _form_text(form, "links")
         if links_raw:
-            links = _normalize_diary_links(str(links_raw))
+            links = _normalize_diary_links(links_raw)
 
         uploads = list(form.getlist("attachments"))
 

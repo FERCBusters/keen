@@ -93,6 +93,17 @@ rises, and explain any reduction in the change that makes it. Use the HTML
 reports to find uncovered behaviour, then add assertions that exercise it
 through the page or API.
 
+## Python types
+
+mypy checks `services/api/app` with the settings in
+`services/api/pyproject.toml`, including the pydantic plugin. Code written
+before the check joined CI still has findings, which
+`services/api/mypy-baseline.txt` lists by file and message. From
+`services/api`, `poetry run python ../../tools/mypy_baseline.py check` fails on
+a finding the baseline does not list, and on a listed finding that has been
+fixed. After fixing findings, run the script's `update` command and commit the
+smaller baseline. CI and the pre-commit hooks run the check.
+
 ## Readable frontend source
 
 Install the pinned frontend tools with `npm ci --prefix services/ui/tests`.

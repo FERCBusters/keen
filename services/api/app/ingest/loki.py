@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -411,12 +410,9 @@ def ingest_loki_once(
                         artifact_kind="log_line",
                         artifact_bytes=line.encode("utf-8", errors="replace"),
                         artifact_content_type=ctype,
-                        # Stored objects are never replaced, so each attempt
-                        # writes a fresh key: a retry after a failed chunk must
-                        # not collide with an object the rollback left behind.
                         artifact_key=(
                             f"loki/{query_name}/{ts.date().isoformat()}/"
-                            f"{external_id}-{uuid.uuid4().hex}.{ext}"
+                            f"{external_id}.{ext}"
                         ),
                         captured_by="keen:loki",
                         # The chunk commits once, together with its cursor.

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlsplit
@@ -331,13 +330,10 @@ def ingest_cloudwatch_logs_once(
                 artifact_kind="log_event",
                 artifact_bytes=msg.encode("utf-8", errors="replace"),
                 artifact_content_type=ctype,
-                # Stored objects are never replaced, so each attempt writes a
-                # fresh key: a retry after a failed run must not collide with an
-                # object the rollback left behind. AWS event IDs can be long, so
-                # the key uses a digest of the identity.
+                # AWS event IDs can be long; the key uses a digest of the identity.
                 artifact_key=(
                     f"cloudwatch_logs/{name}/{ts.date().isoformat()}/"
-                    f"{make_fingerprint(ext_id)}-{uuid.uuid4().hex}.{ext}"
+                    f"{make_fingerprint(ext_id)}.{ext}"
                 ),
                 captured_by="keen:cloudwatch_logs",
                 # The run commits once, together with its cursor.

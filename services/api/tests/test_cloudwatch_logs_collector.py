@@ -271,9 +271,9 @@ def test_events_without_an_aws_event_id_keep_distinct_identities(db):
         ]
     )
     assert len(set(identities)) == 4
-    # Every attempt writes its own artifact key, even for a repeated identity,
-    # because stored objects are never replaced.
-    assert len({event["artifact_key"] for event in stored}) == len(stored)
+    # Artifact keys follow the identity, however long the AWS id is; shared
+    # storage makes each stored key unique.
+    assert len({event["artifact_key"] for event in stored}) == 4
 
 
 def test_once_deduped_event_still_advances_cursor_and_skips_bad_timestamps(db):

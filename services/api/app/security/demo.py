@@ -8,20 +8,23 @@ from starlette.responses import JSONResponse
 from app.core.config import settings
 
 
-def demo_expired():
-    return settings.demo_mode and datetime.now(timezone.utc) >= settings.demo_expires_at
+def demo_expired() -> bool:
+    if not settings.demo_mode:
+        return False
+    expiry = settings.demo_expires_at
+    # Settings refuse demo mode without an expiry; a missing one counts as ended.
+    return expiry is None or datetime.now(timezone.utc) >= expiry
 
 
 def demo_metadata():
+    expiry = settings.demo_expires_at if settings.demo_mode else None
     return {
         "enabled": settings.demo_mode,
-        "expires_at": settings.demo_expires_at.isoformat()
-        if settings.demo_mode
-        else None,
+        "expires_at": expiry.isoformat() if expiry else None,
         "consultation_url": settings.demo_consultation_url
         if settings.demo_mode
         else None,
-        "expired": bool(demo_expired()),
+        "expired": demo_expired(),
     }
 
 
@@ -42,9 +45,8 @@ class DemoExpiryMiddleware:
                     status_code=401 if scope["path"] == "/v1/auth/check" else 410,
                 )(scope, receive, send)
             return await self.app(scope, receive, send)
-        seconds = (
-            settings.demo_expires_at - datetime.now(timezone.utc)
-        ).total_seconds()
+        expiry = settings.demo_expires_at
+        seconds = (expiry - datetime.now(timezone.utc)).total_seconds() if expiry else 0
         if seconds <= 0:
             return await send({"type": "websocket.close", "code": 1008})
         try:

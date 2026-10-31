@@ -12,7 +12,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, NoReturn
 
 from app.agents.ueu import catalogue as catalogues
 from app.agents.ueu.jcs import CanonicalError, parse_canonical
@@ -90,7 +90,7 @@ class Envelope:
         return "valid" if self.spec is not None else "catalogue_unknown"
 
 
-def _fail(detail, code="UEU_SCHEMA_VALIDATION_FAILED"):
+def _fail(detail, code="UEU_SCHEMA_VALIDATION_FAILED") -> NoReturn:
     raise EnvelopeError(code, detail)
 
 

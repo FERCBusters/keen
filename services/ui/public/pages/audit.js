@@ -4,7 +4,10 @@ import {
   buildZipStore,
   downloadBlob,
   extFromContentType,
+  MAX_ZIP_EXPORT_ARTIFACTS,
+  MAX_ZIP_EXPORT_BYTES,
   parseContentDispositionFilename,
+  readBoundedExportResponse,
 } from '/pages/evidence-export/archive.js';
 import {
   buildPdfFromJpegPages,
@@ -787,16 +790,56 @@ async function buildAuditPagePdfBlob(a) {
   }
 }
 
-async function _fetchBytes(url) {
-  const res = await fetch(url, { credentials: 'include' });
-  if (!res.ok) throw new Error(`Failed to download ${url} (HTTP ${res.status})`);
+async function _fetchBytes(url, { signal, remainingBytes }) {
+  const res = await fetch(url, { credentials: 'include', signal });
+  if (!res.ok) {
+    await res.body?.cancel();
+    throw new Error(`Failed to download ${url} (HTTP ${res.status})`);
+  }
   const dispName = parseContentDispositionFilename(res.headers.get('Content-Disposition') || '');
   const contentType = res.headers.get('Content-Type') || '';
   return {
-    data: new Uint8Array(await res.arrayBuffer()),
+    data: await readBoundedExportResponse(res, remainingBytes),
     filename: dispName,
     contentType,
   };
+}
+
+const auditZipButton = document.getElementById('btnAuditZip');
+const auditZipCancel = document.getElementById('btnAuditZipCancel');
+// The export in progress, so Cancel and leaving the page can abort it.
+let auditZipExport = null;
+
+function _stopIfCancelled(signal) {
+  if (signal.aborted) throw new Error('Audit ZIP export cancelled.');
+}
+
+// Reads each sampled event's attachment list, so an export over the attachment
+// limit stops before anything is rendered or downloaded.
+async function _sampledEvidence(evidenceItems, signal) {
+  const sampled = [];
+  let attachments = 0;
+  for (let i = 0; i < evidenceItems.length; i++) {
+    const item = evidenceItems[i];
+    const eventId = item.event_id || item.event?.id;
+    if (!eventId) continue;
+    toast(status, `Collecting sampled evidence ${i + 1}/${evidenceItems.length}`, 'info');
+    const eventData = await apiGet(
+      _sampleExportUrl(
+        `/api/v1/events/${encodeURIComponent(eventId)}?framework=${encodeURIComponent(audit.framework_slug || getCurrentFramework())}`,
+      ),
+    );
+    _stopIfCancelled(signal);
+    const artifacts = Array.isArray(eventData?.artifacts) ? eventData.artifacts : [];
+    if (!artifacts.length) continue;
+    attachments += artifacts.length;
+    if (attachments > MAX_ZIP_EXPORT_ARTIFACTS)
+      throw new Error(
+        `Audit ZIP export supports at most ${MAX_ZIP_EXPORT_ARTIFACTS} sampled evidence attachments. Download them individually.`,
+      );
+    sampled.push({ index: i, eventId, eventData, artifacts });
+  }
+  return sampled;
 }
 
 async function exportAuditZip() {
@@ -804,29 +847,49 @@ async function exportAuditZip() {
     toast(status, 'Audit not loaded yet', 'warning');
     return;
   }
-  const btn = document.getElementById('btnAuditZip');
+  if (auditZipExport) return;
+  const controller = new AbortController();
+  const { signal } = controller;
+  auditZipExport = controller;
+  const btn = auditZipButton;
   const prevLabel = btn ? btn.textContent : '';
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Preparing ZIP';
+  }
+  if (auditZipCancel) {
+    auditZipCancel.hidden = false;
+    // The disabled export button cannot keep focus; Cancel takes it.
+    if (btn && document.activeElement === btn) auditZipCancel.focus();
   }
 
   try {
     const stem = auditFileStem(audit);
     const files = [];
     const seenNames = new Map();
+    const evidenceItems = Array.isArray(audit.evidence) ? audit.evidence : [];
+    const sampled = await _sampledEvidence(evidenceItems, signal);
 
     toast(status, 'Rendering audit page PDF', 'info');
     const pdfBlob = await buildAuditPagePdfBlob(audit);
+    _stopIfCancelled(signal);
+    if (pdfBlob.size > MAX_ZIP_EXPORT_BYTES)
+      throw new Error('Audit page PDF exceeds the 100 MiB ZIP export limit.');
+    const pdfBytes = new Uint8Array(await pdfBlob.arrayBuffer());
+    let totalBytes = pdfBytes.byteLength;
     files.push({
       name: _uniqueZipName(`${stem}-audit-page.pdf`, seenNames),
-      data: new Uint8Array(await pdfBlob.arrayBuffer()),
+      data: pdfBytes,
       mtime: new Date(),
     });
 
     if (audit.final_report?.download_url) {
       toast(status, 'Adding final report', 'info');
-      const finalReport = await _fetchBytes(audit.final_report.download_url);
+      const finalReport = await _fetchBytes(audit.final_report.download_url, {
+        signal,
+        remainingBytes: MAX_ZIP_EXPORT_BYTES - totalBytes,
+      });
+      totalBytes += finalReport.data.byteLength;
       const reportName =
         finalReport.filename ||
         audit.final_report.filename ||
@@ -840,20 +903,8 @@ async function exportAuditZip() {
       });
     }
 
-    const evidenceItems = Array.isArray(audit.evidence) ? audit.evidence : [];
     let artifactCount = 0;
-    for (let i = 0; i < evidenceItems.length; i++) {
-      const item = evidenceItems[i];
-      const eventId = item.event_id || item.event?.id;
-      if (!eventId) continue;
-      toast(status, `Collecting sampled evidence ${i + 1}/${evidenceItems.length}`, 'info');
-      const eventData = await apiGet(
-        _sampleExportUrl(
-          `/api/v1/events/${encodeURIComponent(eventId)}?framework=${encodeURIComponent(audit.framework_slug || getCurrentFramework())}`,
-        ),
-      );
-      const artifacts = Array.isArray(eventData?.artifacts) ? eventData.artifacts : [];
-      if (!artifacts.length) continue;
+    for (const { index: i, eventId, eventData, artifacts } of sampled) {
       const eventStamp = eventData?.timestamp
         ? fmtTsFilename(eventData.timestamp)
         : String(i + 1).padStart(3, '0');
@@ -868,7 +919,9 @@ async function exportAuditZip() {
         toast(status, `Downloading sampled evidence artifact ${artifactCount}`, 'info');
         const downloaded = await _fetchBytes(
           _sampleExportUrl(`/api/v1/artifacts/${encodeURIComponent(art.id)}/download`),
+          { signal, remainingBytes: MAX_ZIP_EXPORT_BYTES - totalBytes },
         );
+        totalBytes += downloaded.data.byteLength;
         const ext = downloaded.filename
           ? ''
           : _extFromContentType(downloaded.contentType || art.content_type);
@@ -883,6 +936,8 @@ async function exportAuditZip() {
       }
     }
 
+    // Nothing is downloaded, and no object URL is made, once the export is cancelled.
+    _stopIfCancelled(signal);
     toast(status, 'Building ZIP', 'info');
     const zipBlob = buildZipStore(files);
     downloadBlob(zipBlob, `${stem}.zip`);
@@ -902,11 +957,16 @@ async function exportAuditZip() {
       } catch {}
     }, 3300);
   } catch (err) {
-    toast(status, errorText(err), 'danger');
+    if (signal.aborted) toast(status, 'Audit ZIP export cancelled.', 'info');
+    else toast(status, errorText(err), 'danger');
   } finally {
+    auditZipExport = null;
+    const cancelHadFocus = !!auditZipCancel && document.activeElement === auditZipCancel;
+    if (auditZipCancel) auditZipCancel.hidden = true;
     if (btn) {
       btn.disabled = false;
       btn.textContent = prevLabel || 'Export audit ZIP';
+      if (cancelHadFocus) btn.focus();
     }
   }
 }
@@ -2229,7 +2289,10 @@ document.getElementById('urlEvidenceForm')?.addEventListener('submit', async (ev
   }
 });
 
-document.getElementById('btnAuditZip')?.addEventListener('click', () => exportAuditZip());
+auditZipButton?.addEventListener('click', () => exportAuditZip());
+auditZipCancel?.addEventListener('click', () => auditZipExport?.abort());
+// Leaving the page stops the downloads instead of finishing them unseen.
+window.addEventListener('pagehide', () => auditZipExport?.abort());
 document.getElementById('deleteAudit')?.addEventListener('click', async () => {
   if (!canDeleteAudit()) {
     toast(status, 'Admin role required.', 'danger');

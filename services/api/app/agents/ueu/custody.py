@@ -67,7 +67,7 @@ def _text(value, path, custody, key=None):
 
 
 def _fields(values, specs, path, custody):
-    out = {}
+    out: dict[str, Any] = {}
     for key, value in values.items():
         here = path + (key,)
         kind = specs[key].type if specs and key in specs else None

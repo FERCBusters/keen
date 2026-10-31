@@ -178,7 +178,7 @@ test('the summary link opens the panel, while a modified click keeps the full pa
   summary.dispatchEvent(modified);
   assert.equal(modified.defaultPrevented, false);
   // Other links in the row keep their own destination.
-  const control = ui.el('rows').querySelector('tr[data-event-id="e1"] td:nth-child(5) a');
+  const control = ui.el('rows').querySelector('tr[data-event-id="e1"] a[href^="/control.html"]');
   const controlClick = new ui.window.MouseEvent('click', { bubbles: true, cancelable: true });
   control.dispatchEvent(controlClick);
   assert.equal(controlClick.defaultPrevented, false);

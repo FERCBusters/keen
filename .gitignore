@@ -12,6 +12,7 @@ staging-results/
 .coverage.*
 htmlcov/
 .ruff_cache
+.mypy_cache
 /services/ui/dist/
 *.orig
 *.rej

@@ -5,6 +5,7 @@ import { loadUi } from './support/load-ui.mjs';
 import {
   buildZipStore,
   parseContentDispositionFilename,
+  readBoundedExportResponse,
 } from '../public/pages/evidence-export/archive.js';
 
 const evidence = { id: 'e1', source: 'rss', artifacts: [] };
@@ -162,9 +163,8 @@ test('PDF capture masks visible attribute values and leaves live inputs unchange
   assert.match(ui.notices.at(-1), /Stop capture/);
 });
 
-test('ZIP streaming checks actual bytes, cancels oversize bodies and shares the remaining budget', async (t) => {
-  const ui = await exporter(t);
-  const read = ui.api.readBoundedExportResponse;
+test('ZIP streaming checks actual bytes, cancels oversize bodies and shares the remaining budget', async () => {
+  const read = readBoundedExportResponse;
   let cancelled = 0;
   function response(chunks, declared = null) {
     return {

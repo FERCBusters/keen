@@ -12,3 +12,9 @@ repos:
         language: system
         files: '^services/ui/.*\.(js|mjs|css)$'
         exclude: '/(vendor|node_modules|dist)/|\.min\.(js|css)$'
+      - id: python-types
+        name: Check Python types against the mypy baseline
+        entry: bash -c 'cd services/api && poetry run python ../../tools/mypy_baseline.py check'
+        language: system
+        pass_filenames: false
+        files: '^(services/api/(app/.*\.py|pyproject\.toml|poetry\.lock|mypy-baseline\.txt)|tools/mypy_baseline\.py)$'

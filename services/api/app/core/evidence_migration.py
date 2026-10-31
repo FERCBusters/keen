@@ -8,7 +8,6 @@ would silently change which evidence they map.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
 
 from app.mapping.collector import collector_id
 from app.mapping.rules import _as_rule_entries, parse_rules
@@ -153,7 +152,7 @@ def unify(
             if not match.get(canonical) and match.get(alias):
                 match[canonical] = match[alias]
         selectors.append(match)
-        when: dict[str, Any] = {"source": "bookstack"}
+        when = {"source": "bookstack"}
         for old, new in (
             ("book_id", "bookstack_book_id"),
             ("book_slug", "bookstack_book_slug"),

@@ -12,7 +12,7 @@ from datetime import timedelta
 from sqlalchemy import text
 
 from app.core.datetime_utils import utc_now_naive as now
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, queue_stored_objects
 from app.services.control_evidence_stats import clear_stats_caches
 from app.storage.s3 import delete_stored_object
 
@@ -178,11 +178,7 @@ def enqueue(db, mode, value, automatic, username):
 
 def queue_object(db, uri):
     if uri:
-        db.execute(
-            text("""INSERT INTO evidence_object_cleanup (storage_uri) VALUES (:uri)
-            ON CONFLICT (storage_uri) DO NOTHING"""),
-            {"uri": uri},
-        )
+        queue_stored_objects(db, [uri], now())
 
 
 def _checked_since_policy_change(db, p):

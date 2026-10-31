@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, settle, pickFilter, filterChips, chosenChips } from './support/page-fixture.mjs';
+import { designSystemTableSorting } from './support/design-system-table-sorting.mjs';
 
 const sources = [
   {
@@ -72,9 +73,17 @@ const insights = {
 
 async function sourcePage(t, options = {}) {
   const fail = options.fail || {};
+  let win;
   const ui = await page(t, 'source', {
     query: options.query ?? '&source=github',
     globals: options.globals,
+    // The design system's own header sorting, for tests of the table header.
+    ...(options.sorting && {
+      vendor: designSystemTableSorting(() => win),
+      setup(window) {
+        win = window;
+      },
+    }),
     post: options.post,
     me: options.me || { is_admin: true },
     get: async (u) => {
@@ -581,6 +590,29 @@ test('source insight drilldown supports multi-selection and story creation', asy
     ],
   });
   assert.equal(ui.el('selectionBar').hidden, true);
+});
+
+test('source events: select all in the sortable header and sort by a column', async (t) => {
+  const rows = (ui) =>
+    [...ui.el('eventRows').querySelectorAll('tr[data-event-id]')].map((tr) => tr.dataset.eventId);
+  const header = (ui, name) =>
+    [...ui.document.querySelectorAll('thead th')].find((th) => th.textContent.trim() === name);
+  // Identifiers run opposite to time, so sorting by the wrong column shows.
+  const events = [event(1, { id: 'z1' }), event(2, { id: 'a2' }), event(3, { id: 'm3' })];
+  for (const me of [{ is_admin: true }, { can_view_events: true }]) {
+    const ui = await sourcePage(t, { me, events, sorting: true });
+    if (me.is_admin) {
+      ui.el('selectAll').click();
+      assert.match(ui.el('selectionBar').textContent, /3 selected/);
+      assert.deepEqual(rows(ui), ['z1', 'a2', 'm3']);
+    }
+    header(ui, 'Time').click();
+    assert.deepEqual(rows(ui), ['z1', 'a2', 'm3']);
+    header(ui, 'Time').click();
+    assert.deepEqual(rows(ui), ['m3', 'a2', 'z1']);
+    header(ui, 'Event UUID').click();
+    assert.deepEqual(rows(ui), ['a2', 'm3', 'z1']);
+  }
 });
 
 test('source selection obeys Story permissions and feature availability', async (t) => {

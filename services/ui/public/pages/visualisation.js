@@ -2,6 +2,7 @@ import { applyFeatures, featureEnabled } from '/pages/feature-availability.js';
 import { csvEscape } from '../csv.js';
 import { ensureEmbeddedVisualisationMarkup } from './visualisation/embedded-markup.js';
 import { createWindowStory } from './visualisation/window-story.js';
+import { downloadBlob } from './evidence-export/archive.js';
 import {
   histStepMs,
   histNextFinerInterval,
@@ -1140,18 +1141,6 @@ function getGraphMinEdge() {
   return v || 1;
 }
 
-function downloadBlob(filename, blob) {
-  const a = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  a.href = url;
-  a.download = filename;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 function toCsv(rows) {
   const r = rows || [];
   if (r.length === 0) return '';
@@ -1168,12 +1157,12 @@ function toCsv(rows) {
 
 function downloadCsv(filename, rows) {
   const csv = toCsv(rows);
-  downloadBlob(filename, new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), filename);
 }
 
 function downloadJson(filename, obj) {
   const json = JSON.stringify(obj, null, 2) + '\n';
-  downloadBlob(filename, new Blob([json], { type: 'application/json' }));
+  downloadBlob(new Blob([json], { type: 'application/json' }), filename);
 }
 
 // The chart on screen takes its colours and type from the page stylesheet and
@@ -1238,7 +1227,7 @@ function downloadCurrentSvg(filename) {
   inlineSvgStyles(el, clone);
   svgExportBackdrop(clone, el.ownerDocument?.defaultView);
   const svgText = new XMLSerializer().serializeToString(clone);
-  downloadBlob(filename, new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' }));
+  downloadBlob(new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' }), filename);
 }
 
 function buildShareUrl() {
@@ -3662,7 +3651,8 @@ saveDefaultViz?.addEventListener('click', async () => {
     const updated = await apiPatch('/api/v1/me/preferences', {
       default_visualisation: defaultState,
     });
-    window.keenPreferences = updated || window.keenPreferences || {};
+    // The design system's date helpers read the account's preferences from here.
+    window.mospPreferences = updated || window.mospPreferences || {};
     defaultVizPref =
       updated && updated.default_visualisation && typeof updated.default_visualisation === 'object'
         ? updated.default_visualisation

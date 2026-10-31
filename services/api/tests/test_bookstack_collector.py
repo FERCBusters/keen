@@ -14,6 +14,8 @@ import httpx
 import pytest
 from app.ingest import bookstack as bs
 from app.security.regex import compile_pattern
+from app.services.errors import DomainError
+from app.services.managed_configurations import _validate_connector
 
 PAGE_LIST_ITEM = {
     "id": 11,
@@ -1150,8 +1152,7 @@ def test_mapped_pages_wait_for_changes_when_seeding_is_off(db, env):
 def test_mapped_pages_are_found_in_each_configured_book(db, env):
     cfg = {
         "label": "multi",
-        # Entries without a usable identity are ignored.
-        "books": [{"id": 7}, {"id": 8}, {"id": "seven"}, {"slug": ""}, 5],
+        "books": [{"id": 7}, {"id": 8}],
         "page_mappings": [
             {"match": {"slug": "hr-handbook"}, "map_to": ["A.6.3"]},
             {"match": {"slug_regex": "^supplier-"}, "map_to": ["A.5.19"]},
@@ -1213,7 +1214,6 @@ def test_unusable_settings_fall_back_and_actors_come_from_the_creator(db, env):
     )
     cfg = {
         "label": "fallbacks",
-        "book": {"id": "seven"},
         "capture": {"preview_chars": "lots"},
     }
 
@@ -1225,13 +1225,6 @@ def test_unusable_settings_fall_back_and_actors_come_from_the_creator(db, env):
     assert stored["actor"] == "Founder"
     payload = stored["normalized_payload"]["bookstack"]
     assert payload["preview_chars"] == 500
-    # An unusable book id leaves the listing unscoped.
-    listing = next(
-        r
-        for r in run.requests
-        if r.url.path == "/api/pages" and "filter[updated_at:gt]" in r.url.params
-    )
-    assert "filter[book_id]" not in listing.url.params
 
 
 def test_a_mapping_scoped_to_another_book_slug_never_matches():
@@ -1454,3 +1447,86 @@ def test_preview_text_is_empty_when_tag_stripping_times_out():
     with patch.object(bs, "_TAG_RE", slow):
         assert bs._strip_html_to_text("<p>text</p>") == ""
     slow.sub.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "cfg,expected",
+    [
+        ({}, (None, None, [])),
+        ({"book": {"id": "7"}}, (7, None, [])),
+        ({"book": {"slug": " isms "}}, (None, "isms", [])),
+        ({"book_id": 7, "book_slug": "isms"}, (7, "isms", [])),
+        ({"book": None, "book_id": 3, "books": None}, (3, None, [])),
+        ({"book": {"id": 7.0}}, (7, None, [])),
+        (
+            {"books": ["isms", {"id": 8}, {"book_slug": "hr", "id": "9"}]},
+            (None, None, [(None, "isms"), (8, None), (9, "hr")]),
+        ),
+        ({"books": None}, (None, None, [])),
+    ],
+)
+def test_book_scope_reads_one_or_several_books(cfg, expected):
+    assert bs.book_scope(cfg) == expected
+
+
+@pytest.mark.parametrize(
+    "cfg",
+    [
+        {"book": {"id": "isms"}},
+        {"book": {"id": 0, "slug": "isms"}},
+        {"book": {"id": True}},
+        {"book": {"id": 7.5}},
+        {"book": {"slug": "  "}},
+        {"book": 7},
+        {"book_id": "seven"},
+        {"books": "isms"},
+        {"books": [{"id": "x"}]},
+        {"books": [{"slug": ""}]},
+        {"books": ["isms", None]},
+        {"books": [""]},
+        # Blank or empty values name no book, so they are refused as well.
+        {"book": {}},
+        {"book_id": ""},
+        {"book_slug": "  "},
+        {"books": []},
+        {"books": [{"id": 8, "slug": " "}]},
+        {"book": {"id": float("inf")}},
+        {"book": {"id": float("nan")}},
+    ],
+)
+def test_an_unusable_book_scope_is_refused(cfg):
+    # A mistyped book must never widen collection to every book.
+    with pytest.raises(ValueError):
+        bs.book_scope(cfg)
+
+
+def test_an_unusable_book_scope_fails_the_run_without_listing_pages(db, env):
+    stack, api = env(list_items=[PAGE_LIST_ITEM], full_pages={11: PAGE_FULL})
+    cfg = {"label": "typo", "book": {"id": "isms"}}
+    stored = []
+
+    def store(db, **kwargs):
+        stored.append(kwargs)
+        return {"deduped": False, "event_id": "ev-1"}
+
+    with contextlib.ExitStack() as total:
+        total.enter_context(stack)
+        connections, run_lock = connections_env()
+        total.enter_context(connections)
+        total.enter_context(run_lock)
+        total.enter_context(patch.object(bs, "load_bookstack_config", return_value=cfg))
+        total.enter_context(patch.object(bs.settings, "bookstack_enabled", True))
+        total.enter_context(patch.object(bs, "store_event_with_artifact", store))
+        results = bs.ingest_bookstack_all(db)
+
+    assert "error" in results[0]
+    assert not [r for r in api.requests if r.url.path == "/api/pages"]
+    assert stored == []
+
+
+def test_saving_an_unusable_book_scope_is_refused():
+    _validate_connector("bookstack", {"book": {"slug": "isms"}})
+    with pytest.raises(DomainError) as refused:
+        _validate_connector("bookstack", {"books": [{"id": "isms"}]})
+    assert refused.value.status_code == 400
+    assert "positive whole number" in refused.value.detail

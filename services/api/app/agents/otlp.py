@@ -113,7 +113,7 @@ def decode_batch(data, agent_id):
     resources = document.get("resourceLogs", [])
     if not isinstance(resources, list) or len(resources) > 64:
         raise ValueError("Resource limit")
-    out = []
+    out: list[AgentEvent] = []
     ueu = []
     count = 0
     for resource in resources:
@@ -203,7 +203,7 @@ def decode_batch(data, agent_id):
             raise ValueError("A signed batch carries UEU records only")
     if len({e.id for e in out}) != len(out):
         # Identical retried records inside a request are accepted once.
-        unique = {}
+        unique: dict[str, AgentEvent] = {}
         for e in out:
             key = str(e.id)
             if key in unique and unique[key] != e:

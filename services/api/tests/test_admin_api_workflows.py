@@ -7,12 +7,15 @@ Worker dispatch and rule evaluation are replaced at their owning modules.
 
 import io
 import json
+import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
+import sqlalchemy
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     Artifact,
     AuditLog,
@@ -29,6 +32,7 @@ from app.db.models import (
     User,
     user_groups,
 )
+from app.services import admin as admin_service
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (
@@ -37,6 +41,14 @@ from tests.test_assembled_authority_regressions import (
 )
 
 HOSTILE = '<img src=x onerror="alert(1)">'
+
+
+def _stored_name(uri):
+    """A stored diary file's name without the suffix unique to its attempt."""
+    name = uri.rsplit("/", 1)[-1]
+    unique = re.fullmatch(r"(.+)-[0-9a-f]{16}(\.[^.]+)?", name)
+    assert unique, name
+    return unique[1] + (unique[2] or "")
 
 
 @pytest.fixture
@@ -174,7 +186,6 @@ def test_audit_views_need_audit_permission_or_administrator(keen):  # noqa: F811
 
 
 def test_audit_views_check_access_in_the_operation_itself(keen):  # noqa: F811
-    from app.services import admin as admin_service
     from app.services.errors import DomainError
 
     reader = keen.user("isms.read")
@@ -308,7 +319,6 @@ def test_control_import_reports_refused_items_and_keeps_the_rest(admin):
 
 
 def test_control_import_stops_on_database_failures(admin, monkeypatch):
-    from app.services import admin as admin_service
     from sqlalchemy.exc import OperationalError
 
     real = admin_service._import_control_item
@@ -339,8 +349,6 @@ def test_control_import_stops_on_database_failures(admin, monkeypatch):
 def test_control_import_reports_unexpected_failures_without_internal_detail(
     admin, monkeypatch
 ):
-    from app.services import admin as admin_service
-
     real = admin_service._import_control_item
 
     def broken(db, framework_slug, item):
@@ -870,7 +878,6 @@ def test_ingest_runs_queue_enabled_sources_and_refuse_disabled_or_paused(
 
 def test_loki_cursor_reset_moves_checkpoints_forward(admin, monkeypatch):
     from app.ingest import connections as connection_module
-    from app.services import admin as admin_service
 
     db = admin.db
     connection = SimpleNamespace(id="loki-main")
@@ -960,8 +967,6 @@ def _event(db, **kw):
 
 
 def test_remap_applies_rules_to_filtered_events(admin, monkeypatch):
-    from app.services import admin as admin_service
-
     db = admin.db
     target = _event(db)
     failing = _event(db, summary="Breaks rules")
@@ -1085,9 +1090,9 @@ def test_diary_entries_map_controls_and_store_attachments(admin):
         for a in db.query(Artifact).filter_by(event_id=event.id)
         if a.kind != "diary_entry"
     )
-    assert storage[0].endswith("attachment-1.png")
+    assert _stored_name(storage[0]) == "attachment-1.png"
     # Long extensions are capped at twelve characters, including the dot.
-    assert storage[1].endswith("attachment-2.extremelylo")
+    assert _stored_name(storage[1]) == "attachment-2.extremelylo"
 
     # JSON entries use the server-side author and ignore a browser-supplied one.
     json_entry = admin.call(
@@ -1111,6 +1116,54 @@ def test_diary_entries_map_controls_and_store_attachments(admin):
         == "clause"
     )
     admin.call("POST", "/v1/admin/diary", {"summary": "  "}, status=400)
+
+
+def test_files_stored_by_a_failed_diary_entry_are_queued_for_cleanup(
+    admin, monkeypatch
+):
+    """A request that stores a file and then fails leaves no unqueued object."""
+    stored = []
+
+    def store_then_fail(**kwargs):
+        if stored:
+            raise RuntimeError("storage failed for the second file")
+        stored.append(real_put_bytes(**kwargs).uri)
+        return SimpleNamespace(uri=stored[-1], sha256="0" * 64, size_bytes=1)
+
+    real_put_bytes = admin_service.put_bytes
+    monkeypatch.setattr(admin_service, "put_bytes", store_then_fail)
+    response = admin.client.post(
+        "/v1/admin/diary",
+        headers=unsafe(admin.client),
+        data={"summary": "Two files", "timestamp": "2026-10-01T09:30:00Z"},
+        files=[
+            ("attachments", ("one.txt", io.BytesIO(b"one"), "text/plain")),
+            ("attachments", ("two.txt", io.BytesIO(b"two"), "text/plain")),
+        ],
+    )
+    assert response.status_code == 500
+    assert not admin.db.query(Artifact).filter(Artifact.storage_uri.in_(stored)).all()
+    queued = admin.db.execute(
+        sqlalchemy.text(
+            "SELECT storage_uri, next_attempt_at FROM evidence_object_cleanup"
+        )
+    ).all()
+    assert [row.storage_uri for row in queued] == stored
+    # The retention worker leaves it alone for an hour.
+    assert queued[0].next_attempt_at > utc_now_naive() + timedelta(minutes=59)
+
+
+def test_a_file_sent_as_a_diary_text_field_is_not_read_as_text(admin):
+    """A file posted under summary is refused like a missing summary."""
+    response = admin.client.post(
+        "/v1/admin/diary",
+        headers=unsafe(admin.client),
+        files=[
+            ("summary", ("summary.txt", io.BytesIO(b"Backups restored"), "text/plain")),
+            ("timestamp", ("when.txt", io.BytesIO(b"2026-10-01"), "text/plain")),
+        ],
+    )
+    assert response.status_code == 400, response.text
 
 
 def test_posting_the_same_diary_entry_again_adds_no_mappings_or_duplicate_files(admin):
@@ -1151,7 +1204,7 @@ def test_posting_the_same_diary_entry_again_adds_no_mappings_or_duplicate_files(
         for a in db.query(Artifact).filter_by(event_id=event_id)
         if a.kind == "diary_attachment"
     ]
-    assert len(stored) == 1 and stored[0].endswith("attachment-1.bin")
+    assert len(stored) == 1 and _stored_name(stored[0]) == "attachment-1.bin"
     assert (first["attachments_created"], second["attachments_created"]) == (1, 0)
 
     # A different file added to the same entry is numbered after the first.
@@ -1164,7 +1217,7 @@ def test_posting_the_same_diary_entry_again_adds_no_mappings_or_duplicate_files(
     assert response.status_code == 200, response.text
     assert response.json()["attachments_created"] == 1
     assert sorted(
-        a.storage_uri.rsplit("/", 1)[-1]
+        _stored_name(a.storage_uri)
         for a in db.query(Artifact).filter_by(event_id=event_id)
         if a.kind == "diary_attachment"
     ) == ["attachment-1.bin", "attachment-2.txt"]

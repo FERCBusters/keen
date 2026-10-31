@@ -37,6 +37,7 @@
 - Test UI rendering and navigation with hostile strings as well as ordinary values. For CSP or vendor changes, verify actual vendor behavior and report any missing browser coverage.
 - Update `pyproject.toml` and `poetry.lock` together for Python dependencies. Keep unrelated locked versions unchanged. Preserve pinned third-party Actions, image digests and design-system revisions. Pin a new third-party image with `python3 tools/docker_image_pins.py update`.
 - Keep `poetry run ruff check ../..` and `poetry run ruff format --check ../..` (from `services/api`) clean; CI and the pre-commit hooks run both. Keep imports at the top of each module.
+- Keep `poetry run python ../../tools/mypy_baseline.py check` (from `services/api`) passing. New and changed code adds no type findings; when you fix baselined findings, run its `update` command so the baseline shrinks. Leave `mypy-baseline.txt` unedited by hand.
 - Validate the exact final working tree after formatter or lint fixes. Include a fresh-process application import and the lifespan tests; earlier results from a different tree do not validate the delivered code. Imported fixtures and public re-exports may be used indirectly: mark them explicitly and preserve their contracts.
 - Report what passed, what failed and what could not run. Do not equate a green SQLite or mocked UI suite with full PostgreSQL CI, production-browser validation or a penetration test.
 

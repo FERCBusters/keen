@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+import sqlalchemy
 import yaml
 from app.core import managed_configuration
 from app.core.config import settings
@@ -637,6 +638,14 @@ def test_a_retry_after_a_failed_chunk_stores_every_line(lk, monkeypatch):
     (first,) = lk.run()
     assert "error" in first
     assert lk.events() == []
+    # Both objects the failed attempt stored are queued for the retention worker.
+    queued = set(
+        lk.db.execute(
+            sqlalchemy.text("SELECT storage_uri FROM evidence_object_cleanup")
+        ).scalars()
+    )
+    assert sorted(uri.rsplit(".", 1)[1] for uri in queued) == ["json", "log"]
+    assert all("/loki/ssh/" in uri for uri in queued)
 
     monkeypatch.setattr(common, "apply_rules", real_rules)
     lk.upstream.replies.append(stream)
@@ -644,3 +653,8 @@ def test_a_retry_after_a_failed_chunk_stores_every_line(lk, monkeypatch):
     assert "error" not in second, second
     assert second["created_events"] == 2
     assert len(lk.events()) == 2
+    # The retry stored fresh objects; the failed attempt's objects stay queued.
+    stored = {
+        artifact.storage_uri for event in lk.events() for artifact in event.artifacts
+    }
+    assert len(stored) == 2 and not stored & queued

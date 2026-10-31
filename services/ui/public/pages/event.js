@@ -16,6 +16,7 @@ import {
   confirmAction,
   esc,
   fmtTs,
+  getUiConfig,
   toast,
   qs,
   getSourceMeta,
@@ -41,10 +42,11 @@ if (PRINT_MODE) {
   document.body.classList.add('print-view');
   // Load /me but avoid rendering the fixed navbar in the print-only window.
   me = await apiGet('/api/v1/me');
-  window.keenMe = me;
-  window.keenDefaultTimezone = me?.default_timezone || 'Etc/UTC';
-  window.keenPreferences = me?.preferences || {};
-  window.keenAvailableThemes = me?.available_themes || null;
+  // The navbar normally gives the design system's date helpers the account's
+  // timezone and date format; they read these globals on every call.
+  window.mospDefaultTimezone = me?.default_timezone || 'Etc/UTC';
+  window.mospDefaultDateFormat = me?.default_date_format || getUiConfig().dateFormat || 'ymd';
+  window.mospPreferences = me?.preferences || {};
 } else {
   me = await initNavbar();
 }

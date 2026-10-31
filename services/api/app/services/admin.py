@@ -34,6 +34,7 @@ from app.db.models import (
     group_permissions,
     user_groups,
 )
+from app.db.session import track_unpublished_object
 from app.ingest.bookstack import apply_bookstack_config_mappings
 from app.ingest.cloud import providers as cloud_providers
 from app.ingest.cloud.runner import enabled as cloud_enabled
@@ -93,7 +94,7 @@ from app.services.presentation import parse_iso_dt as _parse_iso_dt
 from app.services.presentation import (
     validate_control_justification as _validate_control_justification,
 )
-from app.storage.s3 import put_bytes
+from app.storage.s3 import attempt_key, put_bytes
 
 
 def _bump_user_authz(db: Session, user_ids) -> None:
@@ -1599,8 +1600,9 @@ async def admin_diary(
                 ext = ext[:12]
             if not ext:
                 ext = ".bin"
-            key = f"diary/{date_part}/{eid}/attachment-{number}{ext}"
+            key = attempt_key(f"diary/{date_part}/{eid}/attachment-{number}{ext}")
             stored = put_bytes(key=key, data=data, content_type=ctype_up)
+            track_unpublished_object(db, stored.uri)
             art = Artifact(
                 event_id=eid,
                 kind=kind,
@@ -1717,8 +1719,9 @@ def admin_update_diary(
             base_dt = base_dt.replace(tzinfo=timezone.utc)
         date_part = base_dt.date().isoformat()
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        key = f"diary/{date_part}/{str(e.id)}/edit-{stamp}.json"
+        key = attempt_key(f"diary/{date_part}/{e.id}/edit-{stamp}.json")
         stored = put_bytes(key=key, data=payload_bytes, content_type="application/json")
+        track_unpublished_object(db, stored.uri)
         art = Artifact(
             event_id=eid,
             kind="diary_entry_edit",

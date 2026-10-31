@@ -86,7 +86,7 @@ def field_matches(payload, condition):
 
 
 def observed_fields(payload):
-    result = []
+    result: list[dict] = []
 
     def visit(value, path):
         if len(result) >= 100 or len(path) > 8:

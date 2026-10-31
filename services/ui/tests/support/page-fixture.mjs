@@ -93,6 +93,7 @@ export async function page(
       queueMicrotask,
       FormData,
       Blob,
+      AbortController,
       setInterval,
       clearInterval,
       localStorage: undefined,

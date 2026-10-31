@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { page, settle } from './support/page-fixture.mjs';
+import { designSystemTableSorting } from './support/design-system-table-sorting.mjs';
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const EVENTS = [
@@ -10,17 +11,28 @@ const EVENTS = [
   { id: 'e2', source: 'ci', summary: 'Rollback', timestamp: '2026-01-02', controls: [] },
 ];
 
-async function events(t, { me, post, globals, stories = [] } = {}) {
+async function events(
+  t,
+  { me, post, globals, stories = [], items = EVENTS, sorting = false } = {},
+) {
+  let win;
   const calls = { get: [], post: [] };
   const ui = await page(t, 'events', {
     me: { can_view_events: true, ...me },
     globals,
+    // The design system's own header sorting, for tests of the table header.
+    ...(sorting && {
+      vendor: designSystemTableSorting(() => win),
+      setup(window) {
+        win = window;
+      },
+    }),
     get: async (u) => {
       calls.get.push(u.pathname + u.search);
       if (u.pathname === '/api/v1/sources/meta') return { items: [] };
       if (u.pathname === '/api/v1/controls') return { items: [] };
       if (u.pathname === '/api/v1/events/facets') return { sources: [], controls: [] };
-      if (u.pathname === '/api/v1/events') return { total: 2, items: EVENTS };
+      if (u.pathname === '/api/v1/events') return { total: items.length, items };
       if (u.pathname === '/api/v1/stories') {
         if (stories === null) throw new Error('Stories offline');
         return { items: stories };
@@ -35,7 +47,9 @@ async function events(t, { me, post, globals, stories = [] } = {}) {
         return { id: 'new', title: 'Created' };
       }),
   });
-  await settle(() => ui.document.querySelectorAll('#rows tr[data-event-id]').length === 2);
+  await settle(
+    () => ui.document.querySelectorAll('#rows tr[data-event-id]').length === items.length,
+  );
   const boxes = () => [...ui.document.querySelectorAll('#rows [data-select-event]')];
   const check = (id, on = true) => {
     const box = boxes().find((b) => b.value === id);
@@ -257,4 +271,47 @@ test('a hidden selection bar stays hidden despite its Bootstrap display class', 
   assert.match(html, /id="selectionBar" class="[^"]*d-flex[^"]*"[^>]*hidden/);
   const css = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
   assert.match(css, /\[hidden\] \{\s*display: none !important;/);
+});
+
+const rowOrder = (ui) =>
+  [...ui.document.querySelectorAll('#rows tr[data-event-id]')].map((tr) => tr.dataset.eventId);
+const header = (ui, name) =>
+  [...ui.document.querySelectorAll('thead th')].find((th) => th.textContent.trim() === name);
+
+test('the select-all box in the sortable header selects every row', async (t) => {
+  const { ui, boxes } = await events(t, { me: { can_manage_stories: true }, sorting: true });
+  const count = ui.el('selectionBar').querySelector('[data-selection-count]');
+  // The selection column has nothing to sort by, so its header is no sort button.
+  assert.equal(ui.el('selectHeader').getAttribute('role'), null);
+  ui.el('selectAll').click();
+  assert.deepEqual(
+    boxes().map((b) => b.checked),
+    [true, true],
+  );
+  assert.equal(count.textContent, '2 selected');
+  ui.el('selectAll').click();
+  assert.deepEqual(
+    boxes().map((b) => b.checked),
+    [false, false],
+  );
+  assert.equal(ui.el('selectionBar').hidden, true);
+  assert.deepEqual(rowOrder(ui), ['e1', 'e2']);
+});
+
+test('a sorted column orders rows by its own cells, with or without the selection column', async (t) => {
+  // Sources run opposite to time, so sorting by the wrong column shows.
+  const items = [
+    { id: 'e1', source: 'zeta', summary: 'First', timestamp: '2026-01-01', controls: [] },
+    { id: 'e2', source: 'alpha', summary: 'Second', timestamp: '2026-01-02', controls: [] },
+    { id: 'e3', source: 'mid', summary: 'Third', timestamp: '2026-01-03', controls: [] },
+  ];
+  for (const me of [{}, { can_manage_stories: true }]) {
+    const { ui } = await events(t, { me, items, sorting: true });
+    header(ui, 'Time').click();
+    assert.deepEqual(rowOrder(ui), ['e1', 'e2', 'e3']);
+    header(ui, 'Time').click();
+    assert.deepEqual(rowOrder(ui), ['e3', 'e2', 'e1']);
+    header(ui, 'Source').click();
+    assert.deepEqual(rowOrder(ui), ['e2', 'e3', 'e1']);
+  }
 });

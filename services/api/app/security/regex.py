@@ -3,6 +3,8 @@
 import re
 from dataclasses import dataclass
 from functools import lru_cache
+from re import _parser  # type: ignore[attr-defined]  # CPython's parser has no stub
+from typing import Any
 
 import regex
 
@@ -14,7 +16,7 @@ def validate_pattern(pattern):
     if len(pattern) > 512:
         raise ValueError("Pattern must be under 512 characters")
     try:
-        parsed = re._parser.parse(pattern, 0)
+        parsed = _parser.parse(pattern, 0)
     except (re.error, RecursionError) as exc:
         raise ValueError(f"Invalid pattern: {exc}") from exc
 
@@ -22,29 +24,29 @@ def validate_pattern(pattern):
         unbounded = 0
         for op, value in items:
             if op in (
-                re._parser.MAX_REPEAT,
-                re._parser.MIN_REPEAT,
-                re._parser.POSSESSIVE_REPEAT,
+                _parser.MAX_REPEAT,
+                _parser.MIN_REPEAT,
+                _parser.POSSESSIVE_REPEAT,
             ):
-                if value[1] != re._parser.MAXREPEAT and value[1] > 1000:
+                if value[1] != _parser.MAXREPEAT and value[1] > 1000:
                     raise ValueError("Bounded repetition must be at most 1000")
                 if repeated:
                     raise ValueError("Nested repetition can stall ingestion")
-                if value[1] == re._parser.MAXREPEAT:
+                if value[1] == _parser.MAXREPEAT:
                     unbounded += 1
                 check(value[2], repeated=True)
-            elif op == re._parser.ATOMIC_GROUP:
+            elif op == _parser.ATOMIC_GROUP:
                 check(value, repeated)
-            elif op == re._parser.SUBPATTERN:
+            elif op == _parser.SUBPATTERN:
                 check(value[-1], repeated)
-            elif op == re._parser.BRANCH:
+            elif op == _parser.BRANCH:
                 if repeated:
                     raise ValueError("Repeated alternatives can stall ingestion")
                 for branch in value[1]:
                     check(branch, repeated)
-            elif op in (re._parser.GROUPREF, re._parser.GROUPREF_EXISTS):
+            elif op in (_parser.GROUPREF, _parser.GROUPREF_EXISTS):
                 raise ValueError("Backreferences are unsupported")
-            elif op in (re._parser.ASSERT, re._parser.ASSERT_NOT):
+            elif op in (_parser.ASSERT, _parser.ASSERT_NOT):
                 check(value[1], repeated)
         if unbounded > 1:
             raise ValueError("Use one unbounded repetition at most")
@@ -54,7 +56,7 @@ def validate_pattern(pattern):
 
 @dataclass(frozen=True)
 class BoundedPattern:
-    compiled: object
+    compiled: Any  # a regex.Pattern; the regex package ships no type hints
 
     def search(self, value):
         if len(value) > MAX_INPUT_CHARS:

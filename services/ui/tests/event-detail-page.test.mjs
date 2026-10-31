@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, settle } from './support/page-fixture.mjs';
+import { designSystemDates } from './support/design-system-dates.mjs';
 const event = {
   id: 'e1',
   source: 'keen-agent',
@@ -194,6 +195,34 @@ test('a control inherited through a crosswalk links the other control and the ru
     printed.el('rationale').textContent,
     /Another framework's control \(ISO A\.8\.13\) cross-referenced this control when the event was mapped\./,
   );
+});
+
+test('the print view formats timestamps in the account timezone and date format', async (t) => {
+  // The print view has no navbar, so it gives the design system's date helpers
+  // the account's settings itself.
+  for (const [me, expected] of [
+    [{ default_timezone: 'America/Sao_Paulo', default_date_format: 'dmy' }, '01/01/2026 20:30:00'],
+    [
+      {
+        default_timezone: 'Australia/Sydney',
+        default_date_format: 'dmy',
+        preferences: { use_local_timezone: true, timezone: 'Asia/Tokyo', date_format: 'ymd' },
+      },
+      '2026-01-02 08:30:00',
+    ],
+  ]) {
+    let win;
+    const ui = await fixture(t, {
+      query: '&id=e1&print=1',
+      event: { timestamp: '2026-01-01T23:30:00Z' },
+      me,
+      vendor: designSystemDates(() => win),
+      setup(window) {
+        win = window;
+      },
+    });
+    assert.equal(ui.el('ts').textContent, expected);
+  }
 });
 
 test('an unmapped event shows suggested controls and a rule proposal with the ticked refs', async (t) => {

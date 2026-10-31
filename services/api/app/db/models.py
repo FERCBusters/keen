@@ -299,15 +299,15 @@ def effective_cross_framework_links(
             _source_control.c.framework_slug.in_(enabled),
             _target_control.c.framework_slug.in_(enabled),
         )
-    pairs = pairs.distinct().subquery()
+    unique_pairs = pairs.distinct().subquery()
     derived = select(
         (
-            cast(pairs.c.source_control_id, String)
+            cast(unique_pairs.c.source_control_id, String)
             + literal(":")
-            + cast(pairs.c.target_control_id, String)
+            + cast(unique_pairs.c.target_control_id, String)
         ).label("id"),
-        pairs.c.source_control_id,
-        pairs.c.target_control_id,
+        unique_pairs.c.source_control_id,
+        unique_pairs.c.target_control_id,
         literal(
             "Related evidence via shared NIST controls in Open Security Architecture (CC BY-SA 4.0). "
             "Keen-derived crosswalk; review relevance and coverage gaps, as related controls can differ in scope."
@@ -317,8 +317,8 @@ def effective_cross_framework_links(
     ).where(
         ~exists(
             select(_explicit.c.id).where(
-                _explicit.c.source_control_id == pairs.c.source_control_id,
-                _explicit.c.target_control_id == pairs.c.target_control_id,
+                _explicit.c.source_control_id == unique_pairs.c.source_control_id,
+                _explicit.c.target_control_id == unique_pairs.c.target_control_id,
             )
         )
     )

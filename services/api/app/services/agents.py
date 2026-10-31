@@ -275,7 +275,7 @@ def persist_batch(*, db, auth, authorization, batch):
                 artifact_kind="agent_record",
                 artifact_bytes=json.dumps(payload).encode(),
                 artifact_content_type="application/json",
-                artifact_key=f"agents/{a.id}/{event.id}/{uuid.uuid4()}.json",
+                artifact_key=f"agents/{a.id}/{event.id}.json",
                 captured_by="keen-agent:" + a.id,
                 commit=False,
             )

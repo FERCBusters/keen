@@ -19,6 +19,7 @@ from app.db.models import (
     FrameworkClause,
     IsmsDocument,
 )
+from app.db.session import track_unpublished_object
 from app.ingest.bookstack import _client
 from app.security.permissions import has_permission
 from app.security.redaction import prepare_event_fields
@@ -146,6 +147,7 @@ def capture_section(*, payload: SectionInput, user, db: Session):
     stored = put_bytes(
         f"bookstack-policy/{document.id}/{uuid.uuid4()}.json", raw, "application/json"
     )
+    track_unpublished_object(db, stored.uri)
     row = BookStackSectionEvidence(
         document_id=document.id,
         page_id=payload.page_id,

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import Artifact, ControlItem, Event, Mapping
+from app.db.session import track_unpublished_object
 from app.mapping.rules import CLAUSE, evaluate_by_framework, load_rules
 from app.mapping.targets import Target, resolve_targets
 from app.security.redaction import (
@@ -21,7 +22,7 @@ from app.security.redaction import (
     redact_str,
     storable,
 )
-from app.storage.s3 import put_bytes
+from app.storage.s3 import attempt_key, put_bytes
 
 
 def is_safe_url(url: str) -> bool:
@@ -274,7 +275,7 @@ def store_event_with_artifact(
     from app.ingest.connections import identity, namespace
 
     external_id = namespace(external_id)
-    artifact_key = scoped_artifact_key(artifact_key)
+    artifact_key = scoped_artifact_key(attempt_key(artifact_key))
 
     (
         system,
@@ -349,6 +350,7 @@ def store_event_with_artifact(
     stored = put_bytes(
         key=artifact_key, data=artifact_bytes, content_type=artifact_content_type
     )
+    track_unpublished_object(db, stored.uri)
     art = Artifact(
         event_id=ev.id,
         kind=artifact_kind,

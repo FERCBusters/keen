@@ -701,6 +701,78 @@ def apply_bookstack_config_mappings(db: Session, ev: Event) -> int:
     return created
 
 
+_BAD_BOOK_ID = "BookStack book id must be a positive whole number"
+
+
+def _book_id(value) -> int | None:
+    """A configured book id, or None when the setting is empty (null)."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+        raise ValueError(_BAD_BOOK_ID)
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(_BAD_BOOK_ID) from None
+    if number <= 0:
+        raise ValueError(_BAD_BOOK_ID)
+    return number
+
+
+def _book_slug(value) -> str | None:
+    """A configured book slug, or None when the setting is empty (null)."""
+    if value is None:
+        return None
+    slug = str(value).strip()
+    if not slug:
+        raise ValueError("BookStack book slug must not be blank")
+    return slug
+
+
+def book_scope(
+    cfg: dict[str, Any],
+) -> tuple[int | None, str | None, list[tuple[int | None, str | None]]]:
+    """Return the configured book restriction as (book_id, book_slug, books).
+
+    With no restriction configured, or each setting null, collection covers
+    the whole instance. Any other value must name a book, and one that does
+    not raises ValueError, so a mistyped or blank book never widens collection
+    to every book. `book:` takes precedence over `books:`, for example::
+
+        book: {slug: isms}
+        books: [{slug: isms}, {id: 7}, risk-register]
+    """
+    book = cfg.get("book")
+    if book is not None:
+        if not isinstance(book, dict):
+            raise ValueError("BookStack `book` must be a mapping with an id or slug")
+        book_id, book_slug = _book_id(book.get("id")), _book_slug(book.get("slug"))
+        if book_id is None and book_slug is None:
+            raise ValueError("BookStack `book` needs an id or slug")
+    else:
+        book_id = _book_id(cfg.get("book_id"))
+        book_slug = _book_slug(cfg.get("book_slug"))
+
+    raw_books = cfg.get("books")
+    if raw_books is None:
+        raw_books = []
+    elif not isinstance(raw_books, list) or not raw_books:
+        raise ValueError("BookStack `books` must be a list of one or more books")
+    books: list[tuple[int | None, str | None]] = []
+    for entry in raw_books:
+        if isinstance(entry, str):
+            bid, slug = None, _book_slug(entry)
+        elif isinstance(entry, dict):
+            bid = _book_id(entry.get("id"))
+            slug = _book_slug(entry.get("slug", entry.get("book_slug")))
+        else:
+            raise ValueError("Each BookStack book needs an id or slug")
+        if bid is None and slug is None:
+            raise ValueError("Each BookStack book needs an id or slug")
+        books.append((bid, slug))
+    return book_id, book_slug, books
+
+
 @pausable("bookstack")
 @connection_runs("bookstack")
 def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
@@ -714,43 +786,9 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
     include_templates = bool(poll.get("include_templates") or False)
     max_pages = int(poll.get("max_pages") or 5000)
 
-    # Optional scope: Restrict ingest to a single ISMS book.
-    # (Your ISMS in BookStack is typically organized as a book.)
-    book_cfg = cfg.get("book") if isinstance(cfg.get("book"), dict) else {}
-    book_id = book_cfg.get("id") if book_cfg else cfg.get("book_id")
-    book_slug = book_cfg.get("slug") if book_cfg else cfg.get("book_slug")
-    try:
-        book_id = int(book_id) if book_id is not None else None
-    except Exception:
-        book_id = None
-    book_slug = str(book_slug).strip() if book_slug is not None else None
-
-    # Optional scope: Restrict ingest to multiple books.
-    # Example:
-    #   books:
-    #     - slug: "isms"
-    #     - slug: "risk-register"
-    # If `book:` is set, it takes precedence over `books:`.
-    books_raw = cfg.get("books") if isinstance(cfg.get("books"), list) else []
-    books: list[tuple[Optional[int], Optional[str]]] = []
-    for b in books_raw:
-        if isinstance(b, str):
-            slug = b.strip()
-            if slug:
-                books.append((None, slug))
-            continue
-        if not isinstance(b, dict):
-            continue
-        bid = b.get("id")
-        bslug = b.get("slug") or b.get("book_slug")
-        try:
-            bid = int(bid) if bid is not None else None
-        except Exception:
-            bid = None
-        bslug = str(bslug).strip() if bslug is not None else None
-        if bid is None and not bslug:
-            continue
-        books.append((bid, bslug or None))
+    # Optional scope: one book (`book:`, or `book_id`/`book_slug`), or several
+    # (`books:`). A scope that is present but unusable fails the run.
+    book_id, book_slug, books = book_scope(cfg)
 
     # Evidence capture settings
     capture = cfg.get("capture") if isinstance(cfg.get("capture"), dict) else {}

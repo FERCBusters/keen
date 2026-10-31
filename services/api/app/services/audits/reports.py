@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive as utcnow
 from app.db.models import User
+from app.db.session import track_unpublished_object
 from app.security.request_limits import MAX_FILE_UPLOAD
 from app.services.audits.access import editable_audit_or_404
 from app.services.audits.serializers import report_dict
@@ -43,6 +44,7 @@ def save_final_report(
     ext = safe_download_ext(os.path.splitext(filename)[1])
     key = f"audit-reports/{a.id}/{uuid.uuid4()}{ext}"
     stored = put_file(key, content, content_type)
+    track_unpublished_object(db, stored.uri)
     from app.services.evidence_retention import queue_object
 
     queue_object(db, a.final_report_storage_uri)  # replaced report is unreachable
