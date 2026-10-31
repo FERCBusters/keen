@@ -3,22 +3,27 @@
 [![Backend coverage](https://github.com/FERCBusters/keen/raw/badges/coverage-api.svg)](https://github.com/FERCBusters/keen/actions/workflows/tests.yml?query=branch%3Amain)
 [![Frontend coverage](https://github.com/FERCBusters/keen/raw/badges/coverage-ui.svg)](https://github.com/FERCBusters/keen/actions/workflows/tests.yml?query=branch%3Amain)
 
-Keen brings operational evidence, assurance frameworks, risk management and ISMS records into one workspace. It collects activity from your systems, maps evidence to controls, and helps people review that evidence during audits.
+Keen brings operational evidence, assurance frameworks, risk management and ISMS records into one workspace. It collects activity from your systems, maps evidence to controls based on matching structural fields found in the data ingested, and helps people review that evidence during audits.
+
+The goal of Keen is to be a totally open source, free compliance management platform that puts organisations and auditors on the same page (literally), with an 'evidence first' approach that avoids box-ticking, and which doesn't cost tens of thousands of dollars from walled garden platforms.
+
+Compliance and security should be in reach of anyone, even those without big budgets.
 
 ## What you can do
 
 - **Collect evidence:** ingest logs, development activity, service updates and API records, receive webhooks, and record manual diary evidence with attachments.
-- **Map across frameworks:** define rules that associate events with controls in multiple frameworks, preview their matches, and apply saved rules to past evidence. An event page suggests catalogue controls that match its wording, and a rule can be proposed from the ticked suggestions.
+- **Map across frameworks:** define rules that associate events with controls in over 90 compliance frameworks, all of which are editable. You can choose want controls are in scope for or even add your own frameworks.
 - **Watch each source's rhythm:** a source page compares recent activity with the source's own history, flags a source that has gone quiet, and lists quiet periods, daily spikes and repeated summaries with their unmapped counts.
-- **Manage assurance:** set framework scope, maintain a Statement of Applicability, review related controls, and inspect the evidence behind coverage counts. Each control's Requirements tab brings together its linked policies and processes, its evidence by source, the Diary included, and its effectiveness measures with their latest results.
-- **Plan SWOT responses and objectives:** rate strengths, weaknesses, opportunities and threats, organise them in hierarchies, link organisational records and framework requirements, and use quadrant, status-board, timeline and relationship views. Include SWOT in audit scope, sampling, questions and changelogs.
-- **Choose available tools:** administrators enable or disable workspaces, ISMS subsections, questions and audit sampling under Administration → Features. Parent settings preserve child preferences and existing records.
-- **Manage risks and ISMS records:** maintain risk registers and treatments, use the reusable risk library and Keen Mitigator, and link policies, assets, objectives, interested parties, measurements and meetings.
-- **Conduct audits:** plan and schedule audits, remind attendees by email before they start, sample evidence, record findings, discuss evidence through questions, and retain reports and document revisions.
-- **Check what people know:** write quizzes of multiple-choice and written questions on your policies, assign them to people, accounts or organisation roles, and run them once or in scheduled rounds with invitations and reminders. Questions and options are shuffled for every sitting, written answers are graded blind, and progress is saved page by page. Each round's average is recorded on the quiz's effectiveness measure for the controls it tests, people see their own score with a trophy when the quiz allows, and results stay anonymous until three people have finished.
-- **Tell the story of an episode:** gather the events, risks, records and notes of one incident or change into a story with a timeline and a drag-and-drop flow chart, start it from selected events or a histogram window, comment on it, question it and sample it into an audit.
+- **Manage assurance:** set framework scope, maintain a Statement of Applicability, review related controls, and inspect the evidence behind coverage counts. Each control's Requirements tab brings together its linked policies and processes, its evidence, and its effectiveness measures with their latest results.
+- **Plan SWOT responses and objectives:** rate strengths, weaknesses, opportunities and threats, organise them in hierarchies, link organisational records and framework requirements, and visualise it in a variety of ways.
+- **Manage risks and ISMS records:** maintain risk registers and treatments, access control and asset matrices, policies and procedures, objectives, measurements and minutes of meetings.
+- **Conduct audits:** plan and schedule audits, sample evidence, record findings, discuss evidence through questions, and retain reports and document revisions.
+- **Conduct training and awareness:** define quizzes of multiple-choice and written questions on your policies, assign them to people, accounts or organisation roles, and run them once or in scheduled rounds with invitations and reminders. Questions and options are shuffled for every sitting, written answers are graded blind. Each round's average is recorded on the quiz's effectiveness measure for the controls it tests.
+- **Add context to events through stories:** gather the events, risks, records and notes of one incident into a story with a timeline and a drag-and-drop flow chart, add notes and associate assets/policies. Stories, like everything else, can be sampled into audits.
 
-The catalogue includes 94 frameworks, including 88 from Open Security Architecture. Administrators choose which frameworks to enable, edit their controls and definitions, and compare two saved frameworks side by side with added, removed and changed entries. Evidence coverage indicates that evidence is present; reviewers assess its relevance, quality and sufficiency.
+## Try out the demo
+
+Visit https://keen.cloud and try a 30-day free demo, seeded with pretend data. This is the quickest way to get a feel for the application's features and experience layer. Only an e-mail address is required, purely to link it to the demo instance's authentication layer. We never use your e-mail address to send you any unsolicited mail.
 
 ## Run with Docker Compose
 
@@ -29,7 +34,7 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-Before starting, edit `.env`:
+Before starting, edit `.env` with at least the following:
 
 - Set a strong, unique `KEEN_BOOTSTRAP_ADMIN_PASSWORD`. The bootstrap account is created only when the user database is empty. After confirming you can sign in, remove both bootstrap variables and recreate the containers; the account and its current password remain in the database.
 - Replace `POSTGRES_PASSWORD` and `KEEN_REDIS_PASSWORD` with separate random passwords. The supplied database and Redis URLs interpolate these values; URL-encode reserved characters if you write connection URLs yourself.
@@ -44,11 +49,15 @@ docker compose pull
 docker compose up -d
 ```
 
-The API runs database migrations during startup. Workers and the scheduler wait for it to become healthy. `keen-worker` consumes `celery` for internal jobs, including notifications, caches, mapping backfills and scheduling. `keen-http-worker` consumes `ingest-http` for built-in HTTP polling, named-connection collection and custom API ingester runs. The optional `keen-imap-worker` consumes `imap`. Webhook/agent intake and interactive catalogue requests remain API operations.
+The API runs database migrations during startup. Workers and the scheduler wait for it to become healthy.
 
-Both ordinary workers default to one child process. The HTTP worker has a 768 MiB memory limit, one CPU, a 128-PID limit, prefetch multiplier one and recycling after 100 tasks. Tune aggregate worker memory and concurrency to host capacity. The Python API, workers and scheduler run as the image's non-root user with all Linux capabilities dropped and `no-new-privileges`; outbound TCP does not require added capabilities. Preserve writable artifact and scheduler volumes and correct UID 10001 ownership.
+- `keen-worker` consumes `celery` for internal jobs, including notifications, caches, mapping backfills and scheduling.
+- `keen-http-worker` consumes `ingest-http` for built-in HTTP polling, named-connection collection and custom API ingester runs.
+- The optional `keen-imap-worker` consumes `imap`.
 
-When upgrading an existing deployment, stop scheduling/manual submissions and let old collection jobs in `celery` finish before switching workers. Queue routing applies to newly published jobs; jobs already queued stay on their original queue. Do not purge jobs. Deploy matching API, worker and beat images and start `keen-http-worker` together. If it is stopped, newly queued HTTP collection waits while internal jobs continue. Admin Ingest runners return HTTP 202 and a queued task ID. Inspect worker results/logs for completion; event counts alone do not prove poll health.
+Both ordinary workers default to one child process. The HTTP worker has a 768 MiB memory limit, one CPU, a 128-PID limit, prefetch multiplier one and recycling after 100 tasks. Tune aggregate worker memory and concurrency to host capacity.
+
+The Python API, workers and scheduler run as the image's non-root user with all Linux capabilities dropped and `no-new-privileges`; outbound TCP does not require added capabilities.
 
 Open <http://localhost:8081> for local access, or your configured HTTPS address, and sign in with the bootstrap account. The Compose configuration binds published ports to loopback. Route browser and agent traffic through the UI reverse proxy; the browser-facing API prefix is `/api/v1/`.
 
@@ -65,7 +74,9 @@ For a local source build:
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-## Connect your sources
+## Next steps
+
+### Connect your sources
 
 Open **Admin → Sources & Evidence Mapping**:
 
@@ -74,19 +85,9 @@ Open **Admin → Sources & Evidence Mapping**:
 3. **Collect evidence.** Run collection and inspect the resulting events.
 4. **Add mapping rules.** Select the source connection and input, choose matching conditions, and select the controls the evidence supports.
 
-Supported sources include GitHub, GitLab, Forgejo, Gitea, Jenkins, Loki, Elasticsearch, CloudWatch Logs, Google Workspace, Redmine, Taiga, BookStack, Risk Ledger, IMAP mail, RSS/Atom and incoming webhooks. The custom API ingester builder supports declarative HTTP requests, field extraction, pagination and scheduling.
+Supported sources include GitHub, GitLab, Forgejo, Gitea, Jenkins, Loki, Elasticsearch, CloudWatch Logs, Google Workspace, Redmine, Taiga, BookStack, Risk Ledger, IMAP mail, RSS/Atom and incoming webhooks. The custom API ingester builder supports declarative HTTP requests, field extraction, pagination and scheduling. There is also a separate 'Cloud posture' system that supports reading your security posture from AWS, Microsoft Azure/Entra, Google Cloud, Akamai (Linode), DigitalOcean and Scaleway. These records get summarised under ISMS → People/Vendors → Vendors.
 
-Cloud vendor posture reads how AWS accounts, a Microsoft Entra tenant and its Azure subscriptions, a Google Cloud organisation, a Google Workspace customer, an Akamai Cloud (Linode) account, a DigitalOcean team and a Scaleway Organization are set up, with read-only credentials from the deployment environment, and records each provider's sign-ins, administrative changes and resource activity. Each provider's vendor page shows every account's checks (MFA, administrators, unused users, key age, logging, public access, network exposure, firewall coverage, backups, Kubernetes control planes and security findings), the identities the provider lists and its recent activity. Each result and activity entry is recorded as evidence for mapping rules, and a check that needs attention can be recorded as a risk. See **Help → Administering Keen → Cloud vendor posture**.
-
-You can configure several named connections of the same type. Keen records the connection identity on collected events. Credentials entered in the UI are encrypted in PostgreSQL using `KEEN_INTEGRATION_SECRET_KEY`. Environment credentials and file-managed connections are also supported; see `.env.example` and the **Help** administrator handbook for their configuration.
-
-Built-in HTTP collectors require HTTPS, restrict authenticated Git feeds to their connection's server, and limit individual responses to 16 MiB. They request uncompressed responses and ignore ambient proxy settings. Set `KEEN_INGESTION_ALLOWED_CIDRS` to restrict access to private networks; an empty value permits private networks except prohibited addresses such as loopback and link-local.
-
-IMAP uses one named connection per mailbox folder, verified implicit TLS (normally port 993), read-only access and a per-connection collection interval (five minutes by default; 5–1,440 minutes in steps of five). Scheduled and manual runs respect the interval. Admin → Ingest runners → Run IMAP queues all enabled connections. Enable `KEEN_IMAP_ENABLED=true` and start the isolated worker with `docker compose --profile imap up -d`. For local builds, include `-f docker-compose.yml -f docker-compose.build.yml` and `--build`. Body collection is off by default; when enabled it retains up to **4,000 characters** by default, preferring plaintext and storing HTML-only bodies as inert JSON text. Attachments are excluded. Private IMAP addresses require explicit `KEEN_INGESTION_ALLOWED_CIDRS` entries. See **Help → Administering Keen → IMAP mail** for limits, initial baselines and recovery.
-
-Custom API destinations require `KEEN_INTEGRATION_ALLOWED_HOSTS` (`host` for HTTPS port 443 or `host:port` for an explicit port); approved private destinations also require `KEEN_INTEGRATION_PRIVATE_CIDRS`. Configure upstream credentials with the access needed for collection.
-
-## Keen Agent
+### Keen Agent
 
 [Keen Agent](https://github.com/FERCBusters/keen-agent) sends signed evidence from servers and workstations in Keen's profile of the draft Universal Evidence Utility (UEU) format, over OTLP/HTTP JSON. Each agent holds its own Ed25519 key: register a persistent host to receive a single-use enrolment code, or create an enrollment profile for a fleet, whose shared bootstrap key lets each machine bind its own key. Keen verifies every request, batch signature, envelope and chain position, checks typed fields against the event catalogue, records any redaction in a custody record and keeps each envelope's provenance. Each event page shows its verification results. Other OpenTelemetry collectors can send logs with a bearer token.
 
@@ -98,7 +99,9 @@ The agent setup and enrollment instructions are in **Help**. Install and configu
 
 ## Access and authentication
 
-Keen supports local accounts, LDAP, OpenID Connect, Google and GitHub sign-in, user/group permissions, and local second-factor authentication with TOTP, security keys/passkeys and recovery codes. Administrators assign access to evidence, risks, ISMS records, audits and administration.
+Keen supports local accounts, LDAP, OpenID Connect, Google and GitHub sign-in.
+
+It has its own RBAC with user/group permissions, as well as local second-factor authentication with TOTP, security keys/passkeys and recovery codes.
 
 TOTP requires a separate persistent `KEEN_MFA_ENCRYPTION_KEY`. Follow the authentication chapters in **Help** for callback URLs, account linking and MFA policy.
 
@@ -108,9 +111,13 @@ PostgreSQL holds application records. Valkey provides sessions, task queues, rat
 
 Evidence artefacts use the persistent `artifacts` volume by default, with SHA-256 checksums recorded in Keen. S3-compatible storage is available through `KEEN_ARTIFACT_STORAGE_BACKEND` and the `KEEN_S3_*` settings. Storage-level retention and write protection depend on the selected backend and its configuration.
 
-Back up PostgreSQL, artefacts and encryption keys together, and test restoration. Preserve S3 credentials when older evidence still resides there. `docker compose down -v` deletes the Compose-managed data volumes.
+Evidence can be retained forever, up to a maximum number of days or a maximum number of events. This can be configured globally, then overridden by source, then overridden by specific mapping rule (in that order).
 
-Use Keen's retention controls to manage evidence lifetimes. Configure source schedules, review failed ingestion runs, and keep deployment images and dependencies maintained. Detailed setup, backup and administration guidance lives in the application's **Help** section and the [portal help](https://keen.cloud/help/).
+Evidence that has been sampled into an audit won't be deleted, regardless of the retention rule. You must delete an audit before that evidence can be deleted.
+
+## Further Documentation
+
+Detailed setup, backup and administration guidance lives in the application's **Help** section. Contextual help is offered on each page, as well as complete documentation located at `/help`, which is also available at our [portal site](https://keen.cloud/help/).
 
 ## Development and tests
 
@@ -121,10 +128,6 @@ Use Keen's retention controls to manage evidence lifetimes. Configure source sch
 
 The CI workflow in `.github/workflows/tests.yml` installs locked dependencies and runs `bash tests.sh` against disposable PostgreSQL and Valkey services. Set `KEEN_TEST_DATABASE_URL` to a dedicated test database and `KEEN_REDIS_URL` to the test broker before running it. The suite changes database contents. See [TESTING.md](TESTING.md) for the development test environment.
 
-Third-party images in the Dockerfiles, the Compose file and the CI and release workflows are pinned by digest (`name:tag@sha256:…`), and the test suite rejects an unpinned reference. `python3 tools/docker_image_pins.py check` lists pins whose tag has moved; `update` rewrites them after checking each new image index. The Docker image pins workflow (`.github/workflows/docker-image-pins.yml`) runs the update daily and proposes the new digests, with their upstream versions, in a pull request.
-
-The workflow acts through a GitHub App, so its pull requests start CI and can update pins in workflow files. Install an App on this repository with read and write access to contents, pull requests and workflows, then set the repository variable `IMAGE_PINS_APP_CLIENT_ID` to its client ID and the secret `IMAGE_PINS_APP_PRIVATE_KEY` to its private key. The workflow never approves or merges: a maintainer reviews each pull request and merges it. A branch ruleset on `main` that requires an approving review enforces this, since the App cannot approve its own pull requests; keep the App off the ruleset's bypass list and leave **Allow GitHub Actions to create and approve pull requests** disabled.
-
 ## Security
 
 See [SECURITY.md](SECURITY.md) for the threat model, deployment responsibilities and vulnerability reporting policy. Contributor and coding-agent guidance is in [AGENTS.md](AGENTS.md).
@@ -134,3 +137,13 @@ See [SECURITY.md](SECURITY.md) for the threat model, deployment responsibilities
 Keen software is licensed under [Apache License 2.0](LICENSE).
 
 The Keen Assurance Framework incorporates Vanta's Apache-2.0-licensed control set. OSA-derived catalogue data and adaptations are distributed under CC BY-SA 4.0. See [NOTICE](NOTICE) and the bundled licence files for attribution and applicable terms. Consult the underlying standards for authoritative requirements.
+
+## Professional Support
+
+Keen is completely open source and always will be.
+
+However, getting it set up, maintained or extended is not something everyone wants to or is capable of doing.
+
+Professional support for installation, ISMS migration/guidance, maintenance/upgrades, troubleshooting and custom feature development is available from [mig5 system administration](https://mig5.net/keen/), Keen's original inventor and principal developer. Please feel free to get in touch to discussion your needs.
+
+Contributions to [sponsor](https://github.com/sponsors/mig5) ongoing development of Keen is also warmly appreciated.
