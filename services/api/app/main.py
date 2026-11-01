@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from app.api.errors import domain_error_response, validation_error_response
 from app.api.routes import OPENAPI_TAGS
 from app.api.routes import router as api_router
+from app.api.sql_trace import RequestLabelMiddleware
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import AuditLog, User
@@ -481,3 +482,7 @@ app.add_middleware(RequestBodyLimitMiddleware)
 
 # Response policy also covers rejections from every inner middleware.
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Outermost when enabled, so statements from every middleware are labelled.
+if settings.sql_trace:
+    app.add_middleware(RequestLabelMiddleware)

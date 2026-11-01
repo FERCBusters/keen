@@ -8,8 +8,11 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
+from app.db.sql_trace import install_statement_labels
 
 engine = create_engine(settings.database_url, pool_pre_ping=True, hide_parameters=True)
+if settings.sql_trace:
+    install_statement_labels(engine)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 

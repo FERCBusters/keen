@@ -104,6 +104,33 @@ a finding the baseline does not list, and on a listed finding that has been
 fixed. After fixing findings, run the script's `update` command and commit the
 smaller baseline. CI and the pre-commit hooks run the check.
 
+## Tracing slow pages
+
+`tools/keen-perf-trace.sh` records which pages and actions run which database
+queries on a Compose installation. Run it from the directory Keen is started
+from, use Keen in a browser, and type short notes to mark each step; Enter on
+an empty line or Ctrl-C ends the trace. Set `DURATION` to run it unattended.
+
+While it runs, PostgreSQL logs every statement with its duration and the plan
+of any statement slower than `SLOW_MS` (50 ms by default), and the API and
+workers run with `KEEN_SQL_TRACE` on. Each statement then starts with a comment
+naming its API call and page, or worker task. Plans time each step, which adds
+a little to every statement, so compare durations within a trace. The script
+recreates those services from the Compose files they were started with, and
+refuses to start if those files, their settings or the image build have changed
+since. It switches both settings off when the trace ends, including after
+Ctrl-C, a lost terminal or an error, and puts back any of those PostgreSQL
+settings made earlier with `ALTER SYSTEM`. If it is killed outright, running it
+again reports what is still switched on and how to switch it off.
+
+`tools/keen_perf_report.py` writes the summary in `report.txt`: page visits
+in order with each API call's time, the time spent outside PostgreSQL, queries
+repeated within one call, the slowest statements with their plans, lock waits,
+temporary files and table scans. The capture directory and its `.tar.gz` also
+hold the raw logs. PostgreSQL logs statements with their values, so check
+`postgres.log`, and the plans and error messages in `report.txt`, before
+sharing a capture.
+
 ## Readable frontend source
 
 Install the pinned frontend tools with `npm ci --prefix services/ui/tests`.

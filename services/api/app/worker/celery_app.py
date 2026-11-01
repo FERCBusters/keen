@@ -4,6 +4,7 @@ from celery import Celery
 from celery.schedules import crontab
 
 from app.core.config import settings
+from app.worker.sql_trace import connect_task_labels
 
 
 def _event_counter_refresh_seconds() -> int:
@@ -16,6 +17,8 @@ celery_app = Celery(
     backend=settings.redis_url,
     include=["app.worker.tasks"],
 )
+if settings.sql_trace:
+    connect_task_labels()
 
 # Internal work runs on the default queue. HTTP polling is routed to its own
 # queue for scheduled, per-connection and manual runs.

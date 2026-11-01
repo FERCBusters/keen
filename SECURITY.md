@@ -115,6 +115,8 @@ Workflows pin third-party Actions by commit. Python and npm dependencies follow 
 
 Use HTTPS for browser, agent and credential-bearing traffic; configure `KEEN_PUBLIC_BASE_URL`, Secure cookies and trusted proxies correctly. The provided Compose port bindings are local to the host. Keep PostgreSQL, Valkey, worker control interfaces and artifact storage inaccessible to untrusted clients. Use separate strong secrets, restrict upstream account permissions, preserve encryption keys securely, and test backup restoration.
 
+`KEEN_SQL_TRACE` and `tools/keen-perf-trace.sh` are diagnostics. While tracing, PostgreSQL logs every statement with its values, and statement comments and the service logs carry each request's method, path (with numeric and UUID segments replaced) and referring page path, without query strings. Trace only where that data may appear in the PostgreSQL and container logs, and delete captures once they have served their purpose.
+
 Keep Keen, locked dependencies, container images, the TLS proxy and native tools maintained. Disable unused source types and authentication methods, restrict private-network egress, and monitor authentication failures, ingestion errors, disk use and resource pressure. Validate configuration changes with the documented test workflow and operational checks appropriate to the installation.
 
 ## Required security review checklist

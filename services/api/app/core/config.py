@@ -328,6 +328,10 @@ class Settings(BaseSettings):
     # many seconds behind newly ingested events.
     aggregate_cache_ttl_seconds: int = Field(default=60)
 
+    # Diagnostics: label each SQL statement with the request or task that ran
+    # it, for tools/keen-perf-trace.sh. Leave off in normal operation.
+    sql_trace: bool = Field(default=False)
+
     # Evidence storage. Existing s3:// objects remain readable after switching
     # the write backend, provided their S3 credentials remain configured.
     artifact_storage_backend: str = Field(default="auto")
