@@ -20,14 +20,10 @@ from sqlalchemy import (
     Text,
     Time,
     UniqueConstraint,
-    cast,
-    exists,
-    literal,
-    select,
 )
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.datetime_utils import utc_now_naive as utcnow
 from app.db.session import Base
@@ -237,110 +233,6 @@ class OsaControlMapping(Base):
         primary_key=True,
     )
     nist_ref: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
-
-
-# Effective cross-framework links: the explicit links table plus pairs derived
-# from shared NIST references. Evidence readers use this one-hop relation, so an
-# inherited event never propagates transitively.
-_osa_source = OsaControlMapping.__table__.alias("osa_source")
-_osa_target = OsaControlMapping.__table__.alias("osa_target")
-_source_control = ControlItem.__table__.alias("osa_source_control")
-_target_control = ControlItem.__table__.alias("osa_target_control")
-_explicit = CrossFrameworkControlLink.__table__
-
-
-def effective_cross_framework_links(
-    *, source_ids=None, target_framework=None, enabled=None
-):
-    """Resolve indexed NIST memberships, never compare every pair of controls.
-
-    Optional restrictions belong INSIDE both UNION arms, before deduplication.
-    Event readers pass the distinct source controls from their bounded page.
-    The unrestricted form remains available for catalogue readers.
-    """
-    explicit = select(
-        cast(_explicit.c.id, String).label("id"),
-        _explicit.c.source_control_id,
-        _explicit.c.target_control_id,
-        _explicit.c.rationale,
-        _explicit.c.created_at,
-        literal(False).label("derived"),
-    )
-    pairs = (
-        select(
-            _osa_source.c.control_id.label("source_control_id"),
-            _osa_target.c.control_id.label("target_control_id"),
-        )
-        .select_from(
-            _osa_source.join(
-                _osa_target, _osa_source.c.nist_ref == _osa_target.c.nist_ref
-            )
-            .join(_source_control, _source_control.c.id == _osa_source.c.control_id)
-            .join(_target_control, _target_control.c.id == _osa_target.c.control_id)
-        )
-        .where(_source_control.c.framework_slug != _target_control.c.framework_slug)
-    )
-    if source_ids is not None:
-        explicit = explicit.where(_explicit.c.source_control_id.in_(source_ids))
-        pairs = pairs.where(_osa_source.c.control_id.in_(source_ids))
-    if target_framework is not None:
-        targets = select(ControlItem.id).where(
-            ControlItem.framework_slug == target_framework
-        )
-        explicit = explicit.where(_explicit.c.target_control_id.in_(targets))
-        pairs = pairs.where(_target_control.c.framework_slug == target_framework)
-    if enabled is not None:
-        allowed = select(ControlItem.id).where(ControlItem.framework_slug.in_(enabled))
-        explicit = explicit.where(
-            _explicit.c.source_control_id.in_(allowed),
-            _explicit.c.target_control_id.in_(allowed),
-        )
-        pairs = pairs.where(
-            _source_control.c.framework_slug.in_(enabled),
-            _target_control.c.framework_slug.in_(enabled),
-        )
-    unique_pairs = pairs.distinct().subquery()
-    derived = select(
-        (
-            cast(unique_pairs.c.source_control_id, String)
-            + literal(":")
-            + cast(unique_pairs.c.target_control_id, String)
-        ).label("id"),
-        unique_pairs.c.source_control_id,
-        unique_pairs.c.target_control_id,
-        literal(
-            "Related evidence via shared NIST controls in Open Security Architecture (CC BY-SA 4.0). "
-            "Keen-derived crosswalk; review relevance and coverage gaps, as related controls can differ in scope."
-        ),
-        literal(None, type_=DateTime),
-        literal(True),
-    ).where(
-        ~exists(
-            select(_explicit.c.id).where(
-                _explicit.c.source_control_id == unique_pairs.c.source_control_id,
-                _explicit.c.target_control_id == unique_pairs.c.target_control_id,
-            )
-        )
-    )
-    return explicit.union_all(derived).subquery("effective_cross_framework_links")
-
-
-_effective_links = effective_cross_framework_links()
-
-
-class EffectiveCrossFrameworkControlLink(Base):
-    __table__ = _effective_links
-    __mapper_args__ = {"primary_key": [_effective_links.c.id]}
-    source = relationship(
-        ControlItem,
-        primaryjoin=foreign(_effective_links.c.source_control_id) == ControlItem.id,
-        viewonly=True,
-    )
-    target = relationship(
-        ControlItem,
-        primaryjoin=foreign(_effective_links.c.target_control_id) == ControlItem.id,
-        viewonly=True,
-    )
 
 
 class FrameworkClause(Base):

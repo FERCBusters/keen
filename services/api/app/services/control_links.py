@@ -5,15 +5,11 @@ from __future__ import annotations
 import uuid
 
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.core.cache import cache_delete_prefix
-from app.db.models import (
-    ControlItem,
-    CrossFrameworkControlLink,
-    EffectiveCrossFrameworkControlLink,
-    User,
-)
+from app.db.models import ControlItem, CrossFrameworkControlLink, User
+from app.services.control_inheritance import crosswalk_links
 from app.services.errors import DomainError
 
 
@@ -29,38 +25,56 @@ def _control(db, cid):
     return row
 
 
-def _out(row):
-    source = row.source
-    rationale = row.rationale
-    if getattr(row, "derived", False):
+def _out(link, source, target, *, derived=False):
+    rationale = link.rationale
+    if derived:
         shared = sorted(
             set((source.meta or {}).get("osa_nist_controls", []))
-            & set((row.target.meta or {}).get("osa_nist_controls", []))
+            & set((target.meta or {}).get("osa_nist_controls", []))
         )
         if shared:
             rationale += " Shared NIST controls: " + ", ".join(shared) + "."
     return {
-        "id": str(row.id),
+        "id": str(link.id),
         "source_control_id": str(source.id),
         "source_framework": source.framework_slug,
         "source_ref": source.ref,
         "source_title": source.title,
-        "target_control_id": str(row.target_control_id),
+        "target_control_id": str(link.target_control_id),
         "rationale": rationale,
-        "derived": getattr(row, "derived", False),
+        "derived": derived,
     }
 
 
 def list_control_links(*, target_id: uuid.UUID, db: Session):
-    _control(db, target_id)
-    rows = (
-        db.query(EffectiveCrossFrameworkControlLink)
-        .options(joinedload(EffectiveCrossFrameworkControlLink.source))
-        .filter(EffectiveCrossFrameworkControlLink.target_control_id == target_id)
-        .order_by(EffectiveCrossFrameworkControlLink.created_at)
-        .all()
-    )
-    return {"items": [_out(row) for row in rows]}
+    """Every link into the control, whatever the framework selection.
+
+    Explicit links come first, oldest first, then shared-reference pairs by
+    their source's framework and reference.
+    """
+    target = _control(db, target_id)
+    links = crosswalk_links(db, enabled=None, target_ids=[target_id])
+    sources = {
+        row.id: row
+        for row in db.query(ControlItem).filter(
+            ControlItem.id.in_({link.source_control_id for link in links})
+        )
+    }
+
+    def order(link):
+        source = sources[link.source_control_id]
+        if link.derived:
+            return (1, None, source.framework_slug, source.ref, link.id)
+        return (0, link.created_at, "", "", link.id)
+
+    # A control removed meanwhile by another transaction is left out.
+    links = [link for link in links if link.source_control_id in sources]
+    return {
+        "items": [
+            _out(link, sources[link.source_control_id], target, derived=link.derived)
+            for link in sorted(links, key=order)
+        ]
+    }
 
 
 def create_control_link(
@@ -88,7 +102,7 @@ def create_control_link(
     db.commit()
     db.refresh(row)
     cache_delete_prefix()
-    return _out(row)
+    return _out(row, source, target)
 
 
 def remove_control_link(*, target_id: uuid.UUID, link_id: uuid.UUID, user, db: Session):

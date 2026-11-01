@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app.core.datetime_utils import utc_now_naive
 
+from tests.crosswalk_reference import reference_pair_set
 from tests.db_helpers import create_sqlite_schema
 
 os.environ.setdefault("KEEN_DATABASE_URL", "postgresql://test:test@localhost/unused")
@@ -181,7 +182,7 @@ def test_evidence_inherits_one_hop_without_false_reverse_ce_mapping(db, monkeypa
         )
     )
     db.flush()
-    pairs = evidence_pairs("iso_27001_2022")
+    pairs = evidence_pairs("iso_27001_2022", db)
     assert (
         db.scalar(select(pairs.c.event_id).where(pairs.c.control_id == iso.id)) == e.id
     )
@@ -203,7 +204,7 @@ def test_evidence_inherits_one_hop_without_false_reverse_ce_mapping(db, monkeypa
         )
     )
     db.flush()
-    pairs = evidence_pairs("CYBER-ESSENTIALS:2026")
+    pairs = evidence_pairs("CYBER-ESSENTIALS:2026", db)
     assert (
         db.scalar(
             select(pairs.c.event_id).where(
@@ -637,6 +638,7 @@ def test_evidence_spans_sources_and_covers_annex_a(seeded):
         .distinct()
     }
     pairs = evidence_pairs("iso_27001_2022", db)
+    assert set(db.execute(select(pairs))) == reference_pair_set("iso_27001_2022", db)
     supported = {row[0] for row in db.execute(select(pairs.c.control_id).distinct())}
     assert len(direct) >= 85
     # Every Annex A control has evidence, a few only through crosswalks.

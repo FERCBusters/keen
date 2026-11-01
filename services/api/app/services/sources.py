@@ -90,9 +90,7 @@ def list_sources(*, framework: str, limit: int, offset: int, db: Session, user):
         # this framework.
         # The short list of the framework's evidence controls is resolved
         # first; a semi-join then counts each event once.
-        control_ids = sorted(
-            db.execute(effective_framework_ids(framework, db)).scalars(), key=str
-        )
+        control_ids = effective_framework_ids(framework, db)
         mapping = aliased(Mapping)
         mapped_rows = (
             db.query(Event.source, func.count(Event.id))

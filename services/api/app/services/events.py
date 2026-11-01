@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import desc, func, select
-from sqlalchemy.orm import Session, aliased, joinedload, load_only
+from sqlalchemy.orm import Session, load_only
 
 from app.core.cache import cached_json, user_cache_scope
 from app.core.config import settings
@@ -20,12 +20,10 @@ from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     Artifact,
     ControlItem,
-    EffectiveCrossFrameworkControlLink,
     Event,
     EventIncident,
     Mapping,
     User,
-    effective_cross_framework_links,
 )
 from app.outbound.incidents import (
     IncidentWebhookConfig,
@@ -47,7 +45,8 @@ from app.services.activity_log import record_action as _audit_action
 from app.services.context import ChangeContext
 from app.services.control_inheritance import (
     control_event_counts,
-    evidence_pairs,
+    event_evidence,
+    inherited_event_controls,
     inherited_event_rationale,
     page_controls,
     recorded_control_evidence,
@@ -590,30 +589,10 @@ def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session
         }
         for mp, ci in mapped
     ]
-    from app.services.framework_catalogue import _framework_selection
-
-    enabled = _framework_selection(db)[3]
-    source_ids = select(Mapping.control_item_id).where(Mapping.event_id == eid)
-    scoped_links = effective_cross_framework_links(
-        source_ids=source_ids, target_framework=framework, enabled=enabled
-    )
-    link_model = aliased(
-        EffectiveCrossFrameworkControlLink, scoped_links, adapt_on_names=True
-    )
-    inherited = (
-        db.query(Mapping, ControlItem, link_model)
-        .join(link_model, link_model.source_control_id == Mapping.control_item_id)
-        .join(ControlItem, ControlItem.id == link_model.target_control_id)
-        .options(joinedload(link_model.source))
-        .filter(Mapping.event_id == eid)
-        .order_by(ControlItem.ref.asc(), link_model.source_control_id.asc())
-        .all()
-    )
     direct_ids = {item["id"] for item in controls}
-    for mapping, target, link in inherited:
+    for mapping, target, link, source in inherited_event_controls(db, framework, eid):
         if str(target.id) in direct_ids:
             continue
-        source = link.source
         controls.append(
             {
                 "id": str(target.id),
@@ -803,19 +782,19 @@ def export_events(
 
             event_ids = [e.id for e in batch]
             controls_by_event: dict[uuid.UUID, list[str]] = {}
-            if event_ids:
-                pairs = evidence_pairs(framework, db, event_ids)
-                rows = (
-                    db.query(pairs.c.event_id, ControlItem.ref)
-                    .join(ControlItem, ControlItem.id == pairs.c.control_id)
-                    .filter(
-                        pairs.c.event_id.in_(event_ids),
-                    )
+            evidenced = event_evidence(db, framework, event_ids)
+            if evidenced:
+                # The database orders the references, as everywhere else.
+                labels = db.execute(
+                    select(ControlItem.id, ControlItem.ref)
+                    .where(ControlItem.id.in_(set().union(*evidenced.values())))
                     .order_by(ControlItem.ref.asc())
-                    .all()
-                )
-                for ev_id, ref in rows:
-                    controls_by_event.setdefault(ev_id, []).append(ref)
+                ).all()
+                place = {control_id: n for n, (control_id, _) in enumerate(labels)}
+                for ev_id, found in evidenced.items():
+                    controls_by_event[ev_id] = [
+                        labels[n].ref for n in sorted(place[c] for c in found)
+                    ]
 
             artifact_counts: dict[uuid.UUID, int] = {}
             if event_ids:

@@ -7,19 +7,23 @@ from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlItem,
     CrossFrameworkControlLink,
-    EffectiveCrossFrameworkControlLink,
     Event,
     Framework,
     ManagedConfiguration,
     Mapping,
     OsaControlMapping,
-    effective_cross_framework_links,
 )
-from app.services.control_inheritance import evidence_pairs, page_controls
+from app.services.control_inheritance import (
+    crosswalk_links,
+    event_evidence,
+    evidence_pairs,
+    page_controls,
+)
 from sqlalchemy import create_engine, select
 from sqlalchemy import event as sql_event
 from sqlalchemy.orm import Session
 
+from tests.crosswalk_reference import reference_pair_set, reference_rows, resolved_rows
 from tests.db_helpers import create_sqlite_schema
 
 
@@ -96,10 +100,17 @@ def test_dense_page_deduplicates_and_preserves_direct_evidence(catalogue):
         assert {item["id"] for item in items} == expected
         direct = next(item for item in items if item["id"] == str(controls[0][0].id))
         assert "inherited_from_control_id" not in direct
-    pairs = evidence_pairs("F0", db, ids)
-    assert {(str(cid), eid) for cid, eid in db.execute(select(pairs))} == {
+    evidenced = event_evidence(db, "F0", ids)
+    assert {(str(cid), eid) for eid, found in evidenced.items() for cid in found} == {
         (cid, eid) for cid in expected for eid in ids
     }
+    assert {
+        (cid, eid) for eid, found in evidenced.items() for cid in found
+    } == reference_pair_set("F0", db, ids)
+    assert {
+        (cid, eid) for cid, eid in db.execute(select(evidence_pairs("F0", db)))
+    } >= (reference_pair_set("F0", db, ids))
+    assert event_evidence(db, "F0", [events[-1].id]) == {}
     assert page_controls(db, "F0", [events[-1].id]) == {}
     assert page_controls(db, "F0", []) == {}
 
@@ -118,10 +129,8 @@ def test_disabled_sources_and_target_do_not_inherit(catalogue):
 def test_scoped_links_match_catalogue_and_keep_reviewed_precedence(catalogue):
     db, controls, _, _ = catalogue
     ids = [controls[1][0].id, controls[2][0].id]
-    scoped = effective_cross_framework_links(
-        source_ids=ids, target_framework="F0", enabled={"F0", "F1", "F2"}
-    )
-    rows = db.execute(select(scoped)).all()
+    enabled = ["F0", "F1", "F2"]
+    rows = crosswalk_links(db, enabled=enabled, target_framework="F0", source_ids=ids)
     assert len(rows) == 16
     reviewed = next(
         row
@@ -130,18 +139,16 @@ def test_scoped_links_match_catalogue_and_keep_reviewed_precedence(catalogue):
         and row.target_control_id == controls[0][1].id
     )
     assert reviewed.rationale == "Reviewed" and not reviewed.derived
-    global_pairs = (
-        db.query(EffectiveCrossFrameworkControlLink)
-        .filter(
-            EffectiveCrossFrameworkControlLink.source_control_id.in_(ids),
-            EffectiveCrossFrameworkControlLink.target_control_id.in_(
-                [c.id for c in controls[0]]
-            ),
-        )
-        .all()
+    assert resolved_rows(rows) == reference_rows(
+        db, source_ids=ids, target_framework="F0", enabled=enabled
+    )
+    catalogue_links = crosswalk_links(
+        db, enabled=None, target_ids=[c.id for c in controls[0]]
     )
     assert {(r.source_control_id, r.target_control_id) for r in rows} == {
-        (r.source_control_id, r.target_control_id) for r in global_pairs
+        (r.source_control_id, r.target_control_id)
+        for r in catalogue_links
+        if r.source_control_id in ids
     }
 
 
@@ -155,7 +162,9 @@ def test_query_count_does_not_grow_with_page_or_sources(catalogue):
 
     sql_event.listen(db.bind, "before_cursor_execute", capture)
     try:
+        # Each call starts a transaction, so neither reuses the other's links.
         page_controls(db, "F0", ids[:1])
+        db.commit()
         count = len(statements)
         statements.clear()
         page_controls(db, "F0", ids)

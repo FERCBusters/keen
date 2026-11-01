@@ -10,17 +10,22 @@ from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlItem,
     CrossFrameworkControlLink,
-    EffectiveCrossFrameworkControlLink,
     Event,
     Framework,
+    ManagedConfiguration,
     Mapping,
     OsaControlMapping,
 )
-from app.services.control_inheritance import evidence_pairs, source_ids_for_controls
+from app.services.control_inheritance import (
+    crosswalk_links,
+    evidence_pairs,
+    inherited_control_ids,
+)
 from app.services.frameworks import FrameworkNodeInput
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
+from tests.crosswalk_reference import reference_rows, resolved_rows
 from tests.db_helpers import create_sqlite_schema
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,8 +82,6 @@ def test_canonical_reset_preserves_retained_controls_and_editability(db):
         retained.append(c)
     db.add(Framework(slug="HIPAA:old", name="Old HIPAA"))
     db.add(ControlItem(framework_slug="HIPAA:old", type="custom", ref="old"))
-    from app.db.models import ManagedConfiguration
-
     db.add(
         ManagedConfiguration(
             name="organisation-frameworks",
@@ -133,7 +136,20 @@ def test_canonical_reset_preserves_retained_controls_and_editability(db):
     )
 
 
-def test_shared_nist_dedup_explicit_precedence_and_no_transitive_evidence(db):
+def test_shared_nist_dedup_explicit_precedence_and_no_transitive_evidence(
+    db, monkeypatch
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "enabled_frameworks", "")
+    db.add_all([Framework(slug=slug) for slug in ["A", "B", "C"]])
+    db.add(
+        ManagedConfiguration(
+            name="organisation-frameworks",
+            version=1,
+            document={"enabled": ["A", "B", "C"], "default": "B"},
+        )
+    )
     a, b, c = [
         ControlItem(framework_slug=s, type="annex_control", ref="1")
         for s in ["A", "B", "C"]
@@ -165,36 +181,34 @@ def test_shared_nist_dedup_explicit_precedence_and_no_transitive_evidence(db):
         )
     )
     db.flush()
-    assert (
-        db.query(EffectiveCrossFrameworkControlLink)
-        .filter_by(source_control_id=a.id, target_control_id=b.id)
-        .count()
-        == 1
-    )
-    assert set(db.scalars(source_ids_for_controls([b.id]))) == {a.id, c.id}
-    assert db.execute(select(evidence_pairs("B"))).all() == [(b.id, event.id)]
-    assert db.execute(select(evidence_pairs("C"))).all() == []
+    into_b = crosswalk_links(db, enabled=None, target_ids=[b.id])
+    assert [link.source_control_id for link in into_b].count(a.id) == 1
+    assert resolved_rows(into_b) == reference_rows(db, target_ids=[b.id])
+    assert set(inherited_control_ids(db, [b.id])) == {a.id, b.id, c.id}
+    assert db.execute(select(evidence_pairs("B", db))).all() == [(b.id, event.id)]
+    assert db.execute(select(evidence_pairs("C", db))).all() == []
     db.add(
         CrossFrameworkControlLink(
             source_control_id=a.id, target_control_id=b.id, rationale="Reviewed link"
         )
     )
     db.flush()
-    link = (
-        db.query(EffectiveCrossFrameworkControlLink)
-        .filter_by(source_control_id=a.id, target_control_id=b.id)
-        .one()
-    )
+    (link,) = [
+        link
+        for link in crosswalk_links(db, enabled=None, target_ids=[b.id])
+        if link.source_control_id == a.id
+    ]
     assert link.rationale == "Reviewed link" and not link.derived
+    assert resolved_rows(
+        crosswalk_links(db, enabled=None, target_ids=[b.id])
+    ) == reference_rows(db, target_ids=[b.id])
 
 
 def test_only_enabled_frameworks_contribute_inherited_evidence(db, monkeypatch):
     from app.core.config import settings
-    from app.db.models import ManagedConfiguration
     from app.services.control_inheritance import (
         effective_framework_ids,
         events_mapped_to,
-        inherited_control_ids,
     )
 
     monkeypatch.setattr(settings, "enabled_frameworks", "")
@@ -234,7 +248,7 @@ def test_only_enabled_frameworks_contribute_inherited_evidence(db, monkeypatch):
     db.commit()
     assert db.execute(select(evidence_pairs("B", db))).all() == []
     assert inherited_control_ids(db, [b.id]) == [b.id]
-    assert a.id not in set(db.scalars(effective_framework_ids("B", db)))
+    assert a.id not in effective_framework_ids("B", db)
     assert db.query(Event).filter(events_mapped_to(db, [b.id])).count() == 0
     # Direct mappings remain; hiding a framework is not evidence deletion.
     assert db.query(Mapping).count() == 1
@@ -242,7 +256,6 @@ def test_only_enabled_frameworks_contribute_inherited_evidence(db, monkeypatch):
 
 def test_inheritance_fast_path_requires_actual_enabled_evidence(db, monkeypatch):
     from app.core.config import settings
-    from app.db.models import ManagedConfiguration
     from app.services.control_inheritance import has_inherited_evidence
 
     monkeypatch.setattr(settings, "enabled_frameworks", "")

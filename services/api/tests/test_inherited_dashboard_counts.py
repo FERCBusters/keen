@@ -2,8 +2,8 @@
 
 The home overview, the summary statistics and the volume chart count events
 and controls through one-hop inheritance without expanding every event over
-its inheriting targets. ``evidence_pairs`` defines the inherited relation, so
-these tests compare the per-control and semi-join counters with it: explicit
+its inheriting targets. The crosswalk relation of ``tests.crosswalk_reference``
+defines the inherited evidence, so these tests compare the per-control and semi-join counters with it: explicit
 and OSA-derived links, a source in a framework the organisation has not
 enabled, an event mapped to both a source and its target, and a diary entry
 that only risk readers may open.
@@ -36,6 +36,8 @@ from app.services.control_inheritance import (
     mapped_event_count,
 )
 from sqlalchemy import func, select
+
+from tests.crosswalk_reference import reference_evidence_pairs, reference_pair_set
 
 TGT, SRC, OFF = "inherit-target", "inherit-source", "inherit-disabled"
 DAY = datetime(2026, 3, 2, 9, 0)
@@ -139,8 +141,8 @@ def crosswalk(contract_db, monkeypatch):
 
 
 def pairs_reference(db, visibility):
-    """The distinct events and target controls of evidence_pairs."""
-    pairs = evidence_pairs(TGT, db)
+    """The distinct events and target controls of the reference relation."""
+    pairs = reference_evidence_pairs(TGT, db)
     visible = (
         select(pairs.c.event_id, pairs.c.control_id)
         .join(Event, Event.id == pairs.c.event_id)
@@ -172,6 +174,9 @@ def test_counters_match_the_inherited_evidence_relation(
         None if who == "anyone" else diary_filter_condition(db, getattr(crosswalk, who))
     )
     reference_events, reference_controls = pairs_reference(db, visibility)
+    assert set(db.execute(select(evidence_pairs(TGT, db)))) == reference_pair_set(
+        TGT, db
+    )
 
     assert mapped_event_count(db, TGT, visibility) == reference_events == mapped
     found = evidenced_control_ids(db, TGT, visibility)

@@ -1,10 +1,11 @@
 """Per-control evidence counts with one-hop crosswalk inheritance.
 
-``evidence_pairs`` defines the inherited relation. The control statistics,
-the Events page control facet and the control set used by event counters
-resolve the short list of (control, source) pairs first and count from it,
-or, when every event counts, from PostgreSQL's trigger-maintained per-control
-counters. These tests compare each with the relation on a crosswalk with
+The crosswalk relation of ``tests.crosswalk_reference`` defines the
+inherited evidence. The control statistics, the Events page control facet and
+the control set used by event counters resolve the short list of (control,
+source) pairs first and count from it, or, when every event counts, from
+PostgreSQL's trigger-maintained per-control counters. These tests compare
+each with the relation on a crosswalk with
 explicit and shared-NIST links, overlapping sources, a link from a framework
 that is not enabled, a link inside the framework, varied event times and a
 diary entry only risk readers may open.
@@ -33,15 +34,22 @@ from app.services import stats as stats_service
 from app.services.context import ChangeContext
 from app.services.control_inheritance import (
     control_event_counts,
+    crosswalk_links,
     effective_framework_ids,
     evidence_pairs,
     framework_evidence_sources,
-    osa_pairs,
     recorded_control_evidence,
 )
 from app.services.event_filters import EventFilters
 from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
+
+from tests.crosswalk_reference import (
+    reference_evidence_pairs,
+    reference_pair_set,
+    reference_rows,
+    resolved_rows,
+)
 
 TGT, SRC, ALSO, OFF = "count-target", "count-source", "count-also", "count-off"
 
@@ -164,8 +172,8 @@ def postgresql(db):
 
 
 def reference(db, framework, *conditions):
-    """{control: (events, newest)} from evidence_pairs, for the events selected."""
-    pairs = evidence_pairs(framework, db)
+    """{control: (events, newest)} from the relation, for the events selected."""
+    pairs = reference_evidence_pairs(framework, db)
     rows = db.execute(
         select(
             pairs.c.control_id,
@@ -197,7 +205,10 @@ def reference_controls(db, framework):
             CrossFrameworkControlLink.target_control_id.in_(enabled),
         )
     )
-    source, membership, sc, tc = osa_pairs()
+    source = OsaControlMapping.__table__.alias("source_membership")
+    membership = OsaControlMapping.__table__.alias("target_membership")
+    sc = ControlItem.__table__.alias("source_control")
+    tc = ControlItem.__table__.alias("target_control")
     osa = (
         select(source.c.control_id)
         .select_from(
@@ -229,18 +240,30 @@ def test_the_control_set_and_sources_follow_the_selection(crosswalk, enabled):
     crosswalk.selection.document = {"enabled": enabled, "default": enabled[0]}
     db.commit()
     for framework in (TGT, SRC, ALSO):
-        found = set(db.execute(effective_framework_ids(framework, db)).scalars())
+        listed = effective_framework_ids(framework, db)
+        assert listed == sorted(set(listed), key=str)
+        found = set(listed)
         assert found == reference_controls(db, framework)
         sources = framework_evidence_sources(db, framework)
         assert set().union(*sources.values()) == found
         assert all(target in found for target in sources)
+        assert set(db.execute(select(evidence_pairs(framework, db)))) == (
+            reference_pair_set(framework, db)
+        )
+        selected = sorted(
+            db.get(ManagedConfiguration, "organisation-frameworks").document["enabled"]
+        )
+        assert resolved_rows(
+            crosswalk_links(db, enabled=selected, target_framework=framework)
+        ) == reference_rows(db, target_framework=framework, enabled=selected)
 
 
-def test_without_a_session_every_link_counts(crosswalk):
+def test_the_catalogue_view_counts_every_link(crosswalk):
     db, t, s = crosswalk.db, crosswalk.t, crosswalk.s
-    found = set(db.execute(effective_framework_ids(TGT)).scalars())
+    links = crosswalk_links(db, enabled=None, target_framework=TGT)
     sources = {s["S1"].id, s["S2"].id, s["S3"].id, crosswalk.also.id, crosswalk.off.id}
-    assert found == {item.id for item in t.values()} | sources
+    assert {link.source_control_id for link in links} == sources | {t["T6"].id}
+    assert resolved_rows(links) == reference_rows(db, target_framework=TGT)
 
 
 def test_a_framework_without_controls_has_no_evidence(crosswalk):
