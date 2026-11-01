@@ -155,8 +155,8 @@ def validate_control_justification(raw: str | None) -> str | None:
 
 # Keep this list in sync with the UI theme dropdown.
 ALLOWED_THEMES: list[tuple[str, str]] = [
-    ("sand", "Sand"),
     ("ink", "Ink"),
+    ("sand", "Sand"),
     ("ocean", "Ocean"),
     ("forest", "Forest"),
     ("sunset", "Sunset"),

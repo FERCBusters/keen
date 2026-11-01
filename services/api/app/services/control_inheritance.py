@@ -13,8 +13,8 @@ links from it, through ``crosswalk_links`` for each link's details or
 the links and memberships it needs with short indexed queries and pairs
 shared references here, so its cost follows the controls concerned, however
 many catalogue controls hold a popular reference. Within a transaction,
-repeated resolutions are answered from the session until it writes, flushes
-or ends.
+repeated resolutions are answered from the session until it writes through
+the session, flushes or ends.
 """
 
 import uuid
@@ -76,8 +76,12 @@ def _forget(session, *_):
 
 
 # A resolution holds only while the session reads. With pending changes it is
-# resolved afresh, and any flush, write statement or end of a transaction
-# (commit, rollback, close or savepoint) discards it.
+# resolved afresh, and a flush, a write statement run through the session or
+# the end of a transaction (commit, rollback, close or savepoint) discards it.
+# Changes other transactions commit meanwhile are seen from the next
+# transaction, so a long transaction, such as an export, keeps one crosswalk;
+# readers leave out a control removed since it was read. A write sent through
+# db.connection() directly is seen from the next transaction too.
 event.listen(Session, "after_transaction_end", _forget)
 event.listen(Session, "before_flush", _forget)
 

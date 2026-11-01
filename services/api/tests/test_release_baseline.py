@@ -138,6 +138,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0031_theme_ink_default",
         "0030_agent_server_keys",
         "0029_stats_delete_increment",
         "0028_automatic_purge_job_index",
@@ -800,6 +801,16 @@ def test_dashboard_query_migrations_install_and_remove_cleanly():
         )
         return automatic, per_statement
 
+    def theme_default(conn):
+        return conn.scalar(
+            text(
+                "SELECT column_default FROM information_schema.columns "
+                "WHERE table_schema=:schema AND table_name='users' "
+                "AND column_name='pref_theme'"
+            ),
+            {"schema": schema},
+        )
+
     try:
         with engine.connect() as conn:
             conn.execute(text(f"SET search_path TO {schema},public"))
@@ -818,12 +829,15 @@ def test_dashboard_query_migrations_install_and_remove_cleanly():
             }
             automatic, per_statement = retention_upkeep(conn)
             assert "WHERE automatic" in automatic and per_statement is True
+            assert theme_default(conn) == "'ink'::character varying"
             command.downgrade(config, "0020_theme_ink")
             assert installed(conn) == (None, set(), set())
             assert retention_upkeep(conn) == (None, False)
+            assert theme_default(conn) == "'sand'::character varying"
             command.upgrade(config, "head")
             assert installed(conn)[1:] == (statistics, options)
             assert retention_upkeep(conn)[1] is True
+            assert theme_default(conn) == "'ink'::character varying"
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

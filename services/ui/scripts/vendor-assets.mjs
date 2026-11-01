@@ -66,6 +66,11 @@ copyIfExists(
   nm('@fercbusters', 'mosp-design-system', 'dist', 'app.js'),
   out('mosp-design-system', 'app.js'),
 );
+// Loaded first in each page's <head>, so the saved theme is in place at the first paint.
+copyIfExists(
+  nm('@fercbusters', 'mosp-design-system', 'dist', 'theme-boot.js'),
+  out('mosp-design-system', 'theme-boot.js'),
+);
 copyIfExists(
   nm('@fercbusters', 'mosp-design-system', 'dist', 'BUILD_INFO.txt'),
   out('mosp-design-system', 'BUILD_INFO.txt'),

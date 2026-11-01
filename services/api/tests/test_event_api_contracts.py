@@ -5,6 +5,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import app.services.control_links as control_links_operations
+import app.services.events as events_operations
 import pytest
 from app.api.routes import control_links, events
 from app.core.config import settings
@@ -282,6 +283,27 @@ def test_exports_respect_filters_and_row_cap(api, format):
         rows = list(csv.DictReader(io.StringIO(response.text)))
     assert len(rows) == 1
     assert rows[0]["source"] == "keen-agent"
+
+
+def test_export_leaves_out_a_control_removed_during_the_export(api, monkeypatch):
+    def exported():
+        response = api.client.get(
+            "/api/v1/events/export", params={"framework": "A", "format": "json"}
+        )
+        assert response.status_code == 200, response.text
+        return {item["id"]: item["controls"] for item in response.json()["items"]}
+
+    expected = exported()
+    assert expected[str(api.rows[0].id)] == ["A1"]
+    resolve = events_operations.event_evidence
+
+    def with_removed_control(*args, **kwargs):
+        # The export read the crosswalk before another transaction removed it.
+        found = resolve(*args, **kwargs)
+        return {event: {*controls, uuid.uuid4()} for event, controls in found.items()}
+
+    monkeypatch.setattr(events_operations, "event_evidence", with_removed_control)
+    assert exported() == expected
 
 
 def test_export_rejects_unknown_format(api):

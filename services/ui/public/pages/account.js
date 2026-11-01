@@ -230,7 +230,7 @@ function loadPrefs(meObj) {
   if (prefUseLocalTz) prefUseLocalTz.checked = !!prefs.use_local_timezone;
   if (prefTimezone) prefTimezone.value = (prefs.timezone || browserTz || '').trim();
   if (prefTheme) {
-    const t = (prefs.theme || 'sand').trim() || 'sand';
+    const t = (prefs.theme || 'ink').trim() || 'ink';
     prefTheme.value = t;
     applyTheme(t);
   }
@@ -954,7 +954,7 @@ if (prefsForm) {
 
     const payload = {
       use_local_timezone: !!prefUseLocalTz?.checked,
-      theme: (prefTheme?.value || 'sand').trim() || 'sand',
+      theme: (prefTheme?.value || 'ink').trim() || 'ink',
       date_format: (prefDateFormat?.value || 'default').trim() || 'default',
       auto_apply_filters: !!prefAutoApplyFilters?.checked,
       landing_page: (prefLandingPage?.value || '/').trim() || '/',

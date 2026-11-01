@@ -45,6 +45,9 @@ def test_me_reports_identity_permissions_and_policy(keen):  # noqa: F811
     assert me["can_audit_trail"] is True
     assert me["can_view_events"] is False
     assert me["preferences"]["landing_page"] == "/"
+    # New accounts start on Ink, listed first; Sand stays selectable.
+    assert me["preferences"]["theme"] == "ink"
+    assert [t["id"] for t in me["available_themes"]][:2] == ["ink", "sand"]
 
     admin = _json(keen.client(keen.user(role="admin")).get("/v1/me"))
     assert admin["is_admin"] is True

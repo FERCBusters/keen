@@ -791,9 +791,12 @@ def export_events(
                     .order_by(ControlItem.ref.asc())
                 ).all()
                 place = {control_id: n for n, (control_id, _) in enumerate(labels)}
+                # The crosswalk is read once per export; a control removed
+                # since then has no reference to show.
                 for ev_id, found in evidenced.items():
                     controls_by_event[ev_id] = [
-                        labels[n].ref for n in sorted(place[c] for c in found)
+                        labels[n].ref
+                        for n in sorted(place[c] for c in found if c in place)
                     ]
 
             artifact_counts: dict[uuid.UUID, int] = {}
