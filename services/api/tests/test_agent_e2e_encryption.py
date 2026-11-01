@@ -422,6 +422,42 @@ def test_resetting_the_identity_strands_every_earlier_credential(keen, capsys):
     assert rotated["enrollment_code"].endswith("." + new_pin)
 
 
+def test_the_script_accepts_a_fingerprint_that_starts_with_a_dash(keen, capsys):
+    """Fingerprints are base64url, so about one in 64 starts with "-"."""
+    import agent_server_key
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    for seed in range(100000):
+        key = Ed25519PrivateKey.from_private_bytes(seed.to_bytes(32, "big"))
+        public = key.public_key().public_bytes_raw()
+        pin = server_keys.fingerprint(public)
+        if pin.startswith("-"):
+            break
+    with keen.db() as db:
+        db.add(
+            AgentServerKey(
+                key_id=pin,
+                purpose="identity",
+                public_key=server_keys.b64url(public),
+                private_key=server_keys.seal_private(key.private_bytes_raw()),
+                state="active",
+                created_at=utc_now_naive(),
+            )
+        )
+        db.commit()
+    agent_server_key.main([], session=keen.db)
+    assert capsys.readouterr().out.strip() == pin
+    agent_server_key.main(["--reset", "--confirm-fingerprint", pin], session=keen.db)
+    with keen.db() as db:
+        second = server_keys.current_fingerprint(db)
+    assert second != pin and second in capsys.readouterr().out
+    agent_server_key.main(
+        ["--reset", "--confirm-fingerprint=" + second], session=keen.db
+    )
+    with keen.db() as db:
+        assert server_keys.current_fingerprint(db) not in (pin, second)
+
+
 def test_the_script_reports_a_missing_identity(keen, capsys):
     import agent_server_key
 
