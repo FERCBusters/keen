@@ -46,9 +46,11 @@ from app.security.roles import is_effective_admin
 from app.services.activity_log import record_action as _audit_action
 from app.services.context import ChangeContext
 from app.services.control_inheritance import (
+    control_event_counts,
     evidence_pairs,
     inherited_event_rationale,
     page_controls,
+    recorded_control_evidence,
 )
 from app.services.errors import DomainError
 from app.services.event_filters import (
@@ -111,14 +113,19 @@ def _incident_to_dict(incident: EventIncident) -> dict[str, Any]:
     }
 
 
-def _build_event_id_query(db: Session, filters: EventFilters, user: User | None):
-    """Return a query that yields distinct Event IDs for the given filters."""
-    qry = db.query(Event.id)
+def _event_conditions(db: Session, filters: EventFilters, user: User | None) -> list:
+    """Conditions on ``Event`` selecting the filtered events the caller may see.
+
+    An empty list means every event counts. The conditions are column tests
+    and correlated subqueries, never joins, so they select each event once.
+    """
     # RBAC: hide diary events the caller is not permitted to see.
-    qry = qry.filter(diary_filter_condition(db, user))
-    qry = qry.filter(*event_time_filters(filters))
-    qry = qry.filter(*event_predicates(filters, db))
-    return qry.distinct()
+    conditions = [
+        diary_filter_condition(db, user),
+        *event_time_filters(filters),
+        *event_predicates(filters, db),
+    ]
+    return [condition for condition in conditions if condition is not True]
 
 
 def _latest_event_payload(event: Event) -> dict[str, Any]:
@@ -200,6 +207,8 @@ def list_events(
                         Event.id,
                         Event.timestamp,
                         Event.source,
+                        Event.connection_id,
+                        Event.connection_name,
                         Event.system,
                         Event.actor,
                         Event.action,
@@ -273,23 +282,29 @@ def _rule_facet(db: Session, filters: EventFilters, user) -> list[dict[str, Any]
     """
     from app.services.managed_configurations import rule_descriptions
 
-    event_ids = _build_event_id_query(db, filters.without("rule"), user).subquery()
+    suffix = f" ({filters.framework})"
+    conditions = _event_conditions(db, filters.without("rule"), user)
+    # Each rule's events, once each, for this framework's rule mappings only.
+    rule_events = (
+        select(Mapping.rationale, Mapping.event_id)
+        .where(Mapping.method == "rule", Mapping.mapped_by == "system")
+        .where(Mapping.rationale.like("auto by rule %"))
+        .where(Mapping.rationale.endswith(suffix, autoescape=True))
+    )
+    if conditions:
+        rule_events = rule_events.where(
+            Mapping.event_id.in_(select(Event.id).where(*conditions))
+        )
+    distinct_events = rule_events.distinct().subquery()
     rows = run_scan(
         db,
         filters,
-        lambda: (
-            db.query(
-                Mapping.rationale,
-                func.count(func.distinct(Mapping.event_id)).label("count"),
+        lambda: db.execute(
+            select(distinct_events.c.rationale, func.count().label("count")).group_by(
+                distinct_events.c.rationale
             )
-            .join(event_ids, event_ids.c.id == Mapping.event_id)
-            .filter(Mapping.method == "rule", Mapping.mapped_by == "system")
-            .filter(Mapping.rationale.like("auto by rule %"))
-            .group_by(Mapping.rationale)
-            .all()
-        ),
+        ).all(),
     )
-    suffix = f" ({filters.framework})"
     counts: dict[str, int] = {}
     for rationale, count in rows:
         if rationale.endswith(suffix):
@@ -306,6 +321,43 @@ def _rule_facet(db: Session, filters: EventFilters, user) -> list[dict[str, Any]
     ]
     facet.sort(key=lambda row: (-row["count"], row["rule_id"]))
     return facet
+
+
+def _control_facet(db: Session, framework: str, conditions: list) -> list[tuple]:
+    """(ref, title, type, count) of the framework controls the events evidence.
+
+    Ordered by count, most first, then by reference as the database orders
+    text. When every event counts, PostgreSQL's per-control counters answer
+    it without reading the evidence of each control's largest source.
+    """
+    if not conditions and db.get_bind().dialect.name == "postgresql":
+        counts = {
+            control_id: count
+            for control_id, (count, _) in recorded_control_evidence(
+                db, framework
+            ).items()
+        }
+    else:
+        counts = control_event_counts(
+            db,
+            framework,
+            event_ids=select(Event.id).where(*conditions) if conditions else None,
+        )
+    counted = [control_id for control_id, count in counts.items() if count > 0]
+    if not counted:
+        return []
+    labels = db.execute(
+        select(ControlItem.id, ControlItem.ref, ControlItem.title, ControlItem.type)
+        .where(ControlItem.id.in_(sorted(counted, key=str)))
+        .order_by(ControlItem.ref.asc())
+    ).all()
+    # A stable sort by count keeps the database's reference order within a count.
+    rows = [
+        (ref, title, kind, counts[control_id])
+        for control_id, ref, title, kind in labels
+    ]
+    rows.sort(key=lambda row: -row[3])
+    return rows
 
 
 def event_facets(
@@ -350,10 +402,7 @@ def event_facets(
         scan_budget(db, filters)
         src_rows = []
         if max_sources:
-            src_ids = _build_event_id_query(
-                db, filters.without("source"), user
-            ).subquery()
-
+            src_conditions = _event_conditions(db, filters.without("source"), user)
             src_rows = run_scan(
                 db,
                 filters,
@@ -362,7 +411,7 @@ def event_facets(
                         Event.source.label("source"),
                         func.count(Event.id).label("count"),
                     )
-                    .join(src_ids, src_ids.c.id == Event.id)
+                    .filter(*src_conditions)
                     .filter(Event.source.isnot(None))
                     .filter(Event.source != "")
                     .group_by(Event.source)
@@ -377,30 +426,15 @@ def event_facets(
         # first-loading /events.html?unmapped=true on larger datasets.
         ctl_rows = []
         if max_controls and not unmapped:
-            ctl_ids = _build_event_id_query(
-                db, filters.without("control"), user
-            ).subquery()
-
-            pairs = evidence_pairs(framework, db, select(ctl_ids.c.id))
             ctl_rows = run_scan(
                 db,
                 filters,
-                lambda: (
-                    db.query(
-                        ControlItem.ref.label("ref"),
-                        ControlItem.title.label("title"),
-                        ControlItem.type.label("type"),
-                        func.count(pairs.c.event_id).label("count"),
-                    )
-                    .join(pairs, pairs.c.control_id == ControlItem.id)
-                    .join(ctl_ids, ctl_ids.c.id == pairs.c.event_id)
-                    .filter(ControlItem.framework_slug == framework)
-                    .group_by(ControlItem.id)
-                    .order_by(desc("count"), ControlItem.ref.asc())
-                    .limit(max_controls)
-                    .all()
+                lambda: _control_facet(
+                    db,
+                    framework,
+                    _event_conditions(db, filters.without("control"), user),
                 ),
-            )
+            )[:max_controls]
 
         return {
             "sources": [{"source": s, "count": int(c)} for s, c in src_rows],

@@ -138,6 +138,8 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0029_stats_delete_increment",
+        "0028_automatic_purge_job_index",
         "0027_cloud_posture",
         "0026_posture_risk_links",
         "0025_ueu_evidence",
@@ -776,6 +778,27 @@ def test_dashboard_query_migrations_install_and_remove_cleanly():
         )
         return index, statistics, options
 
+    def retention_upkeep(conn):
+        """The automatic purge-job index and the mapping-removal trigger's level."""
+        automatic = conn.scalar(
+            text(
+                "SELECT indexdef FROM pg_indexes WHERE schemaname=:schema "
+                "AND indexname='ix_evidence_purge_jobs_automatic_status'"
+            ),
+            {"schema": schema},
+        )
+        per_statement = conn.scalar(
+            text(
+                "SELECT t.tgtype & 1 = 0 FROM pg_trigger t "
+                "JOIN pg_class c ON c.oid = t.tgrelid "
+                "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname=:schema AND c.relname='mappings' "
+                "AND t.tgname='trg_control_evidence_stats_mappings_delete'"
+            ),
+            {"schema": schema},
+        )
+        return automatic, per_statement
+
     try:
         with engine.connect() as conn:
             conn.execute(text(f"SET search_path TO {schema},public"))
@@ -792,10 +815,14 @@ def test_dashboard_query_migrations_install_and_remove_cleanly():
                 "events:autovacuum_vacuum_insert_scale_factor=0.02",
                 "mappings:autovacuum_vacuum_insert_scale_factor=0.02",
             }
+            automatic, per_statement = retention_upkeep(conn)
+            assert "WHERE automatic" in automatic and per_statement is True
             command.downgrade(config, "0020_theme_ink")
             assert installed(conn) == (None, set(), set())
+            assert retention_upkeep(conn) == (None, False)
             command.upgrade(config, "head")
             assert installed(conn)[1:] == (statistics, options)
+            assert retention_upkeep(conn)[1] is True
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

@@ -18,6 +18,7 @@ from app.db.models import (
     Mapping,
 )
 from app.schemas import FrameworkUpsert
+from app.services.control_evidence_stats import clear_stats_caches
 from app.services.errors import DomainError
 from app.services.framework_catalogue import _framework_selection
 
@@ -106,6 +107,9 @@ def save_framework_selection(*, payload: FrameworkSelectionInput, user, db: Sess
         payload.version,
         user,
     )
+    # Inherited evidence comes from the enabled frameworks; counters and
+    # dashboards are read afresh.
+    clear_stats_caches()
     return framework_selection(db=db)
 
 

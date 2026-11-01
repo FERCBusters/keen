@@ -19,8 +19,11 @@ from app.storage.s3 import delete_stored_object
 LOCK_ID = 836210083
 BATCH_SIZE = 200
 # Automatic retention runs every minute. Once an automatic job completes, the
-# next check waits this long unless the retention policy changes first.
-RECHECK_AFTER_COMPLETION = timedelta(minutes=10)
+# next check waits this long unless the retention policy changes first. With
+# per-source or per-rule overrides a check ranks every event, so it is kept
+# hourly: ages are kept in days, and counts are exceeded by at most an hour of
+# new evidence.
+RECHECK_AFTER_COMPLETION = timedelta(hours=1)
 
 # Audit holds keep sampled events. Additional references keep lineage and
 # question attachments belonging to other records; those events can become

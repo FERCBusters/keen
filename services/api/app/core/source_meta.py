@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from app.core.config import settings
-from app.core.managed_configuration import load_document
+from app.core.managed_configuration import load_documents
 
 
 @dataclass(frozen=True)
@@ -173,14 +173,16 @@ def _configured_source_meta(refresh_bucket: int) -> dict[str, dict[str, str]]:
         "google_workspace": settings.google_workspace_config_path,
     }
 
-    for src, path in plugin_cfgs.items():
-        cfg = load_document(src, path)
+    # One session reads every document, the webhooks included.
+    documents = load_documents({**plugin_cfgs, "webhooks": settings.webhooks_path})
+    for src in plugin_cfgs:
+        cfg = documents[src]
         label = (cfg.get("ui_name") or cfg.get("display_name") or "").strip() or None
         color = _normalize_hex_color(cfg.get("ui_color") or cfg.get("badge_color"))
         _merge(meta, src, label=label, color=color)
 
     # Webhooks: providers -> webhook:<provider>
-    wcfg = load_document("webhooks", settings.webhooks_path)
+    wcfg = documents["webhooks"]
     providers = wcfg.get("providers") or {}
     if isinstance(providers, dict):
         for prov, pcfg in providers.items():

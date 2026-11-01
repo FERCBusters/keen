@@ -42,7 +42,7 @@ from app.security.permissions import (
 )
 from app.security.redaction import redact_query_string
 from app.security.request_limits import RequestBodyLimitMiddleware
-from app.security.roles import attach_effective_role
+from app.security.roles import attach_effective_role, lock_admin_changes
 from app.security.route_policy import (
     gated_write_permission,
     is_permission_checked_write,
@@ -132,6 +132,9 @@ def bootstrap_initial_admin():
 
     db = SessionLocal()
     try:
+        # API worker processes start together; one creates the account while
+        # the others wait, then find it.
+        lock_admin_changes(db)
         if db.query(User).count() > 0:
             return
         if not uname or not pwd:

@@ -4,7 +4,7 @@ import json
 import uuid
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.core.cache import (
@@ -19,13 +19,14 @@ from app.db.models import (
     ControlEvidenceStats,
     ControlItem,
     Event,
-    Mapping,
 )
+from app.services.control_inheritance import mapped_event_count
+from app.services.framework_catalogue import _framework_selection
 
 _EMPTY_SENTINEL = "__empty__"
 _CACHE_PREFIX = "keen:stats:v1:control_evidence"
 _EVENT_COUNTS_CACHE_NAMESPACE = "stats:framework-event-counts"
-_EVENT_COUNTS_CACHE_VERSION = "celery-count-v1"
+_EVENT_COUNTS_CACHE_VERSION = "celery-count-v2"
 
 
 def _safe_framework_part(framework: str) -> str:
@@ -195,27 +196,17 @@ def _compute_framework_event_counts(
     The result is cached for ``KEEN_AGGREGATE_CACHE_TTL_SECONDS`` and
     periodically warmed by Celery.
 
-    Mapped events are aggregated in one GROUP BY over the framework's
-    mappings, deduplicating multi-mapped events before the count. Grouping
-    reads only the (small) mappings side, never the wide events heap, so the
-    cold dashboard load stays near-linear in mapped evidence on both
-    supported databases.
+    Mapped events are those evidencing the framework directly or by one
+    crosswalk hop, as the dashboards count them. The framework's short list of
+    evidence controls is resolved first; the mappings index then yields their
+    events in order, each counted once, without reading the wide events heap.
     """
-
     total = (
         int(total_events)
         if total_events is not None
         else int(db.query(func.count(Event.id)).scalar() or 0)
     )
-    mapped_events = (
-        select(Mapping.event_id)
-        .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-        .where(ControlItem.framework_slug == framework)
-        .group_by(Mapping.event_id)
-        .subquery()
-    )
-    mapped = db.query(func.count()).select_from(mapped_events).scalar() or 0
-    return _normalise_event_counts(total, int(mapped or 0))
+    return _normalise_event_counts(total, mapped_event_count(db, framework))
 
 
 def _store_framework_event_counts(framework: str, counts: dict[str, int]) -> None:
@@ -233,14 +224,16 @@ def get_framework_event_counts(db: Session, framework: str) -> dict[str, int]:
     """Return cached framework-scoped mapped/unmapped event counts.
 
     ``total_events`` is the total evidence universe visible to authenticated
-    users. ``mapped_events`` is the number of distinct events mapped to at least
-    one control in ``framework``. Therefore ``unmapped_events`` means events
-    with no mapping in this framework, even if they are mapped in another
-    framework.
+    users. ``mapped_events`` is the number of distinct events evidencing
+    ``framework``: mapped to one of its controls, or to an enabled control whose
+    evidence one of its controls inherits. Therefore ``unmapped_events`` means
+    events that evidence no control of this framework, even if they are mapped
+    in another framework.
     """
 
     cached = cache_get_json(
-        _EVENT_COUNTS_CACHE_NAMESPACE, _framework_event_counts_cache_parts(framework)
+        _EVENT_COUNTS_CACHE_NAMESPACE,
+        _framework_event_counts_cache_parts(framework),
     )
     if isinstance(cached, dict):
         try:
@@ -266,8 +259,6 @@ def refresh_framework_event_counts_cache(
     request and cached as usual, so the periodic refresh does not scan the
     mappings once for every framework in the catalogue.
     """
-    from app.services.framework_catalogue import _framework_selection
-
     total_events = int(db.query(func.count(Event.id)).scalar() or 0)
     frameworks: list[str]
     if framework:

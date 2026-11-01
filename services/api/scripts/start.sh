@@ -32,5 +32,11 @@ PY
 echo "[keen] running migrations..."
 alembic upgrade head
 
-echo "[keen] starting api..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8080 --no-proxy-headers --ws-max-size 1024 --ws-max-queue 4
+workers="${KEEN_API_WORKERS:-1}"
+case "$workers" in
+  [1-9]|[12][0-9]|3[0-2]) ;;
+  *) echo "[keen] KEEN_API_WORKERS must be a whole number from 1 to 32" >&2; exit 1 ;;
+esac
+
+echo "[keen] starting api with $workers worker process(es)..."
+exec uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers "$workers" --no-proxy-headers --ws-max-size 1024 --ws-max-queue 4

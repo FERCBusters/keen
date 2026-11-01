@@ -88,18 +88,25 @@ def list_sources(*, framework: str, limit: int, offset: int, db: Session, user):
         # if the event maps to more than one control in that framework. An event
         # mapped only in another framework must still be reported as unmapped for
         # this framework.
-        mapped_event_ids = (
-            db.query(Mapping.event_id.label("event_id"))
-            .filter(Mapping.control_item_id.in_(effective_framework_ids(framework, db)))
-            .distinct()
-            .subquery()
+        # The short list of the framework's evidence controls is resolved
+        # first; a semi-join then counts each event once.
+        control_ids = sorted(
+            db.execute(effective_framework_ids(framework, db)).scalars(), key=str
         )
+        mapping = aliased(Mapping)
         mapped_rows = (
             db.query(Event.source, func.count(Event.id))
-            .join(mapped_event_ids, mapped_event_ids.c.event_id == Event.id)
+            .filter(
+                exists().where(
+                    mapping.event_id == Event.id,
+                    mapping.control_item_id.in_(control_ids),
+                )
+            )
             .filter(visibility)
             .group_by(Event.source)
             .all()
+            if control_ids
+            else []
         )
         mapped_by_source = {src: int(n) for src, n in mapped_rows}
 

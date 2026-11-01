@@ -4,7 +4,8 @@ services:
   postgres:
     image: postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
     # Keen's dashboard queries are short, so JIT compilation costs more than it
-    # saves. Size the buffer cache to the host; see .env.example.
+    # saves. Size the buffer cache, sort memory and planner costs to the host;
+    # see .env.example. Parallel queries share memory through /dev/shm.
     command:
       - postgres
       - -c
@@ -12,7 +13,12 @@ services:
       - -c
       - effective_cache_size=${KEEN_POSTGRES_EFFECTIVE_CACHE_SIZE:-1GB}
       - -c
+      - work_mem=${KEEN_POSTGRES_WORK_MEM:-4MB}
+      - -c
+      - random_page_cost=${KEEN_POSTGRES_RANDOM_PAGE_COST:-4}
+      - -c
       - jit=off
+    shm_size: ${KEEN_POSTGRES_SHM_SIZE:-256mb}
     environment:
       POSTGRES_USER: keen
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMe123!}

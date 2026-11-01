@@ -3543,6 +3543,13 @@ Index(
     _evidence_purge_jobs.c.updated_at,
     postgresql_where=sql_text("NOT automatic"),
 )
+# Automatic retention reads its latest completed job and prunes its history.
+Index(
+    "ix_evidence_purge_jobs_automatic_status",
+    _evidence_purge_jobs.c.status,
+    _evidence_purge_jobs.c.updated_at,
+    postgresql_where=sql_text("automatic"),
+)
 _evidence_object_cleanup = Table(
     "evidence_object_cleanup",
     Base.metadata,

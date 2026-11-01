@@ -1,15 +1,17 @@
 """One-hop evidence inheritance, starting from evidence before joining OSA memberships."""
 
-from sqlalchemy import exists, false, func, select
+from sqlalchemy import column, exists, false, func, select, values
 from sqlalchemy.orm import aliased
 
 from app.db.models import (
+    ControlEvidenceStats,
     ControlItem,
     CrossFrameworkControlLink,
     Event,
     Mapping,
     OsaControlMapping,
 )
+from app.services.framework_catalogue import _framework_selection
 
 
 def osa_pairs():
@@ -20,10 +22,12 @@ def osa_pairs():
     return source, target, source_control, target_control
 
 
-def enabled_control_ids(db):
-    from app.services.framework_catalogue import _framework_selection
+def _enabled_frameworks(db):
+    return _framework_selection(db)[3]
 
-    enabled = _framework_selection(db)[3]
+
+def enabled_control_ids(db):
+    enabled = _enabled_frameworks(db)
     return select(ControlItem.id).where(ControlItem.framework_slug.in_(enabled))
 
 
@@ -70,34 +74,255 @@ def inherited_control_ids(db, control_ids):
 
 
 def effective_framework_ids(framework, db=None):
+    """The framework's controls and every control whose evidence they inherit.
+
+    With a session, inheritance needs the framework enabled and comes only from
+    enabled controls. The shared-NIST branch reads the memberships of the
+    other enabled frameworks' controls and keeps those sharing a reference
+    with this framework, so its cost follows those frameworks' memberships
+    alone, however many catalogue controls hold the same reference.
+    """
     direct = select(ControlItem.id).where(ControlItem.framework_slug == framework)
+    target_control = aliased(ControlItem)
     explicit = (
         select(CrossFrameworkControlLink.source_control_id)
         .join(
-            ControlItem, ControlItem.id == CrossFrameworkControlLink.target_control_id
+            target_control,
+            target_control.id == CrossFrameworkControlLink.target_control_id,
         )
-        .where(ControlItem.framework_slug == framework)
+        .where(target_control.framework_slug == framework)
     )
     source, target, sc, tc = osa_pairs()
-    osa = (
-        select(source.c.control_id)
-        .select_from(
-            source.join(target, source.c.nist_ref == target.c.nist_ref)
-            .join(sc, sc.c.id == source.c.control_id)
-            .join(tc, tc.c.id == target.c.control_id)
+    if db is None:
+        osa = (
+            select(source.c.control_id)
+            .select_from(
+                source.join(target, source.c.nist_ref == target.c.nist_ref)
+                .join(sc, sc.c.id == source.c.control_id)
+                .join(tc, tc.c.id == target.c.control_id)
+            )
+            .where(
+                tc.c.framework_slug == framework,
+                sc.c.framework_slug != tc.c.framework_slug,
+            )
         )
-        .where(
-            tc.c.framework_slug == framework, sc.c.framework_slug != tc.c.framework_slug
+        return direct.union(explicit, osa)
+    enabled = _enabled_frameworks(db)
+    if framework not in enabled:
+        return direct
+    explicit = explicit.where(
+        CrossFrameworkControlLink.source_control_id.in_(
+            select(ControlItem.id).where(
+                ControlItem.framework_slug.in_(sorted(enabled))
+            )
         )
     )
-    if db is not None:
-        enabled = enabled_control_ids(db)
-        explicit = explicit.where(
-            CrossFrameworkControlLink.source_control_id.in_(enabled),
-            CrossFrameworkControlLink.target_control_id.in_(enabled),
-        )
-        osa = osa.where(sc.c.id.in_(enabled), tc.c.id.in_(enabled))
+    others = sorted(enabled - {framework})
+    if not others:
+        return direct.union(explicit)
+    shared_refs = (
+        select(target.c.nist_ref)
+        .join(tc, tc.c.id == target.c.control_id)
+        .where(tc.c.framework_slug == framework)
+    )
+    osa = (
+        select(source.c.control_id)
+        .join(sc, sc.c.id == source.c.control_id)
+        .where(sc.c.framework_slug.in_(others), source.c.nist_ref.in_(shared_refs))
+    )
     return direct.union(explicit, osa)
+
+
+def framework_evidence_sources(db, framework):
+    """Each control of the framework, with the controls whose evidence it inherits.
+
+    Returns ``{control id: set of source ids}``; every set holds the control
+    itself. Inheritance is that of ``evidence_pairs``: explicit links from
+    enabled controls, and controls of another enabled framework sharing a NIST
+    reference, when the framework is enabled. Short indexed reads of the
+    framework's links and of the enabled frameworks' NIST memberships resolve
+    it, and the shared references are paired here.
+    """
+    sources = {
+        control_id: {control_id}
+        for control_id in db.execute(
+            select(ControlItem.id).where(ControlItem.framework_slug == framework)
+        ).scalars()
+    }
+    enabled = _enabled_frameworks(db)
+    if not sources or framework not in enabled:
+        return sources
+    source_control = aliased(ControlItem)
+    target_control = aliased(ControlItem)
+    for source_id, target_id in db.execute(
+        select(
+            CrossFrameworkControlLink.source_control_id,
+            CrossFrameworkControlLink.target_control_id,
+        )
+        .join(
+            source_control,
+            source_control.id == CrossFrameworkControlLink.source_control_id,
+        )
+        .join(
+            target_control,
+            target_control.id == CrossFrameworkControlLink.target_control_id,
+        )
+        .where(
+            target_control.framework_slug == framework,
+            source_control.framework_slug.in_(sorted(enabled)),
+        )
+    ):
+        sources[target_id].add(source_id)
+    others = sorted(enabled - {framework})
+    if not others:
+        return sources
+    memberships = OsaControlMapping.__table__
+
+    def by_reference(frameworks):
+        found: dict[str, set] = {}
+        for control_id, ref in db.execute(
+            select(memberships.c.control_id, memberships.c.nist_ref)
+            .join(ControlItem, ControlItem.id == memberships.c.control_id)
+            .where(ControlItem.framework_slug.in_(frameworks))
+        ):
+            found.setdefault(ref, set()).add(control_id)
+        return found
+
+    targets_by_ref = by_reference([framework])
+    if targets_by_ref:
+        for ref, source_ids in by_reference(others).items():
+            for target_id in targets_by_ref.get(ref, ()):
+                sources[target_id].update(source_ids)
+    return sources
+
+
+def _uuid_values(name, columns, rows):
+    """A VALUES list of control ids as a CTE, its rows in a stable order."""
+    uuid_type = ControlItem.__table__.c.id.type
+    return (
+        values(*(column(c, uuid_type) for c in columns), name=name)
+        .data(sorted(rows, key=lambda row: tuple(map(str, row))))
+        .cte(name)
+    )
+
+
+def _recorded_evidence(db):
+    """{control id: (count, newest timestamp)} for every control with evidence.
+
+    PostgreSQL triggers keep ``control_evidence_stats`` exact for each
+    control's own mappings; it holds a row only for a control with evidence.
+    """
+    return {
+        control_id: (count, latest)
+        for control_id, count, latest in db.execute(
+            select(
+                ControlEvidenceStats.control_item_id,
+                ControlEvidenceStats.evidence_count,
+                ControlEvidenceStats.last_evidence,
+            ).where(ControlEvidenceStats.evidence_count > 0)
+        )
+    }
+
+
+def control_event_counts(
+    db, framework, *, event_ids=None, event_conditions=(), latest=False
+):
+    """Distinct events evidencing each framework control, directly or by one hop.
+
+    Equals ``count(event_id)`` of ``evidence_pairs`` grouped by control. The
+    short list of (control, source) pairs is resolved first and sent as values,
+    so each mapping is read once per control it evidences and the event
+    restriction is evaluated once. On PostgreSQL the list holds only sources
+    with evidence, however many frameworks are enabled. ``event_ids`` is a
+    select of the events that count; ``event_conditions`` restrict ``Event``
+    columns, such as diary visibility and a date window. With ``latest`` the
+    newest evidencing event's timestamp is returned too. Controls without
+    evidence are left out.
+    """
+    sources = framework_evidence_sources(db, framework)
+    if db.get_bind().dialect.name == "postgresql":
+        evidenced = _recorded_evidence(db)
+        sources = {
+            target: {source for source in found if source in evidenced}
+            for target, found in sources.items()
+        }
+    pairs = [(target, source) for target, found in sources.items() for source in found]
+    if not pairs:
+        return {}
+    edges = _uuid_values("evidence_edges", ("target_id", "source_id"), pairs)
+    columns = [edges.c.target_id, func.count(func.distinct(Mapping.event_id))]
+    if latest:
+        columns.append(func.max(Event.timestamp))
+    query = select(*columns).select_from(
+        edges.join(Mapping, Mapping.control_item_id == edges.c.source_id)
+    )
+    if latest or event_conditions:
+        query = query.join(Event, Event.id == Mapping.event_id).where(*event_conditions)
+    if event_ids is not None:
+        query = query.where(Mapping.event_id.in_(event_ids))
+    rows = db.execute(query.group_by(edges.c.target_id)).all()
+    if latest:
+        return {row[0]: (row[1], row[2]) for row in rows}
+    return {row[0]: row[1] for row in rows}
+
+
+def recorded_control_evidence(db, framework):
+    """Evidence counts and newest evidence per framework control, every event counting.
+
+    The same figures as ``control_event_counts(..., latest=True)`` without an
+    event restriction, from the trigger-maintained per-control counters. A
+    control evidenced by a single control takes that control's figures. A
+    control inheriting from several evidenced controls counts the largest
+    one's events from the counters and adds only the other sources' events
+    that the largest does not have, so the events of its largest source are
+    never read. Returns ``{control id: (count, newest timestamp)}`` for
+    controls with evidence. PostgreSQL only.
+    """
+    sources = framework_evidence_sources(db, framework)
+    if not sources:
+        return {}
+    recorded = _recorded_evidence(db)
+    result = {}
+    unions: list[tuple] = []
+    for target, found in sources.items():
+        evidenced = sorted(
+            (s for s in found if s in recorded),
+            key=lambda s: (-recorded[s][0], str(s)),
+        )
+        if not evidenced:
+            continue
+        stamps = [recorded[s][1] for s in evidenced if recorded[s][1] is not None]
+        largest = evidenced[0]
+        result[target] = (recorded[largest][0], max(stamps) if stamps else None)
+        unions.extend((target, largest, source) for source in evidenced[1:])
+    if unions:
+        rest = _uuid_values(
+            "union_sources", ("target_id", "largest_id", "source_id"), unions
+        )
+        covered = aliased(Mapping)
+        # OFFSET 0 keeps the check a probe of the (control, event) index for
+        # each of the other sources' events; as an anti-join PostgreSQL would
+        # read every mapping to hash those of the largest source.
+        in_largest = (
+            select(covered.id)
+            .where(
+                covered.control_item_id == rest.c.largest_id,
+                covered.event_id == Mapping.event_id,
+            )
+            .offset(0)
+            .exists()
+        )
+        for target, extra in db.execute(
+            select(rest.c.target_id, func.count(func.distinct(Mapping.event_id)))
+            .select_from(
+                rest.join(Mapping, Mapping.control_item_id == rest.c.source_id)
+            )
+            .where(~in_largest)
+            .group_by(rest.c.target_id)
+        ):
+            count, latest = result[target]
+            result[target] = (count + extra, latest)
+    return result
 
 
 def _visible_events_only(visibility):
@@ -132,10 +357,16 @@ def mapped_event_count(db, framework, visibility=None):
     mapped = framework_event_ids(db, framework)
     if mapped is None:
         return 0
-    query = select(func.count(Event.id)).where(Event.id.in_(mapped))
     restriction = _visible_events_only(visibility)
-    if restriction is not None:
-        query = query.where(restriction)
+    if restriction is None:
+        # Every mapping names an existing event, so the mappings alone answer
+        # it: the (event, control) index yields them in event order and each
+        # event is counted once without reading the events table.
+        query = select(func.count(func.distinct(Mapping.event_id))).where(
+            mapped.whereclause
+        )
+    else:
+        query = select(func.count(Event.id)).where(Event.id.in_(mapped), restriction)
     return int(db.execute(query).scalar() or 0)
 
 
@@ -149,7 +380,6 @@ def evidenced_control_ids(db, framework, visibility=None):
     events that count as evidence.
     """
     from app.db.models import effective_cross_framework_links
-    from app.services.framework_catalogue import _framework_selection
 
     candidates = db.execute(effective_framework_ids(framework, db)).scalars().all()
     if not candidates:
@@ -170,7 +400,7 @@ def evidenced_control_ids(db, framework, visibility=None):
     links = effective_cross_framework_links(
         source_ids=sorted((control_id for control_id, _ in evidenced), key=str),
         target_framework=framework,
-        enabled=_framework_selection(db)[3],
+        enabled=_enabled_frameworks(db),
     )
     supported.update(db.execute(select(links.c.target_control_id).distinct()).scalars())
     return supported
@@ -226,7 +456,6 @@ def evidence_pairs(framework, db=None, event_ids=None):
     branches, so exports and filtered facets cannot expand unrelated evidence.
     """
     from app.db.models import effective_cross_framework_links
-    from app.services.framework_catalogue import _framework_selection
 
     mapped = select(Mapping.event_id, Mapping.control_item_id)
     if event_ids is not None:
@@ -237,7 +466,7 @@ def evidence_pairs(framework, db=None, event_ids=None):
         .join(mapped, mapped.c.control_item_id == ControlItem.id)
         .where(ControlItem.framework_slug == framework)
     )
-    enabled = _framework_selection(db)[3] if db is not None else None
+    enabled = _enabled_frameworks(db) if db is not None else None
     links = effective_cross_framework_links(
         source_ids=select(mapped.c.control_item_id).distinct(),
         target_framework=framework,
@@ -257,9 +486,7 @@ def has_inherited_evidence(db, framework):
     Start with actual mappings, never the global control-pair relation. Empty
     mapping tables and disabled crosswalks must not cause catalogue expansion.
     """
-    from app.services.framework_catalogue import _framework_selection
-
-    enabled = _framework_selection(db)[3]
+    enabled = _enabled_frameworks(db)
     if framework not in enabled:
         return False
     source_control = ControlItem.__table__.alias("inherited_source")
@@ -311,7 +538,6 @@ def page_controls(db, framework, event_ids):
     references and multiple mapped sources cannot duplicate a target badge.
     """
     from app.db.models import effective_cross_framework_links
-    from app.services.framework_catalogue import _framework_selection
 
     if not event_ids:
         return {}
@@ -332,7 +558,7 @@ def page_controls(db, framework, event_ids):
             )
         )
     }
-    enabled = _framework_selection(db)[3]
+    enabled = _enabled_frameworks(db)
     inherited = {}
     if framework in enabled:
         links = effective_cross_framework_links(

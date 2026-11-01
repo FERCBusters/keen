@@ -2,6 +2,7 @@
 acceptance and redaction regressions. Signed keen-agent evidence is covered in
 test_ueu_evidence.py."""
 
+import asyncio
 import copy
 import gzip
 import json
@@ -380,3 +381,25 @@ def test_json_log_bodies_receive_field_redaction(setup):
         }
         assert "DO-NOT-STORE" not in row.summary
     assert len(stored) == 1 and b"DO-NOT-STORE" not in stored[0]
+
+
+def test_batches_are_stored_off_the_event_loop(setup, monkeypatch):
+    """Storage writes and database work leave the event loop to other requests."""
+    client, _, headers, _, stored, _ = setup
+    on_loop = []
+
+    def put(**k):
+        try:
+            asyncio.get_running_loop()
+            on_loop.append(True)
+        except RuntimeError:
+            on_loop.append(False)
+        stored.append(k["data"])
+        return SimpleNamespace(
+            uri="test://artifact", sha256="0" * 64, size_bytes=len(k["data"])
+        )
+
+    monkeypatch.setattr(common, "put_bytes", put)
+    r = client.post("/v1/otlp/logs", json=record(), headers=headers)
+    assert r.status_code == 200, r.text
+    assert on_loop == [False]

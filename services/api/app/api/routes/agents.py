@@ -6,11 +6,13 @@ import asyncio
 import gzip
 import io
 import logging
+from functools import partial
 
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.agents.credentials import authenticate, live_only
 from app.agents.otlp import decode_batch
@@ -112,9 +114,8 @@ def evidence_policy(agent_id: str, body: EvidencePolicy, db: Session = Depends(g
     return service.set_evidence_policy(agent_id=agent_id, body=body, db=db)
 
 
-@router.post("/v1/otlp/logs")
-async def ingest(request: Request, response: Response, db: Session = Depends(get_db)):
-    live_only()
+def _admit_batch(request, db):
+    """Authenticate an evidence batch, check intake is open and apply its limit."""
     auth = authenticate_agent(
         request, db, "keen:agent:auth-failure:ip:", operation="otlp-logs"
     )
@@ -127,6 +128,17 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
     )
     if not ok:
         raise HTTPException(429, "Rate limited", headers={"Retry-After": str(retry)})
+    return auth
+
+
+# Agent requests read their bodies asynchronously, and run their database,
+# Valkey and storage work in the thread pool, as synchronous routes do. A batch
+# writes and syncs each artifact to storage, which must not hold up the event
+# loop and every other request with it.
+@router.post("/v1/otlp/logs")
+async def ingest(request: Request, response: Response, db: Session = Depends(get_db)):
+    live_only()
+    auth = await run_in_threadpool(_admit_batch, request, db)
     if (
         request.headers.get("content-type", "").split(";")[0].strip()
         != "application/json"
@@ -160,11 +172,14 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
         raise HTTPException(
             400, "Invalid OTLP JSON logs; maximum 64 records and bounded attributes"
         )
-    result = service.persist_batch(
-        db=db,
-        auth=auth,
-        authorization=request.headers.get("authorization", ""),
-        batch=batch,
+    result = await run_in_threadpool(
+        partial(
+            service.persist_batch,
+            db=db,
+            auth=auth,
+            authorization=request.headers.get("authorization", ""),
+            batch=batch,
+        )
     )
     response.headers["Cache-Control"] = "no-store"
     return result
@@ -216,6 +231,28 @@ async def heartbeat(
     request: Request, response: Response, db: Session = Depends(get_db)
 ):
     live_only()
+    auth = await run_in_threadpool(_admit_heartbeat, request, db)
+    body = await bounded_body(request, 32768)
+    auth.check_body(body)
+    try:
+        health = Health.model_validate_json(body)
+    except ValidationError:
+        raise HTTPException(400, "Invalid health report")
+    result = await run_in_threadpool(
+        partial(
+            service.record_heartbeat,
+            db=db,
+            auth=auth,
+            authorization=request.headers.get("authorization", ""),
+            health=health,
+        )
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+def _admit_heartbeat(request, db):
+    """Authenticate a health report and apply its limit."""
     auth = authenticate_agent(
         request, db, "keen:agent:health:auth-failure:ip:", operation="heartbeat"
     )
@@ -225,20 +262,7 @@ async def heartbeat(
     )
     if not ok:
         raise HTTPException(429, "Rate limited", headers={"Retry-After": str(retry)})
-    body = await bounded_body(request, 32768)
-    auth.check_body(body)
-    try:
-        health = Health.model_validate_json(body)
-    except ValidationError:
-        raise HTTPException(400, "Invalid health report")
-    result = service.record_heartbeat(
-        db=db,
-        auth=auth,
-        authorization=request.headers.get("authorization", ""),
-        health=health,
-    )
-    response.headers["Cache-Control"] = "no-store"
-    return result
+    return auth
 
 
 router.include_router(admin)

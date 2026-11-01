@@ -169,6 +169,8 @@ def control_evidence(*, control_id: str, limit: int, offset: int, db: Session, u
                 Event.id,
                 Event.timestamp,
                 Event.source,
+                Event.connection_id,
+                Event.connection_name,
                 Event.summary,
                 Event.raw_pointer,
                 Event.normalized_payload,

@@ -3,14 +3,20 @@
 import os
 import subprocess
 import sys
+import threading
+import time
+import uuid
 from unittest.mock import Mock
 
 import pytest
 from app import main
 from app.core.config import Settings, settings
-from app.db.models import User
+from app.db.models import Base, User
 from app.security.passwords import hash_password, verify_password
+from sqlalchemy import DefaultClause, MetaData, create_engine, text
 from sqlalchemy.orm import sessionmaker
+
+from tests.db_helpers import schema_engine
 
 
 @pytest.mark.parametrize(
@@ -132,3 +138,62 @@ def test_no_credentials_or_hosted_mode_never_creates_an_account(monkeypatch):
     )
     main.bootstrap_initial_admin()
     factory.assert_not_called()
+
+
+def test_api_workers_starting_together_create_one_account(monkeypatch):
+    """Each API worker process bootstraps at start-up; one account results."""
+    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Set KEEN_RETENTION_TEST_DATABASE_URL for PostgreSQL concurrency")
+    schema = "bootstrap_" + uuid.uuid4().hex
+    admin = create_engine(url)
+    with admin.begin() as connection:
+        connection.execute(text(f"CREATE SCHEMA {schema}"))
+    engine = schema_engine(url, schema)
+    try:
+        metadata = MetaData()
+        for table in Base.metadata.sorted_tables:
+            table.to_metadata(metadata)
+        for table in metadata.tables.values():
+            for column in table.columns:
+                default = column.server_default
+                if default is not None and "now()" in str(default.arg):
+                    column.server_default = DefaultClause(text(f"({default.arg})"))
+        metadata.create_all(engine)
+        monkeypatch.setattr(settings, "hosted_mode", False)
+        monkeypatch.setattr(settings, "bootstrap_admin_username", "initial-admin")
+        monkeypatch.setattr(
+            settings, "bootstrap_admin_password", "synthetic-bootstrap-password"
+        )
+        monkeypatch.setattr(main, "SessionLocal", sessionmaker(bind=engine))
+        create_user = main.create_user
+
+        def slow_create_user(db, **values):
+            # Hold the first creation open long enough for the other to start.
+            time.sleep(0.5)
+            return create_user(db, **values)
+
+        monkeypatch.setattr(main, "create_user", slow_create_user)
+        start = threading.Barrier(2)
+        failures = []
+
+        def worker():
+            start.wait()
+            try:
+                main.bootstrap_initial_admin()
+            except Exception as error:  # noqa: BLE001 - reported below
+                failures.append(error)
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=20)
+        assert failures == []
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT count(*) FROM users")).scalar() == 1
+    finally:
+        engine.dispose()
+        with admin.begin() as connection:
+            connection.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        admin.dispose()

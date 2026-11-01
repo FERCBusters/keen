@@ -3,9 +3,12 @@ every later request with it."""
 
 from __future__ import annotations
 
+from functools import partial
+
 from fastapi import Depends, HTTPException, Request, Response
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.context import change_context
 from app.api.routing import Router
@@ -75,16 +78,20 @@ async def renew(request: Request, response: Response, db: Session = Depends(get_
     from .agents import authenticate_agent, bounded_body
 
     live_only()
-    auth = authenticate_agent(
-        request,
-        db,
-        "keen:agent:renew:auth-failure:ip:",
-        operation="renew",
-        allow_retired=True,
+    # Database work runs in the thread pool, as for the other agent requests.
+    auth = await run_in_threadpool(
+        partial(
+            authenticate_agent,
+            request,
+            db,
+            "keen:agent:renew:auth-failure:ip:",
+            operation="renew",
+            allow_retired=True,
+        )
     )
     if auth.signed is None:
         raise HTTPException(401, "Invalid agent credential")
-    db.rollback()
+    await run_in_threadpool(db.rollback)
     body = await bounded_body(request, 4096)
     auth.check_body(body)
     try:
@@ -92,8 +99,14 @@ async def renew(request: Request, response: Response, db: Session = Depends(get_
     except ValidationError:
         raise HTTPException(400, "Invalid renewal request")
     response.headers["Cache-Control"] = "no-store"
-    return service.renew(
-        body=renewal, context=change_context(request), db=db, auth=auth
+    return await run_in_threadpool(
+        partial(
+            service.renew,
+            body=renewal,
+            context=change_context(request),
+            db=db,
+            auth=auth,
+        )
     )
 
 

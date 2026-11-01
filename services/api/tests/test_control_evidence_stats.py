@@ -14,9 +14,11 @@ from types import SimpleNamespace
 
 import fakeredis
 import pytest
+from app.core.cache import make_cache_key
 from app.core.config import settings
-from app.db.models import ControlItem, Event, Framework, Mapping
+from app.db.models import ControlItem, Event, Framework, Mapping, User
 from app.services import control_evidence_stats as stats
+from app.services import frameworks as framework_service
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
@@ -91,6 +93,71 @@ def test_triggers_keep_counts_and_the_repair_hook_restores_drifted_rows(evidence
 
     assert rebuilt == 2
     assert evidence.table() == EXPECTED
+
+
+def test_removed_evidence_lowers_the_counts_exactly(evidence):
+    db, controls, events = evidence.db, evidence.controls, evidence.events
+    # The migration acts on the schema in use: removals are counted once per
+    # statement, over every mapping the statement removed.
+    trigger = db.execute(
+        text(
+            "SELECT t.tgtype & 1 = 0 AS per_statement, t.tgoldtable "
+            "FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid "
+            "WHERE c.oid = 'mappings'::regclass "
+            "AND t.tgname = 'trg_control_evidence_stats_mappings_delete'"
+        )
+    ).one()
+    assert tuple(trigger) == (True, "removed_mappings")
+    dated = [
+        Event(
+            source="ci",
+            summary=f"Deploy {day}",
+            external_id=uuid.uuid4().hex,
+            timestamp=datetime(2026, 3, day),
+        )
+        for day in (7, 8, 9)
+    ]
+    db.add_all(dated)
+    db.flush()
+    db.add_all(
+        Mapping(event_id=row.id, control_item_id=controls["A.3"].id, method="rule")
+        for row in (*events, *dated)
+    )
+    db.commit()
+
+    def remove(*pairs):
+        """Remove the (control, event) mappings in one statement."""
+        ids = [
+            db.query(Mapping.id)
+            .filter_by(control_item_id=controls[control].id, event_id=event.id)
+            .scalar()
+            for control, event in pairs
+        ]
+        db.query(Mapping).filter(Mapping.id.in_(ids)).delete()
+        db.commit()
+        stats.clear_stats_caches()
+        return evidence.table()
+
+    # Older events' mappings only lower the count.
+    assert remove(("A.3", events[0]), ("A.1", events[0]))["A.3"] == (
+        4,
+        "2026-03-09T00:00:00",
+    )
+    assert evidence.table()["A.1"] == (1, "2026-03-05T00:00:00")
+    # Removing the newest evidence with older evidence recounts once.
+    assert remove(("A.3", dated[2]), ("A.3", events[1]))["A.3"] == (
+        2,
+        "2026-03-08T00:00:00",
+    )
+    # A control's last mappings remove its row.
+    assert "A.3" not in remove(("A.3", dated[0]), ("A.3", dated[1]))
+    after = evidence.table()
+    assert after == {
+        "A.1": (1, "2026-03-05T00:00:00"),
+        "A.2": (1, "2026-03-05T00:00:00"),
+    }
+    stats.rebuild_control_evidence_stats(db)
+    assert evidence.table() == after
 
 
 def test_the_maintenance_script_rebuilds_and_reports(evidence, monkeypatch, capsys):
@@ -199,12 +266,36 @@ def test_framework_event_counts_recover_from_an_unreadable_cache(evidence):
 
     key = make_cache_key(
         "stats:framework-event-counts",
-        {"framework": FW, "counter_version": "celery-count-v1"},
+        stats._framework_event_counts_cache_parts(FW),
     )
     evidence.redis.set(key, json.dumps({"total_events": "many"}))
 
     assert stats.get_framework_event_counts(evidence.db, FW)["total_events"] == 2
     assert json.loads(evidence.redis.get(key))["total_events"] == 2
+
+
+def test_a_new_framework_selection_reads_fresh_counters(evidence, monkeypatch):
+    """Inherited evidence comes from the enabled frameworks."""
+    db = evidence.db
+    monkeypatch.setattr(settings, "enabled_frameworks", "")
+    stats.refresh_framework_event_counts_cache(db, FW)
+    key = make_cache_key(
+        "stats:framework-event-counts", stats._framework_event_counts_cache_parts(FW)
+    )
+    assert evidence.redis.get(key) is not None
+    admin = User(
+        username=f"admin-{uuid.uuid4().hex[:8]}", password_hash="-", role="admin"
+    )
+    db.add(admin)
+    db.commit()
+    framework_service.save_framework_selection(
+        payload=framework_service.FrameworkSelectionInput(
+            enabled=[FW], default=FW, version=0
+        ),
+        user=admin,
+        db=db,
+    )
+    assert evidence.redis.get(key) is None
 
 
 def test_the_periodic_refresh_covers_enabled_frameworks_and_counts_others_on_demand(

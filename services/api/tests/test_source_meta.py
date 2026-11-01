@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+from app.core import managed_configuration as mc
 from app.core import source_meta as sm
 
 
@@ -61,6 +63,13 @@ def test_merge_only_with_values():
     assert meta2 == {}
 
 
+def documents_of(load_document):
+    """A stand-in for load_documents built from a one-document loader."""
+    return lambda paths: {
+        name: load_document(name, path) for name, path in paths.items()
+    }
+
+
 def test_configured_source_meta_reads_catalogue(monkeypatch):
     sm._configured_source_meta.cache_clear()
     documents = {
@@ -86,7 +95,7 @@ def test_configured_source_meta_reads_catalogue(monkeypatch):
     fake_session = MagicMock()
     fake_session.__enter__.return_value = fake_db
     with (
-        patch.object(sm, "load_document", load_document),
+        patch.object(sm, "load_documents", documents_of(load_document)),
         patch("app.db.session.SessionLocal", lambda: fake_session),
     ):
         meta = sm._configured_source_meta(42)
@@ -102,6 +111,27 @@ def test_configured_source_meta_reads_catalogue(monkeypatch):
     assert meta["keen-agent"] == {"label": "Keen Agent", "color": "#6935BE"}
 
 
+def test_documents_are_read_in_one_session_with_shipped_fallbacks(tmp_path):
+    shipped = tmp_path / "rss.yml"
+    shipped.write_text("ui_name: Feeds\n")
+    stored = MagicMock()
+    stored.execute.return_value = [("taiga", {"ui_name": "Tracker"})]
+    session = MagicMock()
+    session.__enter__.return_value = stored
+    opened = []
+    with patch.object(mc, "SessionLocal", lambda: opened.append(1) or session):
+        documents = mc.load_documents(
+            {"taiga": str(tmp_path / "absent.yml"), "rss": str(shipped)}
+        )
+    assert documents == {"taiga": {"ui_name": "Tracker"}, "rss": {"ui_name": "Feeds"}}
+    assert opened == [1] and stored.execute.call_count == 1
+    shipped.write_text("- not\n- an object\n")
+    with patch.object(mc, "SessionLocal", lambda: session):
+        stored.execute.return_value = []
+        with pytest.raises(ValueError, match="rss configuration must be an object"):
+            mc.load_documents({"rss": str(shipped)})
+
+
 def test_configured_source_meta_survives_database_outage(monkeypatch):
     sm._configured_source_meta.cache_clear()
     documents: dict = {}
@@ -112,7 +142,7 @@ def test_configured_source_meta_survives_database_outage(monkeypatch):
     broken_session = MagicMock()
     broken_session.__enter__ = MagicMock(side_effect=RuntimeError("db is down"))
     with (
-        patch.object(sm, "load_document", load_document),
+        patch.object(sm, "load_documents", documents_of(load_document)),
         patch("app.db.session.SessionLocal", lambda: broken_session),
     ):
         meta = sm._configured_source_meta(42)
@@ -184,7 +214,11 @@ def test_environment_overrides_apply_to_configured_sources_at_load(monkeypatch):
     monkeypatch.setenv("KEEN_SOURCE_COLOR_", "#123456")
     monkeypatch.setenv("KEEN_SOURCE_NAME_DIARY", "Journal")
     with (
-        patch.object(sm, "load_document", lambda src, path: documents.get(src, {})),
+        patch.object(
+            sm,
+            "load_documents",
+            documents_of(lambda src, path: documents.get(src, {})),
+        ),
         patch("app.db.session.SessionLocal", lambda: broken_session),
     ):
         meta = sm._configured_source_meta(7)

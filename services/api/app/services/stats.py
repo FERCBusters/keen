@@ -25,11 +25,12 @@ from app.services.control_evidence_stats import (
     get_framework_event_counts,
 )
 from app.services.control_inheritance import (
-    evidence_pairs,
+    control_event_counts,
     evidenced_control_ids,
     framework_event_ids,
     has_inherited_evidence,
     mapped_event_count,
+    recorded_control_evidence,
 )
 from app.services.errors import DomainError
 from app.services.event_filters import EventFilters, event_predicates
@@ -72,16 +73,16 @@ def stats_event_counts(
         has_inheritance = (
             has_inherited_evidence(db, framework) if inherited is None else inherited
         )
+        visibility = diary_filter_condition(db, user)
         # The same paths as stats_summary: without inheritance, active users
-        # read the global framework event-count cache.
-        if not has_inheritance and is_active_user(user):
+        # read the global framework event-count cache, as does a caller who
+        # sees every event, the cache counting inherited evidence.
+        if (not has_inheritance and is_active_user(user)) or visibility is True:
             counts = get_framework_event_counts(db, framework)
             total, mapped = counts["total_events"], counts["mapped_events"]
         else:
             total, mapped = _live_event_counts(
-                db=db,
-                framework=framework,
-                visibility=diary_filter_condition(db, user),
+                db=db, framework=framework, visibility=visibility
             )
         return {
             "total": int(total),
@@ -217,9 +218,16 @@ def stats_summary(
             )
 
         visibility = diary_filter_condition(db, user)
-        total_events, mapped_events = _live_event_counts(
-            db=db, framework=framework, visibility=visibility
-        )
+        if visibility is True:
+            # Every event is visible: the framework event-count cache, which
+            # counts inherited evidence, holds these counters.
+            event_counts = get_framework_event_counts(db, framework)
+            total_events = event_counts["total_events"]
+            mapped_events = event_counts["mapped_events"]
+        else:
+            total_events, mapped_events = _live_event_counts(
+                db=db, framework=framework, visibility=visibility
+            )
         controls = (
             db.query(ControlItem.id, ControlItem.in_scope)
             .filter(ControlItem.framework_slug == framework)
@@ -361,6 +369,42 @@ def _stats_controls(
             items.sort(key=lambda it: (it["type"], _ref_sort_key(it["ref"])))
             return {"items": items[:limit], "stats_source": "control_evidence_stats"}
 
+        visibility = diary_filter_condition(db, user)
+        if has_inheritance:
+            # Inherited evidence counts each event once per control however
+            # many of the control's sources it is mapped to. Without a date
+            # window, and when every event is visible to the caller, the
+            # trigger-maintained per-control counters answer it.
+            if (
+                start_date is None
+                and end_date is None
+                and visibility is True
+                and db.get_bind().dialect.name == "postgresql"
+            ):
+                evidence = recorded_control_evidence(db, framework)
+            else:
+                event_filters = [visibility]
+                if start_date:
+                    event_filters.append(
+                        Event.timestamp
+                        >= datetime.combine(start_date, datetime.min.time())
+                    )
+                if end_date:
+                    event_filters.append(
+                        Event.timestamp < after_inclusive_date(end_date)
+                    )
+                evidence = control_event_counts(
+                    db, framework, event_conditions=event_filters, latest=True
+                )
+            items = [
+                _item(c, *evidence.get(c.id, (0, None)))
+                for c in db.query(ControlItem)
+                .filter(ControlItem.framework_slug == framework)
+                .all()
+            ]
+            items.sort(key=lambda it: (it["type"], _ref_sort_key(it["ref"])))
+            return {"items": items[:limit], "stats_source": "live_query"}
+
         # Optional date window for evidence counts.
         # Important: keep controls with zero evidence in-range.
         event_filters = []
@@ -374,34 +418,20 @@ def _stats_controls(
         # Aggregate evidence by control first, then left-join to the comparatively
         # small controls table. This remains the exact path for date-filtered
         # requests.
-        if has_inheritance:
-            pairs = evidence_pairs(framework, db)
-            evidence_sq = (
-                db.query(
-                    pairs.c.control_id.label("control_item_id"),
-                    func.count(pairs.c.event_id).label("evidence_count"),
-                    func.max(Event.timestamp).label("last_evidence"),
-                )
-                .join(Event, Event.id == pairs.c.event_id)
-                .filter(diary_filter_condition(db, user), *event_filters)
-                .group_by(pairs.c.control_id)
-                .subquery()
+        evidence_sq = (
+            db.query(
+                Mapping.control_item_id.label("control_item_id"),
+                func.count(Mapping.event_id).label("evidence_count"),
+                func.max(Event.timestamp).label("last_evidence"),
             )
-        else:
-            evidence_sq = (
-                db.query(
-                    Mapping.control_item_id.label("control_item_id"),
-                    func.count(Mapping.event_id).label("evidence_count"),
-                    func.max(Event.timestamp).label("last_evidence"),
-                )
-                .join(Event, Event.id == Mapping.event_id)
-                .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-                .filter(ControlItem.framework_slug == framework)
-                .filter(diary_filter_condition(db, user))
-                .filter(*event_filters)
-                .group_by(Mapping.control_item_id)
-                .subquery()
-            )
+            .join(Event, Event.id == Mapping.event_id)
+            .join(ControlItem, ControlItem.id == Mapping.control_item_id)
+            .filter(ControlItem.framework_slug == framework)
+            .filter(visibility)
+            .filter(*event_filters)
+            .group_by(Mapping.control_item_id)
+            .subquery()
+        )
 
         rows = (
             db.query(
