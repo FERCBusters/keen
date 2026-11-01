@@ -213,6 +213,8 @@ POLICY = {
     "POST /v1/otlp/logs": PUBLIC,
     "POST /v1/agents/heartbeat": PUBLIC,
     "POST /v1/agents/enroll": PUBLIC,
+    # Keen's public keys for agents: identity and signed encryption key.
+    "GET /v1/agents/server-key": PUBLIC,
     "POST /v1/agents/renew": PUBLIC,
     "POST /v1/webhooks/{provider}/{event_type}": PUBLIC,
     "POST /v1/webhooks/connections/{connection_id}/{provider}/{event_type}": PUBLIC,

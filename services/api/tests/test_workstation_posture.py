@@ -17,6 +17,7 @@ from app.db.models import (
 from app.security.auth import create_user
 from app.services import workstation_posture as posture
 from app.services.people import ensure_person_for_user
+from cryptography.fernet import Fernet
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe
@@ -26,6 +27,8 @@ from tests.ueu_agent import FakeValkey, SimAgent
 
 @pytest.fixture(autouse=True)
 def enrolment_limits(monkeypatch):
+    # KEEN's agent keys are stored encrypted with the integration secret key.
+    monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
     monkeypatch.setattr(enrollment_operations, "get_valkey", lambda: None)
     proofs = FakeValkey()
     monkeypatch.setattr(enrollment_operations, "proof_store", lambda: proofs)

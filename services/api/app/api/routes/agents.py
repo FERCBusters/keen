@@ -5,15 +5,18 @@ from __future__ import annotations
 import asyncio
 import gzip
 import io
+import json
 import logging
 from functools import partial
 
 from fastapi import Depends, HTTPException, Request, Response
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app.agents import server_keys
 from app.agents.credentials import authenticate, live_only
 from app.agents.otlp import decode_batch
 from app.agents.schema import Health
@@ -49,6 +52,7 @@ class AgentRoute(DomainRoute):
                     409: 6,
                     413: 8,
                     415: 12,
+                    421: 14,
                     429: 8,
                 }.get(exc.status_code, 13)
                 return JSONResponse(
@@ -77,6 +81,28 @@ admin = Router(
     dependencies=[Depends(require_admin)],
 )
 MAX_BODY = 1024 * 1024
+HEALTH_BODY = 32768
+
+
+def sealed(db, opened, status, result):
+    """A success response encrypted with the key the agent's request carried.
+
+    keen-agent acts on nothing else: an acknowledgement or grant that does not
+    decrypt with that key did not come from this KEEN, so the agent keeps its
+    evidence and its identity unchanged. The active encryption key is named
+    in the clear so agents notice a rotation; they verify it before use.
+    """
+    payload = json.dumps(jsonable_encoder(result), separators=(",", ":")).encode()
+    headers = {"Cache-Control": "no-store"}
+    current = server_keys.active_key_id(db)
+    if current:
+        headers[server_keys.KEY_HEADER] = current
+    return Response(
+        server_keys.seal_response(opened, status, payload),
+        status_code=status,
+        media_type=server_keys.SEALED_RESPONSE,
+        headers=headers,
+    )
 
 
 @admin.get("")
@@ -139,21 +165,39 @@ def _admit_batch(request, db):
 async def ingest(request: Request, response: Response, db: Session = Depends(get_db)):
     live_only()
     auth = await run_in_threadpool(_admit_batch, request, db)
-    if (
-        request.headers.get("content-type", "").split(";")[0].strip()
-        != "application/json"
-    ):
-        raise HTTPException(
-            415,
-            "This endpoint supports OTLP/HTTP JSON; configure exporter encoding=json",
+    opened = None
+    if auth.signed is not None:
+        # keen-agent: the signature covers the encrypted body.
+        body = await bounded_body(request, MAX_BODY + server_keys.SEALED_OVERHEAD)
+        auth.check_body(body)
+        opened = await run_in_threadpool(
+            server_keys.open_request,
+            db,
+            request.headers,
+            body,
+            "otlp-logs",
+            auth.key_id,
         )
-    if request.headers.get("content-encoding", "identity") not in ("identity", "gzip"):
-        raise HTTPException(415, "Unsupported encoding")
-    body = await bounded_body(request, MAX_BODY)
-    # A signed request's digest covers the bytes as sent.
-    auth.check_body(body)
+        body = opened.body
+        if len(body) > MAX_BODY:
+            raise HTTPException(413, "Request exceeds limit")
+    else:
+        if (
+            request.headers.get("content-type", "").split(";")[0].strip()
+            != "application/json"
+        ):
+            raise HTTPException(
+                415,
+                "This endpoint supports OTLP/HTTP JSON; configure exporter encoding=json",
+            )
+        if request.headers.get("content-encoding", "identity") not in (
+            "identity",
+            "gzip",
+        ):
+            raise HTTPException(415, "Unsupported encoding")
+        body = await bounded_body(request, MAX_BODY)
     try:
-        if request.headers.get("content-encoding") == "gzip":
+        if opened is None and request.headers.get("content-encoding") == "gzip":
             with gzip.GzipFile(fileobj=io.BytesIO(body)) as stream:
                 body = stream.read(MAX_BODY + 1)
             if len(body) > MAX_BODY:
@@ -181,6 +225,8 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
             batch=batch,
         )
     )
+    if opened is not None:
+        return await run_in_threadpool(sealed, db, opened, 200, result)
     response.headers["Cache-Control"] = "no-store"
     return result
 
@@ -232,8 +278,23 @@ async def heartbeat(
 ):
     live_only()
     auth = await run_in_threadpool(_admit_heartbeat, request, db)
-    body = await bounded_body(request, 32768)
-    auth.check_body(body)
+    opened = None
+    if auth.signed is not None:
+        body = await bounded_body(request, HEALTH_BODY + server_keys.SEALED_OVERHEAD)
+        auth.check_body(body)
+        opened = await run_in_threadpool(
+            server_keys.open_request,
+            db,
+            request.headers,
+            body,
+            "heartbeat",
+            auth.key_id,
+        )
+        body = opened.body
+        if len(body) > HEALTH_BODY:
+            raise HTTPException(413, "Request exceeds limit")
+    else:
+        body = await bounded_body(request, HEALTH_BODY)
     try:
         health = Health.model_validate_json(body)
     except ValidationError:
@@ -247,6 +308,8 @@ async def heartbeat(
             health=health,
         )
     )
+    if opened is not None:
+        return await run_in_threadpool(sealed, db, opened, 200, result)
     response.headers["Cache-Control"] = "no-store"
     return result
 

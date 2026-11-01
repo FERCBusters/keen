@@ -110,17 +110,83 @@ def test_python_reproduces_the_agents_golden_vectors():
         "signature": VECTORS["signature"],
         "content-digest": VECTORS["content_digest"],
         "keen-agent-operation": "heartbeat",
+        "keen-encryption-key": VECTORS["encryption_key_id"],
     }
     signed = signatures.parse_request(headers, "heartbeat", now=1793083418)
+    sealed = "application/vnd.keen.sealed"
     assert (
         signatures.signature_base(
-            "POST", "heartbeat", signed.digest, "application/json", signed.params
+            "POST",
+            "heartbeat",
+            signed.encryption_key,
+            signed.digest,
+            sealed,
+            signed.params,
         )
         == VECTORS["signature_base"].encode()
     )
-    signatures.verify_request(signed, pub, "POST", "heartbeat", "application/json")
+    signatures.verify_request(signed, pub, "POST", "heartbeat", sealed)
     with pytest.raises(signatures.SignatureError):
-        signatures.verify_request(signed, pub, "POST", "renew", "application/json")
+        signatures.verify_request(signed, pub, "POST", "renew", sealed)
+    with pytest.raises(signatures.SignatureError):
+        signatures.verify_request(signed, pub, "POST", "heartbeat", "application/json")
+
+
+def test_python_reproduces_the_agents_transport_vectors():
+    """KEEN's identity, encryption key, sealed request and sealed response,
+    byte for byte as the Go agent makes and expects them."""
+    from app.agents import server_keys
+    from cryptography.hazmat.primitives import hpke
+    from cryptography.hazmat.primitives.asymmetric import mlkem, x25519
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    identity = Ed25519PrivateKey.from_private_bytes(
+        bytes.fromhex(VECTORS["server_identity_seed_hex"])
+    )
+    raw = identity.public_key().public_bytes_raw()
+    assert b64url(raw) == VECTORS["server_identity_public_key"]
+    assert server_keys.fingerprint(raw) == VECTORS["server_fingerprint"]
+    statement = parse(VECTORS["encryption_statement"])
+    assert canonical(statement) == VECTORS["encryption_statement"].encode()
+    assert (
+        b64url(identity.sign(canonical(statement)))
+        == VECTORS["encryption_statement_signature"]
+    )
+    assert statement["identity"] == VECTORS["server_fingerprint"]
+    # Go's MLKEM768-X25519 private key is a 32-byte seed, expanded with
+    # SHAKE256 into the ML-KEM seed and the X25519 key.
+    expanded = hashlib.shake_256(bytes.fromhex(VECTORS["encryption_seed_hex"])).digest(
+        96
+    )
+    private = hpke.MLKEM768X25519PrivateKey(
+        mlkem.MLKEM768PrivateKey.from_seed_bytes(expanded[:64]),
+        x25519.X25519PrivateKey.from_private_bytes(expanded[64:]),
+    )
+    public = (
+        mlkem.MLKEM768PrivateKey.from_seed_bytes(expanded[:64])
+        .public_key()
+        .public_bytes_raw()
+        + x25519.X25519PrivateKey.from_private_bytes(expanded[64:])
+        .public_key()
+        .public_bytes_raw()
+    )
+    assert b64url(public) == statement["public_key"]
+    assert hashlib.sha256(public).hexdigest()[:16] == statement["key_id"]
+    info = server_keys.request_info("heartbeat", statement["key_id"], VECTORS["key_id"])
+    assert info == VECTORS["sealed_request_info"].encode()
+    wire = signatures.unb64url(VECTORS["sealed_request"])
+    plain = server_keys.SUITE.decrypt(wire, private, info)
+    assert b64url(plain) == VECTORS["sealed_request_plaintext"]
+    key = bytes.fromhex(VECTORS["response_key_hex"])
+    assert plain[:32] == key
+    aad = server_keys.response_aad("heartbeat", 200)
+    assert aad == VECTORS["response_aad"].encode()
+    sealed = signatures.unb64url(VECTORS["sealed_response"])
+    assert (
+        sealed[:12]
+        + AESGCM(key).encrypt(sealed[:12], VECTORS["response_payload"].encode(), aad)
+        == sealed
+    )
 
 
 @pytest.mark.parametrize(
@@ -181,14 +247,24 @@ def test_enrolment_rejects_bad_codes_proofs_and_expired_codes(keen):
     info = register(keen)
     code = info["enrollment_code"]
     agent = SimAgent(keen.client)
-    wrong = code[:-4] + ("AAAA" if not code.endswith("AAAA") else "BBBB")
+    head, secret, pin = code.split(".")
+    wrong = ".".join(
+        (head, secret[:-4] + ("BBBB" if secret.endswith("AAAA") else "AAAA"), pin)
+    )
     assert agent.enroll(wrong).status_code == 401
+    # A code pinning another KEEN identity: the agent will not use this KEEN,
+    # and KEEN refuses it even if sent.
+    elsewhere = ".".join((head, secret, "A" * 22))
+    with pytest.raises(AssertionError):
+        SimAgent(keen.client).fetch_server_key(elsewhere)
+    assert agent.enroll(elsewhere).status_code == 401
     # A proof made for another credential does not bind the key.
     body = agent.enrollment(code)
     body["proof"] = b64url(agent.key.sign(b"something else"))
     assert agent.post_enrollment(code, body).status_code == 400
     # So does a proof signed for another credential.
-    assert agent.post_enrollment(code, agent.enrollment(wrong)).status_code == 400
+    body = {**agent.enrollment(wrong), "credential": code}
+    assert agent.post_enrollment(code, body).status_code == 400
     assert agent.enroll(code, name="x").status_code == 400
     with keen.db() as db:
         row = db.get(KeenAgent, info["agent"]["id"])
@@ -208,17 +284,33 @@ def test_recorded_enrolment_requests_cannot_be_replayed(keen, monkeypatch):
     info = register(keen, subject_type="public")
     code = info["enrollment_code"]
     agent = SimAgent(keen.client)
+    agent.fetch_server_key(code)
     recorded = agent.enrollment(code)
-    first = agent.post_enrollment(code, recorded)
+    wire, response_key = agent.encrypt(json.dumps(recorded).encode(), "enroll")
+    first = agent.open_response(
+        keen.client.post(
+            "/v1/agents/enroll", content=wire, headers=agent.enrollment_headers()
+        ),
+        response_key,
+        "enroll",
+    )
     assert first.status_code == 201 and first.json()["subject"]["type"] == "public"
-    # Someone who saw the request cannot send it again for the grant.
+    agent.accept(first.json(), agent.key)
+    # The grant, public subject key included, crossed the wire encrypted.
+    assert b"subject" not in first.sealed
+    # Someone who recorded the request cannot send it again for the grant.
     replay = keen.client.post(
+        "/v1/agents/enroll", content=wire, headers=agent.enrollment_headers()
+    )
+    assert replay.status_code == 400
+    assert "subject" not in replay.text
+    # Nor is a plaintext enrolment, as keen-agent 0.2 sent it, accepted.
+    plain = keen.client.post(
         "/v1/agents/enroll",
         json=recorded,
         headers={"Authorization": "Bearer " + code},
     )
-    assert replay.status_code == 400
-    assert "subject" not in replay.text
+    assert plain.status_code == 415
     # The key holder's retry, with a fresh proof, recovers the same binding.
     again = agent.enroll(code)
     assert again.status_code == 201 and again.json()["key_id"] == agent.key_id
@@ -342,7 +434,9 @@ def test_signed_batch_is_stored_with_provenance_and_typed_facts(keen):
 def test_request_signatures_cannot_be_replayed_redirected_or_altered(keen):
     agent, _ = enrolled(keen)
     env = agent.observation("firewall", "ufw", {"enabled": True})
-    body = agent.otlp([agent.seal(env)])
+    plain = agent.otlp([agent.seal(env)])
+    # Signatures cover the request as encrypted to KEEN.
+    body, _ = agent.encrypt(plain, "otlp-logs", agent.key_id)
     headers = agent.signed_headers(body, "otlp-logs")
     assert (
         keen.client.post("/v1/otlp/logs", content=body, headers=headers).status_code
@@ -365,9 +459,16 @@ def test_request_signatures_cannot_be_replayed_redirected_or_altered(keen):
     )
     # The body is bound by its digest.
     fresh = agent.signed_headers(body, "otlp-logs")
-    altered = body.replace(b"keen-agent", b"keen-agenT", 1)
+    altered = body[:-1] + bytes([body[-1] ^ 1])
     assert (
         keen.client.post("/v1/otlp/logs", content=altered, headers=fresh).status_code
+        == 401
+    )
+    # So is the encryption key the body names.
+    moved = agent.signed_headers(body, "otlp-logs")
+    moved["Keen-Encryption-Key"] = "0" * 16
+    assert (
+        keen.client.post("/v1/otlp/logs", content=body, headers=moved).status_code
         == 401
     )
     # Signatures outside the five-minute window are refused.

@@ -30,7 +30,7 @@ google-auth = "^2"
 webauthn = "^2.8"
 pyotp = "^2.10"
 qrcode = "^8.2"
-cryptography = ">=46"
+cryptography = ">=50"
 regex = "^2026.9.29"
 
 [build-system]

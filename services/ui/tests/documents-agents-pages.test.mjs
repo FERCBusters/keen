@@ -532,6 +532,7 @@ async function agentsPage(t, options = {}) {
 test('agents show health states, provenance and source details as text', async (t) => {
   const { $ } = await agentsPage(t);
   assert.equal($('endpoint').textContent, 'https://keen.example/api/v1/otlp/logs');
+  assert.equal($('fingerprint').textContent, 'made with the first enrolment code');
   const cards = [...$('agents').querySelectorAll('article.card')];
   assert.deepEqual(
     cards.map((c) => c.querySelector('.badge').textContent),
@@ -699,6 +700,14 @@ test('existing agents can be assigned to a person after confirmation', async (t)
     path: '/api/v1/admin/agents/a1',
     body: { agent_type: 'workstation', person_id: 'p1' },
   });
+});
+
+test("Keen's identity fingerprint is shown as text once it exists", async (t) => {
+  const { $ } = await agentsPage(t, {
+    data: agentsFixture({ server_key_fingerprint: '<i>AbCdEfGhIjKlMnOpQrStUv</i>' }),
+  });
+  assert.equal($('fingerprint').textContent, '<i>AbCdEfGhIjKlMnOpQrStUv</i>');
+  assert.equal($('fingerprint').querySelector('i'), null);
 });
 
 test('agent timestamps use the shared preference formatter and remain escaped', async (t) => {

@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 from sqlalchemy.orm import Session
 
+from app.agents import server_keys
 from app.agents.credentials import live_only, reauthenticate, view
 from app.agents.schema import Strict, fingerprint
 from app.core.config import settings
@@ -80,10 +81,21 @@ def issue(agent, days):
     return token
 
 
-def issue_code(agent, days):
+def issue_code(db, agent, days):
     """A single-use enrolment code. The agent's key, bound by the code, is
-    the credential; an earlier key stays usable until the code is used."""
-    code = "kc_" + agent.id + "." + secrets.token_urlsafe(32)
+    the credential; an earlier key stays usable until the code is used.
+
+    The code ends with the fingerprint of KEEN's identity key, which the agent
+    pins: it encrypts nothing, and sends nothing, to a server that cannot show
+    that key."""
+    code = (
+        "kc_"
+        + agent.id
+        + "."
+        + secrets.token_urlsafe(32)
+        + "."
+        + server_keys.identity(db).fingerprint
+    )
     now = utc_now_naive()
     agent.token_hash = ""
     agent.previous_token_hash = None
@@ -95,15 +107,16 @@ def issue_code(agent, days):
     return code
 
 
-def grant_credential(agent, days):
+def grant_credential(db, agent, days):
     if agent.credential_type == "key":
-        return {"enrollment_code": issue_code(agent, days)}
+        return {"enrollment_code": issue_code(db, agent, days)}
     return {"token": issue(agent, days)}
 
 
 def listing(*, db: Session):
     return {
         "demo_mode": settings.demo_mode,
+        "server_key_fingerprint": server_keys.current_fingerprint(db),
         "agents": [view(a) for a in db.query(KeenAgent).order_by(KeenAgent.name)],
         "people_enabled": feature_state(db).enabled("people"),
         "people": [
@@ -135,7 +148,7 @@ def register(*, body: Registration, db: Session):
         if body.agent_type == "workstation"
         else None,
     )
-    secret = grant_credential(a, body.expires_days)
+    secret = grant_credential(db, a, body.expires_days)
     db.add(a)
     db.commit()
     return {"agent": view(a), **secret}
@@ -180,7 +193,7 @@ def rotate(*, agent_id: str, body: Rotation, db: Session):
         )
     if body.credential_type == "key" and a.credential_type != "key":
         a.credential_type = "key"
-    secret = grant_credential(a, body.expires_days)
+    secret = grant_credential(db, a, body.expires_days)
     db.commit()
     return {"agent": view(a), **secret}
 

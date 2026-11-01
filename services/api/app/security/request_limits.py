@@ -12,18 +12,21 @@ MAX_BODY = 40 * 1024 * 1024
 MAX_FILE_UPLOAD = 100 * 1024 * 1024
 # Room for the multipart boundary and part headers around that one file.
 _MULTIPART_ROOM = 64 * 1024
+_SEALED_OVERHEAD = 1120 + 32 + 16
 _FILE_UPLOADS = re.compile(r"/v1/(?:isms/documents/[^/]+/file|audits/[^/]+/report)")
 
 
 def body_limit(path):
     if path in {"/v1/auth/login", "/v1/agents/enroll", "/v1/agents/renew"}:
         return 16 * 1024
+    # keen-agent requests are encrypted to KEEN, which adds a fixed overhead
+    # (app.agents.server_keys.SEALED_OVERHEAD) to the plaintext limits.
     if path == "/v1/agents/heartbeat":
-        return 32 * 1024
+        return 32 * 1024 + _SEALED_OVERHEAD
     if path.startswith("/v1/auth/mfa/"):
         return 256 * 1024
     if path == "/v1/otlp/logs":
-        return 1024 * 1024
+        return 1024 * 1024 + _SEALED_OVERHEAD
     if path.startswith("/v1/webhooks/"):
         return 10 * 1024 * 1024
     if _FILE_UPLOADS.fullmatch(path):

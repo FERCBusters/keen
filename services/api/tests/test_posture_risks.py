@@ -19,11 +19,18 @@ from app.db.models import (
     RiskControlLink,
 )
 from app.services import posture_risks
+from cryptography.fernet import Fernet
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe
 
 FRAMEWORK = "A"
+
+
+@pytest.fixture(autouse=True)
+def integration_secret(monkeypatch):
+    # Keen Agent identities need KEEN's agent keys, stored with this key.
+    monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
 
 
 def person_with_workstation(keen, name="laptop-01"):

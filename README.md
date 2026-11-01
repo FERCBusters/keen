@@ -89,7 +89,7 @@ Supported sources include GitHub, GitLab, Forgejo, Gitea, Jenkins, Loki, Elastic
 
 ### Keen Agent
 
-[Keen Agent](https://github.com/FERCBusters/keen-agent) sends signed evidence such as logs and other security events from servers (with support for common fleet enrollments to aid auto-connection from autoscale clusters).
+[Keen Agent](https://github.com/FERCBusters/keen-agent) sends signed evidence such as logs and other security events from servers (with support for common fleet enrollments to aid auto-connection from autoscale clusters). Everything it sends is encrypted end to end to your Keen instance, which each agent pins at enrolment, so reverse proxies, CDNs, inspecting middleboxes or an impostor holding a valid certificate for your Keen's address see only ciphertext and cannot acknowledge evidence away.
 
 Keen Agent also supports being run on Linux, Mac and Windows workstations in the background, wherein it sends attestations as to correct security posture (workstation antivirus, disk encryption, screen locks, automatic updates, and so on). This works over over OTLP/HTTP JSON formats. Keen verifies every request, batch signature, envelope and chain position, checks typed fields against the event catalogue, records any redaction in a custody record and keeps each envelope's provenance.
 

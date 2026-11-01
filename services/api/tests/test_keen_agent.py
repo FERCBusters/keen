@@ -19,6 +19,7 @@ from app.api.routes import agents as api
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import Artifact, Event, KeenAgent
 from app.ingest import common
+from cryptography.fernet import Fernet
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -73,6 +74,8 @@ def logs(doc):
 
 @pytest.fixture
 def setup(monkeypatch):
+    # KEEN's agent keys are stored encrypted with the integration secret key.
+    monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )

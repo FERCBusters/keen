@@ -173,18 +173,24 @@ def test_expiry_network_limits_and_limiter_failure(fleet, monkeypatch):
         row.expires_at = utc_now_naive() - timedelta(seconds=1)
         db.commit()
     assert enroll(c, p).status_code == 403
+    ready = SimAgent(c)
+    ready.fetch_server_key(p["bootstrap_key"])
     monkeypatch.setattr(
         agent_enrollment_operations, "fixed_window_allow", lambda *a, **k: (False, 60)
     )
-    assert enroll(c, p).status_code == 429
+    assert enroll(c, p, agent=ready).status_code == 429
+    assert c.get("/v1/agents/server-key").status_code == 429
 
 
 def test_admin_required_and_demo_block(fleet, monkeypatch):
     c, f, p, _ = fleet
     from app.core.config import settings
 
+    ready = SimAgent(c)
+    ready.fetch_server_key(p["bootstrap_key"])
     monkeypatch.setattr(settings, "demo_mode", True)
-    assert enroll(c, p).status_code == 403
+    assert enroll(c, p, agent=ready).status_code == 403
+    assert c.get("/v1/agents/server-key").status_code == 403
     assert action(c, p, "rotate").status_code == 403
 
 
@@ -223,22 +229,16 @@ def test_profile_and_nonce_validation(fleet):
             ).status_code
             == 422
         )
-    assert enroll(c, p, "short").status_code == 422
+    assert enroll(c, p, "short").status_code == 400
+    agent = SimAgent(c)
     for extra in ({"labels": {"admin": "true"}}, {"agent_type": "workstation"}):
-        assert (
-            c.post(
-                "/v1/agents/enroll",
-                json={
-                    "name": "host",
-                    "nonce": secrets.token_urlsafe(32),
-                    "public_key": "A" * 43,
-                    "proof": "A" * 86,
-                    **extra,
-                },
-                headers={"Authorization": "Bearer " + p["bootstrap_key"]},
-            ).status_code
-            == 422
-        )
+        body = {
+            **agent.enrollment(p["bootstrap_key"]),
+            "name": "host",
+            "nonce": secrets.token_urlsafe(32),
+            **extra,
+        }
+        assert agent.post_enrollment(p["bootstrap_key"], body).status_code == 400
     # Profile enrolment names the agent and carries a nonce.
     assert SimAgent(c).enroll(p["bootstrap_key"]).status_code == 400
 
@@ -277,23 +277,32 @@ def test_unknown_profiles_actions_and_credentials_are_refused(fleet):
         c.post(f"/v1/admin/agent-enrollment-profiles/{uuid.uuid4()}/pause").status_code
         == 404
     )
-    for authorization in [
-        "Bearer not-a-bootstrap-key",
-        "Basic " + p["bootstrap_key"],
-        "Bearer " + p["bootstrap_key"][:-1],
+    agent = SimAgent(c)
+    agent.fetch_server_key(p["bootstrap_key"])
+    head, secret, pin = p["bootstrap_key"].split(".")
+    for credential in [
+        "not-a-bootstrap-key",
+        p["bootstrap_key"][:-1],
+        head + "." + secret[:-1] + "." + pin,
+        head.replace("ke_", "ka_") + "." + secret + "." + pin,
         "",
     ]:
-        refused = c.post(
-            "/v1/agents/enroll",
-            json={
-                "name": "web-01",
-                "nonce": secrets.token_urlsafe(32),
-                "public_key": "A" * 43,
-                "proof": "A" * 86,
-            },
-            headers={"Authorization": authorization} if authorization else {},
-        )
-        assert refused.status_code in {401, 422}, authorization
+        body = {
+            **agent.enrollment(credential),
+            "name": "web-01",
+            "nonce": secrets.token_urlsafe(32),
+        }
+        refused = agent.post_enrollment(p["bootstrap_key"], body)
+        assert refused.status_code == 401, credential
+    # The credential travels only inside the sealed body.
+    body = {
+        **agent.enrollment(p["bootstrap_key"]),
+        "name": "web-01",
+        "nonce": secrets.token_urlsafe(32),
+    }
+    del body["credential"]
+    missing = agent.post_enrollment(p["bootstrap_key"], body)
+    assert missing.status_code == 400
     with f() as db:
         assert (
             db.query(KeenAgent)

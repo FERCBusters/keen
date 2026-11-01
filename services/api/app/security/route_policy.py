@@ -19,6 +19,7 @@ PUBLIC_HTTP_ROUTES = {
         "/v1/auth/oidc/logout",
         "/v1/auth/sso/{provider_key}/start",
         "/v1/auth/sso/{provider_key}/callback",
+        "/v1/agents/server-key",
     ),
     "POST": (
         "/v1/auth/oidc/logout",

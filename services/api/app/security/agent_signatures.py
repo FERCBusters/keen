@@ -1,8 +1,9 @@
 """Ed25519 verification for KEEN agent requests, batches and key proofs.
 
 Agents sign each request with RFC 9421 HTTP Message Signatures over a fixed
-set of components, sign each batch manifest of evidence hashes, and prove
-possession of a new key when enrolling or renewing. KEEN stores only public
+set of components (the body they cover is the request as encrypted to KEEN;
+see app/agents/server_keys.py), sign each batch manifest of evidence hashes,
+and prove possession of a new key when enrolling or renewing. KEEN stores only public
 keys. Every signed message names its purpose so a signature made for one
 purpose is never valid for another.
 """
@@ -23,14 +24,19 @@ from app.agents.ueu.jcs import canonical
 
 OPERATIONS = ("otlp-logs", "heartbeat", "renew")
 WINDOW_SECONDS = 300
-COMPONENTS = '("@method" "keen-agent-operation" "content-digest" "content-type")'
+COMPONENTS = (
+    '("@method" "keen-agent-operation" "keen-encryption-key" "content-digest" '
+    '"content-type")'
+)
 _INPUT = re.compile(
-    r'keen=\("@method" "keen-agent-operation" "content-digest" "content-type"\)'
+    r'keen=\("@method" "keen-agent-operation" "keen-encryption-key" "content-digest"'
+    r' "content-type"\)'
     r';created=([0-9]{1,12});keyid="([0-9a-f-]{36}:[0-9a-f]{16})"'
     r';nonce="([A-Za-z0-9_-]{22})";alg="ed25519"'
 )
 _SIGNATURE = re.compile(r"keen=:([A-Za-z0-9+/]{86}==):")
 _DIGEST = re.compile(r"sha-256=:([A-Za-z0-9+/]{43}=):")
+_ENCRYPTION_KEY = re.compile(r"[0-9a-f]{16}")
 _PUBLIC_KEY = re.compile(r"[A-Za-z0-9_-]{43}")
 _B64URL_SIGNATURE = re.compile(r"[A-Za-z0-9_-]{86}")
 KEY_ID = re.compile(r"([0-9a-f-]{36}):([0-9a-f]{16})")
@@ -46,6 +52,7 @@ class SignedRequest:
     agent_id: str
     nonce: str
     created: int
+    encryption_key: str
     digest: str
     params: str
     signature: bytes
@@ -82,10 +89,13 @@ def content_digest(body: bytes) -> str:
     return "sha-256=:" + base64.b64encode(hashlib.sha256(body).digest()).decode() + ":"
 
 
-def signature_base(method, operation, digest, content_type, params) -> bytes:
+def signature_base(
+    method, operation, encryption_key, digest, content_type, params
+) -> bytes:
     return (
         f'"@method": {method.upper()}\n'
         f'"keen-agent-operation": {operation}\n'
+        f'"keen-encryption-key": {encryption_key}\n'
         f'"content-digest": {digest}\n'
         f'"content-type": {content_type}\n'
         f'"@signature-params": {params}'
@@ -103,12 +113,14 @@ def parse_request(headers, operation: str, *, now: float | None = None):
     signature_input = headers.get("signature-input", "")
     signature = headers.get("signature", "")
     digest = headers.get("content-digest", "")
+    encryption_key = headers.get("keen-encryption-key", "")
     match = _INPUT.fullmatch(signature_input)
     value = _SIGNATURE.fullmatch(signature)
     if (
         not match
         or not value
         or not _DIGEST.fullmatch(digest)
+        or not _ENCRYPTION_KEY.fullmatch(encryption_key)
         or headers.get("keen-agent-operation", "") != operation
     ):
         raise SignatureError("missing or malformed signature")
@@ -125,6 +137,7 @@ def parse_request(headers, operation: str, *, now: float | None = None):
         agent_id=match[2].split(":", 1)[0],
         nonce=match[3],
         created=created,
+        encryption_key=encryption_key,
         digest=digest,
         params=signature_input[len("keen=") :],
         signature=raw,
@@ -134,7 +147,14 @@ def parse_request(headers, operation: str, *, now: float | None = None):
 def verify_request(
     signed: SignedRequest, encoded_public_key: str, method, operation, content_type
 ):
-    base = signature_base(method, operation, signed.digest, content_type, signed.params)
+    base = signature_base(
+        method,
+        operation,
+        signed.encryption_key,
+        signed.digest,
+        content_type,
+        signed.params,
+    )
     try:
         public_key(encoded_public_key).verify(signed.signature, base)
     except InvalidSignature as exc:

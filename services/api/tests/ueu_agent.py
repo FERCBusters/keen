@@ -1,9 +1,11 @@
 """A test producer that speaks KEEN's agent protocol the way keen-agent does.
 
-It holds an Ed25519 key, enrols, builds UEU envelopes in KEEN's profile,
-chains and signs them and signs every request (RFC 9421). The golden vectors
-in fixtures/ueu-vectors.json tie this helper, KEEN's verifier and the Go agent
-to the same bytes.
+It holds an Ed25519 key, pins KEEN's identity key from its credential,
+encrypts every request to KEEN's current encryption key (HPKE) and opens only
+responses sealed with the key it sent, enrols, builds UEU envelopes in KEEN's
+profile, chains and signs them and signs every request (RFC 9421). The golden
+vectors in fixtures/ueu-vectors.json tie this helper, KEEN's verifier and the
+Go agent to the same bytes.
 """
 
 from __future__ import annotations
@@ -17,10 +19,24 @@ import uuid
 from datetime import datetime, timezone
 
 from app.agents.ueu.jcs import canonical
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import hpke
+from cryptography.hazmat.primitives.asymmetric import mlkem, x25519
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 TIME = "%Y-%m-%dT%H:%M:%S.%f"
-COMPONENTS = '("@method" "keen-agent-operation" "content-digest" "content-type")'
+COMPONENTS = (
+    '("@method" "keen-agent-operation" "keen-encryption-key" "content-digest" '
+    '"content-type")'
+)
+SEALED = "application/vnd.keen.sealed"
+SEALED_RESPONSE = "application/vnd.keen.sealed-response"
+SUITE = hpke.Suite(
+    hpke.KEM.MLKEM768_X25519, hpke.KDF.HKDF_SHA256, hpke.AEAD.AES_256_GCM
+)
 
 
 class FakeValkey:
@@ -60,6 +76,54 @@ def b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode().rstrip("=")
 
 
+def unb64url(value: str) -> bytes:
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+def verify_server_key(doc, pinned):
+    """Check a server-key document the way keen-agent does."""
+    raw = unb64url(doc["identity"]["public_key"])
+    assert b64url(hashlib.sha256(raw).digest()[:16]) == pinned
+    assert doc["identity"]["fingerprint"] == pinned
+    statement = doc["encryption_key"]
+    Ed25519PublicKey.from_public_bytes(raw).verify(
+        unb64url(doc["signature"]), canonical(statement)
+    )
+    assert statement["context"] == "keen-agent-encryption-key-v1"
+    assert statement["identity"] == pinned
+    assert (statement["kem"], statement["kdf"], statement["aead"]) == (
+        "MLKEM768-X25519",
+        "HKDF-SHA256",
+        "AES-256-GCM",
+    )
+    return statement
+
+
+def encryption_public(statement):
+    raw = unb64url(statement["public_key"])
+    return hpke.MLKEM768X25519PublicKey(
+        mlkem.MLKEM768PublicKey.from_public_bytes(raw[:1184]),
+        x25519.X25519PublicKey.from_public_bytes(raw[1184:]),
+    )
+
+
+def request_info(operation, key_id, agent_key_id=""):
+    return b"\x00".join(
+        (
+            b"keen-agent-request-v1",
+            operation.encode(),
+            key_id.encode(),
+            agent_key_id.encode(),
+        )
+    )
+
+
+def response_aad(operation, status):
+    return b"\x00".join(
+        (b"keen-agent-response-v1", operation.encode(), str(status).encode())
+    )
+
+
 def stamp(when: datetime) -> str:
     when = when.astimezone(timezone.utc)
     return when.strftime(TIME)[:-3] + "Z"
@@ -97,6 +161,39 @@ class SimAgent:
         self.grant = None
         self.sequence = 0
         self.last_hash = None
+        self.server = None
+        self.pinned = None
+
+    # -- KEEN's keys ---------------------------------------------------------
+    def fetch_server_key(self, credential=None, pinned=None):
+        pinned = pinned or credential.rsplit(".", 1)[1]
+        r = self.client.get("/v1/agents/server-key")
+        assert r.status_code == 200, r.text
+        self.pinned = pinned
+        self.server = verify_server_key(r.json(), pinned)
+        return r.json()
+
+    def encrypt(self, body, operation, agent_key_id="", *, key_id=None):
+        """Encrypt body to KEEN; return the wire bytes and the response key."""
+        response_key = secrets.token_bytes(32)
+        key_id = key_id or self.server["key_id"]
+        wire = SUITE.encrypt(
+            response_key + body,
+            encryption_public(self.server),
+            request_info(operation, key_id, agent_key_id),
+        )
+        return wire, response_key
+
+    def open_response(self, r, response_key, operation):
+        """Replace a sealed success body with its plaintext, as the agent sees it."""
+        if 200 <= r.status_code < 300:
+            assert r.headers["content-type"] == SEALED_RESPONSE, r.text
+            raw = r.content
+            r.sealed = raw
+            r._content = AESGCM(response_key).decrypt(
+                raw[:12], raw[12:], response_aad(operation, r.status_code)
+            )
+        return r
 
     # -- enrolment -----------------------------------------------------
     def enrollment(self, credential, *, key=None, created=None, proof_nonce=None):
@@ -107,6 +204,7 @@ class SimAgent:
         )
         proof_nonce = proof_nonce or secrets.token_urlsafe(32)
         return {
+            "credential": credential,
             "public_key": public(key),
             "created": created,
             "proof_nonce": proof_nonce,
@@ -124,15 +222,25 @@ class SimAgent:
             ),
         }
 
-    def post_enrollment(self, credential, body, key=None):
+    def post_enrollment(self, credential, body, key=None, *, raw=None):
+        if self.server is None:
+            self.fetch_server_key(credential)
+        plain = raw if raw is not None else json.dumps(body).encode()
+        wire, response_key = self.encrypt(plain, "enroll")
         r = self.client.post(
-            "/v1/agents/enroll",
-            json=body,
-            headers={"Authorization": "Bearer " + credential},
+            "/v1/agents/enroll", content=wire, headers=self.enrollment_headers()
         )
+        self.open_response(r, response_key, "enroll")
         if r.status_code == 201:
             self.accept(r.json(), key or self.key)
         return r
+
+    def enrollment_headers(self):
+        return {
+            "Content-Type": SEALED,
+            "Keen-Encryption-Key": self.server["key_id"],
+            "Keen-Agent-Operation": "enroll",
+        }
 
     def enroll(self, credential, *, name=None, nonce=None, key=None):
         key = key or self.key
@@ -168,8 +276,19 @@ class SimAgent:
         return r, new, nonce
 
     # -- requests --------------------------------------------------------
-    def signed_headers(self, body, operation, *, created=None, nonce=None, key=None):
+    def signed_headers(
+        self,
+        body,
+        operation,
+        *,
+        created=None,
+        nonce=None,
+        key=None,
+        key_id=None,
+        content_type=SEALED,
+    ):
         key = key or self.key
+        key_id = key_id or self.server["key_id"]
         digest = "sha-256=:" + base64.b64encode(hashlib.sha256(body).digest()).decode()
         digest += ":"
         created = (
@@ -182,20 +301,29 @@ class SimAgent:
         )
         base = (
             f'"@method": POST\n"keen-agent-operation": {operation}\n'
-            f'"content-digest": {digest}\n"content-type": application/json\n'
+            f'"keen-encryption-key": {key_id}\n'
+            f'"content-digest": {digest}\n"content-type": {content_type}\n'
             f'"@signature-params": {params}'
         ).encode()
         return {
-            "Content-Type": "application/json",
+            "Content-Type": content_type,
+            "Keen-Encryption-Key": key_id,
             "Content-Digest": digest,
             "Keen-Agent-Operation": operation,
             "Signature-Input": "keen=" + params,
             "Signature": "keen=:" + base64.b64encode(key.sign(base)).decode() + ":",
         }
 
-    def post(self, path, body, operation, **kw):
+    def post(self, path, body, operation, *, key_id=None, **kw):
+        """Seal body to KEEN, sign the sealed bytes, and open the response."""
+        wire, response_key = self.encrypt(body, operation, self.key_id, key_id=key_id)
+        r = self.post_raw(path, wire, operation, key_id=key_id, **kw)
+        return self.open_response(r, response_key, operation)
+
+    def post_raw(self, path, wire, operation, **kw):
+        """Sign and send bytes exactly as given."""
         return self.client.post(
-            path, content=body, headers=self.signed_headers(body, operation, **kw)
+            path, content=wire, headers=self.signed_headers(wire, operation, **kw)
         )
 
     def heartbeat(self, health=None):

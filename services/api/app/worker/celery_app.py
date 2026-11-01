@@ -118,6 +118,11 @@ celery_app.conf.beat_schedule = {
         "task": "app.worker.tasks.cloud_activity_task",
         "schedule": float(settings.cloud_activity_poll_seconds),
     },
+    # Agent traffic: rotate KEEN's encryption key and erase expired ones.
+    "agent-server-keys-hourly": {
+        "task": "app.worker.tasks.agent_server_keys_task",
+        "schedule": crontab(minute=7),
+    },
     "recover-rule-backfills": {
         "task": "app.worker.tasks.recover_rule_backfills_task",
         "schedule": 60.0,

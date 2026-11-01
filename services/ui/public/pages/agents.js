@@ -152,6 +152,7 @@ async function load() {
   try {
     const data = await apiGet(root);
     demo = data.demo_mode;
+    if (data.server_key_fingerprint) $('fingerprint').textContent = data.server_key_fingerprint;
     people = data.people || [];
     const selected = $('person').value;
     $('person').innerHTML = personOptions(selected);

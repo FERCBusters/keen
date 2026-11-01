@@ -1,14 +1,19 @@
 flowchart TB
   L["Logs, journal or posture probes"] --> P["Recognise, minimise and redact"]
   P --> Q["Seal envelope: evidence ID, hash chain and checkpoint in one local transaction"]
-  Q --> T["Sign batch manifest and request; send OTLP JSON over verified HTTPS"]
+  Q --> T["Sign batch manifest; encrypt the request to Keen's pinned key and sign it; send over verified HTTPS"]
   T --> A{"Request signed by the agent's current key?"}
-  A -->|Yes| V{"Envelopes canonical, valid for their catalogue and listed in the signed manifest?"}
+  A -->|Yes| E{"Encrypted to a Keen key that is still held?"}
+  E -->|Yes| V{"Envelopes canonical, valid for their catalogue and listed in the signed manifest?"}
+  E -->|"No (421)"| K["Fetch Keen's key and check it against the pinned identity"]
+  K --> T
   V -->|Yes| D{"Evidence ID already stored?"}
-  D -->|Same hash| OK["Return success"]
+  D -->|Same hash| OK["Return success, encrypted with the request's one-time key"]
   D -->|New| S["Record chain position, redact with custody record, store artifact and event; commit"]
   S --> OK
-  OK --> R["Remove acknowledged envelopes from the queue"]
+  OK --> C{"Response opens with that key?"}
+  C -->|Yes| R["Remove acknowledged envelopes from the queue"]
+  C -->|No| B
   A -->|No| H["Pause delivery; retain envelopes"]
   V -->|No| H
   D -->|Different hash| H

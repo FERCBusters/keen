@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import Field, field_validator
 from sqlalchemy.orm import Session
 
+from app.agents import server_keys
 from app.agents.credentials import digest, live_only, reauthenticate
 from app.agents.schema import Strict
 from app.core.datetime_utils import utc_now_naive
@@ -64,11 +65,15 @@ class ProfileInput(Strict):
 
 
 PUBLIC_KEY = r"^[A-Za-z0-9_-]{43}$"
+# kc_ codes and ke_ bootstrap keys end with KEEN's identity fingerprint.
+CREDENTIAL = r"^(k[ce])_([0-9a-f-]{36})\.[A-Za-z0-9_-]{43}\.([A-Za-z0-9_-]{22})$"
 PROOF = r"^[A-Za-z0-9_-]{86}$"
 NONCE = r"^[A-Za-z0-9_-]{43}$"
 
 
 class Enrollment(Strict):
+    # The credential travels inside the encrypted request, never in a header.
+    credential: str = Field(max_length=128)
     public_key: str = Field(pattern=PUBLIC_KEY)
     # Each attempt signs a fresh proof: its creation time and a nonce KEEN
     # accepts once, so a recorded request cannot be replayed for the grant.
@@ -128,8 +133,15 @@ def public(profile):
     }
 
 
-def new_key(profile):
-    value = "ke_" + profile.id + "." + secrets.token_urlsafe(32)
+def new_key(db, profile):
+    value = (
+        "ke_"
+        + profile.id
+        + "."
+        + secrets.token_urlsafe(32)
+        + "."
+        + server_keys.identity(db).fingerprint
+    )
     profile.key_hash = digest(value)
     return value
 
@@ -182,7 +194,7 @@ def create(*, body: ProfileInput, context: ChangeContext, db: Session):
     profile = AgentEnrollmentProfile(
         id=str(uuid.uuid4()), state="active", enrollment_count=0, **body.model_dump()
     )
-    key = new_key(profile)
+    key = new_key(db, profile)
     db.add(profile)
     audit(db, context, "profile-created", profile.id)
     db.commit()
@@ -200,7 +212,7 @@ def manage(*, ident: str, action: str, context: ChangeContext, db: Session):
         )
     key = None
     if action == "rotate":
-        key = new_key(profile)
+        key = new_key(db, profile)
     elif action == "revoke":
         profile.state = "revoked"
         profile.key_hash = ""
@@ -231,6 +243,18 @@ def manage(*, ident: str, action: str, context: ChangeContext, db: Session):
     if key:
         result["bootstrap_key"] = key
     return result
+
+
+def server_key_document(*, context: ChangeContext, db: Session):
+    """KEEN's identity and its current signed encryption key, rotating the
+    encryption key when due. Nothing exists until KEEN issues its first agent
+    credential, so an anonymous request never creates KEEN's keys."""
+    rate(context, "server-key-ip", limit=120)
+    if server_keys.current_fingerprint(db) is None:
+        raise DomainError(404, "This KEEN has issued no agent credentials yet")
+    document = server_keys.document(db)
+    db.commit()
+    return document
 
 
 def grant(db, agent, key):
@@ -327,17 +351,20 @@ def previous_binding(db, agent, credential_hash, public_key):
     return key
 
 
-def enroll(
-    *, body: Enrollment, context: ChangeContext, db: Session, authorization: str
-):
+def enroll(*, body: Enrollment, context: ChangeContext, db: Session):
     live_only()
     rate(context)
-    match = re.fullmatch(
-        r"Bearer ((k[ce])_([0-9a-f-]{36})\.[A-Za-z0-9_-]{43})", authorization
-    )
+    match = re.fullmatch(CREDENTIAL, body.credential)
     if not match:
         raise DomainError(401, "Invalid enrollment credential")
-    credential, kind, ident = match.groups()
+    credential = body.credential
+    kind, ident, pinned = match.groups()
+    if pinned != server_keys.current_fingerprint(db):
+        raise DomainError(
+            401,
+            "This credential was issued under a different KEEN identity key; "
+            "ask an administrator for a new one",
+        )
     if abs(time.time() - body.created) > PROOF_SECONDS:
         raise DomainError(
             400, "Key proof is not current; check the machine's clock and retry"

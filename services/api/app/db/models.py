@@ -3361,6 +3361,54 @@ class UeuSettings(Base):
     __table_args__ = (CheckConstraint("id = 1", name="ck_ueu_settings_singleton"),)
 
 
+class AgentServerKey(Base):
+    """KEEN's own keys for agent traffic (app/agents/server_keys.py).
+
+    The identity key's fingerprint ends every enrolment code and bootstrap
+    key; it signs each encryption key. Agents encrypt every request to the
+    current encryption key. Private halves are encrypted with the integration
+    secret key, and an encryption key's private half is erased once agents may
+    no longer use it.
+    """
+
+    __tablename__ = "agent_server_keys"
+    key_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    purpose: Mapped[str] = mapped_column(String(16), nullable=False)
+    public_key: Mapped[str] = mapped_column(Text, nullable=False)
+    private_key: Mapped[str | None] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+    # Encryption keys: the signed statement agents verify, and the time after
+    # which they may no longer encrypt to the key.
+    statement: Mapped[dict | None] = mapped_column(JSONB)
+    signature: Mapped[str | None] = mapped_column(String(128))
+    not_after: Mapped[datetime | None] = mapped_column(DateTime)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime)
+    destroyed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('identity','encryption')", name="ck_agent_server_key_purpose"
+        ),
+        CheckConstraint(
+            "state IN ('active','retired','destroyed')",
+            name="ck_agent_server_key_state",
+        ),
+        CheckConstraint(
+            "(state = 'destroyed') = (private_key IS NULL)",
+            name="ck_agent_server_key_private",
+        ),
+        Index(
+            "uq_agent_server_keys_one_active",
+            "purpose",
+            unique=True,
+            postgresql_where=sql_text("state = 'active'"),
+            sqlite_where=sql_text("state = 'active'"),
+        ),
+    )
+
+
 class AgentPostureObservation(Base):
     """Latest evidence pointer per agent/provider/scope; deleted with its evidence."""
 

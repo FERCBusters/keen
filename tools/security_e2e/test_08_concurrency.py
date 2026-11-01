@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 import pyotp
 import pytest
+from keen_e2e import agent
 from keen_e2e.client import Session
 
 RACERS = 8
@@ -145,17 +146,22 @@ def test_enrollment_limit_holds_under_concurrency(admin, needs_writes, run_id, t
             for _ in range(RACERS)
         ]
         try:
+            # Keen accepts no plaintext enrolment, as keen-agent 0.2 sent it.
+            plain = clients[0].post(
+                "/api/v1/agents/enroll",
+                json={"name": f"{run_id}-plain", "nonce": secrets.token_urlsafe(32)},
+                headers={"Authorization": "Bearer " + key},
+            )
+            assert plain.status_code == 415, plain.status_code
+            statement = agent.server_key(clients[0], key)
             results = _race(
                 [
-                    lambda client=client, i=i: (
-                        client.post(
-                            "/api/v1/agents/enroll",
-                            json={
-                                "name": f"{run_id}-agent-{i}",
-                                "nonce": secrets.token_urlsafe(32),
-                            },
-                            headers={"Authorization": "Bearer " + key},
-                        ).status_code
+                    lambda client=client, i=i: agent.enroll(
+                        client,
+                        statement,
+                        key,
+                        name=f"{run_id}-agent-{i}",
+                        nonce=secrets.token_urlsafe(32),
                     )
                     for i, client in enumerate(clients)
                 ]

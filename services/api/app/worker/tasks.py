@@ -226,6 +226,18 @@ def materialize_missing_monthly_zero_metrics_task() -> dict:
         db.close()
 
 
+@celery_app.task(name="app.worker.tasks.agent_server_keys_task")
+def agent_server_keys_task() -> dict:
+    """Rotate the agent encryption key when due; erase expired private keys."""
+    from app.agents.server_keys import scheduled_maintenance
+
+    db: Session = SessionLocal()
+    try:
+        return scheduled_maintenance(db)
+    finally:
+        db.close()
+
+
 @celery_app.task(name="app.worker.tasks.refresh_event_counter_cache_task")
 def refresh_event_counter_cache_task() -> dict:
     db: Session = SessionLocal()
