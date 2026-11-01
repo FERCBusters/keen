@@ -33,12 +33,19 @@ def list_people(user=Depends(require_isms_read), db: Session = Depends(get_db)):
 def workstation_posture(
     person_id: uuid.UUID,
     offset: int = 0,
+    include_revoked: bool = True,
     user=Depends(require_isms_read),
     db: Session = Depends(get_db),
 ):
     from app.services.workstation_posture import person_posture
 
-    return person_posture(db=db, user=user, person_id=person_id, offset=offset)
+    return person_posture(
+        db=db,
+        user=user,
+        person_id=person_id,
+        offset=offset,
+        include_revoked=include_revoked,
+    )
 
 
 @router.post("/v1/isms/people/{person_id}/workstation-posture/risks", status_code=201)

@@ -106,6 +106,110 @@ test('failed loading is retryable and empty devices have useful instructions', a
   await tick();
   assert.match(host.textContent, /No workstation agents linked/);
 });
+test('revoked agents are hidden until Show revoked agents is ticked', async (t) => {
+  const requests = [];
+  const active = { ...result('replacement').devices[0], agent_id: 'new' };
+  const revoked = {
+    ...result('old-laptop').devices[0],
+    agent_id: 'old',
+    active: false,
+    revoked: true,
+  };
+  const expired = {
+    ...result('spare').devices[0],
+    agent_id: 'spare',
+    active: false,
+    revoked: false,
+  };
+  const ui = await loadUi('pages/workstation-posture.js', {
+    html: '<section id="host"></section>',
+    vendor: {
+      withFramework: (url) => url,
+      apiGet: async (raw) => {
+        const url = new URL(raw, 'https://keen.example');
+        requests.push([url.searchParams.get('offset'), url.searchParams.get('include_revoked')]);
+        const all = url.searchParams.get('include_revoked') === 'true';
+        const devices = all ? [revoked, active, expired] : [active, expired];
+        return { ...result(), devices, total: devices.length, revoked_total: 1 };
+      },
+    },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  const controller = ui.api.workstationPosture(host, true);
+  controller.select({ id: 'p1', name: 'Person' });
+  await tick();
+  const box = () => host.querySelector('[data-posture-show-revoked]');
+  const names = () =>
+    [...host.querySelectorAll('[data-posture-device] h3')].map((h) => h.textContent);
+  assert.deepEqual(requests, [['0', 'false']]);
+  assert.equal(box().checked, false);
+  assert.equal(
+    host.querySelector(`label[for="${box().id}"]`).textContent,
+    'Show revoked agents (1)',
+  );
+  assert.deepEqual(names(), ['replacement', 'spare']);
+  assert.match(host.textContent, /2 devices linked · 1 revoked device hidden\./);
+  // A device whose credential lapsed is expired, not revoked, and stays listed.
+  assert.match(host.querySelectorAll('[data-posture-device]')[1].textContent, /Credential expired/);
+
+  box().click();
+  await tick();
+  assert.deepEqual(requests.at(-1), ['0', 'true']);
+  assert.equal(box().checked, true);
+  assert.equal(ui.document.activeElement, box());
+  assert.deepEqual(names(), ['old-laptop', 'replacement', 'spare']);
+  assert.match(host.querySelector('[data-posture-device]').textContent, /Credential revoked · /);
+  assert.match(host.textContent, /3 devices linked\./);
+
+  // The choice holds for Refresh and for the next person.
+  host.querySelector('[data-posture-refresh]').click();
+  await tick();
+  controller.select({ id: 'p2', name: 'Another' });
+  await tick();
+  assert.deepEqual(requests.slice(-2), [
+    ['0', 'true'],
+    ['0', 'true'],
+  ]);
+  assert.notEqual(ui.document.activeElement, box());
+  box().click();
+  await tick();
+  assert.deepEqual(requests.at(-1), ['0', 'false']);
+  assert.equal(box().checked, false);
+});
+test('a person with only revoked devices is told how to see them', async (t) => {
+  const ui = await loadUi('pages/workstation-posture.js', {
+    html: '<section id="host"></section>',
+    vendor: {
+      withFramework: (url) => url,
+      apiGet: async () => ({ ...result(), devices: [], total: 0, revoked_total: 2 }),
+    },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  ui.api.workstationPosture(host, true).select({ id: 'p', name: 'Person' });
+  await tick();
+  assert.match(
+    host.textContent,
+    /Every device linked to this person is revoked\. Tick Show revoked agents to review them\./,
+  );
+  assert.match(host.textContent, /0 devices linked · 2 revoked devices hidden\./);
+});
+test('without revoked agents there is nothing to show', async (t) => {
+  const ui = await loadUi('pages/workstation-posture.js', {
+    html: '<section id="host"></section>',
+    vendor: {
+      withFramework: (url) => url,
+      apiGet: async () => ({ ...result(), revoked_total: 0 }),
+    },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  ui.api.workstationPosture(host, true).select({ id: 'p', name: 'Person' });
+  await tick();
+  assert.equal(host.querySelector('[data-posture-show-revoked]'), null);
+  assert.match(host.textContent, /1 devices linked\./);
+});
 test('devices collapse with their platform shown and long evidence lists fold', async (t) => {
   const observation = (n) => ({
     provider: 'p' + n,

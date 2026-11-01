@@ -314,7 +314,7 @@ def _iso(value):
     return value.isoformat() + "Z" if value is not None else None
 
 
-def person_posture(*, db, user, person_id, offset=0):
+def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
     # Posture is derived evidence; People access alone never discloses it.
     from app.services.isms.access import can_read_isms
 
@@ -326,6 +326,10 @@ def person_posture(*, db, user, person_id, offset=0):
     if db.get(IsmsPerson, person_id) is None:
         raise DomainError(404, "Person not found")
     query = db.query(KeenAgent).filter_by(person_id=person_id, agent_type="workstation")
+    # A revoked agent keeps its evidence; a reader can leave it out of the list.
+    revoked_total = query.filter(KeenAgent.enabled.is_(False)).count()
+    if not include_revoked:
+        query = query.filter(KeenAgent.enabled.is_(True))
     total = query.count()
     agents = (
         query.order_by(KeenAgent.name, KeenAgent.id)
@@ -430,6 +434,7 @@ def person_posture(*, db, user, person_id, offset=0):
                 "hostname": agent.name,
                 "platform": _platform(agent, grouped.get(agent.id, [])),
                 "active": active,
+                "revoked": not agent.enabled,
                 "last_seen": _iso(agent.last_seen),
                 "overflow": bool(agent.health.get("posture_overflow")),
                 "met": sum(c["status"] == "met" for c in checks),
@@ -440,6 +445,8 @@ def person_posture(*, db, user, person_id, offset=0):
     return {
         "devices": devices,
         "total": total,
+        "revoked_total": revoked_total,
+        "include_revoked": include_revoked,
         "offset": offset,
         "next_offset": offset + PAGE_SIZE if offset + PAGE_SIZE < total else None,
         "freshness_hours": 24,

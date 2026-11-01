@@ -135,6 +135,77 @@ def test_two_devices_dedup_and_revocation(setup):
         assert summary(db, pid)["devices"][0]["met"] == 0
 
 
+def listing(db, pid, **kwargs):
+    return posture.person_posture(
+        db=db,
+        user=User(id=uuid.uuid4(), role="admin", is_active=True),
+        person_id=uuid.UUID(pid),
+        **kwargs,
+    )
+
+
+def test_revoked_devices_can_be_left_out_and_are_told_apart_from_expired(setup):
+    pid, aid, _ = workstation(setup)
+    client, factory, *_ = setup
+    replacement = device(client, "new-laptop", person_id=pid)
+    spare = device(client, "spare-laptop", person_id=pid)
+    assert client.post(f"/v1/admin/agents/{aid}/revoke", json={}).status_code == 200
+    with factory() as db:
+        db.get(KeenAgent, spare.agent_id).expires_at = utc_now_naive() - timedelta(
+            days=1
+        )
+        db.commit()
+
+        everything = listing(db, pid)
+        listed = listing(db, pid, include_revoked=False)
+
+    state = {d["hostname"]: (d["active"], d["revoked"]) for d in everything["devices"]}
+    assert state == {
+        "laptop": (False, True),
+        "new-laptop": (True, False),
+        "spare-laptop": (False, False),
+    }
+    assert (everything["total"], everything["revoked_total"]) == (3, 1)
+    assert everything["include_revoked"] is True
+    # The expired device stays listed; only the revoked one is left out.
+    assert [d["agent_id"] for d in listed["devices"]] == [
+        replacement.agent_id,
+        spare.agent_id,
+    ]
+    assert (listed["total"], listed["revoked_total"]) == (2, 1)
+    assert listed["include_revoked"] is False
+
+
+def test_pages_of_devices_count_only_the_devices_listed(setup):
+    pid, _, _ = workstation(setup)
+    client, factory, *_ = setup
+    ids = []
+    for i in range(21):
+        response = client.post(
+            "/v1/admin/agents",
+            json=dict(name=f"device-{i:02}", agent_type="workstation", person_id=pid),
+        )
+        assert response.status_code == 201
+        ids.append(response.json()["agent"]["id"])
+    for agent_id in ids[:2]:
+        assert (
+            client.post(f"/v1/admin/agents/{agent_id}/revoke", json={}).status_code
+            == 200
+        )
+    with factory() as db:
+        first = listing(db, pid, include_revoked=False)
+        second = listing(db, pid, offset=20, include_revoked=False)
+
+    assert (first["total"], first["revoked_total"], first["next_offset"]) == (
+        20,
+        2,
+        None,
+    )
+    assert len(first["devices"]) == 20
+    assert not any(d["revoked"] for d in first["devices"])
+    assert second["devices"] == []
+
+
 def test_out_of_order_reassignment_and_old_replay(setup):
     pid, aid, sim = workstation(setup)
     c, f, _, _, _, _ = setup
@@ -461,6 +532,22 @@ def test_assembled_permissions_and_csrf(keen):
         == 200
     )
     assert c.get(path + "?offset=-1").status_code == 400
+    # A revoked workstation is listed unless the reader leaves revoked devices out.
+    old = c.post(
+        "/v1/admin/agents",
+        json=dict(name="old-device", agent_type="workstation", person_id=pid),
+        headers=unsafe(c),
+    ).json()["agent"]["id"]
+    revoked = c.post(f"/v1/admin/agents/{old}/revoke", json={}, headers=unsafe(c))
+    assert revoked.status_code == 200, revoked.text
+    shown = rc.get(path).json()
+    hidden = rc.get(path + "?include_revoked=false").json()
+    assert ([d["hostname"] for d in shown["devices"]], shown["revoked_total"]) == (
+        ["old-device"],
+        1,
+    )
+    assert (hidden["devices"], hidden["total"], hidden["revoked_total"]) == ([], 0, 1)
+    assert c.get(path + "?include_revoked=perhaps").status_code == 422
     assert (
         c.get(
             "/v1/isms/people/" + str(uuid.uuid4()) + "/workstation-posture"
