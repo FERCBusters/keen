@@ -9,6 +9,7 @@ from app.api.routing import Router
 from app.db.session import get_db
 from app.security.auth import require_admin
 from app.services import managed_configurations as service
+from app.services import rule_insights as insights
 from app.services.managed_configurations import (
     AdapterSettingsInput,
     ConnectionRemovalInput,
@@ -127,6 +128,12 @@ def export_rules(source: str = "", db: Session = Depends(get_db)):
 @router.get("/v1/admin/mapping-rules")
 def get_rules(db: Session = Depends(get_db)):
     return service.get_rules(db=db)
+
+
+@router.get("/v1/admin/mapping-rules/insights")
+def rule_insights(days: int = insights.DEFAULT_DAYS, db: Session = Depends(get_db)):
+    "Each rule's recent activity, and rules that could be consolidated."
+    return insights.rule_insights(days=days, db=db)
 
 
 @router.put("/v1/admin/mapping-rules/{rule_id}")

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import pickle
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -20,7 +22,8 @@ CLAUSE = "clause"
 TARGET_KINDS = (CONTROL, CLAUSE)
 
 
-@dataclass
+# Parsed rules are shared between the events that use them, so they are frozen.
+@dataclass(frozen=True)
 class Condition:
     fields: list[dict] | None = None
     connection_id: str | None = None
@@ -48,7 +51,7 @@ class Condition:
     bookstack_page_title_regex: str | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class RuleTarget:
     framework_slug: str
     ref: str
@@ -56,7 +59,7 @@ class RuleTarget:
     kind: str | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Rule:
     id: str
     when: Condition
@@ -192,6 +195,10 @@ _TEXT_LIMIT = 512
 _REF_LIMIT = 64
 _FRAMEWORK = re.compile(r"[A-Za-z0-9._:-]{1,64}")
 _WARNED: set[tuple[str, str]] = set()
+# The rules this process last read: the default framework they were read with,
+# a digest of their document, and the parsed rules. load_rules reuses them until
+# either changes.
+_LAST_LOADED: dict[str, tuple[str, bytes, tuple[Rule, ...]]] = {}
 
 
 class _Invalid(ValueError):
@@ -199,7 +206,8 @@ class _Invalid(ValueError):
 
 
 def _skip(rule_id: str, problem: str) -> None:
-    # Rules are reread for each collected event, so a problem is logged once.
+    # Each new rules document, editor check and preview rereads the rules, so a
+    # problem is logged once.
     if (rule_id, problem) not in _WARNED:
         if len(_WARNED) >= 1024:
             _WARNED.clear()
@@ -386,7 +394,14 @@ def _parse_rule(rid: str, inherited: str | None, item: dict[str, Any]) -> Rule |
 
 
 def load_rules(path: str, *, db: Any = None) -> list[Rule]:
-    """Load rules from the managed document, or the shipped YAML."""
+    """Load rules from the managed document, or the shipped YAML.
+
+    Each collected event loads the rules, so a document is parsed once and its
+    rules are reused until the document changes. The digest covers each value's
+    type as well as its content, so a document whose values compare equal but
+    parse differently, such as ``enabled: 1`` and ``enabled: true``, is parsed
+    afresh. The pickled document is only hashed; nothing is unpickled.
+    """
 
     from app.core.managed_configuration import load_document
 
@@ -394,7 +409,13 @@ def load_rules(path: str, *, db: Any = None) -> list[Rule]:
         raw = load_document("rules", path, db=db)
     except FileNotFoundError:
         return []
-    return parse_rules(raw)
+    digest = hashlib.sha256(pickle.dumps(raw, pickle.HIGHEST_PROTOCOL)).digest()
+    framework = settings.default_framework_slug
+    last = _LAST_LOADED.get("rules")
+    if last is None or last[:2] != (framework, digest):
+        last = (framework, digest, tuple(parse_rules(raw)))
+        _LAST_LOADED["rules"] = last
+    return list(last[2])
 
 
 def rule_problem(item: dict[str, Any]) -> str | None:

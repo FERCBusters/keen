@@ -123,6 +123,18 @@ async function editor(t, server = {}) {
     if (revisions) return { items: state.revisions[decodeURIComponent(revisions[1])] || [] };
     if (path === '/api/v1/admin/rule-backfills')
       return { items: state.backfills[query.get('rule_id')] || [] };
+    if (path === '/api/v1/admin/mapping-rules/insights') {
+      if (state.failInsights) throw new Error(state.failInsights);
+      return structuredClone(
+        state.insights || {
+          version: state.rulesVersion,
+          days: 90,
+          rules: [],
+          consolidation: [],
+          overlaps: [],
+        },
+      );
+    }
     const job = path.match(/^\/api\/v1\/admin\/rule-backfills\/([^/]+)$/);
     if (job) {
       const sequence = state.jobs[decodeURIComponent(job[1])];
@@ -178,6 +190,18 @@ async function editor(t, server = {}) {
         rules_version: state.rulesVersion,
         rule,
         backfill: structuredClone(state.saveBackfill),
+      };
+    }
+    const saved = path.match(/^\/api\/v1\/admin\/mapping-rules\/([^/]+)$/);
+    if (saved) {
+      if (state.failSave) throw new Error(state.failSave);
+      const rule = structuredClone(body.rule);
+      state.rules = state.rules.map((item) => (item.id === rule.id ? rule : item));
+      state.rulesVersion++;
+      return {
+        version: state.rulesVersion,
+        item: rule,
+        backfill: body.apply_existing ? structuredClone(state.saveBackfill) : null,
       };
     }
     if (path.startsWith('/api/v1/admin/adapter-settings/')) {
@@ -724,6 +748,11 @@ test('the definition library pages, searches and filters by source', async (t) =
   assert.equal(ui.library().length, 20);
   assert.equal(ui.$('previous-rules').hidden, true);
   assert.equal(ui.$('more-rules').hidden, false);
+  // Previous sits at the left of the page controls and Next at the right, alone or not.
+  const pages = ui.$('previous-rules').parentElement;
+  assert.deepEqual([...pages.children], [ui.$('previous-rules'), ui.$('more-rules')]);
+  assert.ok(pages.classList.contains('d-flex'));
+  assert.ok(ui.$('more-rules').classList.contains('ms-auto'));
 
   ui.$('more-rules').click();
   assert.equal(ui.$('rule-count').textContent, '25 of 25 mapping rules · page 2 of 2');
@@ -809,6 +838,316 @@ test('deleting a definition asks first and keeps its collection', async (t) => {
   await ui.idle();
   assert.equal(ui.$('status').textContent, ui.state.failDelete);
   assert.equal(ui.$('status').getAttribute('role'), 'alert');
+});
+
+// --- Pausing and rule insights ----------------------------------------------------
+
+const rowButton = (ui, rowIndex, label) =>
+  [...ui.$('rules').children[rowIndex].querySelectorAll('button')].find(
+    (button) => button.textContent === label,
+  );
+
+test('pausing a rule from the library asks first and keeps its definition', async (t) => {
+  const ui = await editor(t, { rules: rules(2), confirm: false });
+  assert.equal(rowButton(ui, 0, 'Pause').getAttribute('aria-label'), 'Pause Definition 01');
+  rowButton(ui, 0, 'Pause').click();
+  await ui.idle();
+  assert.deepEqual(
+    ui.confirmations.map((c) => [c.title, c.message, c.confirmLabel]),
+    [
+      [
+        'Pause mapping rule',
+        'Pause Definition 01? Keen stops checking new events against it until you resume it. Its existing mappings stay.',
+        'Pause',
+      ],
+    ],
+  );
+  assert.deepEqual(ui.writes, []);
+
+  ui.state.confirm = true;
+  rowButton(ui, 0, 'Pause').click();
+  await ui.idle();
+  assert.deepEqual(ui.writes, [
+    {
+      method: 'PUT',
+      path: '/api/v1/admin/mapping-rules/rule-01',
+      body: { version: 7, rule: { ...rules(1)[0], enabled: false }, apply_existing: false },
+    },
+  ]);
+  assert.equal(ui.$('status').textContent, 'Definition 01 is paused. Its existing mappings stay.');
+  assert.equal(ui.library()[0][1], 'Paused · All keen-agent events · 1 framework targets');
+  assert.ok(rowButton(ui, 0, 'Resume'));
+  assert.ok(rowButton(ui, 1, 'Pause'));
+  // The library and its insights are read again after the change.
+  assert.equal(
+    ui.calls.filter((call) => call === '/api/v1/admin/mapping-rules/insights').length,
+    2,
+  );
+
+  ui.state.failSave = 'Rules changed in another session. Reload before saving.';
+  rowButton(ui, 1, 'Pause').click();
+  await ui.idle();
+  assert.equal(ui.$('status').textContent, ui.state.failSave);
+});
+
+test('rules the editor cannot save are paused in the rules YAML instead', async (t) => {
+  const ui = await editor(t, {
+    rules: [
+      { id: 'webhook:hook-af', when: { source: 'webhook:hook' }, map_to: [] },
+      { id: 'anywhere', description: 'Any source', when: {}, map_to: [] },
+    ],
+  });
+  rowButton(ui, 0, 'Pause').click();
+  await ui.idle();
+  assert.equal(
+    ui.$('status').textContent,
+    'webhook:hook-af cannot be paused here: it has no source, or its ID uses characters the editor does not accept. Set enabled: false for it in the rules YAML instead.',
+  );
+  rowButton(ui, 1, 'Pause').click();
+  await ui.idle();
+  assert.match(ui.$('status').textContent, /^Any source cannot be paused here/);
+  assert.deepEqual(ui.confirmations, []);
+  assert.deepEqual(ui.writes, []);
+});
+
+test('resuming a rule asks whether to map the events collected while it was paused', async (t) => {
+  const paused = { ...rules(1)[0], enabled: false };
+  const answers = [];
+  const ui = await editor(t, {
+    rules: [paused],
+    saveBackfill: { id: 'job-9', status: 'queued', total_estimate: 0 },
+    confirm: () => answers.shift(),
+  });
+  const resume = async (...choices) => {
+    answers.push(...choices);
+    ui.writes.length = 0;
+    ui.confirmations.length = 0;
+    rowButton(ui, 0, 'Resume').click();
+    await ui.idle();
+  };
+
+  await resume(false);
+  assert.deepEqual(
+    ui.confirmations.map((c) => c.message),
+    ['Resume Definition 01? Keen checks new events against it again.'],
+  );
+  assert.deepEqual(ui.writes, []);
+
+  await resume(true, true);
+  assert.deepEqual(
+    ui.confirmations.map((c) => [c.title, c.confirmLabel, c.cancelLabel]),
+    [
+      ['Resume mapping rule', 'Resume', undefined],
+      ['Map events collected while paused', 'Map existing events', 'New events only'],
+    ],
+  );
+  assert.deepEqual(ui.writes[0].body, {
+    version: 7,
+    rule: { ...paused, enabled: true },
+    apply_existing: true,
+  });
+  assert.equal(
+    ui.$('status').textContent,
+    'Definition 01 is active again. Keen is checking existing events in the background; open the rule to follow progress.',
+  );
+
+  // Pause the rule again elsewhere, then reload the library.
+  const pausedElsewhere = async () => {
+    ui.state.rules = [paused];
+    ui.window.dispatchEvent(new ui.window.CustomEvent('keen-connections-changed'));
+    await ui.idle();
+  };
+  // Choosing New events only resumes the rule without a backfill.
+  await pausedElsewhere();
+  await resume(true, false);
+  assert.equal(ui.writes[0].body.apply_existing, false);
+  assert.equal(ui.$('status').textContent, 'Definition 01 is active again for new events.');
+
+  await pausedElsewhere();
+  ui.state.saveBackfill = { status: 'no_previous_evidence', total_estimate: 0 };
+  await resume(true, true);
+  assert.equal(
+    ui.$('status').textContent,
+    'Definition 01 is active again. There were no earlier events to check.',
+  );
+});
+
+function ruleInsight(id, status, message, extra = {}) {
+  return { id, enabled: status !== 'paused', status, message, source: 'keen-agent', ...extra };
+}
+
+test('rule insights badge each rule and list those to review first', async (t) => {
+  const library = [
+    ...rules(4),
+    { ...rules(5)[4], enabled: false },
+    { id: 'hostile', description: hostile, when: { source: 'keen-agent' }, map_to: [] },
+  ];
+  const ui = await editor(t, {
+    rules: library,
+    confirm: true,
+    insights: {
+      version: 7,
+      days: 90,
+      rules: [
+        ruleInsight('rule-01', 'active', 'Last matched 2 hours ago.'),
+        ruleInsight('rule-02', 'source_quiet', 'No matches for 3 days; keen-agent is quiet too.'),
+        ruleInsight('rule-03', 'quiet', `No matches for 2 days. ${hostile}`),
+        ruleInsight('rule-04', 'insufficient', 'Fewer than 3 matches.'),
+        ruleInsight('rule-05', 'paused', 'Paused.'),
+        ruleInsight('hostile', 'silent', 'No matches in the last 90 days.'),
+        // An insight for a rule removed since is left out.
+        ruleInsight('removed', 'quiet', 'Gone.'),
+      ],
+      consolidation: [],
+      overlaps: [],
+    },
+  });
+  const badges = [...ui.$('rules').children].map(
+    (row) => row.querySelector('.badge')?.textContent ?? null,
+  );
+  assert.deepEqual(badges, [
+    'Active',
+    'Source quiet',
+    'Stopped matching',
+    'No baseline yet',
+    null,
+    'No recent matches',
+  ]);
+  assert.equal(
+    ui.$('rules').children[2].querySelector('.badge').title,
+    `No matches for 2 days. ${hostile}`,
+  );
+  // The badge sits beside the title, so the rule's name and description are unchanged.
+  assert.deepEqual(ui.library()[5], [hostile, 'All keen-agent events · 0 framework targets']);
+  assert.equal(ui.$('insights-count').textContent, ' · 3 to review · 0 to consider');
+  assert.equal(
+    ui.$('insights-meta').textContent,
+    'Based on the events each rule matched in the last 90 days. Keen never pauses or merges rules itself.',
+  );
+
+  const cards = [...ui.$('insights-attention').children];
+  assert.deepEqual(
+    cards.map((card) => [
+      card.querySelector('strong').textContent,
+      card.querySelector('.badge').textContent,
+    ]),
+    [
+      ['Definition 03', 'Stopped matching'],
+      [hostile, 'No recent matches'],
+      ['Definition 02', 'Source quiet'],
+    ],
+  );
+  assert.equal(cards[0].querySelector('p').textContent, `No matches for 2 days. ${hostile}`);
+  assert.equal(ui.$('insights').querySelector('img'), null);
+  // Only a rule whose source went quiet links to the source's insights.
+  assert.deepEqual(
+    cards.map((card) => card.querySelector('a')?.getAttribute('href') ?? null),
+    [null, null, '/source.html?source=keen-agent&tab=insights'],
+  );
+
+  assert.deepEqual(
+    [...cards[2].querySelectorAll('button, a')].map((control) =>
+      control.getAttribute('aria-label'),
+    ),
+    ['Open Definition 02', 'Pause Definition 02', 'Insights for the keen-agent source'],
+  );
+  cards[0].querySelector('button').click();
+  await ui.idle();
+  assert.equal(ui.$('editor').hidden, false);
+  assert.equal(ui.$('rule-id').value, 'rule-03');
+  await ui.click('close-editor');
+
+  [...ui.$('insights-attention').children][1].querySelectorAll('button')[1].click();
+  await ui.idle();
+  assert.deepEqual(ui.writes.at(-1).body.rule, { ...library[5], enabled: false });
+});
+
+test('consolidation suggestions name their rules and show a combined pattern as text', async (t) => {
+  const ui = await editor(t, {
+    rules: rules(3),
+    insights: {
+      version: 7,
+      days: 90,
+      rules: [],
+      consolidation: [
+        {
+          kind: 'same_controls',
+          rules: ['rule-01', 'rule-02', 'gone'],
+          message: 'These rules map the same controls from the same source.',
+          combine: [
+            {
+              rules: ['rule-01', 'rule-02'],
+              condition: 'Activity',
+              values: [
+                { form: 'exact', value: 'login' },
+                { form: 'exact', value: hostile },
+              ],
+              pattern: '\\A(?:login|<b>x</b>)\\Z',
+              replace: { action_regex: '\\A(?:login|<b>x</b>)\\Z' },
+            },
+          ],
+        },
+        { kind: 'duplicate', rules: ['rule-02', 'rule-03'], keep: 'rule-02', message: 'Copies.' },
+      ],
+      overlaps: [
+        { rules: ['rule-03', 'rule-01'], message: 'rule-01 also matched 40 of the 41 events.' },
+      ],
+    },
+  });
+  assert.equal(ui.$('insights-count').textContent, ' · 0 to review · 3 to consider');
+  assert.equal(ui.$('insights-attention').textContent, 'No rules need a review.');
+  assert.equal(ui.$('insights-consolidation-heading').hidden, false);
+  const [combine, duplicate] = ui.$('insights-consolidation').children;
+  assert.equal(
+    combine.querySelector('.fw-semibold').textContent,
+    'Same controls, different conditions',
+  );
+  assert.equal(duplicate.querySelector('.fw-semibold').textContent, 'Same conditions and controls');
+  assert.equal(
+    combine.querySelector('.small.mt-1').textContent,
+    `Activity: one rule could match login, ${hostile} with the pattern \\A(?:login|<b>x</b>)\\Z (Definition 01, Definition 02).`,
+  );
+  assert.equal(combine.querySelector('code').textContent, '\\A(?:login|<b>x</b>)\\Z');
+  assert.equal(ui.$('insights').querySelector('b, img'), null);
+  // A rule removed since the insights were read is named but cannot be opened.
+  const links = [...combine.querySelector('p:nth-of-type(2)').querySelectorAll('button')];
+  assert.deepEqual(
+    links.map((link) => [link.textContent, link.disabled]),
+    [
+      ['Definition 01', false],
+      ['Definition 02', false],
+      ['gone', true],
+    ],
+  );
+  assert.equal(ui.$('insights-overlaps-heading').hidden, false);
+  assert.equal(
+    ui.$('insights-overlaps').textContent,
+    'rule-01 also matched 40 of the 41 events.Rules: Definition 03, Definition 01',
+  );
+  links[1].click();
+  await ui.idle();
+  assert.equal(ui.$('rule-id').value, 'rule-02');
+});
+
+test('unavailable rule insights leave the library usable', async (t) => {
+  const ui = await editor(t, { rules: rules(1), failInsights: 'Service unavailable' });
+  assert.equal(
+    ui.$('insights-meta').textContent,
+    'Rule insights are unavailable: Service unavailable',
+  );
+  assert.equal(ui.$('insights-count').textContent, '');
+  assert.equal(ui.$('rules').querySelector('.badge'), null);
+  assert.equal(ui.$('status').hidden, true);
+  assert.deepEqual(ui.library(), [
+    ['Definition 01', 'All keen-agent events · 1 framework targets'],
+  ]);
+});
+
+test('an empty library has no insights to review yet', async (t) => {
+  const ui = await editor(t);
+  assert.equal(ui.$('insights-attention').textContent, 'Insights appear once mapping rules exist.');
+  assert.equal(ui.$('insights-consolidation-heading').hidden, true);
+  assert.equal(ui.$('insights-overlaps-heading').hidden, true);
 });
 
 test('the editor deletes only saved definitions', async (t) => {
@@ -1302,15 +1641,22 @@ test('Use this event fills the identifying fields and proposes a rule id', async
 });
 
 test('the preview lists matching and non-matching samples as text', async (t) => {
+  const ids = ['1', '2', '3'].map(
+    (n) => `${n.repeat(8)}-${n.repeat(4)}-4${n.repeat(3)}-8${n.repeat(3)}-${n.repeat(12)}`,
+  );
   const ui = await editor(t, {
     preview: {
       examined: 3,
       matched: 1,
       note: 'Newest first.',
-      examples: [{ summary: hostile, targets: { A: ['A1', 'A2'], B: ['B9'] } }],
+      examples: [{ event_id: ids[0], summary: hostile, targets: { A: ['A1', 'A2'], B: ['B9'] } }],
       nonmatches: [
-        { summary: 'Quiet night', reasons: ['Outcome differs.', 'Actor differs.'] },
-        { summary: 'Blank entry' },
+        {
+          event_id: ids[1],
+          summary: 'Quiet night',
+          reasons: ['Outcome differs.', 'Actor differs.'],
+        },
+        { event_id: ids[2], summary: '' },
       ],
     },
   });
@@ -1320,6 +1666,10 @@ test('the preview lists matching and non-matching samples as text', async (t) =>
   const results = [...ui.$('preview-results').children].map((p) => [p.className, p.textContent]);
   assert.deepEqual(results, [
     ['', '1 of 3 recent keen-agent events matched. Newest first.'],
+    [
+      'small-muted',
+      'Open an event in a new tab to compare its payload with the rule, then preview again.',
+    ],
     ['alert alert-success py-2 mb-2', `Matches: ${hostile}Maps to Framework A (A1, A2); B (B9)`],
     [
       'alert alert-warning py-2 mb-2',
@@ -1327,7 +1677,7 @@ test('the preview lists matching and non-matching samples as text', async (t) =>
     ],
     [
       'alert alert-warning py-2 mb-2',
-      'Does not match: Blank entry. Review the additional filters.',
+      'Does not match: Event without a summary. Review the additional filters.',
     ],
   ]);
   // The targets sit on their own line; a framework the picker does not list keeps its slug.
@@ -1335,7 +1685,30 @@ test('the preview lists matching and non-matching samples as text', async (t) =>
     ui.$('preview-results').querySelector('.alert-success .small').textContent,
     'Maps to Framework A (A1, A2); B (B9)',
   );
+  // Each sample's summary opens its event in a new tab, matched or not.
+  const links = [...ui.$('preview-results').querySelectorAll('a')];
+  assert.deepEqual(
+    links.map((link) => [link.getAttribute('href'), link.target, link.rel, link.textContent]),
+    [
+      [`/event.html?id=${ids[0]}`, '_blank', 'noopener', hostile],
+      [`/event.html?id=${ids[1]}`, '_blank', 'noopener', 'Quiet night'],
+      [`/event.html?id=${ids[2]}`, '_blank', 'noopener', 'Event without a summary'],
+    ],
+  );
   assert.equal(ui.$('preview-results').querySelector('img'), null);
+});
+
+test('a preview without samples offers no event links', async (t) => {
+  const ui = await editor(t, {
+    preview: { examined: 0, matched: 0, examples: [], nonmatches: [] },
+  });
+  await ui.openInput('keen-agent');
+  ui.$('description').value = 'Agent evidence';
+  await ui.click('preview');
+  assert.deepEqual(
+    [...ui.$('preview-results').children].map((p) => p.textContent),
+    ['0 of 0 recent keen-agent events matched. '],
+  );
 });
 
 test('a field condition without a chosen field cannot be previewed', async (t) => {

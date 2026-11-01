@@ -305,6 +305,7 @@ POLICY = {
     "PUT /v1/admin/managed-configurations/{name}": ADMIN,
     "GET /v1/admin/mapping-rules": ADMIN,
     "GET /v1/admin/mapping-rules/export.yaml": ADMIN,
+    "GET /v1/admin/mapping-rules/insights": ADMIN,
     "POST /v1/admin/mapping-rules/preview": ADMIN,
     "DELETE /v1/admin/mapping-rules/{rule_id}": ADMIN,
     "PUT /v1/admin/mapping-rules/{rule_id}": ADMIN,

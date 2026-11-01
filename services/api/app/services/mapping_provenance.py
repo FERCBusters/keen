@@ -37,6 +37,20 @@ def rule_owned_event_ids(rule_id: str):
     )
 
 
+def rule_of_rationale(rationale: str) -> str | None:
+    """The rule a rule mapping's rationale names, or None for any other text.
+
+    Framework identifiers hold no spaces or parentheses, so the framework is the
+    text in the last parentheses and everything before it names the rule. The
+    caller checks that the mapping is a rule mapping.
+    """
+    prefix = "auto by rule "
+    if not rationale.startswith(prefix) or not rationale.endswith(")"):
+        return None
+    rule_id, opened, framework = rationale[len(prefix) : -1].rpartition(" (")
+    return rule_id if opened and rule_id and framework else None
+
+
 def rule_id_of(mapping: Mapping, framework_slug: str) -> str | None:
     """The rule that made ``mapping`` for a control in ``framework_slug``, if any."""
     prefix, suffix = "auto by rule ", f" ({framework_slug})"

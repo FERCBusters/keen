@@ -85,7 +85,8 @@ def _day(value) -> str:
     return str(value)[:10]
 
 
-def _clean_days(days) -> int:
+def clean_days(days) -> int:
+    """The window length a request asks for, checked against the allowed range."""
     try:
         value = int(days)
     except (TypeError, ValueError):
@@ -108,7 +109,7 @@ def source_insights(
     src = str(source_name or "").strip()
     if not src or len(src) > 64:
         raise DomainError(400, "source must be between 1 and 64 characters")
-    window_days = _clean_days(days)
+    window_days = clean_days(days)
     clock = now or utc_now_naive()
     cache_parts = {
         "user": user_cache_scope(user),

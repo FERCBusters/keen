@@ -1054,11 +1054,20 @@ function renderRules() {
         ' · ' +
         (sourceConnections.find((c) => c.id === rule.when.connection_id)?.name ||
           rule.when.connection_id);
-    btn.append(title, meta);
+    btn.append(title);
+    const insight = insightFor(rule.id);
+    if (insight && insight.status !== 'paused') btn.append(' ', statusBadge(insight));
+    btn.append(meta);
     btn.addEventListener('click', () => editRule(rule).catch((error) => status(error.message)));
     const row = document.createElement('div');
     row.className = 'd-flex gap-2 align-items-center mb-2';
     btn.classList.add('flex-grow-1');
+    const pause = document.createElement('button');
+    pause.type = 'button';
+    pause.className = 'btn btn-outline-secondary btn-sm';
+    pause.textContent = rule.enabled === false ? 'Resume' : 'Pause';
+    pause.setAttribute('aria-label', `${pause.textContent} ${rule.description || rule.id}`);
+    pause.addEventListener('click', () => setRulePaused(rule, rule.enabled !== false));
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'btn btn-outline-danger btn-sm';
@@ -1085,9 +1094,229 @@ function renderRules() {
         status(error.message);
       }
     });
-    row.append(btn, remove);
+    row.append(btn, pause, remove);
     row.classList.add('flex-wrap');
     list.append(row);
+  }
+}
+// --- Rule insights: activity, quiet rules and consolidation suggestions ------------
+let insights = null,
+  insightsRequest = 0;
+const RULE_STATUS = {
+  active: ['text-bg-success', 'Active'],
+  quiet: ['text-bg-warning', 'Stopped matching'],
+  silent: ['text-bg-warning', 'No recent matches'],
+  source_quiet: ['text-bg-secondary', 'Source quiet'],
+  insufficient: ['text-bg-secondary', 'No baseline yet'],
+  paused: ['text-bg-secondary', 'Paused'],
+};
+// Statuses that ask for a review, in the order they are listed.
+const ATTENTION = ['quiet', 'silent', 'source_quiet'];
+const SUGGESTION_KIND = {
+  duplicate: 'Same conditions and controls',
+  covered: 'Covered by a broader rule',
+  same_conditions: 'Same conditions, different controls',
+  same_controls: 'Same controls, different conditions',
+};
+function insightFor(ruleId) {
+  return insights?.rules?.find((item) => item.id === ruleId) || null;
+}
+function statusBadge(insight) {
+  const [tone, label] = RULE_STATUS[insight.status] || RULE_STATUS.insufficient;
+  const badge = document.createElement('span');
+  badge.className = `badge ${tone}`;
+  badge.textContent = label;
+  badge.title = insight.message || '';
+  return badge;
+}
+// A rule named in an insight opens in the editor.
+function ruleLink(ruleId) {
+  const rule = rules.find((item) => item.id === ruleId);
+  const link = document.createElement('button');
+  link.type = 'button';
+  link.className = 'btn btn-link btn-sm p-0 align-baseline';
+  link.textContent = rule?.description || ruleId;
+  link.disabled = !rule;
+  link.addEventListener('click', () => editRule(rule).catch((error) => status(error.message)));
+  return link;
+}
+function ruleLinks(ids) {
+  const span = document.createElement('span');
+  for (const [index, id] of ids.entries()) span.append(index ? ', ' : '', ruleLink(id));
+  return span;
+}
+function insightCard(heading) {
+  const card = document.createElement('div');
+  card.className = 'border rounded p-2 mb-2';
+  if (heading) {
+    const title = document.createElement('div');
+    title.className = 'fw-semibold';
+    title.textContent = heading;
+    card.append(title);
+  }
+  return card;
+}
+function paragraph(text, className = 'small mb-1') {
+  const p = document.createElement('p');
+  p.className = className;
+  p.textContent = text;
+  return p;
+}
+function renderInsights() {
+  const attention = (insights?.rules || [])
+    .filter((item) => ATTENTION.includes(item.status) && rules.some((r) => r.id === item.id))
+    .sort((a, b) => ATTENTION.indexOf(a.status) - ATTENTION.indexOf(b.status));
+  const suggestions = insights?.consolidation || [];
+  const overlaps = insights?.overlaps || [];
+  $('insights-count').textContent = insights
+    ? ` · ${attention.length} to review · ${suggestions.length + overlaps.length} to consider`
+    : '';
+  $('insights-meta').textContent = insights
+    ? `Based on the events each rule matched in the last ${insights.days} days. Keen never pauses or merges rules itself.`
+    : '';
+  const list = $('insights-attention');
+  list.replaceChildren();
+  if (insights && !attention.length)
+    list.append(
+      paragraph(
+        rules.length ? 'No rules need a review.' : 'Insights appear once mapping rules exist.',
+        'small-muted',
+      ),
+    );
+  for (const item of attention) {
+    const rule = rules.find((r) => r.id === item.id);
+    const card = insightCard();
+    const heading = document.createElement('div');
+    heading.className = 'd-flex flex-wrap align-items-center gap-2';
+    const name = document.createElement('strong');
+    name.textContent = rule.description || rule.id;
+    heading.append(name, statusBadge(item));
+    const actions = document.createElement('div');
+    actions.className = 'd-flex flex-wrap gap-2';
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'btn btn-outline-primary btn-sm';
+    open.textContent = 'Open rule';
+    open.setAttribute('aria-label', `Open ${name.textContent}`);
+    open.addEventListener('click', () => editRule(rule).catch((error) => status(error.message)));
+    const pause = document.createElement('button');
+    pause.type = 'button';
+    pause.className = 'btn btn-outline-secondary btn-sm';
+    pause.textContent = 'Pause rule';
+    pause.setAttribute('aria-label', `Pause ${name.textContent}`);
+    pause.addEventListener('click', () => setRulePaused(rule, true));
+    actions.append(open, pause);
+    if (item.status === 'source_quiet' && item.source) {
+      const source = document.createElement('a');
+      source.className = 'btn btn-outline-secondary btn-sm';
+      source.href = `/source.html?source=${encodeURIComponent(item.source)}&tab=insights`;
+      source.textContent = 'Source insights';
+      source.setAttribute('aria-label', `Insights for the ${item.source} source`);
+      actions.append(source);
+    }
+    card.append(heading, paragraph(item.message, 'small my-1'), actions);
+    list.append(card);
+  }
+  const consolidation = $('insights-consolidation');
+  consolidation.replaceChildren();
+  $('insights-consolidation-heading').hidden = !suggestions.length;
+  for (const item of suggestions) {
+    const card = insightCard(SUGGESTION_KIND[item.kind] || 'Suggestion');
+    const named = paragraph('Rules: ', 'small mb-1');
+    named.append(ruleLinks(item.rules));
+    card.append(paragraph(item.message), named);
+    for (const combined of item.combine || []) {
+      const example = document.createElement('div');
+      example.className = 'small mt-1';
+      const values = combined.values.map((value) => value.value).join(', ');
+      example.append(
+        `${combined.condition}: one rule could match ${values} with the pattern `,
+        Object.assign(document.createElement('code'), { textContent: combined.pattern }),
+        ' (',
+        ruleLinks(combined.rules),
+        ').',
+      );
+      card.append(example);
+    }
+    consolidation.append(card);
+  }
+  const shared = $('insights-overlaps');
+  shared.replaceChildren();
+  $('insights-overlaps-heading').hidden = !overlaps.length;
+  for (const item of overlaps) {
+    const card = insightCard();
+    const named = paragraph('Rules: ', 'small mb-0');
+    named.append(ruleLinks(item.rules));
+    card.append(paragraph(item.message), named);
+    shared.append(card);
+  }
+}
+async function loadInsights() {
+  const request = ++insightsRequest;
+  try {
+    const data = await apiGet(`${apiRoot}/mapping-rules/insights`);
+    if (request !== insightsRequest) return;
+    insights = data;
+    renderInsights();
+    renderRules();
+  } catch (error) {
+    if (request !== insightsRequest) return;
+    insights = null;
+    renderInsights();
+    $('insights-meta').textContent = `Rule insights are unavailable: ${error.message}`;
+  }
+}
+// Pausing keeps a rule and its mappings; Keen skips it for new events until it resumes.
+async function setRulePaused(rule, paused) {
+  const name = rule.description || rule.id;
+  // The editor saves rules with a source and an ID it accepts; others change in the rules YAML.
+  if (!/^[A-Za-z0-9_-]{1,96}$/.test(rule.id) || !rule.when?.source?.trim()) {
+    status(
+      `${name} cannot be ${paused ? 'paused' : 'resumed'} here: it has no source, or its ID uses characters the editor does not accept. Set enabled: ${!paused} for it in the rules YAML instead.`,
+    );
+    return;
+  }
+  const confirmed = await confirmAction(
+    paused
+      ? {
+          title: 'Pause mapping rule',
+          message: `Pause ${name}? Keen stops checking new events against it until you resume it. Its existing mappings stay.`,
+          confirmLabel: 'Pause',
+        }
+      : {
+          title: 'Resume mapping rule',
+          message: `Resume ${name}? Keen checks new events against it again.`,
+          confirmLabel: 'Resume',
+        },
+  );
+  if (!confirmed) return;
+  const applyExisting =
+    !paused &&
+    (await confirmAction({
+      title: 'Map events collected while paused',
+      message: `Also check the events already collected for ${name}, including those that arrived while it was paused, and map the ones it matches? Choosing New events only leaves them unmapped.`,
+      confirmLabel: 'Map existing events',
+      cancelLabel: 'New events only',
+    }));
+  try {
+    const saved = await apiPut(`${apiRoot}/mapping-rules/${encodeURIComponent(rule.id)}`, {
+      version: ruleVersion,
+      rule: { ...rule, enabled: !paused },
+      apply_existing: applyExisting,
+    });
+    await loadRules();
+    status(
+      paused
+        ? `${name} is paused. Its existing mappings stay.`
+        : saved.backfill?.status === 'no_previous_evidence'
+          ? `${name} is active again. There were no earlier events to check.`
+          : saved.backfill
+            ? `${name} is active again. Keen is checking existing events in the background; open the rule to follow progress.`
+            : `${name} is active again for new events.`,
+      'success',
+    );
+  } catch (error) {
+    status(error.message);
   }
 }
 // Framework clauses are also catalogue rows (type "clause"), so a clause and a
@@ -1148,6 +1377,7 @@ async function loadRules({ resetEditor = true } = {}) {
     $('source-filter').add(new Option(source, source));
   $('source-filter').value = selectedSource;
   renderRules();
+  loadInsights();
   if (resetEditor) {
     await newRule({ openEditor: false });
     showLibrary();
@@ -1381,6 +1611,16 @@ $('suggest-controls').addEventListener('click', async () => {
     status(error.message);
   }
 });
+// A previewed event, opened in a new tab so the rule being written stays open.
+function previewEventLink(item) {
+  const link = document.createElement('a');
+  link.className = 'alert-link';
+  link.href = `/event.html?id=${encodeURIComponent(item.event_id)}`;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = item.summary || 'Event without a summary';
+  return link;
+}
 $('preview').addEventListener('click', async () => {
   try {
     const rule = readRule();
@@ -1392,6 +1632,13 @@ $('preview').addEventListener('click', async () => {
     const heading = document.createElement('p');
     heading.textContent = `${data.matched} of ${data.examined} recent ${rule.when.source} events matched. ${data.note || ''}`;
     container.append(heading);
+    if (data.examples.length || data.nonmatches?.length) {
+      const hint = document.createElement('p');
+      hint.className = 'small-muted';
+      hint.textContent =
+        'Open an event in a new tab to compare its payload with the rule, then preview again.';
+      container.append(hint);
+    }
     for (const item of data.examples) {
       const p = document.createElement('p');
       p.className = 'alert alert-success py-2 mb-2';
@@ -1400,13 +1647,17 @@ $('preview').addEventListener('click', async () => {
       maps.textContent = `Maps to ${Object.entries(item.targets)
         .map(([fw, refs]) => `${frameworkLabel(fw)} (${refs.join(', ')})`)
         .join('; ')}`;
-      p.append(`Matches: ${item.summary}`, maps);
+      p.append('Matches: ', previewEventLink(item), maps);
       container.append(p);
     }
     for (const item of data.nonmatches || []) {
       const p = document.createElement('p');
       p.className = 'alert alert-warning py-2 mb-2';
-      p.textContent = `Does not match: ${item.summary}. ${(item.reasons || []).join(' ') || 'Review the additional filters.'}`;
+      p.append(
+        'Does not match: ',
+        previewEventLink(item),
+        `. ${(item.reasons || []).join(' ') || 'Review the additional filters.'}`,
+      );
       container.append(p);
     }
   } catch (error) {

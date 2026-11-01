@@ -873,3 +873,61 @@ def test_rule_history_with_duplicate_ids_cannot_be_restored(lab):
             "Duplicate rule IDs in recorded history; resolve before restoring"
         )
     assert lab.version() == current
+
+
+# --- Insights --------------------------------------------------------------------
+
+
+def test_rule_insights_follow_each_saved_version_for_administrators_only(
+    keen,  # noqa: F811 - fixture imported above
+    lab,
+    monkeypatch,
+):
+    from app.core import cache
+    from app.services import rule_insights
+
+    # Insights are cached, and a saved rule change still shows at once.
+    monkeypatch.setattr(cache.settings, "aggregate_cache_ttl_seconds", 60)
+    monkeypatch.setattr(
+        rule_insights, "utc_now_naive", lambda: datetime(2026, 3, 1, 12)
+    )
+    lab.put(_rule("deploys", action="deploy"))
+    lab.put(_rule("rollbacks", refs=("A.2",), action="rollback"))
+    for _ in range(3):
+        lab.mapping(lab.event("deploy"), "A.1")
+
+    def insights():
+        response = lab.admin.get("/v1/admin/mapping-rules/insights")
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    def statuses(body):
+        return {
+            item["id"]: (item["status"], item["window_matches"])
+            for item in body["rules"]
+        }
+
+    first = insights()
+    assert first["version"] == lab.version()
+    assert statuses(first) == {
+        "deploys": ("source_quiet", 3),
+        "rollbacks": ("silent", 0),
+    }
+    # Within the cache lifetime, new evidence alone leaves the reading as it was.
+    lab.mapping(lab.event("deploy"), "A.1")
+    assert statuses(insights()) == statuses(first)
+    # Pausing a rule saves a new version, which is read afresh.
+    lab.put({**_rule("deploys", action="deploy"), "enabled": False})
+    assert statuses(insights()) == {
+        "deploys": ("paused", 4),
+        "rollbacks": ("silent", 0),
+    }
+
+    reader = keen.client(keen.user(*BROAD_PERMISSIONS))
+    assert reader.get("/v1/admin/mapping-rules/insights").status_code == 403
+    assert keen.client().get("/v1/admin/mapping-rules/insights").status_code == 401
+    for days, code in (("3", 400), ("many", 422)):
+        response = lab.admin.get(
+            "/v1/admin/mapping-rules/insights", params={"days": days}
+        )
+        assert response.status_code == code, response.text

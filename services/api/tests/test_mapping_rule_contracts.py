@@ -6,10 +6,13 @@ target, is skipped with one logged warning, so a typo never widens what a rule
 maps.
 """
 
+import dataclasses
 import logging
 
 import pytest
+from app.core import managed_configuration
 from app.core.config import settings
+from app.db.models import ManagedConfiguration
 from app.mapping import rules as rule_parser
 from app.mapping.collector import (
     collector_id,
@@ -17,7 +20,12 @@ from app.mapping.collector import (
     event_collector,
     matches_collector,
 )
-from app.mapping.rules import evaluate_by_framework, parse_rules, rule_problem
+from app.mapping.rules import (
+    evaluate_by_framework,
+    load_rules,
+    parse_rules,
+    rule_problem,
+)
 
 
 def rule(**kwargs):
@@ -629,3 +637,120 @@ def test_labels_come_from_lists_nested_payloads_and_the_raw_pointer(when, matche
     }
 
     assert bool(matched(event, rule(when=when))) is matches
+
+
+# --- Loading ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def counted_parses(monkeypatch):
+    """Count the documents load_rules parses, starting with nothing loaded."""
+    monkeypatch.setattr(rule_parser, "_LAST_LOADED", {})
+    parsed = []
+
+    def parse_rules_counted(raw):
+        parsed.append(raw)
+        return parse_rules(raw)
+
+    monkeypatch.setattr(rule_parser, "parse_rules", parse_rules_counted)
+    return parsed
+
+
+def serve(monkeypatch, document):
+    monkeypatch.setattr(
+        managed_configuration, "load_document", lambda name, path, db=None: document
+    )
+
+
+def test_a_rules_document_is_parsed_once_until_it_changes(monkeypatch, counted_parses):
+    first = {"rules": [rule()]}
+    serve(monkeypatch, first)
+    rules = load_rules("unused.yml")
+    # Each load reads the document afresh; an equal copy reuses the parse.
+    serve(monkeypatch, {"rules": [rule()]})
+    again = load_rules("unused.yml")
+
+    assert [r.id for r in rules] == ["test"]
+    assert again == rules and again is not rules
+    assert again[0] is rules[0]
+    assert counted_parses == [first]
+
+    changed = {"rules": [rule(map_to=["C2"])]}
+    serve(monkeypatch, changed)
+    assert evaluate_by_framework({}, load_rules("unused.yml")) == {"A": ["C2"]}
+    assert counted_parses == [first, changed]
+
+
+@pytest.mark.parametrize(
+    "readable,unreadable",
+    [
+        (rule(enabled=True), rule(enabled=1)),
+        (rule(confidence=1), rule(confidence=True)),
+        (rule(when={"severity": 3}), rule(when={"severity": 3.0})),
+    ],
+    ids=["enabled", "confidence", "severity"],
+)
+def test_documents_that_compare_equal_but_read_differently_are_each_parsed(
+    monkeypatch, counted_parses, readable, unreadable
+):
+    # Python compares these documents as equal; only the first can be read.
+    assert readable == unreadable
+    assert rule_problem(readable) is None and rule_problem(unreadable)
+    serve(monkeypatch, {"rules": [readable]})
+    assert [r.id for r in load_rules("unused.yml")] == ["test"]
+    serve(monkeypatch, {"rules": [unreadable]})
+    assert load_rules("unused.yml") == []
+    assert len(counted_parses) == 2
+
+
+def test_a_new_default_framework_reparses_rules_that_name_none(
+    monkeypatch, counted_parses
+):
+    serve(monkeypatch, {"rules": [{"id": "bare", "when": {}, "map_to": ["C1"]}]})
+    monkeypatch.setattr(settings, "default_framework_slug", "A")
+    assert evaluate_by_framework({}, load_rules("unused.yml")) == {"A": ["C1"]}
+    monkeypatch.setattr(settings, "default_framework_slug", "B")
+    assert evaluate_by_framework({}, load_rules("unused.yml")) == {"B": ["C1"]}
+    assert len(counted_parses) == 2
+
+
+def test_shared_rules_cannot_be_changed_by_a_caller(monkeypatch, counted_parses):
+    serve(monkeypatch, {"rules": [rule(), rule(id="other")]})
+    rules = load_rules("unused.yml")
+    rules.pop()
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        rules[0].confidence = 0.1
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        rules[0].when.source = "anything"
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        rules[0].targets[0].ref = "C9"
+
+    assert [r.id for r in load_rules("unused.yml")] == ["test", "other"]
+    assert len(counted_parses) == 1
+
+
+def test_a_rolled_back_document_is_not_reused_under_its_version(
+    contract_db, monkeypatch, counted_parses
+):
+    contract_db.add(
+        ManagedConfiguration(name="rules", document={"rules": [rule()]}, version=1)
+    )
+    contract_db.flush()
+    assert [r.id for r in load_rules("unused.yml", db=contract_db)] == ["test"]
+
+    # A save that rolls back leaves its version number free for the next save.
+    savepoint = contract_db.begin_nested()
+    stored = contract_db.get(ManagedConfiguration, "rules")
+    stored.document = {"rules": [rule(id="abandoned")]}
+    stored.version = 2
+    contract_db.flush()
+    assert [r.id for r in load_rules("unused.yml", db=contract_db)] == ["abandoned"]
+    savepoint.rollback()
+
+    stored = contract_db.get(ManagedConfiguration, "rules")
+    assert [r.id for r in load_rules("unused.yml", db=contract_db)] == ["test"]
+    stored.document = {"rules": [rule(id="saved")]}
+    stored.version = 2
+    contract_db.flush()
+    assert [r.id for r in load_rules("unused.yml", db=contract_db)] == ["saved"]
+    assert len(counted_parses) == 4

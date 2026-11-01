@@ -309,7 +309,7 @@ def run_scan(db: Session, filters: EventFilters, query):
             f"The database does not support this regular expression: {_reason(exc)}",
         ) from None
     except OperationalError as exc:
-        if not _cancelled(exc):
+        if not statement_cancelled(exc):
             raise
         db.rollback()
         raise DomainError(
@@ -319,7 +319,7 @@ def run_scan(db: Session, filters: EventFilters, query):
         ) from None
 
 
-def _cancelled(exc: OperationalError) -> bool:
+def statement_cancelled(exc: OperationalError) -> bool:
     """True for PostgreSQL's statement-timeout cancellation (SQLSTATE 57014)."""
     orig = getattr(exc, "orig", None)
     code = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
