@@ -138,6 +138,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0036_control_owners",
         "0035_notification_delivery",
         "0034_inbox_measure_outside",
         "0033_inbox_items",

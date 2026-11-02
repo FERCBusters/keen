@@ -11,6 +11,7 @@ from app.core.references import control_upstream_url as _upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
 from app.core.references import try_uuid
 from app.db.models import ControlClauseLink, ControlItem, FrameworkClause
+from app.services.control_owners import owners_of
 from app.services.control_refs import clause_summary
 from app.services.entity_changelog import list_entity_changelogs
 from app.services.errors import DomainError
@@ -136,7 +137,15 @@ def get_clause(*, clause_id: str, db: Session):
     row = db.query(FrameworkClause).filter(FrameworkClause.id == cid).one_or_none()
     if not row:
         raise DomainError(status_code=404, detail="Clause not found")
-    return _clause_out(row, _control_link_count(db, row.id))
+    return _clause_detail(db, row)
+
+
+def _clause_detail(db: Session, clause: FrameworkClause) -> dict:
+    """A clause with its linked-control count and its owners."""
+    return {
+        **_clause_out(clause, _control_link_count(db, clause.id)),
+        "owners": owners_of(db, clause_id=clause.id),
+    }
 
 
 def clause_changelog(*, clause_id: str, limit: int = 50, offset: int = 0, db: Session):
@@ -192,7 +201,7 @@ def clause_controls(*, clause_id: str, limit: int = 5000, offset: int = 0, db: S
     items.sort(key=lambda it: (it["type"], _ref_sort_key(it["ref"])))
     total = len(items)
     return {
-        "clause": _clause_out(clause, _control_link_count(db, clause.id)),
+        "clause": _clause_detail(db, clause),
         "total": total,
         "limit": limit,
         "offset": offset,

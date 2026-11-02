@@ -57,8 +57,20 @@ const clauseTree = {
   ],
 };
 
+const accounts = [
+  { id: 'u1', username: 'dana', is_active: true },
+  { id: 'u2', username: 'left', is_active: false },
+  { id: 'u3', username: '<b>erin</b>', is_active: true },
+];
+
 async function controlPage(t, options = {}) {
-  const state = { control: options.control || baseControl(), patched: [], posted: [], removed: [] };
+  const state = {
+    control: options.control || baseControl(),
+    patched: [],
+    posted: [],
+    put: [],
+    removed: [],
+  };
   const fail = options.fail || {};
   const empty = options.empty || {};
   const query = options.query ?? '&id=c1&tab=evidence';
@@ -249,6 +261,10 @@ async function controlPage(t, options = {}) {
           ],
         };
       }
+      if (p === '/api/v1/users') {
+        if (fail.users) throw new Error('Users offline');
+        return structuredClone(accounts);
+      }
       if (p === '/api/v1/clauses') {
         if (fail.clauses) throw new Error('Clauses offline');
         if (empty.clauseTree) return { items: [], tree: [] };
@@ -293,6 +309,12 @@ async function controlPage(t, options = {}) {
       state.posted.push({ path: u.pathname, body: plain(b) });
       if (fail.post) throw new Error('Post refused');
       return { ok: true };
+    },
+    put: async (u, b) => {
+      state.put.push({ path: u.pathname, body: plain(b) });
+      if (fail.put) throw new Error('Owners refused');
+      const owners = accounts.filter((a) => b.user_ids.includes(a.id));
+      return { owners: owners.map(({ id, username }) => ({ id, username })) };
     },
     remove: async (u) => {
       state.removed.push(u.pathname);
@@ -1211,4 +1233,80 @@ test('a deep link to Governance loads its linked records as the page starts', as
   });
   await settle(() => ui.el('risksView').querySelectorAll('tbody tr').length === 2);
   assert.equal(ui.el('risksCount').textContent, '2');
+});
+
+test('administrators choose owners from active accounts, loaded when the editor opens', async (t) => {
+  const { ui, state } = await controlPage(t, {
+    query: '&id=c1&tab=governance',
+    control: baseControl({ owners: [{ id: 'u1', username: 'dana' }] }),
+  });
+  await settle(() => /Justification changed/.test(ui.el('controlChangelog').textContent));
+  assert.match(ui.el('ownersList').textContent, /dana/);
+  assert.match(ui.el('ctrlMeta').textContent, /Owners: dana$/);
+  assert.equal(ui.el('ownersEdit').hidden, false);
+  assert.equal(ui.el('ownersEditor').hidden, true);
+  const users = () => ui.calls.filter((c) => c.url === '/api/v1/users').length;
+  assert.equal(users(), 0, 'accounts load only when the editor opens');
+
+  ui.el('ownersEdit').click();
+  await settle(() => !ui.el('ownersEditor').hidden);
+  const options = [...ui.el('ownersSelect').options];
+  assert.deepEqual(
+    options.map((o) => [o.value, o.textContent, o.selected]),
+    [
+      ['u1', 'dana', true],
+      ['u3', '<b>erin</b>', false],
+    ],
+  );
+  assert.equal(ui.el('ownersEdit').textContent, 'Hide edit');
+  options[0].selected = false;
+  options[1].selected = true;
+  const changelogs = ui.calls.filter((c) => c.url.includes('/changelog')).length;
+  ui.el('ownersSave').click();
+  await settle(() => /Owners saved/.test(ui.el('status').textContent));
+  assert.deepEqual(state.put, [
+    { path: '/api/v1/admin/controls/c1/owners', body: { user_ids: ['u3'] } },
+  ]);
+  assert.equal(ui.el('ownersList').querySelector('b'), null);
+  assert.match(ui.el('ownersList').textContent, /<b>erin<\/b>/);
+  assert.match(ui.el('ctrlMeta').textContent, /Owners: <b>erin<\/b>$/);
+  assert.equal(ui.el('ownersEditor').hidden, true);
+  await settle(() => ui.calls.filter((c) => c.url.includes('/changelog')).length > changelogs);
+
+  // Reopening reuses the accounts already loaded.
+  ui.el('ownersEdit').click();
+  await settle(() => !ui.el('ownersEditor').hidden);
+  assert.deepEqual(
+    [...ui.el('ownersSelect').selectedOptions].map((o) => o.value),
+    ['u3'],
+  );
+  assert.equal(users(), 1);
+  ui.el('ownersEdit').click();
+  assert.equal(ui.el('ownersEditor').hidden, true);
+});
+
+test('owners are read-only for readers, and failed loads and saves are reported', async (t) => {
+  const reader = await controlPage(t, { query: '&id=c1', me: { can_view_controls: true } });
+  assert.equal(reader.ui.el('ownersList').textContent, 'No owners yet.');
+  assert.equal(reader.ui.el('ownersEdit').hidden, true);
+
+  const offline = await controlPage(t, { query: '&id=c1&tab=governance', fail: { users: true } });
+  offline.ui.el('ownersEdit').click();
+  await settle(() => /Users offline/.test(offline.ui.el('status').textContent));
+  assert.equal(
+    offline.ui.el('status').textContent,
+    'Failed to load accounts for owners: Users offline',
+  );
+  assert.equal(offline.ui.el('ownersEditor').hidden, true);
+  assert.equal(offline.ui.el('ownersEdit').disabled, false);
+
+  const refused = await controlPage(t, { query: '&id=c1&tab=governance', fail: { put: true } });
+  refused.ui.el('ownersEdit').click();
+  await settle(() => !refused.ui.el('ownersEditor').hidden);
+  refused.ui.el('ownersSave').click();
+  await settle(() => /Owners refused/.test(refused.ui.el('status').textContent));
+  assert.equal(refused.ui.el('status').textContent, 'Failed to save owners: Owners refused');
+  assert.equal(refused.ui.el('ownersEditor').hidden, false);
+  assert.equal(refused.ui.el('ownersSave').disabled, false);
+  assert.deepEqual(refused.state.put[0].body, { user_ids: [] });
 });

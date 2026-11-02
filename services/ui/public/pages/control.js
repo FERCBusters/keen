@@ -2,6 +2,7 @@ import { featureEnabled } from '/pages/feature-availability.js';
 import { createRelatedControlsBrowser } from './related-controls.js';
 import { createControlRequirements } from './control-requirements.js';
 import { scoreBadge } from '/pages/risk-common.js';
+import { mountOwners, ownerNames } from '/pages/owners.js';
 import {
   errorText,
   initNavbar,
@@ -278,7 +279,9 @@ function renderControlChrome() {
   if (titleEl) titleEl.textContent = `${ctrl.ref}  ${ctrl.title || ''}`.trim();
   const bits = [ctrl.framework, ctrl.type, ctrl.in_scope ? 'in scope' : 'out of scope'];
   if (ctrl.justification) bits.push(`Justification: ${ctrl.justification}`);
+  if (ctrl.owners?.length) bits.push(`Owners: ${ownerNames(ctrl.owners)}`);
   if (metaEl) metaEl.textContent = bits.filter(Boolean).join(' · ');
+  owners.show(ctrl.owners || []);
   let description = document.getElementById('osaControlDescription');
   if (!description && metaEl) {
     description = document.createElement('div');
@@ -312,6 +315,17 @@ function renderControlChrome() {
     }
   }
 }
+
+const owners = mountOwners({
+  me,
+  status,
+  path: () => `/api/v1/admin/controls/${encodeURIComponent(id)}/owners`,
+  onSaved: (saved) => {
+    ctrl.owners = saved;
+    renderControlChrome();
+    loadControlChangelog();
+  },
+});
 
 function renderControlJustificationCard() {
   if (!controlJustificationCard) return;

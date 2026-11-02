@@ -1,4 +1,5 @@
 import { featureEnabled } from '/pages/feature-availability.js';
+import { mountOwners, ownerNames } from '/pages/owners.js';
 import {
   fmtTs,
   errorText,
@@ -312,11 +313,24 @@ function renderEvidenceMapping() {
   if (me?.is_admin && evidenceEditMode) renderEvidenceEditor();
 }
 
+const owners = mountOwners({
+  me,
+  status,
+  path: () => `/api/v1/admin/clauses/${encodeURIComponent(id)}/owners`,
+  onSaved: (saved) => {
+    clause = { ...clause, owners: saved };
+    renderClauseHeader();
+    loadClauseChangelog();
+  },
+});
+
 function renderClauseHeader() {
   clauseTitle.textContent = `${clause?.ref || ''}  ${clause?.title || ''}`.trim() || 'Clause';
   const parts = [clause?.framework || framework];
   if (clause?.parent_ref) parts.push(`parent ${clause.parent_ref}`);
+  if (clause?.owners?.length) parts.push(`Owners: ${ownerNames(clause.owners)}`);
   clauseMeta.textContent = parts.filter(Boolean).join(' · ') || '-';
+  owners.show(clause?.owners || []);
   if (clausesBreadcrumb)
     clausesBreadcrumb.href = withFramework('/clauses.html', clause?.framework || framework);
 

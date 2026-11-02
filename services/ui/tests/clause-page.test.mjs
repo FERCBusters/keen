@@ -36,6 +36,7 @@ async function clausePage(t, options = {}) {
       { id: 'c1', ref: 'A1', title: 'Access', applicability: 'applicable', in_scope: false },
     ],
     patched: [],
+    put: [],
   };
   const fail = options.fail || {};
   const ui = await page(t, 'clause', {
@@ -85,6 +86,7 @@ async function clausePage(t, options = {}) {
           ],
         };
       }
+      if (p === '/api/v1/users') return [{ id: 'u1', username: 'dana', is_active: true }];
       if (p === '/api/v1/clauses/k1/isms') {
         if (fail.isms) throw new Error('ISMS offline');
         return {
@@ -114,6 +116,10 @@ async function clausePage(t, options = {}) {
           : { ok: true };
       }
       throw new Error('Unexpected PATCH ' + u);
+    },
+    put: async (u, b) => {
+      state.put.push({ path: u.pathname, body: plain(b) });
+      return { owners: b.user_ids.map((id) => ({ id, username: 'dana' })) };
     },
   });
   await settle(() => ui.el('controlsMeta').textContent || ui.el('status').textContent);
@@ -384,4 +390,28 @@ test('a control catalogue that cannot load is reported when editing linked contr
   assert.equal(ui.el('status').textContent, 'Failed to load controls: Catalogue offline');
   assert.equal(ui.el('status').dataset.alert, 'danger');
   assert.equal(ui.el('adminControlsList').querySelector('select'), null);
+});
+
+test("a clause's owners show in its header, and administrators change them", async (t) => {
+  const { ui, state } = await clausePage(t, {
+    clause: clause({ owners: [{ id: 'u9', username: '<i>sam</i>' }] }),
+  });
+  assert.equal(ui.el('clauseMeta').textContent, 'A · parent 6.1 · Owners: <i>sam</i>');
+  assert.equal(ui.el('ownersList').querySelector('i'), null);
+  ui.el('ownersEdit').click();
+  await settle(() => !ui.el('ownersEditor').hidden);
+  ui.el('ownersSelect').options[0].selected = true;
+  ui.el('ownersSave').click();
+  await settle(() => /Owners saved/.test(ui.el('status').textContent));
+  assert.deepEqual(state.put, [
+    { path: '/api/v1/admin/clauses/k1/owners', body: { user_ids: ['u1'] } },
+  ]);
+  assert.equal(ui.el('clauseMeta').textContent, 'A · parent 6.1 · Owners: dana');
+  await settle(
+    () => ui.calls.filter((c) => c.url.startsWith('/api/v1/clauses/k1/changelog')).length === 2,
+  );
+
+  const reader = await clausePage(t, { me: { can_view_controls: true } });
+  assert.equal(reader.ui.el('ownersEdit').hidden, true);
+  assert.equal(reader.ui.el('ownersList').textContent, 'No owners yet.');
 });

@@ -13,6 +13,7 @@ from app.core.references import ref_sort_key as _ref_sort_key
 from app.db.models import (
     ControlClauseLink,
     ControlItem,
+    ControlOwner,
     EntityChangelog,
     FrameworkClause,
     PestleBusinessProcess,
@@ -116,6 +117,7 @@ _CHANGE_FIELD_LABELS = {
     "justification": "Justification",
     "note": "Note",
     "owner": "Owner",
+    "owners": "Owners",
     "owner_user_id": "Owner",
     "parent": "Parent clause",
     "ref": "Reference",
@@ -374,8 +376,19 @@ def control_changelog_state(
     return {
         **control_summary(control),
         "clauses": _control_clause_links(db, control.id),
+        "owners": _owner_names(db, ControlOwner.control_item_id, control.id),
         "created_at": control.created_at.isoformat() if control.created_at else None,
     }
+
+
+def _owner_names(db: Session, column, target_id: uuid.UUID) -> list[str]:
+    return [
+        name
+        for (name,) in db.query(User.username)
+        .join(ControlOwner, ControlOwner.user_id == User.id)
+        .filter(column == target_id)
+        .order_by(User.username)
+    ]
 
 
 def _clause_controls(db: Session, clause_id: uuid.UUID) -> list[dict[str, Any]]:
@@ -439,6 +452,7 @@ def clause_changelog_state(
         "upstream_url": _control_upstream_url(clause),
         "evidence_mappings": _clause_evidence_mappings(clause),
         "controls": _clause_controls(db, clause.id),
+        "owners": _owner_names(db, ControlOwner.clause_id, clause.id),
         "created_at": clause.created_at.isoformat() if clause.created_at else None,
         "updated_at": clause.updated_at.isoformat() if clause.updated_at else None,
     }

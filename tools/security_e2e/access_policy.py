@@ -247,6 +247,7 @@ POLICY = {
     "GET /v1/admin/bookstack/catalog": ADMIN,
     "PATCH /v1/admin/clauses/{clause_id}/controls": ADMIN,
     "PATCH /v1/admin/clauses/{clause_id}/evidence-urls": ADMIN,
+    "PUT /v1/admin/clauses/{clause_id}/owners": ADMIN,
     "PATCH /v1/admin/clauses/{clause_id}/upstream-url": ADMIN,
     "GET /v1/admin/configuration-revisions/{name}": ADMIN,
     "POST /v1/admin/configuration-revisions/{name}/{revision}/restore": ADMIN,
@@ -254,6 +255,7 @@ POLICY = {
     "POST /v1/admin/controls/import": ADMIN,
     "PATCH /v1/admin/controls/{control_id}/clauses": ADMIN,
     "PATCH /v1/admin/controls/{control_id}/justification": ADMIN,
+    "PUT /v1/admin/controls/{control_id}/owners": ADMIN,
     "PATCH /v1/admin/controls/{control_id}/upstream-url": ADMIN,
     "POST /v1/admin/diary": ADMIN,
     "PATCH /v1/admin/diary/{event_id}": ADMIN,
@@ -664,6 +666,7 @@ POLICY = {
     # --- The signed-in user's own data ---------------------------------------------
     "GET /v1/me": SIGNED_IN,
     "GET /v1/me/audits": SIGNED_IN,
+    "GET /v1/me/controls": SIGNED_IN,
     "GET /v1/me/inbox": SIGNED_IN,
     "POST /v1/me/inbox/read-all": SIGNED_IN,
     "GET /v1/me/inbox/summary": SIGNED_IN,

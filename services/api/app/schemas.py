@@ -122,6 +122,10 @@ class ControlImportPayload(BaseModel):
     items: list[ControlImportItem]
 
 
+class OwnersPayload(BaseModel):
+    user_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
+
+
 class ControlJustificationPayload(BaseModel):
     justification: str | None = Field(default=None, max_length=128)
 

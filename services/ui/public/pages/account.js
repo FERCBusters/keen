@@ -692,6 +692,26 @@ document.getElementById('myQuestionsTbody')?.addEventListener('click', async (ev
 });
 
 // ---------------------------------------------------------------------------
+// My controls
+// ---------------------------------------------------------------------------
+
+function myControlRow(item) {
+  const clause = item?.kind === 'clause';
+  const href = withFramework(
+    `/${clause ? 'clause' : 'control'}.html?id=${encodeURIComponent(item?.id || '')}`,
+    item?.framework || getCurrentFramework(),
+  );
+  const scope = clause ? '-' : item?.in_scope ? 'In scope' : 'Out of scope';
+  return `<tr>
+    <td><a class="fw-semibold" href="${esc(href)}">${esc(item?.ref || '-')}</a></td>
+    <td class="wrap">${esc(item?.title || '-')}</td>
+    <td class="small-muted">${esc(item?.framework_name || item?.framework || '-')}</td>
+    <td>${clause ? 'Clause' : 'Control'}</td>
+    <td class="small-muted">${esc(scope)}</td>
+  </tr>`;
+}
+
+// ---------------------------------------------------------------------------
 // My audits
 // ---------------------------------------------------------------------------
 
@@ -870,6 +890,14 @@ const accountLists = {
       myQuestionRowHtml(item, { framework: getCurrentFramework(), canDelete: canDeleteQuestions }),
     // Keep the navbar's question count in step with the list.
     onLoaded: () => window.keenRefreshBell?.(),
+  }),
+  '#my-controls-pane': accountList({
+    prefix: 'myControls',
+    feature: 'controls',
+    endpoint: '/api/v1/me/controls',
+    noun: 'controls',
+    columns: 5,
+    row: myControlRow,
   }),
   '#my-audits-pane': accountList({
     prefix: 'myAudits',

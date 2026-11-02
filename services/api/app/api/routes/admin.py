@@ -24,13 +24,14 @@ from app.schemas import (
     GroupOut,
     GroupPermissionsPayload,
     GroupUpdatePayload,
+    OwnersPayload,
     PermissionCreatePayload,
     PermissionOut,
     UpstreamUrlPayload,
 )
 from app.security.auth import require_admin, require_authenticated
 from app.services import admin as service
-from app.services import cloud_posture
+from app.services import cloud_posture, control_owners
 from app.services.presentation import (
     normalize_diary_details as _normalize_diary_details,
 )
@@ -71,6 +72,36 @@ def admin_update_control_justification(
 ):
     return service.admin_update_control_justification(
         control_id=control_id, payload=payload, user=user, db=db
+    )
+
+
+@router.put("/v1/admin/controls/{control_id}/owners")
+def admin_set_control_owners(
+    control_id: str,
+    payload: OwnersPayload,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    "Choose the people answerable for a control."
+    return control_owners.set_owners(
+        kind="control",
+        target_id=control_id,
+        user_ids=payload.user_ids,
+        user=user,
+        db=db,
+    )
+
+
+@router.put("/v1/admin/clauses/{clause_id}/owners")
+def admin_set_clause_owners(
+    clause_id: str,
+    payload: OwnersPayload,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    "Choose the people answerable for a clause."
+    return control_owners.set_owners(
+        kind="clause", target_id=clause_id, user_ids=payload.user_ids, user=user, db=db
     )
 
 

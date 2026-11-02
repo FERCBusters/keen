@@ -19,7 +19,7 @@
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
         <h1 class="h3 mb-1">Account</h1>
-        <div class="small-muted">Manage your preferences, security, saved searches, questions, audits, meetings and risks.</div>
+        <div class="small-muted">Manage your preferences, security, saved searches, questions, audits, controls, meetings and risks.</div>
       </div>
       <div class="d-flex gap-2">
         <button id="logoutBtn" class="btn btn-outline-primary" type="button">Logout</button>
@@ -43,6 +43,9 @@
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="my-audits-tab" data-feature="audits" data-bs-toggle="tab" data-bs-target="#my-audits-pane" type="button" role="tab" aria-controls="my-audits-pane" aria-selected="false" data-tab-hash="#my-audits">My audits</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-controls-tab" data-feature="controls" data-bs-toggle="tab" data-bs-target="#my-controls-pane" type="button" role="tab" aria-controls="my-controls-pane" aria-selected="false" data-tab-hash="#my-controls">My controls</button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="my-quizzes-tab" data-feature="quizzes" data-bs-toggle="tab" data-bs-target="#my-quizzes-pane" type="button" role="tab" aria-controls="my-quizzes-pane" aria-selected="false" data-tab-hash="#my-quizzes">My quizzes</button>
@@ -220,6 +223,36 @@
                   </tr>
                 </thead>
                 <tbody id="myQuestionsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="my-controls-pane" role="tabpanel" aria-labelledby="my-controls-tab" tabindex="0">
+        <div id="myControlsStatus" class="alert alert-info" style="display:none;" role="status"></div>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-semibold">My controls</div>
+              <div class="small-muted">Controls and clauses you own, in every framework.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="myControlsRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          </div>
+          <div class="card-body">
+            <div id="myControlsEmpty" class="small-muted" style="display:none;">You do not own any controls or clauses yet. Administrators choose owners on a control's Governance tab or a clause's page.</div>
+            <div class="table-responsive" id="myControlsTableWrap" style="display:none;">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Reference</th>
+                    <th>Title</th>
+                    <th>Framework</th>
+                    <th>Kind</th>
+                    <th>Scope</th>
+                  </tr>
+                </thead>
+                <tbody id="myControlsTbody"></tbody>
               </table>
             </div>
           </div>

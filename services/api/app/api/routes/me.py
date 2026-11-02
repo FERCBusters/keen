@@ -13,6 +13,8 @@ from app.schemas import (
     SavedSearchCreatePayload,
     SavedSearchOut,
 )
+from app.security.auth import require_authenticated
+from app.services import control_owners
 from app.services import me as service
 
 router = Router()
@@ -85,3 +87,9 @@ def change_my_password(
     return service.change_my_password(
         payload=payload, context=change_context(request), db=db
     )
+
+
+@router.get("/v1/me/controls")
+def my_controls(user=Depends(require_authenticated), db: Session = Depends(get_db)):
+    "The controls and clauses the signed-in person owns."
+    return control_owners.my_controls(user=user, db=db)

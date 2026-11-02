@@ -348,6 +348,43 @@ class FrameworkClause(Base):
     )
 
 
+class ControlOwner(Base):
+    """A person answerable for a control or a clause; each has any number."""
+
+    __tablename__ = "control_owners"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    control_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("control_items.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    clause_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("framework_clauses.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(control_item_id IS NULL) <> (clause_id IS NULL)",
+            name="ck_control_owners_target",
+        ),
+        UniqueConstraint(
+            "control_item_id", "user_id", name="uq_control_owners_control"
+        ),
+        UniqueConstraint("clause_id", "user_id", name="uq_control_owners_clause"),
+        Index("ix_control_owners_user", "user_id"),
+    )
+
+
 class ControlClauseLink(Base):
     __tablename__ = "control_clause_links"
 

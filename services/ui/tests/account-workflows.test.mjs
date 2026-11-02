@@ -41,6 +41,19 @@ const lists = {
     },
     { id: 'a2', status: 'completed' },
   ],
+  '/api/v1/me/controls': [
+    {
+      kind: 'control',
+      id: 'c/1',
+      framework: 'B',
+      framework_name: HOSTILE + 'Annex',
+      ref: 'A.5.17',
+      title: 'Authentication information',
+      in_scope: true,
+    },
+    { kind: 'control', id: 'c2', framework: 'B', ref: 'A.8.1', in_scope: false },
+    { kind: 'clause', id: 'k1', framework: 'A', ref: '9.2', title: 'Internal audit' },
+  ],
   '/api/v1/me/risks': [
     {
       id: 'r1',
@@ -281,7 +294,7 @@ test('question deletion respects confirmation, permissions and failures', async 
   assert.equal(reader.ui.el('myQuestionsTbody').querySelector('[data-delete-question]'), null);
 });
 
-test('my audits and risks show status, roles and score bands', async (t) => {
+test('my audits, controls and risks show status, roles, scope and score bands', async (t) => {
   const { ui, state } = await account(t);
   showTab(ui, 'my-audits-tab');
   await settle(() => ui.el('myAuditsTbody').querySelectorAll('tr').length === 2);
@@ -302,6 +315,29 @@ test('my audits and risks show status, roles and score bands', async (t) => {
   showTab(ui, 'my-audits-tab');
   ui.el('myAuditsRefresh').click();
   await settle(() => state.gets.filter((g) => g === '/api/v1/me/audits').length === 2);
+
+  showTab(ui, 'my-controls-tab');
+  await settle(() => ui.el('myControlsTbody').querySelectorAll('tr').length === 3);
+  const owned = [...ui.el('myControlsTbody').querySelectorAll('tr')];
+  assert.deepEqual(
+    owned.map((row) => row.querySelector('a').getAttribute('href')),
+    [
+      '/control.html?id=c%2F1&framework=B',
+      '/control.html?id=c2&framework=B',
+      '/clause.html?id=k1&framework=A',
+    ],
+  );
+  assert.deepEqual(
+    owned.map((row) => [...row.cells].map((c) => c.textContent.trim())),
+    [
+      ['A.5.17', 'Authentication information', HOSTILE + 'Annex', 'Control', 'In scope'],
+      ['A.8.1', '-', 'B', 'Control', 'Out of scope'],
+      ['9.2', 'Internal audit', 'A', 'Clause', '-'],
+    ],
+  );
+  assert.equal(ui.el('myControlsTbody').querySelector('img'), null);
+  ui.el('myControlsRefresh').click();
+  await settle(() => state.gets.filter((g) => g === '/api/v1/me/controls').length === 2);
 
   showTab(ui, 'my-risks-tab');
   await settle(() => ui.el('myRisksTbody').querySelectorAll('tr').length === 2);
@@ -431,6 +467,15 @@ for (const [tab, endpoint, tbody, empty, wrap, statusId, message] of [
     'Failed to load ISMS meetings: Offline',
   ],
   [
+    'my-controls-tab',
+    '/api/v1/me/controls',
+    'myControlsTbody',
+    'myControlsEmpty',
+    'myControlsTableWrap',
+    'myControlsStatus',
+    'Failed to load controls: Offline',
+  ],
+  [
     'my-isms-objectives-tab',
     '/api/v1/me/isms-objectives',
     'myIsmsObjectivesTbody',
@@ -481,6 +526,7 @@ test('disabled features skip their account lists', async (t) => {
     enabled: {
       questions: false,
       audits: false,
+      controls: false,
       risk_cia: false,
       meetings: false,
       objectives: false,
@@ -492,6 +538,7 @@ test('disabled features skip their account lists', async (t) => {
   for (const tab of [
     'my-questions-tab',
     'my-audits-tab',
+    'my-controls-tab',
     'my-risks-tab',
     'my-meetings-tab',
     'my-isms-objectives-tab',
@@ -513,6 +560,7 @@ test("each tab's own hash opens it, and an unknown hash opens the default tab", 
     ['#saved-searches', 'saved-searches-tab'],
     ['#my-questions', 'my-questions-tab'],
     ['#my-audits', 'my-audits-tab'],
+    ['#my-controls', 'my-controls-tab'],
     ['#my-meetings', 'my-meetings-tab'],
     ['#my-risks', 'my-risks-tab'],
     ['#my-isms-objectives', 'my-isms-objectives-tab'],

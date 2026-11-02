@@ -28,6 +28,7 @@ from app.security.diary_visibility import (
 from app.security.redaction import redact_obj as _redact_obj
 from app.security.redaction import redact_str as _redact_str
 from app.services.control_inheritance import inherited_control_ids
+from app.services.control_owners import owners_of
 from app.services.control_refs import control_summary
 from app.services.entity_changelog import list_entity_changelogs
 from app.services.errors import DomainError
@@ -98,6 +99,7 @@ def get_control(*, control_id: str, db: Session):
         "tags": c.tags,
         "metadata": c.meta,
         "clauses": clauses,
+        "owners": owners_of(db, control_id=c.id),
         "created_at": c.created_at.isoformat() if c.created_at else None,
     }
 
