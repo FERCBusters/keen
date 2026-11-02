@@ -3,13 +3,15 @@
 [![Backend coverage](https://github.com/FERCBusters/keen/raw/badges/coverage-api.svg)](https://github.com/FERCBusters/keen/actions/workflows/tests.yml?query=branch%3Amain)
 [![Frontend coverage](https://github.com/FERCBusters/keen/raw/badges/coverage-ui.svg)](https://github.com/FERCBusters/keen/actions/workflows/tests.yml?query=branch%3Amain)
 
-Keen brings operational evidence, assurance frameworks, risk management and ISMS records into one workspace. It collects activity from your systems, maps evidence to controls based on matching structural fields found in the data ingested, and helps people review that evidence during audits.
+KEEN is an open-source, **evidence-first** ISMS and compliance platform. It continuously collects **real operational activity** from your infrastructure, maps it to compliance controls using transparent rules, and makes that evidence available for review and audit. Instead of relying solely on policies, questionnaires and declarations of compliance, KEEN helps organisations demonstrate **what** actually happened, **when** it happened and **how it relates** to their obligations.
+
+Keen is for organisations that want to **operate an ISMS day-to-day**, grounded in **verifiable activity** from their own infrastructure, and **retain control** over how evidence is collected, mapped and scrutinised.
 
 The goal of Keen is to be a totally open source, free compliance management platform that puts organisations and auditors on the same page (literally), with an 'evidence first' approach that avoids box-ticking, and which doesn't cost tens of thousands of dollars from walled garden platforms.
 
 Compliance and security should be in reach of anyone, even those without big budgets.
 
-## What you can do
+## Features
 
 - **Collect evidence:** ingest logs, development activity, service updates and API records, receive webhooks, and record manual diary evidence with attachments.
 - **Map across frameworks:** define rules that associate events with controls in over 90 compliance frameworks, all of which are editable. You can choose want controls are in scope for or even add your own frameworks.
@@ -22,11 +24,11 @@ Compliance and security should be in reach of anyone, even those without big bud
 - **Keep people informed:** each person's notifications tell them when an audit they attend starts, when they are asked to take a quiz, and when minutes are added for a meeting they attended, and link straight to the record.
 - **Add context to events through stories:** gather the events, risks, records and notes of one incident into a story with a timeline and a drag-and-drop flow chart, add notes and associate assets/policies. Stories, like everything else, can be sampled into audits.
 
-## Try out the demo
+## Try out a free demo
 
 Visit https://keen.cloud and try a 30-day free demo, seeded with pretend data. This is the quickest way to get a feel for the application's features and experience layer. Only an e-mail address is required, purely to link it to the demo instance's authentication layer. We never use your e-mail address to send you any unsolicited mail.
 
-## Run with Docker Compose
+## Installation
 
 You need Docker Engine and the Docker Compose plugin. Run these commands from this directory.
 
@@ -99,23 +101,13 @@ A check that needs attention can be recorded as a risk against the workstation's
 See more about Keen Agent and how to install it on workstations at https://keen.cloud/agent
 
 
-## Access and authentication
+### Access and authentication
 
 Keen supports local accounts, LDAP, OpenID Connect, Google and GitHub sign-in.
 
 It has its own RBAC with user/group permissions, as well as local second-factor authentication with TOTP, security keys/passkeys and recovery codes.
 
 TOTP requires a separate persistent `KEEN_MFA_ENCRYPTION_KEY`. Follow the authentication chapters in **Help** for callback URLs, account linking and MFA policy.
-
-## Storage and operation
-
-PostgreSQL holds application records. Valkey provides sessions, task queues, rate limits and caches. Celery workers collect evidence and run background jobs; Celery beat schedules them. The UI is served by nginx, which proxies API requests.
-
-Evidence artefacts use the persistent `artifacts` volume by default, with SHA-256 checksums recorded in Keen. S3-compatible storage is available through `KEEN_ARTIFACT_STORAGE_BACKEND` and the `KEEN_S3_*` settings. Storage-level retention and write protection depend on the selected backend and its configuration.
-
-Evidence can be retained forever, up to a maximum number of days or a maximum number of events. This can be configured globally, then overridden by source, then overridden by specific mapping rule (in that order).
-
-Evidence that has been sampled into an audit won't be deleted, regardless of the retention rule. You must delete an audit before that evidence can be deleted.
 
 ## Further Documentation
 
