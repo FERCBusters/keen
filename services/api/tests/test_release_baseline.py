@@ -138,6 +138,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0032_rule_suggestions",
         "0031_theme_ink_default",
         "0030_agent_server_keys",
         "0029_stats_delete_increment",

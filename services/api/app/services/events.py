@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import try_uuid as _try_uuid
+from app.core.source_meta import get_source_meta
 from app.db.models import (
     Artifact,
     ControlItem,
@@ -51,6 +52,7 @@ from app.services.control_inheritance import (
     page_controls,
     recorded_control_evidence,
 )
+from app.services.control_suggestions import activity_words, rank_controls
 from app.services.errors import DomainError
 from app.services.event_filters import (
     EventFilters,
@@ -496,8 +498,6 @@ def event_control_suggestions(*, event_id: str, framework: str, db: Session, use
     text of the selected framework. Controls the event already maps to in that
     framework are listed separately so a reviewer sees what is left to decide.
     """
-    from app.services.control_suggestions import rank_controls
-
     eid = _try_uuid(event_id)
     if not eid:
         raise DomainError(status_code=400, detail="event_id must be a UUID")
@@ -526,13 +526,14 @@ def event_control_suggestions(*, event_id: str, framework: str, db: Session, use
         .limit(5000)
         .all()
     )
-    activity = " ".join(
-        str(part or "").strip() for part in (e.action, e.system, e.outcome)
-    ).strip()
-    description = f"{activity} {e.summary or ''}".strip()[:4000]
+    # The activity and summary describe the event; its system and source give
+    # context. Code-style names such as PullRequestEvent are read as words.
+    description = f"{activity_words(e.action)} {e.summary or ''}".strip()[:4000]
+    context = f"{activity_words(e.system)} {get_source_meta(e.source).label}"
     ranked = rank_controls(
         candidates,
         description=description or (e.source or ""),
+        context=context,
         sample_summary=str(e.actor or "")[:4000],
         limit=SUGGESTION_LIMIT + len(mapped_refs),
     )

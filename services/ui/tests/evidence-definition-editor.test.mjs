@@ -170,6 +170,10 @@ async function editor(t, server = {}) {
       if (state.failBackfill) throw new Error(state.failBackfill);
       return { backfill: structuredClone(state.startBackfill) };
     }
+    if (/^\/api\/v1\/admin\/rule-suggestions\/[^/]+\/status$/.test(path)) {
+      if (state.failSuggestionStatus) throw new Error(state.failSuggestionStatus);
+      return { status: body.status };
+    }
     const cancel = path.match(/^\/api\/v1\/admin\/rule-backfills\/([^/]+)\/cancel$/);
     if (cancel) {
       const sequence = state.jobs[decodeURIComponent(cancel[1])];
@@ -940,6 +944,106 @@ test('a rule for several sources is chosen with source pills and saved as one pa
   ui.$('source-filter').value = 'azure';
   ui.$('source-filter').dispatchEvent(new ui.window.Event('change'));
   assert.equal(ui.library().length, 1);
+});
+
+// --- Suggested rules ---------------------------------------------------------------
+
+const suggested = (rule = {}) => ({
+  id: 'suggested_aws_posture_identity_mfa',
+  description: 'AWS: posture.identity.mfa',
+  enabled: true,
+  when: { source: 'aws', action: 'posture.identity.mfa' },
+  map_to: [{ framework: 'A', ref: 'A1', kind: 'control' }],
+  ...rule,
+});
+async function suggest(ui, rule, id = 'sug-1') {
+  const bells = [],
+    refreshed = [];
+  ui.window.keenRefreshBell = () => bells.push(true);
+  ui.window.addEventListener('keen-rule-suggestions-changed', () => refreshed.push(true));
+  ui.window.dispatchEvent(
+    new ui.window.CustomEvent('keen-suggested-rule', {
+      detail: { id, rule, eventCount: 1200 },
+    }),
+  );
+  await ui.idle();
+  return { bells, refreshed };
+}
+
+test('a suggested rule opens as a new rule and is marked created once saved', async (t) => {
+  const ui = await editor(t, {
+    ...severalSources,
+    // A rule saved since took the suggested ID.
+    rules: [suggested({ description: 'Taken', when: { source: 'linode' } })],
+  });
+  const { bells, refreshed } = await suggest(ui, suggested());
+  assert.equal(ui.$('editor').hidden, false);
+  assert.equal(ui.$('rule-id').value, 'suggested_aws_posture_identity_mfa_2');
+  assert.equal(ui.$('rule-id').disabled, false);
+  assert.equal(ui.$('description').value, 'AWS: posture.identity.mfa');
+  assert.equal(ui.$('when-action').value, 'posture.identity.mfa');
+  assert.equal(ui.$('definition-adapter').value, 'aws');
+  assert.equal(ui.$('rule-retention').hidden, true);
+  assert.equal(ui.$('apply-existing').checked, true);
+  assert.match(ui.$('targets').textContent, /A1/);
+  assert.equal(
+    ui.$('draft-notice').textContent,
+    'Suggested from 1,200 unmapped events. Review the conditions and controls and preview the matches before saving; saving marks the suggestion as created.',
+  );
+  assert.ok(!ui.calls.some((call) => call.includes('/revisions')));
+
+  await ui.click('preview');
+  await ui.click('save-rule');
+  const saved = ui.writes.find((write) => write.method === 'PUT');
+  assert.equal(
+    saved.path,
+    '/api/v1/admin/evidence-definitions/suggested_aws_posture_identity_mfa_2',
+  );
+  assert.deepEqual(saved.body.rule.when, { action: 'posture.identity.mfa', source: 'aws' });
+  assert.deepEqual(
+    ui.writes.find((write) => write.path.includes('/rule-suggestions/')),
+    {
+      method: 'POST',
+      path: '/api/v1/admin/rule-suggestions/sug-1/status',
+      body: { status: 'applied', rule_id: 'suggested_aws_posture_identity_mfa_2' },
+    },
+  );
+  assert.equal(refreshed.length, 1);
+  assert.equal(bells.length, 1);
+  assert.equal(ui.$('status').textContent, 'Mapping saved. Future evidence uses it immediately.');
+
+  // Saving the rule again does not mark the suggestion a second time.
+  await ui.click('preview');
+  await ui.click('save-rule');
+  assert.equal(ui.writes.filter((write) => write.path.includes('/rule-suggestions/')).length, 1);
+});
+
+test('a suggested rule for several sources opens with their pattern', async (t) => {
+  const ui = await editor(t, { ...severalSources, failSuggestionStatus: 'Gone' });
+  const { refreshed } = await suggest(
+    ui,
+    suggested({ when: { source_regex: CLOUDS, action: 'posture.identity.mfa' } }),
+  );
+  assert.equal(ui.$('definition-adapter').value, '__several__');
+  assert.equal(ui.$('when-source_regex').value, CLOUDS);
+  await ui.click('preview');
+  await ui.click('save-rule');
+  // The rule is saved even when the suggestion cannot be marked.
+  assert.equal(ui.$('status').textContent, 'Mapping saved. Future evidence uses it immediately.');
+  assert.equal(refreshed.length, 1);
+});
+
+test('a rule created from Suggested rules joins the library', async (t) => {
+  const ui = await editor(t, severalSources);
+  const before = ui.calls.filter((call) => call === '/api/v1/admin/evidence-definitions').length;
+  ui.state.rules = [suggested()];
+  ui.window.dispatchEvent(new ui.window.CustomEvent('keen-rules-changed'));
+  await ui.idle();
+  assert.equal(
+    ui.calls.filter((call) => call === '/api/v1/admin/evidence-definitions').length,
+    before + 1,
+  );
+  assert.deepEqual(ui.library()[0][0], 'AWS: posture.identity.mfa');
 });
 
 test('a written source pattern stands in for chosen sources', async (t) => {

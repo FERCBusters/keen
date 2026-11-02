@@ -83,7 +83,7 @@ Open **Admin → Sources & Evidence Mapping**:
 1. **Define a source.** Choose an enabled source type, give the connection a name, and enter its endpoint and credentials.
 2. **Add inputs.** Select what to collect, such as a GitHub organisation, Forgejo user, Loki query or Jenkins job. Each RSS source contains its feed URL and optional credentials.
 3. **Collect evidence.** Run collection and inspect the resulting events.
-4. **Add mapping rules.** Select the source connection and input, choose matching conditions, and select the controls the evidence supports.
+4. **Add mapping rules.** Select the source connection and input, choose matching conditions, and select the controls the evidence supports. Keen also suggests rules for recent unmapped events, with the controls their wording matches; review them under **Suggested rules** and create each with one click.
 
 Supported sources include GitHub, GitLab, Forgejo, Gitea, Jenkins, Loki, Elasticsearch, CloudWatch Logs, Google Workspace, Redmine, Taiga, BookStack, Risk Ledger, IMAP mail, RSS/Atom and incoming webhooks. The custom API ingester builder supports declarative HTTP requests, field extraction, pagination and scheduling. There is also a separate 'Cloud posture' system that supports reading your security posture from AWS, Microsoft Azure/Entra, Google Cloud, Akamai (Linode), DigitalOcean and Scaleway. These records get summarised under ISMS → People/Vendors → Vendors.
 

@@ -1,8 +1,9 @@
 """Deterministic evidence-to-control relevance, using the live catalogue.
 
-Mapping names carry more weight than optional sample text. Related phrases are
-matched one hop through the curated taxonomy, with word boundaries and no
-recursive expansion. No model, external API, regex from users or writes occur.
+Mapping names carry more weight than context, such as the system an event came
+from, and context more than optional sample text. Related phrases are matched
+one hop through the curated taxonomy, with word boundaries and no recursive
+expansion. No model, external API, regex from users or writes occur.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from functools import lru_cache
 from app.services.evidence_taxonomy import CONCEPTS
 
 _STOP = set(
-    "a an and are as at be been by can for from has have in into is it its of on or our that the their this to was we were with without your all activity activities event events evidence control controls security information management system systems process processes review record report collection collected successful success failed failure demonstrate demonstrates ensure ensures general".split()
+    "a an and are as at be been by can for from has have in into is it its of on or our that the their this to was we were with without your all activity activities event events evidence control controls security information management system systems process processes review record report collection collected successful success failed failure demonstrate demonstrates ensure ensures general source".split()
 )
 _ALIASES = {
     "organisation": "organization",
@@ -35,6 +36,21 @@ _ALIASES = {
     "restored": "restore",
     "backups": "backup",
 }
+
+
+# Boundaries inside code-style names: PullRequestEvent, TLSHandshake.
+_CASE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
+
+def activity_words(value) -> str:
+    """An activity or system name in words, as a catalogue would write it.
+
+    Collectors name activities in code style, such as ``PullRequestEvent``,
+    ``CHANGE_USER_PASSWORD`` or ``posture.identity.mfa``. Underscores and dots
+    already separate words once normalised; capitals inside a word are split
+    here, so ``PullRequestEvent`` reads as "Pull Request Event".
+    """
+    return _CASE.sub(" ", str(value or "")[:512])
 
 
 def normalise(text: str) -> str:
@@ -65,6 +81,7 @@ def _has(text, phrase):
 
 @lru_cache(maxsize=1)
 def _taxonomy():
+    """Each concept with its trigger phrases, catalogue phrases and exclusions."""
     return tuple(
         (
             c,
@@ -75,9 +92,19 @@ def _taxonomy():
                 }.items()
             ),
             tuple((raw, normalise(raw)) for raw in c.targets),
+            tuple(normalise(raw) for raw in c.excludes),
         )
         for c in CONCEPTS
     )
+
+
+def _names(text, phrase, excluded):
+    """Whether ``text`` names ``phrase`` outside each excluded, longer phrase."""
+    if not _has(text, phrase):
+        return False
+    for longer in excluded:
+        text = re.sub(rf"(?<!\S){re.escape(longer)}(?!\S)", "|", text)
+    return _has(text, phrase)
 
 
 def _strings(value):
@@ -104,20 +131,32 @@ def _catalogue(control):
 
 
 def rank_controls(
-    controls, *, description: str, sample_summary: str = "", limit: int = 10
+    controls,
+    *,
+    description: str,
+    sample_summary: str = "",
+    context: str = "",
+    limit: int = 10,
 ):
+    """Controls whose catalogue text matches the wording, best first.
+
+    The description is the mapping name or activity; context, such as the
+    system or source, counts half as much, and sample text a quarter. Rows are
+    ordered by how well the description alone matches, then by score.
+    """
     documents = [(c, *_catalogue(c)) for c in controls]
     frequency = Counter()
     for _, title, body in documents:
         frequency.update(_tokens(title + " " + body))
     queries = [
         ("mapping name", normalise(description[:4000]), 1.0),
+        ("context", normalise(context[:4000]), 0.5),
         ("sample", normalise(sample_summary[:4000]), 0.25),
     ]
     prepared = []
     for origin, text, weight in queries:
         active = []
-        for concept, aliases, targets in _taxonomy():
+        for concept, aliases, targets, excluded in _taxonomy():
             triggers = [raw for raw, phrase in aliases if _has(text, phrase)]
             if triggers:
                 # Prefer the most specific trigger for the explanation.
@@ -128,6 +167,7 @@ def rank_controls(
                             triggers, key=lambda x: (len(normalise(x).split()), len(x))
                         ),
                         targets,
+                        excluded,
                     )
                 )
         prepared.append((origin, _tokens(text), weight, active))
@@ -146,12 +186,12 @@ def rank_controls(
                 for hit in hits
             )
             concept_score = 0
-            for concept, trigger, targets in active:
+            for concept, trigger, targets, excluded in active:
                 matches = [
                     (raw, field)
                     for field, text in (("title", title), ("description", body))
                     for raw, phrase in targets
-                    if _has(text, phrase)
+                    if _names(text, phrase, excluded)
                 ]
                 if not matches:
                     continue

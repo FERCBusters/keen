@@ -266,9 +266,38 @@ export function withStoriesLink(links = []) {
   return list;
 }
 
+// The bell's notification kinds: questions for everyone who has them, and
+// suggested mapping rules for administrators. Several kinds make the bell a menu.
+export function bellItems(me) {
+  const items = [];
+  if (featureEnabled(me, 'questions'))
+    items.push({
+      label: 'Questions',
+      href: '/questions.html',
+      icon: 'bi-chat-left-text',
+      summaryEndpoint: me?.is_admin
+        ? '/api/v1/admin/questions/summary'
+        : '/api/v1/me/questions/summary',
+      countKey: me?.is_admin ? 'open_count' : 'unread_count',
+      ws: true,
+    });
+  if (me?.is_admin && featureEnabled(me, 'evidence'))
+    items.push({
+      label: 'Suggested rules',
+      href: '/admin.html#rule-suggestions',
+      icon: 'bi-lightbulb',
+      summaryEndpoint: '/api/v1/admin/rule-suggestions/summary',
+      countKey: 'open_count',
+    });
+  return items;
+}
+
 async function initialiseNavbar(...args) {
   initContextHelp();
   const cfg = getUiConfig(args[0]);
+  // A design system with bell menus lists `items` among its bell defaults; an
+  // older one keeps the questions bell that summaryEndpoint describes.
+  const menus = Object.prototype.hasOwnProperty.call(cfg.bell || {}, 'items');
   const me = await _mospInitNavbar({
     ...cfg,
     links: withStoriesLink(cfg.links),
@@ -281,6 +310,7 @@ async function initialiseNavbar(...args) {
             ? '/api/v1/admin/questions/summary'
             : '/api/v1/me/questions/summary'
           : '',
+      ...(menus ? { title: 'Notifications', items: bellItems } : {}),
     },
     brandIcon: '/keen-mitigator-64.png',
     nav: {

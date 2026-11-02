@@ -177,6 +177,8 @@ let draftEventFields = [];
 let rules = [],
   ruleVersion = 0,
   selectedRule = null,
+  // The suggested rule the editor holds, marked as created once it is saved.
+  activeSuggestion = null,
   targets = [],
   frameworks = [],
   samples = [],
@@ -934,6 +936,13 @@ function conditionForm() {
     $('bookstack-conditions').append(wrapper);
   }
 }
+// An ID no saved rule uses: the stem, or the stem with the first free number.
+function uniqueRuleId(stem) {
+  let candidate = stem,
+    suffix = 2;
+  while (rules.some((rule) => rule.id === candidate)) candidate = `${stem}_${suffix++}`;
+  return candidate;
+}
 function readRule() {
   const definition = definitionFromForm();
   if (!$('description').value.trim()) throw new Error('Give the mapping a name.');
@@ -984,10 +993,7 @@ function readRule() {
         .replace(/[^a-z0-9_-]+/g, '_')
         .replace(/^_+|_+$/g, '')
         .slice(0, 88) || 'evidence';
-    let candidate = stem,
-      suffix = 2;
-    while (rules.some((rule) => rule.id === candidate)) candidate = `${stem}_${suffix++}`;
-    $('rule-id').value = candidate;
+    $('rule-id').value = uniqueRuleId(stem);
   }
   return {
     id: $('rule-id').value.trim(),
@@ -1013,6 +1019,7 @@ async function newRule({ openEditor = true } = {}) {
     optional: true,
   });
   selectedRule = null;
+  activeSuggestion = null;
   savedSources = null;
   previewedRule = null;
   previewCount = 0;
@@ -1078,12 +1085,15 @@ function showSelectedInput() {
   $('input-picker').hidden = true;
   $('selected-input').hidden = false;
 }
-async function editRule(rule) {
+// A suggested rule opens as a new rule: it has no history, retention or backfill yet.
+async function editRule(rule, { suggestion = null } = {}) {
   await newRule();
-  selectedRule = rule.id;
-  $('rule-retention').hidden = false;
-  $('rule-retention').href =
-    '/admin.html?retention_rule=' + encodeURIComponent(rule.id) + '#retention';
+  if (!suggestion) {
+    selectedRule = rule.id;
+    $('rule-retention').hidden = false;
+    $('rule-retention').href =
+      '/admin.html?retention_rule=' + encodeURIComponent(rule.id) + '#retention';
+  }
   $('field-rows').replaceChildren();
   for (const item of rule.when?.fields || []) addFieldCondition(item);
   if (rule.when?.summary_regex)
@@ -1102,8 +1112,8 @@ async function editRule(rule) {
       value: '',
       optional: true,
     });
-  $('rule-id').value = rule.id;
-  $('rule-id').disabled = true;
+  $('rule-id').value = suggestion ? uniqueRuleId(rule.id) : rule.id;
+  $('rule-id').disabled = !suggestion;
   $('description').value = rule.description || '';
   $('confidence').value = rule.confidence ?? 0.8;
   $('enabled').checked = rule.enabled !== false;
@@ -1117,7 +1127,7 @@ async function editRule(rule) {
       (item.connection_id || 'env:' + item.adapter) ===
         (rule.when?.connection_id || 'env:' + item.adapter),
   );
-  savedSources = sourceSignature(rule.when);
+  savedSources = suggestion ? null : sourceSignature(rule.when);
   if (readsSeveral(rule.when)) {
     $('definition-adapter').value = SEVERAL;
     await selectDefinitionAdapter();
@@ -1145,10 +1155,22 @@ async function editRule(rule) {
     $('when-source').value = source;
   }
   showSelectedInput();
-  await loadRuleRevisions();
-  loadRecentBackfill(rule.id).catch((error) => status(error.message));
+  if (suggestion) activeSuggestion = suggestion;
+  else {
+    await loadRuleRevisions();
+    loadRecentBackfill(rule.id).catch((error) => status(error.message));
+  }
   showStep(1);
   unsaved.markClean();
+}
+// Edit first, from Suggested rules: the rule opens in the editor before it is saved.
+async function draftFromSuggestion({ id, rule, eventCount }) {
+  await editRule(rule, { suggestion: id });
+  const notice = $('draft-notice');
+  notice.hidden = false;
+  notice.textContent = `Suggested from ${Number(eventCount).toLocaleString()} unmapped events. Review the conditions and controls and preview the matches before saving; saving marks the suggestion as created.`;
+  showEditor(1);
+  ruleSentence();
 }
 function renderRules() {
   const list = $('rules');
@@ -1941,6 +1963,7 @@ $('save-rule').addEventListener('click', async () => {
             rules_version: ruleVersion,
             apply_existing: applyExisting,
           });
+    if (activeSuggestion) await markSuggestionCreated(activeSuggestion, rule.id);
     await loadRules();
     await editRule(rules.find((item) => item.id === rule.id));
     showStep(3);
@@ -1951,6 +1974,20 @@ $('save-rule').addEventListener('click', async () => {
     status(error.message);
   }
 });
+// The rule is saved either way; a failure here leaves the suggestion to dismiss.
+async function markSuggestionCreated(id, ruleId) {
+  activeSuggestion = null;
+  try {
+    await apiPost(`${apiRoot}/rule-suggestions/${encodeURIComponent(id)}/status`, {
+      status: 'applied',
+      rule_id: ruleId,
+    });
+  } catch {
+    /* The suggestion stays listed; the saved rule is unaffected. */
+  }
+  window.dispatchEvent(new CustomEvent('keen-rule-suggestions-changed'));
+  window.keenRefreshBell?.();
+}
 $('backfill-start').addEventListener('click', async () => {
   if (!selectedRule) {
     status('Save the rule first.');
@@ -2143,6 +2180,13 @@ window.addEventListener('keen-collection-create', async (event) => {
 // A background source refresh must preserve the active tab and mapping draft.
 window.addEventListener('keen-connections-changed', () =>
   loadRules({ resetEditor: false }).catch((e) => status(e.message)),
+);
+// A rule created from Suggested rules joins the library.
+window.addEventListener('keen-rules-changed', () =>
+  loadRules({ resetEditor: false }).catch((e) => status(e.message)),
+);
+window.addEventListener('keen-suggested-rule', (event) =>
+  draftFromSuggestion(event.detail).catch((e) => status(e.message)),
 );
 
 function currentEventFields() {

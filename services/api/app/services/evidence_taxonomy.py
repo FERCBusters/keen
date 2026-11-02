@@ -2,7 +2,9 @@
 
 Aliases identify a concept in the mapping name/sample; targets identify that
 concept in the current control catalogue. Phrases remain intact: a firewall
-must not expand into every control containing the word 'security'. Add aliases
+must not expand into every control containing the word 'security'. Excluded
+phrases name another concept around a target, such as "physical security
+monitoring" around "security monitoring"; a target counts only outside them. Add aliases
 and target phrases here, with a regression example in test_control_suggestions.
 These are relevance hints, not assertions that evidence satisfies a control.
 """
@@ -15,16 +17,22 @@ class Concept:
     name: str
     aliases: tuple[str, ...]
     targets: tuple[str, ...]
+    excludes: tuple[str, ...] = ()
 
 
-def concept(name, aliases, targets):
-    return Concept(name, tuple(aliases.split("|")), tuple(targets.split("|")))
+def concept(name, aliases, targets, excludes=""):
+    return Concept(
+        name,
+        tuple(aliases.split("|")),
+        tuple(targets.split("|")),
+        tuple(excludes.split("|")) if excludes else (),
+    )
 
 
 CONCEPTS = (
     concept(
         "Network protection",
-        "firewall|firewalls|iptables|nftables|ufw|packet filtering|network acl|network security|network traffic|network services|network protection",
+        "firewall|firewalls|iptables|nftables|ufw|packet filtering|network acl|network security|network traffic|network services|network protection|security group|vpn|wireguard|openvpn|ipsec|fail2ban|ip banned|blocked ip",
         "network security|security of networks|security of network services|network services security|network protection|firewall|packet filtering",
     ),
     concept(
@@ -39,7 +47,7 @@ CONCEPTS = (
     ),
     concept(
         "Malware defence",
-        "antivirus|anti virus|antimalware|anti malware|malware|ransomware|edr|endpoint detection|clamav|defender",
+        "antivirus|anti virus|antimalware|anti malware|malware|ransomware|edr|endpoint detection|clamav|defender|rootkit|rootcheck",
         "malware|malicious software|endpoint protection|endpoint security",
     ),
     concept(
@@ -54,7 +62,7 @@ CONCEPTS = (
     ),
     concept(
         "Change management",
-        "deployment|release|change approval|change request|pull request|merge request|peer review|ci cd|jenkins|software change",
+        "deployment|deploy|release|change approval|change request|pull request|merge request|peer review|ci cd|jenkins|software change",
         "change management|change control|changes to information systems|software change|review of changes",
     ),
     concept(
@@ -63,18 +71,28 @@ CONCEPTS = (
         "secure coding|secure development|security testing|application security requirements|secure system engineering",
     ),
     concept(
+        "Source code",
+        "git|github|gitlab|gitea|forgejo|bitbucket|commit|git push|code push|push event|pushed|branch protection|protected branch|repository|source code",
+        "access to source code|source code|secure development life cycle|secure development",
+    ),
+    concept(
+        "Testing",
+        "test|testing|unit test|integration test|test suite|test run|check run|check suite",
+        "security testing|testing in development and acceptance|acceptance testing|test information",
+    ),
+    concept(
         "Authentication",
-        "login|logon|ssh|sshd|mfa|2fa|totp|webauthn|yubikey|password|authentication|single sign on|sso",
+        "login|logon|sign in|signin|ssh|sshd|mfa|2fa|2sv|2 step verification|two step verification|strong authentication|totp|webauthn|yubikey|password|authentication|single sign on|sso",
         "secure authentication|authentication information|authentication|password management",
     ),
     concept(
         "Access rights",
-        "user provisioning|offboarding|leaver|joiner|account removal|account disable|access review|rbac|iam|user access|permission review",
+        "user provisioning|offboarding|leaver|joiner|account removal|account disable|access review|rbac|iam|user access|permission review|create user|delete user|suspend user|unsuspend user|user created|user deleted|user suspended|account created|account deleted|account suspended|provisioning|deprovisioning|group member|group membership|org unit|assign role|role assignment",
         "access rights|identity management|access control|user access|account management",
     ),
     concept(
         "Privileged access",
-        "sudo|su command|root access|privileged access|privilege escalation|administrator access|least privilege|pam access",
+        "sudo|su command|root access|privileged access|privilege escalation|administrator access|least privilege|pam access|super admin|admin role|administrator role|privileged role",
         "privileged access rights|privileged utility programs|privileged access|least privilege",
     ),
     concept(
@@ -84,8 +102,9 @@ CONCEPTS = (
     ),
     concept(
         "Security monitoring",
-        "siem|ossec|wazuh|ids|ips|intrusion detection|intrusion prevention|security alert|security monitoring|suspicious activity",
+        "siem|ossec|wazuh|ids|ips|intrusion detection|intrusion prevention|security alert|security monitoring|suspicious activity|suspicious login|guardduty|security finding|anomaly|anomalous",
         "monitoring activities|security monitoring|intrusion detection|information security events",
+        "physical security monitoring",
     ),
     concept(
         "Incident response",
@@ -176,6 +195,7 @@ CONCEPTS = (
         "Security awareness",
         "training|awareness|phishing simulation|phishing exercise|staff induction|security education",
         "awareness education and training|awareness|competence|training",
+        "training data",
     ),
     concept(
         "Personnel assurance",

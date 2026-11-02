@@ -206,6 +206,7 @@ const TAB_HASH_TO_ID = {
   '#agents': 'tab-agents',
   '#integrations': 'tab-integrations',
   '#evidence-config': 'tab-evidence-config',
+  '#rule-suggestions': 'tab-evidence-config',
   '#framework-editor': 'tab-framework-editor',
   '#retention': 'tab-retention',
   '#users': 'tab-users',
@@ -233,6 +234,8 @@ function activateTabFromHash() {
 document.querySelectorAll('#adminTabs button[data-bs-toggle="tab"]').forEach((btn) => {
   btn.addEventListener('shown.bs.tab', (ev) => {
     const id = ev.target?.id;
+    // A hash naming a part of this tab, such as #rule-suggestions, is kept.
+    if (TAB_HASH_TO_ID[(location.hash || '').toLowerCase()] === id) return;
     const entry = Object.entries(TAB_HASH_TO_ID).find(([, v]) => v === id);
     if (!entry) return;
     const [hash] = entry;

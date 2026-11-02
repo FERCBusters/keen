@@ -52,6 +52,7 @@ from app.services.quizzes.rounds import (
     send_quiz_invitations,
     send_quiz_reminders,
 )
+from app.services.rule_suggestions import refresh_suggestions
 from app.worker.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -599,6 +600,15 @@ def recover_rule_backfills_task() -> None:
 
     for job_id in recover_jobs():
         backfill_rule_task.delay(str(job_id))
+
+
+@celery_app.task(
+    name="app.worker.tasks.rule_suggestions_task", soft_time_limit=600, time_limit=660
+)
+def rule_suggestions_task() -> dict:
+    """Suggest mapping rules from a sample of the latest unmapped events."""
+    with SessionLocal() as db:
+        return refresh_suggestions(db)
 
 
 @celery_app.task(

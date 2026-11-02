@@ -189,6 +189,57 @@ test('changelog loader reports an API failure in its tab without the error text'
   }
 });
 
+test('the bell lists questions, and suggested rules for administrators', async () => {
+  const features = (enabled) => ({ features: { enabled } });
+  // The items come from the page realm; compare plain copies.
+  const labels = (me) => Array.from(a.bellItems(me), (item) => item.label);
+  assert.deepEqual(labels({ is_admin: true }), ['Questions', 'Suggested rules']);
+  assert.deepEqual(labels({ is_admin: false }), ['Questions']);
+  assert.deepEqual(labels({ is_admin: true, ...features({ questions: false }) }), [
+    'Suggested rules',
+  ]);
+  assert.deepEqual(labels({ is_admin: true, ...features({ evidence: false }) }), ['Questions']);
+  assert.deepEqual(labels(features({ questions: false })), []);
+  const [questions, suggested] = a.bellItems({ is_admin: true });
+  assert.equal(questions.summaryEndpoint, '/api/v1/admin/questions/summary');
+  assert.equal(questions.countKey, 'open_count');
+  assert.equal(questions.ws, true);
+  assert.equal(suggested.href, '/admin.html#rule-suggestions');
+  assert.equal(suggested.summaryEndpoint, '/api/v1/admin/rule-suggestions/summary');
+  const [reader] = a.bellItems({ is_admin: false });
+  assert.equal(reader.summaryEndpoint, '/api/v1/me/questions/summary');
+  assert.equal(reader.countKey, 'unread_count');
+});
+
+for (const [defaults, menu] of [
+  [{ items: null }, true],
+  [{}, false],
+])
+  test(`the bell is a menu only where the design system offers one (${menu})`, async () => {
+    let passed;
+    const u = await loadUi('app.js', {
+      html: '<div id="navbar"></div>',
+      vendor: {
+        getUiConfig: () => ({ nav: {}, framework: {}, bell: { enabled: true, ...defaults } }),
+        initCollapsibleFilterSections: () => {},
+        initNavbar: async (cfg) => {
+          passed = cfg.bell;
+          return {};
+        },
+        apiGet: async () => ({ items: [] }),
+      },
+    });
+    try {
+      await u.api.initNavbar();
+      assert.equal(passed.items === u.api.bellItems, menu);
+      assert.equal(passed.title, menu ? 'Notifications' : undefined);
+      assert.equal(passed.summaryEndpoint({ is_admin: true }), '/api/v1/admin/questions/summary');
+      assert.equal(passed.summaryEndpoint({ features: { enabled: { questions: false } } }), '');
+    } finally {
+      u.close();
+    }
+  });
+
 test('navbar native logout uses POST and stops the vendor GET handler', async () => {
   const calls = [];
   let vendorClicked = false;

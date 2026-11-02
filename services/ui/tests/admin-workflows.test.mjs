@@ -969,6 +969,12 @@ test('tabs follow the address hash and update it when changed', async (t) => {
   assert.ok(state.calls.some((c) => c.method === 'TAB' && c.url === 'tab-groups'));
   el('tab-retention').dispatchEvent(new ui.window.Event('shown.bs.tab', { bubbles: true }));
   assert.equal(ui.window.location.hash, '#retention');
+  // A link to part of a tab opens the tab and keeps its own hash.
+  ui.window.location.hash = '#rule-suggestions';
+  ui.window.dispatchEvent(new ui.window.HashChangeEvent('hashchange'));
+  assert.equal(state.calls.filter((c) => c.method === 'TAB').at(-1).url, 'tab-evidence-config');
+  el('tab-evidence-config').dispatchEvent(new ui.window.Event('shown.bs.tab', { bubbles: true }));
+  assert.equal(ui.window.location.hash, '#rule-suggestions');
   // The compact navigation menu closes and names the active tab.
   el('admin-navigation-toggle').click();
   assert.equal(el('admin-navigation-toggle').getAttribute('aria-expanded'), 'true');

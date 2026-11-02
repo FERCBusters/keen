@@ -2483,3 +2483,8 @@ dialog.keen-confirm [data-message] {
 .framework-catalogue-column[hidden] {
   display: none !important;
 }
+
+/* A link to Suggested rules scrolls it into view below the fixed navigation bar. */
+#ec-suggestions {
+  scroll-margin-top: calc(var(--ui-nav-height, 3.5rem) + 0.5rem);
+}

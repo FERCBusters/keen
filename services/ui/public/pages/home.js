@@ -265,6 +265,12 @@ if (ensureHomeLayout()) {
         'API collectors with failures · all frameworks',
         '/admin.html#integrations',
       ],
+      [
+        overview.suggested_rules,
+        'suggested mapping rule',
+        'suggested mapping rules',
+        '/admin.html#rule-suggestions',
+      ],
     ].filter(([count]) => Number.isFinite(count) && count > 0);
     const highlights = counts
       .map(

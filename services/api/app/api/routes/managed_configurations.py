@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.security.auth import require_admin
 from app.services import managed_configurations as service
 from app.services import rule_insights as insights
+from app.services import rule_suggestions as suggestions
 from app.services.managed_configurations import (
     AdapterSettingsInput,
     ConnectionRemovalInput,
@@ -21,6 +22,7 @@ from app.services.managed_configurations import (
     RuleInput,
     SourcePauseInput,
 )
+from app.services.rule_suggestions import SuggestionApplyInput, SuggestionStatusInput
 
 router = Router(dependencies=[Depends(require_admin)])
 
@@ -134,6 +136,50 @@ def get_rules(db: Session = Depends(get_db)):
 def rule_insights(days: int = insights.DEFAULT_DAYS, db: Session = Depends(get_db)):
     "Each rule's recent activity, and rules that could be consolidated."
     return insights.rule_insights(days=days, db=db)
+
+
+@router.get("/v1/admin/rule-suggestions")
+def list_rule_suggestions(status: str = "open", db: Session = Depends(get_db)):
+    "Mapping rules suggested from unmapped events, for review."
+    return suggestions.list_suggestions(status=status, db=db)
+
+
+@router.get("/v1/admin/rule-suggestions/summary")
+def rule_suggestion_summary(db: Session = Depends(get_db)):
+    "How many suggested rules await review."
+    return suggestions.suggestion_summary(db=db)
+
+
+@router.post("/v1/admin/rule-suggestions/refresh", status_code=202)
+def refresh_rule_suggestions(db: Session = Depends(get_db)):
+    "Check for suggestions now, in the background."
+    return suggestions.request_refresh(db=db)
+
+
+@router.post("/v1/admin/rule-suggestions/{suggestion_id}/apply")
+def apply_rule_suggestion(
+    suggestion_id: str,
+    payload: SuggestionApplyInput,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    "Save the suggested rule and map past events in the background."
+    return suggestions.apply_suggestion(
+        suggestion_id=suggestion_id, payload=payload, user=user, db=db
+    )
+
+
+@router.post("/v1/admin/rule-suggestions/{suggestion_id}/status")
+def set_rule_suggestion_status(
+    suggestion_id: str,
+    payload: SuggestionStatusInput,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    "Dismiss a suggestion, restore it, or record the rule saved for it."
+    return suggestions.set_suggestion_status(
+        suggestion_id=suggestion_id, payload=payload, user=user, db=db
+    )
 
 
 @router.put("/v1/admin/mapping-rules/{rule_id}")

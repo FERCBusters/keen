@@ -156,6 +156,77 @@ class RuleBackfillJob(Base):
     )
 
 
+class RuleSuggestion(Base):
+    """A mapping rule proposed from unmapped events, awaiting an administrator.
+
+    ``keys`` lists the [source, activity] pairs the rule covers; once a
+    suggestion is created or dismissed, those pairs are not suggested again in
+    its framework. Samples keep event identifiers only, so event content stays
+    with the events and their retention.
+    """
+
+    __tablename__ = "rule_suggestions"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    framework_slug: Mapped[str] = mapped_column(String(64), nullable=False)
+    signature: Mapped[str] = mapped_column(String(64), nullable=False)
+    keys: Mapped[list] = mapped_column(JSONB, nullable=False)
+    rule: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    controls: Mapped[list] = mapped_column(JSONB, nullable=False)
+    samples: Mapped[list] = mapped_column(JSONB, nullable=False)
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    first_seen: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_seen: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    rule_id: Mapped[str | None] = mapped_column(String(96), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "framework_slug", "signature", name="uq_rule_suggestions_signature"
+        ),
+        CheckConstraint(
+            "status IN ('open','applied','dismissed')",
+            name="ck_rule_suggestions_status",
+        ),
+        Index("ix_rule_suggestions_framework_status", "framework_slug", "status"),
+    )
+
+
+class RuleSuggestionRun(Base):
+    """One finished pass of the rule-suggestion job, for its last-checked time."""
+
+    __tablename__ = "rule_suggestion_runs"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    framework_slug: Mapped[str] = mapped_column(String(64), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    finished_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    examined: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unmapped: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    suggested: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('completed','failed')", name="ck_rule_suggestion_runs_status"
+        ),
+        Index("ix_rule_suggestion_runs_finished", "finished_at"),
+    )
+
+
 class ControlItem(Base):
     __tablename__ = "control_items"
     id: Mapped[uuid.UUID] = mapped_column(

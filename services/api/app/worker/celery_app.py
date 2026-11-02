@@ -123,6 +123,11 @@ celery_app.conf.beat_schedule = {
         "task": "app.worker.tasks.agent_server_keys_task",
         "schedule": crontab(minute=7),
     },
+    # Suggest mapping rules from the latest unmapped events.
+    "rule-suggestions-every-6h": {
+        "task": "app.worker.tasks.rule_suggestions_task",
+        "schedule": crontab(minute=50, hour="*/6"),
+    },
     "recover-rule-backfills": {
         "task": "app.worker.tasks.recover_rule_backfills_task",
         "schedule": 60.0,

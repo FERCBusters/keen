@@ -8,7 +8,7 @@ import pytest
 from app.api.routes import managed_configurations as routes
 from app.core.config import settings
 from app.db.models import ControlItem, Framework, ManagedConfiguration
-from app.services.control_suggestions import rank_controls
+from app.services.control_suggestions import activity_words, rank_controls
 from app.services.errors import DomainError
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -76,6 +76,72 @@ def test_common_operational_terms(name, expected):
 )
 def test_generic_or_substring_words_do_not_invent_matches(name):
     assert rank_controls(seed_controls(), description=name) == []
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("PullRequestEvent", {"A.8.32"}),
+        ("PushEvent", {"A.8.4", "A.8.25"}),
+        ("CheckRunEvent", {"A.8.29"}),
+        ("deploy", {"A.8.32"}),
+        ("SUSPEND_USER", {"A.5.18"}),
+        ("ASSIGN_ROLE super admin", {"A.8.2"}),
+        ("ENFORCE_STRONG_AUTHENTICATION", {"A.5.17", "A.8.5"}),
+        ("rootkit_sec_event", {"A.8.7"}),
+        ("RevokeSecurityGroupIngress", {"A.8.20"}),
+        ("guardduty_finding", {"A.8.16"}),
+    ],
+)
+def test_collector_activity_names_read_as_words(name, expected):
+    results = rank_controls(seed_controls(), description=activity_words(name))
+    assert expected <= {r["ref"] for r in results[:4]}
+
+
+def test_activity_words_split_code_style_names():
+    assert activity_words("PullRequestReviewCommentEvent") == (
+        "Pull Request Review Comment Event"
+    )
+    assert activity_words("TLSHandshakeRefused") == "TLS Handshake Refused"
+    assert activity_words("CHANGE_USER_PASSWORD") == "CHANGE_USER_PASSWORD"
+    assert activity_words(None) == ""
+
+
+def test_monitoring_tools_do_not_match_physical_monitoring():
+    refs = {r["ref"] for r in rank_controls(seed_controls(), description="OSSEC")}
+    assert "A.8.16" in refs and "A.7.4" not in refs
+
+
+def test_training_data_is_not_awareness_training():
+    control = SimpleNamespace(
+        id="ai",
+        framework_slug="CUSTOM",
+        title="Training data quality",
+        ref="AI-1",
+        type="custom",
+        tags={},
+        meta={},
+    )
+    (result,) = rank_controls([control], description="security awareness training")
+    # The shared word still counts; the awareness concept does not.
+    assert result["matched_terms"] == ["training"]
+    assert result["matched_concepts"] == []
+
+
+def test_a_source_address_is_not_source_code():
+    refs = {r["ref"] for r in rank_controls(seed_controls(), description="source ip")}
+    assert "A.8.4" not in refs
+
+
+def test_context_counts_half_as_much_as_the_description():
+    alone = {
+        r["ref"]: r["score"]
+        for r in rank_controls(seed_controls(), description="OSSEC")
+    }
+    results = rank_controls(seed_controls(), description="patching", context="OSSEC")
+    # The description decides the order; the context adds half its weight.
+    assert results[0]["ref"] == "A.8.8"
+    assert {r["ref"]: r["score"] for r in results}["A.8.16"] == alone["A.8.16"] / 2
 
 
 def test_firewall_reason_and_no_generic_security_matches():

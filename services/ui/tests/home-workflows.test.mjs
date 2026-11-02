@@ -96,6 +96,7 @@ test('overview reports coverage and highlight counts for the selected framework'
         overdue_audits: 0,
         measures_outside_threshold: 2,
         collectors_with_failures: 1,
+        suggested_rules: 4,
         attention: [
           { href: '/audits.html', label: HOSTILE + 'Audit overdue', detail: 'Due last week' },
         ],
@@ -119,6 +120,7 @@ test('overview reports coverage and highlight counts for the selected framework'
       ['3 control gaps', '/controls.html?gaps=1&framework=A'],
       ['2 measures outside threshold', '/isms.html?tab=effectiveness&framework=A'],
       ['1 API collector with failures · all frameworks', '/admin.html?framework=A#integrations'],
+      ['4 suggested mapping rules', '/admin.html?framework=A#rule-suggestions'],
     ],
   );
   // Zero counts are absence, not work: a grey zero pill is never rendered.

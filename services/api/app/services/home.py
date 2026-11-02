@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -25,6 +26,7 @@ from app.services.control_inheritance import (
     has_inherited_evidence,
 )
 from app.services.isms.metric_values import threshold_status
+from app.services.rule_suggestions import suggestion_summary
 from app.services.stats import stats_event_counts
 
 
@@ -69,7 +71,7 @@ def home_overview(
         .filter(FrameworkClause.framework_slug == framework)
         .scalar()
     )
-    result = {
+    result: dict[str, Any] = {
         "framework": framework,
         "control_count": len(controls),
         "clause_count": int(clauses or 0),
@@ -190,6 +192,23 @@ def home_overview(
                     "detail": f"API collector · {row.failures} consecutive failures · installation-wide",
                     "href": "/admin.html#integrations",
                 }
+            )
+        suggested = suggestion_summary(db=db)
+        count = suggested["open_count"]
+        result["suggested_rules"] = count
+        if count:
+            # First, so it follows the unmapped events the page lists above it.
+            result["attention"].insert(
+                0,
+                {
+                    "kind": "rule_suggestion",
+                    "label": f"{count} suggested mapping rule{'' if count == 1 else 's'}",
+                    "detail": (
+                        "Proposed from unmapped events for "
+                        f"{suggested['framework_name']} · review before mapping"
+                    ),
+                    "href": "/admin.html#rule-suggestions",
+                },
             )
     return result
 

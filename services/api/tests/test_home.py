@@ -26,6 +26,7 @@ from app.db.models import (
     ManagedConfiguration,
     Mapping,
     OsaControlMapping,
+    RuleSuggestion,
 )
 from app.db.session import Base
 from fastapi import Request
@@ -116,6 +117,7 @@ class HomeDatabaseTests(unittest.TestCase):
                 Framework,
                 ManagedConfiguration,
                 Mapping,
+                RuleSuggestion,
             )
         }
         while True:

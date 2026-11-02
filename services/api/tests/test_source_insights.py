@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timedelta
 
 import pytest
-from app.core import cache
+from app.core import cache, source_meta
 from app.db.models import ControlItem, Event, Framework, Mapping, User
 from app.services import source_insights as insights
 from app.services.errors import DomainError
@@ -28,6 +28,8 @@ FW = "fw-insights"
 @pytest.fixture(autouse=True)
 def uncached(monkeypatch):
     monkeypatch.setattr(cache.settings, "aggregate_cache_ttl_seconds", 0)
+    # Source labels come from the shipped defaults, not a database.
+    monkeypatch.setattr(source_meta, "_configured_source_meta", lambda _: {})
 
 
 @pytest.fixture
