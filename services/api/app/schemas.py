@@ -40,6 +40,11 @@ class PreferencesOut(BaseModel):
     # Preferred framework slug when opening the app/signing in.
     default_framework: str | None = Field(default=None)
 
+    # Where notifications go: app, email or both; and whether Keen can email
+    # this account now (mail set up and an address known).
+    notification_delivery: str = Field(default="app")
+    notification_email: bool = Field(default=False)
+
 
 class PreferencesUpdatePayload(BaseModel):
     use_local_timezone: bool | None = None
@@ -52,6 +57,7 @@ class PreferencesUpdatePayload(BaseModel):
     default_visualisation: dict | None = None
     landing_page: str | None = None
     default_framework: str | None = None
+    notification_delivery: str | None = None
 
 
 class SavedSearchCreatePayload(BaseModel):

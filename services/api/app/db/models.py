@@ -853,6 +853,11 @@ class User(Base):
         String(64), nullable=True
     )
 
+    # Where notifications go: "app" (the inbox), "email" or "both".
+    pref_notification_delivery: Mapped[str] = mapped_column(
+        String(8), default="app", nullable=False
+    )
+
     # Request-scoped authorisation state: session authentication attaches the
     # session's snapshot (revalidated against authz_version) and sign-in attaches
     # the effective role. Never persisted.

@@ -20,10 +20,18 @@ from app.db.models import (
     InboxItem,
     IsmsPerson,
     QuizRound,
+    SecurityNotification,
     User,
 )
 from app.security.rich_text import rich_text_has_text
-from app.services import audit_schedules, features, inbox, webhooks
+from app.services import (
+    audit_schedules,
+    features,
+    inbox,
+    me,
+    security_notifications,
+    webhooks,
+)
 from app.services.context import ChangeContext
 from app.services.quizzes import rounds as rounds_service
 from app.services.schedules import today_for_schedule
@@ -801,3 +809,102 @@ def test_a_measure_without_an_owner_or_a_numeric_threshold_tells_nobody(people):
     db.add(empty)
     db.flush()
     assert inbox.measure_result(db, empty, None) == 0
+
+
+# --- Delivery by email -------------------------------------------------------------
+
+
+def test_each_account_chooses_the_inbox_email_or_both(people, monkeypatch):
+    app, who = people
+    db = app.db
+    monkeypatch.setattr(inbox, "smtp_configured", lambda: True)
+    monkeypatch.setattr(me, "smtp_configured", lambda: True)
+
+    def choose(account, delivery, email=None):
+        row = db.get(User, who[account].id)
+        row.email = email
+        db.commit()
+        client = app.client(who[account])
+        response = client.patch(
+            "/v1/me/preferences",
+            json={"notification_delivery": delivery},
+            headers=unsafe(client),
+        )
+        assert response.status_code == 200, response.text
+        return client, response.json()
+
+    both, prefs = choose("attendee", "both", "attendee@example.test")
+    assert (prefs["notification_delivery"], prefs["notification_email"]) == (
+        "both",
+        True,
+    )
+    email_only, _ = choose("reader", "email", "reader@example.test")
+    no_address, prefs = choose("stranger", "email")
+    assert prefs["notification_email"] is False
+    linked, _ = choose("linked", "both", "linked@example.test")
+    refused = both.patch(
+        "/v1/me/preferences",
+        json={"notification_delivery": "pigeon"},
+        headers=unsafe(both),
+    )
+    assert refused.status_code == 400
+    assert (
+        refused.json()["detail"] == "notification_delivery must be app, email or both"
+    )
+
+    audit_id = _audit(
+        app.client(who["manager"]),
+        [
+            {"user_id": str(who["attendee"].id)},
+            {"user_id": str(who["reader"].id)},
+            {"user_id": str(who["stranger"].id)},
+            {"person_id": str(who["person"].id)},
+        ],
+    )
+    mail = {
+        row.recipient: row
+        for row in db.query(SecurityNotification).filter(
+            SecurityNotification.subject.like("Keen: New audit%")
+        )
+    }
+    # Only those with an address, and who can open the audit, are emailed.
+    assert sorted(mail) == ["attendee@example.test", "reader@example.test"]
+    message = mail["attendee@example.test"]
+    assert message.subject == "Keen: New audit: Access review"
+    assert message.body.startswith(
+        "New audit: Access review\nStarts 2026-11-09 · by "
+        + who["manager"].username
+        + "\n\nOpen it in Keen: https://keen.example/audit.html?id="
+        + audit_id
+    )
+    assert message.status == "pending"
+    # Email only lists the notification as read; both and no address keep it unread.
+    assert (_unread(both), _unread(email_only), _unread(no_address)) == (1, 0, 1)
+    assert _items(email_only)["items"][0]["read_at"] is not None
+    assert _items(linked)["items"] == []
+
+    # Without mail set up, everything stays in Keen.
+    monkeypatch.setattr(inbox, "smtp_configured", lambda: False)
+    _audit(
+        app.client(who["manager"]), [{"user_id": str(who["reader"].id)}], title="Second"
+    )
+    assert _unread(email_only) == 1
+    assert db.query(SecurityNotification).count() == 2
+
+    # The worker sends queued notification email like security email.
+    sent = []
+    monkeypatch.setattr(security_notifications, "smtp_configured", lambda: True)
+    monkeypatch.setattr(
+        security_notifications, "send_email", lambda **kw: sent.append(kw["to_email"])
+    )
+
+    class Session:
+        def __enter__(self):
+            return db
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(security_notifications, "SessionLocal", Session)
+    assert security_notifications.deliver_pending() == 2
+    assert sorted(sent) == ["attendee@example.test", "reader@example.test"]

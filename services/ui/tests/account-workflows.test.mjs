@@ -537,9 +537,17 @@ test('preferences load defaults, toggle the timezone and save the chosen setting
       landing_page: '/custom/landing',
       auto_apply_filters: true,
       default_framework: 'LEGACY',
+      notification_delivery: 'email',
+      notification_email: false,
     },
   });
   assert.equal(ui.el('prefDefaultTzHelp').textContent, 'Default timezone: Australia/Melbourne.');
+  // Email waits for mail and an address; the help says so.
+  assert.equal(ui.el('prefNotificationDelivery').value, 'email');
+  assert.match(
+    ui.el('prefNotificationHelp').textContent,
+    /until then notifications stay in Keen\.$/,
+  );
   assert.equal(
     ui.el('prefDefaultDateFormatHelp').textContent,
     'App default: DD/MM/YYYY. API values remain YYYY-MM-DD.',
@@ -580,6 +588,7 @@ test('preferences load defaults, toggle the timezone and save the chosen setting
   ui.el('prefTheme').dispatchEvent(new ui.window.Event('change'));
   ui.el('prefLandingPage').value = '/events.html?unmapped=true';
   ui.el('prefDefaultFramework').value = '';
+  ui.el('prefNotificationDelivery').value = 'both';
 
   ui.el('prefsForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   // The badge holds "Saved" in the markup, so wait for the page-level status.
@@ -594,6 +603,7 @@ test('preferences load defaults, toggle the timezone and save the chosen setting
       auto_apply_filters: true,
       landing_page: '/events.html?unmapped=true',
       default_framework: null,
+      notification_delivery: 'both',
       source_colors: {},
       timezone: 'Pacific/Auckland',
     },
@@ -621,7 +631,12 @@ test('a rejected preference save is reported beside the button', async (t) => {
 });
 
 test('source colour overrides validate hex values and can be reset', async (t) => {
-  const { ui, state } = await account(t, { preferences: { source_colors: { okta: '#00ff00' } } });
+  const { ui, state } = await account(t, {
+    preferences: { source_colors: { okta: '#00ff00' }, notification_email: true },
+  });
+  // Where mail can reach the account, the notification help needs no caveat.
+  assert.equal(ui.el('prefNotificationDelivery').value, 'app');
+  assert.match(ui.el('prefNotificationHelp').textContent, /listed as read in Keen\.$/);
   const body = ui.el('sourceColorsBody');
   assert.equal(ui.el('sourceColorsWrap').style.display, '');
   const rows = [...body.querySelectorAll('tr')];

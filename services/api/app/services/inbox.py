@@ -19,6 +19,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.core.references import try_uuid
 from app.db.models import (
@@ -42,7 +43,9 @@ from app.services.errors import DomainError
 from app.services.features import state
 from app.services.isms.access import can_read_isms, meeting_ids_for
 from app.services.isms.metric_values import threshold_status
+from app.services.mailer import smtp_configured, user_email
 from app.services.schedules import today_for_schedule
+from app.services.security_notifications import queue_email
 
 AUDIT_STARTED = "audit_started"
 QUIZ_ROUND = "quiz_round"
@@ -66,37 +69,76 @@ def notify(
     """Tell each active account about a record, except the one who acted.
 
     Someone already told about the record is not told again, so a caller can
-    pass everyone concerned. Returns how many were told.
+    pass everyone concerned. Each account's notification setting decides
+    whether it is also emailed; an emailed notification is listed as read
+    for someone who chose email only. Without mail set up, or an address to
+    send to, the notification stays in Keen. Returns how many were told.
     """
     wanted = {uid for uid in user_ids if uid is not None}
     if actor is not None:
         wanted.discard(actor.id)
     if not wanted:
         return 0
-    active = [
-        uid
-        for (uid,) in db.query(User.id)
+    accounts = (
+        db.query(User)
         .filter(User.id.in_(wanted), User.is_active.is_(True))
         .order_by(User.id)
-    ]
+        .all()
+    )
+    mail = smtp_configured()
+    if mail:
+        # An email shows the record as its reader can open it, so the caller's
+        # pending changes, such as new attendees, must be visible first.
+        db.flush()
     told = 0
     now = utc_now_naive()
-    for uid in active:
+    for account in accounts:
+        delivery = account.pref_notification_delivery
+        address = user_email(account) if mail and delivery != "app" else None
+        item = {
+            "id": uuid.uuid4(),
+            "user_id": account.id,
+            "kind": kind,
+            "subject_id": subject_id,
+            "actor_user_id": actor.id if actor is not None else None,
+            "created_at": now,
+            "read_at": now if address and delivery == "email" else None,
+        }
         created = db.execute(
             insert(InboxItem)
-            .values(
-                id=uuid.uuid4(),
-                user_id=uid,
-                kind=kind,
-                subject_id=subject_id,
-                actor_user_id=actor.id if actor is not None else None,
-                created_at=now,
-            )
+            .values(**item)
             .on_conflict_do_nothing(index_elements=["user_id", "kind", "subject_id"])
             .returning(InboxItem.id)
         ).scalar_one_or_none()
-        told += created is not None
+        if created is None:
+            continue
+        told += 1
+        if address:
+            _email(db, account, address, InboxItem(**item))
     return told
+
+
+def _email(db: Session, account: User, address: str, item: InboxItem) -> None:
+    """Queue a notification's email, if its reader can open the record."""
+    shown = _shown(db, account, [item])
+    if not shown:
+        return
+    view = shown[0]
+    line = f"{view['summary']}: {view['title']}"
+    when = f"{view['date_label']} {view['date']} · " if view["date"] else ""
+    by = f"by {view['actor']}" if view["actor"] else "by Keen"
+    queue_email(
+        db,
+        user_id=account.id,
+        recipient=address,
+        subject=f"Keen: {line}",
+        body=(
+            f"{line}\n{when}{by}\n\n"
+            f"Open it in Keen: {settings.public_base_url.rstrip('/')}{view['href']}\n\n"
+            "You receive these emails because your Keen notification setting "
+            "includes email. Change it under Account, Preferences.\n"
+        ),
+    )
 
 
 def _person_accounts(db: Session, person_ids: Iterable[uuid.UUID | None]) -> set:

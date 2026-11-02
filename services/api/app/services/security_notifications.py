@@ -35,12 +35,20 @@ def enqueue(db, user, event, *, ip=None):
     if event == "login-ip":
         body += "This address has not previously been recorded for a successful sign-in to this account. A VPN, mobile connection or changing ISP address can cause this alert.\n\n"
     body += "If this was you, no action is needed. If you do not recognise this activity, open your known Keen address directly and contact your Keen administrator. Review your password and authenticators.\n"
+    queue_email(
+        db,
+        user_id=user.id,
+        recipient=recipient,
+        subject="Keen security: " + title,
+        body=body,
+    )
+
+
+def queue_email(db, *, user_id, recipient, subject, body):
+    """Queue an email in the caller's transaction; the worker sends it with retries."""
     db.add(
         SecurityNotification(
-            user_id=user.id,
-            recipient=recipient,
-            subject="Keen security: " + title,
-            body=body,
+            user_id=user_id, recipient=recipient, subject=subject, body=body
         )
     )
 

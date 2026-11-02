@@ -29,6 +29,7 @@ from app.security.roles import compute_effective_role, is_effective_admin
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.features import state
+from app.services.mailer import smtp_configured, user_email
 from app.services.presentation import ALLOWED_THEMES
 from app.services.presentation import (
     normalize_saved_search_url as _normalize_saved_search_url,
@@ -36,6 +37,7 @@ from app.services.presentation import (
 from app.services.presentation import validate_theme_id as _validate_theme_id
 from app.services.presentation import validate_timezone_name as _validate_timezone_name
 
+NOTIFICATION_DELIVERY = ("app", "email", "both")
 _VIZ_MODES = {"graph", "heatmap", "sunburst_source", "sunburst_control", "histogram"}
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -260,6 +262,8 @@ def _preferences_out(user: User) -> PreferencesOut:
         default_visualisation=user.pref_default_visualisation or None,
         landing_page=user.pref_landing_page or "/",
         default_framework=user.pref_default_framework or None,
+        notification_delivery=user.pref_notification_delivery or "app",
+        notification_email=smtp_configured() and user_email(user) is not None,
     )
 
 
@@ -466,6 +470,14 @@ def update_my_preferences(
         user.pref_default_framework = _validate_default_framework(
             payload.default_framework
         )
+
+    if "notification_delivery" in fields:
+        if payload.notification_delivery not in NOTIFICATION_DELIVERY:
+            raise DomainError(
+                status_code=400,
+                detail="notification_delivery must be app, email or both",
+            )
+        user.pref_notification_delivery = payload.notification_delivery
 
     db.add(user)
     db.commit()

@@ -51,6 +51,8 @@ const prefTheme = document.getElementById('prefTheme');
 const prefAutoApplyFilters = document.getElementById('prefAutoApplyFilters');
 const prefLandingPage = document.getElementById('prefLandingPage');
 const prefDefaultFramework = document.getElementById('prefDefaultFramework');
+const prefNotificationDelivery = document.getElementById('prefNotificationDelivery');
+const prefNotificationHelp = document.getElementById('prefNotificationHelp');
 
 // Inline feedback next to the "Save preferences" button (useful when the page is scrolled).
 const prefsSaveBtn = document.getElementById('prefsSaveBtn');
@@ -239,6 +241,12 @@ function loadPrefs(meObj) {
     prefLandingPage.value = currentLandingPagePref;
   }
   if (prefAutoApplyFilters) prefAutoApplyFilters.checked = !!prefs.auto_apply_filters;
+  if (prefNotificationDelivery)
+    prefNotificationDelivery.value = prefs.notification_delivery || 'app';
+  // Without mail, or an address, notifications stay in Keen whatever is chosen.
+  if (prefNotificationHelp && !prefs.notification_email)
+    prefNotificationHelp.textContent +=
+      ' Email needs mail set up by your administrator and an email address on your account; until then notifications stay in Keen.';
   setTzEnabled();
 }
 
@@ -959,6 +967,7 @@ if (prefsForm) {
       auto_apply_filters: !!prefAutoApplyFilters?.checked,
       landing_page: (prefLandingPage?.value || '/').trim() || '/',
       default_framework: (prefDefaultFramework?.value || '').trim() || null,
+      notification_delivery: prefNotificationDelivery?.value || 'app',
     };
 
     if (sourceColorsLoaded) {
