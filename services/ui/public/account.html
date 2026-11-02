@@ -31,39 +31,41 @@
     <div class="admin-tab-layout d-flex flex-column flex-lg-row gap-3">
       <button id="account-navigation-toggle" type="button" class="btn btn-outline-primary d-lg-none" aria-expanded="false" aria-controls="accountTabs">Account menu</button>
       <ul class="nav nav-pills flex-column admin-tab-nav" id="accountTabs" role="tablist" aria-orientation="vertical">
+      <li class="admin-nav-label" role="presentation">Settings</li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="preferences-tab" data-bs-toggle="tab" data-bs-target="#preferences-pane" type="button" role="tab" aria-controls="preferences-pane" aria-selected="true" data-tab-hash="#preferences">Preferences</button>
+        <button class="nav-link active" id="preferences-tab" data-bs-toggle="tab" data-bs-target="#preferences-pane" type="button" role="tab" aria-controls="preferences-pane" aria-selected="true" data-tab-hash="#preferences"><i class="bi bi-person-gear" aria-hidden="true"></i> Preferences</button>
       </li>
-      <li class="nav-item" role="presentation"><button class="nav-link" id="security-tab" data-bs-toggle="tab" data-bs-target="#security-pane" type="button" role="tab" aria-controls="security-pane" aria-selected="false" data-tab-hash="#security">Security</button></li>
+      <li class="nav-item" role="presentation"><button class="nav-link" id="security-tab" data-bs-toggle="tab" data-bs-target="#security-pane" type="button" role="tab" aria-controls="security-pane" aria-selected="false" data-tab-hash="#security"><i class="bi bi-shield-check" aria-hidden="true"></i> Security</button></li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="saved-searches-tab" data-bs-toggle="tab" data-bs-target="#saved-searches-pane" type="button" role="tab" aria-controls="saved-searches-pane" aria-selected="false" data-tab-hash="#saved-searches">Saved searches</button>
+        <button class="nav-link" id="saved-searches-tab" data-bs-toggle="tab" data-bs-target="#saved-searches-pane" type="button" role="tab" aria-controls="saved-searches-pane" aria-selected="false" data-tab-hash="#saved-searches"><i class="bi bi-bookmark-star" aria-hidden="true"></i> Saved searches</button>
       </li>
+      <li class="admin-nav-label" role="presentation">My work</li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-questions-tab" data-feature="questions" data-bs-toggle="tab" data-bs-target="#my-questions-pane" type="button" role="tab" aria-controls="my-questions-pane" aria-selected="false" data-tab-hash="#my-questions">My questions</button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-audits-tab" data-feature="audits" data-bs-toggle="tab" data-bs-target="#my-audits-pane" type="button" role="tab" aria-controls="my-audits-pane" aria-selected="false" data-tab-hash="#my-audits">My audits</button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-controls-tab" data-feature="controls" data-bs-toggle="tab" data-bs-target="#my-controls-pane" type="button" role="tab" aria-controls="my-controls-pane" aria-selected="false" data-tab-hash="#my-controls">My controls</button>
+        <button class="nav-link" id="my-questions-tab" data-feature="questions" data-bs-toggle="tab" data-bs-target="#my-questions-pane" type="button" role="tab" aria-controls="my-questions-pane" aria-selected="false" data-tab-hash="#my-questions"><i class="bi bi-chat-left-text" aria-hidden="true"></i> My questions</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-quizzes-tab" data-feature="quizzes" data-bs-toggle="tab" data-bs-target="#my-quizzes-pane" type="button" role="tab" aria-controls="my-quizzes-pane" aria-selected="false" data-tab-hash="#my-quizzes">My quizzes</button>
+        <button class="nav-link" id="my-audits-tab" data-feature="audits" data-bs-toggle="tab" data-bs-target="#my-audits-pane" type="button" role="tab" aria-controls="my-audits-pane" aria-selected="false" data-tab-hash="#my-audits"><i class="bi bi-clipboard-check" aria-hidden="true"></i> My audits</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-meetings-tab" data-feature="meetings" data-bs-toggle="tab" data-bs-target="#my-meetings-pane" type="button" role="tab" aria-controls="my-meetings-pane" aria-selected="false" data-tab-hash="#my-meetings">My meetings</button>
+        <button class="nav-link" id="my-controls-tab" data-feature="controls" data-bs-toggle="tab" data-bs-target="#my-controls-pane" type="button" role="tab" aria-controls="my-controls-pane" aria-selected="false" data-tab-hash="#my-controls"><i class="bi bi-check2-square" aria-hidden="true"></i> My controls</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-risks-tab" data-feature="risk_cia" data-bs-toggle="tab" data-bs-target="#my-risks-pane" type="button" role="tab" aria-controls="my-risks-pane" aria-selected="false" data-tab-hash="#my-risks">My risks</button>
+        <button class="nav-link" id="my-quizzes-tab" data-feature="quizzes" data-bs-toggle="tab" data-bs-target="#my-quizzes-pane" type="button" role="tab" aria-controls="my-quizzes-pane" aria-selected="false" data-tab-hash="#my-quizzes"><i class="bi bi-patch-question" aria-hidden="true"></i> My quizzes</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-isms-objectives-tab" data-feature="objectives" data-bs-toggle="tab" data-bs-target="#my-isms-objectives-pane" type="button" role="tab" aria-controls="my-isms-objectives-pane" aria-selected="false" data-tab-hash="#my-isms-objectives">My objectives</button>
+        <button class="nav-link" id="my-meetings-tab" data-feature="meetings" data-bs-toggle="tab" data-bs-target="#my-meetings-pane" type="button" role="tab" aria-controls="my-meetings-pane" aria-selected="false" data-tab-hash="#my-meetings"><i class="bi bi-journal-text" aria-hidden="true"></i> My meetings</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-isms-role-tab" data-feature="organisation" data-bs-toggle="tab" data-bs-target="#my-isms-role-pane" type="button" role="tab" aria-controls="my-isms-role-pane" aria-selected="false" data-tab-hash="#my-isms-role">My role</button>
+        <button class="nav-link" id="my-risks-tab" data-feature="risk_cia" data-bs-toggle="tab" data-bs-target="#my-risks-pane" type="button" role="tab" aria-controls="my-risks-pane" aria-selected="false" data-tab-hash="#my-risks"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> My risks</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-isms-assets-tab" data-feature="assets" data-bs-toggle="tab" data-bs-target="#my-isms-assets-pane" type="button" role="tab" aria-controls="my-isms-assets-pane" aria-selected="false" data-tab-hash="#my-isms-assets">My assets</button>
+        <button class="nav-link" id="my-isms-objectives-tab" data-feature="objectives" data-bs-toggle="tab" data-bs-target="#my-isms-objectives-pane" type="button" role="tab" aria-controls="my-isms-objectives-pane" aria-selected="false" data-tab-hash="#my-isms-objectives"><i class="bi bi-bullseye" aria-hidden="true"></i> My objectives</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-isms-role-tab" data-feature="organisation" data-bs-toggle="tab" data-bs-target="#my-isms-role-pane" type="button" role="tab" aria-controls="my-isms-role-pane" aria-selected="false" data-tab-hash="#my-isms-role"><i class="bi bi-person-badge" aria-hidden="true"></i> My role</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-isms-assets-tab" data-feature="assets" data-bs-toggle="tab" data-bs-target="#my-isms-assets-pane" type="button" role="tab" aria-controls="my-isms-assets-pane" aria-selected="false" data-tab-hash="#my-isms-assets"><i class="bi bi-box-seam" aria-hidden="true"></i> My assets</button>
       </li>
     </ul>
 

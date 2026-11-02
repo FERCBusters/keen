@@ -1,38 +1,6 @@
 body[data-page='admin'] .container-tight {
   max-width: 1480px;
 }
-.admin-tab-nav {
-  flex: 0 0 230px;
-  align-self: flex-start;
-  position: sticky;
-  top: 90px;
-  padding: 12px;
-  background: rgba(var(--keen-accent-rgb), 0.04);
-  border: 1px solid rgba(var(--keen-accent-rgb), 0.16);
-  border-radius: 18px;
-}
-.admin-tab-nav .nav-link {
-  text-align: left;
-  width: 100%;
-  border-radius: 10px;
-  padding: 11px 14px;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.admin-tab-nav .nav-link.active {
-  background: rgba(var(--keen-accent-rgb), 0.16);
-  color: var(--keen-accent-700);
-  box-shadow: none;
-}
-.admin-nav-label {
-  padding: 16px 14px 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 0.75rem;
-  font-weight: 750;
-  color: var(--keen-muted);
-}
 #adminTabContent {
   min-width: 0;
 }
@@ -162,10 +130,6 @@ body[data-page='admin'] .btn-outline-primary {
   --bs-btn-active-bg: var(--keen-accent-700);
   --bs-btn-active-border-color: var(--keen-accent-700);
 }
-.admin-tab-nav .nav-link:not(.active) {
-  color: var(--keen-muted);
-}
-
 @media (max-width: 991px) {
   #adminTabContent {
     width: 100%;
@@ -173,10 +137,6 @@ body[data-page='admin'] .btn-outline-primary {
 }
 
 /* The tab column must shrink below its tables' intrinsic width. */
-.admin-tab-layout {
-  width: 100%;
-  min-width: 0;
-}
 #adminTabContent {
   flex: 1 1 0%;
   width: 0;
@@ -210,20 +170,12 @@ body[data-page='admin'] .btn-outline-primary {
     flex: auto;
     width: 100%;
   }
-  .admin-tab-nav {
-    min-width: 0;
-  }
 }
-:root[data-bs-theme='dark'] .admin-tab-nav,
 :root[data-bs-theme='dark'] .ig-card,
 :root[data-bs-theme='dark'] .ig-field,
 :root[data-bs-theme='dark'] .ig-preview pre {
   background: var(--bs-secondary-bg);
   border-color: var(--bs-border-color);
-  color: var(--bs-body-color);
-}
-:root[data-bs-theme='dark'] .admin-tab-nav .nav-link:not(.active),
-:root[data-bs-theme='dark'] .admin-nav-label {
   color: var(--bs-body-color);
 }
 :root[data-bs-theme='dark'] .ig-steps button {
@@ -240,9 +192,6 @@ body[data-page='admin'] .btn-outline-primary {
   position: static;
 }
 
-:root[data-bs-theme='dark'] body[data-page='admin'] .admin-tab-nav .nav-link:not(.active) {
-  color: var(--bs-body-color);
-}
 :root[data-bs-theme='dark'] body[data-page='admin'] .btn-outline-primary {
   --bs-btn-color: var(--bs-link-color);
   --bs-btn-border-color: var(--bs-link-color);
