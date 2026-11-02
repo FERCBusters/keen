@@ -126,6 +126,7 @@ def test_built_in_rules_match_keens_own_evidence():
     assert refs("keen-agent", "endpoint.session_inventory.observed") == ["END-40"]
     assert refs("keen-agent", "user.authenticated", "failure") == ["IAC-203", "IAC-5"]
     assert refs("keen-agent", "security.alert.generated") == ["MON-1", "MON-121"]
+    assert refs("keen-agent", "software.package.changed") == ["CHG-38"]
     assert refs("keen-agent", "log.line.collected") == []
 
 
@@ -133,10 +134,11 @@ def test_host_rules_match_the_later_catalogues_events():
     rules = parse_rules({"rules": HOST_RULES})
     assert len(rules) == len(HOST_RULES)
 
-    def refs(action, **attributes):
+    def refs(action, outcome="failure", **attributes):
         event = {
             "source": "keen-agent",
             "action": action,
+            "outcome": outcome,
             "normalized_payload": {"ueu": {"attributes": attributes}},
         }
         return sorted(evaluate_by_framework(event, rules).get(FRAMEWORK, []))
@@ -144,10 +146,24 @@ def test_host_rules_match_the_later_catalogues_events():
     assert refs(FAULT, fault="oom_kill") == ["CAP-7", "MON-4"]
     assert refs(FAULT, fault="io_error") == ["MNT-21", "MON-4"]
     assert refs(FAULT, fault="service_failed") == ["MON-4"]
-    assert refs("clock.sync.degraded", condition="offset") == ["SEA-54"]
+    # Clocks are recorded synchronising and losing synchronisation alike.
+    assert refs("clock.sync.changed", condition="offset") == ["SEA-54"]
+    assert refs("clock.sync.changed", "success", condition="source_selected") == [
+        "SEA-54"
+    ]
     assert refs("dns.lookup.failed") == ["NET-92"]
     assert refs("application.error.logged") == ["MON-120"]
-    assert refs("user.account.changed") == ["IAC-198", "IAC-200"]
+    assert refs("user.account.changed", "success") == ["IAC-198", "IAC-200"]
+    # Only completed patching runs count; other tasks and failures map nothing.
+    task = "routine.task.completed"
+    assert refs(task, "success", task="patching", tool="apt") == ["VPM-1"]
+    assert refs(task, "failure", task="patching", tool="apt") == []
+    assert refs(task, "success", task="backup") == []
+    assert refs(task, "success") == []
+    protection = "system.protection.activated"
+    assert refs(protection, "success", protection="mandatory_access_control") == [
+        "NET-5"
+    ]
     assert refs("user.authenticated") == []
 
 

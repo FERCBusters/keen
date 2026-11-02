@@ -449,7 +449,7 @@ def test_agents_granted_the_later_catalogue_send_its_event_types(keen):
             outcome="failure",
         ),
         agent.event(
-            "clock.sync.degraded",
+            "clock.sync.changed",
             "clock",
             {"daemon": "chronyd", "condition": "offset", "offset_ms": -1235},
             outcome="failure",
@@ -472,6 +472,22 @@ def test_agents_granted_the_later_catalogue_send_its_event_types(keen):
             {"tool": "useradd", "change": "created"},
             subject=("unix_user", "alice"),
         ),
+        agent.event(
+            "routine.task.completed",
+            "task",
+            {"task": "patching", "tool": "apt", "unit": "apt-daily-upgrade.service"},
+            component="systemd",
+        ),
+        agent.event(
+            "system.protection.activated",
+            "protection",
+            {
+                "protection": "mandatory_access_control",
+                "mechanism": "apparmor",
+                "unit": "apparmor.service",
+            },
+            component="systemd",
+        ),
         # Posture follows the later catalogue as it did the first.
         agent.observation("firewall", "ufw", {"enabled": True}),
     ]
@@ -481,10 +497,14 @@ def test_agents_granted_the_later_catalogue_send_its_event_types(keen):
         stored = {e.action: e for e in db.query(Event)}
         assert {a: e.summary for a, e in stored.items()} == {
             "system.fault.detected": "Fault in kernel: oom_kill",
-            "clock.sync.degraded": "Clock synchronisation by chronyd: offset",
+            "clock.sync.changed": "Clock synchronisation by chronyd: offset",
             "dns.lookup.failed": "Name resolution failed in curl: unresolved",
             "application.error.logged": "Error in drupal: error (php)",
             "user.account.changed": "Account created via useradd",
+            "routine.task.completed": "Routine task patching by apt: success",
+            "system.protection.activated": (
+                "Protection mandatory_access_control active: apparmor"
+            ),
             "endpoint.firewall.observed": stored["endpoint.firewall.observed"].summary,
         }
         assert stored["system.fault.detected"].severity == 6

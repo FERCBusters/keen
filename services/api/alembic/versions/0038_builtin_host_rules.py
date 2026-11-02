@@ -1,7 +1,8 @@
 """Built-in mapping rules for the host events of KEEN's 2026.11 catalogue.
 
-The Keen Agent recognises host faults, clock and name-resolution problems,
-application errors and account changes once KEEN grants it the 2026.11
+The Keen Agent recognises host faults, clock synchronisation, name-resolution
+problems, application errors, account changes, the daily apt upgrade job
+completing and protections taking effect once KEEN grants it the 2026.11
 catalogue. These rules map them to the Keen Assurance Framework beside the
 rules of 0037, without sharing a control with them. Rules an installation
 already has are kept as they are; see app/core/builtin_rules.py.
@@ -28,14 +29,16 @@ def _rule(rule_id: str, description: str, when: dict, *refs: str) -> dict:
     }
 
 
-def _faults(pattern: str) -> dict:
+def _attribute(action: str, name: str, operator: str, value: str, **when) -> dict:
+    """Events of one type whose attribute ``name`` meets one condition."""
     return {
-        "action": FAULTS,
+        "action": action,
+        **when,
         "fields": [
             {
-                "path": ["ueu", "attributes", "fault"],
-                "operator": "regex",
-                "value": pattern,
+                "path": ["ueu", "attributes", name],
+                "operator": operator,
+                "value": value,
             }
         ],
     }
@@ -51,19 +54,23 @@ RULES = [
     _rule(
         "keen-server-capacity",
         "Servers running out of memory, disk or workers are detected",
-        _faults("^(oom_kill|disk_full|worker_limit|hung_task)$"),
+        _attribute(
+            FAULTS, "fault", "regex", "^(oom_kill|disk_full|worker_limit|hung_task)$"
+        ),
         "CAP-7",
     ),
     _rule(
         "keen-server-hardware",
         "Disk, filesystem and hardware errors on servers are detected",
-        _faults("^(io_error|filesystem_error|hardware_error)$"),
+        _attribute(
+            FAULTS, "fault", "regex", "^(io_error|filesystem_error|hardware_error)$"
+        ),
         "MNT-21",
     ),
     _rule(
         "keen-server-clock",
-        "Server clocks that lose synchronisation are detected",
-        {"action": "clock.sync.degraded"},
+        "Server clocks synchronising and losing synchronisation are recorded",
+        {"action": "clock.sync.changed"},
         "SEA-54",
     ),
     _rule(
@@ -84,6 +91,22 @@ RULES = [
         {"action": "user.account.changed"},
         "IAC-198",
         "IAC-200",
+    ),
+    # Only completed runs match, so failing runs cannot keep the rule looking
+    # active in Rule insights; a job that fails is recorded as a fault.
+    _rule(
+        "keen-server-patching",
+        "Servers complete their daily upgrade job",
+        _attribute(
+            "routine.task.completed", "task", "equals", "patching", outcome="success"
+        ),
+        "VPM-1",
+    ),
+    _rule(
+        "keen-server-protections",
+        "Protections such as AppArmor take effect on servers",
+        {"action": "system.protection.activated", "outcome": "success"},
+        "NET-5",
     ),
 ]
 

@@ -15,8 +15,10 @@ from unittest.mock import Mock
 
 import pytest
 import yaml
+from app.core.config import settings
 from app.db.models import ControlItem, Event, Framework, Mapping, RuleBackfillJob
 from app.ingest import common
+from app.services.managed_configurations import CONNECTORS
 from app.worker import rule_backfill, tasks
 
 # Imported fixture: the assembled application with an in-memory session store.
@@ -1025,7 +1027,14 @@ def test_event_samples_cover_every_source_a_pattern_matches(lab):
         assert refused.json()["detail"] == detail
 
 
-def test_the_source_catalogue_counts_a_rule_for_each_source_it_reads(lab):
+def test_the_source_catalogue_counts_a_rule_for_each_source_it_reads(
+    lab, monkeypatch, tmp_path
+):
+    # The catalogue reads each source's shipped document, which lives outside
+    # the repository until an installation stores its own.
+    for name, (setting, _, _) in CONNECTORS.items():
+        (tmp_path / f"{name}.yml").write_text("{}")
+        monkeypatch.setattr(settings, setting, str(tmp_path / f"{name}.yml"))
     lab.put(_several("identity"))
     lab.put(_rule("jenkins-only", source="jenkins"))
 

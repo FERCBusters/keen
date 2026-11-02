@@ -55,10 +55,12 @@ def test_catalogues_are_listed_and_served_exactly_as_loaded(
         assert all(latest.event_types[n] == t for n, t in first.event_types.items())
         assert set(latest.event_types) - set(first.event_types) == {
             "system.fault.detected",
-            "clock.sync.degraded",
+            "clock.sync.changed",
             "dns.lookup.failed",
             "application.error.logged",
             "user.account.changed",
+            "routine.task.completed",
+            "system.protection.activated",
         }
         extra = items[("acme-cloud", "1")]
         assert extra["origin"] == "deployment" and extra["event_types"] == 1

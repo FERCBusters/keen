@@ -193,7 +193,6 @@ RULES = [
         "Software installed, upgraded or removed on servers is recorded",
         "software.package.changed",
         "CHG-38",
-        "VPM-1",
     ),
     _agent(
         "keen-server-security-alerts",
