@@ -69,6 +69,46 @@ def test_regex_accepted_polynomial_pattern_has_runtime_deadline():
     assert time.monotonic() - started < 2
 
 
+def test_a_timeout_from_other_threads_work_is_retried():
+    # The regex package times a match by the whole process's processor time,
+    # so another thread's native work can end a quick match.
+    class Interrupted:
+        def __init__(self, timeouts):
+            self.timeouts = timeouts
+            self.calls = 0
+
+        def search(self, value, **kwargs):
+            self.calls += 1
+            if self.calls <= self.timeouts:
+                raise TimeoutError
+            return value
+
+    retried = Interrupted(timeouts=regex.MATCH_ATTEMPTS - 1)
+    assert regex.BoundedPattern(retried).search("azure") == "azure"
+    assert retried.calls == regex.MATCH_ATTEMPTS
+    # Interrupted every time, the run stops after the last attempt.
+    stopped = Interrupted(timeouts=regex.MATCH_ATTEMPTS)
+    with pytest.raises(ValueError, match="time budget"):
+        regex.BoundedPattern(stopped).search("azure")
+    assert stopped.calls == regex.MATCH_ATTEMPTS
+
+
+def test_a_match_that_uses_its_budget_is_not_retried():
+    calls = []
+
+    class Slow:
+        def search(self, value, **kwargs):
+            calls.append(value)
+            started = time.thread_time()
+            while time.thread_time() - started < regex.MATCH_TIMEOUT_SECONDS:
+                pass
+            raise TimeoutError
+
+    with pytest.raises(ValueError, match="time budget"):
+        regex.BoundedPattern(Slow()).search("aaaa")
+    assert calls == ["aaaa"]
+
+
 def test_bounded_matches_keep_the_interpreter_lock(monkeypatch):
     # The regex package times a match in processor time for the whole process.
     # A match that released the lock would be charged for other threads' work

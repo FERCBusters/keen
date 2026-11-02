@@ -254,6 +254,8 @@ crossList?.addEventListener('click', async (event) => {
 });
 let clauseCatalog = [];
 let clauseApplicabilityEditMode = false;
+// Declared before the tabs are wired: a deep-linked tab loads as the page starts.
+let risksLoaded = false;
 let interestedPartiesLoaded = false;
 let ismsLoaded = false;
 
@@ -506,7 +508,6 @@ function renderLinkedClauses() {
     </div>`;
 }
 
-let risksLoaded = false;
 async function loadLinkedRisks({ force = false } = {}) {
   if (!featureEnabled(me, 'risk_cia')) return;
   if (!risksCard || !risksView) return;

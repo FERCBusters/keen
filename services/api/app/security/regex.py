@@ -1,6 +1,7 @@
 """One bounded execution boundary for administrator-supplied match patterns."""
 
 import re
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 from re import _parser  # type: ignore[attr-defined]  # CPython's parser has no stub
@@ -16,6 +17,11 @@ MAX_INPUT_CHARS = 65536
 # could time out. Matches keep the lock; other threads' Python work is not
 # charged to them.
 MATCH_CONCURRENTLY = False
+# Native work elsewhere in the process, such as hashing or TLS, still counts
+# against a match's budget, so a timeout stops the run only once the matching
+# thread has itself used the budget; until then the match is tried again, at
+# most this many times in all.
+MATCH_ATTEMPTS = 3
 
 
 def validate_pattern(pattern):
@@ -67,15 +73,17 @@ class BoundedPattern:
     def search(self, value):
         if len(value) > MAX_INPUT_CHARS:
             raise ValueError("Regex input exceeds 65536 characters; narrow the input")
-        try:
-            return self.compiled.search(
-                value, timeout=MATCH_TIMEOUT_SECONDS, concurrent=MATCH_CONCURRENTLY
-            )
-        except TimeoutError:
-            # Stop the run rather than silently dropping a required mapping.
-            raise ValueError(
-                "Regex match exceeded its time budget; simplify the rule"
-            ) from None
+        for _ in range(MATCH_ATTEMPTS):
+            started = time.thread_time()
+            try:
+                return self.compiled.search(
+                    value, timeout=MATCH_TIMEOUT_SECONDS, concurrent=MATCH_CONCURRENTLY
+                )
+            except TimeoutError:
+                if time.thread_time() - started >= MATCH_TIMEOUT_SECONDS:
+                    break
+        # Stop the run rather than silently dropping a required mapping.
+        raise ValueError("Regex match exceeded its time budget; simplify the rule")
 
 
 @lru_cache(maxsize=256)

@@ -1194,3 +1194,21 @@ test('the ISMS tab names what it lists when only policies or measures are linked
     'No SWOT items, objectives, organisation roles, assets or meetings are linked to this control.',
   );
 });
+
+test('a deep link to Governance loads its linked records as the page starts', async (t) => {
+  const { ui } = await controlPage(t, {
+    query: '&id=c1&tab=governance',
+    setup(window) {
+      window.bootstrap = {
+        Tab: {
+          // Bootstrap announces a tab with no transition as soon as it is shown.
+          getOrCreateInstance: (el) => ({
+            show: () => el.dispatchEvent(new window.Event('shown.bs.tab')),
+          }),
+        },
+      };
+    },
+  });
+  await settle(() => ui.el('risksView').querySelectorAll('tbody tr').length === 2);
+  assert.equal(ui.el('risksCount').textContent, '2');
+});
