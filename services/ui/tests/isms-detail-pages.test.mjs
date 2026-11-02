@@ -182,6 +182,40 @@ test('meetings without details show placeholders and hide editing from readers',
   assert.equal(ui.el('editMeetingLink').style.display, 'none');
 });
 
+test('someone on a meeting reads it without ISMS links or its change history', async (t) => {
+  const row = {
+    id: 'x1',
+    title: 'Review',
+    links: [
+      { link_type: 'isms_document', document: { id: 'd1', title: 'Policy <b>' } },
+      { link_type: 'isms_document', title: 'Old policy', document: { id: 'd2' } },
+      { link_type: 'external_url', url: 'https://docs.example/minutes', title: 'Notes' },
+    ],
+    controls,
+    clauses,
+  };
+  const { ui } = await detail(t, 'isms-meeting', {
+    path: '/api/v1/isms/meetings/x1',
+    row,
+    me: {},
+    query: '&id=x1&tab=changelog',
+  });
+  const [policy, old, notes] = ui.el('meetingLinks').querySelectorAll('li');
+  // Linked documents are named without a link to pages the reader cannot open.
+  assert.equal(policy.querySelector('a'), null);
+  assert.equal(policy.textContent, 'Policy <b>ISMS document');
+  assert.equal(old.textContent, 'Old policyISMS document');
+  assert.equal(notes.querySelector('a').getAttribute('href'), 'https://docs.example/minutes');
+  assert.equal(ui.el('meetingBackLink').getAttribute('href'), '/account.html#my-meetings');
+  assert.equal(ui.el('meetingBackLink').textContent, '← My meetings');
+  assert.equal(ui.el('meetingBackButton').getAttribute('href'), '/account.html#my-meetings');
+  assert.equal(ui.el('meetingBackButton').textContent, 'Back to my meetings');
+  assert.equal(ui.el('meetingChangelogItem').hidden, true);
+  assert.equal(ui.el('meetingChangelogTab').classList.contains('active'), false);
+  assert.ok(!ui.calls.some((call) => call.url.includes('/changelog')));
+  assert.equal(ui.el('editMeetingLink').style.display, 'none');
+});
+
 test('ISMS documents link uploaded files and only safe external URLs', async (t) => {
   const row = {
     id: 'x1',

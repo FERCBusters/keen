@@ -11,6 +11,7 @@ from app.db.models import (
     User,
 )
 from app.security.permissions import has_permission
+from app.services import inbox
 from app.services.audits.access import (
     audit_or_404,
     can_manage_audits,
@@ -109,8 +110,9 @@ def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):
         document_values=payload.documents,
     )
     # The audit and its attendees are saved together, or not at all.
-    for attendee in payload.attendees:
-        db.add(_attendee_row(db, user, a, attendee))
+    attendees = [_attendee_row(db, user, a, attendee) for attendee in payload.attendees]
+    db.add_all(attendees)
+    inbox.audit_started(db, a, attendees, user)
     db.commit()
     db.refresh(a)
     return audit_summary(db, a, {user.id: user.username})
@@ -465,6 +467,7 @@ def add_attendee(
     a.updated_at = utcnow()
     db.add(row)
     db.add(a)
+    inbox.audit_started(db, a, [row], user)
     db.commit()
     db.refresh(row)
     return attendee_dict(row)

@@ -219,6 +219,7 @@ test('page help follows the page and the active tab', async (t) => {
     ['quiz', 'quizGradingTab', '/help/using-quizzes.html#grade-written-answers'],
     ['quiz-take', 'none', '/help/using-quizzes.html#sit-a-quiz'],
     ['account', 'my-quizzes-tab', '/help/using-quizzes.html#sit-a-quiz'],
+    ['notifications', 'none', '/help/using-account.html#notifications'],
   ];
   for (const [page, tab, url] of cases) {
     ui.document.body.dataset.page = page;
@@ -286,6 +287,7 @@ test('every help topic points at a published chapter and anchor', async (t) => {
     'quizResults',
     'quizGrading',
     'myQuizzes',
+    'notifications',
   ];
   for (const key of keys) {
     trigger.dataset.helpTopic = key;

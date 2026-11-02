@@ -598,6 +598,20 @@ def _meeting_out(
     return _attach_links(db, out, "meeting", row.id, framework, include_links)
 
 
+def meeting_for_attendee(out: dict[str, Any]) -> dict[str, Any]:
+    """A meeting as someone on it reads it without ISMS access: linked
+    documents by title, without their content."""
+    for link in out.get("links") or []:
+        document = link.get("document")
+        if document:
+            link["document"] = {
+                "id": document["id"],
+                "title": document["title"],
+                "display": document["display"],
+            }
+    return out
+
+
 def _entity_out(
     db: Session,
     entity_type: str,

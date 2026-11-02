@@ -18,6 +18,7 @@ from .features import router as features_router
 from .frameworks import router as frameworks_router
 from .graph import router as graph_router
 from .home import router as home_router
+from .inbox import router as inbox_router
 from .integrations import router as integrations_router
 from .interested_parties import router as interested_parties_router
 from .isms import router as isms_router
@@ -110,6 +111,7 @@ router = Router()
 router.include_router(auth_router, tags=["Auth"])
 router.include_router(audits_router, tags=["Audits"])
 router.include_router(me_router, tags=["Me"])
+router.include_router(inbox_router, tags=["Me"])
 router.include_router(users_router, tags=["Users"])
 router.include_router(admin_router, tags=["Admin"])
 router.include_router(webhooks_router, tags=["Webhooks"])

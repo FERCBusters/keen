@@ -85,6 +85,9 @@ _PERMISSION_WRITES = {
         # account's linked person and the round's participants.
         "/v1/me/quizzes/rounds/{round_id}/attempt",
         "/v1/me/quizzes/attempts/{attempt_id}/submit",
+        # A person marks only their own notifications as read.
+        "/v1/me/inbox/{item_id}/read",
+        "/v1/me/inbox/read-all",
     ),
     "PATCH": (
         "/v1/pestle/items/{item_id}",

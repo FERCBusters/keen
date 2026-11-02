@@ -142,3 +142,21 @@ def sanitize_rich_text_html(raw: str | None) -> str:
     parser.feed(value)
     parser.close()
     return parser.get_html()
+
+
+class _TextFinder(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.found = False
+
+    def handle_data(self, data: str) -> None:
+        if data.strip():
+            self.found = True
+
+
+def rich_text_has_text(value: str | None) -> bool:
+    """Whether rich text shows any words, beyond empty paragraphs and breaks."""
+    finder = _TextFinder()
+    finder.feed(value or "")
+    finder.close()
+    return finder.found

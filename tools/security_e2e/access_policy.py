@@ -169,6 +169,14 @@ OBJECT_RULES = {
     "GET /v1/controls/{control_id}/evidence/summary": (
         "Diary entries count only when the account can see them, as in the evidence list."
     ),
+    "GET /v1/isms/meetings/{meeting_id}": (
+        "An account recorded on the meeting, directly or through its linked People "
+        "record, reads it without isms.read; linked documents then appear by title only."
+    ),
+    "POST /v1/me/inbox/{item_id}/read": "The notification must belong to the account.",
+    "GET /v1/me/inbox": (
+        "Each notification is shown only while the account can open its record."
+    ),
 }
 
 OUTSIDE_SCHEMA = {
@@ -655,6 +663,10 @@ POLICY = {
     # --- The signed-in user's own data ---------------------------------------------
     "GET /v1/me": SIGNED_IN,
     "GET /v1/me/audits": SIGNED_IN,
+    "GET /v1/me/inbox": SIGNED_IN,
+    "POST /v1/me/inbox/read-all": SIGNED_IN,
+    "GET /v1/me/inbox/summary": SIGNED_IN,
+    "POST /v1/me/inbox/{item_id}/read": SIGNED_IN,
     "GET /v1/me/isms-assets": SIGNED_IN,
     "GET /v1/me/isms-meetings": SIGNED_IN,
     "GET /v1/me/isms-objectives": SIGNED_IN,

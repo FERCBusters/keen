@@ -11,16 +11,25 @@ from sqlalchemy.orm import Session
 from app.db.models import (
     IsmsMeeting,
     IsmsMeetingAttendee,
+    IsmsMeetingPerson,
     IsmsObjective,
     IsmsObjectiveResourceUser,
     IsmsOrgNode,
     IsmsOrgNodeUser,
+    IsmsPerson,
     RiskAsset,
     User,
 )
 from app.services.frameworks import framework_parameter
 
-from .serializers import _asset_out, _meeting_out, _objective_out, _org_node_out
+from .access import can_read_isms, meeting_ids_for
+from .serializers import (
+    _asset_out,
+    _meeting_out,
+    _objective_out,
+    _org_node_out,
+    meeting_for_attendee,
+)
 
 
 def my_isms_objectives(*, framework: str, user: User, db: Session):
@@ -80,11 +89,11 @@ def _org_path(node: IsmsOrgNode | None) -> list[dict[str, Any]]:
 
 
 def my_isms_meetings(*, framework: str, user: User, db: Session):
+    """Meetings the person is on, through their account or People record."""
     fw = framework_parameter(framework)
-    attendee_links = (
-        db.query(IsmsMeetingAttendee)
-        .join(IsmsMeeting, IsmsMeeting.id == IsmsMeetingAttendee.meeting_id)
-        .filter(IsmsMeetingAttendee.user_id == user.id)
+    rows = (
+        db.query(IsmsMeeting)
+        .filter(IsmsMeeting.id.in_(meeting_ids_for(user)))
         .order_by(
             IsmsMeeting.date.desc(),
             IsmsMeeting.start_time.desc().nullslast(),
@@ -92,27 +101,25 @@ def my_isms_meetings(*, framework: str, user: User, db: Session):
         )
         .all()
     )
-    grouped: dict[uuid.UUID, dict[str, Any]] = {}
-    for link in attendee_links:
-        if not link.meeting:
-            continue
-        row = grouped.setdefault(
-            link.meeting_id, {"meeting": link.meeting, "types": []}
-        )
-        if link.attendance_type not in row["types"]:
-            row["types"].append(link.attendance_type)
-
+    types: dict[uuid.UUID, set[str]] = {}
+    for meeting_id, kind in [
+        *db.query(
+            IsmsMeetingAttendee.meeting_id, IsmsMeetingAttendee.attendance_type
+        ).filter(IsmsMeetingAttendee.user_id == user.id),
+        *db.query(IsmsMeetingPerson.meeting_id, IsmsMeetingPerson.attendance_type)
+        .join(IsmsPerson, IsmsPerson.id == IsmsMeetingPerson.person_id)
+        .filter(IsmsPerson.user_id == user.id),
+    ]:
+        types.setdefault(meeting_id, set()).add(kind)
+    readable = can_read_isms(db, user)
     items = []
-    label_by_type = {"attendee": "Attendee", "apology": "Apology"}
-    for row in grouped.values():
-        meeting = row["meeting"]
-        types = list(row["types"] or [])
+    labels = {"attendee": "Attendee", "apology": "Apology"}
+    for meeting in rows:
+        mine = [kind for kind in labels if kind in types.get(meeting.id, set())]
         out = _meeting_out(db, meeting, fw)
-        out["my_attendance_types"] = types
-        out["my_attendance_label"] = ", ".join(
-            label_by_type.get(t, t.title()) for t in types
-        )
-        items.append(out)
+        out["my_attendance_types"] = mine
+        out["my_attendance_label"] = ", ".join(labels[kind] for kind in mine)
+        items.append(out if readable else meeting_for_attendee(out))
     return {"framework": fw, "items": items}
 
 

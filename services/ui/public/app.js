@@ -269,7 +269,16 @@ export function withStoriesLink(links = []) {
 // The bell's notification kinds: questions for everyone who has them, and
 // suggested mapping rules for administrators. Several kinds make the bell a menu.
 export function bellItems(me) {
-  const items = [];
+  // Everyone has an inbox: audits, quizzes and meeting minutes that concern them.
+  const items = [
+    {
+      label: 'Notifications',
+      href: '/notifications.html',
+      icon: 'bi-inbox',
+      summaryEndpoint: '/api/v1/me/inbox/summary',
+      countKey: 'unread_count',
+    },
+  ];
   if (featureEnabled(me, 'questions'))
     items.push({
       label: 'Questions',

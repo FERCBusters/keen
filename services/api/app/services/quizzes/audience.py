@@ -29,6 +29,7 @@ from app.db.models import (
     QuizRound,
     User,
 )
+from app.services import inbox
 from app.services.assurance import ensure_person_for_user
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
@@ -182,11 +183,15 @@ def round_person_ids(db: Session, quiz: Quiz) -> set[uuid.UUID]:
     return sitting
 
 
-def sync_participants(db: Session, quiz: Quiz, round_: QuizRound) -> list[uuid.UUID]:
+def sync_participants(
+    db: Session, quiz: Quiz, round_: QuizRound, *, actor: User | None
+) -> list[uuid.UUID]:
     """Bring an open round's participants into line with the audience.
 
     New people join; people no longer assigned leave unless they have started
-    the round, so nobody loses an attempt. Returns the participants added.
+    the round, so nobody loses an attempt. The accounts of people who join
+    hear about the round in their inbox, unless they made the change.
+    Returns the participants added.
     """
     wanted = round_person_ids(db, quiz)
     current = {
@@ -210,6 +215,7 @@ def sync_participants(db: Session, quiz: Quiz, round_: QuizRound) -> list[uuid.U
         db.add(row)
         added.append(row)
     db.flush()
+    inbox.quiz_participants_added(db, round_, [row.person_id for row in added], actor)
     return [row.id for row in added]
 
 
@@ -374,7 +380,7 @@ def replace_audience(
             .with_for_update()
             .all()
         )
-        if sync_participants(db, quiz, round_)
+        if sync_participants(db, quiz, round_, actor=user)
     ]
     record_quiz_change(db, quiz, "updated", before, quiz_snapshot(quiz), user, context)
     db.commit()

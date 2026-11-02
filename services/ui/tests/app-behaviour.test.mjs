@@ -189,24 +189,32 @@ test('changelog loader reports an API failure in its tab without the error text'
   }
 });
 
-test('the bell lists questions, and suggested rules for administrators', async () => {
+test('the bell lists notifications, questions, and suggested rules for administrators', async () => {
   const features = (enabled) => ({ features: { enabled } });
   // The items come from the page realm; compare plain copies.
   const labels = (me) => Array.from(a.bellItems(me), (item) => item.label);
-  assert.deepEqual(labels({ is_admin: true }), ['Questions', 'Suggested rules']);
-  assert.deepEqual(labels({ is_admin: false }), ['Questions']);
+  assert.deepEqual(labels({ is_admin: true }), ['Notifications', 'Questions', 'Suggested rules']);
+  assert.deepEqual(labels({ is_admin: false }), ['Notifications', 'Questions']);
   assert.deepEqual(labels({ is_admin: true, ...features({ questions: false }) }), [
+    'Notifications',
     'Suggested rules',
   ]);
-  assert.deepEqual(labels({ is_admin: true, ...features({ evidence: false }) }), ['Questions']);
-  assert.deepEqual(labels(features({ questions: false })), []);
-  const [questions, suggested] = a.bellItems({ is_admin: true });
+  assert.deepEqual(labels({ is_admin: true, ...features({ evidence: false }) }), [
+    'Notifications',
+    'Questions',
+  ]);
+  // Everyone keeps their inbox, whichever features are switched off.
+  assert.deepEqual(labels(features({ questions: false })), ['Notifications']);
+  const [inbox, questions, suggested] = a.bellItems({ is_admin: true });
+  assert.equal(inbox.href, '/notifications.html');
+  assert.equal(inbox.summaryEndpoint, '/api/v1/me/inbox/summary');
+  assert.equal(inbox.countKey, 'unread_count');
   assert.equal(questions.summaryEndpoint, '/api/v1/admin/questions/summary');
   assert.equal(questions.countKey, 'open_count');
   assert.equal(questions.ws, true);
   assert.equal(suggested.href, '/admin.html#rule-suggestions');
   assert.equal(suggested.summaryEndpoint, '/api/v1/admin/rule-suggestions/summary');
-  const [reader] = a.bellItems({ is_admin: false });
+  const [, reader] = a.bellItems({ is_admin: false });
   assert.equal(reader.summaryEndpoint, '/api/v1/me/questions/summary');
   assert.equal(reader.countKey, 'unread_count');
 });

@@ -22,6 +22,8 @@ import {
 
 const me = await initNavbar();
 const canManageIsms = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks);
+// Someone recorded on a meeting reads it without ISMS access, from My meetings.
+const canReadIsms = !!(me?.is_admin || me?.can_view_isms);
 
 const framework = getCurrentFramework();
 const params = new URLSearchParams(window.location.search || '');
@@ -34,6 +36,8 @@ function personBadges(list) {
 }
 
 function linkHtml(link) {
+  if (link?.link_type === 'isms_document' && link.document && !canReadIsms)
+    return `<li>${esc(link.document.title || link.title || 'ISMS document')}<span class="small-muted ms-2">ISMS document</span></li>`;
   if (link?.link_type === 'isms_document' && link.document) {
     const doc = link.document;
     const href = withFramework(
@@ -89,7 +93,19 @@ async function loadChangelog() {
 }
 
 function activateMeetingTab() {
-  activateTabFromHashOrQuery(params, { changelog: $('meetingChangelogTab') });
+  if (canReadIsms) activateTabFromHashOrQuery(params, { changelog: $('meetingChangelogTab') });
+}
+
+// Without ISMS access the way back is My meetings, and the change history,
+// kept for ISMS readers, is left out.
+function showAsAttendee() {
+  for (const link of [$('meetingBackLink'), $('meetingBackButton')]) {
+    link.href = '/account.html#my-meetings';
+    link.removeAttribute('data-nav-fw');
+  }
+  $('meetingBackLink').textContent = '← My meetings';
+  $('meetingBackButton').textContent = 'Back to my meetings';
+  $('meetingChangelogItem').hidden = true;
 }
 
 async function load() {
@@ -102,13 +118,14 @@ async function load() {
       `/api/v1/isms/meetings/${encodeURIComponent(meetingId)}?framework=${encodeURIComponent(framework)}`,
     );
     renderMeeting(meeting);
-    await loadChangelog();
+    if (canReadIsms) await loadChangelog();
     activateMeetingTab();
   } catch (e) {
     toast(status, `Failed to load meeting minutes: ${errorText(e)}`, 'danger');
   }
 }
 
+if (!canReadIsms) showAsAttendee();
 window.addEventListener('hashchange', activateMeetingTab);
 mountStoryRelated({ me, kind: 'meeting', id: meetingId, framework });
 load();

@@ -3693,6 +3693,45 @@ class SecurityNotification(Base):
     )
 
 
+class InboxItem(Base):
+    """Something a person is told about in their inbox.
+
+    An audit they attend starts, they are asked to sit a quiz round, or minutes
+    appear for a meeting they attended. The item names its record by kind and
+    identifier only; its title and link are read when the inbox is shown.
+    Each person is told about each record once.
+    """
+
+    __tablename__ = "inbox_items"
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "kind", "subject_id", name="uq_inbox_items_subject"
+        ),
+        CheckConstraint(
+            "kind IN ('audit_started','quiz_round','meeting_minutes')",
+            name="ck_inbox_items_kind",
+        ),
+        Index("ix_inbox_items_user_created", "user_id", "created_at"),
+        Index("ix_inbox_items_subject", "kind", "subject_id"),
+    )
+
+
 class SourceIngestionState(Base):
     __tablename__ = "source_ingestion_states"
     source: Mapped[str] = mapped_column(String(64), primary_key=True)

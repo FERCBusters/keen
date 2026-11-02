@@ -252,6 +252,12 @@ const topics = {
     'Manage your password, authenticator apps, security keys and recovery codes, and the e-mail addresses that may link an SSO identity.',
     'Store recovery codes somewhere safe before you need them. The guide explains what sign-in looks like afterwards.',
   ],
+  notifications: [
+    'Notifications',
+    'using-account.html#notifications',
+    'Your inbox lists the audits, quizzes and meeting minutes that concern you, when someone else started or added them. Opening one marks it as read.',
+    'Mark all as read clears the list without opening each record. The guide explains when a notification leaves the inbox.',
+  ],
 };
 const sourceGuides = {
   elasticsearch: ['Elasticsearch', 'elasticsearch'],
@@ -294,6 +300,7 @@ const pages = {
   'interested-party': 'context',
   'interested-parties': 'context',
   account: 'account',
+  notifications: 'notifications',
   isms: 'isms',
   'isms-document': 'documents',
   'isms-asset': 'peopleAssets',

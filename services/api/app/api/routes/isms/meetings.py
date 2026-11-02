@@ -9,6 +9,7 @@ from app.api.dependencies.isms import require_isms_manage, require_isms_read
 from app.api.routing import Router
 from app.core.config import settings
 from app.db.session import get_db
+from app.security.auth import require_authenticated
 from app.services.context import ChangeContext
 from app.services.isms import meetings as service
 from app.services.isms.schemas import MeetingPayload
@@ -46,7 +47,8 @@ def list_meetings(
 def get_meeting(
     meeting_id: str,
     framework: str = settings.default_framework_slug,
-    user=Depends(require_isms_read),
+    # isms.read, or being recorded on the meeting (checked by the service).
+    user=Depends(require_authenticated),
     db: Session = Depends(get_db),
 ):
     return service.get_meeting(

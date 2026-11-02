@@ -18,12 +18,12 @@
   <main id="main-content" class="container-fluid py-4">
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
-        <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/isms.html?tab=meetings">← ISMS meetings</a></div>
+        <div class="small-muted mb-1"><a id="meetingBackLink" class="link-subtle" data-nav-fw="1" href="/isms.html?tab=meetings">← ISMS meetings</a></div>
         <h1 class="h3 mb-1" id="meetingTitle">Meeting minutes</h1>
         <div class="small-muted" id="meetingMeta">Loading meeting minutes</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
-        <a class="btn btn-outline-secondary" data-nav-fw="1" href="/isms.html?tab=meetings">Back to meetings</a>
+        <a id="meetingBackButton" class="btn btn-outline-secondary" data-nav-fw="1" href="/isms.html?tab=meetings">Back to meetings</a>
         <a class="btn btn-outline-primary" data-nav-fw="1" id="editMeetingLink" href="/isms.html?tab=meetings">Edit in ISMS</a>
       </div>
     </div>
@@ -32,7 +32,7 @@
 
     <ul class="nav nav-tabs mb-3 no-print" id="meetingTabs" role="tablist">
       <li class="nav-item" role="presentation"><button class="nav-link active" id="meetingDetailsTab" data-bs-toggle="tab" data-bs-target="#meetingDetailsPane" type="button" role="tab">Details</button></li>
-      <li class="nav-item" role="presentation"><button class="nav-link" id="meetingChangelogTab" data-bs-toggle="tab" data-bs-target="#meetingChangelogPane" type="button" role="tab">Changelog</button></li>
+      <li class="nav-item" role="presentation" id="meetingChangelogItem"><button class="nav-link" id="meetingChangelogTab" data-bs-toggle="tab" data-bs-target="#meetingChangelogPane" type="button" role="tab">Changelog</button></li>
     </ul>
 
     <div class="tab-content" id="meetingTabContent">

@@ -45,6 +45,7 @@ from app.services.audit_schedules import (
 )
 from app.services.control_evidence_stats import refresh_framework_event_counts_cache
 from app.services.effectiveness_metrics import materialize_missing_monthly_zero_metrics
+from app.services.inbox import remove_old_items
 from app.services.quizzes.rounds import (
     close_due_quiz_rounds,
     invite_waiting,
@@ -609,6 +610,13 @@ def rule_suggestions_task() -> dict:
     """Suggest mapping rules from a sample of the latest unmapped events."""
     with SessionLocal() as db:
         return refresh_suggestions(db)
+
+
+@celery_app.task(name="app.worker.tasks.inbox_housekeeping_task")
+def inbox_housekeeping_task() -> dict:
+    """Remove inbox notifications read long ago, and very old unread ones."""
+    with SessionLocal() as db:
+        return {"removed": remove_old_items(db)}
 
 
 @celery_app.task(

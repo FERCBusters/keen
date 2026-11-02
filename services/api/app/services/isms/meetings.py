@@ -5,12 +5,16 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive as _utcnow
+from app.core.references import try_uuid
 from app.db.models import IsmsMeeting, User
+from app.security.rich_text import rich_text_has_text
+from app.services import inbox
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.frameworks import framework_parameter
 from app.services.text import clean_text
 
+from .access import can_read_isms, can_read_meeting
 from .common import _by_id_or_404, _clean_minutes_html, _record
 from .mutations import (
     _apply_links,
@@ -20,7 +24,7 @@ from .mutations import (
     _replace_meeting_person_links,
 )
 from .schemas import MeetingPayload
-from .serializers import _meeting_out
+from .serializers import _meeting_out, meeting_for_attendee
 
 
 def create_meeting(
@@ -56,6 +60,8 @@ def create_meeting(
     )
     _replace_meeting_links(db, row, payload.links or [])
     _apply_links(db, "meeting", row.id, fw, payload, user)
+    if rich_text_has_text(row.agenda_minutes_notes):
+        inbox.meeting_minutes(db, row, inbox.meeting_attendees(db, row.id), user)
     after = _meeting_out(db, row, fw)
     _record(db, "meeting", row, "created", None, after, user, context)
     db.commit()
@@ -75,8 +81,16 @@ def list_meetings(*, framework: str, user: User, db: Session):
 
 def get_meeting(*, meeting_id: str, framework: str, user: User, db: Session):
     fw = framework_parameter(framework)
+    if can_read_isms(db, user):
+        row = _by_id_or_404(db, IsmsMeeting, meeting_id, "Meeting")
+        return _meeting_out(db, row, fw)
+    # Someone on a meeting reads it without ISMS access. Any other meeting,
+    # or none at all, is refused alike.
+    mid = try_uuid(meeting_id)
+    if mid is None or not can_read_meeting(db, user, mid):
+        raise DomainError(status_code=403, detail="isms.read permission required")
     row = _by_id_or_404(db, IsmsMeeting, meeting_id, "Meeting")
-    return _meeting_out(db, row, fw)
+    return meeting_for_attendee(_meeting_out(db, row, fw))
 
 
 def update_meeting(
@@ -91,6 +105,8 @@ def update_meeting(
     fw = framework_parameter(framework)
     row = _by_id_or_404(db, IsmsMeeting, meeting_id, "Meeting")
     before = _meeting_out(db, row, fw)
+    had_minutes = rich_text_has_text(row.agenda_minutes_notes)
+    attended = inbox.meeting_attendees(db, row.id)
     fields = set(payload.model_fields_set or set())
     if "title" in fields:
         row.title = clean_text(payload.title, max_len=256, required=True, label="title")
@@ -116,6 +132,13 @@ def update_meeting(
     if "links" in fields:
         _replace_meeting_links(db, row, payload.links or [])
     _apply_links(db, "meeting", row.id, fw, payload, user)
+    if rich_text_has_text(row.agenda_minutes_notes):
+        # Attendees hear once that minutes are there: all of them when the
+        # minutes first appear, and attendees added later when they join.
+        attendees = inbox.meeting_attendees(db, row.id)
+        inbox.meeting_minutes(
+            db, row, attendees - attended if had_minutes else attendees, user
+        )
     after = _meeting_out(db, row, fw)
     _record(db, "meeting", row, "updated", before, after, user, context)
     db.commit()

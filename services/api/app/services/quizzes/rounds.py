@@ -70,7 +70,7 @@ def open_round(
     )
     db.add(round_)
     db.flush()
-    sync_participants(db, quiz, round_)
+    sync_participants(db, quiz, round_, actor=user)
     return round_
 
 

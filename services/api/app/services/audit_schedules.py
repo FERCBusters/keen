@@ -26,6 +26,7 @@ from app.db.models import (
     AuditSwotScope,
     User,
 )
+from app.services import inbox
 from app.services.mailer import (
     looks_like_email,
     send_audit_reminder_email,
@@ -71,7 +72,8 @@ def _audit_end_for_run(template: Audit, run_date: date) -> date | None:
 
 def _copy_template_scope_and_attendees(
     db: Session, *, template: Audit, audit: Audit
-) -> None:
+) -> list[AuditAttendee]:
+    """Copy a template's scope and attendees to its audit; returns the attendees."""
     now = utc_now_naive()
     controls = (
         db.query(AuditScopedControl.control_item_id)
@@ -128,18 +130,20 @@ def _copy_template_scope_and_attendees(
         .order_by(AuditAttendee.created_at.asc())
         .all()
     )
-    for attendee in attendees:
-        db.add(
-            AuditAttendee(
-                audit_id=audit.id,
-                user_id=attendee.user_id,
-                person_id=attendee.person_id,
-                name=attendee.name,
-                email=_attendee_notification_email(db, attendee),
-                role=attendee.role,
-                created_at=now,
-            )
+    copies = [
+        AuditAttendee(
+            audit_id=audit.id,
+            user_id=attendee.user_id,
+            person_id=attendee.person_id,
+            name=attendee.name,
+            email=_attendee_notification_email(db, attendee),
+            role=attendee.role,
+            created_at=now,
         )
+        for attendee in attendees
+    ]
+    db.add_all(copies)
+    return copies
 
 
 def _audit_email_fields(audit: Audit) -> dict[str, Any]:
@@ -219,7 +223,10 @@ def _audit_run(db: Session):
         )
         db.add(audit)
         db.flush()
-        _copy_template_scope_and_attendees(db, template=template, audit=audit)
+        attendees = _copy_template_scope_and_attendees(
+            db, template=template, audit=audit
+        )
+        inbox.audit_started(db, audit, attendees, None)
         template.schedule_last_created_audit_id = audit.id
         return audit
 

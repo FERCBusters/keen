@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen - Notifications</title>
+  <script src="/vendor/mosp-design-system/theme-boot.js"></script>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/demo-notice.js" defer></script>
+</head>
+<body data-page="notifications">
+  <a class="visually-hidden-focusable" href="#main-content">Skip to content</a>
+  <div id="navbar"></div>
+
+  <main id="main-content" class="container container-tight py-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+      <div>
+        <h1 class="h3 mb-1">Notifications</h1>
+        <div id="inbox-meta" class="small-muted" role="status">Loading notifications</div>
+      </div>
+      <div class="d-flex flex-wrap gap-3 align-items-center no-print">
+        <div class="form-check form-switch mb-0">
+          <input id="inbox-unread" class="form-check-input" type="checkbox" role="switch">
+          <label class="form-check-label" for="inbox-unread">Unread only</label>
+        </div>
+        <button id="inbox-read-all" class="btn btn-outline-primary" type="button" disabled><i class="bi bi-check2-all me-1" aria-hidden="true"></i>Mark all as read</button>
+      </div>
+    </div>
+
+    <div id="inbox-status" hidden></div>
+    <div id="inbox-list" class="list-group mb-3"></div>
+    <p class="small-muted mb-0">Keen tells you here when an audit you attend starts, when you are asked to take a quiz, and when minutes are added for a meeting you attended, unless you made the change yourself. Opening a notification marks it as read.</p>
+  </main>
+
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="/pages/notifications.js"></script>
+</body>
+</html>

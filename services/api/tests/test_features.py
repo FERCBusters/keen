@@ -285,6 +285,8 @@ def test_every_router_has_an_availability_decision():
         "evidence_retention",
         "features",
         "frameworks",
+        # The inbox hides each notification whose record's feature is off.
+        "inbox",
         "integrations",
         "managed_configurations",
         "me",
