@@ -18,6 +18,7 @@ from app.security.redaction import (
     redact_str,
     redact_url,
 )
+from app.services import inbox
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
@@ -259,5 +260,6 @@ def record_metric(*, db, metric_key, payload, context: ChangeContext):
         request_method=context.method,
         request_path=context.path,
     )
+    inbox.measure_result(db, measure, None)
     db.commit()
     return {"ok": True, "metric_entry": out}

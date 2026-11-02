@@ -43,6 +43,18 @@ function inboxItems() {
       read_at: '2026-10-31T01:00:00',
     },
     {
+      id: 'n5',
+      kind: 'measure_outside',
+      summary: 'Measure outside its threshold',
+      title: 'Patched within 14 days',
+      href: '/isms-effectiveness-measure.html?id=m1',
+      date_label: 'Recorded',
+      date: '2026-10-29',
+      actor: null,
+      created_at: '2026-10-29T02:00:00',
+      read_at: '2026-10-31T01:00:00',
+    },
+    {
       id: 'n4',
       kind: 'other',
       summary: 'Something',
@@ -98,11 +110,17 @@ test('the inbox lists notifications newest first with unread ones marked', async
   const links = rows(ui);
   assert.deepEqual(
     links.map((link) => link.getAttribute('href')),
-    ['/audit.html?id=a1', '/quiz-take.html?round=r1', '#', '#'],
+    [
+      '/audit.html?id=a1',
+      '/quiz-take.html?round=r1',
+      '#',
+      '/isms-effectiveness-measure.html?id=m1',
+      '#',
+    ],
   );
   assert.equal(ui.el('inbox-meta').textContent, '2 unread notifications');
   assert.equal(ui.el('inbox-read-all').disabled, false);
-  const [audit, quiz, minutes, other] = links;
+  const [audit, quiz, minutes, measure, other] = links;
   assert.match(audit.textContent, /^NewNew audit: Access review <img/);
   assert.equal(audit.querySelector('img'), null);
   assert.match(audit.textContent, /Starts 2026-11-09 · by dana/);
@@ -113,6 +131,8 @@ test('the inbox lists notifications newest first with unread ones marked', async
   assert.equal(minutes.querySelector('.badge'), null);
   assert.equal(minutes.querySelector('.flex-grow-1 > .small-muted').textContent, 'by erin');
   assert.ok(minutes.querySelector('.bi-journal-text'));
+  assert.ok(measure.querySelector('.bi-graph-down-arrow'));
+  assert.match(measure.textContent, /Recorded 2026-10-29 · by Keen/);
   assert.ok(other.querySelector('.bi-bell'));
 });
 
@@ -186,7 +206,7 @@ test('mark all as read clears every notification without opening any', async (t)
   assert.ok(ui.calls.some((call) => call.url === '/api/v1/me/inbox?unread=true'));
   ui.el('inbox-unread').checked = false;
   ui.el('inbox-unread').dispatchEvent(new ui.window.Event('change'));
-  await settle(() => rows(ui).length === 4);
+  await settle(() => rows(ui).length === 5);
 });
 
 test('an inbox that cannot be read or marked says so', async (t) => {

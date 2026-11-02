@@ -3724,7 +3724,8 @@ class InboxItem(Base):
             "user_id", "kind", "subject_id", name="uq_inbox_items_subject"
         ),
         CheckConstraint(
-            "kind IN ('audit_started','quiz_round','meeting_minutes')",
+            "kind IN ('audit_started','quiz_round','meeting_minutes',"
+            "'measure_outside')",
             name="ck_inbox_items_kind",
         ),
         Index("ix_inbox_items_user_created", "user_id", "created_at"),

@@ -23,7 +23,8 @@ from app.db.models import (
     User,
 )
 from app.security.rich_text import rich_text_has_text
-from app.services import audit_schedules, features, inbox
+from app.services import audit_schedules, features, inbox, webhooks
+from app.services.context import ChangeContext
 from app.services.quizzes import rounds as rounds_service
 from app.services.schedules import today_for_schedule
 from app.worker import tasks
@@ -641,3 +642,162 @@ def test_a_scheduled_round_tells_everyone_in_its_audience(world):  # noqa: F811
         (ada.user.id, None),
         (world.manager_user.id, None),
     }
+
+
+# --- Effectiveness measures ------------------------------------------------------------
+
+
+def test_a_measure_owner_hears_when_its_latest_result_falls_outside(people):
+    app, who = people
+    manager = app.client(who["manager"])
+    owner_user = app.user("isms.read")
+    owner = app.client(owner_user)
+
+    def send(method, path, body):
+        response = manager.request(
+            method, path, params={"framework": FW}, json=body, headers=unsafe(manager)
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    measure = send(
+        "POST",
+        "/v1/isms/effectiveness-measures",
+        {
+            "summary": "Patched within 14 days",
+            "metric_key": "patching",
+            "target_value": 95,
+            "target_unit": "%",
+            "threshold_operator": "gte",
+            "owner_user_id": str(owner_user.id),
+        },
+    )
+    path = f"/v1/isms/effectiveness-measures/{measure['id']}/metrics"
+
+    def record(value, day):
+        return send(
+            "POST",
+            path,
+            {
+                "metric_value": value,
+                "metric_unit": "%",
+                "recorded_at": f"2026-10-{day}T09:00:00",
+            },
+        )
+
+    record(97, 10)
+    assert _items(owner)["items"] == []
+    low = record(80, 11)
+    (item,) = _items(owner)["items"]
+    assert (item["kind"], item["summary"], item["title"]) == (
+        "measure_outside",
+        "Measure outside its threshold",
+        "Patched within 14 days",
+    )
+    assert item["href"] == f"/isms-effectiveness-measure.html?id={measure['id']}"
+    assert (item["date_label"], item["date"], item["actor"]) == (
+        "Recorded",
+        "2026-10-11",
+        who["manager"].username,
+    )
+    # Staying outside tells nobody again; recovering and falling again does.
+    record(70, 12)
+    record(99, 13)
+    assert len(_items(owner)["items"]) == 1
+    webhooks.record_metric(
+        db=app.db,
+        metric_key="patching",
+        payload={
+            "framework": FW,
+            "value": 60,
+            "unit": "%",
+            "recorded_at": "2026-10-14T09:00:00",
+        },
+        context=ChangeContext(method="POST", path="/v1/webhooks/test"),
+    )
+    latest = _items(owner)["items"][0]
+    assert (latest["date"], latest["actor"]) == ("2026-10-14", None)
+    assert len(_items(owner)["items"]) == 2
+
+    # A revised result that moves outside counts too; the owner's own changes do not.
+    entries = app.db.query(InboxItem).filter_by(kind="measure_outside").count()
+    send("PATCH", f"/v1/isms/effectiveness-metrics/{low['id']}", {"metric_value": 99})
+    assert app.db.query(InboxItem).filter_by(kind="measure_outside").count() == entries
+    owner_manager = app.user("isms.manage")
+    own = app.client(owner_manager)
+    send(
+        "PATCH",
+        f"/v1/isms/effectiveness-measures/{measure['id']}",
+        {"owner_user_id": str(owner_manager.id)},
+    )
+    response = own.post(
+        path,
+        params={"framework": FW},
+        json={
+            "metric_value": 99,
+            "metric_unit": "%",
+            "recorded_at": "2026-10-15T09:00:00",
+        },
+        headers=unsafe(own),
+    )
+    assert response.status_code == 200, response.text
+    response = own.post(
+        path,
+        params={"framework": FW},
+        json={
+            "metric_value": 50,
+            "metric_unit": "%",
+            "recorded_at": "2026-10-16T09:00:00",
+        },
+        headers=unsafe(own),
+    )
+    assert response.status_code == 200, response.text
+    assert _items(own)["items"] == []
+    for day, value in ((17, 99), (18, 98)):
+        fixed = send(
+            "POST",
+            path,
+            {
+                "metric_value": value,
+                "metric_unit": "%",
+                "recorded_at": f"2026-10-{day}T09:00:00",
+            },
+        )
+    send("PATCH", f"/v1/isms/effectiveness-metrics/{fixed['id']}", {"metric_value": 10})
+    assert len(_items(own)["items"]) == 1
+
+    # Without ISMS access, or with measures switched off, the items are hidden.
+    reader = app.db.get(User, owner_user.id)
+    reader.permissions.clear()
+    reader.authz_version = (reader.authz_version or 0) + 1
+    app.db.commit()
+    assert _items(app.client(owner_user))["items"] == []
+    features.update(app.db, app.user(role="admin"), 0, {"effectiveness": False})
+    assert _items(own)["items"] == []
+
+
+def test_a_measure_without_an_owner_or_a_numeric_threshold_tells_nobody(people):
+    app, who = people
+    db = app.db
+    from app.db.models import IsmsEffectivenessMeasure, IsmsEffectivenessMetricEntry
+
+    measure = IsmsEffectivenessMeasure(
+        framework_slug=FW, summary="Qualitative", target_value=None
+    )
+    db.add(measure)
+    db.flush()
+    db.add(
+        IsmsEffectivenessMetricEntry(
+            measure_id=measure.id, recorded_at=utc_now_naive(), metric_value=1
+        )
+    )
+    db.flush()
+    assert inbox.measure_result(db, measure, None) == 0
+    measure.owner_user_id = who["attendee"].id
+    assert inbox.measure_result(db, measure, None) == 0
+    empty = IsmsEffectivenessMeasure(
+        framework_slug=FW, summary="Empty", owner_user_id=who["attendee"].id
+    )
+    db.add(empty)
+    db.flush()
+    assert inbox.measure_result(db, empty, None) == 0

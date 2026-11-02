@@ -255,7 +255,7 @@ const topics = {
   notifications: [
     'Notifications',
     'using-account.html#notifications',
-    'Your inbox lists the audits, quizzes and meeting minutes that concern you, when someone else started or added them. Opening one marks it as read.',
+    'Your inbox lists the audits, quizzes, meeting minutes and measures that concern you, when someone else started or recorded them. Opening one marks it as read.',
     'Mark all as read clears the list without opening each record. The guide explains when a notification leaves the inbox.',
   ],
 };

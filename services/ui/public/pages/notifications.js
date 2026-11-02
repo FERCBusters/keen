@@ -8,6 +8,7 @@ const ICONS = {
   audit_started: 'bi-clipboard-check',
   quiz_round: 'bi-patch-question',
   meeting_minutes: 'bi-journal-text',
+  measure_outside: 'bi-graph-down-arrow',
 };
 const $ = (suffix) => document.getElementById(`inbox-${suffix}`);
 let items = [],

@@ -21,7 +21,7 @@ Compliance and security should be in reach of anyone, even those without big bud
 - **Manage risks and ISMS records:** maintain risk registers and treatments, access control and asset matrices, policies and procedures, objectives, measurements and minutes of meetings.
 - **Conduct audits:** plan and schedule audits, sample evidence, record findings, discuss evidence through questions, and retain reports and document revisions.
 - **Conduct training and awareness:** define quizzes of multiple-choice and written questions on your policies, assign them to people, accounts or organisation roles, and run them once or in scheduled rounds with invitations and reminders. Questions and options are shuffled for every sitting, written answers are graded blind. Each round's average is recorded on the quiz's effectiveness measure for the controls it tests.
-- **Keep people informed:** each person's notifications tell them when an audit they attend starts, when they are asked to take a quiz, and when minutes are added for a meeting they attended, and link straight to the record.
+- **Keep people informed:** each person's notifications tell them when an audit they attend starts, when they are asked to take a quiz, when minutes are added for a meeting they attended, and when a measure they own falls outside its threshold, and link straight to the record.
 - **Add context to events through stories:** gather the events, risks, records and notes of one incident into a story with a timeline and a drag-and-drop flow chart, add notes and associate assets/policies. Stories, like everything else, can be sampled into audits.
 
 ## Try out a free demo

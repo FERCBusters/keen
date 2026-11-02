@@ -13,6 +13,7 @@ from app.db.models import (
     Quiz,
     User,
 )
+from app.services import inbox
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
@@ -238,6 +239,7 @@ def add_effectiveness_result(
     _record_metric_change(
         db, row, "created", None, _metric_entry_out(row), user, context
     )
+    inbox.measure_result(db, measure, user)
     return row
 
 
@@ -260,6 +262,7 @@ def revise_effectiveness_result(
     _record_metric_change(
         db, row, "updated", before, _metric_entry_out(row), user, context
     )
+    inbox.measure_result(db, row.measure, user)
 
 
 def remove_effectiveness_result(

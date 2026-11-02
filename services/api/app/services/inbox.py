@@ -1,9 +1,9 @@
 """Each person's inbox: records that concern them, changed by someone else.
 
 Keen tells a person when an audit they attend starts, when they are asked to
-sit a quiz round, and when minutes appear for a meeting they attended. The
-person who made the change is not told, and nobody is told about the same
-record twice. An item names its record only: the title and link are read when
+sit a quiz round, when minutes appear for a meeting they attended, and when a
+measure they own falls outside its threshold. The person who made the change
+is not told, and nobody is told about the same record twice. An item names its record only: the title and link are read when
 the inbox is shown, and an item is shown only while its record exists, its
 feature is on and its reader can open it.
 """
@@ -25,6 +25,8 @@ from app.db.models import (
     Audit,
     AuditAttendee,
     InboxItem,
+    IsmsEffectivenessMeasure,
+    IsmsEffectivenessMetricEntry,
     IsmsMeeting,
     IsmsMeetingAttendee,
     IsmsMeetingPerson,
@@ -39,11 +41,13 @@ from app.services.audits.validation import MUTABLE_AUDIT_STATUSES
 from app.services.errors import DomainError
 from app.services.features import state
 from app.services.isms.access import can_read_isms, meeting_ids_for
+from app.services.isms.metric_values import threshold_status
 from app.services.schedules import today_for_schedule
 
 AUDIT_STARTED = "audit_started"
 QUIZ_ROUND = "quiz_round"
 MEETING_MINUTES = "meeting_minutes"
+MEASURE_OUTSIDE = "measure_outside"
 # The inbox lists this many of a person's latest items it can show.
 LIST_LIMIT = 100
 # Read items are removed after this long, and unread ones after a year.
@@ -174,6 +178,51 @@ def meeting_minutes(
     )
 
 
+def measure_result(
+    db: Session, measure: IsmsEffectivenessMeasure, actor: User | None
+) -> int:
+    """Tell a measure's owner when its latest result falls outside the
+    threshold after one that did not.
+
+    Call after recording or revising a result. Each result that crosses the
+    threshold is its own notification, so a measure that recovers and falls
+    outside again is reported again.
+    """
+    if measure.owner_user_id is None:
+        return 0
+    latest = (
+        db.query(IsmsEffectivenessMetricEntry)
+        .filter(IsmsEffectivenessMetricEntry.measure_id == measure.id)
+        .order_by(
+            IsmsEffectivenessMetricEntry.recorded_at.desc(),
+            IsmsEffectivenessMetricEntry.created_at.desc(),
+            IsmsEffectivenessMetricEntry.id.desc(),
+        )
+        .limit(2)
+        .all()
+    )
+
+    def outside(entry: IsmsEffectivenessMetricEntry) -> bool:
+        status = threshold_status(
+            entry.metric_value,
+            measure.target_value,
+            measure.threshold_operator,
+            entry.metric_unit or "",
+            measure.target_unit or "",
+        )
+        return status == "outside"
+
+    if not latest or not outside(latest[0]) or len(latest) > 1 and outside(latest[1]):
+        return 0
+    return notify(
+        db,
+        kind=MEASURE_OUTSIDE,
+        subject_id=latest[0].id,
+        user_ids=[measure.owner_user_id],
+        actor=actor,
+    )
+
+
 # --- Reading -------------------------------------------------------------------
 
 
@@ -249,10 +298,34 @@ def _meeting_views(db: Session, user: User, ids: set, features) -> dict:
     }
 
 
+def _measure_views(db: Session, user: User, ids: set, features) -> dict:
+    if not ids or not features.enabled("effectiveness") or not can_read_isms(db, user):
+        return {}
+    rows = (
+        db.query(IsmsEffectivenessMetricEntry, IsmsEffectivenessMeasure)
+        .join(
+            IsmsEffectivenessMeasure,
+            IsmsEffectivenessMeasure.id == IsmsEffectivenessMetricEntry.measure_id,
+        )
+        .filter(IsmsEffectivenessMetricEntry.id.in_(ids))
+    )
+    return {
+        entry.id: {
+            "summary": "Measure outside its threshold",
+            "title": measure.summary or "Effectiveness measure",
+            "href": f"/isms-effectiveness-measure.html?id={measure.id}",
+            "date_label": "Recorded",
+            "date": entry.recorded_at.date().isoformat(),
+        }
+        for entry, measure in rows
+    }
+
+
 VIEWS = {
     AUDIT_STARTED: _audit_views,
     QUIZ_ROUND: _quiz_views,
     MEETING_MINUTES: _meeting_views,
+    MEASURE_OUTSIDE: _measure_views,
 }
 
 
