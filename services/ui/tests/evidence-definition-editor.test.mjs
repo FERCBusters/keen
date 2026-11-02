@@ -1315,6 +1315,7 @@ test('rule insights badge each rule and list those to review first', async (t) =
     ...rules(4),
     { ...rules(5)[4], enabled: false },
     { id: 'hostile', description: hostile, when: { source: 'keen-agent' }, map_to: [] },
+    { id: 'keen-cloud-posture', description: 'Cloud', when: { source: 'aws' }, map_to: [] },
   ];
   const ui = await editor(t, {
     rules: library,
@@ -1329,6 +1330,8 @@ test('rule insights badge each rule and list those to review first', async (t) =
         ruleInsight('rule-04', 'insufficient', 'Fewer than 3 matches.'),
         ruleInsight('rule-05', 'paused', 'Paused.'),
         ruleInsight('hostile', 'silent', 'No matches in the last 90 days.'),
+        // A rule whose source sent nothing waits, outside the review.
+        ruleInsight('keen-cloud-posture', 'waiting', 'aws sent no events in that time.'),
         // An insight for a rule removed since is left out.
         ruleInsight('removed', 'quiet', 'Gone.'),
       ],
@@ -1346,6 +1349,7 @@ test('rule insights badge each rule and list those to review first', async (t) =
     'No baseline yet',
     null,
     'No recent matches',
+    'Waiting for evidence',
   ]);
   assert.equal(
     ui.$('rules').children[2].querySelector('.badge').title,

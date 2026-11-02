@@ -232,6 +232,18 @@ def test_rules_without_matches_say_whether_their_source_sent_anything(db):
         "No matches in the last 30 days, while ci sent 1 event. Preview the rule "
         "to compare its conditions with recent events."
     )
+    # A rule whose source sent nothing waits for evidence, outside the review.
+    assert status_of(result, "elsewhere") | {"message": None} == status_of(
+        result, "unmatched"
+    ) | {
+        "id": "elsewhere",
+        "source": "cd",
+        "sources": ["cd"],
+        "status": "waiting",
+        "source_last_seen": None,
+        "source_window_events": 0,
+        "message": None,
+    }
     assert status_of(result, "elsewhere")["message"] == (
         "No matches in the last 30 days; cd sent no events in that time."
     )
@@ -289,6 +301,7 @@ def test_a_rule_whose_sources_all_went_quiet_points_at_them(db):
         "about 1 hour. Its sources have sent no events for 2 days either; review "
         "the sources before the rule."
     )
+    assert status_of(result, "nothing")["status"] == "waiting"
     assert status_of(result, "nothing")["message"] == (
         "No matches in the last 90 days; its sources sent no events in that time."
     )

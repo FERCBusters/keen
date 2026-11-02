@@ -1292,6 +1292,7 @@ const RULE_STATUS = {
   active: ['text-bg-success', 'Active'],
   quiet: ['text-bg-warning', 'Stopped matching'],
   silent: ['text-bg-warning', 'No recent matches'],
+  waiting: ['text-bg-secondary', 'Waiting for evidence'],
   source_quiet: ['text-bg-secondary', 'Source quiet'],
   insufficient: ['text-bg-secondary', 'No baseline yet'],
   paused: ['text-bg-secondary', 'Paused'],

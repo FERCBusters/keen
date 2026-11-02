@@ -13,6 +13,8 @@ from alembic.config import Config
 from app.core.config import settings
 from sqlalchemy import create_engine, text
 
+from tests.test_builtin_rules import RULES as BUILTIN_RULES
+
 
 def test_release_schema_and_final_seed_data(monkeypatch):
     url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
@@ -109,6 +111,12 @@ def test_release_schema_and_final_seed_data(monkeypatch):
                 )
             )
             assert selection == {"enabled": ["KEEN-AF:1.0"], "default": "KEEN-AF:1.0"}
+            # The seeded framework has every built-in rule's controls, so each
+            # rule is added whole after the deployment's own.
+            rules = conn.scalar(
+                text("SELECT document FROM managed_configurations WHERE name='rules'")
+            )["rules"]
+            assert rules[-len(BUILTIN_RULES) :] == BUILTIN_RULES
             conn.execute(
                 text(
                     "UPDATE control_items SET title='Local edit' WHERE framework_slug='soc2_tsc' AND ref='CC6.1'"
@@ -138,6 +146,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0037_builtin_rules",
         "0036_control_owners",
         "0035_notification_delivery",
         "0034_inbox_measure_outside",

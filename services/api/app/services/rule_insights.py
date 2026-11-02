@@ -334,16 +334,22 @@ def _status(rule, activity, sources, read, clock, window_days, outranked_by) -> 
             "message": "Paused. Keen skips this rule while collecting evidence.",
         }
     if activity is None:
-        if not subject:
-            message = f"No matches in {period}."
-        elif source_events:
-            message = (
-                f"No matches in {period}, while {subject} sent {source_events:,} "
-                f"event{'' if source_events == 1 else 's'}. Preview the rule to "
-                "compare its conditions with recent events."
-            )
-        else:
-            message = f"No matches in {period}; {subject} sent no events in that time."
+        if subject and not source_events:
+            # Nothing to judge the rule by, such as a built-in rule for a
+            # source not set up; quiet sources show in Source insights.
+            return {
+                **result,
+                "status": "waiting",
+                "message": f"No matches in {period}; {subject} sent no events in "
+                "that time." + recorded_elsewhere,
+            }
+        message = (
+            f"No matches in {period}, while {subject} sent {source_events:,} "
+            f"event{'' if source_events == 1 else 's'}. Preview the rule to "
+            "compare its conditions with recent events."
+            if subject
+            else f"No matches in {period}."
+        )
         return {**result, "status": "silent", "message": message + recorded_elsewhere}
     since_last = max(0.0, (clock - activity["last"]).total_seconds())
     result["since_last_seconds"] = round(since_last)
