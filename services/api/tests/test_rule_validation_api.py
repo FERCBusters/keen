@@ -49,9 +49,39 @@ REFUSED = [
     (
         "no-source",
         {"id": "r", "when": {"action": "deploy"}, "map_to": [TARGET]},
-        "Choose a source for every rule",
+        "Choose a source, or several sources, for every rule",
     ),
-    ("blank-source", _rule("r", source="  "), "Choose a source for every rule"),
+    (
+        "blank-source",
+        _rule("r", source="  "),
+        "Choose a source, or several sources, for every rule",
+    ),
+    (
+        "blank-source-pattern",
+        {"id": "r", "when": {"source_regex": "  "}, "map_to": [TARGET]},
+        "Choose a source, or several sources, for every rule",
+    ),
+    (
+        "several-sources-one-connection",
+        {
+            "id": "r",
+            "when": {"source_regex": "^ci", "connection_id": "ci-one"},
+            "map_to": [TARGET],
+        },
+        "A rule for several sources cannot be limited to one connection or collection",
+    ),
+    (
+        "several-sources-one-collection",
+        {
+            "id": "r",
+            "when": {
+                "source_regex": "^ci",
+                "collector": '["jenkins", "jobs", "deploy"]',
+            },
+            "map_to": [TARGET],
+        },
+        "A rule for several sources cannot be limited to one connection or collection",
+    ),
     (
         "severity-high",
         _rule("r", severity=1001),

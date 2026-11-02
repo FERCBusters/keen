@@ -216,6 +216,7 @@ def test_rules_without_matches_say_whether_their_source_sent_anything(db):
         "id": "unmatched",
         "enabled": True,
         "source": "ci",
+        "sources": ["ci"],
         "connection_id": None,
         "status": "silent",
         "window_matches": 0,
@@ -234,6 +235,94 @@ def test_rules_without_matches_say_whether_their_source_sent_anything(db):
     assert status_of(result, "elsewhere")["message"] == (
         "No matches in the last 30 days; cd sent no events in that time."
     )
+
+
+CLOUDS = "\\A(?:aws|azure)\\Z"
+
+
+def several(rule_id, refs=("A.1",), confidence=0.8, **when):
+    return {
+        **rule(rule_id, refs=refs, confidence=confidence),
+        "when": {"source_regex": CLOUDS, **when},
+    }
+
+
+def test_a_rule_for_several_sources_is_judged_against_all_of_them(db):
+    save(db, several("identity"), several("unmatched", refs=("A.2",), action="never"))
+    stopped = NOW - timedelta(days=2)
+    matched(db, events(db, hourly(24, end=stopped), source="aws"), "identity")
+    events(db, hourly(2, end=NOW - timedelta(minutes=20)), source="azure")
+    events(db, [NOW - timedelta(minutes=1)], source="gcp")
+
+    result = run(db)
+
+    identity, unmatched = status_of(result, "identity"), status_of(result, "unmatched")
+    assert (identity["status"], identity["source"], identity["sources"]) == (
+        "quiet",
+        None,
+        ["aws", "azure"],
+    )
+    assert identity["source_window_events"] == 26
+    assert identity["message"].endswith(
+        "Its sources are still sending events, the latest 20 minutes ago, so the "
+        "rule may no longer describe them."
+    )
+    assert unmatched["message"] == (
+        "No matches in the last 90 days, while its sources sent 26 events. Preview "
+        "the rule to compare its conditions with recent events."
+    )
+
+
+def test_a_rule_whose_sources_all_went_quiet_points_at_them(db):
+    save(
+        db,
+        several("identity"),
+        several("nothing", refs=("A.2",), source_regex="^none$"),
+    )
+    stopped = NOW - timedelta(days=2)
+    matched(db, events(db, hourly(24, end=stopped), source="azure"), "identity")
+
+    result = run(db)
+
+    assert status_of(result, "identity")["message"] == (
+        "No matches for 2 days; 90% of the gaps between its matches are at most "
+        "about 1 hour. Its sources have sent no events for 2 days either; review "
+        "the sources before the rule."
+    )
+    assert status_of(result, "nothing")["message"] == (
+        "No matches in the last 90 days; its sources sent no events in that time."
+    )
+
+
+def test_rule_sources_follow_the_events_keen_holds(db):
+    from app.services.rule_sources import reads_source, rule_sources
+
+    for source in ("aws", "azure", "ci"):
+        events(db, [NOW], source=source)
+
+    assert rule_sources(db, {"source": "ci"}) == ["ci"]
+    assert rule_sources(db, {"source": "new-source"}) == ["new-source"]
+    # A named source is read even when its pattern refuses it, so a preview can
+    # explain the miss.
+    assert rule_sources(db, {"source": "ci", "source_regex": "^a"}) == ["ci"]
+    assert rule_sources(db, {"source_regex": CLOUDS}) == ["aws", "azure"]
+    assert rule_sources(db, {}) == ["aws", "azure", "ci"]
+    assert reads_source({"source_regex": CLOUDS}, "aws")
+    assert not reads_source({"source_regex": CLOUDS}, "aws-gov")
+    assert not reads_source({"source": "ci"}, "aws")
+
+
+def test_too_many_sources_to_match_a_pattern_are_refused(db, monkeypatch):
+    from app.services import rule_sources as module
+
+    for source in ("aws", "azure", "ci"):
+        events(db, [NOW], source=source)
+    monkeypatch.setattr(module, "MAX_SOURCES", 2)
+
+    with pytest.raises(DomainError) as refused:
+        module.rule_sources(db, {"source_regex": CLOUDS})
+    assert refused.value.status_code == 409
+    assert module.rule_sources(db, {"source": "ci"}) == ["ci"]
 
 
 def test_a_rule_with_few_matches_has_no_baseline(db):
@@ -801,7 +890,11 @@ def test_rules_sharing_a_control_are_told_which_rule_comes_first(db):
         rule("elsewhere", refs=("A.1",), source="cd"),
         rule("own-control", refs=("A.3",), actor="bob"),
         rule("paused", refs=("A.1",), confidence=1.0, enabled=False),
+        # A rule for other sources never competes, however confident.
+        several("clouds", refs=("A.1", "A.3"), confidence=0.95),
+        several("aws-too", refs=("A.3",), source_regex="^aws$"),
     )
+    events(db, [NOW], source="aws")
 
     result = run(db)
 
@@ -818,6 +911,8 @@ def test_rules_sharing_a_control_are_told_which_rule_comes_first(db):
         "elsewhere": None,
         "own-control": None,
         "paused": None,
+        "clouds": None,
+        "aws-too": "clouds",
     }
 
 

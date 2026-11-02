@@ -931,3 +931,129 @@ def test_rule_insights_follow_each_saved_version_for_administrators_only(
             "/v1/admin/mapping-rules/insights", params={"days": days}
         )
         assert response.status_code == code, response.text
+
+
+# --- Rules for several sources -----------------------------------------------------
+
+CLOUDS = "\\A(?:aws|azure)\\Z"
+
+
+def _several(rule_id="identity", *, refs=("A.1",), **when):
+    return {
+        "id": rule_id,
+        "when": {"source_regex": CLOUDS, **when},
+        "map_to": [{"framework": FW, "ref": ref, "kind": "control"} for ref in refs],
+        "confidence": 0.8,
+    }
+
+
+def test_a_rule_for_several_sources_previews_and_maps_each_of_them(lab):
+    aws = lab.event("posture.identity.mfa", source="aws")
+    azure = lab.event("posture.identity.admins", source="azure")
+    lab.event("posture.identity.mfa", source="aws-gov")
+    lab.event("posture.network.open", source="aws")
+    rule = _several(action_regex="^posture\\.identity")
+
+    body = _preview(lab, rule)
+    assert (body["examined"], body["matched"]) == (3, 2)
+    assert {item["event_id"] for item in body["examples"]} == {
+        str(aws.id),
+        str(azure.id),
+    }
+
+    saved = lab.put(rule, apply_existing=True)
+    assert saved["item"]["when"] == {
+        "source_regex": CLOUDS,
+        "action_regex": "^posture\\.identity",
+    }
+    job = lab.db.get(RuleBackfillJob, uuid.UUID(saved["backfill"]["id"]))
+    assert job.source == ""
+    assert rule_backfill.process_batch(job.id) is False
+    assert (lab.mapped(aws), lab.mapped(azure)) == ({"A.1"}, {"A.1"})
+    # New events from either source are mapped as they arrive.
+    later = lab.event("posture.identity.keys", source="azure", commit=False)
+    common.apply_rules(lab.db, later)
+    lab.db.commit()
+    assert lab.mapped(later) == {"A.1"}
+
+
+def test_a_rule_can_move_between_one_source_and_several(lab):
+    deploy = lab.event("deploy")
+    cloud = lab.event("deploy", source="aws")
+    lab.put(_rule("deploys", action="deploy"), apply_existing=True)
+    first = lab.db.query(RuleBackfillJob).one()
+    assert rule_backfill.process_batch(first.id) is False
+    assert (lab.mapped(deploy), lab.mapped(cloud)) == ({"A.1"}, set())
+
+    moved = lab.put(_several("deploys", action="deploy"), apply_existing=True)
+    job = lab.db.get(RuleBackfillJob, uuid.UUID(moved["backfill"]["id"]))
+    assert rule_backfill.process_batch(job.id) is False
+    # The old source's match is reconciled away and the new source is mapped.
+    assert (lab.mapped(deploy), lab.mapped(cloud)) == (set(), {"A.1"})
+
+
+def test_event_samples_cover_every_source_a_pattern_matches(lab):
+    lab.event("posture.identity.mfa", source="aws")
+    lab.event("posture.identity.admins", source="azure")
+    lab.event("deploy")
+
+    def samples(**params):
+        return lab.admin.get("/v1/admin/evidence-event-samples", params=params)
+
+    response = samples(source_regex=CLOUDS)
+    assert response.status_code == 200, response.text
+    assert sorted(item["source"] for item in response.json()["items"]) == [
+        "aws",
+        "azure",
+    ]
+    for params, detail in (
+        (
+            {"source_regex": CLOUDS, "source": "ci"},
+            "Sample one source, or several sources through a pattern",
+        ),
+        (
+            {"source_regex": CLOUDS, "connection_id": "ci-one"},
+            "Sample one source, or several sources through a pattern",
+        ),
+        (
+            {"source_regex": "(a+)+"},
+            "source_regex: Nested repetition can stall ingestion",
+        ),
+    ):
+        refused = samples(**params)
+        assert refused.status_code == 400
+        assert refused.json()["detail"] == detail
+
+
+def test_the_source_catalogue_counts_a_rule_for_each_source_it_reads(lab):
+    lab.put(_several("identity"))
+    lab.put(_rule("jenkins-only", source="jenkins"))
+
+    items = {
+        item["adapter"]: item["definitions"]
+        for item in lab.admin.get("/v1/admin/source-catalogue").json()["items"]
+    }
+
+    assert (items["aws"], items["azure"], items["linode"]) == (1, 1, 0)
+    assert items["jenkins"] == 1
+
+
+def test_a_source_export_holds_the_rules_for_several_sources_that_read_it(lab):
+    lab.put(_several("identity"))
+    lab.put(_rule("ci-deploys", action="deploy"))
+
+    def ids(source):
+        return [r["id"] for r in yaml.safe_load(_export(lab, source).text)["rules"]]
+
+    assert ids("azure") == ["identity"]
+    assert ids("ci") == ["ci-deploys"]
+    assert ids(None) == ["ci-deploys", "identity"]
+
+
+def test_a_preview_explains_why_a_named_source_misses_its_own_pattern(lab):
+    deploy = lab.event("deploy")
+
+    body = _preview(lab, _rule("narrow", source_regex="^cd$"))
+
+    assert (body["examined"], body["matched"]) == (1, 0)
+    assert [item["event_id"] for item in body["nonmatches"]] == [str(deploy.id)]

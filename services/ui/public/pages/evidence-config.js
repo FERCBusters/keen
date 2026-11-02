@@ -13,6 +13,10 @@ import {
   getCurrentFramework,
   unsavedGuard,
 } from '/app.js';
+import {
+  enhanceFilterPillMultiSelect,
+  selectedFilterPillValues,
+} from '/pages/filter-pill-multiselect.js';
 
 const $ = (suffix) => document.getElementById(`ec-${suffix}`);
 const unsaved = unsavedGuard({ root: $('editor'), hint: $('unsaved') });
@@ -41,6 +45,51 @@ function status(message, tone = 'danger') {
     }, 6000);
 }
 const conditions = ['source', 'system', 'actor', 'action', 'outcome', 'severity', 'label'];
+// --- Rules that read several sources -----------------------------------------------
+// The source picker's choice for a rule that reads several sources. The chosen
+// sources are kept as the rule's source pattern, which More filters shows.
+const SEVERAL = '__several__';
+let severalMode = false,
+  sourcePicker = null,
+  savedSources = null;
+const PATTERN_SYNTAX = '\\.^$*+?{}[]|()';
+// A pattern matching exactly the named sources, as the server suggests patterns.
+function sourcePattern(names) {
+  const escaped = [...names].sort().map((name) => name.replace(/[\\.^$*+?{}[\]|()]/g, '\\$&'));
+  return `\\A(?:${escaped.join('|')})\\Z`;
+}
+// The sources a pattern names, when it names sources exactly; otherwise null.
+function sourcesOf(pattern) {
+  const body = /^\\A\(\?:(.*)\)\\Z$/s.exec(pattern || '')?.[1];
+  if (body === undefined) return null;
+  const names = [];
+  let current = '';
+  for (let index = 0; index < body.length; index++) {
+    const character = body[index];
+    if (character === '\\') {
+      const next = body[index + 1];
+      if (next === undefined || !PATTERN_SYNTAX.includes(next)) return null;
+      current += next;
+      index++;
+    } else if (character === '|') {
+      names.push(current);
+      current = '';
+    } else if (PATTERN_SYNTAX.includes(character)) return null;
+    else current += character;
+  }
+  names.push(current);
+  return names.every(Boolean) ? names : null;
+}
+// How a sentence names the sources a pattern reads.
+function sourcesText(pattern) {
+  const names = sourcesOf(pattern);
+  if (!names) return pattern ? `sources matching “${pattern}”` : 'the chosen sources';
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} or ${names.at(-1)}`;
+}
+// A rule without its own source reads every source its pattern matches.
+function readsSeveral(when) {
+  return !when?.source && Boolean(when?.source_regex);
+}
 const regexConditions = [
   'source_regex',
   'system_regex',
@@ -392,7 +441,46 @@ function paintConnectionChoices() {
     select.add(new Option(c.name, c.id));
   if ([...select.options].some((option) => option.value === previous)) select.value = previous;
 }
+// A rule for several sources has no connection, collection or BookStack page.
+function showSeveral(several) {
+  const leaving = severalMode && !several;
+  severalMode = several;
+  $('several-sources').hidden = !several;
+  $('input-options').hidden = several;
+  const connection = $('definition-connection')?.parentElement;
+  if (connection) connection.hidden = several;
+  if (leaving && sourcesOf($('when-source_regex').value)) {
+    // The chosen sources do not carry over to a rule naming one source.
+    $('when-source_regex').value = '';
+    sourcePicker?.setSelected([]);
+  }
+  if (!several) return;
+  definitionVersion = 0;
+  definitionEntryKey = null;
+  $('when-source').value = '';
+  $('definition-section').replaceChildren(new Option('All collected events', 'source'));
+  $('definition-entry').replaceChildren(new Option('Collected events', '__all__'));
+  $('definition-fields').replaceChildren();
+  $('definition-extra').value = '{}';
+  for (const id of [
+    'collection-settings',
+    'source-scope-help',
+    'bookstack-picker',
+    'bookstack-conditions-panel',
+  ])
+    $(id).hidden = true;
+  syncSourcePicker();
+  loadSamples().catch((error) => status(error.message));
+}
+function syncSourcePicker() {
+  sourcePicker?.setSelected(sourcesOf($('when-source_regex').value) || [], {
+    pruneSelected: false,
+  });
+}
 async function selectDefinitionAdapter(keepConnection = false) {
+  const several = $('definition-adapter').value === SEVERAL;
+  showSeveral(several);
+  if (several) return;
   if (!keepConnection) paintConnectionChoices();
   const adapter = $('definition-adapter').value;
   const connection = sourceConnections.find((c) => c.id === selectedConnection());
@@ -417,6 +505,20 @@ async function selectDefinitionAdapter(keepConnection = false) {
 function definitionFromForm() {
   const adapter = $('definition-adapter').value,
     section = $('definition-section').value;
+  if (adapter === SEVERAL) {
+    if (!$('when-source_regex').value.trim())
+      throw new Error('Choose at least one source, or write a source pattern under More filters.');
+    return {
+      adapter,
+      section: 'source',
+      entry: {},
+      key: '__all__',
+      collector: null,
+      entry_key: null,
+      connector_version: 0,
+      connection_id: null,
+    };
+  }
   if (!adapter) throw new Error('Enable an ingester before creating a mapping.');
   if (
     layouts[adapter] &&
@@ -460,8 +562,9 @@ function sourceChoices(extra) {
   const select = $('definition-adapter');
   const current = extra || select.value;
   select.replaceChildren(...enabledSources.map((item) => new Option(item.label, item.value)));
-  if (extra && !enabledSources.some((item) => item.value === extra))
+  if (extra && extra !== SEVERAL && !enabledSources.some((item) => item.value === extra))
     select.add(new Option(extra + ' (inactive / existing evidence)', extra));
+  select.add(new Option('Several sources…', SEVERAL));
   if ([...select.options].some((o) => o.value === current)) select.value = current;
 }
 const fieldTitles = {
@@ -486,7 +589,10 @@ const fieldHelp = {
 };
 function eventSentence() {
   const parts = [
-    'From ' + ($('definition-adapter').selectedOptions[0]?.textContent || 'the selected source'),
+    'From ' +
+      (severalMode
+        ? sourcesText($('when-source_regex').value.trim())
+        : $('definition-adapter').selectedOptions[0]?.textContent || 'the selected source'),
   ];
   for (const [key, title] of [
     ['system', 'on system'],
@@ -500,7 +606,10 @@ function eventSentence() {
     ...conditions.filter((x) => !['source', 'system', 'action', 'outcome'].includes(x)),
     ...regexConditions,
     ...bookstackConditions,
-  ].filter((x) => $('when-' + x)?.value.trim());
+  ]
+    // With several sources, the source pattern is where the sentence starts.
+    .filter((x) => !(severalMode && x === 'source_regex'))
+    .filter((x) => $('when-' + x)?.value.trim());
   if (extra.length)
     parts.push('with ' + extra.length + ' additional filter' + (extra.length === 1 ? '' : 's'));
   return parts.join(', ') + '.';
@@ -710,7 +819,13 @@ async function loadRuleRevisions() {
   $('rule-restore').disabled = !data.items.length;
 }
 
-async function loadSamples() {
+function sampleRequest() {
+  if (severalMode) {
+    const pattern = $('when-source_regex').value.trim();
+    return pattern
+      ? `${apiRoot}/evidence-event-samples?source_regex=${encodeURIComponent(pattern)}`
+      : null;
+  }
   const source = $('when-source').value.trim();
   const identity = $('definition-entry').value;
   const isCollection = collectors.some(
@@ -719,20 +834,29 @@ async function loadSamples() {
   const filter =
     (isCollection ? `&collector=${encodeURIComponent(identity)}` : '') +
     (selectedConnection() ? `&connection_id=${encodeURIComponent(selectedConnection())}` : '');
-  const result =
-    source && source !== 'webhook:'
-      ? await apiGet(
-          `${apiRoot}/evidence-event-samples?source=${encodeURIComponent(source)}${filter}`,
-        )
-      : { items: [] };
+  return source && source !== 'webhook:'
+    ? `${apiRoot}/evidence-event-samples?source=${encodeURIComponent(source)}${filter}`
+    : null;
+}
+async function loadSamples() {
+  const request = sampleRequest();
+  const result = request ? await apiGet(request) : { items: [] };
   samples = result.items || [];
   $('sample').replaceChildren(
-    new Option(samples.length ? 'Select an event' : 'No recent events for this source', ''),
+    new Option(
+      samples.length
+        ? 'Select an event'
+        : severalMode
+          ? 'No recent events for these sources'
+          : 'No recent events for this source',
+      '',
+    ),
   );
+  // Events from several sources say which source sent them.
   for (const [index, event] of samples.entries())
     $('sample').add(
       new Option(
-        `${event.action || '(no action)'} · ${event.outcome || '(no result)'} · ${event.summary}`,
+        `${severalMode ? `${event.source} · ` : ''}${event.action || '(no action)'} · ${event.outcome || '(no result)'} · ${event.summary}`,
         String(index),
       ),
     );
@@ -838,19 +962,22 @@ function readRule() {
         ? Number(value)
         : value;
   }
-  when.source =
-    definition.section === 'source' && $('when-source').value.startsWith('webhook:')
-      ? $('when-source').value
-      : definition.adapter === 'webhooks' && definition.section !== 'source'
-        ? `webhook:${definition.key}`
-        : definition.adapter;
+  if (definition.adapter !== SEVERAL)
+    when.source =
+      definition.section === 'source' && $('when-source').value.startsWith('webhook:')
+        ? $('when-source').value
+        : definition.adapter === 'webhooks' && definition.section !== 'source'
+          ? `webhook:${definition.key}`
+          : definition.adapter;
   if (definition.connection_id) when.connection_id = definition.connection_id;
   if (definition.collector) when.collector = definition.collector;
   if (!$('rule-id').value.trim()) {
     const basis =
-      definition.section === 'source'
-        ? `${definition.adapter}_${$('description').value}`
-        : `${definition.adapter}_${definition.key}`;
+      definition.adapter === SEVERAL
+        ? `sources_${$('description').value}`
+        : definition.section === 'source'
+          ? `${definition.adapter}_${$('description').value}`
+          : `${definition.adapter}_${definition.key}`;
     const stem =
       basis
         .toLowerCase()
@@ -886,6 +1013,7 @@ async function newRule({ openEditor = true } = {}) {
     optional: true,
   });
   selectedRule = null;
+  savedSources = null;
   previewedRule = null;
   previewCount = 0;
   await loadRuleRevisions();
@@ -912,6 +1040,12 @@ async function newRule({ openEditor = true } = {}) {
   if (openEditor) showEditor(1);
   unsaved.markClean();
 }
+// What a saved rule reads: its source or pattern, connection and collection.
+function sourceSignature(when) {
+  return JSON.stringify(
+    ['source', 'source_regex', 'connection_id', 'collector'].map((key) => when?.[key] ?? null),
+  );
+}
 function showSelectedInput() {
   const adapter = $('definition-adapter').value,
     section = $('definition-section').value;
@@ -924,10 +1058,23 @@ function showSelectedInput() {
   const connectionLabel =
     sourceConnections.find((c) => c.id === selectedConnection())?.name ||
     (selectedConnection() ? 'Environment default' : 'all connections');
-  $('selected-input').textContent =
-    section === 'source'
-      ? `Selected input: All ${$('when-source').value || adapter} events from ${connectionLabel}. Choose another definition from the library to change inputs.`
-      : `Selected input: ${adapter} ${inputType(section)} “${collector?.key || $('definition-entry').selectedOptions[0]?.textContent || ''}” from ${connectionLabel}. Choose another definition from the library to change inputs.`;
+  const text = document.createElement('span');
+  text.textContent = severalMode
+    ? `Selected input: Events from ${sourcesText($('when-source_regex').value.trim())}.`
+    : section === 'source'
+      ? `Selected input: All ${$('when-source').value || adapter} events from ${connectionLabel}.`
+      : `Selected input: ${adapter} ${inputType(section)} “${collector?.key || $('definition-entry').selectedOptions[0]?.textContent || ''}” from ${connectionLabel}.`;
+  // A saved rule can read other sources; saving it then rechecks past evidence.
+  const change = document.createElement('button');
+  change.type = 'button';
+  change.className = 'btn btn-sm btn-outline-primary ms-2';
+  change.textContent = 'Change source';
+  change.addEventListener('click', () => {
+    $('input-picker').hidden = false;
+    $('selected-input').hidden = true;
+    $('definition-adapter').focus();
+  });
+  $('selected-input').replaceChildren(text, change);
   $('input-picker').hidden = true;
   $('selected-input').hidden = false;
 }
@@ -970,7 +1117,11 @@ async function editRule(rule) {
       (item.connection_id || 'env:' + item.adapter) ===
         (rule.when?.connection_id || 'env:' + item.adapter),
   );
-  if (linked) {
+  savedSources = sourceSignature(rule.when);
+  if (readsSeveral(rule.when)) {
+    $('definition-adapter').value = SEVERAL;
+    await selectDefinitionAdapter();
+  } else if (linked) {
     sourceChoices(linked.adapter);
     $('definition-adapter').value = linked.adapter;
     await selectDefinitionAdapter();
@@ -1016,9 +1167,11 @@ function renderRules() {
   const chosenSource = $('source-filter').value;
   const filtered = entries.filter(
     ({ rule, origin }) =>
-      (!chosenSource || (rule.when?.source || origin?.adapter) === chosenSource) &&
+      (!chosenSource ||
+        (rule.when?.source || origin?.adapter) === chosenSource ||
+        (readsSeveral(rule.when) && sourcesOf(rule.when.source_regex)?.includes(chosenSource))) &&
       (!query ||
-        `${rule.id} ${rule.description || ''} ${rule.when?.source || ''} ${JSON.stringify(rule.map_to || [])} ${origin?.adapter || ''} ${origin?.key || ''}`
+        `${rule.id} ${rule.description || ''} ${rule.when?.source || ''} ${rule.when?.source_regex || ''} ${JSON.stringify(rule.map_to || [])} ${origin?.adapter || ''} ${origin?.key || ''}`
           .toLowerCase()
           .includes(query)),
   );
@@ -1047,7 +1200,9 @@ function renderRules() {
     meta.textContent = `${rule.enabled === false ? 'Paused · ' : ''}${
       origin
         ? `${origin.adapter} ${inputType(origin.section)}: ${origin.key}`
-        : `All ${rule.when?.source || 'source'} events`
+        : readsSeveral(rule.when)
+          ? `Events from ${sourcesText(rule.when.source_regex)}`
+          : `All ${rule.when?.source || 'source'} events`
     } · ${rule.map_to?.length || 0} framework targets`;
     if (rule.when?.connection_id)
       meta.textContent +=
@@ -1270,7 +1425,10 @@ async function loadInsights() {
 async function setRulePaused(rule, paused) {
   const name = rule.description || rule.id;
   // The editor saves rules with a source and an ID it accepts; others change in the rules YAML.
-  if (!/^[A-Za-z0-9_-]{1,96}$/.test(rule.id) || !rule.when?.source?.trim()) {
+  if (
+    !/^[A-Za-z0-9_-]{1,96}$/.test(rule.id) ||
+    !(rule.when?.source || rule.when?.source_regex)?.trim()
+  ) {
     status(
       `${name} cannot be ${paused ? 'paused' : 'resumed'} here: it has no source, or its ID uses characters the editor does not accept. Set enabled: ${!paused} for it in the rules YAML instead.`,
     );
@@ -1370,7 +1528,11 @@ async function loadRules({ resetEditor = true } = {}) {
   const selectedSource = $('source-filter').value;
   $('source-filter').replaceChildren(new Option('All sources', ''));
   for (const source of [
-    ...new Set([...rules.map((r) => r.when?.source), ...collectors.map((c) => c.adapter)]),
+    ...new Set([
+      ...rules.map((r) => r.when?.source),
+      ...rules.flatMap((r) => (readsSeveral(r.when) && sourcesOf(r.when.source_regex)) || []),
+      ...collectors.map((c) => c.adapter),
+    ]),
   ]
     .filter(Boolean)
     .sort())
@@ -1465,9 +1627,12 @@ $('save-settings').addEventListener('click', async () => {
 $('when-source').addEventListener('change', () =>
   loadSamples().catch((error) => status(error.message)),
 );
-$('definition-adapter').addEventListener('change', () =>
-  selectDefinitionAdapter().catch((error) => status(error.message)),
-);
+$('definition-adapter').addEventListener('change', () => {
+  // Conditions only BookStack pages carry stay behind when a rule reads another source.
+  if ($('definition-adapter').value !== 'bookstack')
+    for (const field of bookstackConditions) $(`when-${field}`).value = '';
+  selectDefinitionAdapter().catch((error) => status(error.message));
+});
 $('definition-section').addEventListener('change', paintDefinitionChoices);
 $('definition-entry').addEventListener('change', paintDefinitionEntry);
 $('bookstack-book').addEventListener('change', () =>
@@ -1630,7 +1795,9 @@ $('preview').addEventListener('click', async () => {
     const container = $('preview-results');
     container.replaceChildren();
     const heading = document.createElement('p');
-    heading.textContent = `${data.matched} of ${data.examined} recent ${rule.when.source} events matched. ${data.note || ''}`;
+    heading.textContent = rule.when.source
+      ? `${data.matched} of ${data.examined} recent ${rule.when.source} events matched. ${data.note || ''}`
+      : `${data.matched} of ${data.examined} recent events from ${sourcesText(rule.when.source_regex)} matched. ${data.note || ''}`;
     container.append(heading);
     if (data.examples.length || data.nonmatches?.length) {
       const hint = document.createElement('p');
@@ -1743,17 +1910,37 @@ $('save-rule').addEventListener('click', async () => {
     )
       return;
     const definition = definitionFromForm();
-    const saved = await apiPut(`${apiRoot}/evidence-definitions/${encodeURIComponent(rule.id)}`, {
-      adapter: definition.adapter,
-      section: definition.section,
-      entry_key: definition.entry_key,
-      entry: definition.entry,
-      connection_id: definition.connection_id,
-      rule,
-      connector_version: definition.connector_version,
-      rules_version: ruleVersion,
-      apply_existing: $('apply-existing').checked,
-    });
+    // Reading other sources changes which past events the rule owns.
+    const applyExisting =
+      $('apply-existing').checked ||
+      (savedSources !== null &&
+        savedSources !== sourceSignature(rule.when) &&
+        (await confirmAction({
+          title: 'Apply to past evidence',
+          message:
+            'This rule now reads different sources. Apply it to past evidence as well, so its earlier matches are rechecked and events already collected from the new sources are mapped?',
+          confirmLabel: 'Apply to past evidence',
+          cancelLabel: 'New events only',
+        })));
+    const saved =
+      definition.adapter === SEVERAL
+        ? await apiPut(`${apiRoot}/mapping-rules/${encodeURIComponent(rule.id)}`, {
+            version: ruleVersion,
+            rule,
+            create_only: !selectedRule,
+            apply_existing: applyExisting,
+          })
+        : await apiPut(`${apiRoot}/evidence-definitions/${encodeURIComponent(rule.id)}`, {
+            adapter: definition.adapter,
+            section: definition.section,
+            entry_key: definition.entry_key,
+            entry: definition.entry,
+            connection_id: definition.connection_id,
+            rule,
+            connector_version: definition.connector_version,
+            rules_version: ruleVersion,
+            apply_existing: applyExisting,
+          });
     await loadRules();
     await editRule(rules.find((item) => item.id === rule.id));
     showStep(3);
@@ -1772,7 +1959,7 @@ $('backfill-start').addEventListener('click', async () => {
   if (
     !(await confirmAction({
       title: 'Backfill earlier evidence',
-      message: `Evaluate all previous ${$('when-source').value} evidence against saved rule ${selectedRule}? This runs in the background.`,
+      message: `Evaluate all previous ${severalMode ? `evidence from ${sourcesText($('when-source_regex').value.trim())}` : `${$('when-source').value} evidence`} against saved rule ${selectedRule}? This runs in the background.`,
       confirmLabel: 'Backfill',
     }))
   )
@@ -1845,6 +2032,44 @@ async function load() {
     if (collector.enabled && collector.live_revision)
       enabledSources.push({ value: 'integration:' + collector.id, label: collector.name });
   sourceChoices();
+  sourcePicker = enhanceFilterPillMultiSelect($('sources'), {
+    title: 'Choose sources',
+    description: 'Select the sources whose events this rule reads.',
+    buttonLabel: 'Choose sources',
+    singular: 'source',
+    plural: 'sources',
+    emptyText: 'No sources chosen',
+    emptySelectedText:
+      'No sources chosen. Choose some, or write a source pattern under More filters.',
+    noMatchText: 'No sources match your filter.',
+    searchPlaceholder: 'Filter sources',
+    // Webhook events carry their provider's source, such as webhook:github.
+    options: [
+      ...enabledSources.filter((item) => item.value !== 'webhooks'),
+      ...(observed.sources || [])
+        .filter((source) => !enabledSources.some((item) => item.value === source))
+        .map((source) => ({ value: source, label: source })),
+    ],
+    selectedValues: [],
+  });
+  // Chosen sources become the rule's source pattern; a written pattern shows its sources.
+  $('sources').addEventListener('change', () => {
+    const names = selectedFilterPillValues($('sources'));
+    $('when-source_regex').value = names.length ? sourcePattern(names) : '';
+    ruleSentence();
+    loadSamples().catch((error) => status(error.message));
+  });
+  $('when-source_regex').addEventListener('input', () => {
+    if (severalMode) syncSourcePicker();
+    ruleSentence();
+  });
+  $('when-source_regex').addEventListener('change', () => {
+    if (severalMode) loadSamples().catch((error) => status(error.message));
+  });
+  $('source-pattern').addEventListener('click', () => {
+    $('more-filters').open = true;
+    $('when-source_regex').focus();
+  });
   await selectDefinitionAdapter();
   await loadRules();
   await loadSettings();

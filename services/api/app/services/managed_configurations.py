@@ -42,6 +42,7 @@ from app.mapping.rules import (
 from app.mapping.targets import resolve_targets
 from app.security.redaction import redact_url
 from app.services.errors import DomainError
+from app.services.rule_sources import distinct_sources, reads_source, rule_sources
 
 CONNECTORS = {
     "jenkins": ("jenkins_config_path", "jobs", "name"),
@@ -752,6 +753,15 @@ def get_evidence_definitions(*, db: Session):
     }
 
 
+def _reads_type(rule: dict, name: str) -> bool:
+    """Whether a rule reads events of a source type, by name or by its pattern."""
+    when = rule.get("when") or {}
+    source = str(when.get("source") or "")
+    if source:
+        return source.split(":")[0] == name
+    return bool(when.get("source_regex")) and reads_source(when, name)
+
+
 def source_catalogue(*, db: Session):
     """Show supported adapters, collection setup and observed evidence."""
     definition_data = get_evidence_definitions(db=db)
@@ -771,11 +781,7 @@ def source_catalogue(*, db: Session):
         if name in ("redmine", "riskledger", "imap") and settings.demo_mode:
             enabled = False
         count = sum(1 for item in collectors if item["adapter"] == name)
-        matching_rules = sum(
-            1
-            for rule in rules
-            if (str((rule.get("when") or {}).get("source") or "").split(":")[0] == name)
-        )
+        matching_rules = sum(1 for rule in rules if _reads_type(rule, name))
         sources = [
             (src, n, at)
             for src, (n, at) in observed.items()
@@ -808,9 +814,7 @@ def source_catalogue(*, db: Session):
             "adapter": "keen-agent",
             "enabled": not settings.demo_mode,
             "collection_items": agents_count,
-            "definitions": sum(
-                1 for r in rules if (r.get("when") or {}).get("source") == "keen-agent"
-            ),
+            "definitions": sum(1 for r in rules if _reads_type(r, "keen-agent")),
             "observed_events": agent_events,
             "last_seen": agent_last,
             "managed_version": 0,
@@ -839,11 +843,7 @@ def source_catalogue(*, db: Session):
                 "adapter": provider.key,
                 "enabled": bool(getattr(settings, provider.setting, False)),
                 "collection_items": int(scopes.get(provider.key, 0)),
-                "definitions": sum(
-                    1
-                    for r in rules
-                    if (r.get("when") or {}).get("source") == provider.key
-                ),
+                "definitions": sum(1 for r in rules if _reads_type(r, provider.key)),
                 "observed_events": events,
                 "last_seen": last_seen,
                 "managed_version": 0,
@@ -1231,12 +1231,21 @@ def _validate_rule(rule: dict, db: Session):
             400, "Rule ID must be 1-96 letters, numbers, underscores or hyphens"
         )
     when = rule.get("when")
-    if (
-        not isinstance(when, dict)
-        or not isinstance(when.get("source"), str)
-        or not when["source"].strip()
-    ):
+    if not isinstance(when, dict):
         raise DomainError(400, "Choose a source for every rule")
+    # A rule reads one source, or several through a source pattern.
+    named = isinstance(when.get("source"), str) and bool(when["source"].strip())
+    pattern = isinstance(when.get("source_regex"), str) and bool(
+        when["source_regex"].strip()
+    )
+    if not named and not pattern:
+        raise DomainError(400, "Choose a source, or several sources, for every rule")
+    if not named and (when.get("connection_id") or when.get("collector")):
+        raise DomainError(
+            400,
+            "A rule for several sources cannot be limited to one connection or "
+            "collection",
+        )
     unknown = set(when) - _KNOWN_WHEN_KEYS
     if unknown:
         raise DomainError(
@@ -1341,7 +1350,8 @@ def _queue_rule_backfill(db: Session, rule: dict, version: int) -> dict | None:
     from app.db.models import RuleBackfillJob
     from app.worker.tasks import backfill_rule_task
 
-    source = rule["when"]["source"].strip()
+    when = rule["when"]
+    source = str(when.get("source") or "").strip()
     current = (
         db.query(RuleBackfillJob)
         .filter_by(rule_id=rule["id"], rules_version=version)
@@ -1361,7 +1371,10 @@ def _queue_rule_backfill(db: Session, rule: dict, version: int) -> dict | None:
     exists = (
         db.query(Event.id)
         .filter(
-            or_(Event.source == source, Event.id.in_(rule_owned_event_ids(rule["id"]))),
+            or_(
+                Event.source.in_(rule_sources(db, when)),
+                Event.id.in_(rule_owned_event_ids(rule["id"])),
+            ),
             Event.created_at <= cutoff,
         )
         .first()
@@ -1456,8 +1469,9 @@ def preview_rule(*, payload: RuleInput, db: Session):
             "note": "Rule is paused; enable it to preview matches.",
         }
     rule = parse_rules({"rules": [payload.rule]})[0]
-    source = payload.rule["when"]["source"]
-    query = db.query(Event).filter(Event.source == source)
+    query = db.query(Event).filter(
+        Event.source.in_(rule_sources(db, payload.rule["when"]))
+    )
     if payload.rule["when"].get("connection_id"):
         query = query.filter(
             Event.connection_id == payload.rule["when"]["connection_id"]
@@ -1524,35 +1538,41 @@ def evidence_event_samples(
     source: str | None = None,
     collector: str | None = None,
     connection_id: str | None = None,
+    source_regex: str | None = None,
     db: Session,
 ):
-    """Expose the event fields used by exact-match rule conditions."""
-    if not source:
-        sources = [
-            slug
-            for (slug,) in db.query(Event.source)
-            .distinct()
-            .order_by(Event.source)
-            .limit(100)
-            .all()
-        ]
-        return {"sources": sources, "items": []}
-    source = source.strip()[:128]
-    query = db.query(Event).filter(Event.source == source)
-    if connection_id:
-        query = query.filter(Event.connection_id == connection_id)
-    if collector:
-        try:
-            adapter, _, _ = json.loads(collector)
-            if adapter != source and not (
-                adapter == "webhooks" and source.startswith("webhook:")
-            ):
-                raise ValueError("Source and collection item differ")
-            query = query.filter(
-                Event.raw_pointer.contains(collector_pointer_filter(collector))
+    """Expose the event fields used by exact-match rule conditions.
+
+    A source pattern samples the recent events of every source it matches, as
+    a rule for several sources reads them.
+    """
+    if source_regex:
+        if source or collector or connection_id:
+            raise DomainError(
+                400, "Sample one source, or several sources through a pattern"
             )
-        except (ValueError, TypeError, KeyError, IndexError) as exc:
-            raise DomainError(400, "Invalid collection item") from exc
+        _validate_regex(source_regex, "source_regex")
+        sources = rule_sources(db, {"source_regex": source_regex})
+        query = db.query(Event).filter(Event.source.in_(sources))
+    elif not source:
+        return {"sources": distinct_sources(db, limit=100), "items": []}
+    else:
+        source = source.strip()[:128]
+        query = db.query(Event).filter(Event.source == source)
+        if connection_id:
+            query = query.filter(Event.connection_id == connection_id)
+        if collector:
+            try:
+                adapter, _, _ = json.loads(collector)
+                if adapter != source and not (
+                    adapter == "webhooks" and source.startswith("webhook:")
+                ):
+                    raise ValueError("Source and collection item differ")
+                query = query.filter(
+                    Event.raw_pointer.contains(collector_pointer_filter(collector))
+                )
+            except (ValueError, TypeError, KeyError, IndexError) as exc:
+                raise DomainError(400, "Invalid collection item") from exc
     rows = query.order_by(Event.timestamp.desc()).limit(20).all()
     return {
         "items": [
@@ -2226,7 +2246,18 @@ def export_rules(*, source: str, db: Session):
         raise DomainError(400, "Source is too long")
     rules = _normalized_rules(db)
     if source:
-        rules = [r for r in rules if r.get("when", {}).get("source") == source]
+        # A source's export holds its own rules and the rules for several
+        # sources that read it.
+        rules = [
+            r
+            for r in rules
+            if r.get("when", {}).get("source") == source
+            or (
+                not r.get("when", {}).get("source")
+                and r.get("when", {}).get("source_regex")
+                and reads_source(r["when"], source)
+            )
+        ]
     document = {"rules": sorted(rules, key=lambda r: r.get("id", ""))}
     filename = re.sub(r"[^a-zA-Z0-9_-]", "_", source)[:80] or "all"
     return yaml.safe_dump(document, sort_keys=False, allow_unicode=True), filename

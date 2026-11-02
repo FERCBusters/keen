@@ -106,6 +106,7 @@ test('unchanged legacy Summary regex saves without consuming a structured condit
   const context = vm.createContext({
     $: (key) => elements[key],
     definitionFromForm: () => ({ section: 'source', adapter: 'source' }),
+    SEVERAL: '__several__',
     readFieldConditions: () => [
       { scope: 'event', path: ['summary'], operator: row.fieldInputs.op.value, value: '^$' },
     ],

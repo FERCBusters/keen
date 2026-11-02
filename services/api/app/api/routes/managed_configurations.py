@@ -167,11 +167,16 @@ def evidence_event_samples(
     source: str | None = None,
     collector: str | None = None,
     connection_id: str | None = None,
+    source_regex: str | None = None,
     db: Session = Depends(get_db),
 ):
     "Expose the event fields used by exact-match rule conditions."
     return service.evidence_event_samples(
-        source=source, collector=collector, connection_id=connection_id, db=db
+        source=source,
+        collector=collector,
+        connection_id=connection_id,
+        source_regex=source_regex,
+        db=db,
     )
 
 

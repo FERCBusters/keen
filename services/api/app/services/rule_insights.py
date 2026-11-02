@@ -32,6 +32,7 @@ from app.services.errors import DomainError
 from app.services.event_filters import statement_cancelled
 from app.services.managed_configurations import get_rules
 from app.services.mapping_provenance import rule_of_rationale
+from app.services.rule_sources import MAX_SOURCES, distinct_sources, reads_source
 from app.services.source_insights import (
     DEFAULT_DAYS,
     MIN_EVENTS_FOR_BASELINE,
@@ -107,15 +108,28 @@ def _insights(rules: dict, window_days: int, clock: datetime, db: Session) -> di
     start = clock - timedelta(days=window_days)
     ids = {rule["id"] for rule in items}
     activity = _rule_activity(db, ids, start, clock)
-    sources = _source_activity(db, items, start, clock)
+    # Rules for several sources read the observed sources their patterns match.
+    observed = (
+        distinct_sources(db, limit=MAX_SOURCES)
+        if any(_reads_several(rule["when"]) for rule in items)
+        else []
+    )
+    reads = {id(rule): _sources_read(rule["when"], observed) for rule in items}
+    sources = _source_activity(
+        db,
+        sorted(set().union(*(read for read in reads.values() if read))),
+        start,
+        clock,
+    )
     enabled = [rule for rule in items if rule["enabled"]]
     consolidation = _consolidation(enabled)
-    outranked = _outranked(enabled)
+    outranked = _outranked(enabled, reads)
     statuses = [
         _status(
             rule,
             activity.get(rule["id"]),
             sources,
+            reads[id(rule)],
             clock,
             window_days,
             outranked.get(rule["id"]),
@@ -144,7 +158,16 @@ def _names(rules: list[dict]) -> dict[str, str]:
     return {rule["id"]: f"“{rule.get('description') or rule['id']}”" for rule in rules}
 
 
-def _outranked(rules: list[dict]) -> dict[str, str]:
+def _sources_read(when: dict, observed: list[str]) -> set[str] | None:
+    """The sources a rule reads, or None for a rule reading every source."""
+    if when.get("source"):
+        return {when["source"]}
+    if when.get("source_regex"):
+        return {source for source in observed if reads_source(when, source)}
+    return None
+
+
+def _outranked(rules: list[dict], reads: dict) -> dict[str, str]:
     """For each rule, how messages name a rule that records their shared controls first.
 
     An event records each control once, under the most confident matching rule
@@ -158,12 +181,13 @@ def _outranked(rules: list[dict]) -> dict[str, str]:
     name = _names(rules)
     found: dict[str, str] = {}
     for rule in rules:
-        source = rule["when"].get("source")
+        mine = reads[id(rule)]
         first = next(
             (
                 other
                 for other in ranked[: rank[id(rule)]]
-                if (source is None or other["when"].get("source") in (None, source))
+                # Two rules compete only for events from a source both read.
+                if (mine is None or reads[id(other)] is None or mine & reads[id(other)])
                 and targets[id(other)] & targets[id(rule)]
             ),
             None,
@@ -217,11 +241,8 @@ def _rule_activity(db: Session, ids: set[str], start, clock) -> dict[str, dict]:
     return activity
 
 
-def _source_activity(db: Session, rules: list[dict], start, clock) -> dict:
+def _source_activity(db: Session, names: list[str], start, clock) -> dict:
     """The latest event and the event count per source and connection."""
-    names = sorted(
-        {rule["when"]["source"] for rule in rules if rule["when"].get("source")}
-    )
     if not names:
         return {}
     rows = (
@@ -242,6 +263,10 @@ def _source_activity(db: Session, rules: list[dict], start, clock) -> dict:
     return found
 
 
+def _reads_several(when: dict) -> bool:
+    return not when.get("source") and bool(when.get("source_regex"))
+
+
 def _usual_longest_gap(hours: dict[int, int]) -> float:
     """The 90th percentile of the gaps between matches, estimated from hourly counts.
 
@@ -260,24 +285,32 @@ def _usual_longest_gap(hours: dict[int, int]) -> float:
     return gaps[bisect_right(counted, round(0.9 * (counted[-1] - 1)))][0]
 
 
-def _status(rule, activity, sources, clock, window_days, outranked_by) -> dict:
+def _status(rule, activity, sources, read, clock, window_days, outranked_by) -> dict:
     when = rule["when"]
     source = when.get("source")
-    connections = (sources.get(source) or {}) if source else {}
-    if when.get("connection_id"):
-        seen = (
-            [connections[when["connection_id"]]]
-            if when["connection_id"] in connections
-            else []
-        )
+    if source:
+        reads = [source]
+        connections = sources.get(source) or {}
+        connection = when.get("connection_id")
+        if connection:
+            seen = [connections[connection]] if connection in connections else []
+        else:
+            seen = list(connections.values())
+    elif read is not None:
+        reads = sorted(read)
+        seen = [entry for name in reads for entry in (sources.get(name) or {}).values()]
     else:
-        seen = list(connections.values())
+        reads, seen = [], []
+    # How messages name the sources the rule reads, if it names any.
+    subject = source or ("its sources" if _reads_several(when) else None)
+    one = bool(source)
     source_last = max((last for last, _ in seen), default=None)
     source_events = sum(count for _, count in seen)
     result: dict[str, Any] = {
         "id": rule["id"],
         "enabled": rule["enabled"],
         "source": source,
+        "sources": reads,
         "connection_id": when.get("connection_id"),
         "window_matches": activity["events"] if activity else 0,
         "last_matched": activity["last"].isoformat() if activity else None,
@@ -301,16 +334,16 @@ def _status(rule, activity, sources, clock, window_days, outranked_by) -> dict:
             "message": "Paused. Keen skips this rule while collecting evidence.",
         }
     if activity is None:
-        if not source:
+        if not subject:
             message = f"No matches in {period}."
         elif source_events:
             message = (
-                f"No matches in {period}, while {source} sent {source_events:,} "
+                f"No matches in {period}, while {subject} sent {source_events:,} "
                 f"event{'' if source_events == 1 else 's'}. Preview the rule to "
                 "compare its conditions with recent events."
             )
         else:
-            message = f"No matches in {period}; {source} sent no events in that time."
+            message = f"No matches in {period}; {subject} sent no events in that time."
         return {**result, "status": "silent", "message": message + recorded_elsewhere}
     since_last = max(0.0, (clock - activity["last"]).total_seconds())
     result["since_last_seconds"] = round(since_last)
@@ -338,8 +371,10 @@ def _status(rule, activity, sources, clock, window_days, outranked_by) -> dict:
         f"No matches for {humanise_seconds(since_last)}; 90% of the gaps between "
         f"its matches are at most about {humanise_seconds(usual)}."
     )
-    if not source:
+    if not subject:
         return {**result, "status": "quiet", "message": quiet + recorded_elsewhere}
+    # A source's own name keeps its case; only the general phrase starts a sentence.
+    named = source or "Its sources"
     source_silence = (
         (clock - source_last).total_seconds() if source_last is not None else None
     )
@@ -352,20 +387,24 @@ def _status(rule, activity, sources, clock, window_days, outranked_by) -> dict:
             **result,
             "status": "quiet",
             "message": (
-                f"{quiet} {source} is still sending events, the latest "
+                f"{quiet} {named} {'is' if one else 'are'} still sending events, the latest "
                 f"{humanise_seconds(source_silence)} ago, so the rule may no longer "
                 "describe them." + recorded_elsewhere
             ),
         }
     silent_source = (
-        f"{source} sent no events in {period}"
+        f"{named} sent no events in {period}"
         if source_silence is None
-        else f"{source} has sent no events for {humanise_seconds(source_silence)} either"
+        else f"{named} {'has' if one else 'have'} sent no events for "
+        f"{humanise_seconds(source_silence)} either"
     )
     return {
         **result,
         "status": "source_quiet",
-        "message": f"{quiet} {silent_source}; review the source before the rule.",
+        "message": (
+            f"{quiet} {silent_source}; review the {'source' if one else 'sources'} "
+            "before the rule."
+        ),
     }
 
 

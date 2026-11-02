@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import timedelta
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import ColumnElement, and_, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.datetime_utils import utc_now_naive
@@ -23,6 +23,7 @@ from app.mapping.rules import evaluate_by_framework, parse_rules, rule_rationale
 from app.mapping.targets import resolve_targets
 from app.services.control_evidence_stats import clear_stats_caches
 from app.services.mapping_provenance import rule_owned_event_ids
+from app.services.rule_sources import rule_sources
 
 log = logging.getLogger(__name__)
 BATCH_SIZE = 200
@@ -85,7 +86,10 @@ def process_batch(job_id: uuid.UUID) -> bool:
                 return False
             job.rules_version = current.version
         identity = job.rule_document.get("when", {}).get("collector")
-        scope = Event.source == job.source
+        # A rule for several sources reads every source its pattern matches.
+        scope: ColumnElement[bool] = Event.source.in_(
+            rule_sources(db, job.rule_document.get("when", {}))
+        )
         connection_id = job.rule_document.get("when", {}).get("connection_id")
         if connection_id:
             scope = and_(scope, Event.connection_id == connection_id)

@@ -86,7 +86,12 @@ async function editor(t, server = {}) {
     const path = url.pathname,
       query = url.searchParams;
     if (path === '/api/v1/admin/evidence-event-samples')
-      return { sources: [], items: structuredClone(state.samples) };
+      return {
+        sources: structuredClone(state.observedSources || []),
+        items: structuredClone(
+          query.get('source_regex') ? state.patternSamples || [] : state.samples,
+        ),
+      };
     if (path === '/api/v1/admin/source-catalogue')
       return { items: state.sources.map((adapter) => ({ adapter, enabled: true })) };
     if (path === '/api/v1/admin/integrations')
@@ -196,7 +201,9 @@ async function editor(t, server = {}) {
     if (saved) {
       if (state.failSave) throw new Error(state.failSave);
       const rule = structuredClone(body.rule);
-      state.rules = state.rules.map((item) => (item.id === rule.id ? rule : item));
+      state.rules = state.rules.some((item) => item.id === rule.id)
+        ? state.rules.map((item) => (item.id === rule.id ? rule : item))
+        : [...state.rules, rule];
       state.rulesVersion++;
       return {
         version: state.rulesVersion,
@@ -492,8 +499,8 @@ test('choosing a BookStack page records its book and slug with the saved input',
   assert.equal(ui.$('rule-id').value, 'bookstack_12');
   assert.equal(ui.$('rule-id').disabled, true);
   assert.equal(
-    ui.$('selected-input').textContent,
-    'Selected input: bookstack page “12” from Policies wiki. Choose another definition from the library to change inputs.',
+    ui.$('selected-input').querySelector('span').textContent,
+    'Selected input: bookstack page “12” from Policies wiki.',
   );
   assert.equal(ui.$('status').textContent, 'Mapping saved. Future evidence uses it immediately.');
 });
@@ -838,6 +845,229 @@ test('deleting a definition asks first and keeps its collection', async (t) => {
   await ui.idle();
   assert.equal(ui.$('status').textContent, ui.state.failDelete);
   assert.equal(ui.$('status').getAttribute('role'), 'alert');
+});
+
+// --- Rules for several sources ------------------------------------------------------
+
+const CLOUDS = '\\A(?:aws|azure)\\Z';
+const severalSources = {
+  sources: ['keen-agent', 'aws', 'azure', 'linode', 'webhooks', 'bookstack'],
+  observedSources: ['aws', 'digitalocean'],
+  patternSamples: [
+    {
+      id: 's1',
+      source: 'aws',
+      action: 'posture.identity.mfa',
+      outcome: 'fail',
+      summary: 'MFA off',
+      fields: [],
+    },
+  ],
+};
+const pills = (ui) => ui.document.getElementById('ec-sourcesFilterPillModal');
+const chosen = (ui) =>
+  [
+    ...ui.document.querySelectorAll('[data-filter-pill-for="ec-sources"] .keen-filter-pill-chip'),
+  ].map((chip) => chip.dataset.value);
+async function pick(ui, ...names) {
+  for (const name of names)
+    pills(ui).querySelector(`.keen-filter-pill-grid [data-value="${name}"]`).click();
+  await ui.idle();
+}
+
+test('a rule for several sources is chosen with source pills and saved as one pattern', async (t) => {
+  const ui = await editor(t, severalSources);
+  await ui.click('new-rule');
+  const adapters = [...ui.$('definition-adapter').options].map((option) => option.value);
+  assert.equal(adapters.at(-1), '__several__');
+  await ui.choose('definition-adapter', '__several__');
+  assert.equal(ui.$('several-sources').hidden, false);
+  assert.equal(ui.$('input-options').hidden, true);
+  assert.equal(ui.$('sample').options[0].textContent, 'No recent events for these sources');
+  // Enabled sources and sources with events are offered; the choice itself is not.
+  assert.deepEqual(
+    [...pills(ui).querySelectorAll('.keen-filter-pill-grid [data-value]')]
+      .map((chip) => chip.dataset.value)
+      .sort(),
+    // Webhook events carry their provider's source, so the adapter itself is not offered.
+    ['aws', 'azure', 'bookstack', 'digitalocean', 'keen-agent', 'linode'],
+  );
+
+  await pick(ui, 'azure', 'aws');
+  assert.equal(ui.$('when-source_regex').value, CLOUDS);
+  assert.deepEqual(chosen(ui).sort(), ['aws', 'azure']);
+  assert.ok(
+    ui.calls.includes(
+      '/api/v1/admin/evidence-event-samples?source_regex=' + encodeURIComponent(CLOUDS),
+    ),
+  );
+  assert.equal(
+    ui.$('sample').options[1].textContent,
+    'aws · posture.identity.mfa · fail · MFA off',
+  );
+  assert.match(ui.$('rule-sentence').textContent, /^From aws or azure\./);
+
+  ui.$('description').value = 'Identity posture';
+  ui.$('control').value = 'A1';
+  ui.$('add-target').click();
+  await ui.click('preview');
+  const preview = ui.writes.find((write) => write.path === '/api/v1/admin/mapping-rules/preview');
+  assert.deepEqual(preview.body.rule.when, { source_regex: CLOUDS });
+  assert.equal(
+    ui.$('preview-results').firstElementChild.textContent,
+    '1 of 1 recent events from aws or azure matched. ',
+  );
+  await ui.click('save-rule');
+  const saved = ui.writes.find((write) => write.method === 'PUT');
+  assert.equal(saved.path, '/api/v1/admin/mapping-rules/sources_identity_posture');
+  assert.deepEqual(
+    { ...saved.body, rule: undefined },
+    { version: 7, rule: undefined, create_only: true, apply_existing: true },
+  );
+  assert.deepEqual(saved.body.rule.when, { source_regex: CLOUDS });
+  assert.equal(ui.$('status').textContent, 'Mapping saved. Future evidence uses it immediately.');
+  assert.equal(ui.$('definition-adapter').value, '__several__');
+  assert.equal(
+    ui.$('selected-input').querySelector('span').textContent,
+    'Selected input: Events from aws or azure.',
+  );
+
+  await ui.click('close-editor');
+  assert.deepEqual(ui.library(), [
+    ['Identity posture', 'Events from aws or azure · 1 framework targets'],
+  ]);
+  // Filtering the library by one of its sources keeps the rule.
+  ui.$('source-filter').value = 'azure';
+  ui.$('source-filter').dispatchEvent(new ui.window.Event('change'));
+  assert.equal(ui.library().length, 1);
+});
+
+test('a written source pattern stands in for chosen sources', async (t) => {
+  const ui = await editor(t, severalSources);
+  await ui.click('new-rule');
+  await ui.choose('definition-adapter', '__several__');
+  await ui.click('next-step');
+  assert.equal(
+    ui.$('status').textContent,
+    'Choose at least one source, or write a source pattern under More filters.',
+  );
+
+  ui.$('source-pattern').click();
+  assert.equal(ui.$('more-filters').open, true);
+  assert.equal(ui.document.activeElement, ui.$('when-source_regex'));
+  const type = async (value) => {
+    ui.$('when-source_regex').value = value;
+    ui.$('when-source_regex').dispatchEvent(new ui.window.Event('input'));
+    ui.$('when-source_regex').dispatchEvent(new ui.window.Event('change'));
+    await ui.idle();
+  };
+  await type('^(aws|gcp)');
+  assert.deepEqual(chosen(ui), []);
+  assert.match(ui.$('rule-sentence').textContent, /^From sources matching “\^\(aws\|gcp\)”\./);
+  // A pattern that names sources exactly shows them as chosen.
+  await type('\\A(?:linode|a\\.b)\\Z');
+  assert.deepEqual(chosen(ui).sort(), ['a.b', 'linode']);
+  assert.match(ui.$('rule-sentence').textContent, /^From linode or a\.b\./);
+  await ui.click('next-step');
+  assert.equal(ui.$('step-number').textContent, '2');
+
+  // Choosing one source again leaves the chosen sources behind.
+  await ui.click('prev-step');
+  await ui.choose('definition-adapter', 'aws');
+  assert.equal(ui.$('when-source_regex').value, '');
+  assert.equal(ui.$('several-sources').hidden, true);
+  assert.equal(ui.$('input-options').hidden, false);
+});
+
+test('BookStack page conditions stay behind when a rule reads another source', async (t) => {
+  const ui = await editor(t, severalSources);
+  await ui.click('new-rule');
+  await ui.choose('definition-adapter', 'bookstack');
+  ui.$('when-bookstack_book_slug').value = 'policies';
+  await ui.choose('definition-adapter', 'bookstack');
+  assert.equal(ui.$('when-bookstack_book_slug').value, 'policies');
+  await ui.choose('definition-adapter', '__several__');
+  assert.equal(ui.$('when-bookstack_book_slug').value, '');
+});
+
+test('a saved rule can change its sources and is offered past evidence', async (t) => {
+  const ui = await editor(t, {
+    ...severalSources,
+    rules: [
+      {
+        id: 'identity',
+        description: 'Identity posture',
+        when: { source_regex: CLOUDS, action_regex: '^posture' },
+        map_to: [{ framework: 'A', ref: 'A1' }],
+        enabled: true,
+      },
+    ],
+    confirm: false,
+  });
+  [...ui.$('rules').querySelectorAll('button')]
+    .find((button) => button.querySelector('strong')?.textContent === 'Identity posture')
+    .click();
+  await ui.idle();
+  assert.equal(ui.$('definition-adapter').value, '__several__');
+  assert.deepEqual(chosen(ui).sort(), ['aws', 'azure']);
+  assert.equal(ui.$('input-picker').hidden, true);
+  assert.equal(
+    ui.$('selected-input').querySelector('span').textContent,
+    'Selected input: Events from aws or azure.',
+  );
+
+  ui.$('selected-input').querySelector('button').click();
+  assert.equal(ui.$('input-picker').hidden, false);
+  assert.equal(ui.document.activeElement, ui.$('definition-adapter'));
+  await pick(ui, 'linode');
+  assert.equal(ui.$('when-source_regex').value, '\\A(?:aws|azure|linode)\\Z');
+  ui.$('apply-existing').checked = false;
+  await ui.click('preview');
+  await ui.click('save-rule');
+  assert.deepEqual(
+    ui.confirmations.map((c) => [c.title, c.confirmLabel, c.cancelLabel]),
+    [['Apply to past evidence', 'Apply to past evidence', 'New events only']],
+  );
+  const first = ui.writes.filter((write) => write.method === 'PUT').at(-1);
+  assert.equal(first.path, '/api/v1/admin/mapping-rules/identity');
+  assert.equal(first.body.create_only, false);
+  assert.equal(first.body.apply_existing, false);
+
+  // Moving the rule to one source saves it as a source-wide definition.
+  ui.$('selected-input').querySelector('button').click();
+  await ui.choose('definition-adapter', 'aws');
+  ui.$('apply-existing').checked = false;
+  ui.state.confirm = true;
+  await ui.click('preview');
+  await ui.click('save-rule');
+  const moved = ui.writes.filter((write) => write.method === 'PUT').at(-1);
+  assert.equal(moved.path, '/api/v1/admin/evidence-definitions/identity');
+  assert.equal(moved.body.apply_existing, true);
+  assert.deepEqual(moved.body.rule.when, { source: 'aws', action_regex: '^posture' });
+  assert.equal(ui.confirmations.length, 2);
+
+  // Saving without changing the sources asks nothing.
+  ui.$('apply-existing').checked = false;
+  await ui.click('preview');
+  await ui.click('save-rule');
+  assert.equal(ui.confirmations.length, 2);
+});
+
+test('a rule for several sources can be paused from the library', async (t) => {
+  const identity = {
+    id: 'identity',
+    description: 'Identity posture',
+    when: { source_regex: CLOUDS },
+    map_to: [{ framework: 'A', ref: 'A1' }],
+  };
+  const ui = await editor(t, { ...severalSources, rules: [identity] });
+  [...ui.$('rules').querySelectorAll('button')].find((b) => b.textContent === 'Pause').click();
+  await ui.idle();
+  assert.deepEqual(ui.writes.at(-1).body.rule, { ...identity, enabled: false });
+  assert.equal(
+    ui.$('status').textContent,
+    'Identity posture is paused. Its existing mappings stay.',
+  );
 });
 
 // --- Pausing and rule insights ----------------------------------------------------
@@ -1242,7 +1472,7 @@ test('opening a definition restores its source, connection and input', async (t)
   assert.equal(ui.$('input-picker').hidden, true);
   assert.equal(
     ui.$('selected-input').textContent,
-    'Selected input: github repository “octo/keen” from Engineering GitHub. Choose another definition from the library to change inputs.',
+    'Selected input: github repository “octo/keen” from Engineering GitHub.Change source',
   );
   assert.equal(ui.$('editor-heading').textContent, 'Edit Repository changes');
   assert.match(ui.$('targets').textContent, /A \/ A1/);
@@ -1253,8 +1483,8 @@ test('opening a definition restores its source, connection and input', async (t)
   assert.equal(ui.$('definition-section').value, 'source');
   assert.equal(ui.$('when-source').value, 'webhook:github');
   assert.equal(
-    ui.$('selected-input').textContent,
-    'Selected input: All webhook:github events from all connections. Choose another definition from the library to change inputs.',
+    ui.$('selected-input').querySelector('span').textContent,
+    'Selected input: All webhook:github events from all connections.',
   );
 
   await ui.click('close-editor');
