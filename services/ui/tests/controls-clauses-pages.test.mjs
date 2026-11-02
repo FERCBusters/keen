@@ -18,12 +18,29 @@ const controls = [
   { id: 'k1', ref: '4', title: 'Clause row', type: 'clause', in_scope: true },
 ];
 
+// Policies and measures linked to each control, as ISMS reports them.
+const requirements = {
+  framework: 'A',
+  policies: true,
+  measures: true,
+  items: {
+    c1: { policies: 2, measures: 1, met: 1, judged: 1, unrecorded: 0 },
+    c3: { policies: 1, measures: 2, met: 1, judged: 1, unrecorded: 1 },
+  },
+};
+
 async function controlsPage(t, options = {}) {
   const posted = [];
   const ui = await page(t, 'controls', {
     query: options.query || '',
     globals: options.globals,
+    me: options.me,
     get: async (u) => {
+      if (u.pathname === '/api/v1/isms/control-requirements') {
+        assert.equal(u.searchParams.get('framework'), 'A');
+        if (options.requirementsFail) throw new Error('ISMS offline');
+        return options.requirements ?? requirements;
+      }
       if (u.pathname === '/api/v1/stats/controls') {
         if (options.fail) throw new Error('Stats offline');
         return { items: options.items ?? controls };
@@ -107,7 +124,7 @@ test('controls register shows in-scope controls with evidence counts and KPIs', 
   );
   assert.match(rows[1].textContent, /0/);
   // Counts withheld from accounts without event access render as a dash.
-  assert.equal(rows[2].cells[3].textContent.trim(), '-');
+  assert.equal(rows[2].cells[4].textContent.trim(), '-');
   assert.equal(ui.el('kpiEventsMapped').textContent, '10');
   assert.equal(ui.el('kpiEventsUnmapped').textContent, '2');
   assert.equal(ui.el('kpiControlsWith').textContent, '1');
@@ -257,4 +274,62 @@ test('clause load failures are reported', async (t) => {
   const ui = await clausesPage(t, { fail: true });
   assert.match(ui.el('status').textContent, /Failed to load clauses: Clauses offline/);
   assert.match(ui.el('rows').textContent, /Failed to load clauses/);
+});
+
+test('each control shows how many of its requirements it meets', async (t) => {
+  const { ui } = await controlsPage(t);
+  const rows = [...ui.el('rows').querySelectorAll('tr')];
+  const cell = (row) => row.cells[3];
+  // Evidence, policies and measures all in place.
+  const met = cell(rows[0]).querySelector('svg');
+  assert.equal(cell(rows[0]).textContent.trim(), 'Met');
+  assert.ok(met.classList.contains('is-met'));
+  assert.equal(met.getAttribute('role'), 'img');
+  assert.equal(
+    met.getAttribute('aria-label'),
+    '3 of 3 requirements met. Evidence: met (4 events); Policies and processes: met (2 linked); Measures and tests: met (1 of 1 meeting target).',
+  );
+  assert.equal(cell(rows[0]).dataset.sort, '100');
+  assert.match(cell(rows[0]).querySelector('a').getAttribute('href'), /control\.html\?id=c1/);
+  // Nothing linked and no evidence.
+  assert.equal(cell(rows[1]).textContent.trim(), '0 of 3');
+  assert.ok(!cell(rows[1]).querySelector('svg').classList.contains('is-met'));
+  // Evidence withheld leaves the parts this reader can see.
+  assert.equal(cell(rows[2]).textContent.trim(), '1 of 2');
+  assert.match(
+    cell(rows[2]).querySelector('a').title,
+    /Measures and tests: not met \(1 of 1 meeting target, 1 without a result\)/,
+  );
+  assert.equal(ui.el('kpiRequirementsMet').textContent, '1 of 3');
+
+  ui.el('onlyUnmet').checked = true;
+  ui.el('onlyUnmet').dispatchEvent(new ui.window.Event('change'));
+  assert.deepEqual(refs(ui), ['A.2', 'A.3']);
+  assert.match(ui.window.location.search, /unmet=1/);
+  ui.el('resetFilters').click();
+  assert.equal(ui.el('onlyUnmet').checked, false);
+  assert.deepEqual(refs(ui), ['A.1', 'A.2', 'A.3']);
+});
+
+test('without ISMS access, requirements count the evidence alone', async (t) => {
+  const { ui } = await controlsPage(t, { me: { can_view_events: true } });
+  assert.ok(!ui.calls.some((c) => c.url.includes('control-requirements')));
+  const rows = [...ui.el('rows').querySelectorAll('tr')];
+  assert.deepEqual(
+    rows.map((row) => row.cells[3].textContent.trim()),
+    ['Met', '0 of 1', '-'],
+  );
+  assert.equal(rows[2].cells[3].dataset.sort, '-1');
+  // Unreadable ISMS links, or parts switched off, are left out the same way.
+  const offline = await controlsPage(t, { requirementsFail: true, query: '&unmet=true' });
+  assert.equal(offline.ui.el('onlyUnmet').checked, true);
+  assert.deepEqual(refs(offline.ui), ['A.2', 'A.3']);
+  const measuresOnly = await controlsPage(t, {
+    requirements: { ...requirements, policies: false, items: {} },
+  });
+  const first = measuresOnly.ui.el('rows').querySelector('tr').cells[3];
+  assert.equal(first.textContent.trim(), '1 of 2');
+  assert.match(first.querySelector('a').title, /Measures and tests: not met \(none linked\)/);
+  const none = await controlsPage(t, { me: {}, items: [controls[2]] });
+  assert.equal(none.ui.el('kpiRequirementsMet').textContent, '-');
 });

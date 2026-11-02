@@ -1168,6 +1168,20 @@ export function wireOffsetPagerButtons(pager, onPage) {
   }
 }
 
+// A progress ring in the theme accent, described for screen readers. The
+// caller's class sizes it.
+export function progressRing(percent, label, className = '') {
+  const clamped = Math.min(Math.max(Number(percent) || 0, 0), 100);
+  const radius = 18;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - clamped / 100);
+  return (
+    `<svg class="keen-ring ${esc(className)}" viewBox="0 0 44 44" role="img" aria-label="${esc(label)}">` +
+    `<circle class="keen-ring-track" cx="22" cy="22" r="${radius}"/>` +
+    `<circle class="keen-ring-value" cx="22" cy="22" r="${radius}" stroke-linecap="round" stroke-dasharray="${circumference.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" transform="rotate(-90 22 22)"/></svg>`
+  );
+}
+
 export function effectivenessMetricThresholdState(measure, entry) {
   if (!measure || !entry) return null;
   const op = String(measure.threshold_operator || '').trim();

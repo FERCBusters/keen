@@ -1844,25 +1844,36 @@ button.keen-filter-pill-chip:focus-visible {
   gap: 0.75rem;
 }
 .keen-home .home-kpi-ring {
-  flex: 0 0 auto;
   width: 3rem;
   height: 3rem;
 }
-.keen-home .home-kpi-ring circle {
+/* Progress rings: home coverage and each control's requirements. */
+.keen-ring {
+  flex: 0 0 auto;
+}
+.keen-ring circle {
   fill: none;
   stroke-width: 5;
 }
-.keen-home .home-kpi-ring-track {
+.keen-ring-track {
   stroke: rgba(var(--keen-accent-rgb), 0.14);
 }
-.keen-home .home-kpi-ring-value {
+.keen-ring-value {
   stroke: var(--keen-accent);
 }
-:root[data-bs-theme='dark'] .keen-home .home-kpi-ring-track {
+:root[data-bs-theme='dark'] .keen-ring-track {
   stroke: rgba(var(--keen-accent-rgb), 0.4);
 }
-:root[data-bs-theme='dark'] .keen-home .home-kpi-ring-value {
+:root[data-bs-theme='dark'] .keen-ring-value {
   stroke: color-mix(in srgb, rgb(var(--keen-accent-rgb)) 55%, white);
+}
+.control-ring {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+/* A control meeting every requirement completes in the success colour. */
+.control-ring.is-met .keen-ring-value {
+  stroke: var(--bs-success);
 }
 
 /* Evidence activity: 30-day overview band (sparkline + busiest sources). */

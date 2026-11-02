@@ -416,6 +416,7 @@ POLICY = {
     "GET /v1/controls/{control_id}/evidence/summary": EVENTS_READ,
     "GET /v1/controls/{control_id}/interested-parties": PARTIES_READ,
     "GET /v1/controls/{control_id}/isms": ISMS_READ,
+    "GET /v1/isms/control-requirements": ISMS_READ,
     "GET /v1/controls/{control_id}/risks": RISK_READ,
     "GET /v1/controls/{target_id}/cross-framework": SIGNED_IN,
     "POST /v1/controls/{target_id}/cross-framework": ADMIN,

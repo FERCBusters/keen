@@ -16,6 +16,10 @@ import {
 } from '/app.js';
 
 const plural = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+
+// Linked measures are in place when every result compared with a target meets
+// it and none is waiting for a first result. The Controls page reads the same.
+export const measuresMet = (m) => !!m.count && m.met === m.judged && !m.unrecorded;
 const capitalise = (text) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 const TILE_STATES = {
@@ -226,7 +230,7 @@ export function createControlRequirements({ root, me, isms, sourceName, onOpenEv
               'Measures and tests',
               String(m.count),
               detail,
-              m.count && m.met === m.judged && !m.unrecorded ? 'ok' : 'attention',
+              measuresMet(m) ? 'ok' : 'attention',
             ),
       );
     }

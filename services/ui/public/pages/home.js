@@ -1,5 +1,13 @@
 import { featureEnabled } from '/pages/feature-availability.js';
-import { errorText, initNavbar, apiGet, esc, getCurrentFramework, withFramework } from '/app.js';
+import {
+  errorText,
+  initNavbar,
+  apiGet,
+  esc,
+  getCurrentFramework,
+  progressRing,
+  withFramework,
+} from '/app.js';
 
 // HTML and unversioned modules must come from the same UI release. A browser
 // can still hold HTML cached before the server's no-store policy was deployed.
@@ -164,19 +172,8 @@ if (ensureHomeLayout()) {
     document.getElementById('homeSearch').hidden = !(admin || me?.can_view_events);
   }
 
-  // Coverage ring: an SVG progress ring using the theme accent; described for
-  // screen readers with role="img" and an explicit label.
-  function coverageRing(percent) {
-    const clamped = Math.min(Math.max(percent, 0), 100);
-    const radius = 18;
-    const circumference = 2 * Math.PI * radius;
-    const offset = circumference * (1 - clamped / 100);
-    return (
-      `<svg class="home-kpi-ring" viewBox="0 0 44 44" role="img" aria-label="${esc(percent)}% of in-scope controls covered by evidence">` +
-      `<circle class="home-kpi-ring-track" cx="22" cy="22" r="${radius}" fill="none"/>` +
-      `<circle class="home-kpi-ring-value" cx="22" cy="22" r="${radius}" fill="none" stroke-linecap="round" stroke-dasharray="${circumference.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" transform="rotate(-90 22 22)"/></svg>`
-    );
-  }
+  const coverageRing = (percent) =>
+    progressRing(percent, `${percent}% of in-scope controls covered by evidence`, 'home-kpi-ring');
 
   function kpi(label, value, detail, href, ringPercent = null) {
     const ring = ringPercent === null ? '' : coverageRing(ringPercent);

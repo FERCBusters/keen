@@ -45,6 +45,16 @@ def control_effectiveness_measures(
     )
 
 
+@router.get("/v1/isms/control-requirements")
+def control_requirements(
+    framework: str = settings.default_framework_slug,
+    user=Depends(require_isms_read),
+    db: Session = Depends(get_db),
+):
+    "Each control's policies and measures towards its requirements."
+    return service.control_requirements(framework=framework, user=user, db=db)
+
+
 @router.get("/v1/controls/{control_id}/isms")
 def control_isms(
     control_id: str,
