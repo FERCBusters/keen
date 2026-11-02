@@ -410,7 +410,7 @@ test('step pills, hints and the review guide the mapping journey', async (t) => 
   ]);
 
   document.getElementById('ec-description').value = 'Mail <b>evidence</b>';
-  await until(() => document.getElementById('ec-control').options.length > 1);
+  await until(() => document.getElementById('ec-control').options.length > 0);
   document.getElementById('ec-control').value = 'A1';
   document.getElementById('ec-add-target').click();
   document.getElementById('ec-next-step').click();
@@ -431,7 +431,7 @@ test('step pills, hints and the review guide the mapping journey', async (t) => 
   assert.match(values[0], /^From Keen Agent \/ OTLP logs, on system “server”/);
   assert.equal(values[1], 'Mail <b>evidence</b>');
   assert.equal(review.querySelector('b'), null);
-  assert.equal(values[2], 'Framework A / A1');
+  assert.equal(values[2], 'Framework A / A1 Control A');
 
   // Change goes back to the step that holds the answer.
   const changes = [...review.querySelectorAll('[data-ec-goto]')];
@@ -480,24 +480,32 @@ test('a clause and a control sharing a reference become separate targets', async
   document.getElementById('ec-next-step').click();
   document.getElementById('ec-description').value = 'Policy evidence';
   const control = document.getElementById('ec-control');
-  await until(() => control.options.length === 3);
+  await until(() => control.options.length === 2);
   assert.deepEqual(
-    [...control.options].map((option) => [option.textContent, option.dataset.kind ?? null]),
+    [...control.options].map((option) => [option.textContent, option.dataset.kind]),
     [
-      ['Choose a control or clause', null],
       ['Clause 5.1 - Leadership', 'clause'],
       ['5.1 - <b>Policies</b>', 'control'],
     ],
   );
   // Both options carry the reference; the chosen option decides the kind.
-  for (const index of [1, 2, 1]) {
+  for (const index of [0, 1, 0]) {
     control.selectedIndex = index;
     document.getElementById('ec-add-target').click();
   }
   const targets = document.getElementById('ec-targets');
   const labels = () => [...targets.children].map((row) => row.querySelector('span').textContent);
   assert.deepEqual(labels(), ['Framework A / Clause 5.1', 'Framework A / 5.1']);
+  // Each target shows its title beside the reference, as text.
+  assert.deepEqual(
+    [...targets.children].map((row) => row.querySelector('.text-break').textContent),
+    ['Framework A / Clause 5.1Leadership', 'Framework A / 5.1<b>Policies</b>'],
+  );
   assert.equal(targets.querySelector('b'), null);
+  assert.equal(
+    targets.querySelector('button').getAttribute('aria-label'),
+    'Remove Framework A / Clause 5.1 Leadership',
+  );
 
   document.getElementById('ec-suggest-controls').click();
   const list = document.getElementById('ec-control-suggestions');
@@ -532,11 +540,11 @@ test('a new rule opens the control picker on the active framework', async (t) =>
   });
   const picker = document.getElementById('ec-framework');
   const control = document.getElementById('ec-control');
-  await until(() => control.options.length === 2);
+  await until(() => control.options.length === 1);
   assert.equal(picker.value, 'B');
   assert.deepEqual(
     [...control.options].map((option) => option.value),
-    ['', 'B1'],
+    ['B1'],
   );
   // The page asks only for the active framework's controls.
   assert.deepEqual(
@@ -547,9 +555,9 @@ test('a new rule opens the control picker on the active framework', async (t) =>
   // Choosing another framework for one rule does not carry over to the next.
   picker.value = 'A';
   picker.dispatchEvent(new window.Event('change'));
-  await until(() => control.options[1]?.value === 'A1');
+  await until(() => control.options[0]?.value === 'A1');
   document.getElementById('ec-new-rule').click();
-  await until(() => control.options[1]?.value === 'B1');
+  await until(() => control.options[0]?.value === 'B1');
   assert.equal(picker.value, 'B');
   document.getElementById('ec-next-step').click();
   document.getElementById('ec-description').value = 'Access reviews';
@@ -574,7 +582,7 @@ test('an active framework the picker does not list leaves its first framework', 
     controls: (framework) => [{ ref: framework + '1', title: 'Control ' + framework }],
   });
   const control = document.getElementById('ec-control');
-  await until(() => control.options.length === 2);
+  await until(() => control.options.length === 1);
   assert.equal(document.getElementById('ec-framework').value, 'A');
   assert.deepEqual(
     calls.filter((call) => call.startsWith('/api/v1/controls')),
@@ -584,6 +592,174 @@ test('an active framework the picker does not list leaves its first framework', 
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(document.getElementById('ec-framework').value, 'A');
   assert.equal(calls.filter((call) => call.startsWith('/api/v1/controls')).length, 1);
+});
+
+test('the control list narrows by reference or title and adds from the keyboard', async (t) => {
+  const { document, window } = await fixture(t, {
+    defaultView: true,
+    controls: [
+      { ref: 'A.5.15', title: 'Access control' },
+      { ref: 'A.5.17', title: 'Authentication information' },
+      { ref: 'A.8.5', title: 'Secure authentication' },
+      { ref: '9.2', title: 'Internal audit', type: 'clause' },
+    ],
+  });
+  const control = document.getElementById('ec-control');
+  const filter = document.getElementById('ec-control-filter');
+  const count = document.getElementById('ec-control-count');
+  document.getElementById('ec-new-rule').click();
+  await until(() => control.options.length === 4);
+  // The list stays open: no drop-down can close under the pointer.
+  assert.equal(control.size, 8);
+  assert.equal(control.value, '');
+  assert.equal(count.textContent, '4 controls and clauses.');
+  const shown = () => [...control.options].map((option) => option.value);
+  const type = (text) => {
+    filter.value = text;
+    filter.dispatchEvent(new window.Event('input'));
+  };
+  const press = (target, key) => {
+    const event = new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    target.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const targets = () =>
+    [...document.getElementById('ec-targets').children].map(
+      (row) => row.querySelector('.text-break').textContent,
+    );
+
+  type('AUTHENTICATION');
+  assert.deepEqual(shown(), ['A.5.17', 'A.8.5']);
+  assert.equal(count.textContent, '2 of 4 match.');
+  // Enter in the box adds only the one entry left.
+  assert.equal(press(filter, 'Enter'), false);
+  assert.deepEqual(targets(), []);
+  type(' secure  auth ');
+  assert.deepEqual(shown(), ['A.8.5']);
+  assert.equal(press(filter, 'Enter'), true);
+  assert.deepEqual(targets(), ['Framework A / A.8.5Secure authentication']);
+
+  type('a.5');
+  assert.equal(press(filter, 'Tab'), false);
+  assert.equal(press(filter, 'ArrowDown'), true);
+  assert.equal(document.activeElement, control);
+  assert.equal(control.value, 'A.5.15');
+  control.selectedIndex = 1;
+  assert.equal(press(control, 'ArrowDown'), false);
+  assert.equal(press(control, 'Enter'), true);
+  control.selectedIndex = 0;
+  control.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true }));
+  assert.deepEqual(targets(), [
+    'Framework A / A.8.5Secure authentication',
+    'Framework A / A.5.17Authentication information',
+    'Framework A / A.5.15Access control',
+  ]);
+
+  // A choice stays chosen while the list narrows around it.
+  control.selectedIndex = 1;
+  type('information');
+  assert.equal(control.value, 'A.5.17');
+  type('');
+  assert.equal(control.value, 'A.5.17');
+  assert.equal(control.options.length, 4);
+  type('nothing like this');
+  assert.equal(control.options.length, 0);
+  assert.equal(count.textContent, '0 of 4 match.');
+  assert.equal(press(filter, 'ArrowDown'), false);
+  assert.equal(press(filter, 'Enter'), false);
+  document.getElementById('ec-add-target').click();
+  assert.equal(targets().length, 3);
+
+  // The next rule starts on the whole list with nothing chosen.
+  document.getElementById('ec-close-editor').click();
+  document.getElementById('ec-new-rule').click();
+  await until(() => control.options.length === 4);
+  assert.equal(filter.value, '');
+  assert.equal(control.value, '');
+  assert.equal(count.textContent, '4 controls and clauses.');
+});
+
+test('the last framework chosen fills the control list', async (t) => {
+  const { document, window } = await fixture(t, {
+    defaultView: true,
+    frameworks: [
+      { slug: 'A', name: 'Framework A' },
+      { slug: 'B', name: 'Framework B' },
+      { slug: 'C', name: 'Framework C' },
+    ],
+    active: 'A',
+    controls: (framework) =>
+      framework === 'C' ? [] : [{ ref: framework + '1', title: 'Control' }],
+  });
+  const picker = document.getElementById('ec-framework');
+  const control = document.getElementById('ec-control');
+  await until(() => control.options[0]?.value === 'A1');
+  // B is still loading when C is chosen, so C's empty list stays.
+  for (const slug of ['B', 'C']) {
+    picker.value = slug;
+    picker.dispatchEvent(new window.Event('change'));
+  }
+  await until(() =>
+    document.getElementById('ec-control-count').textContent.includes('no controls'),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(control.options.length, 0);
+  assert.equal(
+    document.getElementById('ec-control-count').textContent,
+    'This framework has no controls or clauses.',
+  );
+});
+
+test('targets in other frameworks show their titles once those frameworks are read', async (t) => {
+  const rule = {
+    id: 'reviews',
+    description: 'Access reviews',
+    when: { source: 'keen-agent' },
+    map_to: [
+      { framework: 'A', ref: 'A1', kind: 'control' },
+      { framework: 'B', ref: 'B1', kind: 'control' },
+      { framework: 'B', ref: 'B2' },
+      { framework: 'C', ref: 'C1', kind: 'control' },
+    ],
+    confidence: 0.8,
+  };
+  const { document, calls } = await fixture(t, {
+    rule,
+    requestedRule: 'reviews',
+    frameworks: [
+      { slug: 'A', name: 'Framework A' },
+      { slug: 'B', name: 'Framework B' },
+    ],
+    active: 'A',
+    controls: (framework) => {
+      if (framework === 'C') throw new Error('Unknown framework');
+      return framework === 'B'
+        ? [
+            { ref: 'B1', title: 'Control B' },
+            { ref: 'B2', title: 'Clause B', type: 'clause' },
+          ]
+        : [{ ref: 'A1', title: 'Control A' }];
+    },
+  });
+  const list = document.getElementById('ec-targets');
+  const rows = () => [...list.children].map((row) => row.querySelector('.text-break').textContent);
+  await until(() => rows()[1] === 'Framework B / B1Control B');
+  // A target saved without a kind takes the title of the only row with its
+  // reference; a framework that cannot be read leaves the reference alone.
+  assert.deepEqual(rows(), [
+    'Framework A / A1Control A',
+    'Framework B / B1Control B',
+    'Framework B / B2Clause B',
+    'C / C1',
+  ]);
+  const reads = (slug) =>
+    calls.filter((call) => call === `/api/v1/controls?framework=${slug}&limit=5000`).length;
+  assert.deepEqual([reads('A'), reads('B'), reads('C')], [1, 1, 1]);
+  // Each framework is read once for titles, even one that could not be read.
+  list.children[0].querySelector('button').click();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual([reads('A'), reads('B'), reads('C')], [1, 1, 1]);
+  assert.deepEqual(rows(), ['Framework B / B1Control B', 'Framework B / B2Clause B', 'C / C1']);
 });
 
 test('ticked suggestions from the event page become targets when they exist in the catalogue', async (t) => {

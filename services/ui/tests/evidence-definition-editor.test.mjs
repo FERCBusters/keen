@@ -318,7 +318,7 @@ async function editor(t, server = {}) {
         : [row.querySelector('strong').textContent, row.querySelector('.small-muted').textContent],
     );
   await idle();
-  assert.ok($('control').options.length > 1, 'the editor finished loading');
+  assert.ok($('control').options.length > 0, 'the editor finished loading');
   return {
     ...ui,
     $,

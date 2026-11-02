@@ -11,6 +11,7 @@ import app.services.questions as questions_operations
 import fakeredis
 import pytest
 from app.core.config import settings
+from app.ingest import bookstack
 from app.security import csrf, oidc, regex, sessions
 from app.security.route_policy import PUBLIC_HTTP_ROUTES, is_public_request
 from app.services.errors import DomainError
@@ -66,6 +67,38 @@ def test_regex_accepted_polynomial_pattern_has_runtime_deadline():
     with pytest.raises(ValueError, match="time budget"):
         pattern.search("a" * 20000 + "!")
     assert time.monotonic() - started < 2
+
+
+def test_bounded_matches_keep_the_interpreter_lock(monkeypatch):
+    # The regex package times a match in processor time for the whole process.
+    # A match that released the lock would be charged for other threads' work
+    # while it waited to resume, and could time out on a trivial input.
+    calls = []
+
+    class Recording:
+        def __init__(self, compiled):
+            self.compiled = compiled
+
+        def search(self, *args, **kwargs):
+            calls.append(kwargs.get("concurrent", "unset"))
+            return self.compiled.search(*args, **kwargs)
+
+        def sub(self, *args, **kwargs):
+            calls.append(kwargs.get("concurrent", "unset"))
+            return self.compiled.sub(*args, **kwargs)
+
+    pattern = regex.compile_pattern(r"\A(?:aws|azure)\Z")
+    assert regex.BoundedPattern(Recording(pattern.compiled)).search("azure")
+    monkeypatch.setattr(bookstack, "_TAG_RE", Recording(bookstack._TAG_RE))
+    monkeypatch.setattr(
+        bookstack, "_SCRIPT_STYLE_RE", Recording(bookstack._SCRIPT_STYLE_RE)
+    )
+    text = bookstack._strip_html_to_text(
+        "<p>Hello <script>x()</script><b>there</b></p>"
+    )
+
+    assert text == "Hello there"
+    assert calls == [False, False, False]
 
 
 def test_mapping_runtime_uses_regex_boundary():

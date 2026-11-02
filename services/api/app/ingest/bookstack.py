@@ -23,6 +23,7 @@ from app.ingest.http import client as ingestion_client
 from app.mapping.targets import resolve_targets
 from app.security.errors import collection_error
 from app.security.regex import (
+    MATCH_CONCURRENTLY,
     MATCH_TIMEOUT_SECONDS,
     MAX_INPUT_CHARS,
     BoundedPattern,
@@ -545,8 +546,15 @@ def _strip_html_to_text(html_text: str) -> str:
     # with repeated opening tags can otherwise cause quadratic backtracking.
     html_text = html_text[:MAX_INPUT_CHARS]
     try:
-        html_text = _SCRIPT_STYLE_RE.sub(" ", html_text, timeout=MATCH_TIMEOUT_SECONDS)
-        txt = _TAG_RE.sub(" ", html_text, timeout=MATCH_TIMEOUT_SECONDS)
+        html_text = _SCRIPT_STYLE_RE.sub(
+            " ",
+            html_text,
+            timeout=MATCH_TIMEOUT_SECONDS,
+            concurrent=MATCH_CONCURRENTLY,
+        )
+        txt = _TAG_RE.sub(
+            " ", html_text, timeout=MATCH_TIMEOUT_SECONDS, concurrent=MATCH_CONCURRENTLY
+        )
     except TimeoutError:
         return ""
     txt = _html.unescape(txt)

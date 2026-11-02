@@ -180,11 +180,18 @@ let rules = [],
   // The suggested rule the editor holds, marked as created once it is saved.
   activeSuggestion = null,
   targets = [],
+  // The chosen framework's controls and clauses; null until they have loaded.
+  pickerControls = null,
   frameworks = [],
   samples = [],
   previewedRule = null,
   previewCount = 0;
 let sourceConnections = [];
+// Each framework's controls and clauses, read once: the picker lists them and
+// the chosen targets show their titles.
+const catalogues = new Map(),
+  targetTitles = new Map(),
+  titleReads = new Set();
 let collectors = [],
   definitionVersion = 0,
   definitionEntryKey = null;
@@ -656,7 +663,7 @@ function renderReview() {
   $('review').replaceChildren(
     ...reviewRow('Events', eventSentence(), 1),
     ...reviewRow('Mapping name', $('description').value.trim(), 2),
-    ...reviewRow('Maps to', targets.map(targetText).join(', '), 2),
+    ...reviewRow('Maps to', targets.map(targetWithTitle).join('; '), 2),
   );
 }
 function showStep(number) {
@@ -1037,6 +1044,7 @@ async function newRule({ openEditor = true } = {}) {
     $(`when-${field}`).value = '';
   targets = [];
   renderTargets();
+  resetControlPicker();
   if (selectActiveFramework()) await loadFrameworkControls();
   $('preview-results').textContent = '';
   $('backfill').replaceChildren();
@@ -1121,6 +1129,7 @@ async function editRule(rule, { suggestion = null } = {}) {
     $(`when-${field}`).value = rule.when?.[field] ?? '';
   targets = structuredClone(rule.map_to || []);
   renderTargets();
+  resetControlPicker();
   const linked = collectors.find(
     (item) =>
       item.collector === rule.when?.collector &&
@@ -1514,6 +1523,9 @@ function frameworkLabel(slug) {
 function targetText(target) {
   return `${frameworkLabel(target.framework)} / ${targetLabel(target.kind, target.ref)}`;
 }
+function targetWithTitle(target) {
+  return [targetText(target), targetTitle(target)].filter(Boolean).join(' ');
+}
 function addTarget(target) {
   const same = (t) =>
     t.framework === target.framework && t.ref === target.ref && t.kind === target.kind;
@@ -1526,13 +1538,25 @@ function renderTargets() {
   list.replaceChildren();
   for (const [index, target] of targets.entries()) {
     const row = document.createElement('div');
-    row.className = 'list-group-item d-flex justify-content-between align-items-center';
-    const text = document.createElement('span');
-    text.textContent = targetText(target);
+    row.className = 'list-group-item d-flex justify-content-between align-items-center gap-2';
+    const text = document.createElement('div');
+    text.className = 'text-break';
+    const reference = document.createElement('span');
+    reference.className = 'fw-semibold';
+    reference.textContent = targetText(target);
+    text.append(reference);
+    const title = targetTitle(target);
+    if (title) {
+      const name = document.createElement('span');
+      name.className = 'ms-2';
+      name.textContent = title;
+      text.append(name);
+    }
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'btn btn-sm btn-outline-danger';
     remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', `Remove ${targetWithTitle(target)}`);
     remove.addEventListener('click', () => {
       targets.splice(index, 1);
       renderTargets();
@@ -1540,6 +1564,7 @@ function renderTargets() {
     row.append(text, remove);
     list.append(row);
   }
+  loadTargetTitles();
 }
 async function loadRules({ resetEditor = true } = {}) {
   const data = await apiGet(`${apiRoot}/evidence-definitions`);
@@ -1577,24 +1602,116 @@ function selectActiveFramework() {
   picker.value = active;
   return true;
 }
-async function loadFrameworkControls() {
-  const data = await apiGet(
-    `/api/v1/controls?framework=${encodeURIComponent($('framework').value)}&limit=5000`,
-  );
-  $('control').replaceChildren(new Option('Choose a control or clause', ''));
-  for (const control of data.items) {
-    const kind = targetKind(control);
-    const option = new Option(
-      `${targetLabel(kind, control.ref)} - ${control.title || control.type}`,
-      control.ref,
-    );
-    option.dataset.kind = kind;
-    $('control').add(option);
+function titleKey(framework, ref, kind = '') {
+  return [framework, kind, ref].join('\u0000');
+}
+// A target saved without a kind names the only row with its reference.
+function rememberTitles(framework, items) {
+  const rows = new Map();
+  for (const item of items) rows.set(item.ref, (rows.get(item.ref) || 0) + 1);
+  for (const item of items) {
+    targetTitles.set(titleKey(framework, item.ref, targetKind(item)), item.title || '');
+    if (rows.get(item.ref) === 1) targetTitles.set(titleKey(framework, item.ref), item.title || '');
   }
+}
+function targetTitle(target) {
+  return targetTitles.get(titleKey(target.framework, target.ref, target.kind)) || '';
+}
+function frameworkCatalogue(framework) {
+  if (!catalogues.has(framework))
+    catalogues.set(
+      framework,
+      apiGet(`/api/v1/controls?framework=${encodeURIComponent(framework)}&limit=5000`).then(
+        (data) => {
+          rememberTitles(framework, data.items);
+          return data.items;
+        },
+        (error) => {
+          catalogues.delete(framework);
+          throw error;
+        },
+      ),
+    );
+  return catalogues.get(framework);
+}
+// Targets from frameworks the picker has not shown yet get their titles once
+// those frameworks are read. Each is read once for titles; choosing it in the
+// picker reads it again after a failure.
+function loadTargetTitles() {
+  for (const framework of new Set(targets.map((target) => target.framework)))
+    if (framework && !catalogues.has(framework) && !titleReads.has(framework)) {
+      titleReads.add(framework);
+      frameworkCatalogue(framework)
+        .then(renderTargets)
+        .catch(() => {
+          /* The target keeps its reference without a title. */
+        });
+    }
+}
+// The list stays open, so a long catalogue cannot close under the pointer;
+// the box above it narrows the list by reference or title.
+function fillControlPicker() {
+  const select = $('control');
+  const chosen = select.selectedOptions[0];
+  const chosenKey = chosen?.value ? `${chosen.dataset.kind}|${chosen.value}` : '';
+  const words = $('control-filter').value.toLowerCase().split(/\s+/).filter(Boolean);
+  const items = pickerControls || [];
+  select.replaceChildren();
+  for (const control of items) {
+    const kind = targetKind(control);
+    const label = `${targetLabel(kind, control.ref)} - ${control.title || control.type}`;
+    const text = label.toLowerCase();
+    if (!words.every((word) => text.includes(word))) continue;
+    const option = new Option(label, control.ref);
+    option.dataset.kind = kind;
+    option.selected = `${kind}|${control.ref}` === chosenKey;
+    select.add(option);
+  }
+  $('control-count').textContent = !pickerControls
+    ? ''
+    : !items.length
+      ? 'This framework has no controls or clauses.'
+      : words.length
+        ? `${select.options.length} of ${items.length} match.`
+        : `${items.length} controls and clauses.`;
+}
+// Each rule opens on the whole list with nothing chosen.
+function resetControlPicker() {
+  $('control-filter').value = '';
+  fillControlPicker();
+  $('control').selectedIndex = -1;
+}
+async function loadFrameworkControls() {
+  const framework = $('framework').value;
+  const items = await frameworkCatalogue(framework);
+  // A framework chosen while this one loaded wins.
+  if ($('framework').value !== framework) return;
+  pickerControls = items;
+  fillControlPicker();
+  renderTargets();
 }
 $('framework').addEventListener('change', () =>
   loadFrameworkControls().catch((error) => status(error.message)),
 );
+$('control-filter').addEventListener('input', fillControlPicker);
+$('control-filter').addEventListener('keydown', (event) => {
+  const select = $('control');
+  if (event.key === 'ArrowDown' && select.options.length) {
+    event.preventDefault();
+    if (select.selectedIndex < 0) select.selectedIndex = 0;
+    select.focus();
+  } else if (event.key === 'Enter' && select.options.length === 1) {
+    event.preventDefault();
+    select.selectedIndex = 0;
+    addSelectedTarget();
+  }
+});
+$('control').addEventListener('dblclick', addSelectedTarget);
+$('control').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  addSelectedTarget();
+});
 async function restore(selectedRevision) {
   const ruleId = selectedRule;
   if (
@@ -2360,7 +2477,7 @@ async function draftFromEvent() {
     .filter(Boolean)
     .slice(0, 20);
   const catalogue = new Map(
-    [...$('control').options].filter((o) => o.value).map((o) => [o.value, o.dataset.kind]),
+    (pickerControls || []).map((control) => [control.ref, targetKind(control)]),
   );
   const added = requested.filter((ref) => catalogue.has(ref));
   for (const ref of added)

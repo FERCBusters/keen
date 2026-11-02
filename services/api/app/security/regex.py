@@ -10,6 +10,12 @@ import regex
 
 MATCH_TIMEOUT_SECONDS = 0.025
 MAX_INPUT_CHARS = 65536
+# The regex package measures a timeout in processor time for the whole process.
+# A match that released the interpreter lock would wait for it again while other
+# threads ran, and their work would count against its budget, so a trivial match
+# could time out. Matches keep the lock; other threads' Python work is not
+# charged to them.
+MATCH_CONCURRENTLY = False
 
 
 def validate_pattern(pattern):
@@ -62,7 +68,9 @@ class BoundedPattern:
         if len(value) > MAX_INPUT_CHARS:
             raise ValueError("Regex input exceeds 65536 characters; narrow the input")
         try:
-            return self.compiled.search(value, timeout=MATCH_TIMEOUT_SECONDS)
+            return self.compiled.search(
+                value, timeout=MATCH_TIMEOUT_SECONDS, concurrent=MATCH_CONCURRENTLY
+            )
         except TimeoutError:
             # Stop the run rather than silently dropping a required mapping.
             raise ValueError(

@@ -74,9 +74,9 @@ def test_bookstack_hostile_preview_is_bounded():
 
 def test_bookstack_preview_timeout_omits_optional_preview(monkeypatch):
     class SlowPattern:
-        def sub(self, replacement, text, *, timeout):
+        def sub(self, replacement, text, *, timeout, concurrent):
             assert len(text) <= 65536
-            assert timeout == 0.025
+            assert (timeout, concurrent) == (0.025, False)
             raise TimeoutError
 
     monkeypatch.setattr(bookstack, "_SCRIPT_STYLE_RE", SlowPattern())
