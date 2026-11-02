@@ -16,30 +16,32 @@ from app.db.models import (
 from app.mapping.rules import evaluate_by_framework, parse_rules
 from app.services.managed_configurations import _validate_rule
 
-MIGRATION = (
-    Path(__file__).resolve().parents[1] / "alembic/versions/0037_builtin_rules.py"
-)
+VERSIONS = Path(__file__).resolve().parents[1] / "alembic/versions"
 OWN = {"id": "keen-cloud-mfa", "when": {"source": "aws"}, "map_to": "IAC-203"}
 OTHER = {"id": "admins-own", "when": {"source": "github"}, "map_to": "CHG-1"}
 # The installation no longer has these controls.
 MISSING = {"GOV-5", "PES-78"}
+FAULT = "system.fault.detected"
 
 
-def _rules():
-    spec = importlib.util.spec_from_file_location("builtin_rules_0037", MIGRATION)
+def _rules(name):
+    spec = importlib.util.spec_from_file_location(name, VERSIONS / f"{name}.py")
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.RULES
 
 
-RULES = _rules()
+RULES = _rules("0037_builtin_rules")
+HOST_RULES = _rules("0038_builtin_host_rules")
+# Every built-in rule, in the order the migrations add them.
+ALL_RULES = RULES + HOST_RULES
 
 
 @pytest.fixture
 def installation(contract_db):
     db = contract_db
-    refs = {target["ref"] for rule in RULES for target in rule["map_to"]}
+    refs = {target["ref"] for rule in ALL_RULES for target in rule["map_to"]}
     db.add(Framework(slug=FRAMEWORK, name="Keen Assurance Framework"))
     db.add_all(
         ControlItem(framework_slug=FRAMEWORK, ref=ref, type="custom", title=ref)
@@ -82,7 +84,7 @@ def test_rules_are_added_once_beside_the_installations_own(installation):
 
 
 def test_administrators_save_built_in_rules_unchanged(installation):
-    for rule in RULES:
+    for rule in ALL_RULES:
         rule = deepcopy(rule)
         rule["map_to"] = [t for t in rule["map_to"] if t["ref"] not in MISSING]
         if rule["map_to"]:
@@ -127,11 +129,33 @@ def test_built_in_rules_match_keens_own_evidence():
     assert refs("keen-agent", "log.line.collected") == []
 
 
+def test_host_rules_match_the_later_catalogues_events():
+    rules = parse_rules({"rules": HOST_RULES})
+    assert len(rules) == len(HOST_RULES)
+
+    def refs(action, **attributes):
+        event = {
+            "source": "keen-agent",
+            "action": action,
+            "normalized_payload": {"ueu": {"attributes": attributes}},
+        }
+        return sorted(evaluate_by_framework(event, rules).get(FRAMEWORK, []))
+
+    assert refs(FAULT, fault="oom_kill") == ["CAP-7", "MON-4"]
+    assert refs(FAULT, fault="io_error") == ["MNT-21", "MON-4"]
+    assert refs(FAULT, fault="service_failed") == ["MON-4"]
+    assert refs("clock.sync.degraded", condition="offset") == ["SEA-54"]
+    assert refs("dns.lookup.failed") == ["NET-92"]
+    assert refs("application.error.logged") == ["MON-120"]
+    assert refs("user.account.changed") == ["IAC-198", "IAC-200"]
+    assert refs("user.authenticated") == []
+
+
 def test_no_two_built_in_rules_for_one_source_share_a_control():
     # An event records each control under one rule, so Rule insights would
     # report the other rule's matches as going unrecorded.
     first = {}
-    for rule in RULES:
+    for rule in ALL_RULES:
         source = rule["when"].get("source") or rule["when"]["source_regex"]
         for target in rule["map_to"]:
             assert first.setdefault((source, target["ref"]), rule["id"]) == rule["id"]

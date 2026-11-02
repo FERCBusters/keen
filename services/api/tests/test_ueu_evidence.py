@@ -240,7 +240,7 @@ def test_code_enrolment_binds_one_key_and_is_single_use(keen):
     assert other.enroll(code).status_code == 409
     assert agent.grant["subject"] == {"type": "pairwise"}
     assert agent.grant["evidence_mode_ceiling"] == "events"
-    assert agent.grant["catalogue"] == {"id": "keen", "version": "2026.10"}
+    assert agent.grant["catalogue"] == {"id": "keen", "version": "2026.11"}
 
 
 def test_enrolment_rejects_bad_codes_proofs_and_expired_codes(keen):
@@ -421,7 +421,13 @@ def test_signed_batch_is_stored_with_provenance_and_typed_facts(keen):
         "filtered_by_source": {"auth": 3},
         "evidence_modes": {"auth": "events_with_lines"},
     }
-    assert agent.heartbeat(health).status_code == 200
+    reply = agent.heartbeat(health)
+    assert reply.status_code == 200
+    # The sealed reply names the catalogue the agent may follow.
+    assert reply.json() == {
+        "ok": True,
+        "catalogue": {"id": "keen", "version": "2026.11"},
+    }
     with keen.db() as db:
         stored = db.get(KeenAgent, agent.agent_id).health
         # Source names are operator-chosen keys, never redacted as secrets.
@@ -429,6 +435,67 @@ def test_signed_batch_is_stored_with_provenance_and_typed_facts(keen):
         assert stored["filtered_by_source"] == {"auth": 3}
         assert stored["evidence_modes"] == {"auth": "events_with_lines"}
         assert "hunter2" not in stored["sources"]["app"]
+
+
+def test_agents_granted_the_later_catalogue_send_its_event_types(keen):
+    agent, _ = enrolled(keen)
+    agent.catalogue = agent.grant["catalogue"]
+    events = [
+        agent.event(
+            "system.fault.detected",
+            "host",
+            {"component": "kernel", "fault": "oom_kill", "process": "php-fpm8.2"},
+            component="kernel",
+            outcome="failure",
+        ),
+        agent.event(
+            "clock.sync.degraded",
+            "clock",
+            {"daemon": "chronyd", "condition": "offset", "offset_ms": -1235},
+            outcome="failure",
+        ),
+        agent.event(
+            "dns.lookup.failed",
+            "name_resolution",
+            {"process": "curl", "reason": "unresolved"},
+            outcome="failure",
+        ),
+        agent.event(
+            "application.error.logged",
+            "application",
+            {"application": "drupal", "level": "error", "category": "php"},
+            outcome="failure",
+        ),
+        agent.event(
+            "user.account.changed",
+            "account",
+            {"tool": "useradd", "change": "created"},
+            subject=("unix_user", "alice"),
+        ),
+        # Posture follows the later catalogue as it did the first.
+        agent.observation("firewall", "ufw", {"enabled": True}),
+    ]
+    r, _ = agent.send(*events)
+    assert r.status_code == 200, r.text
+    with keen.db() as db:
+        stored = {e.action: e for e in db.query(Event)}
+        assert {a: e.summary for a, e in stored.items()} == {
+            "system.fault.detected": "Fault in kernel: oom_kill",
+            "clock.sync.degraded": "Clock synchronisation by chronyd: offset",
+            "dns.lookup.failed": "Name resolution failed in curl: unresolved",
+            "application.error.logged": "Error in drupal: error (php)",
+            "user.account.changed": "Account created via useradd",
+            "endpoint.firewall.observed": stored["endpoint.firewall.observed"].summary,
+        }
+        assert stored["system.fault.detected"].severity == 6
+        assert {row.catalogue for row in db.query(UeuEvidence)} == {"keen@2026.11"}
+        assert "alice" not in json.dumps(
+            stored["user.account.changed"].normalized_payload
+        )
+    # Under the first catalogue the type is unknown, so the batch is refused.
+    agent.catalogue = {"id": "keen", "version": "2026.10"}
+    r, _ = agent.send(agent.event("dns.lookup.failed", "name_resolution", {}))
+    assert r.status_code == 400 and "UEU_EVENT_TYPE_UNKNOWN" in r.text
 
 
 def test_request_signatures_cannot_be_replayed_redirected_or_altered(keen):

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from app.agents.otlp import UeuRecord, UeuResource
 from app.agents.ueu import custody, jcs
-from app.agents.ueu.catalogue import keen
+from app.agents.ueu.catalogue import lookup
 from app.services import ueu_evidence as ueu
 from app.services.ueu_evidence import Rejected
 
@@ -144,6 +144,7 @@ def test_display_redacts_with_the_catalogue_when_it_is_known():
         shown = ueu.display_payload({"ueu": doc, "password": "x"})
         assert shown["ueu"]["observation"]["facts"]["session_secret"] != "abc"
         assert shown["password"] != "x"
+    # The observation follows the first KEEN catalogue, which is still held.
     known = check(observation()).spec
-    assert known is keen().event_types["endpoint.firewall.observed"]
+    assert known is lookup("keen", "2026.10").event_types["endpoint.firewall.observed"]
     assert json.dumps(ueu.display_payload({"ueu": observation()}))

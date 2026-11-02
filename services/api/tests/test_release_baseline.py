@@ -13,7 +13,7 @@ from alembic.config import Config
 from app.core.config import settings
 from sqlalchemy import create_engine, text
 
-from tests.test_builtin_rules import RULES as BUILTIN_RULES
+from tests.test_builtin_rules import ALL_RULES as BUILTIN_RULES
 
 
 def test_release_schema_and_final_seed_data(monkeypatch):
@@ -146,6 +146,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0038_builtin_host_rules",
         "0037_builtin_rules",
         "0036_control_owners",
         "0035_notification_delivery",

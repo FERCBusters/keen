@@ -26,6 +26,7 @@ from app.ingest.common import store_event_with_artifact
 from app.security.redaction import redact_obj, redact_str
 from app.services.errors import DomainError
 from app.services.features import state as feature_state
+from app.services.ueu_evidence import catalogue_grant
 from app.services.ueu_evidence import persist as persist_ueu
 from app.services.ueu_subjects import public_subject_key
 
@@ -337,4 +338,6 @@ def record_heartbeat(*, db, auth, authorization, health):
         "health_received_at": utc_now_naive().isoformat(),
     }
     db.commit()
-    return {"ok": True}
+    # The catalogue agents may follow, so an agent upgraded before KEEN only
+    # sends event types KEEN accepts.
+    return {"ok": True, "catalogue": catalogue_grant()}

@@ -85,12 +85,23 @@ sudo -u keen-agent keen-agent -command status
 <thead><tr><th>Parser</th><th>Recognised events</th></tr></thead>
 <tbody>
 <tr><td><code>dpkg</code>, <code>apt</code>, <code>dnf</code></td><td><code>software.package.changed</code>: package installs, upgrades, removals and transactions, with versions and the requesting account as a pseudonymous subject</td></tr>
-<tr><td><code>syslog</code></td><td><code>user.authenticated</code> for SSH logins and failures, <code>privileged.action.completed</code> for sudo commands</td></tr>
-<tr><td><code>auditd</code></td><td>Authentication and login records, privileged commands and denied system calls (<code>access.denied</code>)</td></tr>
+<tr><td><code>syslog</code></td><td><code>user.authenticated</code> for SSH, su, sudo, console and Drupal sign-ins and failures; <code>privileged.action.completed</code> for sudo commands and su; <code>access.denied</code> for refused sudo, AppArmor and SELinux access; <code>security.alert.generated</code> for fail2ban bans; and the host events below</td></tr>
+<tr><td><code>auditd</code></td><td>Authentication and login records, privileged commands, and denied system calls and SELinux or AppArmor refusals (<code>access.denied</code>)</td></tr>
+<tr><td><code>php</code></td><td><code>application.error.logged</code> for PHP fatal, parse and recoverable errors</td></tr>
 <tr><td><code>ossec</code></td><td><code>security.alert.generated</code> with rule, level, groups and description</td></tr>
-<tr><td><code>raw</code>, <code>json</code>, <code>nginx</code>, <code>php</code></td><td>Lines only, in <code>all_lines</code> mode</td></tr>
+<tr><td><code>raw</code>, <code>json</code>, <code>nginx</code></td><td>Lines only, in <code>all_lines</code> mode</td></tr>
 </tbody>
 </table>
+<p>The <code>syslog</code> parser, reading the journal or a syslog file, also recognises these host events:</p>
+<table><thead><tr><th>Event type</th><th>Messages</th></tr></thead><tbody>
+<tr><td><code>system.fault.detected</code></td><td>Out-of-memory kills, I/O, filesystem and hardware errors, segfaults, hung tasks and kernel errors; failed systemd units; core dumps; PHP-FPM reaching its worker limit; and <code>No space left on device</code> from any program. The <code>fault</code> attribute names which.</td></tr>
+<tr><td><code>clock.sync.degraded</code></td><td>chrony, ntpd and systemd-timesyncd losing their time sources, stepping the clock, or reporting an offset, a spike (jitter), a frequency error or an unsynchronised clock, with any offset in milliseconds</td></tr>
+<tr><td><code>dns.lookup.failed</code></td><td>Failed name resolution in any program, and systemd-resolved falling back to a degraded feature set or failing DNSSEC validation; the name looked up is not sent</td></tr>
+<tr><td><code>application.error.logged</code></td><td>PHP fatal, parse and recoverable errors, and Drupal watchdog entries written by its syslog module at error priority or worse, or PHP errors</td></tr>
+<tr><td><code>user.account.changed</code></td><td>Accounts and groups created, deleted, locked or changed with <code>useradd</code>, <code>userdel</code>, <code>usermod</code>, <code>groupadd</code>, <code>groupdel</code>, <code>gpasswd</code>, <code>passwd</code> or <code>chpasswd</code>, and Drupal accounts created, deleted or blocked, with the account as a pseudonymous subject</td></tr>
+</tbody></table>
+<p>These five event types belong to Keen's 2026.11 event catalogue. Keen grants it to agents when they enrol or renew and in its replies to their health reports; an agent sends the five only once granted, so an agent upgraded before Keen never sends evidence Keen would refuse. Until then those messages are sent only as lines in <code>all_lines</code> mode, with their recognised fields, such as <code>fault</code>, as line attributes. Those fields also serve <code>include_when</code> and <code>exclude_when</code> filters.</p>
+<p>A server without OSSEC therefore sends these recognised events in the default <code>events</code> mode, without its log lines. To collect other messages as well, use <code>all_lines</code> on a source narrowed by <code>units</code>, <code>include</code> or <code>include_when</code>, and map the lines with rules on their attributes.</p>
 <p>Each source's <code>evidence_mode</code> (or the global default) chooses what it sends:</p>
 <table><thead><tr><th>Mode</th><th>Sends</th></tr></thead><tbody>
 <tr><td><code>events</code></td><td>Recognised events with typed attributes. The source line is represented by its SHA-256 hash and a file offset or journal cursor.</td></tr>
@@ -240,7 +251,7 @@ sources:
 <p>Fetch bootstrap keys and enrolment codes from a secret manager using the machine's workload identity where available, and keep them out of command-line arguments, images and logs. Removing a local bootstrap file does not remove copies held in user-data or provisioning logs. Use separate profiles to limit a leaked key's reach.</p>
 <h2 id="agent-013">Agent health and journal evidence</h2>
 <p>Agent heartbeats report delivery counters, queue size, source health, the agent's chain position, each source's evidence mode and whether a source asks for more than the identity's limit allows. Review these in the agent inventory to identify collection failures or delivery backlogs, and use the agent's local status and service logs to investigate a reported problem. Heartbeats also report, per source, how many lines were filtered out and how many were read but not recognised as evidence in the chosen mode.</p>
-<p>Journal entries are recognised by their message: SSH authentication results become <code>user.authenticated</code> and sudo commands <code>privileged.action.completed</code>, with the account as a pseudonymous subject. In <code>all_lines</code> mode, other entries become <code>log.line.collected</code> with the redacted line and their service, process, priority and host attributes. Inspect an event's structured fields when choosing mapping conditions.</p>
+<p>Journal entries are recognised by their message, as for the <code>syslog</code> parser above: SSH authentication results become <code>user.authenticated</code>, sudo commands <code>privileged.action.completed</code>, out-of-memory kills <code>system.fault.detected</code>, and so on, with any account as a pseudonymous subject. Drupal entries read from the journal are judged by their priority. In <code>all_lines</code> mode, other entries become <code>log.line.collected</code> with the redacted line and their service, process, priority and host attributes. Inspect an event's structured fields when choosing mapping conditions.</p>
 <h2 id="structured-agent-filtering">Filter before agent delivery</h2>
 <p>Filtering on the host keeps noisy logs out of Keen altogether. Each source accepts <code>include_when</code> and <code>exclude_when</code> lists, and each condition has a <code>field</code> (a literal parsed field key), an <code>operator</code> and a <code>value</code>.</p>
 <table><thead><tr><th>Operators</th><th>Notes</th></tr></thead><tbody>

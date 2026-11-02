@@ -143,7 +143,10 @@ def test_every_signed_request_and_response_is_sealed(keen):
     assert r.headers["content-type"] == "application/vnd.keen.sealed-response"
     assert r.headers["keen-encryption-key"] == agent.server["key_id"]
     heartbeat = agent.heartbeat({"version": "0.3.0"})
-    assert heartbeat.status_code == 200 and heartbeat.json() == {"ok": True}
+    assert heartbeat.status_code == 200 and heartbeat.json() == {
+        "ok": True,
+        "catalogue": {"id": "keen", "version": "2026.11"},
+    }
     renewed, new, _ = agent.renew()
     assert renewed.status_code == 200
     assert renewed.json()["key_id"] != agent.key_id
@@ -158,9 +161,8 @@ def test_a_sealed_response_opens_only_with_its_request_key_and_purpose(keen):
     assert r.status_code == 200
     raw = r.content
     nonce, sealed = raw[:12], raw[12:]
-    assert AESGCM(response_key).decrypt(
-        nonce, sealed, response_aad("heartbeat", 200)
-    ) == (b'{"ok":true}')
+    opened = AESGCM(response_key).decrypt(nonce, sealed, response_aad("heartbeat", 200))
+    assert json.loads(opened)["ok"] is True
     # An impostor without KEEN's key cannot make one; nor does this one
     # pass for another operation's or status's answer.
     for key, aad in (

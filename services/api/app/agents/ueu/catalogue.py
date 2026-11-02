@@ -206,9 +206,14 @@ def lookup(ident: str, version: str) -> Catalogue | None:
     return catalogues().get((ident, version))
 
 
+# KEEN's own catalogues. Agents are granted the latest, and envelopes that
+# follow an earlier one are still accepted.
+KEEN_VERSIONS = ("2026.10", "2026.11")
+
+
 def keen() -> Catalogue:
-    """KEEN's own catalogue, which KEEN agents are granted."""
-    return catalogues()[("keen", "2026.10")]
+    """KEEN's latest catalogue, which KEEN agents are granted."""
+    return catalogues()[("keen", KEEN_VERSIONS[-1])]
 
 
 def typed_ok(kind: str, value: Any) -> bool:

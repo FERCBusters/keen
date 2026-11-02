@@ -156,6 +156,8 @@ class SimAgent:
         self.key = Ed25519PrivateKey.generate()
         self.pairwise = secrets.token_bytes(32)
         self.platform = platform
+        # The catalogue envelopes follow; a test can adopt KEEN's grant.
+        self.catalogue = {"id": "keen", "version": "2026.10"}
         self.agent_id = None
         self.key_id = None
         self.grant = None
@@ -353,7 +355,7 @@ class SimAgent:
             "ueu_spec_version": "0.1-keen",
             "evidence_id": uuid7(when),
             "event_type": event_type,
-            "catalogue": {"id": "keen", "version": "2026.10"},
+            "catalogue": dict(self.catalogue),
             "event_time": stamp(when),
             "source": {
                 "application_id": "keen-agent",

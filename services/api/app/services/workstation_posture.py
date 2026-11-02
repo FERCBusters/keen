@@ -18,6 +18,7 @@ from datetime import timedelta
 
 from pydantic import Field
 
+from app.agents.ueu.catalogue import KEEN_VERSIONS
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     AgentPostureObservation,
@@ -50,6 +51,8 @@ THRESHOLDS = {
     "keen.workstation.antivirus_signature_age_days": ("antivirus", "days"),
 }
 COVERAGE = "evidence.collection.completed"
+# Every KEEN catalogue defines the posture checks alike.
+POSTURE_CATALOGUES = [{"id": "keen", "version": v} for v in KEEN_VERSIONS]
 MAX_STREAMS = 128
 PAGE_SIZE = 20
 MAX_AGE = timedelta(hours=24)
@@ -77,7 +80,7 @@ def observation(event):
         or parts[0] != "endpoint"
         or parts[2] != "observed"
         or parts[1] not in CHECKS
-        or doc.get("catalogue") != {"id": "keen", "version": "2026.10"}
+        or doc.get("catalogue") not in POSTURE_CATALOGUES
         or not isinstance(observed, dict)
         or not isinstance(observed.get("facts"), dict)
     ):
