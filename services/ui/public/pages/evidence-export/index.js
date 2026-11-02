@@ -12,6 +12,7 @@ import {
 import {
   sliceCanvasToA4JpegPages,
   buildPdfFromJpegPages,
+  captureCanvas,
   sliceCanvasToFirstA4PreviewBlob,
   waitForImages,
 } from './pdf.js';
@@ -167,8 +168,6 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     const segments = nodes.length ? [nodes] : [];
 
     const allPages = [];
-    const h2c = window.html2canvas || globalThis.html2canvas;
-    if (!h2c) throw new Error('html2canvas is not available');
 
     for (const seg of segments) {
       const wrap = _makeExportContainer(seg, w);
@@ -178,7 +177,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         // Page breaks avoid cutting cards and evidence thumbnails when possible.
         const avoidRanges = _computeAvoidRangesForWrap(wrap, 2);
 
-        const canvas = await h2c(wrap, {
+        const canvas = await captureCanvas(wrap, {
           scale: 2,
           backgroundColor: '#fff',
           useCORS: true,
@@ -306,8 +305,6 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     const rawCard = document.getElementById('raw')?.closest('.card');
 
     const nodes = [topRow, evidenceCard, normalizedCard, rawCard].filter(Boolean);
-    const h2c = window.html2canvas || globalThis.html2canvas;
-    if (!h2c) throw new Error('html2canvas is not available');
 
     const wrap = _makeExportContainer(nodes, w);
     let url = '';
@@ -321,7 +318,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       const scale = 0.85;
       const avoidRanges = _computeAvoidRangesForWrap(wrap, scale);
 
-      const canvas = await h2c(wrap, {
+      const canvas = await captureCanvas(wrap, {
         scale,
         backgroundColor: '#fff',
         useCORS: true,

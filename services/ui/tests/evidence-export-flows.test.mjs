@@ -196,10 +196,10 @@ test('a PDF export keeps the attachment heading with its thumbnail and numbers e
   );
   assert.equal(drawn.filter((text) => text === 'Confidential').length, 3);
   assert.match(drawn[0], /^Board pack \d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z - e1$/);
-  assert.deepEqual(
-    { ...ui.renders[0].options },
-    { scale: 2, backgroundColor: '#fff', useCORS: true },
-  );
+  const { onclone, ...options } = ui.renders[0].options;
+  assert.deepEqual({ ...options }, { scale: 2, backgroundColor: '#fff', useCORS: true });
+  // The copy html2canvas draws from gets colours it can read.
+  assert.equal(typeof onclone, 'function');
   // Buttons and other screen-only controls stay out of the capture.
   assert.equal(ui.renders[0].wrap.querySelector('.no-print'), null);
   assert.equal(ui.document.querySelector('.export-capture'), null);

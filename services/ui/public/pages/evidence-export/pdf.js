@@ -36,6 +36,128 @@ export async function waitForImages(root, timeoutMs = 15_000) {
   await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, timeoutMs))]);
 }
 
+// --- Colours html2canvas can draw ------------------------------------------------
+// html2canvas 1.4 reads colours in hex, rgb() and hsl() form and stops the
+// whole capture on any other colour function. Browsers report colours written
+// with oklch(), oklab(), lab() or lch() in that form, and color-mix() and
+// color() as color(), so a capture of a page styled with them fails. The copy
+// of the page html2canvas draws from is given each such colour as the browser
+// draws it, in rgba() form, before html2canvas reads it.
+
+// The properties html2canvas reads colours from.
+const COLOUR_PROPERTIES = [
+  'color',
+  'background-color',
+  'background-image',
+  'border-top-color',
+  'border-right-color',
+  'border-bottom-color',
+  'border-left-color',
+  'box-shadow',
+  'text-shadow',
+  'text-decoration-color',
+  '-webkit-text-stroke-color',
+];
+// Colour functions html2canvas cannot read.
+const UNDRAWABLE = /(?<![\w-])(?:color-mix|color|oklch|oklab|lch|lab|hwb)\(/i;
+
+// The index of the parenthesis closing the one at open, or -1.
+function _closing(value, open) {
+  let depth = 0,
+    quote = '';
+  for (let i = open; i < value.length; i++) {
+    const c = value[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = '';
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === '(') depth++;
+    else if (c === ')' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+// value with each colour function html2canvas cannot read replaced by what
+// convert returns for it. A url() is left as it is, and so is a colour
+// convert cannot read.
+export function drawableColours(value, convert) {
+  const functions = new RegExp(`url\\(|${UNDRAWABLE.source}`, 'gi');
+  let out = '',
+    from = 0,
+    match;
+  while ((match = functions.exec(value))) {
+    const close = _closing(value, match.index + match[0].length - 1);
+    if (close < 0) break;
+    const text = value.slice(match.index, close + 1);
+    out += value.slice(from, match.index);
+    out += /^url\(/i.test(text) ? text : (convert(text) ?? text);
+    from = functions.lastIndex = close + 1;
+  }
+  return out + value.slice(from);
+}
+
+// A converter drawing each colour onto a one-pixel canvas and reading back
+// the sRGB pixel, which is how the browser itself draws the colour.
+function _pixelColours(doc) {
+  const canvas = doc.createElement('canvas');
+  canvas.width = canvas.height = 1;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const seen = new Map();
+  return (colour) => {
+    if (!seen.has(colour)) {
+      // A colour the canvas cannot read leaves the sentinel in place.
+      const sentinel = '#010203';
+      ctx.fillStyle = sentinel;
+      ctx.fillStyle = colour;
+      let drawn = null;
+      if (ctx.fillStyle !== sentinel) {
+        ctx.clearRect(0, 0, 1, 1);
+        ctx.fillRect(0, 0, 1, 1);
+        const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+        drawn =
+          a === 255
+            ? `rgb(${r}, ${g}, ${b})`
+            : `rgba(${r}, ${g}, ${b}, ${Math.round((a / 255) * 1000) / 1000})`;
+      }
+      seen.set(colour, drawn);
+    }
+    return seen.get(colour);
+  };
+}
+
+// Gives the elements under root, and the page's own background, colours
+// html2canvas can read. The canvas that converts them is made only when a
+// colour needs it.
+export function useDrawableColours(root) {
+  const doc = root.ownerDocument;
+  let pixels = null;
+  const convert = (colour) => (pixels ??= _pixelColours(doc))(colour);
+  const elements = new Set([doc.documentElement, doc.body, root, ...root.querySelectorAll('*')]);
+  for (const el of elements) {
+    if (!el?.style) continue;
+    const style = doc.defaultView.getComputedStyle(el);
+    // Read every property first: a new colour changes what currentcolor means.
+    const changes = [];
+    for (const property of COLOUR_PROPERTIES) {
+      const value = style.getPropertyValue(property);
+      if (!value || !UNDRAWABLE.test(value)) continue;
+      const drawable = drawableColours(value, convert);
+      if (drawable !== value) changes.push([property, drawable]);
+    }
+    for (const [property, value] of changes) el.style.setProperty(property, value, 'important');
+  }
+}
+
+// Draws element onto a canvas with html2canvas, which the page loads.
+export async function captureCanvas(element, options = {}) {
+  const html2canvas = window.html2canvas;
+  if (!html2canvas) throw new Error('html2canvas is not available');
+  return html2canvas(element, {
+    ...options,
+    onclone: (doc, copy) => useDrawableColours(copy),
+  });
+}
+
 async function _canvasToJpegBytes(canvas, quality = 0.92) {
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
   if (!blob) throw new Error('Failed to encode PDF page image');

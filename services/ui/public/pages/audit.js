@@ -11,6 +11,7 @@ import {
 } from '/pages/evidence-export/archive.js';
 import {
   buildPdfFromJpegPages,
+  captureCanvas,
   sliceCanvasToA4JpegPages,
   waitForImages,
 } from '/pages/evidence-export/pdf.js';
@@ -757,8 +758,6 @@ function _makeAuditExportContainer(widthPx) {
 async function buildAuditPagePdfBlob(a) {
   const main = document.querySelector('main');
   if (!main) throw new Error('Page layout missing');
-  const h2c = window.html2canvas || globalThis.html2canvas;
-  if (!h2c) throw new Error('html2canvas is not available');
   // Use a fixed export viewport instead of the current browser window size.
   // This keeps Bootstrap breakpoints and text wrapping consistent between
   // small MacBook windows, external displays, Linux desktops, and browser zooms.
@@ -772,7 +771,7 @@ async function buildAuditPagePdfBlob(a) {
   const wrap = _makeAuditExportContainer(width);
   try {
     await waitForImages(wrap);
-    const canvas = await h2c(wrap, {
+    const canvas = await captureCanvas(wrap, {
       scale: 2,
       backgroundColor: '#fff',
       useCORS: true,
