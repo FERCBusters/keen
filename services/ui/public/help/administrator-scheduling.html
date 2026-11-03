@@ -23,10 +23,19 @@
 <p>Resuming does not enable an adapter disabled in installation settings, or re-enable an individual custom API collector disabled after failures. Historical catch-up depends on each upstream service and the adapter's cursor and lookback limits. Manual diary evidence and ordinary ISMS editing remain available throughout.</p>
 </details>
 <h2 id="measurement-webhook-setup">Configure measurement submissions</h2>
-<p>Measures can receive their values from a reporting job through a webhook. Configure this provider in Webhooks using the configuration editor or administrator-managed YAML:</p>
-<pre><code>providers:
-  isms_metrics:
-    secret_header: X-KEEN-Metrics-Secret
-    secret_env: KEEN_METRICS_SECRET</code></pre>
-<p>Set the named secret in the Keen API environment and provide it securely to the reporting job. The measure's copyable examples send JSON to <code>/api/v1/webhooks/isms/effectiveness-metrics/{metric_key}</code>. Keep metric keys stable, send the observed numeric value and use the correct framework and unit. Each accepted submission creates an entry, so the reporting job should account for duplicate submissions after uncertain network failures.</p>
+<p>Measures can receive their values from a reporting job. Each measure signs with its own submission secret, so a job can write only to the measures whose secrets it holds, and the secret itself never travels with a request. Beyond <code>KEEN_WEBHOOKS_ENABLED</code>, the server needs only <code>KEEN_INTEGRATION_SECRET_KEY</code>, which encrypts the stored secrets.</p>
+<ol class="steps">
+<li>On the measure's page, expand <strong>Send measurements from another system</strong> and choose <strong>Generate secret</strong>. Accounts that manage ISMS records can do this.</li>
+<li>Copy the secret when it appears; Keen shows it once. Store it as <code>KEEN_METRICS_SECRET</code> wherever the reporting job keeps its secrets.</li>
+<li>Copy the curl or Python example into the job. Keep metric keys stable, send the observed numeric value and use the correct framework and unit.</li>
+</ol>
+<p>The job sends JSON to <code>/api/v1/webhooks/isms/effectiveness-metrics/{metric_key}</code> with two headers: <code>X-Keen-Timestamp</code>, the current Unix time in seconds, and <code>X-Keen-Signature</code>, which is <code>v1=</code> followed by the hexadecimal HMAC-SHA256 of the timestamp, a full stop and the exact request body, keyed with the secret. Keen accepts a signature within five minutes of its timestamp and records each signature once, so keep the reporting host's clock synchronised.</p>
+<details class="more"><summary>Going deeper: retries, rotation and responses</summary>
+<ul>
+<li>After a timeout or a lost connection, resend the identical request, with the same timestamp and signature, within five minutes. Keen answers <code>409 Conflict</code> when it already recorded that submission, so the job can treat 409 as success; the examples do. Signing again with a new timestamp makes a new entry, and an identical body signed in the same second is the same submission.</li>
+<li><strong>Replace secret</strong> stops the old secret at once, so update the job's <code>KEEN_METRICS_SECRET</code> straight afterwards. <strong>Revoke secret</strong> refuses the measure's submissions until a new secret is generated.</li>
+<li>Keen answers <code>403</code> for a missing, stale or wrong signature, and the same way for a measure that does not exist or has no secret; <code>409</code> for a repeat; <code>413</code> for a body over 256 KiB; and <code>503</code> with <code>Retry-After</code> while webhooks are paused or repeats cannot be checked.</li>
+<li>Replacing <code>KEEN_INTEGRATION_SECRET_KEY</code> leaves existing submission secrets unreadable; generate new ones afterwards.</li>
+</ul>
+</details>
 <nav aria-label="Chapter pagination" class="chapter-pagination"><a href="administrator-rules.html" rel="prev">← Previous: Manage rules, YAML and historical mapping</a><a href="administrator-git.html" rel="next">Next: Choose a Git service →</a></nav></main></div></body></html>

@@ -521,6 +521,8 @@ POLICY = {
     "PATCH /v1/isms/effectiveness-measures/{measure_id}": ISMS_MANAGE,
     "GET /v1/isms/effectiveness-measures/{measure_id}/metrics": ISMS_READ,
     "POST /v1/isms/effectiveness-measures/{measure_id}/metrics": ISMS_MANAGE,
+    "DELETE /v1/isms/effectiveness-measures/{measure_id}/submission-secret": ISMS_MANAGE,
+    "POST /v1/isms/effectiveness-measures/{measure_id}/submission-secret": ISMS_MANAGE,
     "DELETE /v1/isms/effectiveness-metrics/{entry_id}": ISMS_MANAGE,
     "GET /v1/isms/effectiveness-metrics/{entry_id}": ISMS_READ,
     "PATCH /v1/isms/effectiveness-metrics/{entry_id}": ISMS_MANAGE,

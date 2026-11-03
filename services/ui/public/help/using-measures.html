@@ -31,15 +31,15 @@
 <p>The rule covers monthly and required/as-required measures whose target is zero and whose operator permits zero (blank, equals or at-most). An existing observation for the period prevents an inferred zero. Establish incident and exception coverage through the relevant source evidence and check collection coverage before relying on these entries.</p>
 </details>
 <h2 id="measurement-payloads">Send effectiveness measurements</h2>
-<p class="lead">A reporting job in another system can post observations straight into a measure. Keen writes the example call for you.</p>
+<p class="lead">A reporting job in another system can post observations straight into a measure. Keen writes the example call for you, and each measure has its own secret for signing them.</p>
 <ol class="steps">
 <li>In <strong>ISMS → Effectiveness measures</strong>, define the measure with its metric key, unit and thresholds, and save it.</li>
-<li>Expand <strong>Send measurements from another system</strong> in the editor or on the measure's detail page, and copy the generated curl or Python example into your reporting job. It already contains this installation's endpoint, the metric key, the framework and the unit.</li>
+<li>On the measure's detail page, expand <strong>Send measurements from another system</strong> and choose <strong>Generate secret</strong>. Copy the secret straight away: Keen shows it once. Store it as <code>KEEN_METRICS_SECRET</code> in the reporting environment.</li>
+<li>Copy the generated curl or Python example into your reporting job. It already contains this installation's endpoint, the metric key, the framework and the unit, and signs each submission with the secret.</li>
 <li>Replace the example value of zero with the observed result. Optional <code>period_start</code> and <code>period_end</code> describe the reporting period as <code>YYYY-MM-DD</code>.</li>
-<li>Supply the webhook secret your administrator configured as <code>KEEN_METRICS_SECRET</code> in the reporting environment, and <code>KEEN_METRICS_HEADER</code> if a custom header is configured. The examples reference these as environment variables.</li>
 </ol>
-<p>Each successful POST creates a metric entry, so repeated submissions produce additional entries. Keen evaluates each result against the measure's threshold. Review it, link it to the relevant requirements and sample supporting evidence into an audit when appropriate.</p>
-<details class="more"><summary>Going deeper: the webhook behind the examples</summary>
-<p>Your administrator configures the <code>isms_metrics</code> webhook and its secret in the deployment. Measurements are evidence of observed performance, such as service availability or patch coverage; the threshold remains the criterion Keen applies.</p>
+<p>Each accepted submission creates a metric entry. When a send gets no answer, the examples resend the same signed request; Keen answers <code>409 Conflict</code> when it already has it, so the measurement is recorded once. Keen evaluates each result against the measure's threshold. Review it, link it to the relevant requirements and sample supporting evidence into an audit when appropriate.</p>
+<details class="more"><summary>Going deeper: how submissions are signed</summary>
+<p>Each submission carries <code>X-Keen-Timestamp</code> and <code>X-Keen-Signature</code>: an HMAC-SHA256 over the timestamp, a full stop and the exact body, keyed with the measure's secret. Keen accepts it within five minutes of the timestamp, once, so keep the reporting host's clock synchronised. <strong>Replace secret</strong> stops the old secret at once, and <strong>Revoke secret</strong> refuses submissions until a new one is generated. Measurements are evidence of observed performance, such as service availability or patch coverage; the threshold remains the criterion Keen applies. <a href="administrator-scheduling.html#measurement-webhook-setup">Configure measurement submissions</a> lists every response.</p>
 </details>
 <nav aria-label="Chapter pagination" class="chapter-pagination"><a href="using-people-assets.html" rel="prev">← Previous: People, assets and access</a><a href="using-quizzes.html" rel="next">Next: Quizzes and training checks →</a></nav></main></div></body></html>

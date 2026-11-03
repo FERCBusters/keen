@@ -18,6 +18,7 @@ from app.db.models import (
     AuditAttendee,
     Framework,
     InboxItem,
+    IsmsEffectivenessMeasure,
     IsmsPerson,
     QuizRound,
     SecurityNotification,
@@ -714,7 +715,9 @@ def test_a_measure_owner_hears_when_its_latest_result_falls_outside(people):
     assert len(_items(owner)["items"]) == 1
     webhooks.record_metric(
         db=app.db,
-        metric_key="patching",
+        measure=app.db.query(IsmsEffectivenessMeasure)
+        .filter_by(metric_key="patching")
+        .one(),
         payload={
             "framework": FW,
             "value": 60,

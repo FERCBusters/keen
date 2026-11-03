@@ -1,16 +1,26 @@
 from __future__ import annotations
 
+import json
 import math
 import uuid
 from datetime import date, datetime
 from typing import Any
 
+from cryptography.fernet import InvalidToken
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import Event, IsmsEffectivenessMeasure, IsmsEffectivenessMetricEntry
+from app.db.models import (
+    Event,
+    IsmsEffectivenessMeasure,
+    IsmsEffectivenessMeasureSecret,
+    IsmsEffectivenessMetricEntry,
+)
+from app.integrations.errors import IntegrationError
+from app.integrations.transport import decrypt
+from app.security import signed_webhooks
 from app.security.redaction import (
     mask_event_data_obj,
     mask_event_data_str,
@@ -22,10 +32,14 @@ from app.services import inbox
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
+from app.services.ingestion_pause import require_receiving
 from app.services.isms.metric_values import (
     inherited_metric_source_type,
     resolve_metric_source_type,
 )
+
+# Submissions are small JSON documents; the bound applies before verification.
+MAX_SUBMISSION_BYTES = 256 * 1024
 
 
 def _webhook_parse_date(value: Any) -> date | None:
@@ -93,33 +107,97 @@ def _webhook_coerce_metric_source_type(db: Session, raw: Any) -> str:
     return resolved
 
 
-def _webhook_measure_by_key(
-    db: Session, *, metric_key: str, framework: str
-) -> IsmsEffectivenessMeasure:
+def _submission_target(
+    db: Session, metric_key: str
+) -> tuple[IsmsEffectivenessMeasure | None, str | None]:
+    """Return the measure a submission names and its secret, without failing.
+
+    Metric keys are unique across frameworks. An unknown measure, one without a
+    secret and one whose secret cannot be read all leave nothing to sign with,
+    so the caller refuses them alike.
+    """
     cleaned = str(metric_key or "").strip()
-    if not cleaned:
-        raise DomainError(status_code=400, detail="metric_key is required")
-    mid = None
     try:
-        mid = uuid.UUID(cleaned)
+        named = IsmsEffectivenessMeasure.id == uuid.UUID(cleaned)
+    except ValueError:
+        named = func.lower(IsmsEffectivenessMeasure.metric_key) == cleaned.lower()
+    # One query whether or not the measure exists or has a secret.
+    found = (
+        db.query(IsmsEffectivenessMeasure, IsmsEffectivenessMeasureSecret)
+        .outerjoin(
+            IsmsEffectivenessMeasureSecret,
+            IsmsEffectivenessMeasureSecret.measure_id == IsmsEffectivenessMeasure.id,
+        )
+        .filter(named)
+        .one_or_none()
+    )
+    if found is None:
+        return None, None
+    measure, stored = found
+    try:
+        secret = decrypt(stored.secret_encrypted) if stored else None
+    except (IntegrationError, InvalidToken, ValueError):
+        secret = None
+    return measure, secret if isinstance(secret, str) else None
+
+
+def submit_signed_metric(
+    *,
+    db: Session,
+    redis,
+    metric_key: str,
+    timestamps: list[str],
+    signatures: list[str],
+    body: bytes,
+    context: ChangeContext,
+    now: float | None = None,
+):
+    """Record a reporting job's signed submission once.
+
+    The signature covers the timestamp and the exact body under the measure's
+    own secret. Nothing about the measure, the ingestion state or the payload is
+    revealed before it verifies.
+    """
+    try:
+        timestamp, signature = signed_webhooks.presented(timestamps, signatures, now)
+    except signed_webhooks.SignatureRefused as refused:
+        raise DomainError(status_code=403, detail=str(refused)) from None
+    if len(body) > MAX_SUBMISSION_BYTES:
+        raise DomainError(status_code=413, detail="Submissions are limited to 256 KiB")
+    measure, secret = _submission_target(db, metric_key)
+    # The comparison runs even without a secret, so refusals take as long.
+    signed = signed_webhooks.matches(secret, timestamp, body, signature)
+    if measure is None or not signed:
+        raise DomainError(status_code=403, detail="Invalid webhook signature")
+    require_receiving(db, "webhooks")
+    try:
+        payload = json.loads(body.decode("utf-8")) if body else {}
+    except (ValueError, RecursionError):
+        raise DomainError(status_code=400, detail="Expected JSON payload") from None
+    scope = f"isms-metric:{measure.id}"
+    try:
+        claimed = signed_webhooks.claim(redis, scope, signature)
     except Exception:
-        mid = None
-    qry = db.query(IsmsEffectivenessMeasure).filter(
-        IsmsEffectivenessMeasure.framework_slug == framework
-    )
-    row = (
-        qry.filter(IsmsEffectivenessMeasure.id == mid).one_or_none()
-        if mid
-        else qry.filter(
-            func.lower(IsmsEffectivenessMeasure.metric_key) == cleaned.lower()
-        ).one_or_none()
-    )
-    if not row:
-        raise DomainError(status_code=404, detail="Effectiveness measure not found")
-    return row
+        raise DomainError(
+            503,
+            "Submissions cannot be checked for replay right now; retry later.",
+            headers={"Retry-After": "60"},
+        ) from None
+    if not claimed:
+        raise DomainError(
+            status_code=409, detail="This submission was already received"
+        )
+    try:
+        return record_metric(db=db, measure=measure, payload=payload, context=context)
+    except BaseException:
+        # A submission that was not recorded leaves its retry acceptable.
+        signed_webhooks.release(redis, scope, signature)
+        raise
 
 
-def record_metric(*, db, metric_key, payload, context: ChangeContext):
+def record_metric(
+    *, db, measure: IsmsEffectivenessMeasure, payload, context: ChangeContext
+):
     from app.services.features import state
 
     state(db).require("effectiveness")
@@ -131,7 +209,9 @@ def record_metric(*, db, metric_key, payload, context: ChangeContext):
         or settings.default_framework_slug,
         64,
     )
-    measure = _webhook_measure_by_key(db, metric_key=metric_key, framework=framework)
+    # A measure is reached within its own framework only.
+    if measure.framework_slug != framework:
+        raise DomainError(status_code=404, detail="Effectiveness measure not found")
     from app.services.isms.effectiveness import measure_quiz
 
     if measure_quiz(db, measure.id) is not None:

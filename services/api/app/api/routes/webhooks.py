@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -11,6 +9,7 @@ from app.core.valkey import get_valkey
 from app.db.session import get_db
 from app.ingest.webhooks import ingest_webhook, verify_secret
 from app.security.rate_limit import fixed_window_allow
+from app.security.signed_webhooks import SIGNATURE_HEADER, TIMESTAMP_HEADER
 from app.services import webhooks as service
 
 router = Router()
@@ -43,10 +42,12 @@ def _limit_webhook(request: Request, provider: str):
 async def isms_effectiveness_metric_webhook(
     metric_key: str, request: Request, db: Session = Depends(get_db)
 ):
-    """Record an ISMS effectiveness metric entry from an external scheduler/tool.
+    """Record an effectiveness measurement signed by a reporting job.
 
-    Configure provider ``isms_metrics`` in config/webhooks.yml. ``source_type``
-    must be an existing Keen evidence source, or ``other``. A typical payload is:
+    The job signs ``<timestamp>.<body>`` with HMAC-SHA256 under the measure's
+    submission secret and sends ``X-Keen-Timestamp`` and
+    ``X-Keen-Signature: v1=<hex>``. ``source_type`` must be an existing Keen
+    evidence source, or ``other``. A typical payload is:
     {
       "value": 42,
       "unit": "requests",
@@ -59,19 +60,15 @@ async def isms_effectiveness_metric_webhook(
     """
     _require_webhook_enabled()
     _limit_webhook(request, "isms_metrics")
-    headers = {k: v for k, v in request.headers.items()}
-    if not verify_secret("isms_metrics", headers):
-        raise HTTPException(status_code=403, detail="Invalid webhook secret")
-    from app.services.ingestion_pause import require_receiving
-
-    require_receiving(db, "webhooks")
     body = await request.body()
-    try:
-        payload = json.loads(body.decode("utf-8")) if body else {}
-    except Exception:
-        raise HTTPException(status_code=400, detail="Expected JSON payload")
-    return service.record_metric(
-        db=db, metric_key=metric_key, payload=payload, context=change_context(request)
+    return service.submit_signed_metric(
+        db=db,
+        redis=get_valkey(),
+        metric_key=metric_key,
+        timestamps=request.headers.getlist(TIMESTAMP_HEADER),
+        signatures=request.headers.getlist(SIGNATURE_HEADER),
+        body=body,
+        context=change_context(request),
     )
 
 

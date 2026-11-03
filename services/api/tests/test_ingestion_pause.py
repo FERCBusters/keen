@@ -118,10 +118,9 @@ def test_agents_retry_without_losing_records_or_revoking_credentials(
     assert len(stored) == 1
 
 
-@pytest.mark.parametrize(
-    "path",
-    ["/v1/webhooks/example/event", "/v1/webhooks/isms/effectiveness-metrics/test"],
-)
+# Signed metric submissions meet the pause after their signature verifies; see
+# tests/test_metric_webhooks.py.
+@pytest.mark.parametrize("path", ["/v1/webhooks/example/event"])
 def test_webhooks_retry_before_ingest(db, monkeypatch, path):
     app = FastAPI()
     app.include_router(webhooks.router)

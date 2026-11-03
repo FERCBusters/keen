@@ -2469,6 +2469,26 @@ class IsmsEffectivenessMeasure(Base):
     )
 
 
+class IsmsEffectivenessMeasureSecret(Base):
+    """A measure's submission secret, encrypted with KEEN_INTEGRATION_SECRET_KEY.
+
+    Reporting jobs sign submissions with it. It lives apart from the measure so
+    that the measure's serialisers, exports and changelog never carry it.
+    """
+
+    __tablename__ = "isms_effectiveness_measure_secrets"
+
+    measure_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_effectiveness_measures.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    secret_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+
+
 class IsmsEffectivenessMetricEntry(Base):
     __tablename__ = "isms_effectiveness_metric_entries"
 

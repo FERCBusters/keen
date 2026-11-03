@@ -689,6 +689,7 @@ def test_disabled_webhooks_reject_before_credentials(
     monkeypatch.setattr(deployment_settings, "webhooks_enabled", False)
     verify = Mock(side_effect=AssertionError("Credentials must not be consulted"))
     monkeypatch.setattr(webhooks, "verify_secret", verify)
+    monkeypatch.setattr(webhooks.service, "submit_signed_metric", verify)
     response = production_client[0].post(path, json={"value": 1})
     assert response.status_code == 503
     verify.assert_not_called()
@@ -703,7 +704,7 @@ def test_metric_webhook_rate_limit_precedes_credentials(production_client, monke
     limiter = Mock(return_value=(False, 60))
     monkeypatch.setattr(webhooks, "fixed_window_allow", limiter)
     verify = Mock(side_effect=AssertionError("Must reject before credential check"))
-    monkeypatch.setattr(webhooks, "verify_secret", verify)
+    monkeypatch.setattr(webhooks.service, "submit_signed_metric", verify)
     response = production_client[0].post(
         "/v1/webhooks/isms/effectiveness-metrics/test", json={"value": 1}
     )
@@ -726,20 +727,20 @@ def test_webhook_metric_requires_finite_number(value):
     assert _webhook_metric_value("12.5") == 12.5
 
 
-def test_enabled_metric_webhook_checks_secret(production_client, monkeypatch):
+def test_enabled_metric_webhook_requires_a_signature(production_client, monkeypatch):
     from app.api.routes import webhooks
     from app.ingest.connections import deployment_settings
 
     monkeypatch.setattr(deployment_settings, "webhooks_enabled", True)
     monkeypatch.setattr(webhooks, "get_valkey", lambda: production_client[1])
     monkeypatch.setattr(webhooks, "fixed_window_allow", Mock(return_value=(True, 0)))
-    verify = Mock(return_value=False)
-    monkeypatch.setattr(webhooks, "verify_secret", verify)
+    # The shared provider secret no longer authenticates measurements.
+    monkeypatch.setattr(webhooks, "verify_secret", Mock(return_value=True))
     response = production_client[0].post(
         "/v1/webhooks/isms/effectiveness-metrics/test", json={"value": 1}
     )
     assert response.status_code == 403
-    assert verify.call_args.args[0] == "isms_metrics"
+    assert response.json()["detail"].startswith("Sign the submission")
 
 
 @pytest.mark.parametrize("method", ["local", "ldap", "google", "github", "oidc"])

@@ -479,7 +479,9 @@ def test_a_quiz_measure_changes_only_through_its_quiz(world):
     with pytest.raises(DomainError) as refused:
         webhooks.record_metric(
             db=world.db,
-            metric_key=quiz["measure_id"],
+            measure=world.db.get(
+                IsmsEffectivenessMeasure, uuid.UUID(quiz["measure_id"])
+            ),
             payload={"framework": FW, "value": 50},
             context=ChangeContext(),
         )

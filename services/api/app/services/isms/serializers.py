@@ -17,6 +17,7 @@ from app.db.models import (
     IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
+    IsmsEffectivenessMeasureSecret,
     IsmsEffectivenessMetricEntry,
     IsmsEntityClauseLink,
     IsmsEntityControlLink,
@@ -519,6 +520,13 @@ def _effectiveness_measure_out(
     # A quiz's measure records the quiz's round averages and changes with it.
     quiz = db.query(Quiz.id, Quiz.title).filter(Quiz.measure_id == row.id).first()
     out["quiz"] = {"id": str(quiz.id), "title": quiz.title} if quiz else None
+    # Whether reporting jobs can sign submissions, never the secret itself.
+    issued = (
+        db.query(IsmsEffectivenessMeasureSecret.created_at)
+        .filter(IsmsEffectivenessMeasureSecret.measure_id == row.id)
+        .scalar()
+    )
+    out["submission_secret_issued_at"] = issued.isoformat() if issued else None
     if include_entries:
         out["metric_entries"] = [
             _metric_entry_out(entry, row) for entry in entries[:25] if entry is not None

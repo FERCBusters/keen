@@ -122,7 +122,7 @@ def test_metric_webhook_redacts_recognised_secrets_before_storage(contract_db):
     contract_db.commit()
     webhooks.record_metric(
         db=contract_db,
-        metric_key="patching",
+        measure=measure,
         payload={"value": 3, "api_key": "SYNTHETIC-SECRET", "detail": {"token": "x"}},
         context=ChangeContext(method="POST", path="/test"),
     )

@@ -132,12 +132,19 @@ function renderMeasure(row) {
     const panel = document.createElement('div');
     panel.id = 'measurement-examples';
     $('metricKey').closest('.card').after(panel);
-    mountMeasurementExamples(panel, () => ({
-      key: measure.metric_key,
-      framework: measure.framework || framework,
-      unit: measure.target_unit || '',
-      sourceType: measure.source_type || 'other',
-    }));
+    mountMeasurementExamples(
+      panel,
+      () => ({
+        key: measure.metric_key,
+        framework: measure.framework || framework,
+        unit: measure.target_unit || '',
+        sourceType: measure.source_type || 'other',
+      }),
+      {
+        secretPath: `/api/v1/isms/effectiveness-measures/${encodeURIComponent(measure.id)}/submission-secret?framework=${encodeURIComponent(measure.framework || framework)}`,
+        issuedAt: measure.submission_secret_issued_at,
+      },
+    );
   }
   $('metricKey').innerHTML = measure.metric_key ? `<code>${esc(measure.metric_key)}</code>` : '-';
   $('measureUpdated').textContent = fmtTs(measure.updated_at) || '-';

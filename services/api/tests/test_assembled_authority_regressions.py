@@ -7,6 +7,7 @@ set (SQLite otherwise, which does not establish locking behaviour).
 """
 
 import json
+import time
 import uuid
 from unittest.mock import MagicMock, Mock
 
@@ -20,6 +21,7 @@ from app.db.models import (
     EntityChangelog,
     Event,
     IsmsEffectivenessMeasure,
+    IsmsEffectivenessMeasureSecret,
     IsmsEffectivenessMetricEntry,
     Permission,
     User,
@@ -369,25 +371,27 @@ def test_failed_webhook_persistence_releases_replay_claim(keen, monkeypatch):
 
 
 def test_metric_webhook_redacts_extracted_fields_and_history(keen, monkeypatch):
-    from app.api.routes import webhooks as webhook_routes
+    from app.integrations.transport import encrypt
+    from app.security.signed_webhooks import sign
 
-    monkeypatch.setattr(
-        webhook_routes,
-        "verify_secret",
-        lambda provider, headers: headers.get("x-keen-metrics-secret") == "synthetic",
-    )
+    monkeypatch.setattr(settings, "webhooks_enabled", True)
+    monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
     key = "metric-" + uuid.uuid4().hex[:8]
+    measure = IsmsEffectivenessMeasure(
+        framework_slug=settings.default_framework_slug, metric_key=key
+    )
+    keen.db.add(measure)
+    keen.db.flush()
     keen.db.add(
-        IsmsEffectivenessMeasure(
-            framework_slug=settings.default_framework_slug, metric_key=key
+        IsmsEffectivenessMeasureSecret(
+            measure_id=measure.id, secret_encrypted=encrypt("keen_ms_synthetic")
         )
     )
     keen.db.commit()
     secrets = ["SYNTH-QUERY-SECRET", "SYNTH-FRAGMENT-TOKEN", "SYNTH-NOTE-PASSWORD"]
     secrets += ["SYNTH-BEARER", "SYNTH-TITLE-SECRET", "SYNTH-REF-TOKEN"]
-    response = keen.client().post(
-        f"/v1/webhooks/isms/effectiveness-metrics/{key}",
-        json={
+    body = json.dumps(
+        {
             "value": 1,
             "source_url": "https://grafana.example/d?api_key=SYNTH-QUERY-SECRET"
             "#access_token=SYNTH-FRAGMENT-TOKEN",
@@ -395,8 +399,17 @@ def test_metric_webhook_redacts_extracted_fields_and_history(keen, monkeypatch):
             "text": "Authorization: Bearer SYNTH-BEARER",
             "source_title": "secret=SYNTH-TITLE-SECRET",
             "source_reference": "token=SYNTH-REF-TOKEN",
+        }
+    ).encode()
+    stamp = str(int(time.time()))
+    response = keen.client().post(
+        f"/v1/webhooks/isms/effectiveness-metrics/{key}",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Keen-Timestamp": stamp,
+            "X-Keen-Signature": sign("keen_ms_synthetic", stamp, body),
         },
-        headers={"X-Keen-Metrics-Secret": "synthetic"},
     )
     assert response.status_code == 200, response.text
     entry_id = uuid.UUID(response.json()["metric_entry"]["id"])

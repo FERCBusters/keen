@@ -93,6 +93,40 @@ def delete_effectiveness_measure(
     )
 
 
+@router.post("/v1/isms/effectiveness-measures/{measure_id}/submission-secret")
+def issue_measure_submission_secret(
+    measure_id: str,
+    request: Request,
+    framework: str = settings.default_framework_slug,
+    user=Depends(require_isms_manage),
+    db: Session = Depends(get_db),
+):
+    return service.issue_submission_secret(
+        measure_id=measure_id,
+        context=ChangeContext(method=request.method, path=request.url.path),
+        framework=framework,
+        user=user,
+        db=db,
+    )
+
+
+@router.delete("/v1/isms/effectiveness-measures/{measure_id}/submission-secret")
+def revoke_measure_submission_secret(
+    measure_id: str,
+    request: Request,
+    framework: str = settings.default_framework_slug,
+    user=Depends(require_isms_manage),
+    db: Session = Depends(get_db),
+):
+    return service.revoke_submission_secret(
+        measure_id=measure_id,
+        context=ChangeContext(method=request.method, path=request.url.path),
+        framework=framework,
+        user=user,
+        db=db,
+    )
+
+
 @router.post("/v1/isms/effectiveness-measures/{measure_id}/metrics")
 def create_effectiveness_metric_entry(
     measure_id: str,

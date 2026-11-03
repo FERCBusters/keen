@@ -101,8 +101,13 @@ async function measurePage(t, options = {}) {
     },
     post: async (u, b) => {
       state.posted.push({ path: u.pathname, body: JSON.parse(JSON.stringify(b)) });
+      if (u.pathname.endsWith('/submission-secret')) {
+        if (options.postFail) throw new Error('Secret refused');
+        return state.secretReply;
+      }
       return { ok: true };
     },
+    confirm: options.confirm ?? true,
   });
   await settle(
     () =>
@@ -213,26 +218,57 @@ test('the trend explains when D3 is unavailable', async (t) => {
   assert.match(ui.el('trendMeta').textContent, /D3 is unavailable/);
 });
 
-test('administrators see measurement integration examples for the metric key', async (t) => {
+test('administrators see signed measurement examples for the metric key', async (t) => {
   const { ui } = await measurePage(t);
   const details = ui.el('measurement-examples').querySelector('details');
   // Opening the disclosure fills the examples through its toggle event.
   details.open = true;
-  await settle(() => details.querySelector('code').textContent);
-  const code = [...details.querySelectorAll('code')].map((c) => c.textContent);
+  const examples = () => [...details.querySelectorAll('pre code')].map((c) => c.textContent);
+  await settle(() => examples()[0]);
+  const [curl, python] = examples();
   assert.match(
-    code[0],
-    /curl --fail-with-body --show-error 'https:\/\/keen\.example\/api\/v1\/webhooks\/isms\/effectiveness-metrics\/patch-latency'/,
+    curl,
+    /'https:\/\/keen\.example\/api\/v1\/webhooks\/isms\/effectiveness-metrics\/patch-latency'\)/,
   );
-  assert.match(code[0], /KEEN_METRICS_SECRET:\?Set KEEN_METRICS_SECRET/);
+  assert.match(curl, /KEEN_METRICS_SECRET:\?Set KEEN_METRICS_SECRET/);
+  // The body that is signed is the body that is sent.
+  assert.match(curl, /printf '%s\.%s' "\$timestamp" "\$body" \|/);
+  assert.match(curl, /openssl dgst -sha256 -hmac "\$KEEN_METRICS_SECRET"/);
+  assert.match(curl, /-H "X-Keen-Signature: v1=\$signature"/);
+  assert.match(curl, /--data-binary "\$body"/);
+  assert.match(curl, /409\) echo "Already recorded"/);
   // The example payload names the measure's expected source, so the entries it
   // creates are attributed the same way as entries recorded by hand.
-  assert.match(code[0], /"source_type": "jira"/);
-  assert.match(code[1], /\\"source_type\\": \\"jira\\"/);
-  assert.match(code[1], /urlopen\(request, timeout=30\)/);
+  assert.match(curl, /"source_type": "jira"/);
+  assert.match(python, /\\"source_type\\": \\"jira\\"/);
+  assert.match(
+    python,
+    /hmac\.new\(secret, timestamp\.encode\(\) \+ b"\." \+ body, hashlib\.sha256\)/,
+  );
+  assert.match(python, /"X-Keen-Signature": "v1=" \+ signature\.hexdigest\(\)/);
+  assert.match(python, /if error\.code == 409:/);
+  assert.match(python, /urlopen\(request, timeout=30\)/);
   assert.match(details.textContent, /Example value is 0/);
-  details.querySelector('button').click();
+  assert.match(details.textContent, /HMAC-SHA256 over the Unix timestamp/);
+  [...details.querySelectorAll('button')].find((b) => b.textContent === 'Copy curl').click();
   await settle(() => /Copied curl/.test(details.textContent));
+});
+
+test('a hostile metric key stays inside the examples’ quoting', async (t) => {
+  const { ui } = await measurePage(t, {
+    measure: measure({ metric_key: 'k\'$(touch x)"\n', framework: 'A"\\' }),
+  });
+  const details = ui.el('measurement-examples').querySelector('details');
+  details.open = true;
+  await settle(() => details.querySelector('pre code').textContent);
+  const [curl, python] = [...details.querySelectorAll('pre code')].map((c) => c.textContent);
+  // The URL's own quote closes and reopens the shell quoting around it.
+  assert.match(curl, /effectiveness-metrics\/k'\\''%24\(touch%20x\)%22%0A'\)/);
+  assert.match(
+    python,
+    /URL = "https:\/\/keen\.example\/api\/v1\/webhooks\/isms\/effectiveness-metrics\/k'%24\(touch%20x\)%22%0A"/,
+  );
+  assert.match(curl, /"framework": "A\\"\\\\"/);
 });
 
 test('measures without a key disable the integration examples', async (t) => {
@@ -247,7 +283,116 @@ test('measures without a key disable the integration examples', async (t) => {
   const details = ui.el('measurement-examples').querySelector('details');
   details.open = true;
   await settle(() => /Enter and save a metric key/.test(details.textContent));
-  assert.ok([...details.querySelectorAll('button')].every((b) => b.disabled));
+  const copies = [...details.querySelectorAll('button')].filter((b) =>
+    b.textContent.startsWith('Copy '),
+  );
+  assert.deepEqual(
+    copies.map((b) => [b.textContent, b.disabled]),
+    [
+      ['Copy secret', false],
+      ['Copy curl', true],
+      ['Copy Python (standard library)', true],
+    ],
+  );
+});
+
+function secretControls(ui) {
+  const details = ui.el('measurement-examples').querySelector('details');
+  const buttons = [...details.querySelectorAll('button')];
+  const named = (label) => buttons.find((b) => b.textContent === label);
+  return {
+    details,
+    status: details.querySelector('[role="status"]'),
+    issue: buttons[0],
+    revoke: named('Revoke secret'),
+    copy: named('Copy secret'),
+    secret: details.querySelector('code.user-select-all'),
+  };
+}
+
+test('a measure manager generates a submission secret that is shown once', async (t) => {
+  const writes = [];
+  const { ui, state } = await measurePage(t, {
+    globals: {
+      navigator: { clipboard: { writeText: async (text) => writes.push(text) } },
+    },
+  });
+  const controls = secretControls(ui);
+  assert.match(controls.status.textContent, /No secret yet/);
+  assert.equal(controls.issue.textContent, 'Generate secret');
+  assert.equal(controls.revoke.hidden, true);
+  assert.equal(controls.secret.parentElement.hidden, true);
+  state.secretReply = {
+    secret: 'keen_ms_<b>new</b>',
+    measure: { submission_secret_issued_at: '2026-11-03T05:00:00Z' },
+  };
+  controls.issue.click();
+  await settle(() => controls.secret.textContent);
+  // The secret is text, never markup.
+  assert.equal(controls.secret.textContent, 'keen_ms_<b>new</b>');
+  assert.equal(controls.secret.querySelector('b'), null);
+  assert.equal(controls.secret.parentElement.hidden, false);
+  assert.match(controls.status.textContent, /^Generated .*Replacing or revoking/);
+  assert.equal(controls.issue.textContent, 'Replace secret');
+  assert.equal(controls.revoke.hidden, false);
+  controls.copy.click();
+  await settle(() =>
+    /Copied\. Keen will not show this secret again/.test(controls.details.textContent),
+  );
+  assert.deepEqual(writes, ['keen_ms_<b>new</b>']);
+});
+
+test('replacing and revoking a secret ask first and stop at a refusal', async (t) => {
+  let answer = false;
+  const { ui, state } = await measurePage(t, {
+    measure: measure({ submission_secret_issued_at: '2026-11-01T00:00:00Z' }),
+    confirm: () => answer,
+  });
+  const controls = secretControls(ui);
+  assert.match(controls.status.textContent, /^Generated /);
+  controls.issue.click();
+  controls.revoke.click();
+  await settle(() => ui.confirmations.length === 2);
+  assert.deepEqual(
+    ui.confirmations.map((c) => [c.title, c.danger]),
+    [
+      ['Replace submission secret', true],
+      ['Revoke submission secret', true],
+    ],
+  );
+  assert.deepEqual(state.posted, []);
+  assert.deepEqual(state.removed, []);
+
+  answer = true;
+  controls.revoke.click();
+  await settle(() => state.removed.length);
+  assert.deepEqual(state.removed, [
+    '/api/v1/isms/effectiveness-measures/m1/submission-secret?framework=A',
+  ]);
+  await settle(() => /No secret yet/.test(controls.status.textContent));
+  assert.equal(controls.revoke.hidden, true);
+  assert.equal(controls.issue.disabled, false);
+});
+
+test('failed secret changes say so and keep the controls usable', async (t) => {
+  const { ui } = await measurePage(t, {
+    measure: measure({ submission_secret_issued_at: '2026-11-01T00:00:00Z' }),
+    postFail: true,
+    deleteFail: true,
+    globals: {
+      navigator: { clipboard: { writeText: async () => Promise.reject(new Error('no')) } },
+    },
+  });
+  const controls = secretControls(ui);
+  controls.issue.click();
+  await settle(() => /not generated/.test(controls.status.textContent));
+  assert.equal(controls.issue.disabled, false);
+  controls.revoke.click();
+  await settle(() => /not revoked/.test(controls.status.textContent));
+  assert.equal(controls.revoke.disabled, false);
+  assert.equal(controls.secret.parentElement.hidden, true);
+  controls.copy.click();
+  await settle(() => /Select and copy the secret/.test(controls.details.textContent));
 });
 
 test('readers cannot edit, record, sample or delete metric entries', async (t) => {

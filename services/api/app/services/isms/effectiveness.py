@@ -9,10 +9,14 @@ from sqlalchemy.orm import Session
 from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.db.models import (
     IsmsEffectivenessMeasure,
+    IsmsEffectivenessMeasureSecret,
     IsmsEffectivenessMetricEntry,
     Quiz,
     User,
 )
+from app.integrations.errors import IntegrationError
+from app.integrations.transport import encrypt
+from app.security.signed_webhooks import new_secret
 from app.services import inbox
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
@@ -107,6 +111,9 @@ def remove_effectiveness_measure(
     before = _effectiveness_measure_out(db, row, fw)
     _record(db, "effectiveness_measure", row, "deleted", before, None, user, context)
     _delete_entity_links(db, "effectiveness_measure", row.id, fw)
+    db.query(IsmsEffectivenessMeasureSecret).filter(
+        IsmsEffectivenessMeasureSecret.measure_id == row.id
+    ).delete(synchronize_session=False)
     db.delete(row)
 
 
@@ -187,6 +194,69 @@ def delete_effectiveness_measure(
     remove_effectiveness_measure(row=row, context=context, user=user, db=db)
     db.commit()
     return {"ok": True}
+
+
+def _submission_measure(
+    db: Session, measure_id: str, framework: str
+) -> IsmsEffectivenessMeasure:
+    fw = framework_parameter(framework)
+    row = _by_id_or_404(
+        db, IsmsEffectivenessMeasure, measure_id, "Effectiveness measure", lock=True
+    )
+    if row.framework_slug != fw:
+        raise DomainError(status_code=404, detail="Effectiveness measure not found")
+    _refuse_quiz_measure(db, row)
+    return row
+
+
+def issue_submission_secret(
+    *, measure_id: str, context: ChangeContext, framework: str, user: User, db: Session
+):
+    """Give a measure a new submission secret, replacing any earlier one.
+
+    The response carries the secret once; Keen keeps it encrypted and never
+    shows it again. A replaced secret stops signing submissions at once.
+    """
+    row = _submission_measure(db, measure_id, framework)
+    before = _effectiveness_measure_out(db, row, row.framework_slug)
+    secret = new_secret()
+    try:
+        sealed = encrypt(secret)
+    except IntegrationError:
+        raise DomainError(
+            503,
+            "Set KEEN_INTEGRATION_SECRET_KEY on the API before generating "
+            "submission secrets",
+        ) from None
+    stored = db.get(IsmsEffectivenessMeasureSecret, row.id)
+    if stored is None:
+        stored = IsmsEffectivenessMeasureSecret(measure_id=row.id)
+    stored.secret_encrypted = sealed
+    stored.created_at = _utcnow()
+    db.add(stored)
+    db.flush()
+    after = _effectiveness_measure_out(db, row, row.framework_slug)
+    _record(db, "effectiveness_measure", row, "updated", before, after, user, context)
+    db.commit()
+    return {"secret": secret, "measure": after}
+
+
+def revoke_submission_secret(
+    *, measure_id: str, context: ChangeContext, framework: str, user: User, db: Session
+):
+    """Remove a measure's submission secret, so no submission is accepted."""
+    row = _submission_measure(db, measure_id, framework)
+    stored = db.get(IsmsEffectivenessMeasureSecret, row.id)
+    if stored is not None:
+        before = _effectiveness_measure_out(db, row, row.framework_slug)
+        db.delete(stored)
+        db.flush()
+        after = _effectiveness_measure_out(db, row, row.framework_slug)
+        _record(
+            db, "effectiveness_measure", row, "updated", before, after, user, context
+        )
+        db.commit()
+    return _effectiveness_measure_out(db, row, row.framework_slug)
 
 
 def _record_metric_change(

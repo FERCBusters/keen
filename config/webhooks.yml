@@ -21,18 +21,6 @@ providers:
       # - "old.state_mtime"
 
 
-  # Dedicated inbound metrics endpoint for ISMS Effectiveness Measures.
-  # POST /api/v1/webhooks/isms/effectiveness-metrics/{metric_key}
-  isms_metrics:
-    badge_color: "#6f42c1"
-    secret_header: "X-Keen-Metrics-Secret"
-    secret_env: "KEEN_ISMS_METRICS_WEBHOOK_SECRET"
-    summary_hints:
-      - "source_title"
-      - "period_start"
-      - "period_end"
-      - "value"
-
   cloudtrail_source_ip:
     ui_name: "CloudTrail Source IP Watch"
     badge_color: "#dc3545"

@@ -117,7 +117,6 @@ cmd_generate_env() {
 		-e "s|@MFA_KEY@|$(fernet)|" \
 		-e "s|@INTEGRATION_KEY@|$(fernet)|" \
 		-e "s|@WEBHOOK_SECRET@|$(hex 32)|" \
-		-e "s|@METRICS_SECRET@|$(hex 32)|" \
 		"$HERE/staging.env.example" >"$ENV_FILE"
 	say "wrote $ENV_FILE (mode 600) for $url"
 	say "next: $0 init-golden"

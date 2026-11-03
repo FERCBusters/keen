@@ -146,6 +146,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0039_measure_submission_secrets",
         "0038_builtin_host_rules",
         "0037_builtin_rules",
         "0036_control_owners",
