@@ -30,6 +30,7 @@ from app.ingest.connections import connection_runs, load_document, namespace, se
 from app.ingest.http import client as ingestion_client
 from app.security.errors import collection_error
 from app.security.redaction import redact_url
+from app.security.xml import parse_untrusted_xml
 from app.services.ingestion_pause import pausable
 
 
@@ -137,7 +138,7 @@ def _external_id(url: str, entry_id: str) -> str:
 
 def _parse_feed(xml_bytes: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Return (feed_meta, entries)."""
-    root = ET.fromstring(xml_bytes)
+    root = parse_untrusted_xml(xml_bytes)
     root_name = _local(root.tag).lower()
 
     # RSS 2.0 nests items in channel; RSS 1.0/RDF keeps them beside channel.

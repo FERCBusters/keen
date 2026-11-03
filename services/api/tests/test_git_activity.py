@@ -105,6 +105,26 @@ def test_feeds_without_a_channel_or_a_parseable_url_yield_nothing():
     )
 
 
+@pytest.mark.parametrize(
+    ("declaration", "title"),
+    [
+        ('<!ENTITY e "' + "x" * 280 + '">', "&e; pushed"),
+        ('<!ATTLIST item n CDATA "' + "y" * 1000 + '">', "x pushed"),
+    ],
+    ids=["entity", "attribute-default"],
+)
+def test_feeds_declaring_an_internal_dtd_subset_are_refused(declaration, title):
+    # Each item would otherwise carry the declared text into the parsed feed.
+    xml = (
+        f"<!DOCTYPE rss [{declaration}]><rss><channel>"
+        + f"<item><title>{title}</title></item>" * 50
+        + "</channel></rss>"
+    )
+
+    with pytest.raises(SyntaxError, match="internal DTD subset"):
+        collector._parse_rss_items(xml)
+
+
 def test_naive_timestamps_and_xml_content_types_are_accepted():
     naive = datetime(2026, 10, 9, 1)
     assert to_utc_naive(naive) is naive

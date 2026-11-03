@@ -4,7 +4,6 @@ import json
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
-from xml.etree import ElementTree as ET
 
 import httpx
 from sqlalchemy.orm import Session
@@ -16,6 +15,7 @@ from app.ingest.connections import connection_runs, load_document, namespace, se
 from app.ingest.http import client as ingestion_client
 from app.security.errors import collection_error
 from app.security.redaction import redact_url
+from app.security.xml import parse_untrusted_xml
 from app.services.ingestion_pause import pausable
 
 
@@ -754,7 +754,7 @@ def ingest_github_atom_feed(
         r.raise_for_status()
         xml = r.text
 
-    root = ET.fromstring(xml)
+    root = parse_untrusted_xml(xml)
     ns = {"a": "http://www.w3.org/2005/Atom"}
     entries = root.findall("a:entry", ns)[:max_entries]
 

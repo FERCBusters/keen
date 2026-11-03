@@ -10,11 +10,11 @@ from datetime import datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlparse
-from xml.etree import ElementTree as ET
 
 import httpx
 
 from app.core.datetime_utils import to_utc_naive
+from app.security.xml import parse_untrusted_xml
 
 
 def _parse_iso_ts(value: str | None) -> datetime | None:
@@ -79,7 +79,7 @@ def _is_probably_rss(resp: httpx.Response) -> bool:
 
 
 def _parse_rss_items(xml: str, max_items: int = 200) -> list[dict[str, Any]]:
-    root = ET.fromstring(xml)
+    root = parse_untrusted_xml(xml)
     channel = root.find("channel")
     if channel is None:
         channel = root.find("./{*}channel")

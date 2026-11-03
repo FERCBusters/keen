@@ -411,8 +411,20 @@ def test_feed_entries_older_than_the_lookback_are_ignored(gh):
         )
         + ']><feed xmlns="http://www.w3.org/2005/Atom"><entry><title>&i;</title>'
         "<updated>2099-01-01T00:00:00Z</updated></entry></feed>",
+        # Within expat's amplification limit, which a feed at the response
+        # limit turns into gigabytes of title text.
+        '<?xml version="1.0"?><!DOCTYPE feed [<!ENTITY e "' + "x" * 280 + '">]>'
+        '<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>'
+        + "&e;" * 50
+        + "</title><updated>2099-01-01T00:00:00Z</updated></entry></feed>",
+        # Default attribute values, outside expat's amplification limit.
+        '<?xml version="1.0"?><!DOCTYPE feed [<!ATTLIST link title CDATA "'
+        + "y" * 1000
+        + '">]><feed xmlns="http://www.w3.org/2005/Atom"><entry><title>t</title>'
+        + "<link/>" * 50
+        + "<updated>2099-01-01T00:00:00Z</updated></entry></feed>",
     ],
-    ids=["external-entity", "entity-expansion"],
+    ids=["external-entity", "entity-expansion", "flat-entity", "attribute-default"],
 )
 def test_hostile_feed_documents_store_nothing(gh, document):
     feed = "https://feeds.example/acme.atom"

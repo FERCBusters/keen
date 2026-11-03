@@ -333,6 +333,54 @@ def test_one_failing_feed_leaves_the_others_collected(feeds, monkeypatch):
     assert len(feeds.events()) == 3
 
 
+@pytest.mark.parametrize(
+    "declaration",
+    ['<!ENTITY e "' + "x" * 280 + '">', '<!ATTLIST item n CDATA "' + "y" * 1000 + '">'],
+    ids=["entity", "attribute-default"],
+)
+def test_a_feed_declaring_an_internal_dtd_subset_stores_nothing(
+    feeds, monkeypatch, declaration
+):
+    # Within the response limit, either declaration would expand the feed to
+    # gigabytes while its tree is built.
+    hostile = ORIGIN + "/hostile.xml"
+    title = "&e;" if "ENTITY" in declaration else "Entry"
+    feeds.server.bodies[hostile] = (
+        f'<?xml version="1.0"?><!DOCTYPE rss [{declaration}]><rss><channel>'
+        + "".join(
+            f"<item><guid>h-{i}</guid><title>{title}</title>"
+            "<pubDate>2026-01-09T00:00:00Z</pubDate></item>"
+            for i in range(50)
+        )
+        + "</channel></rss>"
+    ).encode()
+    connection = Connection(
+        "db:feeds",
+        "rss",
+        "Feeds",
+        {},
+        {},
+        {
+            "feeds": [
+                {"url": hostile, "label": "Hostile"},
+                {"url": FEED_URL, "label": "Advisories"},
+            ]
+        },
+    )
+    monkeypatch.setattr(settings, "rss_enabled", True)
+
+    with patch("app.ingest.connections.connections", return_value=[connection]):
+        results = rss.ingest_rss_all(feeds.db)
+
+    assert [(r.get("url"), r.get("ok")) for r in results] == [
+        (hostile, False),
+        (FEED_URL, True),
+    ]
+    assert results[0]["error"].startswith("Collection failed;")
+    assert feeds.cursor(hostile, "Hostile", connection) is None
+    assert {e.system for e in feeds.events()} == {"Advisories"}
+
+
 def test_collection_without_feeds_or_while_disabled_does_nothing(feeds, monkeypatch):
     empty = Connection("db:feeds", "rss", "Feeds", {}, {}, {"feeds": []})
     monkeypatch.setattr(settings, "rss_enabled", True)
